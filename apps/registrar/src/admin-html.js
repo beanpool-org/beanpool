@@ -72,6 +72,8 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         .w-when { width: 20%; } .w-ev-name { width: 15%; } .w-event { width: 15%; } .w-detail { width: 50%; }
         .w-src { width: 26%; } .w-net { width: 20%; } .w-cnt { width: 20%; } .w-seen { width: 14%; } .w-sact { width: 20%; }
         .w-setting { width: 45%; } .w-now { width: 20%; } .w-change { width: 35%; }
+        .w-notice { width: 50%; } .w-to { width: 18%; } .w-reach { width: 20%; } .w-nact { width: 12%; }
+        .notice-text { white-space: pre-line; color: #fff; }
         .acts { display: flex; flex-wrap: wrap; gap: 0.4rem; justify-content: flex-end; align-items: center; }
         .acts > * { white-space: nowrap; }
         .acts label { font-size: 0.75rem; color: var(--text-muted); display: inline-flex; align-items: center; gap: 0.25rem; }
@@ -189,6 +191,12 @@ export const ADMIN_HTML = `<!DOCTYPE html>
             <h2 style="font-size: 1.1rem; font-family: var(--font-header); color: #f472b6; margin-bottom: 0.5rem;">🧭 New names, last 24 h</h2>
             <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1rem;">Where each new name came from: its source (one connecting address, kept only as a keyed hash, never the address) and its network. No limit refuses a claim: past one, a new name waits above for your approval. Approve the real ones; Reject all held frees a group's held names; Block all also blocks its live ones and refuses that source's new claims for 7 days. Kept 24 hours, or while a name from it is held.</p>
             <div id="sourcesContainer"><p style="color: var(--text-muted); font-size: 0.85rem;">Loading new names...</p></div>
+        </div>
+
+        <div class="admin-card">
+            <h2 style="font-size: 1.1rem; font-family: var(--font-header); color: #a3e635; margin-bottom: 0.5rem;">📨 Notices to operators</h2>
+            <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1rem;">Write to one name, a group of names or every name. Each node hears it at its own next check-in (within 15 minutes) — blocked names too — shows it in its Settings under Public address, and tells its owners it has a message. Nothing is collected to reach anyone. A reply link lets its owner answer once, into the feedback inbox, without giving an address. Your words go to the node as written: never put a person's details in them.</p>
+            <div id="noticesContainer"><p style="color: var(--text-muted); font-size: 0.85rem;">Loading notices...</p></div>
         </div>
 
         <div class="admin-card">
@@ -354,6 +362,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
                 renderActive(active);
                 showFragment();
                 loadSources();
+                loadNotices();
                 loadEvents();
                 loadAlerts();
                 loadServers();
@@ -832,6 +841,8 @@ export const ADMIN_HTML = `<!DOCTYPE html>
                     let acts = '';
                     if (g.held && (g.source || g.asn)) acts += '<button data-source-act="reject"' + (g.source ? ' data-source="' + esc(g.source) + '"' : ' data-asn="' + esc(g.asn) + '"') + ' data-total="' + esc(g.held) + '" class="btn-approve" title="Each held name from it is rejected: free again">Reject all held (' + esc(g.held) + ')</button>';
                     if (g.source) acts += '<button data-source-act="block" data-source="' + esc(g.source) + '" data-total="' + esc(g.names) + '" class="btn-revoke" title="Pending ones rejected (held, awaiting approval or being set up), live ones blocked, its new claims refused for 7 days">Block all (' + esc(g.names) + ')</button>';
+                    // A notice to the group (Notices below): its names held now, blocked ones too — say why they were blocked.
+                    if (g.source || g.asn) acts += '<button data-notice-group="1"' + (g.source ? ' data-source="' + esc(g.source) + '"' : ' data-asn="' + esc(g.asn) + '"') + ' data-label="' + (g.source ? 'source ' + esc(shortId(g.source)) : 'network AS' + esc(g.asn)) + '" class="btn-approve" title="Write to the names of this group (Notices to operators, below)">Notice</button>';
                     html += '<tr>' +
                         '<td data-label="Source"><span class="mono" style="color: #fff;">' + (g.source ? esc(shortId(g.source)) : 'no source') + '</span><span class="sub">' + names + '</span></td>' +
                         '<td data-label="Network" style="font-size: 0.8rem;"><span>' + networkWords(g) + '</span></td>' +
@@ -954,6 +965,116 @@ export const ADMIN_HTML = `<!DOCTYPE html>
             }
         }
         document.addEventListener('click', function(e) { sourcesClick(e); });
+
+        // Notices to operators (GET/POST /notices; index.js handleNoticeSend): the form, then the latest with how far each
+        // got. A group picked from "New names, last 24 h" (its Notice button) is kept here until sent or cleared.
+        let noticeGroup = null;   // { source } | { asn }, with its label
+        const LEVEL_WORDS = { info: 'ℹ️ info', warning: '⚠️ warning', action: '❗ action needed' };
+        function renderNotices(st) {
+            const container = document.getElementById('noticesContainer');
+            if (!st || st.schema === false) {
+                container.innerHTML = '<p style="color: #f87171; font-size: 0.85rem;">' + esc((st && st.error) || 'Could not load notices.') + '</p>';
+                return;
+            }
+            const max = st.text_max || 500;
+            let html = '<div class="row-wrap" style="margin-bottom: 0.5rem;">' +
+                '<select id="noticeTo" class="admin-input" style="flex: 0 0 auto; width: auto;">' +
+                (noticeGroup ? '<option value="group" selected>To ' + esc(noticeGroup.label) + '</option>' : '') +
+                '<option value="names"' + (noticeGroup ? '' : ' selected') + '>To names</option><option value="all">To every name</option></select>' +
+                '<input id="noticeNames" class="admin-input" placeholder="a name, or names separated by commas (at most ' + esc(st.names_max || 50) + ')" autocomplete="off">' +
+                (noticeGroup ? '<button data-notice-clear="1" class="btn-revoke">Clear group</button>' : '') + '</div>' +
+                '<textarea id="noticeText" class="admin-input" rows="4" maxlength="' + esc(max) + '" placeholder="What to tell them, at most ' + esc(max) + ' characters. The node shows it as written."></textarea>' +
+                '<div class="row-wrap" style="margin-top: 0.5rem;">' +
+                '<select id="noticeLevel" class="admin-input" style="flex: 0 0 auto; width: auto;"><option value="info">' + LEVEL_WORDS.info + '</option><option value="warning">' + LEVEL_WORDS.warning + '</option><option value="action">' + LEVEL_WORDS.action + '</option></select>' +
+                '<label style="font-size: 0.8rem; color: var(--text-secondary); display: inline-flex; gap: 0.3rem; align-items: center;"><input type="checkbox" id="noticeReply"' + (st.reply_links ? '' : ' disabled') + '> with a reply link</label>' +
+                '<label style="font-size: 0.8rem; color: var(--text-secondary); display: inline-flex; gap: 0.3rem; align-items: center;">for <input id="noticeDays" class="admin-input" style="width: 4.5rem; flex: 0 0 auto; padding: 0.4rem;" inputmode="numeric" value="' + esc((st.days && st.days.def) || 14) + '"> days</label>' +
+                '<button data-notice-send="1" class="btn-approve">Send notice</button></div>';
+            if (!st.reply_links) html += '<p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.4rem;">Reply links are off: REPLY_URL is not set (wrangler.toml), so nothing could answer them yet.</p>';
+            const list = st.notices || [];
+            if (!list.length) html += '<p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 1rem;">No notices sent yet.</p>';
+            else {
+                html += '<table class="admin-table stack" style="margin-top: 1rem;"><thead><tr><th class="w-notice">Notice</th><th class="w-to">To</th><th class="w-reach">Reached</th><th class="w-nact act">Who</th></tr></thead><tbody>';
+                list.forEach(function(n) {
+                    const over = n.expires_at <= Math.floor(Date.now() / 1000);
+                    html += '<tr>' +
+                        '<td data-label="Notice"><span class="notice-text">' + esc(n.text) + '</span><span class="sub">#' + esc(n.id) + ' · ' + (LEVEL_WORDS[n.level] || esc(n.level)) + ' · ' + esc(when(n.at)) + (n.by ? ' · by ' + esc(n.by) : '') + (n.reply ? ' · with a reply link' : '') + '</span></td>' +
+                        '<td data-label="To" style="font-size: 0.8rem;"><span>' + esc(n.audience) + '</span></td>' +
+                        '<td data-label="Reached" style="font-size: 0.8rem;"><span>' + esc(n.seen) + ' of ' + esc(n.recipients) + ' have it' + (n.delivered > n.seen ? ' (' + esc(n.delivered - n.seen) + ' more sent)' : '') + (n.replies ? ' · <b style="color: #a3e635;">' + esc(n.replies) + ' repl' + (n.replies === 1 ? 'y' : 'ies') + '</b>' : '') + '</span><span class="sub">' + (over ? 'no longer sent' : 'sent until ' + esc(when(n.expires_at))) + '</span></td>' +
+                        '<td><div class="acts"><button data-notice-who="' + esc(n.id) + '" class="btn-approve">Who</button></div></td></tr>' +
+                        '<tr id="notice-who-' + esc(n.id) + '" style="display: none;"><td colspan="4" style="font-size: 0.8rem;"></td></tr>';
+                });
+                html += '</tbody></table>';
+            }
+            container.innerHTML = html;
+        }
+
+        async function loadNotices() {
+            const container = document.getElementById('noticesContainer');
+            try {
+                const res = await fetch('/api/local/admin/registrar/notices', { headers: authHeaders() });
+                if (!res.ok) { container.innerHTML = '<p style="color: #f87171; font-size: 0.85rem;">Could not load notices.</p>'; return; }
+                renderNotices(await res.json());
+            } catch (err) {
+                container.innerHTML = '<p style="color: #f87171; font-size: 0.85rem;">Error loading notices.</p>';
+            }
+        }
+
+        async function noticesClick(e) {
+            const group = e.target.closest('[data-notice-group]');
+            if (group) {
+                noticeGroup = group.getAttribute('data-source') ? { source: group.getAttribute('data-source') } : { asn: Number(group.getAttribute('data-asn')) };
+                noticeGroup.label = group.getAttribute('data-label') || 'that group';
+                await loadNotices();
+                const card = document.getElementById('noticesContainer');
+                if (card) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                return;
+            }
+            if (e.target.closest('[data-notice-clear]')) { noticeGroup = null; loadNotices(); return; }
+            const who = e.target.closest('[data-notice-who]');
+            if (who) {
+                const id = who.getAttribute('data-notice-who');
+                const row = document.getElementById('notice-who-' + id);
+                if (!row) return;
+                if (row.style.display !== 'none') { row.style.display = 'none'; return; }
+                row.style.display = '';
+                row.firstChild.textContent = 'Loading...';
+                try {
+                    const res = await fetch('/api/local/admin/registrar/notices?id=' + encodeURIComponent(id), { headers: authHeaders() });
+                    const d = await res.json();
+                    const rs = d.recipients || [];
+                    row.firstChild.innerHTML = rs.length ? rs.map(function(r) {
+                        return '<b style="color: #fff;">' + esc(r.name) + '</b> ' + (r.seen_at ? 'has it (' + esc(when(r.seen_at)) + ')' : r.delivered_at ? 'sent ' + esc(when(r.delivered_at)) + ', not yet seen' : 'not yet checked in') + (r.replied_at ? ', <b style="color: #a3e635;">replied</b>' : '');
+                    }).join(' · ') : 'Nobody.';
+                } catch (err) {
+                    row.firstChild.textContent = 'Could not load who it went to.';
+                }
+                return;
+            }
+            if (!e.target.closest('[data-notice-send]')) return;
+            const toKind = document.getElementById('noticeTo').value;
+            const text = String(document.getElementById('noticeText').value || '').trim();
+            const level = document.getElementById('noticeLevel').value;
+            const reply = document.getElementById('noticeReply').checked;
+            const days = Number(String(document.getElementById('noticeDays').value || '').trim());
+            if (!text) { alert('Write what to tell them first.'); return; }
+            let to;
+            let whom;
+            if (toKind === 'group' && noticeGroup) { to = noticeGroup.source ? { source: noticeGroup.source } : { asn: noticeGroup.asn }; whom = 'the names of ' + noticeGroup.label; }
+            else if (toKind === 'all') { to = { all: true }; whom = 'EVERY name held now'; }
+            else {
+                const names = String(document.getElementById('noticeNames').value || '').split(/[\\s,]+/).map(function(n) { return n.trim().toLowerCase().replace(/\\.beanpool\\.org$/, ''); }).filter(Boolean);
+                if (!names.length) { alert('Type a name, or names separated by commas.'); return; }
+                to = { names: names };
+                whom = names.join(', ');
+            }
+            if (!confirm('Send this ' + level + ' notice to ' + whom + '?\\n\\n' + text + '\\n\\nEach node shows it in its Settings and tells its owners' + (reply ? '; each gets a one-use reply link' : '') + '. It cannot be taken back.')) return;
+            const r = await postAdmin('notices', { to: to, text: text, level: level, reply: reply, days: days });
+            if (!r.ok) { alert('Not sent: ' + (r.data.error || r.status)); return; }
+            noticeGroup = null;
+            alert('Sent to ' + r.data.recipients + ' node' + (r.data.recipients === 1 ? '' : 's') + '. Each hears it at its next check-in, within 15 minutes.');
+            loadNotices();
+        }
+        document.addEventListener('click', function(e) { noticesClick(e); });
 
         document.addEventListener('click', function(e) {
             const mode = e.target.closest('[data-alert-mode]');

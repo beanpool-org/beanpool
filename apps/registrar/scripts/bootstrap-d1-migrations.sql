@@ -103,5 +103,10 @@ WHERE (SELECT COUNT(*) FROM sqlite_master WHERE (type = 'table' AND name IN ('cl
 INSERT OR IGNORE INTO d1_migrations (name)
 SELECT '0012_status.sql'
 WHERE (SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'watch_days') = 1;
+-- 0013: its three tables and three indexes.
+INSERT OR IGNORE INTO d1_migrations (name)
+SELECT '0013_notices.sql'
+WHERE (SELECT COUNT(*) FROM sqlite_master WHERE (type = 'table' AND name IN ('notices', 'notice_recipients', 'reply_tokens'))
+       OR (type = 'index' AND name IN ('idx_notice_recipients_key', 'idx_reply_tokens_recipient', 'idx_reply_tokens_expires'))) = 6;
 
 SELECT id, name, applied_at FROM d1_migrations ORDER BY id;

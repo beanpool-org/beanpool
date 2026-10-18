@@ -119,7 +119,8 @@ const registrar = http.createServer((req, res) => {
     req.on('end', () => {
         const send = (code: number, data: unknown) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(data)); };
         if (!req.headers['x-bp-pubkey'] || !req.headers['x-bp-signature']) return send(401, { error: 'unsigned' });
-        if (req.url === '/api/registrar/status') return send(200, { status: reg.status, name: reg.name, hostname: reg.name ? `${reg.name}.beanpool.org` : null });
+        // The path alone: the main server's /status asks for notices (?notices=1), as the real registrar reads it.
+        if (req.url?.split('?')[0] === '/api/registrar/status') return send(200, { status: reg.status, name: reg.name, hostname: reg.name ? `${reg.name}.beanpool.org` : null });
         if (req.url === '/api/registrar/claim' && req.method === 'POST') {
             const b = JSON.parse(body || '{}');
             reg.claims++;

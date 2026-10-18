@@ -73,6 +73,21 @@ export function validateSubmission(body) {
     };
 }
 
+/**
+ * A reply through a notice's reply link (src/reply.js): the form's `text` and its hidden `website`, as a suggestion's.
+ * @returns {{ ok: true, text: string, honeypot: boolean } | { ok: false, error: string }}
+ */
+export function validateReply(form) {
+    const hp = form[HONEYPOT_FIELD];
+    const honeypot = hp !== undefined && hp !== null && String(hp) !== '';
+    if (typeof form.text !== 'string') return { ok: false, error: 'Please write your reply.' };
+    const text = clean(form.text.replace(/\r\n?/g, '\n'));
+    const len = charLength(text);
+    if (len < TEXT_MIN) return { ok: false, error: `Please write at least ${TEXT_MIN} characters.` };
+    if (len > TEXT_MAX) return { ok: false, error: `Please keep it under ${TEXT_MAX} characters.` };
+    return { ok: true, text, honeypot };
+}
+
 /** Admin status update body. */
 export function validateStatusUpdate(body) {
     if (!body || typeof body !== 'object' || Array.isArray(body)) return { ok: false, error: 'Expected a JSON object.' };

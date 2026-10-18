@@ -10,6 +10,8 @@
  *   3. An owner, by key or by the admin password, still gets the token (the manager's PublicAddressPanel shows it),
  *      and still never anything the registrar sent beyond the named fields.
  *   4. The tunnel keeps running on the token from the node's config, whoever reads the status.
+ *   5. A notice from the address service: an admin reads its words, but its one-use reply link is an owner's too, and the
+ *      admin is told only that an owner can reply (#2151 review 4306457093).
  *
  * The registrar is a local stub; Cloudflare's edge probe is refused in-process; cloudflared is the test fake.
  */
@@ -90,7 +92,7 @@ async function keySession(who: Identity): Promise<{ sid: string; role: string }>
 async function main() {
     console.log('Only an owner reads the tunnel token (real HTTPS, real admin auth)...\n');
     const { initTls } = await import('./services/tls.js');
-    const { initAdminPassword, updateLocalConfig } = await import('./config/local-config.js');
+    const { initAdminPassword, updateLocalConfig, getLocalConfig } = await import('./config/local-config.js');
     const { initStateEngine, getNodeConfig, grantNodeRole } = await import('./state-engine.js');
     const { startHttpsServer } = await import('./https-server.js');
     const { startP2P } = await import('./p2p.js');
@@ -204,6 +206,29 @@ async function main() {
         assert(pwStatus.status === 200 && pwStatus.body?.tunnelToken === TUNNEL_TOKEN, `the admin password (an owner) reads the token (${pwStatus.status})`);
         assert(tunnelConnectorForTests().wantedToken === TUNNEL_TOKEN && (getNodeConfig() as any).publicAddress?.tunnelToken === TUNNEL_TOKEN,
             'after every read the tunnel still runs on the token in the node config');
+
+        console.log('\n── 3b. a notice from the address service: an admin reads it, only an owner gets its reply link ──');
+        const NOTICES = '/api/local/admin/public-address/notices';
+        const REPLY = `https://beanpool.org/reply/${'Q'.repeat(43)}`;
+        updateLocalConfig({ registrarNotices: [
+            { id: 7, at: 1_760_000_007, level: 'action', text: 'Blocked by mistake? Tell us.', name: 'tokvale', link: REPLY, receivedAt: Date.now() },
+            { id: 6, at: 1_760_000_006, level: 'info', text: 'Your name is set up.', name: 'tokvale', link: null, receivedAt: Date.now() },
+        ] } as any);
+        try {
+            const adminNotices = await call('GET', NOTICES, undefined, asAdmin);
+            const an = adminNotices.body?.notices ?? [];
+            assert(adminNotices.status === 200 && an.length === 2 && an[0]?.text === 'Blocked by mistake? Tell us.',
+                `an admin reads the notices' words (${adminNotices.status} ${adminNotices.text.slice(0, 160)})`);
+            assert(!adminNotices.text.includes('/reply/') && an.every((n: any) => n.link === null), 'but is given no reply link');
+            assert(an[0]?.replyOwnerOnly === true && !('replyOwnerOnly' in (an[1] ?? {})),
+                'told only an owner can reply to the one that has a link; nothing said of the one without');
+            const ownerNotices = await call('GET', NOTICES, undefined, asOwner);
+            assert(ownerNotices.status === 200 && ownerNotices.body?.notices?.[0]?.link === REPLY && !ownerNotices.text.includes('replyOwnerOnly'),
+                `an owner by key is given the link (${ownerNotices.status})`);
+            const pwNotices = await withPassword('GET', NOTICES);
+            assert(pwNotices.status === 200 && pwNotices.body?.notices?.[0]?.link === REPLY, `and so is the admin password, an owner (${pwNotices.status})`);
+            assert((getLocalConfig() as any).registrarNotices?.[0]?.link === REPLY, 'an admin\'s read changes nothing kept');
+        } finally { updateLocalConfig({ registrarNotices: null } as any); }
 
         console.log('\n── 4. with the registrar unreachable, the saved address answers: still no token for an admin ──');
         const regUrl = process.env.REGISTRAR_URL;

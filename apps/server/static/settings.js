@@ -210,10 +210,14 @@
                 const d = await res.json().catch(() => ({}));
                 if (res.ok && (d.status === 'live' || d.status === 'pending' || d.status === 'none')) {
                     renderPublicAddress(d);
+                    // That status check brought any new notices from the address service: show them.
+                    loadAddressNotices();
                 } else if (retryCount < 2) {
                     setTimeout(() => loadPublicAddress(retryCount + 1), 1200);
                 } else {
                     renderPublicAddress(res.ok ? d : { status: 'error', error: d.error });
+                    // Paused, blocked or released: the notices are for this case too ("even while the name is blocked").
+                    if (res.ok) loadAddressNotices();
                 }
             } catch (e) {
                 if (retryCount < 2) {
@@ -266,6 +270,45 @@
                 display.innerHTML = `<span style="color:#f87171;">Couldn't reach the registrar${d.error ? ' — ' + esc(d.error) : ''}.</span>`;
                 claimForm.style.display = '';
             }
+        }
+
+        // Notices from the address service (registrar slice S2): what the BeanPool project wrote to this community's name,
+        // newest first, as this server kept them from its status checks. The words are the project's, shown as text; a
+        // reply link only on the address service's own site (the server keeps no other). Nothing shows while there are none.
+        const NOTICE_LEVELS = {
+            info: { icon: 'ℹ️', word: 'Information', colour: '#38bdf8' },
+            warning: { icon: '⚠️', word: 'Warning', colour: '#fbbf24' },
+            action: { icon: '❗', word: 'Action needed', colour: '#f87171' },
+        };
+        function renderAddressNotices(list) {
+            const box = document.getElementById('pubaddr-notices');
+            if (!box) return;
+            const notices = Array.isArray(list) ? list : [];
+            if (!notices.length) { box.style.display = 'none'; box.innerHTML = ''; return; }
+            box.style.display = '';
+            box.innerHTML = `<div style="font-size:0.8rem; color:#94a3b8; margin-bottom:0.4rem;">📨 From your address service</div>`
+                + notices.map((n) => {
+                    const lv = NOTICE_LEVELS[n.level] || NOTICE_LEVELS.info;
+                    const day = n.at ? new Date(n.at * 1000).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+                    // The server gives a reply link to an owner only; anyone else is told so, with nothing to press.
+                    const reply = typeof n.link === 'string' && n.link
+                        ? ` · <a href="${esc(n.link)}" target="_blank" rel="noopener noreferrer" style="color:#38bdf8;">Reply</a>`
+                        : n.replyOwnerOnly === true ? ' · only an owner can reply' : '';
+                    return `<div style="border-left:3px solid ${lv.colour}; background:rgba(255,255,255,0.03); padding:0.5rem 0.75rem; margin-bottom:0.5rem; border-radius:0 6px 6px 0;">`
+                        + `<div style="font-size:0.75rem; color:#94a3b8;">${lv.icon} ${lv.word} · ${esc(day)} · about <strong>${esc(n.name)}</strong>${reply}</div>`
+                        + `<div style="font-size:0.85rem; color:#e2e8f0; white-space:pre-line; margin-top:0.25rem; overflow-wrap:anywhere;">${esc(n.text)}</div>`
+                        + `</div>`;
+                }).join('')
+                + `<div style="font-size:0.72rem; color:#64748b;">A reply link works once, for 14 days, and goes to the BeanPool project only.</div>`;
+        }
+
+        async function loadAddressNotices() {
+            try {
+                const res = await fetch(`${API}/admin/public-address/notices`, { headers: adminHeaders() });
+                if (!res.ok) return;
+                const d = await res.json().catch(() => ({}));
+                renderAddressNotices(d.notices);
+            } catch (e) { /* the panel above already says when the server can't be reached */ }
         }
 
         let pubaddrCountdownTimer = null;

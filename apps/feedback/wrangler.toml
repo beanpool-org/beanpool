@@ -36,6 +36,18 @@ database_id = "00000000-0000-0000-0000-000000000000"   # PLACEHOLDER — replace
 # [[routes]]
 # pattern = "beanpool.org/api/feedback*"
 # zone_name = "beanpool.org"
+# The reply page for notices from the address service (src/reply.js): one route, GET and POST.
+# [[routes]]
+# pattern = "beanpool.org/reply/*"
+# zone_name = "beanpool.org"
+
+# The registrar's ReplyTokens entrypoint (apps/registrar/src/worker.js): the reply page checks a link and takes its one
+# use there, and never touches the registrar's database. Deploy the registrar (with that entrypoint) first. A copy of this
+# Worker with no registrar deletes this block: its /reply page then says replies are not set up.
+[[services]]
+binding = "REGISTRAR"
+service = "beanpool-registrar"
+entrypoint = "ReplyTokens"
 
 # Secrets (NOT here — set with `wrangler secret put <NAME>`):
 #   FEEDBACK_ADMIN_TOKEN   bearer token for /api/feedback/admin/* (the weekly digest reads it from

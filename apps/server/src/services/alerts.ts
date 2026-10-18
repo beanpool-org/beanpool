@@ -155,6 +155,7 @@ export type AlertKey =
     | 'sec.agent'
     | 'sec.restore' | 'sec.backups' | 'sec.members' | 'sec.settings' | 'sec.address'
     | 'sec.log'
+    | 'reg.notice'
     | 'reports.new' | 'reports.child' | 'reports.child-more'
     | 'door.busy';
 
@@ -219,6 +220,11 @@ const ROWS: Record<AlertKey, Row> = {
     'sec.seen': { title: 'security alerts marked as seen', priority: 2, webhook: false, pushEveryMs: 0, banner: false },
     /** A logger.security() line was written (design §3.2): kept in the history only, one line per category, counted. */
     'sec.log': { title: 'security log lines', priority: 1, webhook: false, pushEveryMs: 0, banner: false },
+    /**
+     * A notice from the address service (services/registrar-notices.ts, registrar slice S2): once per notice, in the server's
+     * own words by its level (security-signal.ts REGISTRAR_NOTICE_WORDS); what it says is shown in Settings only.
+     */
+    'reg.notice': { title: 'a message from the address service', priority: 3, webhook: true, pushEveryMs: EACH, banner: true },
     /** Reports in the Manager's queue (noteNewReport): the first at once, the rest of the fold window as one line. */
     'reports.new': { title: 'new reports waiting', priority: 3, webhook: true, pushEveryMs: EACH, banner: false },
     /** A report in the child-safety category, told at once, urgent: a member's first in their hour, up to 10 an hour. */
@@ -235,7 +241,7 @@ const REPORT_KEYS: ReadonlySet<AlertKey> = new Set<AlertKey>(['reports.new', 're
 /** Told once each, counted in the banner for a day or until an owner acknowledges them. */
 const SECURITY_ONE_SHOTS: ReadonlySet<AlertKey> = new Set<AlertKey>([
     'sec.role', 'sec.claim', 'sec.keys', 'sec.more', 'sec.agent', 'sec.restore', 'sec.backups', 'sec.members', 'sec.settings',
-    'sec.address',
+    'sec.address', 'reg.notice',
 ]);
 /** Going on while it is seen; over after an hour without another (then the usual 15-minute hold). */
 const SECURITY_SEEN: ReadonlySet<AlertKey> = new Set<AlertKey>(['sec.password-burst', 'sec.claim-guess']);

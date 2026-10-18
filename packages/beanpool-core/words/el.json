@@ -2,7 +2,7 @@
   "_meta": {
     "language": "el",
     "name": "Greek",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-19",
@@ -305,5 +305,25 @@
   "Sunset {time}.": "Δύση ηλίου στις {time}.",
   "Look around ›": "Κοιτάξτε γύρω ›",
   "Pick up the tour at step {step} ›": "Συνεχίστε την περιήγηση στο βήμα {step} ›",
-  "This is your Home. You choose what goes here. Before you start, take a one-minute look at the other tabs.": "Αυτή είναι η Αρχική σας. Εσείς επιλέγετε τι θα μπει εδώ. Πριν ξεκινήσετε, ρίξτε μια ματιά ενός λεπτού στις άλλες καρτέλες."
+  "This is your Home. You choose what goes here. Before you start, take a one-minute look at the other tabs.": "Αυτή είναι η Αρχική σας. Εσείς επιλέγετε τι θα μπει εδώ. Πριν ξεκινήσετε, ρίξτε μια ματιά ενός λεπτού στις άλλες καρτέλες.",
+  "Save this search to Home": "Αποθήκευση αυτής της αναζήτησης στην Αρχική",
+  "Save the search \"{q}\" to Home": "Αποθήκευση της αναζήτησης \"{q}\" στην Αρχική",
+  "The 1 vote came from a new or 12-word account": "Η 1 ψήφος προήλθε από νέο λογαριασμό ή λογαριασμό 12 λέξεων",
+  "All {n} votes came from new or 12-word accounts|All {n} votes came from new or 12-word accounts": {
+    "one": "Και η {n} ψήφος προήλθε από νέο λογαριασμό ή λογαριασμό 12 λέξεων",
+    "other": "Και οι {n} ψήφοι προήλθαν από νέους λογαριασμούς ή λογαριασμούς 12 λέξεων"
+  },
+  "{n} of {total} votes came from a new or 12-word account|{n} of {total} votes came from new or 12-word accounts": {
+    "one": "{n} από τις {total} ψήφους προήλθε από νέο λογαριασμό ή λογαριασμό 12 λέξεων",
+    "other": "{n} από τις {total} ψήφους προήλθαν από νέους λογαριασμούς ή λογαριασμούς 12 λέξεων"
+  },
+  "This 1 from a new or 12-word account": "Αυτή η 1 από νέο λογαριασμό ή λογαριασμό 12 λέξεων",
+  "All {n} from new or 12-word accounts|All {n} from new or 12-word accounts": {
+    "one": "Και η {n} από νέο λογαριασμό ή λογαριασμό 12 λέξεων",
+    "other": "Και οι {n} από νέους λογαριασμούς ή λογαριασμούς 12 λέξεων"
+  },
+  "{n} of these {count} from a new or 12-word account|{n} of these {count} from new or 12-word accounts": {
+    "one": "{n} από αυτές τις {count} από νέο λογαριασμό ή λογαριασμό 12 λέξεων",
+    "other": "{n} από αυτές τις {count} από νέους λογαριασμούς ή λογαριασμούς 12 λέξεων"
+  }
 }

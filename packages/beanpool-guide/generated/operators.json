@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 141,
-  "hash": "3bf02986535dea963265c571d809bc622a76d6416ac253e12ce9f926c8ffc736",
+  "version": 142,
+  "hash": "2544746755b018536a18a203ba3efb9dee404131f649040ccacfc93d968e18d1",
   "sections": [
     {
       "id": "setup",
@@ -3783,6 +3783,8 @@
             "Every few minutes the BeanPool address service checks that the name still answers with your server's key. If something else answers there instead, it **pauses** the name. That might be another BeanPool server, or, for about an hour, something that isn't a BeanPool server at all, such as a stranger's website. While the name is paused, visitors can't reach your community at that address. But the name stays yours, and nobody else can claim it. The panel says **Paused** and why.",
             "You don't need to do anything about a pause. Your server asks for the name back by itself within a few minutes. It gets it back as soon as it shows its own key, on a new tunnel that only your server is given, so whoever was answering there is cut off. The one exception is a pause by the BeanPool project itself: only the project can lift it.",
             "**New tunnel key** gives the tunnel a new key, and the old key stops working at once. Use it if someone else may have only the tunnel's key: someone saw it on this screen, or you gave away a machine that was a standby. Anyone with the old key could answer at your address. Your server switches to the new key by itself; visitors' connections drop for a few seconds.",
+            "**Notices from the address service.** The BeanPool project, which runs the address service, can send your community a notice about its address: that its name is set up, that it was blocked by mistake, that maintenance is coming. Your server hears it the next time it checks in with the address service (within 15 minutes, even while the name is blocked), shows it here under **From your address service**, and tells its owners there is a message. The alert says only that; the words are here. A notice may carry **Reply**: a link that works once, for 14 days, to answer the BeanPool project without giving an address. Only an owner is given it; an admin reads the notice and is told that an owner can reply. Nothing is collected to send you notices, and your server needs none of them to keep working.",
+            "The contact on the name is optional. Only the BeanPool project sees it, to reach you about the name; it is never checked, and it is deleted when the name's hold ends.",
             "**New tunnel key does not help if a copy of this server's data folder, or a backup, went somewhere it shouldn't.** That copy holds your server's own key, which is what the name belongs to, and a server started from it gets the new tunnel key from the address service on its own. Nothing in Settings replaces your server's own key. Keep the data folder and backups private, and if a copy may have got out, contact the BeanPool project, who run the address service, and say so."
           ]
         },

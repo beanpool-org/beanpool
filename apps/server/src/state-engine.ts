@@ -12,7 +12,7 @@ import { expoPushHeaders } from './config/expo-access-token.js';
 import { sanitizeMessage } from './sanitize-message.js';
 import {
     getNodeProfile, getNodeFeatures, getProfileSwitches, nearbyListingsLimits, mirrorNodeProfileAtBoot, isMainServerBootRefusal, assertBeansOn, forgetLedgerHistory,
-    BeansOffError, BEANS_OFF_PRICE_MESSAGE, type NodeProfile, type NodeFeatures,
+    profileLimits, BeansOffError, BEANS_OFF_PRICE_MESSAGE, type NodeProfile, type NodeFeatures,
 } from './config/node-profile.js';
 import { installCommunitySettingsAtBoot } from './config/community-settings.js';
 import { getDoor, mayInviteHere, type Door } from './config/door.js';
@@ -364,6 +364,7 @@ import {
     letInEvent as letInEventEngine,
     adminDeletePost as adminDeletePostEngine,
     assertPostWagesWritable,
+    archiveStaleListings as archiveStaleListingsEngine,
     type EscrowRefundShortfall,
     type EventTimeOut
 } from './engine/posts.js';
@@ -635,12 +636,19 @@ export interface NodeConfig {
     publishHealth?: boolean;
     directoryPushIntervalHours?: number;
     lastDirectoryPush?: string;
+    /**
+     * The community's address: the BeanPool registrar's record of its name (`tunnel` or `direct`, with the tunnel's token),
+     * or, while it holds no such name, an own address given with `beanpool claim --ip/--address` or in Settings: this
+     * server's public IP (`ip`) or the owner's own domain (`own`), `{ mode, hostname, status: 'live', since }`, which the
+     * registrar never hears of (isOwnPublicAddress; services/public-address-agent.ts storeOwnAddress).
+     */
     publicAddress?: {
         name?: string;
-        mode?: 'tunnel' | 'direct';
+        mode?: 'tunnel' | 'direct' | 'ip' | 'own';
         hostname?: string;
         status?: string;
         tunnelToken?: string;
+        since?: string;
     } | null;
     /**
      * Addresses an owner or admin confirmed in Settings as this community's own (engine/own-addresses.ts, source 3): a
@@ -1267,6 +1275,24 @@ export function runMarketplaceHygiene(): void {
     } catch (e) {
         console.warn('[Push] Hygiene tidy of push notices failed:', e);
     }
+
+    // 6. Retention, where the node profile's `retention` switch is on (the global node): listings nothing has changed in
+    // LISTING_ARCHIVE_DAYS (90) are archived, with their photos (engine/posts.ts archiveStaleListings).
+    try {
+        archiveStaleListings();
+    } catch (e) {
+        console.warn('[Retention] Listing archive failed:', e);
+    }
+}
+
+/** One run of the listing archive (runMarketplaceHygiene step 6), with this node's broadcast and push. */
+export function archiveStaleListings(nowMs = Date.now()): ReturnType<typeof archiveStaleListingsEngine> {
+    const run = archiveStaleListingsEngine(broadcast, dispatchPushNotification, nowMs);
+    if (run.archived > 0 || run.photosDropped > 0) {
+        console.log(`🗄️  Archived ${run.archived} listing(s) past ${profileLimits().listingArchiveDays} days without a change, `
+            + `and deleted ${run.photosDropped} photo(s)${run.more ? '; more wait for the next hour' : ''}`);
+    }
+    return run;
 }
 
 function sweepSettledEscrowAccounts(): void {
@@ -8658,6 +8684,15 @@ export function getNodeConfig(): NodeConfig {
     }
 
     return finalConfig;
+}
+
+/**
+ * Whether a stored `publicAddress` is an own address (this server's IP, `ip`, or the owner's domain, `own`) rather than
+ * the registrar's record: nothing about it is asked of the registrar, and no tunnel runs for it.
+ */
+export function isOwnPublicAddress(pa: unknown): pa is { mode: 'ip' | 'own'; hostname: string } {
+    const mode = pa && typeof pa === 'object' ? (pa as { mode?: unknown }).mode : undefined;
+    return (mode === 'ip' || mode === 'own') && typeof (pa as { hostname?: unknown }).hostname === 'string';
 }
 
 let publicAddressWrites = 0;

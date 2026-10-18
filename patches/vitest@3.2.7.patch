@@ -1,0 +1,47 @@
+diff --git a/dist/chunks/rpc.-pEldfrD.js b/dist/chunks/rpc.-pEldfrD.js
+index a48eb0174a4fbc508a36c46ff78b0f9bf7ba6295..762980713d07985ab36c325c02e2d9cd95e82050 100644
+--- a/dist/chunks/rpc.-pEldfrD.js
++++ b/dist/chunks/rpc.-pEldfrD.js
+@@ -29,10 +29,23 @@ function withSafeTimers(fn) {
+ 	}
+ }
+ const promises = /* @__PURE__ */ new Set();
++// BeanPool: with no per-call timer (timeout: -1, below), a call the main process never answers — a vite plugin's
++// transform that never settles — held this wait open forever, and the run with it, where stock failed the call at 60 s.
++// Upstream #8297 rejects such calls here with birpc's $rejectPendingCalls, which 3.2.7's birpc 2.4.0 lacks, so stop
++// waiting after the same 60 s instead. A wait that ends sooner is unchanged.
+ async function rpcDone() {
+ 	if (!promises.size) return;
+ 	const awaitable = Array.from(promises);
+-	return Promise.all(awaitable);
++	const { setTimeout, clearTimeout } = getSafeTimers();
++	let timer;
++	const gaveUp = new Promise((resolve) => {
++		timer = setTimeout(resolve, 6e4);
++	});
++	try {
++		return await Promise.race([Promise.all(awaitable), gaveUp]);
++	} finally {
++		clearTimeout(timer);
++	}
+ }
+ function createRuntimeRpc(options) {
+ 	let setCancel = (_reason) => {};
+@@ -45,13 +58,10 @@ function createRuntimeRpc(options) {
+ 			"onCollected",
+ 			"onCancel"
+ 		],
+-		onTimeoutError(functionName, args) {
+-			let message = `[vitest-worker]: Timeout calling "${functionName}"`;
+-			if (functionName === "fetch" || functionName === "transform" || functionName === "resolveId") message += ` with "${JSON.stringify(args)}"`;
+-			// JSON.stringify cannot serialize Error instances
+-			if (functionName === "onUnhandledError") message += ` with "${args[0]?.message || args[0]}"`;
+-			throw new Error(message);
+-		},
++		// BeanPool: backport of vitest-dev/vitest#8297 (in vitest 4, never in 3.x). A worker that keeps its event loop busy
++		// for 60 s — tests chained on microtasks, no I/O — let birpc's timer fire before the ack already waiting in the pipe
++		// was read: "Timeout calling onTaskUpdate" after every test passed. Test and hook timeouts still bound every test.
++		timeout: -1,
+ 		...options
+ 	}));
+ 	return {

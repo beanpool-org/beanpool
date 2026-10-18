@@ -99,6 +99,15 @@ describe('the web find card with no community near', () => {
         expect(screen.getByTestId('home-find-watch')).toBeInTheDocument();
     });
 
+    it('watching as many places as the node allows is said in the app\'s own words, with the node\'s number', async () => {
+        vi.mocked(api.watchPlace).mockRejectedValue(Object.assign(new Error('the node\'s own words'), { status: 409, code: 'watch_limit', limit: 2 }));
+        await memberAtLismore();
+        fireEvent.click(screen.getByTestId('home-find-watch'));
+        expect(await screen.findByTestId('home-find-watch-note')).toHaveTextContent('You can watch up to 2 places. Remove one to watch another.');
+        expect(document.body.textContent).not.toContain('the node\'s own words');
+        expect(screen.getByTestId('home-find-watch')).toBeInTheDocument();
+    });
+
     it('Start a community opens the Start screen', async () => {
         await memberAtLismore();
         fireEvent.click(screen.getByTestId('home-find-start'));

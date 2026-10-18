@@ -1,4 +1,4 @@
--- 0011: the public status line (design scratch/global-node/DESIGN-global-mothership-fable.md §3.2 U4, slice A8;
+-- 0012: the public status line (design scratch/global-node/DESIGN-global-mothership-fable.md §3.2 U4, slice A8;
 -- accepted by Marty 2026-10-18). At each watch tick src/status.js counts each server's looks by UTC day from watch_log
 -- (which keeps 30 days) into watch_days (kept 100), and writes status.json (per server named in STATUS_SERVERS, and
 -- the registrar itself: up now, the last incident, the 90-day percentage) to the STATUS KV namespace, which

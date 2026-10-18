@@ -16,9 +16,10 @@ export interface NodeIdentityPanelProps {
 }
 
 /** Why the public directory doesn't list this community, and what to change: one line each (Directory Publishing). */
-export const DIRECTORY_HELD_BACK_LINES: Record<'unnamed' | 'unlisted', string> = {
+export const DIRECTORY_HELD_BACK_LINES: Record<'unnamed' | 'unlisted' | 'probation', string> = {
     unnamed: 'Not on the public map yet: your community has no name of its own ("BeanPool Community" is the default). Type its name in Community name, then Save.',
     unlisted: "Not on the public map: this server's .env sets DIRECTORY_UNLISTED, as our test and review nodes do. Remove that line and restart the node to be listed.",
+    probation: 'Not on the public map yet: your beanpool.org address is new, and the address service checks a new address for a while before it is listed. Nothing to do: it is listed by itself once that is done.',
 };
 
 export function NodeIdentityPanel({

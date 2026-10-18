@@ -374,7 +374,8 @@ test('F3: with alerts on, the sweep keeps D1 queries for its one send: nothing r
         return new Response('{"id":"x"}', { status: 200 });
     };
     try {
-        for (const i of [1, 2, 3]) await orphan(w, await makeKey(), `orphan${i}`, 400);
+        const keys = await Promise.all([makeKey(), makeKey(), makeKey()]);
+        for (const i of [1, 2, 3]) await orphan(w, keys[i - 1], `orphan${i}`, 400);
         owedAndStale(w);
         sent.length = 0;
         const sweep = capped(w);
@@ -389,8 +390,16 @@ test('F3: with alerts on, the sweep keeps D1 queries for its one send: nothing r
             assert.deepEqual(next.refused, [], `nothing refused (${next.queries} queries)`);
         }
         assert.equal(await finished(), 3);
+        // Their "New community" alert waits for their probation (S3): none at the finish; with probation at one ok sweep
+        // and no time, the next sweep verifies all three — one message for them, inside the same 50 queries.
+        assert.ok(!sent.some((m) => /New communit/.test(m.title)), `no New community alert before verification (${JSON.stringify(sent.map((m) => m.title))})`);
+        w.setting('probation_sweeps', 1);
+        w.setting('probation_s', 0);
+        for (const i of [1, 2, 3]) w.nodes[`orphan${i}.beanpool.org`] = attestsAs(keys[i - 1]);
+        const last = await sweep();
+        assert.deepEqual(last.refused, [], `nothing refused (${last.queries} queries)`);
         for (const i of [1, 2, 3])
-            assert.ok(sent.some((m) => m.body.includes(`New community: orphan${i}.beanpool.org`)), `orphan${i}'s New community alert sent (${JSON.stringify(sent.map((m) => m.title))})`);
+            assert.ok(sent.some((m) => /New communit/.test(m.title) && m.body.includes(`orphan${i}`)), `orphan${i}'s New community alert sent (${JSON.stringify(sent.map((m) => m.title))})`);
     } finally { w.restore(); }
 });
 

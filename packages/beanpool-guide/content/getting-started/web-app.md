@@ -9,6 +9,8 @@ related: home, the-bean, your-12-words, joining, messages, reporting
 
 Your community can also be used in a web browser, on a computer or a phone. This guide is written for the phone app. The web app works the same way, but some things are named or placed differently.
 
+Use one account on both. Joined in a browser? Put that same account on your phone: see "Putting your web account on a phone", below. Joined on your phone? Bring it to the browser: see "Using your phone account on a computer". Joining again makes a second account, and two accounts can never be joined into one.
+
 ## Joining global.beanpool.org in a browser
 
 The global community at global.beanpool.org is open to anyone, and you can join it right there in a web browser. You need no invite and no phone app.
@@ -96,7 +98,7 @@ If you joined the global community with 12 words, they are your only way back. A
 - **Blocking:** Settings says **Manage Blocked Members**. Your community keeps your blocks with your account, so they come back when you sign in on any browser, and signing out leaves nothing about them on the computer. The people who run your community's server can see whom you blocked. Blocking and unblocking need a connection: without one, the web app says so and nothing changes. Blocks made in the phone app stay on the phone and do not show here.
 - **Chats:** the web chat has **Report** and **Block** buttons at the top.
 - **Your area:** on the global community the web app's Settings has **Your area** too, and its Market and Map start from it. See "Your area".
-- **Global community:** on a local community, Settings has a **Global community** row under **BEANPOOL**, with its address. It opens the worldwide community your community's server names, in a new tab. Your account isn't there until you bring it: in that tab, **Join**, then **I have my 12 words**. If your community names none, there is no row.
+- **Global community:** on a local community, Settings has a **Global community** row under **BEANPOOL**, with its address and **The global community is one community among many. Your own community runs on its own server and never needs it.** It opens the worldwide community your community's server names, in a new tab. Your account isn't there until you bring it: in that tab, **Join**, then **I have my 12 words**. If your community names none, there is no row.
 
 ## What the web app does not have
 

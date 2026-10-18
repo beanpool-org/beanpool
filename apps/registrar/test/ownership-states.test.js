@@ -25,6 +25,7 @@ test('a paused name is taken: available says so, another key\'s claim is 409, an
     try {
         const [owner, other] = await Promise.all([makeKey(), makeKey()]);
         await liveName(w, 'riverside', owner);
+        await w.verify('riverside');   // past its probation (S3), so its invites resolve while it is live or paused
         const paused = await w.admin('riverside', 'pause');
         assert.equal(paused.body.status, 'paused');
         const before = await w.row('riverside');

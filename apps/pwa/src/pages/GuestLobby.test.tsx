@@ -473,6 +473,23 @@ describe('a visitor with no key on the global node', () => {
         expect(await screen.findByTestId('lobby-join-card')).toHaveTextContent('It takes a name and one sign-in. No invite needed.');
     });
 
+    it('the Join card says what the global community is, under its ways in: one among many, which your own community never needs (mothership design §2.5, pick 1)', async () => {
+        stubNode(GLOBAL);
+        await openLobby();
+        const card = await screen.findByTestId('lobby-join-card');
+        const about = within(card).getByTestId('lobby-one-among-many');
+        expect(about).toHaveTextContent('The global community is one community among many. Your own community runs on its own server and never needs it.');
+        // Last in the card: no way in moves for it.
+        expect(card.lastElementChild).toBe(about);
+        cleanup();
+        resetCommunityInfoOnce();
+
+        // A lobby on a node that isn't a global community (one that shows visitors its listings): never says it.
+        stubNode({ ...GLOBAL, profile: 'local' });
+        await openLobby();
+        expect(await screen.findByTestId('lobby-join-card')).not.toHaveTextContent(/one community among many/);
+    });
+
     it('Join in the header opens screen 1 over the lobby, and ← Back returns to the listings', async () => {
         stubNode(GLOBAL);
         await openLobby();

@@ -124,10 +124,11 @@ export interface DiagnosticsResponse {
     contactPhone?: string | null;
     /**
      * Why the public directory doesn't list the community although it is set to publish (apps/server
-     * services/directory-publisher.ts directoryHeldBack): no name of its own yet, or DIRECTORY_UNLISTED in its .env.
-     * Null when nothing holds it back; absent on a node from before.
+     * services/directory-publisher.ts directoryHeldBack): no name of its own yet, DIRECTORY_UNLISTED in its .env, or its
+     * new beanpool.org address still on the registrar's probation. Null when nothing holds it back; absent on a node from
+     * before.
      */
-    directoryHeldBack?: 'unnamed' | 'unlisted' | null;
+    directoryHeldBack?: 'unnamed' | 'unlisted' | 'probation' | null;
     shutdownStatus?: ShutdownStatus;
     diskHealth?: DiskHealth;
     /** The node's watch on its standbys (apps/server services/standby-health.ts): owners only, null to anyone else. */

@@ -3,7 +3,7 @@
  * the global node will have no community near them yet; a watch is how they hear when one appears.
  *
  * - A member's own, set, listed and removed only with their own signed request (routes/global-directory.ts). The
- *   member comes from the signature, never the body. At most PLACE_WATCH_LIMIT each.
+ *   member comes from the signature, never the body. At most `profileLimits().placeWatches` each (PLACE_WATCHES_MAX, 3).
  * - Stored as the 0.1° cell (roundToArea, the rounding G4 uses for a person's area), rounded BEFORE the write, so the
  *   spot a phone sent never reaches the disk. The same cell again changes that watch's radius, not a second watch.
  * - A community reaches a watch when its centre is within the watch's radius plus its own service radius (counted up
@@ -69,8 +69,12 @@ import { EARTH_RADIUS_KM, haversineKm, type SyncPlaceWatch } from '@beanpool/eng
 import type { PushNoticeKind } from '@beanpool/core';
 import { roundToArea } from './member-area.js';
 import { firstSightings, type DirectoryRow, type FirstSighting } from './directory-cache.js';
+import { profileLimits } from '../config/node-profile.js';
 
-export const PLACE_WATCH_LIMIT = 3;
+/** How many places one member may watch here (config/node-profile.ts profileLimits): 3, unless PLACE_WATCHES_MAX says. */
+export function placeWatchLimit(): number {
+    return profileLimits().placeWatches;
+}
 export const PLACE_WATCH_RADIUS_KM = { min: 10, max: 200, default: 50 } as const;
 /** How much of a community's own service radius counts toward reaching a watch. */
 export const SERVICE_REACH_CAP_KM = 100;
@@ -99,8 +103,8 @@ const toWatch = (w: WatchRecord): PlaceWatch => ({ id: w.id, lat: w.lat, lng: w.
 export class PlaceWatchLimitError extends Error {
     readonly code = 'watch_limit';
     readonly status = 409;
-    constructor() {
-        super(`You can watch up to ${PLACE_WATCH_LIMIT} places. Remove one to watch another.`);
+    constructor(readonly limit: number) {
+        super(`You can watch up to ${limit} places. Remove one to watch another.`);
         this.name = 'PlaceWatchLimitError';
     }
 }
@@ -126,7 +130,8 @@ export function setPlaceWatch(pubkey: string, point: { lat: number; lng: number 
             return { watch: toWatch({ ...same, radius_km: radiusKm }), created: false };
         }
         const count = (db.prepare('SELECT COUNT(*) AS n FROM place_watches WHERE pubkey = ?').get(pubkey) as { n: number }).n;
-        if (count >= PLACE_WATCH_LIMIT) throw new PlaceWatchLimitError();
+        const limit = placeWatchLimit();
+        if (count >= limit) throw new PlaceWatchLimitError(limit);
         const row: WatchRecord = { id: crypto.randomUUID(), pubkey, lat, lng, radius_km: radiusKm, created_at: now, last_notified_at: null, updated_at: now };
         db.prepare('INSERT INTO place_watches (id, pubkey, lat, lng, radius_km, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
             .run(row.id, row.pubkey, row.lat, row.lng, row.radius_km, row.created_at, row.updated_at);

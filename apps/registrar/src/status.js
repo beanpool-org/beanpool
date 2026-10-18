@@ -10,7 +10,7 @@
 // An incident is what the alert calls down (watch.js LOOKS_TO_RAISE: two failed looks in a row); it began at the first
 // of them and ended at the first answer. The registrar's own line is its checks running, a tick every 5 minutes
 // (WATCH_CRON): as many missed in a row are an incident, and its share is the ticks that ran of the slots since its
-// first. The numbers come from D1 (watch_days, migration 0011), counted again from watch_log at every tick, so a tick
+// first. The numbers come from D1 (watch_days, migration 0012), counted again from watch_log at every tick, so a tick
 // that failed loses nothing: the next one catches up.
 //
 // D1: a watch tick already spends most of the 50 queries Workers Free allows one invocation (38 with our five servers,

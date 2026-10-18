@@ -12,7 +12,7 @@
  *
  * Nothing is contacted: fetch answers the global community's membership probe and info only, and refuses anything else.
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import Module from 'node:module';
 import { act, createElement } from 'react';
 import * as ReactAll from 'react';
@@ -160,6 +160,11 @@ function globalSaysStranger() {
 
 let host: HTMLDivElement;
 let root: Root;
+// The probe's modules, loaded before any test: Reconnect's first ask imports them (global-entry.ts defaultAskDeps), mid-test.
+// Loaded cold on a busy machine (PR #2128's test-all, 18 Oct) that outlasted settle()'s fixed ticks, and Damo's case read the
+// asked list before the membership probe was sent. The same fix as the global row's test (d77eec21).
+beforeAll(async () => { await import('../membership-probe'); await import('../global-join-existing'); });
+
 beforeEach(() => {
     host = document.createElement('div');
     document.body.appendChild(host);

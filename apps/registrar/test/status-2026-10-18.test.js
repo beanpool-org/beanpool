@@ -385,16 +385,16 @@ test('a first tick counts watch_log\'s whole days only; days past 100 go at the 
     } finally { r.done(); }
 });
 
-test('migration 0011: re-running changes nothing; a database without it publishes nothing and logs why, the watch untouched', async () => {
+test('migration 0012: re-running changes nothing; a database without it publishes nothing and logs why, the watch untouched', async () => {
     const r = await room();
     try {
         await r.tick();
         const before = r.w.sqlite.prepare('SELECT * FROM watch_days ORDER BY target, day').all();
-        r.w.sqlite.exec(readFileSync(new URL('../migrations/0011_status.sql', import.meta.url), 'utf8'));
+        r.w.sqlite.exec(readFileSync(new URL('../migrations/0012_status.sql', import.meta.url), 'utf8'));
         assert.deepEqual(r.w.sqlite.prepare('SELECT * FROM watch_days ORDER BY target, day').all(), before);
     } finally { r.done(); }
-    const BEFORE_0011 = ['0001_init.sql', '0002_states.sql', '0003_decision_seq.sql', '0004_teardown.sql', '0005_reserve_global.sql', '0006_request_nonces.sql', '0007_content_swap.sql', '0008_alerts.sql', '0009_watch.sql', '0010_reserve_our_hosts.sql'];
-    const old = await room({ migrations: BEFORE_0011 });
+    const BEFORE_0012 = ['0001_init.sql', '0002_states.sql', '0003_decision_seq.sql', '0004_teardown.sql', '0005_reserve_global.sql', '0006_request_nonces.sql', '0007_content_swap.sql', '0008_alerts.sql', '0009_watch.sql', '0010_reserve_our_hosts.sql', '0011_sources.sql'];
+    const old = await room({ migrations: BEFORE_0012 });
     try {
         const seen = await old.tick();
         assert.deepEqual(seen.map((s) => [s.name, s.ok]), [['global', true], ['vault', true], ['mullum', true], ['test', true]], 'the watch looked');

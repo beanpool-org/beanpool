@@ -1,7 +1,7 @@
 // /admin in a real browser: the page served as the Worker serves it, its API answered with a list shaped like the live
-// one (2026-10-17: 51 names, 45 of them released), at 320, 768, 1000, 1001 and 1280 px. Exit 1 if anything in the
-// Pending or Names card reaches past its card's edge, or the page scrolls sideways — with the Released section shut
-// and open. Run by hand (CI's test job has no browser):
+// one (2026-10-17: 51 names, 45 of them released; and a bot's burst of held names, S3), at 320, 768, 1000, 1001 and
+// 1280 px. Exit 1 if anything in the Pending, New names or Names card reaches past its card's edge, or the page scrolls
+// sideways — with the Released section shut and open. Run by hand (CI's test job has no browser):
 //   pnpm --filter @beanpool/manager exec playwright install --only-shell chromium   # once
 //   node apps/registrar/scripts/check-admin-layout.mjs [<dir for screenshots>]
 // Playwright comes from the workspace (apps/manager's); the registrar itself depends on nothing.
@@ -39,10 +39,33 @@ const rows = [
     return { node_pubkey: key(i + 1), requested_at: now - (120 - i) * DAY, ...r, holds, ...(released ? { takes_back: takesBack } : {}), ...(holds && released ? { held_until: r.released_at + 30 * DAY } : {}) };
 });
 
+// "New names, last 24 h" (GET /sources) as a bot's burst draws it: one source with many names, a long network name, the
+// held ones in the Awaiting card too (their source and why), a block, and the settings table open.
+const hash = (c) => c.repeat(64);
+const sources = {
+    schema: true, source_key_set: true, since: now - DAY,
+    hold: { on: true, until: now + 20 * 3600 },
+    capacity: { names: 131, capacity: 200, alert_at: 120, hold_at: 160 },
+    groups: [
+        { source: hash('a'), asn: 14061, as_org: 'DigitalOcean, LLC — a hosting network with a long name', country: 'US', names: 17, held: 14, pending: 14, live: 3, verified: 0, keys: 17, first: now - 7200, last: now - 60,
+            rows: Array.from({ length: 17 }, (_, i) => ({ name: `bot-made-name-number-${i}`, status: i < 3 ? 'live' : 'pending', held_reason: i < 3 ? null : 'source', probation: i < 3 })) },
+        { source: hash('b'), asn: 7545, as_org: 'TPG Telecom', country: 'AU', names: 1, held: 0, pending: 0, live: 1, verified: 1, keys: 1, first: now - 3600, last: now - 3600,
+            rows: [{ name: 'a-name-of-the-longest-kind-32ch', status: 'live', held_reason: null, probation: false }] },
+        { source: null, asn: null, as_org: null, country: null, names: 2, held: 2, pending: 2, live: 0, verified: 0, keys: 2, first: now - 600, last: now - 300,
+            rows: [{ name: 'nosource1', status: 'pending', held_reason: 'budget' }, { name: 'nosource2', status: 'pending', held_reason: 'budget' }] },
+    ],
+    networks: [{ asn: 14061, as_org: 'DigitalOcean, LLC — a hosting network with a long name', country: 'US', names: 17, sources: 1 }],
+    blocked: [{ kind: 'source', value: hash('c'), until: now + 6 * DAY, at: now - DAY, by: 'admin@example.org', label: 'AS14061 DigitalOcean, LLC, US' }, { kind: 'asn', value: '64500', until: now + DAY, at: now, by: null, label: null }],
+    settings: ['source_per_hour', 'source_per_day', 'asn_per_day', 'new_names_per_hour', 'new_names_per_day', 'claim_limit_per_key', 'probation_sweeps', 'probation_s', 'attest_fail_limit', 'swap_fail_limit', 'capacity', 'capacity_alert_at', 'capacity_hold_at']
+        .map((key, i) => ({ key, value: 3 + i, default: 3, min: 1, max: 100000, words: 'New names from one source (one connecting address) in an hour; past it they are held for your approval', set: i % 2 ? { value: '9', at: now, by: 'admin@example.org' } : null })),
+};
+for (let i = 3; i < 17; i++) rows.push({ name: `bot-made-name-number-${i}`, status: 'pending', mode: 'tunnel', node_pubkey: key(500 + i), requested_at: now - 600, holds: true, awaiting_approval: true, held_reason: 'source',
+    source: { id: hash('a'), asn: 14061, as_org: 'DigitalOcean, LLC — a hosting network with a long name', country: 'US' } });
+
 // How far anything drawn in each card reaches past the card's inner edge (px), and how far the page scrolls sideways.
 const measure = () => {
     const out = { page: document.documentElement.scrollWidth - window.innerWidth };
-    for (const id of ['pendingTableContainer', 'activeTableContainer']) {
+    for (const id of ['pendingTableContainer', 'sourcesContainer', 'activeTableContainer']) {
         const c = document.getElementById(id);
         const card = c.closest('.admin-card');
         const cs = getComputedStyle(card);
@@ -71,12 +94,18 @@ try {
             if (p === '/api/local/admin/registrar/events') return route.fulfill({ json: { events: [{ at: now, name: 'mullum', event: 'claimed', detail: 'claimed by key 0001000100010001 (tunnel, tier auto)' }] } });
             if (p === '/api/local/admin/registrar/alerts') return route.fulfill({ json: { channel: { set: false }, cap: {}, settings: {} } });
             if (p === '/api/local/admin/registrar/servers') return route.fulfill({ json: { targets: [] } });
+            if (p === '/api/local/admin/registrar/sources') return route.fulfill({ json: sources });
             return route.fulfill({ status: 404, body: '' });
         });
         await page.goto('https://beanpool.org/admin');
         await page.waitForSelector('#activeTableContainer details.released');
+        await page.waitForSelector('#sourcesContainer details.released');
+        await page.click('#sourcesContainer details.released > summary');   // the settings table, open
         const shut = await page.evaluate(measure);
-        if (shots) await page.screenshot({ path: `${shots}/admin-${width}.png` });
+        if (shots) {
+            await page.screenshot({ path: `${shots}/admin-${width}.png` });
+            await (await page.$('#sourcesContainer')).screenshot({ path: `${shots}/admin-${width}-sources.png` });
+        }
         await page.click('#activeTableContainer details.released > summary');
         const open = await page.evaluate(measure);
         if (shots) {

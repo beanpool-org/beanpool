@@ -28,17 +28,19 @@
  *                                                 list (node_config.ownerAddresses, carried in the take-over envelope).
  *                                                 A lost name is refused (409, with why): confirming it would not bring it
  *                                                 back, since the mark is per host, whatever lists it.
- *   POST /api/local/admin/app-addresses/remove   { address }: takes an owner-confirmed address off the list again.
+ *   POST /api/local/admin/app-addresses/remove   { address }: takes an owner-confirmed address off the list again; an own
+ *                                                 address that is also the community's address (`publicAddress`
+ *                                                 `ip`/`own`, beanpool claim --ip/--address) stops being that too.
  *
  * An address is only ever added by an owner or admin here, or by config the operator set (the registrar's name,
  * CF_RECORD_NAME, BEANPOOL_ADDRESSES). Never from a request's Host header.
  */
 
 import Router from '@koa/router';
-import { updateNodeConfig } from '../state-engine.js';
+import { getNodeConfig, isOwnPublicAddress, updateNodeConfig } from '../state-engine.js';
 import {
     configuredAddresses, forgetOwnAddresses, isLostAddress, knowsItsNames, normalizeAddress, ownerConfirmedAddresses,
-    primaryAddress,
+    primaryAddress, MAX_OWNER_ADDRESSES,
 } from '../engine/own-addresses.js';
 import { registrarNames } from '../engine/registrar-names.js';
 import { nameStandings } from '../services/registrar-name-watch.js';
@@ -50,8 +52,8 @@ import { logger } from '../logger.js';
 import { requireAdminRole } from '../admin-auth.js';
 import type { RouteDeps } from './types.js';
 
-/** More than any real community needs; a bound on what one Settings session can write. */
-export const MAX_OWNER_ADDRESSES = 20;
+// The bound on the owner-confirmed list lives with the list (own-addresses.ts); `beanpool claim --ip/--address` adds to it too.
+export { MAX_OWNER_ADDRESSES };
 
 /**
  * `pageHost` is the host Settings is open at (`?host=`): the only host offered with one tap (engine/address-offers.ts),
@@ -167,7 +169,11 @@ export function createAppAddressesRoutes(deps: RouteDeps): Router {
             ctx.body = { error: 'That address is not one confirmed in Settings. Addresses from the registrar or the server’s own settings are changed there.' };
             return;
         }
-        updateNodeConfig({ ownerAddresses: current.filter((a) => a !== address) });
+        // An own address (`beanpool claim --ip/--address`) is also the community's address while it holds no BeanPool name
+        // (services/public-address-agent.ts storeOwnAddress): removed, it is that no longer either, or it would stay accepted.
+        const pa = getNodeConfig().publicAddress;
+        const alsoPublic = isOwnPublicAddress(pa) && normalizeAddress(pa.hostname) === address;
+        updateNodeConfig({ ownerAddresses: current.filter((a) => a !== address), ...(alsoPublic ? { publicAddress: null } : {}) } as any);
         forgetOwnAddresses();
         logger.security('AUTH', `App address removed in Settings by ${(ctx.state as any)?.actor || 'the admin password'}: ${address}`);
         ctx.set('Cache-Control', 'no-store');

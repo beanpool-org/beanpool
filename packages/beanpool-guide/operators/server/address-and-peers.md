@@ -43,7 +43,7 @@ Before it asks Let's Encrypt, your server checks itself: it fetches its own answ
 Owners see **Your own address** under **Public Address**. Admins don't. It lists every address your server holds a certificate for or is asking for one, with where the address comes from. Each one says "Certificate valid until … Renews about …", or the last try, why it failed, and when it tries next.
 
 - **Use this IP address** and **Use this domain** give your server an address. It starts asking for the certificate at once. That takes a minute or two once the address leads to your server.
-- Putting another IP address in place of the community's IP address, or another domain in place of its domain, asks the fresh proof (Access and security). Adding an IP address beside a domain, or either beside a name, does not.
+- Putting another IP address in place of the community's IP address, or another domain in place of its domain, asks the fresh proof (Access and security). Giving an address otherwise doesn't: a domain given after an IP address becomes the community's address and the IP address stays one of its addresses, and an IP address given after a domain, or either beside a name, is kept beside it.
 - **Try again now** shows for an address an owner gave while it has no certificate or its last try failed. Fix what it said (port 80 closed, no A record yet), then press it: your server tries at once instead of waiting.
 - **Remove** asks first, then the fresh proof. Members' apps that use the address are refused after it.
 - On a standby, the card says it asks for no certificates. On a server set to Let's Encrypt's test service (ACME_DIRECTORY_URL in .env), it says that phones and browsers do not trust the certificates it gives.
@@ -77,7 +77,7 @@ Also under **Public Address**. A member's app signs every request for the addres
 
 The list shows each address with where it comes from and how many apps used it today and on the busiest day this week:
 
-- **this community's web address**: the name you claimed above; while the community has no .beanpool.org name, the IP address or domain given with beanpool claim or under Your own address; or the server's CF_RECORD_NAME;
+- **this community's web address**: the name you claimed above; on a server with no .beanpool.org name or CF_RECORD_NAME, the IP address or domain given with beanpool claim or under Your own address (once it has a domain, a later IP address is kept beside it); or the server's CF_RECORD_NAME;
 - **set on the server**: extra names in the server's .env, as BEANPOOL_ADDRESSES=one.example.org,two.example.org (a domain of your own, or a proxy's name). Write a name with letters outside a–z in its punycode form, which starts with xn-- (bücher.example is xn--bcher-kva.example). An entry that isn't an address is left out, and the server's log names it when the server starts: check the list here after changing the .env. Your server tries to get its own certificate for each one that is a public name or IP address, never for localhost or a home-network one (Your own address, above);
 - **confirmed in Settings**: addresses an owner or admin confirmed here, and an IP address or domain given beside the community's web address. Only these can be removed here, by an owner, with the fresh proof each time.
 

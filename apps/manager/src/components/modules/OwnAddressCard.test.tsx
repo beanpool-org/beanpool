@@ -47,7 +47,10 @@ function tlsStatus(over: Partial<TlsStatus> = {}): TlsStatus {
 
 type Sent = { path: string; body: Record<string, unknown> };
 
-/** fetch: tls/status answers `status()`; a POST to a path in `posts` answers from its list in turn; records each POST. */
+/**
+ * fetch: tls/status answers `status()` (a Response it returns goes as it is; a throw is a fetch that fails); a POST to a
+ * path in `posts` answers from its list in turn; records each POST.
+ */
 function mockNode(status: () => unknown, posts: Record<string, Array<[number, unknown]>>, sent: Sent[], tlsCode = 200) {
     vi.spyOn(global, 'fetch').mockImplementation(async (url, opts) => {
         const u = String(url);
@@ -61,7 +64,11 @@ function mockNode(status: () => unknown, posts: Record<string, Array<[number, un
                 return json(code, body);
             }
         }
-        if (u.includes('/api/local/admin/tls/status')) return json(tlsCode, tlsCode === 200 ? status() : { error: 'Only an owner of this node can see its certificates' });
+        if (u.includes('/api/local/admin/tls/status')) {
+            if (tlsCode !== 200) return json(tlsCode, { error: 'Only an owner of this node can see its certificates' });
+            const answer = status();
+            return answer instanceof Response ? answer : json(200, answer);
+        }
         if (u.includes('/public-address/status')) return json(200, { status: 'none' });
         if (u.includes('/extra-names')) return json(200, { names: [] });
         return json(200, { logs: [] });
@@ -114,6 +121,66 @@ describe('OwnAddressCard: "Your own address" (HTTPS S4)', () => {
         await waitFor(() => expect(screen.getByTestId('public-address-panel')).toBeInTheDocument());
         await new Promise((r) => setTimeout(r, 20));
         expect(screen.queryByTestId('own-address-card')).toBeNull();
+    });
+
+    it('an older server without the route (404) draws nothing either', async () => {
+        mockNode(() => tlsStatus(), {}, [], 404);
+        render(<PublicAddressPanel activeNode={node} />);
+        await waitFor(() => expect(screen.getByTestId('public-address-panel')).toBeInTheDocument());
+        await new Promise((r) => setTimeout(r, 20));
+        expect(screen.queryByTestId('own-address-card')).toBeNull();
+    });
+
+    it('a re-read that fails after a change keeps the card, the change\'s message and what was last read, and says it could not refresh', async () => {
+        const sent: Sent[] = [];
+        let reads = 0;
+        // The first read answers; every later one is the server's 500 until `healed`.
+        let healed = false;
+        mockNode(() => (++reads === 1 || healed ? tlsStatus() : json(500, {})),
+            { '/public-address/own': [[200, { success: true, address: '203.0.113.5', kind: 'ip', communityAddress: false, primaryAddress: 'beans.example.org' }]] }, sent);
+        render(<PublicAddressPanel activeNode={node} />);
+        await card();
+        fireEvent.click(within(row('203.0.113.5')).getByRole('button', { name: 'Try again now' }));
+        await waitFor(() => expect(screen.getByTestId('own-address-load-error')).toHaveTextContent("Couldn't refresh this list, so it may be out of date. Press Refresh to try again."));
+        expect(sent).toHaveLength(1);
+        expect(reads).toBe(2);
+        // The change went through: its message stays, beside the failed refresh, and so does every address last read.
+        expect(screen.getByTestId('own-address-message')).toHaveTextContent('203.0.113.5 is being tried again now.');
+        expect(screen.getByTestId('own-address-load-error')).toHaveTextContent('The server answered 500.');
+        expect(screen.getAllByTestId('own-address').map((li) => li.getAttribute('data-address'))).toEqual(['beans.example.org', '203.0.113.5', 'nas.example.net']);
+        // Refresh is still there; once the server answers, the line goes.
+        healed = true;
+        fireEvent.click(within(screen.getByTestId('own-address-card')).getByRole('button', { name: 'Refresh' }));
+        await waitFor(() => expect(screen.queryByTestId('own-address-load-error')).toBeNull());
+        expect(reads).toBe(3);
+        expect(screen.getByTestId('own-address-card')).toBeInTheDocument();
+    });
+
+    it('a re-read that cannot reach the server after Remove keeps the card and the "removed" message', async () => {
+        const sent: Sent[] = [];
+        let reads = 0;
+        mockNode(() => { if (++reads > 1) throw new TypeError('Failed to fetch'); return tlsStatus(); },
+            { '/app-addresses/remove': [[200, { addresses: [], unconfirmed: [], oldApps: { today: 0, busiestDay: 0 } }]] }, sent);
+        render(<PublicAddressPanel activeNode={node} />);
+        await card();
+        fireEvent.click(within(row('203.0.113.5')).getByRole('button', { name: 'Remove 203.0.113.5' }));
+        fireEvent.click(within(await screen.findByTestId('in-page-confirm')).getByRole('button', { name: 'Remove' }));
+        await waitFor(() => expect(screen.getByTestId('own-address-load-error')).toHaveTextContent('Could not reach the server.'));
+        expect(sent).toEqual([{ path: '/app-addresses/remove', body: { address: '203.0.113.5' } }]);
+        expect(screen.getByTestId('own-address-message')).toHaveTextContent('203.0.113.5 removed.');
+        expect(screen.getByTestId('own-address-card')).toBeInTheDocument();
+    });
+
+    it('Refresh pressed while the read answers 500 keeps the card and its Refresh button', async () => {
+        let reads = 0;
+        mockNode(() => (++reads === 1 ? tlsStatus() : json(500, {})), {}, []);
+        render(<PublicAddressPanel activeNode={node} />);
+        await card();
+        fireEvent.click(within(screen.getByTestId('own-address-card')).getByRole('button', { name: 'Refresh' }));
+        await waitFor(() => expect(screen.getByTestId('own-address-load-error')).toHaveTextContent('The server answered 500.'));
+        expect(reads).toBe(2);
+        expect(within(screen.getByTestId('own-address-card')).getByRole('button', { name: 'Refresh' })).toBeEnabled();
+        expect(screen.getAllByTestId('own-address')).toHaveLength(3);
     });
 
     it('adds the server\'s IP, and a domain typed as a web address goes as its host', async () => {

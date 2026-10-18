@@ -2,7 +2,8 @@
  * Settings → Public Address → "Your own address" (HTTPS S4; design scratch/global-node/DESIGN-https-anywhere-fable.md §4):
  * this server's public IP address, or a domain the owner points at it, without a .beanpool.org name or a Cloudflare
  * account. Owner-only, as every address change is: drawn only when the node answers GET /api/local/admin/tls/status
- * (an admin's 403, or an older server without the route, draws nothing).
+ * (an admin's 403, or an older server without the route, draws nothing). A read that fails any other way (a 5xx, no
+ * connection) keeps what was last read, with Refresh, and says it could not refresh.
  *
  *   - see: every address the server holds a certificate for, or asks one for, with the certificate's dates (valid until,
  *     renews about) or why the last try failed and when it is tried next, in the server's own words;
@@ -60,6 +61,8 @@ export function OwnAddressCard({ activeNode, enabled }: { activeNode: NodeProfil
     const [domain, setDomain] = useState('');
     const [busy, setBusy] = useState<string | null>(null);
     const [message, setMessage] = useState<Message | null>(null);
+    /** Why the last read failed: shown beside `message`, so a change that went through keeps its own words. */
+    const [loadError, setLoadError] = useState<string | null>(null);
     const proof = useFreshProof();
     const [ask, confirmation] = useInPageConfirm();
     const credential = nodeCredential(activeNode);
@@ -68,15 +71,19 @@ export function OwnAddressCard({ activeNode, enabled }: { activeNode: NodeProfil
         if (!enabled) return;
         setLoading(true);
         try {
+            // Null: the node offers no such answer (an admin's 403, an older server), so the card is not drawn.
             setStatus(await getTlsStatus(activeNode.url, credential, getTfaSessionToken(activeNode.id)));
-        } catch {
-            setStatus(null);
+            setLoadError(null);
+        } catch (e) {
+            // Anything else keeps what was last read, with Refresh, and says so.
+            setLoadError(e instanceof Error ? e.message : String(e));
         } finally {
             setLoading(false);
         }
     }, [enabled, activeNode.url, activeNode.id, credential]);
 
-    useEffect(() => { void load(); }, [load]);
+    // Another address or sign-in for this node: nothing read through the last one is kept.
+    useEffect(() => { setStatus(null); setLoadError(null); void load(); }, [load]);
 
     const give = async (input: OwnAddressInput, again: boolean, code?: string) => {
         const address = 'ip' in input ? input.ip : input.domain;
@@ -267,6 +274,14 @@ export function OwnAddressCard({ activeNode, enabled }: { activeNode: NodeProfil
                 <p role="status" className={`text-sm m-0 break-words [overflow-wrap:anywhere] ${messageClass}`} data-testid="own-address-message">
                     {message.text}
                 </p>
+            )}
+            {loadError && (
+                <div role="alert" className="space-y-1" data-testid="own-address-load-error">
+                    <p className="text-sm text-bp-ink-warning m-0 break-words">
+                        {t("Couldn't refresh this list, so it may be out of date. Press Refresh to try again.")}
+                    </p>
+                    <p className="text-xs text-nature-400 m-0 break-words [overflow-wrap:anywhere]">{loadError}</p>
+                </div>
             )}
 
             {status.orders && (

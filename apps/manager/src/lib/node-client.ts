@@ -3332,13 +3332,29 @@ function asTlsStatus(body: unknown): TlsStatus | null {
 }
 
 /**
- * GET /api/local/admin/tls/status: owner-only. Null when the node gives no such answer (an admin's 403, an older server
- * without the route), so the card is simply not drawn.
+ * GET /api/local/admin/tls/status: owner-only. Null only when the node says it offers no such answer (an admin's 403, an
+ * older server's 404, or a page in place of the answer), so the card is simply not drawn. Any other failure (a 5xx, a
+ * 429, an ended sign-in, no connection) throws with a sentence: the card keeps what it last read and says it could not
+ * refresh, rather than vanishing after a change that went through.
  */
 export async function getTlsStatus(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<TlsStatus | null> {
-    const res = await fetch(resolveNodeApiUrl(nodeUrl, '/api/local/admin/tls/status'), { headers: buildAdminHeaders(adminPassword, tfaToken) });
-    if (!res.ok) return null;
-    return asTlsStatus(await res.json().catch(() => null));
+    let res: Response;
+    try {
+        res = await fetch(resolveNodeApiUrl(nodeUrl, '/api/local/admin/tls/status'), { headers: buildAdminHeaders(adminPassword, tfaToken) });
+    } catch {
+        throw new Error(t('Could not reach the server.'));
+    }
+    const body = await res.json().catch(() => null);
+    if (res.status === 403 || res.status === 404) return null;
+    if (!res.ok) {
+        // A read changes nothing: statusSentence's "Nothing was changed" would read as if a change just made had not taken.
+        const said = body && typeof body === 'object' ? (body as Record<string, unknown>).error : undefined;
+        if (typeof said === 'string' && said.trim()) throw new Error(said);
+        if (res.status === 401) throw new Error(t('Your sign-in has ended. Sign in again.'));
+        if (res.status === 429) throw new Error(t('Too many tries. Wait a minute.'));
+        throw new Error(t('The server answered {status}.', { status: res.status }));
+    }
+    return asTlsStatus(body);
 }
 
 export type OwnAddressInput = { ip: string } | { domain: string };

@@ -166,6 +166,19 @@ export function adminSourceDid(env, { who = null, run, block, label = null, tota
             : `${you} chose Reject all held for one source${label ? ` (${label})` : ''}: ${n}, each freed again. What each name did is under Name events.`,
     };
 }
+// The admin sent a notice from /admin (index.js handleNoticeSend): to whom and how many names, its number and level —
+// never its words (they are the admin's own, in /admin), never a contact.
+export const noticeSent = (env, { who = null, id, level, names, audience }) => ({
+    category: 'admin', priority: PRIORITY.low, tag: TAG.resolved, name: null,
+    title: `${who || 'You'} sent a notice to ${plural(names, 'name')}`,
+    body: `${who || 'You'} sent notice #${id} (${level}) to ${audience}: ${plural(names, 'name')}. Each node hears it at its next check-in, within 15 minutes; /admin → Notices shows how many have it.`,
+});
+// An operator answered a notice through its reply link (index.js redeemReplyToken): the name and the notice's number,
+// never the words, which are in the feedback inbox.
+export const noticeReply = (env, { name, id }) => ({
+    category: 'names', priority: PRIORITY.default, tag: TAG.growth, name, title: `Reply from ${name}`,
+    body: `Reply from ${host(env, name)}: its owner answered notice #${id} through its reply link. The words are in the feedback inbox (source address-reply).`,
+});
 // The admin changed a live setting, the hold switch or a block in /admin: said, with the value (the ntfy topic is the
 // admin's own), so a change nobody meant is seen.
 export const adminSetting = (env, { who = null, what }) => ({

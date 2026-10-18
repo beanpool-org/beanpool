@@ -336,3 +336,118 @@ export const blockSource = (env, kind, value, until, now, by, label) => env.DB.p
 
 export const unblockSource = async (env, kind, value) =>
     ((await env.DB.prepare('DELETE FROM blocked_sources WHERE kind=? AND value=?').bind(kind, value).run())?.meta?.changes ?? 0) > 0;
+
+// --- Notices to the operators of names (migration 0012; index.js carryNotices, handleNotices, the ReplyTokens entrypoint) ---
+
+// The states in which a key holds its name (holdsName, release aside): a notice is carried, and its reply link taken,
+// only while the name it is about is still in one of them for that key. A blocked name's node still hears it.
+const HOLDS = "('pending', 'live', 'paused', 'blocked')";
+const HELD_BY = `EXISTS (SELECT 1 FROM name_allocations a WHERE a.name = r.name AND a.node_pubkey = r.node_pubkey AND a.status IN ${HOLDS})`;
+// One recipient row per key: the key's live name first, when a group holds more than one of its names.
+const BY_STATE = "CASE a.status WHEN 'live' THEN 0 WHEN 'pending' THEN 1 WHEN 'paused' THEN 2 ELSE 3 END, a.name";
+
+// The node said it has every notice up to `seen` (its highest id): those carried to it are never carried again, and
+// their reply links' tokens leave the table (only their hashes stay, in reply_tokens). One never carried to it is left
+// as it is: it reaches the node once the name it is about is held again.
+export const ackNotices = (env, pubkey, seen, now) => env.DB.prepare(
+    `UPDATE notice_recipients SET seen_at = ?, reply_token = NULL
+     WHERE node_pubkey = ? AND notice_id <= ? AND delivered_at IS NOT NULL AND seen_at IS NULL`
+).bind(now, pubkey, seen).run();
+
+// What `pubkey`'s /status carries: its notices not yet seen and not past their time, about a name it still holds, oldest
+// first, at most `limit`.
+export const noticesFor = async (env, pubkey, now, limit) => ((await env.DB.prepare(
+    `SELECT r.notice_id, r.name, r.delivered_at, r.reply_token, n.at, n.level, n.text, n.reply
+     FROM notice_recipients r JOIN notices n ON n.id = r.notice_id
+     WHERE r.node_pubkey = ? AND r.seen_at IS NULL AND n.expires_at > ? AND ${HELD_BY}
+     ORDER BY r.notice_id LIMIT ?`
+).bind(pubkey, now, limit).all()).results || []);
+
+// A notice's first carry to its key: delivered now, with its reply link's token (or null). True only for the one request
+// that marked it: two /status of one key at once never make two links.
+export const markDelivered = async (env, noticeId, pubkey, now, token) => ((await env.DB.prepare(
+    'UPDATE notice_recipients SET delivered_at = ?, reply_token = ? WHERE notice_id = ? AND node_pubkey = ? AND delivered_at IS NULL'
+).bind(now, token, noticeId, pubkey).run())?.meta?.changes ?? 0) > 0;
+
+export const forgetReplyToken = (env, noticeId, pubkey) =>
+    env.DB.prepare('UPDATE notice_recipients SET reply_token = NULL WHERE notice_id = ? AND node_pubkey = ?').bind(noticeId, pubkey).run();
+
+export const insertReplyToken = (env, t) => env.DB.prepare(
+    'INSERT INTO reply_tokens (token_hash, notice_id, node_pubkey, name, at, expires_at) VALUES (?,?,?,?,?,?)'
+).bind(t.token_hash, t.notice_id, t.node_pubkey, t.name, t.at, t.expires_at).run();
+
+// A reply link that still works: not used, not past its time, its name still held by its key.
+const LIVE_TOKEN = `r.token_hash = ? AND r.used_at IS NULL AND r.expires_at > ? AND ${HELD_BY}`;
+export const replyTokenLive = async (env, hash, now) =>
+    !!(await env.DB.prepare(`SELECT 1 AS yes FROM reply_tokens r WHERE ${LIVE_TOKEN}`).bind(hash, now).first());
+
+// The reply link's one use, in one statement: the name and notice it was for, to the one request that took it; else null.
+export const takeReplyToken = (env, hash, now) => env.DB.prepare(
+    `UPDATE reply_tokens AS r SET used_at = ? WHERE ${LIVE_TOKEN} RETURNING name, notice_id`
+).bind(now, hash, now).first();
+
+// A notice the admin wrote; its id.
+export const insertNotice = async (env, n) => (await env.DB.prepare(
+    'INSERT INTO notices (at, level, text, reply, expires_at, audience, by) VALUES (?,?,?,?,?,?,?) RETURNING id'
+).bind(n.at, n.level, n.text, n.reply ? 1 : 0, n.expires_at, n.audience, n.by ?? null).first())?.id ?? null;
+
+export const deleteNotice = (env, id) => env.DB.prepare('DELETE FROM notices WHERE id = ?').bind(id).run();
+
+// Who a notice goes to, in one statement: every key holding one of `to`'s names now — { names } those names, { source }
+// the names one source claimed since `since` (the last day) or still held for approval, { asn } the same from one
+// network, { all } every name held — one row per key. How many.
+export async function addRecipients(env, noticeId, to, since) {
+    let from;
+    let args;
+    if (to.names) {
+        from = `FROM name_allocations a WHERE a.name IN (${to.names.map(() => '?').join(', ')}) AND a.status IN ${HOLDS}`;
+        args = to.names;
+    } else if (to.source || to.asn) {
+        from = `FROM claim_sources s JOIN name_allocations a ON ${TENURE}
+                WHERE ${to.source ? 's.source_hash = ?' : 's.asn = ?'} AND (s.at > ? OR (${STILL_HELD})) AND a.status IN ${HOLDS}`;
+        args = [to.source || to.asn, since];
+    } else {
+        from = `FROM name_allocations a WHERE a.status IN ${HOLDS}`;
+        args = [];
+    }
+    const r = await env.DB.prepare(
+        `INSERT OR IGNORE INTO notice_recipients (notice_id, node_pubkey, name) SELECT ?, a.node_pubkey, a.name ${from} ORDER BY ${BY_STATE}`
+    ).bind(noticeId, ...args).run();
+    return r?.meta?.changes ?? 0;
+}
+
+// Each name a notice went to, in its history (name_events): the notice's id and level, never its words.
+export const noticeEvents = (env, noticeId, detail, now) => env.DB.prepare(
+    "INSERT INTO name_events (name, at, event, detail) SELECT name, ?, 'notice', ? FROM notice_recipients WHERE notice_id = ?"
+).bind(now, detail, noticeId).run();
+
+// /admin's list: the latest notices, each with how many keys it went to, how many a /status carried it to, how many said
+// they have it, and how many replied.
+export const listNotices = async (env, limit) => ((await env.DB.prepare(
+    `SELECT n.*, COUNT(r.node_pubkey) AS recipients, COUNT(r.delivered_at) AS delivered, COUNT(r.seen_at) AS seen,
+            (SELECT COUNT(*) FROM reply_tokens t WHERE t.notice_id = n.id AND t.used_at IS NOT NULL) AS replies
+     FROM notices n LEFT JOIN notice_recipients r ON r.notice_id = n.id GROUP BY n.id ORDER BY n.id DESC LIMIT ?`
+).bind(limit).all()).results || []);
+
+// One notice's recipients: the name, when it was carried and seen, when its reply link was used.
+export const noticeRecipients = async (env, noticeId, limit) => ((await env.DB.prepare(
+    `SELECT r.name, r.delivered_at, r.seen_at,
+            (SELECT t.used_at FROM reply_tokens t WHERE t.notice_id = r.notice_id AND t.node_pubkey = r.node_pubkey) AS replied_at
+     FROM notice_recipients r WHERE r.notice_id = ? ORDER BY r.name LIMIT ?`
+).bind(noticeId, limit).all()).results || []);
+
+// Reply links past their time go; notices more than `keep` past their time go, with their recipients.
+export async function pruneNotices(env, now, keep) {
+    await env.DB.prepare('DELETE FROM reply_tokens WHERE expires_at < ?').bind(now).run();
+    await env.DB.prepare('DELETE FROM notice_recipients WHERE notice_id IN (SELECT id FROM notices WHERE expires_at < ?)').bind(now - keep).run();
+    await env.DB.prepare('DELETE FROM notices WHERE expires_at < ?').bind(now - keep).run();
+}
+
+// Contact retention (design §3.2): a name's optional contact is kept only while the name is held. Its hold over (a release
+// past `heldSince`, or one that freed it at once) or the name abandoned, it is cleared. One statement, deciding "held" as
+// holdsName does; the sweep runs it every time.
+export const clearLapsedContacts = (env, heldSince) => env.DB.prepare(
+    `UPDATE name_allocations SET contact = NULL WHERE contact IS NOT NULL
+       AND (status = 'abandoned'
+            OR (status = 'released' AND (COALESCE(pause_reason, '') IN ('admin', 'withdrawn') OR COALESCE(released_at, 0) <= ?)))`
+).bind(heldSince).run();

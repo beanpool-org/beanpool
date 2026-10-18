@@ -1040,7 +1040,10 @@ CREATE INDEX IF NOT EXISTS idx_burst_action_posts_post ON burst_action_posts(pos
 -- target. A row is never deleted: a community that leaves the registry is kept as its key and `first_seen_at` only
 -- (`listed` 0, every published field cleared), so a community is new to this node once, and a watcher is told
 -- about it once. Replicated to a standby (`updated_at`, stamped only when a row changes), so a server that takes over
--- knows what the old one had already seen and tells nobody about it again.
+-- knows what the old one had already seen and tells nobody about it again. `promise`, `accepting_knocks` and
+-- `closing_on` are the listing promise (mothership A2, engine/directory-promise.ts): the promise as JSON text, checked
+-- to its five fields; whether a stranger can ask to join; the day the community says it closes. Added to an existing
+-- table by db.ts.
 CREATE TABLE IF NOT EXISTS directory_cache (
     community_key TEXT PRIMARY KEY,
     listed INTEGER NOT NULL DEFAULT 1 CHECK (listed IN (0, 1)),
@@ -1054,7 +1057,10 @@ CREATE TABLE IF NOT EXISTS directory_cache (
     contact_phone TEXT,
     registry_updated_at TEXT,
     first_seen_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+    updated_at TEXT NOT NULL,
+    promise TEXT,
+    accepting_knocks INTEGER CHECK (accepting_knocks IS NULL OR accepting_knocks IN (0, 1)),
+    closing_on TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_directory_cache_updated_at ON directory_cache(updated_at);
 

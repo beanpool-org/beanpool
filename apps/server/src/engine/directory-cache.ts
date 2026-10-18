@@ -21,7 +21,12 @@
  *     a positive distance is none;
  *   - the name is `community_name`, else `callsign`, else `name`, with control and direction-changing characters taken
  *     out and at most 80 characters: it is shown in other people's notifications;
- *   - a member count is a whole number from 0; contacts are an email and a phone number or nothing.
+ *   - a member count is a whole number from 0; contacts are an email and a phone number or nothing;
+ *   - the listing promise (`promise`, engine/directory-promise.ts) is exactly its five fields: `v` 1, `owners` a whole
+ *     number from 2, and `backups`, `reports` and `notice` each `true`. Anything else in it (a name, a key, a list, a
+ *     sixth field, a "true" as text) and the whole promise is dropped: the community reads as a new listing;
+ *   - `accepting_knocks` is true or false, else unknown (null); `closing_on` is a day (YYYY-MM-DD) from two days ago to
+ *     {@link MAX_CLOSING_DAYS} days ahead, else none.
  *
  * ## Written once a run, in one transaction (writeDirectoryRows)
  *
@@ -37,6 +42,7 @@
  * tells no watcher about them again (engine/place-watches.ts). It also lists the directory from its first minute. A
  * standby never fetches; a copy is its only writer until it takes over.
  */
+import crypto from 'node:crypto';
 import { db, rethrowUnlessRowRefused } from '../db/db.js';
 import { audienceOf } from '@beanpool/core';
 import { haversineKm, type SyncDirectoryCommunity } from '@beanpool/engine';
@@ -53,6 +59,24 @@ export interface DirectoryRow {
     contactEmail: string | null;
     contactPhone: string | null;
     registryUpdatedAt: string | null;
+    /** The listing promise as the community's own push carried it, checked (see the header), or null. */
+    promise: ListingPromise | null;
+    /** Whether a stranger can ask to join it from the directory; null when its push didn't say (an older version). */
+    acceptingKnocks: boolean | null;
+    /** The day it says it closes (YYYY-MM-DD), or null. */
+    closingOn: string | null;
+}
+
+/**
+ * The listing promise as a community's push carries it (engine/directory-promise.ts makes it, design §1.2): counts and
+ * booleans only. `owners` is how many owners it has (two or more); the other three lines are kept, so each is `true`.
+ */
+export interface ListingPromise {
+    v: 1;
+    owners: number;
+    backups: true;
+    reports: true;
+    notice: true;
 }
 
 /** A listed community as the API gives it: a DirectoryRow, and how far it is from the reader's point (km, 0.1). */
@@ -70,12 +94,24 @@ export interface Community {
     /** When the community last published itself to the registry, as the registry said. */
     updatedAt: string | null;
     distanceKm: number | null;
+    /** The listing promise it keeps, or null (the card reads "New listing"). */
+    promise: ListingPromise | null;
+    /** Whether a stranger can ask to join it from here: true, false, or null when it didn't say. */
+    acceptingKnocks: boolean | null;
+    /** The day it says it closes (YYYY-MM-DD), or null. */
+    closingOn: string | null;
 }
 
 export const MAX_NAME_CHARS = 80;
 /** More than any registry will hold for a long time; a response past it is cut here and the rest logged. */
 export const MAX_DIRECTORY_ROWS = 10_000;
 const MAX_KEY_CHARS = 200;
+/** The most owners a promise may say: more than any community has; past it the promise is no promise. */
+export const MAX_PROMISE_OWNERS = 1000;
+/** How far ahead a closing day may be: a year's notice, and a little. */
+export const MAX_CLOSING_DAYS = 400;
+/** The distance band (design §1.2): communities within the same 25 km of the reader are ordered by the promise, then at random. */
+export const DISTANCE_BAND_KM = 25;
 
 // ── checking a row ───────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -179,6 +215,48 @@ function isoTime(v: unknown): string | null {
     return Number.isFinite(t) ? new Date(t).toISOString() : null;
 }
 
+const PROMISE_FIELDS = ['v', 'owners', 'backups', 'reports', 'notice'];
+
+/**
+ * A listing promise, exactly as engine/directory-promise.ts makes one (an object, or its JSON text as a jsonb column may
+ * come back), or null. Every field must be there and nothing else: a promise with names in it, a list of owners, a
+ * `"true"`, or a field this version doesn't know is not this promise, and none of it is kept.
+ */
+export function listingPromise(v: unknown): ListingPromise | null {
+    let p: unknown = v;
+    if (typeof p === 'string') {
+        if (p.length > 200) return null;
+        try { p = JSON.parse(p); } catch { return null; }
+    }
+    if (!p || typeof p !== 'object' || Array.isArray(p)) return null;
+    const o = p as Record<string, unknown>;
+    const fields = Object.keys(o);
+    if (fields.length !== PROMISE_FIELDS.length || !fields.every(f => PROMISE_FIELDS.includes(f))) return null;
+    if (o.v !== 1 || o.backups !== true || o.reports !== true || o.notice !== true) return null;
+    if (typeof o.owners !== 'number' || !Number.isSafeInteger(o.owners) || o.owners < 2 || o.owners > MAX_PROMISE_OWNERS) return null;
+    return { v: 1, owners: o.owners, backups: true, reports: true, notice: true };
+}
+
+function knocks(v: unknown): boolean | null {
+    return typeof v === 'boolean' ? v : null;
+}
+
+const DAY = /^(\d{4})-(\d{2})-(\d{2})$/;
+const DAY_MS = 86_400_000;
+
+/**
+ * A closing day: YYYY-MM-DD, a real date, from two days before `now` (time zones, and the hourly mirror) to
+ * {@link MAX_CLOSING_DAYS} days after. Anything else, a day long past included, is none.
+ */
+export function closingDay(v: unknown, now: number = Date.now()): string | null {
+    if (typeof v !== 'string') return null;
+    const m = DAY.exec(v.trim());
+    if (!m) return null;
+    const t = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    if (!Number.isFinite(t) || new Date(t).toISOString().slice(0, 10) !== m[0]) return null;
+    return t >= now - 2 * DAY_MS && t <= now + MAX_CLOSING_DAYS * DAY_MS ? m[0] : null;
+}
+
 /** A registry row, checked (see the header), or null when it has no key to know it by. */
 export function normaliseRegistryRow(raw: unknown): DirectoryRow | null {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
@@ -195,6 +273,9 @@ export function normaliseRegistryRow(raw: unknown): DirectoryRow | null {
         contactEmail: email(r.contact_email ?? r.contactEmail),
         contactPhone: phone(r.contact_phone ?? r.contactPhone),
         registryUpdatedAt: isoTime(r.updated_at ?? r.updatedAt ?? r.last_seen_at),
+        promise: listingPromise(r.promise),
+        acceptingKnocks: knocks(r.accepting_knocks ?? r.acceptingKnocks),
+        closingOn: closingDay(r.closing_on ?? r.closingOn),
     };
 }
 
@@ -212,16 +293,22 @@ interface CacheRecord {
     contact_email: string | null;
     contact_phone: string | null;
     registry_updated_at: string | null;
+    /** The listing promise as JSON text, or null. */
+    promise: string | null;
+    accepting_knocks: number | null;
+    closing_on: string | null;
     first_seen_at: string;
     updated_at: string;
 }
 
 function columns(r: DirectoryRow): unknown[] {
-    return [r.name, r.url, r.lat, r.lng, r.radiusKm, r.memberCount, r.contactEmail, r.contactPhone, r.registryUpdatedAt];
+    return [r.name, r.url, r.lat, r.lng, r.radiusKm, r.memberCount, r.contactEmail, r.contactPhone, r.registryUpdatedAt,
+        r.promise ? JSON.stringify(r.promise) : null, r.acceptingKnocks === null ? null : r.acceptingKnocks ? 1 : 0, r.closingOn];
 }
 
 function stored(c: CacheRecord): unknown[] {
-    return [c.name, c.node_url, c.lat, c.lng, c.radius_km, c.member_count, c.contact_email, c.contact_phone, c.registry_updated_at];
+    return [c.name, c.node_url, c.lat, c.lng, c.radius_km, c.member_count, c.contact_email, c.contact_phone, c.registry_updated_at,
+        c.promise ?? null, c.accepting_knocks ?? null, c.closing_on ?? null];
 }
 
 export interface DirectoryWrite {
@@ -244,12 +331,14 @@ let listedRows: Array<{ row: DirectoryRow; folded: string | null }> | null = nul
 export function writeDirectoryRows(rows: readonly DirectoryRow[], now: string): DirectoryWrite {
     const existing = new Map((db.prepare('SELECT * FROM directory_cache').all() as CacheRecord[]).map(c => [c.community_key, c]));
     const insert = db.prepare(`INSERT INTO directory_cache (community_key, listed, name, node_url, lat, lng, radius_km, member_count,
-        contact_email, contact_phone, registry_updated_at, first_seen_at, updated_at) VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+        contact_email, contact_phone, registry_updated_at, promise, accepting_knocks, closing_on, first_seen_at, updated_at)
+        VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
     const update = db.prepare(`UPDATE directory_cache SET listed = 1, name = ?, node_url = ?, lat = ?, lng = ?, radius_km = ?,
-        member_count = ?, contact_email = ?, contact_phone = ?, registry_updated_at = ?, updated_at = ? WHERE community_key = ?`);
+        member_count = ?, contact_email = ?, contact_phone = ?, registry_updated_at = ?, promise = ?, accepting_knocks = ?,
+        closing_on = ?, updated_at = ? WHERE community_key = ?`);
     const scrub = db.prepare(`UPDATE directory_cache SET listed = 0, name = NULL, node_url = NULL, lat = NULL, lng = NULL,
         radius_km = NULL, member_count = NULL, contact_email = NULL, contact_phone = NULL, registry_updated_at = NULL,
-        updated_at = ? WHERE community_key = ?`);
+        promise = NULL, accepting_knocks = NULL, closing_on = NULL, updated_at = ? WHERE community_key = ?`);
     const out: DirectoryWrite = { added: [], updated: 0, removed: 0 };
     const seen = new Set<string>();
     db.transaction(() => {
@@ -293,11 +382,14 @@ export function mergeReplicatedDirectory(communities: unknown): DirectoryMerge {
     if (!Array.isArray(communities) || communities.length === 0) return merge;
     const current = db.prepare('SELECT updated_at FROM directory_cache WHERE community_key = ?');
     const upsert = db.prepare(`INSERT INTO directory_cache (community_key, listed, name, node_url, lat, lng, radius_km, member_count,
-        contact_email, contact_phone, registry_updated_at, first_seen_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        contact_email, contact_phone, registry_updated_at, promise, accepting_knocks, closing_on, first_seen_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(community_key) DO UPDATE SET listed = excluded.listed, name = excluded.name, node_url = excluded.node_url,
             lat = excluded.lat, lng = excluded.lng, radius_km = excluded.radius_km, member_count = excluded.member_count,
             contact_email = excluded.contact_email, contact_phone = excluded.contact_phone,
-            registry_updated_at = excluded.registry_updated_at, first_seen_at = excluded.first_seen_at, updated_at = excluded.updated_at`);
+            registry_updated_at = excluded.registry_updated_at, promise = excluded.promise,
+            accepting_knocks = excluded.accepting_knocks, closing_on = excluded.closing_on,
+            first_seen_at = excluded.first_seen_at, updated_at = excluded.updated_at`);
     db.transaction(() => {
         for (const raw of communities) {
             const c = raw as Partial<SyncDirectoryCommunity> | null;
@@ -309,6 +401,8 @@ export function mergeReplicatedDirectory(communities: unknown): DirectoryMerge {
                 node_id: c.key, community_name: c.name, node_url: c.url,
                 service_radius: { lat: c.lat, lng: c.lng, radiusKm: c.radiusKm },
                 member_count: c.memberCount, contact_email: c.contactEmail, contact_phone: c.contactPhone, updated_at: c.registryUpdatedAt,
+                // Left out by a main server from before the promise: none of the three.
+                promise: c.promise ?? null, accepting_knocks: c.acceptingKnocks ?? null, closing_on: c.closingOn ?? null,
             });
             if (!row || row.key !== c.key) { merge.invalid++; continue; }
             const here = current.get(row.key) as { updated_at: string } | undefined;
@@ -348,6 +442,10 @@ function listed(): Array<{ row: DirectoryRow; folded: string | null }> {
             contactEmail: c.contact_email,
             contactPhone: c.contact_phone,
             registryUpdatedAt: c.registry_updated_at,
+            // Checked again on the way out: only a run or a checked copy wrote the column, and the reads never take its word.
+            promise: listingPromise(c.promise),
+            acceptingKnocks: c.accepting_knocks === 1 ? true : c.accepting_knocks === 0 ? false : null,
+            closingOn: closingDay(c.closing_on),
         },
         folded: c.name === null ? null : foldForSearch(c.name),
     }));
@@ -372,6 +470,9 @@ function toCommunity(r: DirectoryRow, distanceKm: number | null): Community {
         contactPhone: r.contactPhone,
         updatedAt: r.registryUpdatedAt,
         distanceKm,
+        promise: r.promise,
+        acceptingKnocks: r.acceptingKnocks,
+        closingOn: r.closingOn,
     };
 }
 
@@ -381,19 +482,58 @@ export interface CommunityQuery {
     q?: string | null;
     limit: number;
     offset: number;
+    /**
+     * The shuffle among communities at the same distance (a whole number from 0 to 2^32 - 1): the `order` an earlier answer
+     * gave, so its next page walks the same order. Left out, a new one for this read.
+     */
+    order?: number | null;
+}
+
+/** A new shuffle for one read. */
+export function newDirectoryOrder(): number {
+    return crypto.randomInt(0, 0x1_0000_0000);
 }
 
 /**
- * The listed communities: from a point, nearest first by the centre of each one's service radius, those with no place
- * after them; without one, by name. Ties by name, then key, so paging never skips or repeats. `total` is how many match.
+ * Where a community falls among its ties under one shuffle: FNV-1a over its key from the shuffle, then murmur3's
+ * finaliser, so every bit of both reaches the rank. A fairness shuffle, not a secret: a reader who sends an `order`
+ * only reorders their own answer, and a community can't know the order of a read it is not making.
  */
-export function listCommunities(query: CommunityQuery): { communities: Community[]; total: number } {
+function tieRank(order: number, key: string): number {
+    let h = (order ^ 0x811c9dc5) >>> 0;
+    for (let i = 0; i < key.length; i++) {
+        h ^= key.charCodeAt(i);
+        h = Math.imul(h, 0x01000193);
+    }
+    h ^= h >>> 16;
+    h = Math.imul(h, 0x85ebca6b);
+    h ^= h >>> 13;
+    h = Math.imul(h, 0xc2b2ae35);
+    h ^= h >>> 16;
+    return h >>> 0;
+}
+
+/**
+ * The listed communities. From a point (design §1.2): nearest first by the centre of each one's service radius, in
+ * bands of {@link DISTANCE_BAND_KM} km; within a band, the communities that keep the listing promise and take requests
+ * to join come first, then the rest, each group in the order of this read's shuffle (`order`, new on every read unless
+ * the caller sends one), so no community is always the first a stranger sees; those with no place after them, by name.
+ * The member count never orders anything. Without a point, by name, ties by key. Within a band, an equal rank goes by
+ * key, so paging with the same `order` never skips or repeats. `total` is how many match; `order` is the shuffle this read used.
+ */
+export function listCommunities(query: CommunityQuery): { communities: Community[]; total: number; order: number } {
     const needle = query.q ? foldForSearch(query.q.trim()) : '';
+    const order = query.order ?? newDirectoryOrder();
     const rows = listed()
         .filter(x => !needle || (x.folded !== null && x.folded.includes(needle)))
         .map(({ row: r, folded }) => {
             const d = query.point && r.lat !== null && r.lng !== null ? haversineKm(query.point.lat, query.point.lng, r.lat, r.lng) : null;
-            return { r, d, name: folded };
+            return {
+                r, d, name: folded,
+                band: d === null ? null : Math.floor(d / DISTANCE_BAND_KM),
+                first: r.promise !== null && r.acceptingKnocks === true,
+                rank: d === null ? 0 : tieRank(order, r.key),
+            };
         });
     const byName = (a: typeof rows[number], b: typeof rows[number]) => {
         if (a.name !== b.name) {
@@ -404,16 +544,21 @@ export function listCommunities(query: CommunityQuery): { communities: Community
         return a.r.key < b.r.key ? -1 : a.r.key > b.r.key ? 1 : 0;
     };
     rows.sort((a, b) => {
-        if (query.point && a.d !== b.d) {
-            if (a.d === null) return 1;
-            if (b.d === null) return -1;
-            return a.d - b.d;
+        if (query.point && a.band !== b.band) {
+            if (a.band === null) return 1;
+            if (b.band === null) return -1;
+            return a.band - b.band;
+        }
+        if (query.point && a.band !== null) {
+            if (a.first !== b.first) return a.first ? -1 : 1;
+            if (a.rank !== b.rank) return a.rank - b.rank;
+            return a.r.key < b.r.key ? -1 : a.r.key > b.r.key ? 1 : 0;
         }
         return byName(a, b);
     });
     const page = rows.slice(query.offset, query.offset + query.limit)
         .map(x => toCommunity(x.r, x.d === null ? null : Math.round(x.d * 10) / 10));
-    return { communities: page, total: rows.length };
+    return { communities: page, total: rows.length, order };
 }
 
 /** How many communities are listed. */

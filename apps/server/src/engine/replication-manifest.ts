@@ -346,7 +346,7 @@ export const TABLES: Record<string, TableEntry> = {
     },
     directory_cache: {
         kind: 'replicated', payload: 'directoryCache', watermark: 'updated_at',
-        columns: cols('community_key listed name node_url lat lng radius_km member_count contact_email contact_phone registry_updated_at first_seen_at updated_at'),
+        columns: cols('community_key listed name node_url lat lng radius_km member_count contact_email contact_phone registry_updated_at first_seen_at updated_at promise accepting_knocks closing_on'),
     },
     join_requests: {
         kind: 'replicated-except', payload: 'joinRequests', watermark: 'updated_at',
@@ -688,6 +688,7 @@ export const NODE_CONFIG_KEYS: Record<string, SettingEntry> = {
     health_debt_line_pct: { kind: 'community-settings', reason: "the Community health panel's debt line, a % of the credit line (engine/community-health.ts)" },
     health_quiet_days: { kind: 'community-settings', reason: "the Community health panel's days in debit without a sale (engine/community-health.ts)" },
     startCommunityUrl: { kind: 'community-settings', reason: "where the Local community sheet's Start a community leads (config/start-community.ts)" },
+    directory_promise: { kind: 'community-settings', reason: "the listing promise's two ticked lines and the closing day (engine/directory-promise.ts)" },
     commons_projects: {
         kind: 'community', gap: 'G3',
         reason: 'pending Commons proposals kept as one JSON value; still written (POST /api/commons/projects, state-engine.ts createProject), '

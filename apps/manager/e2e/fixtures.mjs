@@ -570,7 +570,9 @@ const PUBLIC_ADDRESS_STATUS = {
     hostname: NODE_HOSTNAME,
     mode: 'tunnel',
     pubkey: pubkey('node-identity'),
-    cached: false,
+    // The address service out of reach (#2143 item 1): the stored name as last stored, and the longest form of its one line.
+    cached: true,
+    nameServiceNote: "The BeanPool name service couldn't answer right now (Registrar returned 503: the address service is down for maintenance until its next deploy finishes).",
     communityName: COMMUNITY_NAME,
     contact: `admin@${NODE_HOSTNAME}`,
     // The tunnel inside the server (apps/server services/tunnel-connector.ts).

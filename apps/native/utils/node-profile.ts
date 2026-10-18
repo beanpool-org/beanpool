@@ -114,6 +114,31 @@ export interface NodeProfile {
      * what this phone writes in when the member has chosen none and the phone's own language is not one of them.
      */
     language?: Lang;
+    /**
+     * The community's own names and numbers (`addresses` in its info: apps/server engine/own-addresses.ts
+     * publishedAddresses), each a bare host in lower case. Absent from a node that doesn't say (one older than them).
+     */
+    addresses?: string[];
+    /**
+     * Where the community lives now (`primaryAddress` in its info), only when it is one of `addresses`. When it isn't the
+     * host this phone uses, the phone offers to follow it, after checking it is the same community (utils/address-follow.ts).
+     */
+    primaryAddress?: string;
+}
+
+/** A bare host as a node's info names its own: letters, digits, hyphens and dots, an optional port, nothing else. */
+const OWN_HOST = /^[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?(?::\d{1,5})?$/;
+const MAX_ADDRESSES = 32;
+
+/** `addresses` and `primaryAddress` of an info answer: hosts only, at most 32; the primary only when it is one of them. */
+function ownAddresses(addresses: unknown, primary: unknown): Pick<NodeProfile, 'addresses' | 'primaryAddress'> {
+    if (!Array.isArray(addresses)) return {};
+    const hosts = [...new Set(addresses
+        .filter((a): a is string => typeof a === 'string')
+        .map((a) => a.trim().toLowerCase())
+        .filter((a) => OWN_HOST.test(a)))].slice(0, MAX_ADDRESSES);
+    const p = typeof primary === 'string' ? primary.trim().toLowerCase() : null;
+    return { addresses: hosts, ...(p && hosts.includes(p) ? { primaryAddress: p } : {}) };
 }
 
 /** The server's own rule (config/start-community.ts cleanStartCommunityUrl): https, a host, no user name or password, at most 300 characters, no spaces. */
@@ -140,10 +165,13 @@ function cacheKey(url: string): string {
  *
  * Only the exact string `global` makes a node global: anything else, including an answer that does
  * not say, is `local`. Only booleans are kept from `features`, beside `door` and `nearbyListings`' two numbers.
+ * The community's own addresses are kept as bare hosts (ownAddresses).
  */
 export function readNodeProfile(body: unknown, now: Date = new Date()): NodeProfile | null {
     if (!body || typeof body !== 'object' || Array.isArray(body)) return null;
-    const b = body as { profile?: unknown; features?: unknown; startCommunityUrl?: unknown; language?: unknown };
+    const b = body as {
+        profile?: unknown; features?: unknown; startCommunityUrl?: unknown; language?: unknown; addresses?: unknown; primaryAddress?: unknown;
+    };
     const features: NodeFeatures = {};
     if (b.features && typeof b.features === 'object') {
         const f = b.features as Record<string, unknown>;
@@ -162,6 +190,7 @@ export function readNodeProfile(body: unknown, now: Date = new Date()): NodeProf
         profile: b.profile === 'global' ? 'global' : 'local', features, checkedAt: now.toISOString(),
         ...(startCommunityUrl ? { startCommunityUrl } : {}),
         ...(language ? { language } : {}),
+        ...ownAddresses(b.addresses, b.primaryAddress),
     };
 }
 

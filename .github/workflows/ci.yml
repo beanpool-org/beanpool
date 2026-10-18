@@ -68,7 +68,12 @@ jobs:
       - name: Install expect
         run: command -v expect || (sudo apt-get update && sudo apt-get install -y expect)
 
+      # A hang fails the step, and the log upload below still runs, instead of holding the runner for GitHub's 6 h
+      # default. patches/vitest@3.2.7.patch drops vitest's 60 s per-call rpc timer, as vitest 4 does: a test file whose
+      # import never finishes (a plugin transform that never settles) now waits for this. The slowest green run of the
+      # last 59 took 72 min here; the median, 55.
       - name: Run test-all checks
+        timeout-minutes: 120
         env:
           # On failure test-all.sh copies every check log here; a passing run writes nothing.
           TEST_ALL_LOG_DIR: ${{ runner.temp }}/test-all-logs

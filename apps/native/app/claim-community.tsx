@@ -29,9 +29,10 @@ import { assertPlainNodeAddress, plainOriginOf } from '../utils/node-url';
 import { requireDeviceUnlock, NO_DEVICE_LOCK_MESSAGE } from '../utils/node-admin';
 import {
     claimCodeDigits, claimCodeFromDigits, claimCodeFromScan, claimCommunity, claimNodeOrigin, claimOutcomeMessage,
-    claimSuccessActions, ownerCheckViaRole, readClaimStatus, readNodeHasAddress, type ClaimStatus,
+    claimSuccessActions, ownerCheckViaRole, readClaimStatus, readNodeAddresses, type ClaimStatus,
 } from '../utils/node-claim';
 import { CLAIM_CODE_PLACEHOLDER, claimLinkFromScan, parseClaimLink } from '../utils/claim-link';
+import { numberNudge, numberOnlyAddress } from '../utils/address-follow';
 
 export { ErrorBoundary };
 
@@ -197,12 +198,16 @@ export default function ClaimCommunityScreen() {
 
     const [isAnchor, setIsAnchor] = useState(false);
     const [hasAddress, setHasAddress] = useState<boolean | null>(null);
+    // Claimed at the server's public number, with no name yet: the owner is told what that means for members (D3).
+    const [numberOnly, setNumberOnly] = useState<string | null>(null);
     const [switching, setSwitching] = useState(false);
 
     const afterOwner = async (o: string) => {
         const anchor = await getAnchorUrl().catch(() => null);
         setIsAnchor(!!anchor && plainOriginOf(anchor.replace(/\/+$/, '')) === o);
-        setHasAddress(await readNodeHasAddress(o));
+        const addresses = await readNodeAddresses(o);
+        setHasAddress(addresses ? addresses.length > 0 : null);
+        setNumberOnly(numberOnlyAddress(o, addresses));
         setPhase('done');
     };
 
@@ -303,6 +308,7 @@ export default function ClaimCommunityScreen() {
                 <Text style={styles.title}>You own {name}</Text>
                 <Text style={styles.address} selectable>{origin}</Text>
                 <Text style={styles.lead}>This phone's screen lock is how you manage it; keep it on. Add a second owner soon.</Text>
+                {numberOnly ? <Text style={styles.note} testID="claim-number-nudge">{numberNudge(numberOnly)}</Text> : null}
                 {actions.includes('set-address') || actions.includes('open-settings') ? (
                     <Pressable style={styles.primary} onPress={() => manage.start(name)} disabled={manage.busy} accessibilityRole="button">
                         <Text style={styles.primaryText}>{manage.busy ? 'Opening…' : actions.includes('set-address') ? 'Set the address' : 'Open Settings'}</Text>

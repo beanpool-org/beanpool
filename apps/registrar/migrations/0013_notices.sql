@@ -1,4 +1,4 @@
--- 0012: notices to the operators of names, and their one-use reply links (slice S2 of
+-- 0013: notices to the operators of names, and their one-use reply links (slice S2 of
 -- scratch/global-node/DESIGN-registrar-trust-fable.md §3.2; D4 decided by Marty 2026-10-18: reach a living node through its
 -- own check-in, collect nothing). src/notices.js, src/index.js handleStatus.
 --

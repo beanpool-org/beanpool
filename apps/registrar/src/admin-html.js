@@ -215,6 +215,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
             <h2 style="font-size: 1.1rem; font-family: var(--font-header); color: #38bdf8; margin-bottom: 0.5rem;">🛰️ Our servers</h2>
             <p style="font-size: 0.8rem; color: var(--text-muted);">Looked at every 5 minutes from this Worker, never from the server itself (WATCH_TARGETS). Two failed looks in a row and your phone hears of it; so it does of a locked vault, a vault report that is not right, a release that changed, and a node its watchdog restarted.</p>
             <div id="serversContainer"><p style="color: var(--text-muted); font-size: 0.85rem;">Loading servers...</p></div>
+            <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.5rem;">The public status page: <a href="/status" style="color: #38bdf8;">beanpool.org/status</a> — the servers in STATUS_SERVERS and this registrar, up now, the last incident and 90 days' share, drawn from <a href="/api/registrar/status.json" style="color: #38bdf8;">/api/registrar/status.json</a>. Never a community's name.</p>
         </div>
 
         <div class="admin-card">

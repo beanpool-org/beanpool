@@ -506,6 +506,8 @@ export interface SyncCommunitySettings {
         health_quiet_days?: string | null;
         /** Where Start a community leads, or null for beanpool.org's page (apps/server config/start-community.ts). */
         startCommunityUrl?: string | null;
+        /** The listing promise's ticked lines and closing day as JSON text, or null for none (apps/server engine/directory-promise.ts). */
+        directory_promise?: string | null;
     };
     /** Fields of the `node_config` row's object: the service area and the directory's switches. */
     directory: {
@@ -539,6 +541,12 @@ export interface SyncDirectoryCommunity {
     registryUpdatedAt: string | null;
     firstSeenAt: string;
     updatedAt: string;
+    /** The listing promise the community's push carried, as the mirror checked it; left out by a main server from before it. */
+    promise?: { v: 1; owners: number; backups: true; reports: true; notice: true } | null;
+    /** Whether a stranger can ask to join it from the directory; null when it didn't say. */
+    acceptingKnocks?: boolean | null;
+    /** The day it says it closes (YYYY-MM-DD), or null. */
+    closingOn?: string | null;
 }
 
 /**
@@ -1369,7 +1377,16 @@ function directoryCommunityOfRow(r: any): SyncDirectoryCommunity {
         registryUpdatedAt: r.registry_updated_at ?? null,
         firstSeenAt: r.first_seen_at,
         updatedAt: r.updated_at,
+        promise: jsonOrNull(r.promise),
+        acceptingKnocks: r.accepting_knocks === 1 ? true : r.accepting_knocks === 0 ? false : null,
+        closingOn: r.closing_on ?? null,
     };
+}
+
+/** A JSON column's value, or null for none or for text that isn't JSON. The standby checks it again (directory-cache.ts). */
+function jsonOrNull(v: unknown): any {
+    if (typeof v !== 'string') return null;
+    try { return JSON.parse(v); } catch { return null; }
 }
 
 // Requests to join (G6): on every node, empty on the global one. Never `ip_hash`, the knock limiter's for a day.

@@ -172,6 +172,11 @@ async function child(): Promise<void> {
             const row = db.prepare("SELECT member_pubkey FROM node_roles WHERE role = 'owner' ORDER BY rowid LIMIT 1").get() as { member_pubkey: string } | undefined;
             return (await import('./admin-auth-test-harness.js')).ownerSessionHeaders(row?.member_pubkey);
         },
+        // The same owner's session from the phone's Manage hand-off, just unlocked: the fresh proof removing an address asks.
+        'owner-phone-session': async () => {
+            const row = db.prepare("SELECT member_pubkey FROM node_roles WHERE role = 'owner' ORDER BY rowid LIMIT 1").get() as { member_pubkey: string } | undefined;
+            return (await import('./admin-auth-test-harness.js')).ownerPhoneSessionHeaders(row?.member_pubkey);
+        },
     };
 
     const rl = readline.createInterface({ input: process.stdin });
@@ -712,7 +717,7 @@ async function main(): Promise<void> {
             assert(JSON.stringify(info.body?.addresses) === JSON.stringify(['community.example.org']), `and /api/community/info lists it (${JSON.stringify(info.body?.addresses)})`);
             const bad = await call(U, 'POST', '/api/local/admin/app-addresses/confirm', await adminOf(U), JSON.stringify({ address: 'not a host' }));
             assert(bad.status === 400, `something that is not an address is refused (${show(bad)})`);
-            const removed = await call(U, 'POST', '/api/local/admin/app-addresses/remove', await adminOf(U), JSON.stringify({ address: 'community.example.org' }));
+            const removed = await call(U, 'POST', '/api/local/admin/app-addresses/remove', await U.send('owner-phone-session'), JSON.stringify({ address: 'community.example.org' }));
             assert(removed.status === 200 && removed.body?.addresses?.length === 0, `and it can be removed again (${show(removed)})`);
         });
 
@@ -799,7 +804,7 @@ async function main(): Promise<void> {
             assert(mixed?.source === 'owner', `Settings lists it as mixed.example.org, confirmed in Settings (${show(listed)})`);
             const own = await sendTo(A, 'GET', await bound(xan, 'GET', 'https://mixed.example.org/api/community/me'));
             assert(own.status === 200, `A accepts a request signed for it (${show(own)})`);
-            const removed = await call(A, 'POST', '/api/local/admin/app-addresses/remove', await adminOf(A), JSON.stringify({ address: 'mixed.example.org' }));
+            const removed = await call(A, 'POST', '/api/local/admin/app-addresses/remove', await A.send('owner-phone-session'), JSON.stringify({ address: 'mixed.example.org' }));
             assert(removed.status === 200 && !removed.body?.addresses?.some((a: any) => a.address === 'mixed.example.org'),
                 `the Remove button's request takes it off the list (${show(removed)})`);
             assert(JSON.stringify(await A.send('storedOwnerAddresses')) === JSON.stringify(['kept.example.org']), 'and off what is stored; the other stays');

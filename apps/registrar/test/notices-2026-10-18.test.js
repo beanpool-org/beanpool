@@ -1,7 +1,7 @@
 // Slice S2 of scratch/global-node/DESIGN-registrar-trust-fable.md (§3.2, §6) as decided by Marty on 2026-10-18 (D4):
 // notices to the operators of names, carried by each node's own signed /status and never again once it says `seen`; a
 // blocked key hears them too; one-use reply links that say nothing of the name or the key; and contact retention (a
-// name's contact cleared once its hold is over). Every test here fails on origin/main (a77b76d1: no migration 0012, no
+// name's contact cleared once its hold is over). Every test here fails on origin/main (a77b76d1: no migration 0013, no
 // /notices route, /status carries nothing, the sweep keeps every contact).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';

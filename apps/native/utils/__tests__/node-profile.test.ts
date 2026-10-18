@@ -101,6 +101,36 @@ describe('readNodeProfile', () => {
         expect(readNodeProfile('global')).toBeNull();
         expect(readNodeProfile([GLOBAL_INFO])).toBeNull();
     });
+
+    // HTTPS S3 (DESIGN-https-anywhere-fable.md §3, D4): the hourly read of the info keeps where the community lives, so the
+    // phone can offer to follow it (utils/address-follow.ts). Nothing read it before.
+    it('keeps the community\'s own addresses as bare hosts, and primaryAddress only when it is one of them', () => {
+        const p = readNodeProfile({ addresses: ['203.0.113.5', 'Beans.Example.ORG', 'beans.example.org', 'beans.example.org:8443'], primaryAddress: 'BEANS.example.org' })!;
+        expect(p.addresses).toEqual(['203.0.113.5', 'beans.example.org', 'beans.example.org:8443']);
+        expect(p.primaryAddress).toBe('beans.example.org');
+        expect(readNodeProfile({ addresses: ['203.0.113.5'], primaryAddress: 'elsewhere.example.org' })!).not.toHaveProperty('primaryAddress');
+        expect(readNodeProfile({ addresses: [], primaryAddress: null })!).toMatchObject({ addresses: [] });
+    });
+
+    it('drops anything in addresses that is not a bare host: a scheme, a path, a login, a space, a non-string', () => {
+        const p = readNodeProfile({
+            addresses: ['https://beans.example.org', 'beans.example.org/x', 'user@beans.example.org', 'beans example.org', 'a\\b.org', '-bad.org', 7, null, 'ok.example.org'],
+            primaryAddress: 'https://beans.example.org',
+        })!;
+        expect(p.addresses).toEqual(['ok.example.org']);
+        expect(p).not.toHaveProperty('primaryAddress');
+    });
+
+    it('says nothing of addresses for a node that says nothing of them (one older than them)', () => {
+        const p = readNodeProfile({ profile: 'local', primaryAddress: 'beans.example.org' })!;
+        expect(p).not.toHaveProperty('addresses');
+        expect(p).not.toHaveProperty('primaryAddress');
+    });
+
+    it('a copy read back from the phone keeps them', async () => {
+        const p = readNodeProfile({ addresses: ['203.0.113.5', 'beans.example.org'], primaryAddress: 'beans.example.org' }, new Date('2026-10-18T00:00:00Z'))!;
+        expect(readNodeProfile(JSON.parse(JSON.stringify(p)), new Date(p.checkedAt))).toEqual(p);
+    });
 });
 
 describe('fetchNodeProfile and the per-node cache', () => {

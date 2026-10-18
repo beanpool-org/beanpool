@@ -8,9 +8,13 @@
  *   - POST /api/local/admin/public-address/own { ip } or { domain } (owner-only, main server only): an address of this
  *     server's own, its public IPv4 address or the owner's domain pointed at it, as `beanpool claim --ip/--address`
  *     gives one (services/public-address-agent.ts storeOwnAddress; design scratch/global-node/DESIGN-https-anywhere-fable.md
- *     §4). Nothing is asked of the registrar; the server gets its own certificate for it. Moving the community's live own
- *     address to another of its kind asks for the owner's fresh proof, as a claim over a live name does. The registrar's
- *     routes below leave an own address alone: it has no BeanPool name to release, rotate or ask about.
+ *     §4). Nothing is asked of the registrar; the server gets its own certificate for it. Refused: a home-network,
+ *     loopback or carrier-NAT IP, a beanpool.org name, and the global community's address on a local community. Moving the
+ *     community's live own address to another of its kind asks for the owner's fresh proof, as a claim over a live name
+ *     does. The registrar's routes below leave an own address alone: it has no BeanPool name to release, rotate or ask
+ *     about. Settings removes one through app-addresses/remove (routes/app-addresses.ts), with the owner's fresh proof.
+ *   - GET /api/local/admin/tls/status (owner-only): this server's certificates, per identifier (services/acme/status.ts):
+ *     issued, expires, next renewal, last error. Never a key.
  */
 
 import Router from '@koa/router';
@@ -25,6 +29,7 @@ import { primaryAddress, publishedAddresses } from '../engine/own-addresses.js';
 import { noteTurnedAway, settleUnansweredClaims, turnedAwayList } from '../config/turned-away-names.js';
 import { isAddressLabel } from '../address-request.js';
 import { requireAdminRole, requireFreshProof } from '../admin-auth.js';
+import { tlsStatus } from '../services/acme/status.js';
 import type { RouteDeps } from './types.js';
 import { noteSecurityEvent, actingAs, OWNER_ALERT_WORDS } from '../services/security-signal.js';
 import { registrarNotices } from '../services/registrar-notices.js';
@@ -386,6 +391,15 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
         if (!got.ok) { ctx.status = 400; ctx.body = { error: got.error }; return; }
         ctx.set('Cache-Control', 'no-store');
         ctx.body = { success: true, address: got.host, kind: got.kind, communityAddress: got.communityAddress, addresses: publishedAddresses(), primaryAddress: primaryAddress() };
+    });
+
+    // This server's certificates, per identifier (services/acme/status.ts), for the card "Your own address". Owner-only, as
+    // the addresses they are for are an owner's to change. Never a key.
+    router.get('/api/local/admin/tls/status', async (ctx) => {
+        if (!(await checkAdminAuth(ctx))) return;
+        if (!requireAdminRole(ctx, ['owner'], 'Only an owner of this node can see its certificates')) return;
+        ctx.set('Cache-Control', 'no-store');
+        ctx.body = { success: true, ...tlsStatus() };
     });
 
     // The names this key holds besides the stored address (the install's late claim, a name moved off or taken offline

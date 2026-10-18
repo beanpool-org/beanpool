@@ -22,6 +22,7 @@ import * as alerts from './alerts.js';
 import * as settings from './settings.js';
 import { accessMode, accessIdentity } from './access.js';
 import { watchOurServers, serversStatus, watchTargets, WATCH_CRON } from './watch.js';
+import { handleStatusJson } from './status.js';
 
 const NAME_RE = /^[a-z0-9](?:[a-z0-9-]{1,30}[a-z0-9])$/; // 3–32, no leading/trailing hyphen
 const json = (obj, status = 200) =>
@@ -1771,7 +1772,7 @@ async function handleSettings(env, bodyText, who = null) {
     return json(await sourcesPanel(env));
 }
 
-// --- Notices to the operators of names (slice S2, design §3.2; migration 0012; D4 decided by Marty 2026-10-18) ---
+// --- Notices to the operators of names (slice S2, design §3.2; migration 0013; D4 decided by Marty 2026-10-18) ---
 // The admin writes to one name, a group of names (a source or a network from "New names, last 24 h", or a list) or every
 // name, from /admin; each node hears it on its own check-in — its signed /status, every 5 or 15 minutes — and says it has
 // it with `seen` on its next one. Nothing is collected to reach anyone: no address, no account, and a blocked name's node
@@ -1801,7 +1802,7 @@ const sha256Hex = async (text) => hex(await crypto.subtle.digest('SHA-256', new 
 // What `pubkey`'s /status carries, after taking its `seen` (the highest notice id it has): up to NOTICES_PER_STATUS
 // notices it has not seen, oldest first, each about a name it still holds. One carried for the first time is marked
 // delivered and, when it carries a reply link and REPLY_URL is set, given its token: a random one, whose SHA-256 alone is
-// kept beyond the node's `seen` (reply_tokens). [] on any failure, a database without migration 0012 included.
+// kept beyond the node's `seen` (reply_tokens). [] on any failure, a database without migration 0013 included.
 async function carryNotices(env, pubkey, seen, now) {
     try {
         if (seen > 0) await db.ackNotices(env, pubkey, seen, now);
@@ -1920,7 +1921,7 @@ async function handleNoticeList(env, url) {
         return json({ notices: await db.listNotices(env, 50), reply_links: !!replyBase(env), text_max: NOTICE_TEXT_MAX, days: NOTICE_DAYS, names_max: NOTICE_NAMES_MAX });
     } catch (e) {
         if (!/no such table/i.test(String(e?.message || e))) throw e;
-        return json({ schema: false, error: 'migration 0012 is not applied: notices cannot be sent', notices: [] });
+        return json({ schema: false, error: 'migration 0013 is not applied: notices cannot be sent', notices: [] });
     }
 }
 
@@ -2342,7 +2343,7 @@ async function pruneSources(d1, s) {
     try { await db.pruneSources(d1.env, nowS() - SOURCE_KEEP_S); } catch (e) { console.error('[SOURCE_PRUNE]', e.message || e); }
 }
 
-// Contact retention and the notices' tidying (migration 0012, design §3.2), last, each only with queries to spare (d1Meter)
+// Contact retention and the notices' tidying (migration 0013, design §3.2), last, each only with queries to spare (d1Meter)
 // past the sweep's send. Every sweep: a contact is cleared once its name's hold is over, or the name is abandoned — one
 // statement (db.clearLapsedContacts). Once an hour (the first sweep of it): reply links never used past their time, and
 // notices NOTICE_KEEP_S past theirs with their recipients and links, go (three statements). Never throws.
@@ -2465,6 +2466,8 @@ export default {
             if (method === 'GET' && p === '/api/registrar/health')
                 return json({ status: 'ok', commit: env.GIT_SHA || null, accepted_proto: await acceptedProtos(env) });
             if (method === 'GET' && p === '/api/registrar/available') return await handleAvailable(url, env);
+            // The public status line of our servers (src/status.js), for beanpool.org/status: no names but ours.
+            if (method === 'GET' && p === '/api/registrar/status.json') return await handleStatusJson(env);
             if (method === 'POST' && p === '/api/registrar/claim') return await finishing(env, handleClaim(request, env, bodyText));
             if (method === 'POST' && p === '/api/registrar/heal') return await finishing(env, handleHeal(request, env, bodyText));
             if (method === 'POST' && p === '/api/registrar/rotate') return await finishing(env, handleRotate(request, env, bodyText));

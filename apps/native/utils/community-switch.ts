@@ -3,7 +3,8 @@
  * community (`beanpool_anchor_url`):
  * - switches: the BeanPool sheet (use-communities.ts), Settings' Advanced switch and its reset, the not-recognised
  *   screen, the full-screen "Update required" itself (update-block-escape.ts), the deep link's Switch & Join
- *   (app/_layout.tsx);
+ *   (app/_layout.tsx), following the community to where it lives now (address-follow.ts, through reconnect.ts
+ *   `switchPhoneTo`);
  * - joins: joining another community (join-another-community.ts, its undo too), Welcome's invite joins, the global
  *   joins (welcome.tsx `finishGlobalJoin`, global-join-existing.ts `enterGlobalCommunity`), a restore
  *   (restore-account.ts);

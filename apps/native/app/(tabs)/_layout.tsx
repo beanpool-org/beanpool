@@ -20,6 +20,7 @@ import { useNodeStatus } from '../NodeStatusContext';
 import { withJitter } from '../../utils/jitter';
 import { fetchNodeProfile, getCachedNodeProfile, hiddenTabsFor, type HideableTab } from '../../utils/node-profile';
 import { UNKNOWN_NODE_PROFILE, anchorRead, profileArrived, type AnchoredNodeProfile } from '../../utils/node-profile-anchor';
+import { keepCommunityIdentity } from '../../utils/address-follow';
 
 /** Each tour step's tab as a route, written out so every link into the app is checked (deep-links-resolve.test.ts). */
 const TOUR_ROUTES: Record<string, '/(tabs)' | '/(tabs)/market' | '/(tabs)/map' | '/(tabs)/chats' | '/(tabs)/projects' | '/(tabs)/ledger'> = {
@@ -146,6 +147,9 @@ export default function TabLayout() {
             setStrip(s => profileArrived(s, url, cached));
             const fresh = await fetchNodeProfile(url);
             setStrip(s => profileArrived(s, url, fresh));
+            // Who the community is at this address, kept the first time it answers here, before any move to follow is on
+            // offer (utils/address-follow.ts keepCommunityIdentity): once per address, and the strip doesn't wait for it.
+            if (fresh) keepCommunityIdentity(url).catch(() => {});
             // Nothing known of it (offline, and no copy yet): read it again at the next screen change rather than
             // show Commons and Ledger for the rest of the session. Only while the phone is still on it.
             if (!cached && !fresh && stripReadFor.current === url) stripReadFor.current = undefined;

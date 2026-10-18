@@ -100,6 +100,26 @@ describe('every write or removal of the phone\'s community announces it', () => 
         }
     });
 
+    // Writers that move the phone through another module's switch, writing no address themselves: each is listed with the
+    // switch it calls, and the switch is one the sweep above finds announcing.
+    it('following the community to where it lives now (address-follow.ts) moves only through reconnect.ts switchPhoneTo', () => {
+        const follow = code(fs.readFileSync(path.join(NATIVE, 'utils/address-follow.ts'), 'utf8'));
+        // It writes no community address of its own: the sweep finds no write of it there.
+        expect(writes.filter(w => w.file === 'utils/address-follow.ts')).toEqual([]);
+        expect(follow).not.toMatch(/beanpool_anchor_url/);
+        // Its one move is the switch it is handed, by default switchPhoneTo.
+        expect(follow).toMatch(/switchTo: switchPhoneTo,/);
+        expect([...follow.matchAll(/deps\.switchTo\(/g)]).toHaveLength(1);
+        expect(follow).toMatch(/await deps\.switchTo\(offer\.to, offer\.from\);/);
+        // switchPhoneTo writes the address and announces it (found by the sweep, and in this order). Following, the
+        // community's copy is carried first, inside the gate that keeps every copy closed until the address is written,
+        // and the carry writes the address once the copy is there and before the old one goes (community-copy-carry.ts).
+        const reconnect = code(fs.readFileSync(path.join(NATIVE, 'utils/reconnect.ts'), 'utf8'));
+        expect(reconnect).toMatch(/await AsyncStorage\.setItem\('beanpool_anchor_url', url\);\s*\}\s*await initDB\(\);\s*communitySwitched\(\);/);
+        expect(reconnect).toMatch(/await whileCopyMoves\(url, \(\) => carryCommunityCopy\(carryFrom, url, \(\) => AsyncStorage\.setItem\('beanpool_anchor_url', url\)\)\);/);
+        expect(writes.some(w => w.file === 'utils/reconnect.ts')).toBe(true);
+    });
+
     it('the exceptions: discovery writes a community only in a development build', () => {
         const sync = code(fs.readFileSync(path.join(NATIVE, 'services/pillar-sync.ts'), 'utf8'));
         const discover = sync.slice(sync.indexOf('async function discoverAnchor'), sync.indexOf("await AsyncStorage.setItem('beanpool_anchor_url', winningUrl)"));

@@ -13,8 +13,8 @@
  *   old host's), so it stays with each server: taken over, it could lock the owners out of the Settings they need
  *   right then.
  * - node_config rows: the accepted audit baseline and its note, the pricing guide's source and seasonality, the snapshot
- *   schedule, the door (who may invite, config/door.ts), and whether a confirmation against the names list needs two
- *   admins (engine/names-list.ts). The baseline travels only where the main server has one (every main server writes one at its first
+ *   schedule, the door (who may invite, config/door.ts), whether a confirmation against the names list needs two
+ *   admins (engine/names-list.ts), and the listing promise's ticked lines and closing day (engine/directory-promise.ts). The baseline travels only where the main server has one (every main server writes one at its first
  *   boot): installing "none" would make the next audit accept whatever the ledger sums to, and hide a drift.
  * - The `node_config` row's object: the service area, the four directory switches and how often the directory is told.
  *
@@ -38,6 +38,7 @@ import { isAutoSnapshotInterval, restartScheduler, MAX_SNAPSHOTS_KEPT } from '..
 import type { SyncCommunitySettings } from '@beanpool/engine';
 import { cleanLabel } from './clean-label.js';
 import { cleanStartCommunityUrl } from './start-community.js';
+import { cleanPromiseRow } from '../engine/directory-promise.js';
 
 export type { SyncCommunitySettings };
 
@@ -52,6 +53,7 @@ export const COMMUNITY_LOCAL_CONFIG_FIELDS = [
 export const COMMUNITY_NODE_CONFIG_KEYS = [
     'ledger_audit_baseline', 'ledger_audit_rebaseline_note', 'pricing_data_source', 'pricing_show_seasonality', 'autosnapshot_config', 'door',
     'names_two_admins', 'confirmation', 'known_floor', 'credit_cap', 'health_debt_line_pct', 'health_quiet_days', 'startCommunityUrl',
+    'directory_promise',
 ] as const;
 
 /** Fields of the `node_config` row's object that are the community's. */
@@ -222,6 +224,8 @@ const NODE_CONFIG_CHECKS: Record<(typeof COMMUNITY_NODE_CONFIG_KEYS)[number], Ch
     health_quiet_days: orNull(wholeBeans),
     // Where Start a community leads (config/start-community.ts): a web address, or no row for beanpool.org's page.
     startCommunityUrl: orNull((v) => cleanStartCommunityUrl(v) ?? BAD),
+    // The listing promise's two ticks and closing day (engine/directory-promise.ts), rewritten to those three fields.
+    directory_promise: orNull((v) => cleanPromiseRow(v) ?? BAD),
 };
 
 /**

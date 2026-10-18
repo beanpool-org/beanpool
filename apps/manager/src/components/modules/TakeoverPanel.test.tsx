@@ -193,6 +193,29 @@ describe('TakeoverPanel', () => {
         expect(document.querySelector('#takeover-copy-warning')).toBeNull();
     });
 
+    it("warns, in the server's words, when members reached the community only by an IP address", async () => {
+        const words = 'Members reached this community at 203.0.113.5, which this server does not have. They will need its new address.';
+        for (const addressWarning of [words, null]) {
+            stubFetch({
+                '/api/local/admin/takeover/progress': () => ({ status: 200, body: progress('none') }),
+                '/api/local/admin/takeover/open': () => ({ status: 200, body: { success: true, preview: { ...PREVIEW, publicAddress: null, addressWarning } } }),
+            });
+            const { unmount } = render(<TakeoverPanel activeNode={node} isStandby pollMs={60_000} />);
+            fireEvent.click(await screen.findByRole('button', { name: 'Take over as the main server' }));
+            fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'I understand, continue' }));
+            fireEvent.change(screen.getByLabelText(/The recovery code on the paper/), { target: { value: 'BPRC-1 RIGHT' } });
+            fireEvent.click(screen.getByRole('button', { name: 'Open the keys' }));
+            await screen.findByText(/Identity kept:/);
+            const box = document.querySelector('#takeover-address-warning');
+            if (addressWarning) expect(box?.textContent).toContain(words);
+            else expect(box).toBeNull();
+            // Never a gate: the tickbox still lets the take-over go ahead.
+            fireEvent.click(screen.getByLabelText(/The main server is gone, and nobody will start it again/));
+            expect(screen.getByRole('button', { name: 'Take over now' })).not.toBeDisabled();
+            unmount();
+        }
+    });
+
     it('says the server is restarting while it does not answer, then shows the true result with the progress token', async () => {
         sessionStorage.setItem('bp-takeover-progress:standby-1', 'b'.repeat(64));
         let phase: 'down' | 'done' = 'down';

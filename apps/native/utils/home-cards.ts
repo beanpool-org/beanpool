@@ -772,8 +772,8 @@ const withinReach = isNearKm;
 
 /**
  * A community within reach (core's NEAR_COMMUNITY_KM) with an address to knock on, checked as Communities near you and the
- * find card check it (utils/community-origin.ts `communityOrigin`: an https host name, never an IP literal, a dotless
- * host or the global node's own; #1517). Both of the same community.
+ * find card check it (utils/community-origin.ts `communityOrigin`: an https host name or public IPv4 address, never a
+ * private or IPv6 literal, a dotless host or the global node's own; #1517). Both of the same community.
  */
 function communityToAsk(find: HomeFind | undefined): boolean {
     return !!find && isFindCard(find) && find.communities.some(c => isObj(c) && withinReach(c.distanceKm) && communityOrigin(c.url) !== null);

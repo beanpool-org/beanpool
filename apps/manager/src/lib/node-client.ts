@@ -777,6 +777,8 @@ export interface AppVersionsResponse {
     minAppVersion: string;
     minAppVersionFrom: string | null;
     storeCheckedAt: string | null;
+    /** The server's store lookup is off (DISABLE_APP_STORE_CHECK): no store's build is ever read. Absent from older builds. */
+    storeCheckOff?: boolean;
     platforms: { android: AppPlatformVersions; ios: AppPlatformVersions };
 }
 
@@ -3271,10 +3273,125 @@ export function confirmAppAddress(nodeUrl: string, address: string, adminPasswor
     });
 }
 
-export function removeAppAddress(nodeUrl: string, address: string, adminPassword?: string, tfaToken?: string): Promise<AppAddressesReport> {
-    return appAddressesCall(nodeUrl, '/api/local/admin/app-addresses/remove', {
-        method: 'POST', headers: buildAdminHeaders(adminPassword, tfaToken), body: JSON.stringify({ address }),
+/**
+ * Remove an owner-confirmed address. Members' apps that sign for it are refused after it, so it asks an owner's fresh
+ * proof (server requireFreshProof): `code` carries it; a refusal that asks for it throws FreshProofRequiredError.
+ */
+export async function removeAppAddress(nodeUrl: string, address: string, adminPassword?: string, tfaToken?: string, code?: string): Promise<AppAddressesReport> {
+    const host = audienceOf(nodeUrl);
+    const res = await fetch(resolveNodeApiUrl(nodeUrl, '/api/local/admin/app-addresses/remove', host ? { host } : undefined), {
+        method: 'POST', headers: buildAdminHeaders(adminPassword, tfaToken), body: JSON.stringify({ address, ...proofField(code) }),
     });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+        throwIfFreshProof(res.status, body);
+        throw new Error(body?.error || `HTTP ${res.status}: ${res.statusText}`);
+    }
+    return body as AppAddressesReport;
+}
+
+// ======================== THIS SERVER'S OWN ADDRESS AND ITS CERTIFICATES (HTTPS S4) ========================
+// Settings → Public Address → "Your own address": this server's public IP, or a domain the owner points at it, each with
+// the certificate the server gets for it by itself (apps/server services/acme; design
+// scratch/global-node/DESIGN-https-anywhere-fable.md §4).
+
+/** apps/server services/acme/status.ts IdentifierStatus: one address the server holds (or asks for) a certificate for. */
+export interface TlsIdentifierStatus {
+    identifier: string;
+    kind: 'ip' | 'name';
+    /** http-01 on the server's own port 80; dns-01 through Cloudflare for a fleet node's CF_RECORD_NAME. */
+    challenge: 'http-01' | 'dns-01';
+    /** Where it is configured (AppAddress['source']), or `fleet`: CF_RECORD_NAME. */
+    source: AppAddress['source'] | 'fleet';
+    /** In the owner-confirmed list: an owner can remove it here. */
+    ownerAdded: boolean;
+    /**
+     * Given again, it is only asked for again and the community's address stays where it is: "Try again now" is offered
+     * only then (server services/acme/status.ts). False for one that would become the community's address.
+     */
+    retryOnly: boolean;
+    /** Where new members are sent (/api/community/info primaryAddress). */
+    communityAddress: boolean;
+    /** The certificate served for it now (ISO times), or null. */
+    certificate: { issuedAt: string; expiresAt: string } | null;
+    /** When the server next asks: the renewal of the one it holds, or the next try after a failure. Null: within the hour. */
+    nextRenewalAt: string | null;
+    lastAttemptAt: string | null;
+    lastSuccessAt: string | null;
+    failures: number;
+    /** Why the last try failed, in the server's words. */
+    lastError: string | null;
+}
+
+export interface TlsStatus {
+    /** "Let's Encrypt", else "the CA". */
+    ca: string;
+    /** The server asks a CA's test directory: no phone trusts what it issues. */
+    testCa: boolean;
+    /** False on a standby, which asks for no certificates. */
+    orders: boolean;
+    identifiers: TlsIdentifierStatus[];
+}
+
+/** The node's answer, or null for anything else (an older server's 404 page, a proxy's error page). */
+function asTlsStatus(body: unknown): TlsStatus | null {
+    const b = body as TlsStatus | null;
+    return b && typeof b === 'object' && Array.isArray(b.identifiers) && typeof b.ca === 'string' ? b : null;
+}
+
+/**
+ * GET /api/local/admin/tls/status: owner-only. Null only when the node says it offers no such answer (an admin's 403, an
+ * older server's 404, or a page in place of the answer), so the card is simply not drawn. Any other failure (a 5xx, a
+ * 429, an ended sign-in, no connection) throws with a sentence: the card keeps what it last read and says it could not
+ * refresh, rather than vanishing after a change that went through.
+ */
+export async function getTlsStatus(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<TlsStatus | null> {
+    let res: Response;
+    try {
+        res = await fetch(resolveNodeApiUrl(nodeUrl, '/api/local/admin/tls/status'), { headers: buildAdminHeaders(adminPassword, tfaToken) });
+    } catch {
+        throw new Error(t('Could not reach the server.'));
+    }
+    const body = await res.json().catch(() => null);
+    if (res.status === 403 || res.status === 404) return null;
+    if (!res.ok) {
+        // A read changes nothing: statusSentence's "Nothing was changed" would read as if a change just made had not taken.
+        const said = body && typeof body === 'object' ? (body as Record<string, unknown>).error : undefined;
+        if (typeof said === 'string' && said.trim()) throw new Error(said);
+        if (res.status === 401) throw new Error(t('Your sign-in has ended. Sign in again.'));
+        if (res.status === 429) throw new Error(t('Too many tries. Wait a minute.'));
+        throw new Error(t('The server answered {status}.', { status: res.status }));
+    }
+    return asTlsStatus(body);
+}
+
+export type OwnAddressInput = { ip: string } | { domain: string };
+
+export interface OwnAddressResult {
+    address: string;
+    kind: 'ip' | 'own';
+    /** It is the community's address now (none was held, or it replaced one of its kind). */
+    communityAddress: boolean;
+    primaryAddress: string | null;
+}
+
+/**
+ * POST /api/local/admin/public-address/own: owner-only. Moving the community's live own address to another of its kind
+ * asks an owner's fresh proof: `code` carries it; a refusal that asks for it throws FreshProofRequiredError. Any other
+ * refusal throws with the node's sentence (a home-network IP, a beanpool.org name, a standby).
+ */
+export async function setOwnAddress(nodeUrl: string, input: OwnAddressInput, adminPassword?: string, tfaToken?: string, code?: string): Promise<OwnAddressResult> {
+    const res = await fetch(resolveNodeApiUrl(nodeUrl, '/api/local/admin/public-address/own'), {
+        method: 'POST',
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+        body: JSON.stringify({ ...input, ...passwordField(adminPassword), ...proofField(code) }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok || body?.success !== true) {
+        throwIfFreshProof(res.status, body);
+        throw new Error(statusSentence(res.status, body, t('The server did not take that address. Nothing was changed.')));
+    }
+    return { address: body.address, kind: body.kind, communityAddress: body.communityAddress === true, primaryAddress: body.primaryAddress ?? null };
 }
 
 export type SignOutEverywhereResult = { ok: true; breakGlassCodeRetired: boolean } | { ok: false; message: string };

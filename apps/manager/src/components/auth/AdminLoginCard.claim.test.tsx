@@ -264,6 +264,34 @@ describe('AdminLoginCard: the unclaimed card', () => {
         expect(claimCalls).toHaveLength(1);
     });
 
+    it('on a standby, says it has no owner of its own and names the shell command that makes one, above the phone sign-in', async () => {
+        const { claimCalls } = stubNode([{ status: 200, body: { unclaimed: false, standby: true, password: false } }]);
+        renderCard();
+        const note = await screen.findByTestId('standby-signin-note');
+        expect(note).toHaveTextContent("This server is a standby copy of its community. It has no owner of its own: its owners are the main server's, and a take-over brings them.");
+        expect(note).toHaveTextContent('docker compose exec beanpool-node beanpool recover --key @your-callsign');
+        expect(screen.getByTestId('no-password-signin')).toBeInTheDocument();
+        expect(screen.queryByTestId('claim-card')).toBeNull();
+        expect(screen.queryByText(/beanpool claim/)).toBeNull();
+        expect(claimCalls).toHaveLength(1);
+    });
+
+    it('says nothing of a standby on a main server', async () => {
+        stubNode([{ status: 200, body: { unclaimed: false, password: false } }]);
+        renderCard();
+        await screen.findByTestId('no-password-signin');
+        expect(screen.queryByTestId('standby-signin-note')).toBeNull();
+    });
+
+    it('says nothing of a standby once the standby has an owner of its own, and keeps its password sign-in', async () => {
+        // After beanpool recover --key the server answers as any server with an owner: no standby flag (routes/node-claim.ts).
+        stubNode([{ status: 200, body: { unclaimed: false, password: true } }]);
+        renderCard();
+        await screen.findByTestId('admin-password-field');
+        expect(screen.queryByTestId('standby-signin-note')).toBeNull();
+        expect(screen.queryByTestId('claim-card')).toBeNull();
+    });
+
     it('says an owner retired the password only when the claim answer says so', async () => {
         stubNode([{ status: 200, body: { unclaimed: false, password: false, passwordRetired: true } }]);
         renderCard();

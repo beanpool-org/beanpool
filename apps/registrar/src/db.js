@@ -337,7 +337,7 @@ export const blockSource = (env, kind, value, until, now, by, label) => env.DB.p
 export const unblockSource = async (env, kind, value) =>
     ((await env.DB.prepare('DELETE FROM blocked_sources WHERE kind=? AND value=?').bind(kind, value).run())?.meta?.changes ?? 0) > 0;
 
-// --- Notices to the operators of names (migration 0012; index.js carryNotices, handleNotices, the ReplyTokens entrypoint) ---
+// --- Notices to the operators of names (migration 0013; index.js carryNotices, handleNotices, the ReplyTokens entrypoint) ---
 
 // The states in which a key holds its name (holdsName, release aside): a notice is carried, and its reply link taken,
 // only while the name it is about is still in one of them for that key. A blocked name's node still hears it.

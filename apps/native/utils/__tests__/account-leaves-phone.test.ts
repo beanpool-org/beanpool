@@ -426,7 +426,8 @@ describe('each community\'s cached copy', () => {
         const dir = 'file:///data/user/0/org.beanpool.app/files/SQLite';
         const removed = vi.mocked(FileSystem.deleteAsync).mock.calls.map(([uri]) => uri);
         // The database file goes last: a WAL or journal it left behind would be replayed into the next copy of that name.
-        const files = (name: string) => ['-wal', '-shm', '-journal', ''].map((s) => `${dir}/${name}${s}`);
+        // And a copy a stop left on its way to that name (cache-file-migration.ts COPY_LANDING_SUFFIX), before the database.
+        const files = (name: string) => ['-wal', '-shm', '-journal', '-carry', ''].map((s) => `${dir}/${name}${s}`);
         // Each community once, and a file that can't be removed doesn't stop the rest. Each under its own name
         // (nodes.ts getDatabaseFilenameForNode) and under the name from before every community had a file of its own,
         // in case that copy never moved (cache-file-migration.ts).
@@ -443,7 +444,7 @@ describe('each community\'s cached copy', () => {
         const real = await vi.importActual<typeof import('../community-cache')>('../community-cache');
         const wiped = 'community_byron.beanpool.org_0123456789abcdef0123456789abcdef.db';
         vi.mocked(FileSystem.readDirectoryAsync).mockResolvedValue([
-            wiped, `${wiped}-wal`, `${wiped}-shm`,
+            wiped, `${wiped}-wal`, `${wiped}-shm`, `${wiped}-carry`,
             'beanpool_https___old_example_org.db', 'beanpool.db',
             'community_mullum.beanpool.org_0f80ace00fd23a4b8c3a33f625a40a87.db',
             'ExpoSQLiteStorage', 'notes.db', 'community_x.db', 'beanpool_https___old_example_org.db.bak',
@@ -454,7 +455,7 @@ describe('each community\'s cached copy', () => {
         const dir = 'file:///data/user/0/org.beanpool.app/files/SQLite';
         expect(FileSystem.readDirectoryAsync).toHaveBeenCalledWith(dir);
         const removed = new Set(vi.mocked(FileSystem.deleteAsync).mock.calls.map(([uri]) => String(uri).slice(dir.length + 1)));
-        const files = (name: string) => ['-wal', '-shm', '-journal', ''].map((x) => `${name}${x}`);
+        const files = (name: string) => ['-wal', '-shm', '-journal', '-carry', ''].map((x) => `${name}${x}`);
         for (const name of [wiped, 'beanpool_https___old_example_org.db', 'beanpool.db', 'community_mullum.beanpool.org_0f80ace00fd23a4b8c3a33f625a40a87.db']) {
             for (const f of files(name)) expect(removed.has(f), f).toBe(true);
         }
@@ -491,13 +492,14 @@ describe('each community\'s cached copy', () => {
         const real = await vi.importActual<typeof import('../community-cache')>('../community-cache');
         await real.removeCommunityCaches([MULLUM]);
         expect(FileSystem.readDirectoryAsync).not.toHaveBeenCalled();
-        expect(vi.mocked(FileSystem.deleteAsync).mock.calls).toHaveLength(8);
+        // Its two names (now and before every community had its own file), five files each: -wal, -shm, -journal, -carry, the database.
+        expect(vi.mocked(FileSystem.deleteAsync).mock.calls).toHaveLength(10);
     });
 
     it('a directory that can\'t be listed still takes the listed copies', async () => {
         const real = await vi.importActual<typeof import('../community-cache')>('../community-cache');
         vi.mocked(FileSystem.readDirectoryAsync).mockRejectedValue(new Error('EACCES'));
         await real.removeCommunityCaches([MULLUM], { everyCopy: true });
-        expect(vi.mocked(FileSystem.deleteAsync).mock.calls).toHaveLength(8);
+        expect(vi.mocked(FileSystem.deleteAsync).mock.calls).toHaveLength(10);
     });
 });

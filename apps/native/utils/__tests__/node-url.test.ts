@@ -220,3 +220,36 @@ describe("the phone's cleartext rule is the one `beanpool claim` warns by", () =
         expect(parseClaimLink('beanpool://claim?node=https%3A%2F%2Fbeans.example.org&id=0a1b2c3d')?.node).toBe('https://beans.example.org');
     });
 });
+
+/**
+ * HTTPS S3 (scratch/global-node/DESIGN-https-anywhere-fable.md §3, D3): a server claimed at its public number. The QR
+ * `beanpool claim --ip` prints carries `node=https://<IP>`; the phone claims there, signs for that number and keeps it
+ * as the community's address. The wall the AI-installed server hit (17 Oct) was the bare number becoming http://, which
+ * the cleartext rule refuses; #2106 made a bare public number https, and these pin the whole way in, so it never comes
+ * back. A number on a home network stays http:// for LAN sync, as before.
+ */
+describe('a claim at a server\'s public number, over https', () => {
+    it('normalizeNodeUrl makes a bare public number https, and a home-network one http', () => {
+        expect(normalizeNodeUrl('203.0.113.5')).toBe('https://203.0.113.5');
+        expect(normalizeNodeUrl('192.168.1.10:8443')).toBe('http://192.168.1.10:8443');
+    });
+
+    it('the claim link names it with nodeRefused: false, typed with its scheme, encoded or bare', async () => {
+        const { parseClaimLink, claimRouteFor, claimLinkFromScan } = await import('../claim-link');
+        for (const node of ['https://203.0.113.5', 'https%3A%2F%2F203.0.113.5', '203.0.113.5', 'https%3A%2F%2F203.0.113.5%2F']) {
+            const link = parseClaimLink(`beanpool://claim?node=${node}&id=0a1b2c3d`);
+            expect(link, node).toEqual({ node: 'https://203.0.113.5', nodeRefused: false, codeId: '0a1b2c3d', code: null });
+            expect(claimRouteFor(link!)).toBe(`/claim-community?node=${encodeURIComponent('https://203.0.113.5')}&id=0a1b2c3d`);
+        }
+        const code = 'claim-a1b2-c3d4-e5f6-7890';
+        expect(claimLinkFromScan(`beanpool://claim?node=https://203.0.113.5:8443&code=${code}`)).toEqual({ node: 'https://203.0.113.5:8443', nodeRefused: false, codeId: null, code });
+    });
+
+    it('the Find box and the claim screen\'s address box take it too; cleartext to it stays refused', async () => {
+        const { claimNodeOrigin, claimProbeOrigin } = await import('../claim-link');
+        expect(claimProbeOrigin('203.0.113.5')).toBe('https://203.0.113.5');
+        expect(claimNodeOrigin('https://203.0.113.5')).toBe('https://203.0.113.5');
+        expect(claimNodeOrigin('http://203.0.113.5')).toBeNull();
+        expect(claimNodeOrigin('http://192.168.1.10:8080')).toBe('http://192.168.1.10:8080');
+    });
+});

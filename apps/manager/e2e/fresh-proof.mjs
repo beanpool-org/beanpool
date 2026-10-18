@@ -74,10 +74,12 @@ const FLOWS = [
         overrides: { '/api/local/admin/public-address/status': () => ({ status: 'none' }) },
         refuses: (p, m) => m === 'POST' && p === '/api/local/admin/public-address/claim',
         press: async (page) => {
-            const f = page.locator('form input[type="text"], form input:not([type])').first();
+            // The Claim form itself: the own-address card (HTTPS S4) sits above it with a form of its own.
+            const claim = page.getByTestId('claim-form');
+            const f = claim.locator('input[type="text"], input:not([type])').first();
             await f.scrollIntoViewIfNeeded();
             await f.fill('cairns');
-            const submit = page.locator('form button[type="submit"]').first();
+            const submit = claim.locator('button[type="submit"]').first();
             await submit.scrollIntoViewIfNeeded();
             await submit.click();
         } },

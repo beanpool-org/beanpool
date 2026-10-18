@@ -8,6 +8,7 @@ import { passwordField } from '../../lib/node-client';
 import { proofField } from '../../lib/fresh-proof';
 import { FreshProofBox, useFreshProof } from '../common/FreshProofBox';
 import type { RolesViewer } from './NodeRolesPanel';
+import { OwnAddressCard } from './OwnAddressCard';
 
 export interface ProbeLogEntry {
     timestamp: string;
@@ -933,6 +934,9 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag, viewer = { kind:
                 </div>
             </div>
 
+            {/* This server's own IP or domain, each with its own certificate (HTTPS S4): owner-only, drawn by the node's answer. */}
+            <OwnAddressCard key={activeNode.id} activeNode={activeNode} enabled={isOwnerViewer} />
+
             {/* Real-time Propagation Monitor Terminal */}
             <div className="p-5 sm:p-6 rounded-2xl bg-nature-900/80 border border-nature-800 shadow-xl space-y-3">
                 <div className="flex flex-wrap lg:flex-nowrap items-center justify-between gap-2 border-b border-nature-800 pb-2.5">
@@ -1011,7 +1015,7 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag, viewer = { kind:
                     </div>
                 )}
 
-                <form onSubmit={handleClaim} className="space-y-4">
+                <form onSubmit={handleClaim} className="space-y-4" data-testid="claim-form">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         {/* Subdomain Input */}
                         <div>

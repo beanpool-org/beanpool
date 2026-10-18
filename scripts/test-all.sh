@@ -86,8 +86,52 @@ if [ $FAST -eq 1 ]; then
   echo "⚡ FAST MODE: Skipping package-specific sub-checks."
 fi
 
+# Keep every log of a failing or stopped run. CI sets TEST_ALL_LOG_DIR and uploads that directory as a
+# workflow artifact; run locally, the temp dir is simply left in place. Passing runs keep nothing.
+keep_logs() {
+  if [ -n "${TEST_ALL_LOG_DIR:-}" ] && mkdir -p "$TEST_ALL_LOG_DIR" && cp "$LOGDIR"/*.log "$TEST_ALL_LOG_DIR"/; then
+    echo "Full logs of every check copied to $TEST_ALL_LOG_DIR"
+  else
+    trap - EXIT INT TERM
+    echo "Full logs of every check kept in $LOGDIR"
+    LOGDIR=""
+  fi
+}
+
+# A run stopped part-way: Ctrl-C, or CI's `timeout -s INT 115m` (.github/workflows/ci.yml), which signals every check
+# too. The trap used to delete $LOGDIR then, so a hang on CI uploaded nothing and never said which check hung (#2134).
+# This names the checks that had not finished, starts none that wait on build, gives the rest up to 30 s to end (turbo
+# under GitHub Actions holds a task's output until the task ends: measured 1-2 s after the signal), and keeps the logs.
+stop_run() {
+  local rc="$1" name unfinished="" waited=0
+  trap '' INT TERM
+  touch "$LOGDIR/stopped"
+  for name in "${NAMES[@]}"; do [ -f "$LOGDIR/$name.rc" ] || unfinished="$unfinished $name"; done
+  echo ""
+  echo "⏹  Run stopped. Checks unfinished:${unfinished:- none}"
+  while [ -n "$(jobs -rp)" ] && [ $waited -lt 30 ]; do sleep 1; waited=$((waited + 1)); done
+  for name in $unfinished; do
+    echo ""
+    echo "━━━ $name (last 40 lines) ━━━"
+    tail -40 "$LOGDIR/$name.log"
+  done
+  echo ""
+  keep_logs
+  [ -n "$LOGDIR" ] && rm -rf "$LOGDIR"
+  exit "$rc"
+}
+
+# The checks that start once build has finished wait here (each says why). A stopped run starts none of them: build
+# ends BECAUSE of the stop, and a check launched then would outlive the run.
+wait_for_build() {
+  until [ -f "$LOGDIR/build.rc" ] || [ -f "$LOGDIR/stopped" ]; do sleep 1; done
+  if [ -f "$LOGDIR/stopped" ]; then echo "Not started: the run was stopped."; return 1; fi
+}
+
 LOGDIR=$(mktemp -d)
-trap 'rm -rf "$LOGDIR"' EXIT INT TERM
+trap 'rm -rf "$LOGDIR"' EXIT
+trap 'stop_run 130' INT
+trap 'stop_run 143' TERM
 PIDS=()
 NAMES=()
 SKIPPED_NAMES=()
@@ -191,7 +235,7 @@ echo ""
 # after build and waits for build's .rc, so it starts the moment build is done rather than queueing for a free slot
 # behind the checks launched after it. A failed build is reported by its own check; the suites still run.
 run_server_suites() {
-  while [ ! -f "$LOGDIR/build.rc" ]; do sleep 1; done
+  wait_for_build || return 1
   [ "$(cat "$LOGDIR/build.rc")" = "0" ] || echo "⚠️  build failed; these suites ran against whatever dist it left."
   SERVER_SUITES_SUMMARY="$LOGDIR/server_suites.summary" node scripts/run-server-suites.mjs
 }
@@ -229,7 +273,7 @@ run_check "pwa_dark_classes" bash -c 'pnpm --filter @beanpool/pwa exec playwrigh
 # a sideways scroll, cut text, a button under 48dp or text under 4.5:1. Same browser as above, from the PWA's Playwright.
 # It bundles @beanpool/core from its dist, so like the server suites it starts once build has finished.
 run_native_phone_width() {
-  while [ ! -f "$LOGDIR/build.rc" ]; do sleep 1; done
+  wait_for_build || return 1
   pnpm --filter @beanpool/pwa exec playwright install --only-shell ${CI:+--with-deps} chromium && node apps/native/e2e/locked-history-320.mjs
 }
 run_check "native_phone_width" run_native_phone_width
@@ -316,11 +360,20 @@ run_check "no_google_fonts" node --test scripts/no-google-fonts.test.mjs
 # finished; instant). Then every page in headless Chromium, both themes, 320 and 1280 px: words under 4.5:1 (3:1 large)
 # fail, in light and in dark. No network; about a minute.
 run_website_colours() {
-  while [ ! -f "$LOGDIR/build.rc" ]; do sleep 1; done
+  wait_for_build || return 1
   node --test scripts/website-colours.test.mjs
 }
 run_check "website_colours" run_website_colours
 run_check "website_contrast" bash -c 'pnpm --filter @beanpool/pwa exec playwright install --only-shell ${CI:+--with-deps} chromium && node scripts/website-contrast.mjs'
+# beanpool.org/status, the public status line of our servers (mothership slice A8): drawn from a stubbed status.json at
+# 320 px, light and dark, each state in words and its token colour, nothing wider than the screen; a late, missing or
+# unknown status said in words; nothing from the status drawn as markup. Its Chromium is the one website_contrast
+# installs, so it starts once that has finished. Seconds.
+run_website_status() {
+  while [ ! -f "$LOGDIR/website_contrast.rc" ]; do sleep 1; done
+  node --test scripts/website-status.test.mjs
+}
+run_check "website_status" run_website_status
 # beanpool.org/global, the link to the global community: every link on it is https and ours, the Play referrer reads
 # global=1, its script sends each kind of visitor where the global-entry design says, and the iPhone app claims it. Instant.
 run_check "website_global_link" node --test scripts/website-global-link.test.mjs
@@ -490,16 +543,7 @@ if [ $FAIL -gt 0 ]; then
     fi
   done
   echo ""
-
-  # Keep every log of a failing run. CI sets TEST_ALL_LOG_DIR and uploads that directory as a
-  # workflow artifact; run locally, the temp dir is simply left in place. Passing runs keep nothing.
-  if [ -n "${TEST_ALL_LOG_DIR:-}" ] && mkdir -p "$TEST_ALL_LOG_DIR" && cp "$LOGDIR"/*.log "$TEST_ALL_LOG_DIR"/; then
-    echo "Full logs of every check copied to $TEST_ALL_LOG_DIR"
-  else
-    trap - EXIT INT TERM
-    echo "Full logs of every check kept in $LOGDIR"
-    LOGDIR=""
-  fi
+  keep_logs
 fi
 
 # Cleanup

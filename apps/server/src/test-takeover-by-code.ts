@@ -16,7 +16,8 @@
  *     brake the source even though every request carries the standby's admin password; the seventh, the RIGHT
  *     code, is refused while braked; after the wait it opens.
  *  4. The preview: the main server's PeerId, the owner, the admin, the link, the web address, the tunnel token
- *     from the OLDER envelope, "the main server does not answer", and what will be missing.
+ *     from the OLDER envelope, "the main server does not answer", and what will be missing. A community with a name
+ *     has no address warning.
  *  5. Confirm → the journaled promotion → the process restarts itself → started again (NODE_ROLE=backup still in its
  *     environment, as a redeploy with the standby's old .env would be).
  *  6. After: the SAME PeerId; the roles; @Anna's key sign-in works; the link with the other community is back and
@@ -26,7 +27,9 @@
  *  7. A third server, pinned to the main server's PeerId, copies from the promoted standby: it accepts the sync
  *     payload and the take-over envelope, because they are signed with the same key.
  *  8. Refused: an envelope for another community (by its header, and by the bundle inside a header that lies);
- *     a forged newest envelope (not signed by the pinned main server) is skipped for the real one.
+ *     a forged newest envelope (not signed by the pinned main server) is skipped for the real one. Keys of a community
+ *     members reached only by an IP address (HTTPS-anywhere S7, design D8): the preview says this server does not have
+ *     it and members will need its new address; with a name beside the IP it says nothing.
  *  9. The public-address agent keeps the last tunnel token when the registrar leaves it out.
  *
  * Recovery seal S2 (the key that opens members' sign-in recovery copies travels inside the take-over keys):
@@ -283,6 +286,7 @@ async function main(): Promise<void> {
         assert(pv.publicAddress === 'testtown.beanpool.org', 'the web address testtown.beanpool.org');
         assert(pv.tunnel.source === 'older-envelope' && pv.tunnel.sealedAt, `the newest envelope had no tunnel token; it came from the older copy (${pv.tunnel.message})`);
         assert(pv.mainServer.answers === false && pv.mainServer.warning === null, 'the main server does not answer, and the preview says so (no warning)');
+        assert(pv.addressWarning === null, `a community with a name (testtown.beanpool.org): no address warning (${pv.addressWarning})`);
         assert(pv.recoverySealKey === true && !pv.missing.some((m: string) => /sign-in recovery copies/.test(m)),
             `S2: the preview says the keys carry the key that opens members' sign-in recovery copies (${pv.recoverySealKey})`);
         assert(pv.missing.some((m: string) => /photos sent in chats/.test(m)) && pv.missing.some((m: string) => /Commons project proposals/.test(m))
@@ -459,6 +463,40 @@ async function main(): Promise<void> {
                 'refused take-overs write nothing');
             const probeState = await probe.send('inspect', {});
             assert(probeState.role === 'backup' && probeState.peerId !== mainPeerId, 'and the standby is still a standby with its own PeerId');
+
+            // Keys of a community whose only address is an IP (design scratch/global-node/DESIGN-https-anywhere-fable.md
+            // §6, D8): a standby is another server, so members' apps cannot follow; with a name beside it, they can.
+            const ownGenesis = fs.readFileSync(path.join(dirs.main, 'genesis.json')).toString('base64');
+            const communityKey = fs.readFileSync(path.join(dirs.main, 'community.key')).toString('base64');
+            const addressed = async (addresses: { publicAddress: unknown; ownerAddresses: string[] }) => {
+                for (const n of fs.readdirSync(heldDir)) fs.rmSync(path.join(heldDir, n));
+                const bundle = {
+                    v: 1,
+                    files: { libp2p_key: keyBytes.toString('base64'), 'community.key': communityKey, 'genesis.json': ownGenesis, 'connectors.json': null },
+                    localConfig: { adminHash: 'x', salt: 'y', totpEnabled: false, totpSecret: null, totpBackupCodesHashes: [], breakGlassMode: false },
+                    nodeRoles: [], recoveryCode: record, ...addresses,
+                };
+                plant(await core.sealEnvelope(new TextEncoder().encode(JSON.stringify(bundle)), {
+                    kind: 'takeover', communityId, nodePeerId: mainPeerId, recipients: { owners: [], codes: [record] },
+                    signingKey: mainSeed, createdAt: new Date().toISOString(),
+                }));
+                const r = await openProbe();
+                await post(probe.base, '/api/local/admin/takeover/cancel', {}, probeOwner);
+                return r;
+            };
+            const ipOnly = await addressed({ publicAddress: null, ownerAddresses: ['203.0.113.5'] });
+            assert(ipOnly.status === 200 && ipOnly.body.preview.addressWarning
+                === 'Members reached this community at 203.0.113.5, which this server does not have. They will need its new address.',
+                `an IP-only community: the preview says members will need its new address (${ipOnly.status} ${ipOnly.body.preview?.addressWarning ?? ipOnly.body.error})`);
+            const ipServed = await addressed({ publicAddress: { mode: 'ip', hostname: '203.0.113.5', status: 'live' }, ownerAddresses: ['[2001:db8::5]'] });
+            assert(ipServed.status === 200 && ipServed.body.preview.addressWarning
+                === 'Members reached this community at 203.0.113.5, [2001:db8::5], which this server does not have. They will need its new address.',
+                `its web address an IP too, with an IPv6 one beside it: both named (${ipServed.body.preview?.addressWarning ?? ipServed.body.error})`);
+            assert(ipServed.status === 200 && ipServed.body.preview.tunnel.source === 'none',
+                `an IP web address is the server itself: no tunnel to bring back, not one to re-claim (${ipServed.body.preview?.tunnel?.source}: ${ipServed.body.preview?.tunnel?.message ?? ipServed.body.error})`);
+            const named = await addressed({ publicAddress: null, ownerAddresses: ['203.0.113.5', 'beans.example.org'] });
+            assert(named.status === 200 && named.body.preview.addressWarning === null,
+                `an IP with a name beside it: no address warning (${named.body.preview?.addressWarning ?? named.body.error})`);
             await probe.kill();
         }
 

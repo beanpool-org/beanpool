@@ -4,10 +4,32 @@ import { useTheme, useStyles } from '../app/ThemeContext';
 import { MemberAvatar } from './MemberAvatar';
 import type { BeanPoolIdentity } from '../utils/identity';
 import {
-    fetchJoinRequests, approveJoinRequest, declineJoinRequest, wantsToJoinTitle, joinRequestMeta, KNOCK_INBOX_WORDS,
+    fetchJoinRequests, approveJoinRequest, declineJoinRequest, joinRequestAge, KNOCK_UNREACHABLE_TEXT,
     type JoinRequest,
 } from '../utils/knock-inbox';
-import { t } from '@beanpool/core';
+import { t, tn, word } from '@beanpool/core';
+
+/**
+ * The words of this section, in the member's language. utils/knock-inbox.ts signs its requests with the member's key and
+ * stays off the words layer, so its English (wantsToJoinTitle, joinRequestMeta, WANTS_TO_JOIN_HELP) is worded again here;
+ * utils/__tests__/talk-words-render.test.ts holds the two to the same English.
+ */
+const KNOCK_WORDS = {
+    help: word('People asking to join this community. Invite makes an invite that only their key can use, and their app finds it by itself. Not now tells them nothing more than "no answer yet".'),
+    unreachable: word("Couldn't reach your community. Check your connection and try again."),
+} as const;
+
+/** Under each request: when, and where they came from, two facts side by side. */
+function requestMeta(r: JoinRequest): string {
+    const days = joinRequestAge(r);
+    // English writes one form for both; the count is 2 or more here.
+    const when = days === null ? '' : days === 0 ? t('Asked today') : days === 1 ? t('Asked yesterday') : tn(days, 'Asked {n} days ago', 'Asked {n} days ago');
+    const from = r.fromNode ? t('from {node}', { node: r.fromNode }) : '';
+    return [when, from].filter(Boolean).join(' · ');
+}
+
+/** The community couldn't be reached: said in the member's language; the node's own words as it sent them (slice S4). */
+const knockMessage = (message: string): string => (message === KNOCK_UNREACHABLE_TEXT ? t(KNOCK_WORDS.unreachable) : message);
 
 /**
  * "Wants to join (n)" (design §3.3): people asking to join this (local) community, for any member to answer. Hidden
@@ -56,7 +78,7 @@ export function WantsToJoin({ anchorUrl, identity, onCount }: {
             setHidden(true);
             onCount?.(0);
         } else {
-            setError(r.message);
+            setError(knockMessage(r.message));
         }
     }, [anchorUrl, identity, onCount]);
 
@@ -76,7 +98,7 @@ export function WantsToJoin({ anchorUrl, identity, onCount }: {
             return;
         }
         // Another member got there first, or it lapsed: the community's words, then the list as it is now.
-        setNotes(n => ({ ...n, [req.id]: r.message }));
+        setNotes(n => ({ ...n, [req.id]: knockMessage(r.message) }));
         load();
     };
 
@@ -84,8 +106,8 @@ export function WantsToJoin({ anchorUrl, identity, onCount }: {
 
     return (
         <View>
-            <Text style={styles.header} accessibilityRole="header">🚪 {wantsToJoinTitle(total)}</Text>
-            <Text style={styles.help}>{t(KNOCK_INBOX_WORDS.help)}</Text>
+            <Text style={styles.header} accessibilityRole="header">{tn(total, '🚪 Wants to join ({n})', '🚪 Wants to join ({n})')}</Text>
+            <Text style={styles.help}>{t(KNOCK_WORDS.help)}</Text>
             {!!error && <Text style={styles.error} accessibilityLiveRegion="polite">{error}</Text>}
             {!!done && <Text style={styles.note} accessibilityLiveRegion="polite">{done}</Text>}
             {requests === null ? (
@@ -96,7 +118,7 @@ export function WantsToJoin({ anchorUrl, identity, onCount }: {
                         <MemberAvatar avatarUrl={req.avatar} pubkey={req.pubkey} callsign={req.callsign} size={44} />
                         <View style={styles.whoText}>
                             <Text style={styles.name} numberOfLines={1}>{req.callsign}</Text>
-                            {!!joinRequestMeta(req) && <Text style={styles.meta} numberOfLines={2}>{joinRequestMeta(req)}</Text>}
+                            {!!requestMeta(req) && <Text style={styles.meta} numberOfLines={2}>{requestMeta(req)}</Text>}
                         </View>
                     </View>
                     <Text style={styles.message}>{req.message}</Text>

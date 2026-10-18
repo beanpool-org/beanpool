@@ -148,11 +148,16 @@ vi.mock('../membership-probe', () => ({ fetchMembership: async () => ({ ok: true
 vi.mock('../node-admin', () => ({
     askNodeRole: async () => null, persistNodeRole: async () => {}, readPersistedNodeRole: async () => undefined, rememberNodeRole: () => {},
 }));
-const knocks = vi.hoisted(() => ({ list: [] as any[] }));
-vi.mock('../knock-inbox', async (importOriginal) => ({
-    ...(await importOriginal<Record<string, unknown>>()),
-    fetchJoinRequests: async () => ({ ok: true, knocks: knocks.list, total: knocks.list.length }),
-}));
+const knocks = vi.hoisted(() => ({ list: [] as any[], unreachable: false }));
+vi.mock('../knock-inbox', async (importOriginal) => {
+    const real = await importOriginal<Record<string, any>>();
+    return {
+        ...real,
+        fetchJoinRequests: async () => (knocks.unreachable
+            ? { ok: false, kind: 'error', message: real.KNOCK_UNREACHABLE_TEXT }
+            : { ok: true, knocks: knocks.list, total: knocks.list.length }),
+    };
+});
 const globalDoor = vi.hoisted(() => ({ entry: 'checking' as string, here: false }));
 vi.mock('../global-join-existing', () => ({ isGlobalCommunity: () => globalDoor.here }));
 vi.mock('../use-global-entry', () => ({ useGlobalEntry: () => globalDoor.entry }));
@@ -163,6 +168,7 @@ import { pseudoLocalise, setLanguage, type UiLang } from '@beanpool/core';
 import { DrawnInLanguage, LanguageProvider } from '../../components/LanguageProvider';
 import { LanguageRow } from '../../components/LanguagePicker';
 import { yourGroupsStore } from '../../components/useYourGroups';
+import { joinRequestMeta, wantsToJoinTitle, WANTS_TO_JOIN_HELP } from '../knock-inbox';
 import ChatsScreen from '../../app/(tabs)/chats';
 import NewMessageScreen from '../../app/new-message';
 
@@ -249,6 +255,7 @@ beforeEach(() => {
     params.now = {};
     alerts.said.length = 0;
     knocks.list = [];
+    knocks.unreachable = false;
     membership.isMember = true;
     globalDoor.entry = 'checking';
     globalDoor.here = false;
@@ -386,6 +393,25 @@ describe('Talk in the pseudo-locale: every word on it came through t() (words S3
         expect(host.textContent).toContain('I grow tomatoes');
         expect(host.textContent).toContain(pseudoLocalise('📤 Invite Someone'));
         expect(bypassing(), 'invites').toEqual([]);
+    });
+
+    it('People\'s requests to join: in English exactly as knock-inbox writes them (it stays off the words layer); a community out of reach, in the member\'s language', async () => {
+        knocks.list = KNOCKS;
+        await renderIn('en');
+        await pane('People');
+        await click(Array.from(host.querySelectorAll('button')).find((b) => b.textContent?.startsWith('🎟️ Invites')) ?? null, 'Invites');
+        expect(host.textContent).toContain(`🚪 ${wantsToJoinTitle(1)}`);
+        expect(host.textContent).toContain(WANTS_TO_JOIN_HELP);
+        expect(host.textContent).toContain(joinRequestMeta(KNOCKS[0]));
+
+        act(() => root.unmount());
+        root = createRoot(host);
+        knocks.unreachable = true;
+        await renderIn('xx');
+        await pane('People');
+        await click(Array.from(host.querySelectorAll('button')).find((b) => b.textContent?.startsWith(pseudoLocalise('🎟️ Invites').slice(0, 6))) ?? null, 'Invites');
+        expect(host.textContent).toContain(pseudoLocalise("Couldn't reach your community. Check your connection and try again."));
+        expect(bypassing()).toEqual([]);
     });
 
     it('People as a guest: registration and the troubleshooting card; at the global community, its door', async () => {

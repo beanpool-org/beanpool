@@ -17,7 +17,6 @@
 import { buildSignedHeaders } from './crypto';
 import { signedPost } from './node-post';
 import type { BeanPoolIdentity } from './identity';
-import { t, tn, word } from '@beanpool/core';
 
 export const KNOCKS_PATH = '/api/join/knocks';
 export const KNOCKS_PAGE = 20;
@@ -45,8 +44,9 @@ export type AnswerResult =
     /** The node said no (already answered, lapsed, …), in its words. The list should be read again. */
     | { ok: false; message: string };
 
-/** Said when the community could not be reached, in the member's language at the moment it is said. */
-const unreachable = (): string => t("Couldn't reach your community. Check your connection and try again.");
+const UNREACHABLE = "Couldn't reach your community. Check your connection and try again.";
+/** What a list or an answer says when the community couldn't be reached (the screen words it in the member's language). */
+export const KNOCK_UNREACHABLE_TEXT = UNREACHABLE;
 
 function readRequest(raw: unknown): JoinRequest | null {
     if (!raw || typeof raw !== 'object') return null;
@@ -84,26 +84,26 @@ export async function fetchJoinRequests(
         });
         // 404: requests are off here (or the node predates them). 401/403: not a member who can answer.
         if (res.status === 404 || res.status === 401 || res.status === 403) return { ok: false, kind: 'hidden' };
-        if (!res.ok) return { ok: false, kind: 'error', message: (await errorText(res)) ?? unreachable() };
+        if (!res.ok) return { ok: false, kind: 'error', message: (await errorText(res)) ?? UNREACHABLE };
         const body = await res.json().catch(() => null) as { knocks?: unknown; total?: unknown } | null;
-        if (!body || !Array.isArray(body.knocks)) return { ok: false, kind: 'error', message: unreachable() };
+        if (!body || !Array.isArray(body.knocks)) return { ok: false, kind: 'error', message: UNREACHABLE };
         const knocks = body.knocks.map(readRequest).filter((k): k is JoinRequest => k !== null);
         const total = typeof body.total === 'number' && Number.isFinite(body.total) ? body.total : knocks.length;
         return { ok: true, knocks, total };
     } catch {
-        return { ok: false, kind: 'error', message: unreachable() };
+        return { ok: false, kind: 'error', message: UNREACHABLE };
     }
 }
 
 async function answer(anchorUrl: string, identity: BeanPoolIdentity, id: string, verb: 'approve' | 'decline'): Promise<AnswerResult> {
     try {
         const res = await signedPost(anchorUrl, `${KNOCKS_PATH}/${encodeURIComponent(id)}/${verb}`, {}, identity);
-        if (!res.ok) return { ok: false, message: (await errorText(res)) ?? unreachable() };
+        if (!res.ok) return { ok: false, message: (await errorText(res)) ?? UNREACHABLE };
         const body = await res.json().catch(() => null) as { knock?: { status?: unknown } } | null;
         const status = body?.knock?.status;
         return status === 'approved' || status === 'declined' ? { ok: true, status } : { ok: true, status: verb === 'approve' ? 'approved' : 'declined' };
     } catch {
-        return { ok: false, message: unreachable() };
+        return { ok: false, message: UNREACHABLE };
     }
 }
 
@@ -118,22 +118,26 @@ export function declineJoinRequest(anchorUrl: string, identity: BeanPoolIdentity
 }
 
 export function wantsToJoinTitle(total: number): string {
-    return tn(total, 'Wants to join ({n})', 'Wants to join ({n})');
+    return `Wants to join (${total})`;
+}
+
+/** How many whole days ago a request was made (0 today), or null for a date that can't be read. */
+export function joinRequestAge(r: Pick<JoinRequest, 'createdAt'>, now: number = Date.now()): number | null {
+    const at = Date.parse(r.createdAt);
+    return Number.isFinite(at) ? Math.max(0, Math.floor((now - at) / 86_400_000)) : null;
 }
 
 /** Under each request: when, and where they came from. */
 export function joinRequestMeta(r: Pick<JoinRequest, 'createdAt' | 'fromNode'>, now: number = Date.now()): string {
-    const at = Date.parse(r.createdAt);
+    const days = joinRequestAge(r, now);
     let when = '';
-    if (Number.isFinite(at)) {
-        const days = Math.floor((now - at) / 86_400_000);
-        when = days <= 0 ? t('Asked today') : days === 1 ? t('Asked yesterday') : tn(days, 'Asked {n} days ago', 'Asked {n} days ago');
+    if (days !== null) {
+        when = days <= 0 ? 'Asked today' : days === 1 ? 'Asked yesterday' : `Asked ${days} days ago`;
     }
-    const from = r.fromNode ? t('from {node}', { node: r.fromNode }) : '';
-    // Two facts, each whole in the member's language, side by side.
+    const from = r.fromNode ? `from ${r.fromNode}` : '';
     return [when, from].filter(Boolean).join(' · ');
 }
 
-export const WANTS_TO_JOIN_HELP = word('People asking to join this community. Invite makes an invite that only their key can use, and their app finds it by itself. Not now tells them nothing more than "no answer yet".');
-/** The words above as a table, so each is put through t() where it is shown (words:check reads `t(X.key)`). */
-export const KNOCK_INBOX_WORDS = { help: WANTS_TO_JOIN_HELP } as const;
+export const WANTS_TO_JOIN_HELP =
+    'People asking to join this community. Invite makes an invite that only their key can use, and their app finds it by itself. '
+    + 'Not now tells them nothing more than "no answer yet".';

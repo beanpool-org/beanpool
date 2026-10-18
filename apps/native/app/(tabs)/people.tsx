@@ -37,6 +37,7 @@ import { useGlobalEntry } from '../../utils/use-global-entry';
 import { askNodeRole, persistNodeRole, readPersistedNodeRole, rememberNodeRole } from '../../utils/node-admin';
 import { fetchJoinRequests } from '../../utils/knock-inbox';
 import { joinAnotherCommunity, joinedNudge, PROTECT_REDIRECT, HOME_REDIRECT } from '../../utils/join-another-community';
+import { joinedNudgeWords } from '../../utils/joined-nudge-words';
 import { WantsToJoin } from '../../components/WantsToJoin';
 import { MyJoinRequests } from '../../components/MyJoinRequests';
 import { communitySwitched } from '../../utils/community-switch';
@@ -632,7 +633,8 @@ export default function PeopleScreen() {
             // unique here (callsigns are per-node) and confirms their photo, then home or, in a build without a key
             // vault, if they choose, to protect their account here too: there sign-in recovery is kept by each
             // community (design §3.6). With a vault, a linked sign-in already covers this community.
-            const nudge = joinedNudge(joined.name);
+            // In the member's language (utils/joined-nudge-words: join-another-community.ts handles the key, off the words layer).
+            const nudge = joinedNudgeWords(joinedNudge(joined.name), joined.name);
             Alert.alert(nudge.title, nudge.body, [
                 { text: nudge.later, onPress: () => router.replace({ pathname: '/profile-setup', params: { redirect: HOME_REDIRECT } }) },
                 // Only where each community keeps its own sign-in copy (a build without a key vault).

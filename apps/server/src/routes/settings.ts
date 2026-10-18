@@ -24,7 +24,8 @@ import { issue2faSessionToken, requireAdminRole, requireCurrentSecondFactor, PAS
 import { logger } from '../logger.js';
 import { noteSecurityEvent } from '../services/security-signal.js';
 import qrcode from 'qrcode';
-import { initDirectoryPublisher, pushDirectoryNow, NOT_LISTED_MESSAGE } from '../services/directory-publisher.js';
+import { initDirectoryPublisher, pushDirectoryNow, NOT_LISTED_MESSAGE, directoryPromiseStatus, directoryPromiseSaved } from '../services/directory-publisher.js';
+import { listingFields, publicListingFields, setPromiseTicks } from '../engine/directory-promise.js';
 import { getConfiguredSwitches, setSwitchOverride } from '../config/node-profile.js';
 import { getDoor, setDoor, doorSettingRefusal, type CommunityDoor } from '../config/door.js';
 import { HealthError, healthSummary, readHealthAccessLog, setHealthSettings } from '../engine/community-health.js';
@@ -450,10 +451,39 @@ router.post('/api/local/admin/directory/push', async (ctx) => {
     ctx.body = result;
 });
 
-// Local directory info endpoint (used by settings preview): what a push sends, which holds only what the switches publish.
+// Settings → Directory: the listing promise (engine/directory-promise.ts, mothership A2). The read is an owner's or an
+// admin's: what the next push says, the two measured lines as counts and switches, and why the promise is left out, in
+// sentences. Null as `promise` where nothing is pushed at all (a standby, a profile never listed, the interval Never).
+router.get('/api/local/admin/directory/promise', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    ctx.set('Cache-Control', 'no-store');
+    ctx.body = { promise: directoryPromiseStatus(), listing: listingFields().fields };
+});
+
+// The two ticked lines and "closing on", an owner's only: the community's word to every stranger the directory sends.
+// `{ reports?, notice?, closingOn? }`, each changed only when sent: true or false; a day YYYY-MM-DD from today, or null to
+// clear it. Pushed at once when the community is listed (directoryPromiseSaved).
+router.post('/api/local/admin/directory/promise', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    if (!requireAdminRole(ctx, ['owner'], 'Only an owner of this community can make or change its listing promise.')) return;
+    const { reports, notice, closingOn } = (ctx as any).requestBody || {};
+    const set = setPromiseTicks({ reports, notice, closingOn });
+    if (!set.ok) {
+        ctx.status = 400;
+        ctx.body = { error: set.error };
+        return;
+    }
+    console.log(`📜 The listing promise is now ${JSON.stringify(set.ticks)}, set by ${(ctx.state as any)?.actor || 'owner:password'}.`);
+    directoryPromiseSaved();
+    ctx.set('Cache-Control', 'no-store');
+    ctx.body = { promise: directoryPromiseStatus(), listing: listingFields().fields };
+});
+
+// Local directory info endpoint (used by settings preview): what a push sends, which holds only what the switches publish,
+// and the listing promise's three fields (counts and booleans, as the public directory holds them).
 // No CORS headers - should only be called from same origin (admin PWA)
 router.get('/api/directory/info', async (ctx) => {
-    ctx.body = getDirectoryInfo();
+    ctx.body = { ...getDirectoryInfo(), ...publicListingFields() };
 });
 
 

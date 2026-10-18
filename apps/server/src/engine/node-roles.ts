@@ -222,6 +222,19 @@ export function nodeHasOwner(): boolean {
     return !!db.prepare(NODE_HAS_OWNER_SQL).get();
 }
 
+/**
+ * How many owners this node has whose role acts (NODE_ROLE_ACTS): the owners who keep it, as the last-owner guards below
+ * count them. A suspended owner, or one whose key waits on a re-key code, can sign nothing meanwhile and is not counted.
+ * For the listing promise's "two owners" (engine/directory-promise.ts): a count, never who.
+ */
+export function actingOwnerCount(): number {
+    return (db.prepare(
+        `SELECT COUNT(*) as c FROM node_roles nr
+         JOIN members m ON nr.member_pubkey = m.public_key
+         WHERE nr.role = 'owner' AND ${NODE_ROLE_ACTS}`
+    ).get() as { c: number } | undefined)?.c ?? 0;
+}
+
 const withArticle = (role: string) => `${/^[aeiou]/.test(role) ? 'an' : 'a'} ${role}`;
 
 /**

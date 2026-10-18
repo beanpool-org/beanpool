@@ -3,6 +3,7 @@ import { getLocalConfig } from '../config/local-config.js';
 import { getProfileSwitches } from '../config/node-profile.js';
 import { getP2PNode, getPrivateKey } from '../p2p.js';
 import { publicKeyToProtobuf } from '@libp2p/crypto/keys';
+import { listingFields, PROMISE_GAP_MESSAGES, type ListingFields, type PromiseGap, type PromiseStatus } from '../engine/directory-promise.js';
 
 // The URL of the directory registry Edge Function. Read at every push, so a test can point it at a fixture.
 function directoryRegistryUrl(): string {
@@ -88,6 +89,27 @@ export function directoryHeldBack(): DirectoryHoldBack | null {
     return holdBack();
 }
 
+/** The owners' diagnostics' `directoryPromise`: the listing promise as this node measures it, and why it is left out. */
+export interface DirectoryPromiseDiagnostics extends PromiseStatus {
+    /** What the next push says about joining: knocks on and the door not "only admins". */
+    acceptingKnocks: boolean;
+    /** One sentence per gap, in order (PROMISE_GAP_MESSAGES); empty when the promise is kept. */
+    why: string[];
+}
+
+/**
+ * For the owners' screens (GET /api/local/admin/diagnostics `directoryPromise`, and GET /api/local/admin/directory/
+ * promise): the listing promise (engine/directory-promise.ts) as the next push will carry it, and why not. Null where
+ * nothing is pushed at all and the screens already say why: a standby, a profile that is never listed, the interval at
+ * Never. A community held back for its name still gets it, so its owners can make the promise before they name it.
+ */
+export function directoryPromiseStatus(): DirectoryPromiseDiagnostics | null {
+    if (getNodeRole() !== 'primary' || !getProfileSwitches().publishToDirectory) return null;
+    if (getNodeConfig().directoryPushIntervalHours === 0) return null;
+    const { fields, status } = listingFields();
+    return { ...status, acceptingKnocks: fields.acceptingKnocks, why: status.gaps.map((g: PromiseGap) => PROMISE_GAP_MESSAGES[g]) };
+}
+
 let pushTimer: ReturnType<typeof setInterval> | null = null;
 
 function safePush(): void {
@@ -166,6 +188,34 @@ export function addressVerified(): void {
     safePush();
 }
 
+/**
+ * An owner changed the listing promise's ticks or the closing day (Settings → Directory): pushed at once, so the card
+ * says so now rather than at the next timed push. On the same conditions as a rename.
+ */
+export function directoryPromiseSaved(): void {
+    communityNameSaved();
+}
+
+/** The fields a registry from before the listing promise (mothership A2) doesn't know: the push without them is the old one. */
+const LISTING_FIELDS: (keyof ListingFields)[] = ['promise', 'acceptingKnocks', 'closingOn'];
+
+/** Signs `payload` with the node key and POSTs it to the registry. Throws on a network failure; the answer is the caller's. */
+async function signedPush(payload: Record<string, unknown>, privateKey: NonNullable<ReturnType<typeof getPrivateKey>>): Promise<Response> {
+    const rawBody = JSON.stringify(payload);
+    const signatureBytes = await privateKey.sign(new TextEncoder().encode(rawBody));
+    const signatureHex = Buffer.from(signatureBytes).toString('hex');
+    const pubKeyHex = Buffer.from(publicKeyToProtobuf(privateKey.publicKey)).toString('hex');
+    return fetch(directoryRegistryUrl(), {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'x-signature': signatureHex,
+            'x-public-key': pubKeyHex
+        },
+        body: rawBody
+    });
+}
+
 export async function pushDirectoryNow() {
     if (getNodeRole() !== 'primary') {
         return { success: false, error: 'Directory push is only allowed on primary nodes' };
@@ -193,32 +243,48 @@ export async function pushDirectoryNow() {
         const nodeId = p2pNode.peerId.toString();
         const timestamp = Date.now();
         
+        // The listing promise (engine/directory-promise.ts), measured now: left out (null) when a measured line fails,
+        // and the log says why, as the owners' diagnostics do. Counts and booleans only. A measurement that fails sends
+        // none of the three: it must never cost the community its listing.
+        let listing: ReturnType<typeof listingFields> | null = null;
+        try {
+            listing = listingFields();
+        } catch (e: any) {
+            console.error(`[Directory] Could not measure the listing promise, pushed without it: ${e?.message || e}`);
+        }
+        if (listing && !listing.status.kept && !listing.status.gaps.includes('not_made')) {
+            console.log(`[Directory] The listing promise is left out of this push: ${listing.status.gaps.map(g => PROMISE_GAP_MESSAGES[g]).join(' ')}`);
+        }
+
         // The contacts are always said, null unless the owner turned each on (getDirectoryInfo): a node that publishes
-        // nothing else must still tell the directory to drop a contact it was sent before.
-        const payload = {
+        // nothing else must still tell the directory to drop a contact it was sent before. So are the listing fields:
+        // a promise that lapsed must be cleared, not kept from the push before.
+        const payload: Record<string, unknown> = {
             nodeId,
             callsign: localConfig.communityName,
             timestamp,
             contactEmail: null,
             contactPhone: null,
-            ...directoryInfo
+            ...directoryInfo,
+            ...listing?.fields,
         };
-        
-        const rawBody = JSON.stringify(payload);
-        const signatureBytes = await privateKey.sign(new TextEncoder().encode(rawBody));
-        const signatureHex = Buffer.from(signatureBytes).toString('hex');
-        const pubKeyHex = Buffer.from(publicKeyToProtobuf(privateKey.publicKey)).toString('hex');
 
-        const res = await fetch(directoryRegistryUrl(), {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'x-signature': signatureHex,
-                'x-public-key': pubKeyHex
-            },
-            body: rawBody
-        });
-        
+        let res = await signedPush(payload, privateKey);
+        // The registry's table and function take the listing fields only once the director applies
+        // supabase/migrations/20261018000000_directory_listing_promise.sql and the function's three lines. Until then a
+        // registry that refuses a field it doesn't know must not cost the community its listing: it is pushed again
+        // as before, without them, signed afresh.
+        let listingRefused = false;
+        if (!res.ok && listing) {
+            const refusal = `HTTP ${res.status}: ${(await res.text().catch(() => '')).slice(0, 300)}`;
+            const before = Object.fromEntries(Object.entries(payload).filter(([k]) => !LISTING_FIELDS.includes(k as keyof ListingFields)));
+            res = await signedPush({ ...before, timestamp: Date.now() }, privateKey);
+            if (res.ok) {
+                listingRefused = true;
+                console.warn(`[Directory] ⚠️ The directory registry refused the listing promise (${refusal}); published without it, as before.`);
+            }
+        }
+
         if (!res.ok) {
             const errText = await res.text();
             throw new Error(`HTTP ${res.status}: ${errText}`);
@@ -228,7 +294,11 @@ export async function pushDirectoryNow() {
         updateNodeConfig({ lastDirectoryPush: new Date().toISOString() });
         
         console.log(`[Directory] ✅ Successfully published to directory registry`);
-        return { success: true, timestamp: new Date().toISOString() };
+        return {
+            success: true, timestamp: new Date().toISOString(),
+            // Whether the row carries the promise: 'sent', 'none' (not kept), or 'refused' (the registry predates it).
+            promise: listingRefused ? 'refused' : listing?.fields.promise ? 'sent' : 'none',
+        };
     } catch (err: any) {
         console.error(`[Directory] ❌ Failed to push directory info:`, err.message);
         return { success: false, error: err.message };

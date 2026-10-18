@@ -1,11 +1,17 @@
 /**
  * The global node's way out (G5, design §3.1, §3.2, §3.5): communities near you, place watches, and the landing card.
  *
- *   GET    /api/global/communities?lat&lng&q=&limit&offset   public. The mirrored directory (services/directory-mirror.ts):
- *          nearest first from a point, else by name; `q` searches names. → { communities, total, limit, offset, fetchedAt }
+ *   GET    /api/global/communities?lat&lng&q=&limit&offset&order   public. The mirrored directory (services/directory-mirror.ts):
+ *          from a point, nearest first in 25 km bands, and within a band the communities keeping the listing promise and
+ *          taking requests to join first, each group shuffled (engine/directory-cache.ts listCommunities); else by name.
+ *          `q` searches names. `order` (up to 8 hex digits, the reader's own pick) fixes the shuffle: a reader paging
+ *          sends the same one with every page, which then walk one order; left out, every read shuffles afresh. Each
+ *          community carries `promise`, `acceptingKnocks` and `closingOn` (mothership A2).
+ *          → { communities, total, limit, offset, fetchedAt }
  *   GET    /api/global/home?lat&lng                           public, better signed. Everything the "Find your community"
  *          card needs in one request (session-cost-baselines). → { point, communities, communityCount, nearbyPosts,
- *          watches, knock, directoryFetchedAt }
+ *          watches, knock, directoryFetchedAt }. Its communities' shuffle is the reader's own until the mirror next
+ *          writes the cache (cardOrder), so the Home screen's tag holds.
  *   GET    /api/global/watches                                a member's own watches. → { watches, limit }
  *   POST   /api/global/watches  { lat, lng, radiusKm? }       set one (the 0.1° cell; the same cell again: its radius;
  *                                                            radiusKm left out or null: the default)
@@ -65,6 +71,14 @@ function nameQuery(query: Record<string, unknown>): Parsed<string | null> {
     return { ok: true, value: q || null };
 }
 
+/** The reader's shuffle (up to 8 hex digits), or null for a new one on this read. */
+function orderQuery(query: Record<string, unknown>): Parsed<number | null> {
+    const raw = query.order;
+    if (raw === undefined) return { ok: true, value: null };
+    if (typeof raw !== 'string' || !/^[0-9a-f]{1,8}$/.test(raw)) return { ok: false, error: 'order must be up to 8 hex digits, the same on every page.' };
+    return { ok: true, value: parseInt(raw, 16) };
+}
+
 function badRequest(ctx: any, error: string): void {
     ctx.status = 400;
     ctx.body = { error };
@@ -94,6 +108,21 @@ function watcher(ctx: any): string | null {
  */
 function openKnockFor(_actor: string | undefined): null {
     return null;
+}
+
+/** This process's own secret, so nobody outside can work out the order a reader's card is in. */
+const CARD_ORDER_KEY = crypto.randomBytes(32);
+
+/**
+ * The shuffle for this reader's card (listCommunities `order`): theirs until the mirror next writes the cache, then a
+ * new one. Not a new one on every read: the card is the Home screen's `find` card, and Home's tag is a hash of the
+ * answer (routes/home.ts homeEtag), so a card that reshuffled on every read gave every read a new tag and a phone never
+ * a 304. `fetchedAt` moves with every run that writes the cache and the card carries it, so this changes the tag only
+ * when the card changes anyway. Each reader has their own (a key from their signature; every unsigned reader shares
+ * one), so no community is always the first the strangers see.
+ */
+function cardOrder(actor: string | undefined, fetchedAt: string | null): number {
+    return crypto.createHmac('sha256', CARD_ORDER_KEY).update(`${actor ?? ''}\n${fetchedAt ?? ''}`).digest().readUInt32BE(0);
 }
 
 /** The "Find your community" card's body (GET /api/global/home). */
@@ -152,8 +181,12 @@ export function landingCardFor(actor: string | undefined, asked: Point | null, g
     }
     return {
         point: from,
-        // Nearest first puts the communities with a place first: none with no distance is "near you".
-        communities: point ? listCommunities({ point, limit: HOME_COMMUNITIES, offset: 0 }).communities.filter(c => c.distanceKm !== null) : [],
+        // Nearest first puts the communities with a place first: none with no distance is "near you". Shuffled among
+        // those at the same distance by this reader's own order (cardOrder), the promise kept and knocks taken first
+        // (design §1.2).
+        communities: point
+            ? listCommunities({ point, limit: HOME_COMMUNITIES, offset: 0, order: cardOrder(actor, status.fetchedAt) }).communities.filter(c => c.distanceKm !== null)
+            : [],
         communityCount: listedCommunityCount(),
         nearbyPosts,
         // null: not a member's read, so no watches to show; [] a member with none.
@@ -175,10 +208,14 @@ export function createGlobalDirectoryRoutes(_deps: RouteDeps): Router {
         if (!limit.ok) return badRequest(ctx, limit.error);
         const offset = whole(ctx.query, 'offset', 0, 0, MAX_OFFSET);
         if (!offset.ok) return badRequest(ctx, offset.error);
+        const order = orderQuery(ctx.query);
+        if (!order.ok) return badRequest(ctx, order.error);
 
         // Only the mirror writes the cache, and every run that writes it moves fetchedAt (which the answer carries), so
         // the answer is fixed by the query and fetchedAt: the ETag is made of those two, and a repeat read is a 304
-        // before anything is read.
+        // before anything is read. Up to the shuffle: a read with no `order` shuffles the communities at the same
+        // distance afresh, and the tag (a weak one) stands for any of those answers, which hold the same communities in
+        // the same bands: a reader revalidating keeps the order it was given. One that pages sends its own `order`.
         const status = readMirrorStatus();
         const tag = crypto.createHash('sha256').update(`${status.fetchedAt ?? 'never'}|${ctx.querystring}`).digest('hex').slice(0, 16);
         const etag = `W/"communities-${tag}"`;
@@ -190,7 +227,7 @@ export function createGlobalDirectoryRoutes(_deps: RouteDeps): Router {
             ctx.status = 304;
             return;
         }
-        const { communities, total } = listCommunities({ point: point.value, q: q.value, limit: limit.value, offset: offset.value });
+        const { communities, total } = listCommunities({ point: point.value, q: q.value, limit: limit.value, offset: offset.value, order: order.value });
         ctx.body = { communities, total, limit: limit.value, offset: offset.value, fetchedAt: status.fetchedAt };
     });
 

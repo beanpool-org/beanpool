@@ -15,10 +15,15 @@
  *     about. Settings removes one through app-addresses/remove (routes/app-addresses.ts), with the owner's fresh proof.
  *   - GET /api/local/admin/tls/status (owner-only): this server's certificates, per identifier (services/acme/status.ts):
  *     issued, expires, next renewal, last error. Never a key.
+ *   - GET /api/local/admin/public-address/status asks the registrar only about a BeanPool name this server holds or is
+ *     asked for (hasNameToAsk). Otherwise it answers from this server alone, with no call to our domain (#2143 item 1): a
+ *     node must never need it. A registrar that gives no answer is one calm line beside what this server holds, never an
+ *     error.
  */
 
 import Router from '@koa/router';
 import http from 'node:http';
+import { wordsFor } from '@beanpool/core';
 import { buildAttestation, claimAddress, updateAddressMetadata, addressStatus, releaseAddress, rotateAddress, nodePubkeyHex, askNameHolder, isPublicIpv4 } from '../services/registrar-client.js';
 import { syncTunnel, restartTunnel, persistAddress, persistAddressIfUnchanged, answersAboutAnotherName, noteUnansweredClaim, getTunnelStatus, dockerSocketMounted, LOOPBACK_ORIGIN, type TunnelStatus } from '../services/tunnel-connector.js';
 import { getNodeConfig, getNodeRole, updateNodeConfig, publicAddressGeneration, adminBroadcastAnnouncement, isOwnPublicAddress } from '../state-engine.js';
@@ -32,6 +37,10 @@ import { requireAdminRole, requireFreshProof } from '../admin-auth.js';
 import { tlsStatus } from '../services/acme/status.js';
 import type { RouteDeps } from './types.js';
 import { noteSecurityEvent, actingAs, OWNER_ALERT_WORDS } from '../services/security-signal.js';
+
+// The words layer in English (a node never writes in the device language: core words.test N11), named apart from the
+// tunnel status `t` below.
+const { t: tr } = wordsFor('en');
 
 export interface ProbeLogEntry {
     timestamp: string;
@@ -227,6 +236,62 @@ async function reclaimStored(stored: any): Promise<boolean> {
         console.error(`[PublicAddr] could not claim "${stored?.name}" back: ${e?.message || e}`);
         return false;
     }
+}
+
+/**
+ * Whether Settings' status read has a BeanPool name to ask the registrar about (#2143 item 1): the registrar's record stored
+ * here (any status), the name the record of names calls current (the read stores it again, even with the stored address
+ * cleared), the name the public-address agent asks for (PUBLIC_ADDRESS_NAME or _AUTO, or `beanpool claim --name`'s
+ * request), the owner's Settings pick that got no answer (the read may store it), or the fleet's CF_RECORD_NAME under
+ * beanpool.org. Anything else (no address, or only this server's own IP or domain) has nothing there to ask about: the read
+ * answers from this server alone, and a node with no name never needs our domain to open Settings.
+ */
+function hasNameToAsk(stored: any): boolean {
+    if (stored && !isOwnPublicAddress(stored)) return true;
+    if (nameAskedFor()) return true;
+    if (registrarNames().some((e) => e.role === 'current' && !e.lost)) return true;
+    if (turnedAwayList().some((e) => e.why === 'unanswered')) return true;
+    const cf = (process.env.CF_RECORD_NAME ?? '').trim().toLowerCase();
+    return !!cf && (!cf.includes('.') || cf.endsWith(`.${REGISTRAR_ZONE}`));
+}
+
+/** The node key Settings shows, or null while it isn't ready: the status read answers either way. */
+function pubkeyOrNull(): string | null {
+    try { return nodePubkeyHex(); } catch { return null; }
+}
+
+/**
+ * The certificate state of this server's own address (an IP or a domain), from what GET /tls/status reads
+ * (services/acme/status.ts): the one served now, when it is renewed or tried next, and what went wrong last. Null when the
+ * server does not look after one for it. Never a key.
+ */
+function ownAddressTls(host: string): { certificate: { issuedAt: string; expiresAt: string } | null; nextRenewalAt: string | null; lastError: string | null } | null {
+    try {
+        const want = normalizeAddress(host) ?? host;
+        const id = tlsStatus().identifiers.find((i) => i.identifier === want);
+        return id ? { certificate: id.certificate, nextRenewalAt: id.nextRenewalAt, lastError: id.lastError } : null;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * What this server holds as its address, from itself alone: its own address (an IP, a domain) with that certificate's
+ * state, or none. A registrar name is never shown from here: one stored is asked about (hasNameToAsk).
+ */
+function ownAddressAnswer(ctx: any): Record<string, unknown> {
+    const stored = (getNodeConfig() as any).publicAddress;
+    if (!isOwnPublicAddress(stored)) return { status: 'none' };
+    return { ...addressFields(ctx, stored), tls: ownAddressTls(stored.hostname) };
+}
+
+/**
+ * The one line Settings shows when the registrar gave no answer it could use: calm, as nothing here is wrong. `err`: what
+ * registrar-client threw, with a `status` when something answered.
+ */
+function nameServiceNote(err: any): string {
+    if (typeof err?.status !== 'number') return tr("The BeanPool name service can't be reached right now.");
+    return tr("The BeanPool name service couldn't answer right now ({why}).", { why: String(err?.message || err.status).slice(0, 200) });
 }
 
 export function createPublicAddressRoutes(deps: RouteDeps): Router {
@@ -507,6 +572,12 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
 
     router.get('/api/local/admin/public-address/status', async (ctx) => {
         if (!(await checkAdminAuth(ctx))) return;
+        ctx.set('Cache-Control', 'no-store');
+        // Nothing here for the registrar to say: answered from this server alone, with no call to our domain.
+        if (!hasNameToAsk((getNodeConfig() as any).publicAddress)) {
+            ctx.body = { success: true, pubkey: pubkeyOrNull(), ...ownAddressAnswer(ctx), ...serverSide() };
+            return;
+        }
         let localPa = (getNodeConfig() as any).publicAddress || null;
 
         // Fallback to env or saved token configuration if nodeConfig cache hasn't synced yet
@@ -522,9 +593,21 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
         // An answer that comes after the address was written another way (a claim or Take offline in another tab, the
         // agent) is shown, never stored over the newer write.
         const since = publicAddressGeneration();
+        const stored = (getNodeConfig() as any).publicAddress;
+        // What this server holds, its stored name as last stored: shown when there is no registrar answer to act on.
+        const held = () => (localPa && !isOwnPublicAddress(localPa) && (localPa.hostname || localPa.name)
+            ? { ...addressFields(ctx, localPa), cached: true }
+            : ownAddressAnswer(ctx));
+        let result: any;
         try {
-            const stored = (getNodeConfig() as any).publicAddress;
-            const result = await addressStatus(stored?.name);
+            result = await addressStatus(stored?.name);
+        } catch (e: any) {
+            // No usable answer (the registrar unreachable, or answering an error): what this server holds and one calm line.
+            // Never a 400 or 500: nothing is wrong with this server.
+            ctx.body = { success: true, pubkey: pubkeyOrNull(), ...held(), nameServiceNote: nameServiceNote(e), ...serverSide() };
+            return;
+        }
+        try {
             // A live answer about another name this key holds (an older registrar answers about its first one) is never
             // stored: Settings shows the stored address. With nothing stored, nor one this server left (one the owner took
             // offline, the install's late claim): Settings shows it offline. Any other answer is only written on
@@ -563,19 +646,8 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
                 ...serverSide(),
             };
         } catch (e: any) {
-            if (localPa && (localPa.hostname || localPa.name)) {
-                ctx.body = {
-                    success: true,
-                    pubkey: nodePubkeyHex(),
-                    ...addressFields(ctx, localPa),
-                    cached: true,
-                    error: e.message,
-                    ...serverSide(),
-                };
-            } else {
-                ctx.status = 400;
-                ctx.body = { error: e.message };
-            }
+            // The registrar answered, and acting on it here failed (storing it, the tunnel): what this server holds, and why.
+            ctx.body = { success: true, pubkey: pubkeyOrNull(), ...held(), error: e.message, ...serverSide() };
         }
     });
 

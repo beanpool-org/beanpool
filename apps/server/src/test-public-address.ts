@@ -12,6 +12,9 @@
  * 8. Tunnel restart (POST /api/local/admin/public-address/restart-tunnel): a new child.
  * 9. Take Offline & Tunnel Teardown (POST /api/local/admin/public-address/offline).
  * 10. Admin authentication enforcement across all management endpoints.
+ * 11. Settings' status read with nothing to ask the registrar about (no address, or after Take offline) asks it nothing,
+ *     and with a stored name and the registrar unreachable or faulty answers 200: the stored name and one calm line
+ *     (#2143 item 1).
  *
  * The tunnel's cloudflared is the fake (__fixtures__/fake-cloudflared.mjs), and Settings' probes of Cloudflare's edge are
  * refused here: this suite reaches neither Docker nor Cloudflare (before 2026-09-28 it restarted cloudflared containers
@@ -119,8 +122,18 @@ async function run() {
     // What reached the fake registrar: each request's path, protocol and body (SEC-REG-01, 02 and 04, verified 2026-10-16).
     const registrarSeen: { path: string; proto: unknown; nonce: boolean; body: any }[] = [];
     const registrarToken = 'cf-tunnel-token-secret-123456789';
+    /** Every request that reached the fake registrar, signed or not. */
+    let registrarRequests = 0;
+    /** Set: the registrar answers every request with this status and its own JSON error (a registrar with a fault). */
+    let registrarFault: number | null = null;
 
     const mockRegistrar = http.createServer(async (req, res) => {
+        registrarRequests++;
+        if (registrarFault !== null) {
+            res.writeHead(registrarFault, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'down for maintenance' }));
+            return;
+        }
         let bodyText = '';
         req.on('data', chunk => { bodyText += chunk; });
         req.on('end', () => {
@@ -298,6 +311,15 @@ async function run() {
         assert(!registrarSeen.some((r) => r.path === '/api/registrar/claim'), 'and no Direct claim without an address reached the registrar');
         assert(!(getNodeConfig() as any).publicAddress, 'nor changed the stored address');
 
+        // --- Test 4b: Settings opened on a node with no address asks the registrar nothing (#2143 item 1) ---
+        const asksBefore = registrarRequests;
+        const bareRes = await fetch(`${baseUrl}/api/local/admin/public-address/status`);
+        const bareBody = await bareRes.json().catch(() => ({}));
+        assert(bareRes.status === 200 && bareBody.success === true && bareBody.status === 'none' && bareBody.pubkey === pubkey,
+            `with no address, GET /status answers 200, none, from this server alone (${bareRes.status} ${JSON.stringify(bareBody)})`);
+        assert(registrarRequests === asksBefore, `…and the registrar was asked nothing (${registrarRequests - asksBefore} requests)`);
+        assert(bareBody.nameServiceNote === undefined && bareBody.error === undefined, '…and says nothing about the name service it did not ask');
+
         // --- Test 4: Claim Public Address & Provision Tunnel ---
         const claimRes = await fetch(`${baseUrl}/api/local/admin/public-address/claim`, {
             method: 'POST',
@@ -347,6 +369,44 @@ async function run() {
         assert(statusBody.status === 'live', 'Status reports status: live');
         assert(statusBody.hostname === 'mullum-test.beanpool.org', 'Status reports active hostname');
         assert(statusBody.pubkey === pubkey, 'Status reports node public key');
+        assert(statusBody.nameServiceNote === undefined, 'and, the registrar having answered, no line about the name service');
+
+        // --- Test 5b: the registrar unreachable, with a .beanpool.org name stored (#2143 item 1) ---
+        const registrarUrl = process.env.REGISTRAR_URL;
+        const closed = http.createServer();
+        await new Promise<void>((resolve) => closed.listen(0, '127.0.0.1', () => resolve()));
+        const closedPort = (closed.address() as any).port;
+        await new Promise<void>((resolve) => closed.close(() => resolve()));
+        process.env.REGISTRAR_URL = `http://127.0.0.1:${closedPort}`;
+        try {
+            const downRes = await fetch(`${baseUrl}/api/local/admin/public-address/status`);
+            const downBody = await downRes.json().catch(() => ({}));
+            assert(downRes.status === 200 && downBody.success === true, `with the registrar unreachable, GET /status still answers 200 (${downRes.status} ${JSON.stringify(downBody)})`);
+            assert(downBody.status === 'live' && downBody.name === 'mullum-test' && downBody.hostname === 'mullum-test.beanpool.org' && downBody.cached === true,
+                `…showing the stored name as last stored (${downBody.status} ${downBody.hostname}, cached ${downBody.cached})`);
+            assert(downBody.nameServiceNote === "The BeanPool name service can't be reached right now.",
+                `…with the one calm line about the name service (${JSON.stringify(downBody.nameServiceNote)})`);
+            assert(downBody.error === undefined, `…and no error for Settings to show in red (${JSON.stringify(downBody.error)})`);
+            assert(downBody.tunnelToken === registrarToken && downBody.pubkey === pubkey, '…the owner still sees the tunnel token and the node key');
+            const kept = (getNodeConfig() as any).publicAddress;
+            assert(kept?.name === 'mullum-test' && kept?.tunnelToken === registrarToken && kept?.status === 'live',
+                `…and the stored address is untouched (${JSON.stringify({ name: kept?.name, status: kept?.status })})`);
+        } finally {
+            process.env.REGISTRAR_URL = registrarUrl;
+        }
+
+        // --- Test 5c: the registrar answering a fault of its own: 200 too, its words in the same calm line ---
+        registrarFault = 503;
+        try {
+            const faultRes = await fetch(`${baseUrl}/api/local/admin/public-address/status`);
+            const faultBody = await faultRes.json().catch(() => ({}));
+            assert(faultRes.status === 200 && faultBody.status === 'live' && faultBody.hostname === 'mullum-test.beanpool.org' && faultBody.cached === true,
+                `with the registrar answering 503, GET /status answers 200 with the stored name (${faultRes.status} ${JSON.stringify(faultBody)})`);
+            assert(faultBody.nameServiceNote === "The BeanPool name service couldn't answer right now (down for maintenance)." && faultBody.error === undefined,
+                `…and one calm line with what it said (${JSON.stringify(faultBody.nameServiceNote)})`);
+        } finally {
+            registrarFault = null;
+        }
 
         // --- Test 6: Metadata Update ---
         const updateRes = await fetch(`${baseUrl}/api/local/admin/public-address/update`, {
@@ -396,6 +456,13 @@ async function run() {
         assert(offTunnel.pid === null && offTunnel.runningToken === null && offTunnel.status.state === 'off' && !alive(pidAfter!),
             `the tunnel is stopped on teardown: no child (${offTunnel.status.state})`);
         assert(!fs.existsSync(TOKEN_FILE), 'and no token file is left on disk');
+
+        // --- Test 10: Settings opened after Take offline: no name held, none asked for, so nothing asked ---
+        const asksAfterOffline = registrarRequests;
+        const afterRes = await fetch(`${baseUrl}/api/local/admin/public-address/status`);
+        const afterBody = await afterRes.json().catch(() => ({}));
+        assert(afterRes.status === 200 && afterBody.status === 'none' && registrarRequests === asksAfterOffline,
+            `after Take offline, GET /status answers none and asks the registrar nothing (${afterRes.status} ${afterBody.status}, ${registrarRequests - asksAfterOffline} requests)`);
 
         console.log(`\n⭐️ ALL ${testsPassed}/${testsRun} PUBLIC ADDRESS & TUNNEL TESTS PASSED.`);
     } finally {

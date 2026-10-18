@@ -112,10 +112,11 @@ describe('every write or removal of the phone\'s community announces it', () => 
         expect([...follow.matchAll(/deps\.switchTo\(/g)]).toHaveLength(1);
         expect(follow).toMatch(/await deps\.switchTo\(offer\.to, offer\.from\);/);
         // switchPhoneTo writes the address and announces it (found by the sweep, and in this order). Following, the
-        // community's copy is carried first, inside the gate that keeps every copy closed until the address is written.
+        // community's copy is carried first, inside the gate that keeps every copy closed until the address is written,
+        // and the carry writes the address once the copy is there and before the old one goes (community-copy-carry.ts).
         const reconnect = code(fs.readFileSync(path.join(NATIVE, 'utils/reconnect.ts'), 'utf8'));
         expect(reconnect).toMatch(/await AsyncStorage\.setItem\('beanpool_anchor_url', url\);\s*\}\s*await initDB\(\);\s*communitySwitched\(\);/);
-        expect(reconnect).toMatch(/await whileCopyMoves\(url, async \(\) => \{\s*const done = await carryCommunityCopy\(carryFrom, url\);\s*await AsyncStorage\.setItem\('beanpool_anchor_url', url\);/);
+        expect(reconnect).toMatch(/await whileCopyMoves\(url, \(\) => carryCommunityCopy\(carryFrom, url, \(\) => AsyncStorage\.setItem\('beanpool_anchor_url', url\)\)\);/);
         expect(writes.some(w => w.file === 'utils/reconnect.ts')).toBe(true);
     });
 

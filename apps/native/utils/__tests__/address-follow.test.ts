@@ -38,7 +38,8 @@ vi.mock('../db', () => ({
 }));
 // The copy's carry itself runs over real files in community-copy-carry.test.ts.
 vi.mock('../community-copy-carry', () => ({
-    carryCommunityCopy: vi.fn(async (from: string, to: string) => { switched.carried.push([from, to]); return 'carried'; }),
+    // It writes the address itself once the copy is there (writeAddress), before the old copy goes.
+    carryCommunityCopy: vi.fn(async (from: string, to: string, writeAddress: () => Promise<void>) => { switched.carried.push([from, to]); await writeAddress(); return 'carried'; }),
 }));
 vi.mock('../community-switch', () => ({ communitySwitched: vi.fn(() => { switched.announced++; }), onCommunitySwitched: vi.fn(() => () => {}) }));
 

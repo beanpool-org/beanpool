@@ -41,6 +41,9 @@
         "serviceAccountKeyPath": "./pc-api-key.json",
         "track": "internal",
         "releaseStatus": "draft"
+      },
+      "ios": {
+        "ascAppId": "6761870086"
       }
     }
   }

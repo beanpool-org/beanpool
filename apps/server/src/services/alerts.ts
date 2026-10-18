@@ -260,6 +260,9 @@ export interface Condition {
     alsoPush?: string[];
     /** A count's line (SecurityNote.perDay): it replaces the same count's earlier line of the last day. */
     dayLine?: string;
+    /** Not active because another row took over and tells what happened instead (a certificate that expired un-renewed
+     *  is tls.fallback's): its end leaves the book after ALERT_CLEAR_HOLD_MS like any other, but is never told. */
+    endUntold?: boolean;
 }
 
 export interface AlertEvent {
@@ -906,7 +909,7 @@ export async function updateAlerts(conditions: readonly Condition[]): Promise<Al
             } else if (t - r.endedAt >= ALERT_CLEAR_HOLD_MS) {
                 delete s.raised[c.key];
                 s.clearedAt[c.key] = t;
-                tell({ key: c.key, kind: 'cleared', at: t, since: r.since, priority: r.priority, detail: c.detail });
+                if (!c.endUntold) tell({ key: c.key, kind: 'cleared', at: t, since: r.since, priority: r.priority, detail: c.detail });
             }
         }
     }
@@ -1555,6 +1558,8 @@ export const TLS_EXPIRING_MS = DAY;
  *   - tls.fallback: one whose certificate expired before it was renewed, so apps and browsers see the self-signed pair
  *     there; and, as before, the fleet's Cloudflare name with none. Was that name only; now any address this server
  *     certifies. Not an address never issued one: a proxy in front may hold its certificate.
+ * An expiry is not a renewal: while an address is left with the self-signed pair after its certificate expired,
+ * tls.fallback tells it, and the other two end untold (Condition.endUntold), never as resolved.
  * Each names the address (the soonest to expire first) and when; several are one line. The retries they promise are the
  * scheduler's: never more than a day apart, and at most a third of what is left (so within 8 hours under the last day).
  */
@@ -1572,6 +1577,7 @@ function tlsConditions(at: number): Condition[] {
     const expiring = held.filter((c) => c.notAfter - at < TLS_EXPIRING_MS).sort(bySoonest);
     const hosts = (list: { host: string }[]) => list.map((c) => c.host).join(', ');
     const lateDue = late.length ? when(Math.min(...late.map((c) => c.renewDueAt))) : '';
+    const endUntold = fallen.some((f) => f.expired) ? { endUntold: true } : {};
     return [
         fallen.length === 0
             ? { key: 'tls.fallback', active: false, detail: tr('No address of this server is left with the self-signed certificate now.') }
@@ -1584,7 +1590,7 @@ function tlsConditions(at: number): Condition[] {
                     : tr('There is no certificate for {host} yet: browsers now see a self-signed one. It is tried again within a day.', { host: fallen[0].host }),
             },
         late.length === 0
-            ? { key: 'tls.renewal-late', active: false, detail: tr('No certificate this server serves is late for renewal now.') }
+            ? { key: 'tls.renewal-late', active: false, detail: tr('No certificate this server serves is late for renewal now.'), ...endUntold }
             : {
                 key: 'tls.renewal-late', active: true,
                 detail: late.length > 1
@@ -1594,7 +1600,7 @@ function tlsConditions(at: number): Condition[] {
                         { host: late[0].host, due: lateDue, expires: when(late[0].notAfter) }),
             },
         expiring.length === 0
-            ? { key: 'tls.expiring', active: false, detail: tr('No certificate this server serves expires within a day now.') }
+            ? { key: 'tls.expiring', active: false, detail: tr('No certificate this server serves expires within a day now.'), ...endUntold }
             : {
                 key: 'tls.expiring', active: true,
                 detail: expiring.length > 1

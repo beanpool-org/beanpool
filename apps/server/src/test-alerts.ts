@@ -34,7 +34,9 @@
  *     renewal clocks are the alert book's): no ACME certificate, an address no renewal check has looked at yet, or one
  *     never issued a certificate (a proxy may hold it) raises none of the three; a renewal due and not done for 24 hours
  *     is `tls.renewal-late`, not before; under a day left is `tls.expiring` (urgent); renewed, both clear; expired,
- *     `tls.fallback` names the address, and clears when renewed; the fleet's Cloudflare name with none is told as before.
+ *     `tls.fallback` names the address, and clears when renewed; late and under a day, then expired un-renewed, the two
+ *     are never told as resolved (only the fallback's end is, at the renewal); the fleet's Cloudflare name with none is
+ *     told as before.
  *
  * Run (as test-all does, through scripts/run-server-suites.mjs):
  *   BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-alerts.ts
@@ -747,6 +749,43 @@ async function main(): Promise<void> {
     advance(15 * MIN);
     await tick();
     assert(tlsKeys().length === 0 && !!tlsMod.servedCertificate(IP) && !tlsMod.tlsFellBackToSelfSigned(), `12. renewed: tls.fallback over (${tlsKeys()})`);
+    // Late, then under a day, then expired without a renewal: tls.fallback takes over, and the other two are never told as
+    // resolved, since nothing was renewed (the review of #2146 measured "RESOLVED" told 15 minutes after the expiry).
+    caAnswers = false;
+    const third = tlsMod.servedCertificate(IP)!;
+    at(third.notAfter - LIFE / 3 + 24 * HOUR + MIN);
+    await schedule.runAcmeTick();
+    await tick();
+    at(third.notAfter - 23 * HOUR);
+    await schedule.runAcmeTick();
+    await tick();
+    assert(JSON.stringify(tlsKeys()) === JSON.stringify(['tls.expiring', 'tls.renewal-late']),
+        `12. a third certificate late, then under a day left (${tlsKeys()})`);
+    const hitsBeforeExpiry = (await ntfyHits()).length;
+    at(third.notAfter + MIN);
+    const expiredAt = clock12();
+    await schedule.runAcmeTick();
+    await tick();
+    advance(15 * MIN);
+    await tick();
+    advance(HOUR);
+    await tick();
+    const endedAtExpiry = alerts.getAlertsStatus().history.filter((e) => e.kind === 'cleared' && e.key.startsWith('tls.') && e.at >= expiredAt).map((e) => e.key);
+    const toldAtExpiry = (await ntfyHits()).slice(hitsBeforeExpiry).map((h) => h.body).join('\n');
+    assert(endedAtExpiry.length === 0 && JSON.stringify(tlsKeys()) === JSON.stringify(['tls.fallback']),
+        `12. expired un-renewed, an hour on: only tls.fallback, and neither of the other two told as resolved (${endedAtExpiry}; ${tlsKeys()})`);
+    assert(!/RESOLVED \(certificate/.test(toldAtExpiry) && /CERTIFICATE FELL BACK TO SELF-SIGNED/.test(toldAtExpiry),
+        `12. the channel is told the fallback, and nothing resolved (${toldAtExpiry})`);
+    caAnswers = true;
+    at(third.notAfter + 24 * HOUR + 2 * MIN);
+    await schedule.runAcmeTick();
+    await tick();
+    advance(15 * MIN);
+    await tick();
+    const toldAtRenewal = (await ntfyHits()).slice(hitsBeforeExpiry).map((h) => h.body).join('\n');
+    assert(tlsKeys().length === 0 && /RESOLVED \(certificate fell back to self-signed/.test(toldAtRenewal)
+        && !/RESOLVED \(certificate (renewal late|expires within a day)/.test(toldAtRenewal),
+        `12. renewed a day later: the end is told once, as the fallback's (${tlsKeys()}; ${toldAtRenewal})`);
     // The fleet's Cloudflare name (dns-01) with no certificate at all is still told, as it was before any other address was.
     Object.assign(process.env, { CF_RECORD_NAME: 'fleet.example.org', CF_API_TOKEN: 'cf-suite-token', CF_ZONE_ID: 'cf-suite-zone' });
     forgetOwnAddresses();

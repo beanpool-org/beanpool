@@ -478,6 +478,7 @@ export const SUITES = [
     'test-process-handlers',
     'test-shutdown-recovery',
     'test-clean-stop',
+    'test-no-mothership',
     'test-storage-health',
     'test-image-store',
     'test-image-store-put-async',

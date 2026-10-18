@@ -183,7 +183,7 @@ export function installOutsideCallTrap(opts: { file?: string } = {}): OutsideCal
 
 /** The calls a process left in its file (none when it made none). */
 export function readOutsideCalls(file: string): OutsideCall[] {
-    let text = '';
+    let text: string;
     try { text = fs.readFileSync(file, 'utf-8'); } catch { return []; }
     return text.split('\n').filter(Boolean).flatMap((l) => { try { return [JSON.parse(l) as OutsideCall]; } catch { return []; } });
 }

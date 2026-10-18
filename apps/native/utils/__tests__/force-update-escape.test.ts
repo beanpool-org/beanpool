@@ -217,7 +217,9 @@ describe('every way a member moves the phone to another community tells the upda
         ['utils/use-communities.ts', /await AsyncStorage\.setItem\('beanpool_anchor_url', url\);\s*await initDB\(\);\s*communitySwitched\(\);/],
         ['app/(tabs)/settings.tsx', /await AsyncStorage\.setItem\('beanpool_anchor_url', targetUrl\);\s*await initDB\(\);\s*communitySwitched\(\);/],
         ['app/(tabs)/settings.tsx', /await AsyncStorage\.setItem\('beanpool_anchor_url', finalAnchorUrl\);\s*communitySwitched\(\);/],
-        ['utils/reconnect.ts', /await AsyncStorage\.setItem\('beanpool_anchor_url', url\);\s*await initDB\(\);\s*communitySwitched\(\);/],
+        // A plain switch writes the address and opens the new copy; a follow (carryFrom) has the carry write it once the copy is there.
+        ['utils/reconnect.ts', /\} else \{\s*await closeDB\(\);\s*await AsyncStorage\.setItem\('beanpool_anchor_url', url\);\s*\}\s*await initDB\(\);\s*communitySwitched\(\);/],
+        ['utils/reconnect.ts', /carryCommunityCopy\(carryFrom, url, \(\) => AsyncStorage\.setItem\('beanpool_anchor_url', url\)\)\);\s*\} else \{/],
         ['utils/join-another-community.ts', /communitySwitched\(\);\s*await deps\.clearGuestNode\(targetUrl\)/],
         ['utils/delete-here.ts', /await leaveThisCommunity\(plan\.here, plan\.next\.url\);\s*const \{ initDB \} = await import\('\.\/db'\);\s*await initDB\(\);\s*communitySwitched\(\);/],
         ['utils/account-leaves-phone.ts', /await releaseAccountFromPhone\(account, AsyncStorage, \{ keepDmMemoryOf \}\);\s*await wipeIdentity\(\);\s*communitySwitched\(\);/],

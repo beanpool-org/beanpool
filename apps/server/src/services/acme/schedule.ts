@@ -13,6 +13,9 @@
  *     IP certificate opens ~53 h before it expires is tried in, hourly as it closes). Failures at another directory than
  *     the one configured now (state.json records the last attempt's) neither delay the next try nor add to its count.
  * An order still running after ORDER_TIMEOUT_MS counts as failed, and whatever it brings back later is thrown away.
+ * Before an order asks the CA anything, state.json already holds the attempt as a failure would leave it (its count, its
+ * next try), and the once-a-day mark is written before an unconfirmed challenge goes out: a server that stops mid-order
+ * waits at its next boot instead of asking the CA again on every one.
  *
  * A standby orders nothing: certificates never travel, and a standby gets its own once the address points at it and it
  * has taken over (D8). A `.beanpool.org` name (Cloudflare's edge holds those) and a private host are never ordered.
@@ -192,6 +195,10 @@ async function considerTarget(target: AcmeTarget, now: number): Promise<TargetOu
     const attempt = (): AcmeState => ({
         ...state, lastAttemptAt: now, attemptDirectoryUrl: directoryUrl, unconfirmedAttemptAt: askedUnconfirmed ? now : lastUnconfirmed,
     });
+    // On disk before the CA is asked anything, as if this attempt failed: a server that stops mid-order (a crash loop, a
+    // restart) reads it at its next boot and waits out the back-off, rather than asking the CA again on every boot. The
+    // outcome below writes over it.
+    writeState(dataDir, { ...attempt(), failures: failuresSoFar + 1, nextAttemptAt: now + nextAttemptDelay(failuresSoFar + 1, held?.notAfter ?? null, now) });
     try {
         const pair = await withTimeout(orderFn(target, {
             directoryUrl,
@@ -200,6 +207,8 @@ async function considerTarget(target: AcmeTarget, now: number): Promise<TargetOu
             orderUnconfirmed: (problem) => {
                 selfCheckProblem = problem;
                 askedUnconfirmed = !settled && now - lastUnconfirmed >= UNCONFIRMED_EVERY_MS;
+                // The once-a-day limit on disk before the challenge goes to the CA, for the same reason.
+                if (askedUnconfirmed) writeState(dataDir, { ...readState(dataDir, target.host), unconfirmedAttemptAt: now });
                 return askedUnconfirmed;
             },
         })).finally(() => { settled = true; });

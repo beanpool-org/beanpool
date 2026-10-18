@@ -27,7 +27,9 @@
  *      with CF_RECORD_NAME set but empty, as docker-compose.yml passes it;
  *  12. docker-compose.yml passes ACME_DIRECTORY_URL through;
  *  13. a certificate that expires (TLS clock injected) is not served to the next connection with no SNI, on a standby
- *      too, whose ticks look at nothing: the next valid certificate is, else the self-signed pair.
+ *      too, whose ticks look at nothing: the next valid certificate is, else the self-signed pair;
+ *  14. state.json holds the attempt (its count and next try, and the once-a-day mark of an unconfirmed one) before the
+ *      CA is asked anything: what a server that stops mid-order leaves makes its next boot wait and ask the CA nothing.
  *
  * Run: BEANPOOL_SUITE_ENV_PASSWORD=1 BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx apps/server/src/test-acme-http01.ts
  */
@@ -688,6 +690,50 @@ try {
     const t13c = await schedule.runAcmeTick();
     check('the clock back, the main server\'s next tick: the IP certificate is served with no SNI again', t13c.outcomes['203.0.113.5'] === 'fresh'
         && (await served(null, '203.0.113.5')).san === 'IP Address:203.0.113.5', JSON.stringify(t13c));
+
+    console.log('\n14. The attempt is on disk before the CA is asked: a server that stops mid-order waits at its next boot');
+    // What state.json holds at the moment the order would reach the CA is what a crash then leaves: put back after the
+    // attempt, then a tick reads it as the next boot's first tick would.
+    const stateFile = (host: string) => path.join(store.acmeRoot(dataDir), store.folderName(host), 'state.json');
+    const rawState = (host: string) => { try { return fs.readFileSync(stateFile(host), 'utf8'); } catch { return null; } };
+    const leaveOnDisk = (host: string, raw: string | null) => { if (raw === null) fs.rmSync(stateFile(host), { force: true }); else fs.writeFileSync(stateFile(host), raw); };
+    for (const [host, unconfirmed] of [['crash.example.org', false], ['crash-shut.example.org', true]] as const) {
+        configure([host]);
+        if (unconfirmed) { originFor[host] = closedPort; fake.caPortFor[host] = closedPort; }
+        now = Date.now();
+        const stoppedAt = now;
+        let atTheCa: string | null = null;
+        schedule._setScheduleHooksForTests({ order: async (_target, opts) => {
+            // Confirmed: the order reaches the CA as it starts. Unconfirmed: once the scheduler says to go on anyway.
+            if (unconfirmed && !opts.orderUnconfirmed?.('port 80 is shut')) throw new Error('not asked anyway');
+            atTheCa = rawState(host);
+            throw new Error('the server stopped here');
+        } });
+        try { await schedule.runAcmeTick(); } finally { schedule._setScheduleHooksForTests({ order: null }); }
+        const was = atTheCa ? JSON.parse(atTheCa) : null;
+        check(`${host}: when the order reached the CA, state.json already said: one failure, the next try in an hour`,
+            was?.failures === 1 && was?.nextAttemptAt === stoppedAt + HOUR && was?.lastAttemptAt === stoppedAt, String(atTheCa));
+        if (unconfirmed) {
+            check(`${host}: …and that the CA was asked unconfirmed now, before the challenge went out`, was?.unconfirmedAttemptAt === stoppedAt, String(atTheCa));
+        }
+        leaveOnDisk(host, atTheCa);
+        let reqs = fake.requests.length;
+        const boot = await schedule.runAcmeTick();
+        check(`${host}: the next boot's first tick (the same minute) waits and asks the CA nothing`, boot.outcomes[host] === 'waiting' && fake.requests.length === reqs,
+            JSON.stringify({ boot, asked: fake.requests.slice(reqs) }));
+        now = stoppedAt + HOUR + 60_000;
+        reqs = fake.requests.length;
+        const later = await schedule.runAcmeTick();
+        if (unconfirmed) {
+            check(`${host}: an hour on, port 80 still shut: the self-check fails and the CA is asked nothing within the day`,
+                later.outcomes[host] === 'failed' && fake.requests.length === reqs, JSON.stringify({ later, asked: fake.requests.slice(reqs) }));
+            delete originFor[host];
+            delete fake.caPortFor[host];
+        } else {
+            check(`${host}: an hour on: ordered, served, and the failure cleared`, later.outcomes[host] === 'renewed'
+                && store.readState(dataDir, host).failures === 0 && tlsMod.servedHosts().includes(host), JSON.stringify(later));
+        }
+    }
 } catch (e) {
     failed++;
     console.log(`  ❌ the suite threw: ${(e as Error).stack}`);

@@ -58,7 +58,7 @@
  */
 
 import { domainToASCII } from 'node:url';
-import { audienceOf } from '@beanpool/core';
+import { audienceOf, isPublicIpv4 } from '@beanpool/core';
 import { getNodeConfig, resolvePublicNodeUrl, PUBLIC_URL_RULES } from '../state-engine.js';
 import { registrarNames, registrarNamesVersion } from './registrar-names.js';
 import { logger } from '../logger.js';
@@ -256,18 +256,6 @@ export function primaryAddress(): string | null {
 /** Top-level names no public CA certifies (RFC 6761, RFC 8375 and the usual home and company ones). */
 const NON_PUBLIC_TLDS = new Set(['local', 'localhost', 'internal', 'lan', 'home', 'corp', 'test', 'invalid', 'example', 'onion', 'arpa']);
 
-/** An IPv4 literal anyone on the Internet could reach: not 0/8, 10/8, 100.64/10 (carrier NAT), 127/8, 169.254/16, 172.16/12,
- *  192.168/16, nor multicast and above (224/3). */
-function isPublicIpv4(host: string): boolean {
-    const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
-    if (!m) return false;
-    const o = m.slice(1).map(Number);
-    if (o.some((n, i) => n > 255 || String(n) !== m[i + 1])) return false;
-    const [a, b] = o;
-    return !(a === 0 || a === 10 || a === 127 || a >= 224 || (a === 100 && b >= 64 && b <= 127) || (a === 169 && b === 254)
-        || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168));
-}
-
 /** A bracketed IPv6 literal anyone on the Internet could reach: global unicast (2000::/3) only, never an IPv4-mapped one. */
 function isPublicIpv6(host: string): boolean {
     if (!/^\[[0-9a-f:.]+\]$/.test(host)) return false;
@@ -278,7 +266,8 @@ function isPublicIpv6(host: string): boolean {
 }
 
 /**
- * Whether a public CA can certify `host` by fetching it from the Internet (services/acme): a public IP literal, or a name of
+ * Whether a public CA can certify `host` by fetching it from the Internet (services/acme): a public IP literal (an IPv4 one by
+ * core's isPublicIpv4, the phone's own reading of a server's public number), or a name of
  * two labels or more, each a-z, 0-9 and inner hyphens, under a top-level name that is not numeric and not a home, test or
  * special-use one. Never a beanpool.org name (Cloudflare's edge holds those), never loopback or a local-network host.
  */

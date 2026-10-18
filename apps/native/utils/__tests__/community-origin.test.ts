@@ -5,10 +5,14 @@
  * communityOrigin refused every IP literal ("a community with nothing to knock on").
  *
  * The rest stays refused: cleartext to anyone, a private, loopback or link-local number (core isPrivateHost, the
- * cleartext rule's own reading, which normalizeNodeUrl and withNodeScheme read too), 0.0.0.0/8 and multicast, an
- * IPv6 literal, a malformed number, a login, and the global node.
+ * cleartext rule's own reading, which normalizeNodeUrl and withNodeScheme read too), 0.0.0.0/8 and multicast, a
+ * carrier-NAT (100.64.0.0/10) or benchmarking (198.18.0.0/15) number, which the server never holds a certificate for
+ * (one rule for both, core isPublicIpv4: review of #2138), an IPv6 literal, a malformed number, a login, and the global
+ * node.
  */
 import { describe, it, expect } from 'vitest';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { isPrivateHost } from '@beanpool/core';
 import { communityOrigin } from '../community-origin';
 import { normalizeNodeUrl } from '../node-url';
@@ -24,6 +28,11 @@ describe('a public IPv4 address over https is a community\'s address', () => {
         ['HTTPS://8.8.8.8', 'https://8.8.8.8'],
         ['https://172.32.0.1', 'https://172.32.0.1'], // just outside 172.16.0.0/12
         ['https://223.255.255.254', 'https://223.255.255.254'],
+        // Just outside carrier NAT (100.64.0.0/10) and the benchmarking networks (198.18.0.0/15).
+        ['https://100.63.255.255', 'https://100.63.255.255'],
+        ['https://100.128.0.1', 'https://100.128.0.1'],
+        ['https://198.17.255.255', 'https://198.17.255.255'],
+        ['https://198.20.0.1', 'https://198.20.0.1'],
     ])('%j → %j', (raw, origin) => {
         expect(communityOrigin(raw)).toBe(origin);
     });
@@ -41,6 +50,9 @@ describe('everything else stays refused', () => {
         // Private, loopback and link-local numbers: the cleartext rule's own reading.
         'https://10.0.0.5', 'https://172.16.0.5', 'https://172.31.255.1', 'https://192.168.1.10:8443', 'https://127.0.0.1',
         'https://169.254.10.1',
+        // Carrier NAT (and Tailscale's tailnets on a member's phone) and the benchmarking networks: the server's own
+        // rule refuses them (review of #2138), so no server there has a certificate.
+        'https://100.64.0.1', 'https://100.100.100.100', 'https://100.127.255.254', 'https://198.18.0.1', 'https://198.19.255.254',
         // Nothing serves there: 0.0.0.0/8 (some systems connect to it as the phone itself), multicast and above.
         'https://0.0.0.0', 'https://0.1.2.3', 'https://224.0.0.1', 'https://239.1.2.3', 'https://255.255.255.255',
         // Not a number at all, though all digits and dots.
@@ -59,6 +71,14 @@ describe('everything else stays refused', () => {
             expect(isPrivateHost(ip), ip).toBe(true);
             expect(communityOrigin(`https://${ip}`), ip).toBeNull();
         }
+    });
+
+    it('a server\'s number is read by the server\'s own rule: one copy, in core, so the phone never offers a number no server is certified for', () => {
+        const server = fs.readFileSync(path.resolve(__dirname, '../../../server/src/engine/own-addresses.ts'), 'utf8');
+        expect(server).toMatch(/import \{[^}]*\bisPublicIpv4\b[^}]*\} from '@beanpool\/core';/);
+        expect(server).not.toMatch(/function isPublicIpv4/);
+        const phone = fs.readFileSync(path.resolve(__dirname, '../community-origin.ts'), 'utf8');
+        expect(phone).toMatch(/import \{[^}]*\bisPublicIpv4\b[^}]*\} from '@beanpool\/core';/);
     });
 
     it('names are as before, and the global node is still never one', () => {

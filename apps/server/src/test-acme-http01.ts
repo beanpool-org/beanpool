@@ -497,7 +497,7 @@ try {
 
     console.log('\n8. `.beanpool.org` names and private hosts are never ordered');
     const never = ['mytown.beanpool.org', 'beanpool.org', '10.0.0.5', '192.168.1.10', '172.16.4.4', '127.0.0.1', 'localhost', 'box.local',
-        '100.64.1.2', '169.254.1.1', '0.0.0.0', '224.0.0.1', '[fd00::1]', '[fe80::1]', '[::1]', 'intranet', 'host.internal', 'nas.lan', 'x.test'];
+        '100.64.1.2', '100.127.255.254', '198.18.0.1', '198.19.255.254', '169.254.1.1', '0.0.0.0', '224.0.0.1', '[fd00::1]', '[fe80::1]', '[::1]', 'intranet', 'host.internal', 'nas.lan', 'x.test'];
     configure(never);
     check('none of them is a tlsIdentifier', tlsIdentifiers().length === 0, JSON.stringify(tlsIdentifiers()));
     check('each is refused by isCertifiableHost', never.every((h) => !isCertifiableHost(h)), never.filter((h) => isCertifiableHost(h)).join(', '));

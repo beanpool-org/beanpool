@@ -23,6 +23,10 @@
  *   7. Given again after its order failed (`beanpool claim --ip` run again once port 80 is open): ordered at once, past
  *      the back-off, its count started again; not twice within a minute; and the CA is still asked unconfirmed at most
  *      once a day.
+ *   8. A name the server is given (CF_RECORD_NAME, a domain or a bare fleet label) is never replaced by an own address:
+ *      the IP or domain, from /own or the command's file, is kept beside it, and the name stays this community's (no
+ *      421 for members' apps signing for it), published, primary and the directory's publicUrl. A name set on the server
+ *      after an own address became the community's is this community's too.
  *
  * No real registrar, CA or BeanPool node: the registrar is a fake HTTP server here, and the certificate scheduler's order
  * is a stand-in that records what it was asked for and fails.
@@ -299,6 +303,57 @@ try {
     await settledTick();
     check('given again with the self-check failing: ordered, and the CA is not asked anyway twice in a day', orders() === 3
         && anywayFor() === show([true, false]), show({ orders: orders(), askedAnyway }));
+
+    console.log('\n8. A name the server is given (CF_RECORD_NAME) is never replaced by an own address');
+    // A server set up as the README says, with no BeanPool name and nothing given yet.
+    const OWN = '/api/local/admin/public-address/own';
+    const NAME = 'bean.mycommunity.org';
+    se.updateNodeConfig({ publicAddress: null, registrarNames: [], ownerAddresses: [] } as any);
+    process.env.CF_RECORD_NAME = NAME;
+    own.forgetOwnAddresses();
+    check('precondition: the name is this community\'s, primary and the directory\'s publicUrl', own.audienceStanding(NAME) === 'own'
+        && own.primaryAddress() === NAME && se.getDirectoryInfo().publicUrl === `https://${NAME}`);
+    const IP8 = '203.0.113.9';
+    const r8 = await post(OWN, { ip: IP8 });
+    check('/own { ip }: 200, kept beside the name, not the community\'s address', r8.status === 200 && r8.body?.communityAddress === false
+        && pa() === null && owned().includes(IP8), show({ r8, pa: pa() }));
+    check('the name is still this community\'s: members\' apps signing for it are accepted (no 421)', own.audienceStanding(NAME) === 'own');
+    check('…still published, primary, the directory\'s publicUrl and a certificate identifier', own.publishedAddresses().includes(NAME)
+        && own.primaryAddress() === NAME && r8.body?.primaryAddress === NAME && se.getDirectoryInfo().publicUrl === `https://${NAME}`
+        && own.tlsIdentifiers().includes(NAME), show({ published: own.publishedAddresses(), primary: own.primaryAddress(), url: se.getDirectoryInfo().publicUrl }));
+    check('the IP is this community\'s too, published, and a certificate identifier', own.audienceStanding(IP8) === 'own'
+        && own.publishedAddresses().includes(IP8) && own.tlsIdentifiers().includes(IP8), show(own.tlsIdentifiers()));
+    const D8 = 'coop8.example.net';
+    const r8d = await post(OWN, { domain: D8 });
+    check('/own { domain } beside it: kept beside, the name still primary and the directory\'s publicUrl', r8d.status === 200
+        && r8d.body?.communityAddress === false && pa() === null && own.audienceStanding(D8) === 'own' && own.primaryAddress() === NAME
+        && se.getDirectoryInfo().publicUrl === `https://${NAME}`, show({ r8d, pa: pa() }));
+    writeAddressRequestFile(dir, { kind: 'ip', host: '203.0.113.10', at: Date.now() });
+    await agent.checkAddressRequest();
+    check('beanpool claim --ip on such a server: kept beside, the name still this community\'s and primary', fileGone() && pa() === null
+        && own.audienceStanding('203.0.113.10') === 'own' && own.audienceStanding(NAME) === 'own' && own.primaryAddress() === NAME, show(pa()));
+    // A bare fleet label, as the fleet's nodes set it: `<label>.beanpool.org`.
+    process.env.CF_RECORD_NAME = 'valleyfolk';
+    own.forgetOwnAddresses();
+    const r8l = await post(OWN, { ip: '203.0.113.11' });
+    check('a bare label: kept beside it, valleyfolk.beanpool.org still this community\'s and primary', r8l.status === 200
+        && r8l.body?.communityAddress === false && own.audienceStanding('valleyfolk.beanpool.org') === 'own'
+        && own.primaryAddress() === 'valleyfolk.beanpool.org', show({ r8l, primary: own.primaryAddress() }));
+    // The name set on the server after an own address became the community's.
+    delete process.env.CF_RECORD_NAME;
+    se.updateNodeConfig({ publicAddress: null, ownerAddresses: [] } as any);
+    own.forgetOwnAddresses();
+    await post(OWN, { ip: IP8 });
+    check('precondition: with no name, the IP is the community\'s address', pa()?.mode === 'ip' && pa()?.hostname === IP8, show(pa()));
+    process.env.CF_RECORD_NAME = NAME;
+    own.forgetOwnAddresses();
+    check('a name set on the server later is this community\'s, published, primary and a certificate identifier; the IP stays',
+        own.audienceStanding(NAME) === 'own' && own.publishedAddresses().includes(NAME) && own.primaryAddress() === NAME
+        && own.tlsIdentifiers().includes(NAME) && own.audienceStanding(IP8) === 'own',
+        show({ published: own.publishedAddresses(), primary: own.primaryAddress() }));
+    delete process.env.CF_RECORD_NAME;
+    own.forgetOwnAddresses();
+
 } catch (e) {
     failed++;
     console.log(`  ❌ the suite threw: ${(e as Error).stack}`);

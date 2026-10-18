@@ -27,9 +27,10 @@
 // registrar: storeOwnAddress keeps it, and the certificate scheduler orders its certificate at once (services/acme). It is
 // no BeanPool name, so it neither ends a name request nor stops one: a name taken later is where new members are sent
 // (engine/own-addresses.ts primaryAddress), and the IP or domain stays accepted (design
-// scratch/global-node/DESIGN-https-anywhere-fable.md §3, D3).
+// scratch/global-node/DESIGN-https-anywhere-fable.md §3, D3). Nor does it take a name's place: given beside a BeanPool
+// name or the server's CF_RECORD_NAME, it is kept beside it.
 
-import { getNodeRole, getNodeConfig, isOwnPublicAddress, publicAddressGeneration, updateNodeConfig } from '../state-engine.js';
+import { getNodeRole, getNodeConfig, isOwnPublicAddress, publicAddressGeneration, updateNodeConfig, resolvePublicNodeUrl, PUBLIC_URL_RULES } from '../state-engine.js';
 import { getLocalConfig, updateLocalConfig } from '../config/local-config.js';
 import { noteTurnedAway } from '../config/turned-away-names.js';
 import { dataDir } from '../recover-command.js';
@@ -92,27 +93,41 @@ export type OwnAddressResult =
     | { ok: false; error: string };
 
 /**
+ * Whether an own address (`host`, of `kind`) is stored as the community's address (`replace`), or is that already
+ * (`same`). Never over a BeanPool name, nor over the name the server is given (CF_RECORD_NAME, which resolvePublicNodeUrl
+ * falls back to with nothing stored): taking its place would make it another community's to this node, and every
+ * member's app signing for it would be refused (421; S2 review 4305409688). Never an IP over a domain.
+ */
+function asCommunityAddress(host: string, kind: 'ip' | 'own'): { same: boolean; replace: boolean } {
+    const config = getNodeConfig();
+    const pa = (config as any).publicAddress;
+    const same = isOwnPublicAddress(pa) && normalizeAddress(pa.hostname) === host;
+    const named = !pa && !!resolvePublicNodeUrl(PUBLIC_URL_RULES.community, config);
+    const replace = !same && ((!pa && !named) || (isOwnPublicAddress(pa) && !(kind === 'ip' && pa.mode === 'own')));
+    return { same, replace };
+}
+
+/**
  * An own address given to this server: `beanpool claim --ip/--address` (the request file, below) or Settings
  * (routes/public-address.ts /own, owner-only). Kept in the owner-confirmed list (`ownerAddresses`), which only an owner
  * shortens (routes/app-addresses.ts remove), so members' apps holding it keep working whatever the community's address
- * becomes later (D3); and, while this server holds no BeanPool name, also as the community's address, `publicAddress
- * { mode: 'ip' | 'own', hostname, status: 'live', since }`: the directory's publicUrl and the identity-epoch check's
- * host. A name is never replaced there by an IP, and the registrar's record (its tunnel token) never by either. Its
- * certificate is looked at now, not at the next hourly tick, and an address given again is a retry past the back-off of
- * an order that failed (services/acme/schedule.ts runAcmeTickSoon). `by` ends the log line.
+ * becomes later (D3); and, while this server holds no BeanPool name and is given none (CF_RECORD_NAME), also as the
+ * community's address, `publicAddress { mode: 'ip' | 'own', hostname, status: 'live', since }`: the directory's publicUrl
+ * and the identity-epoch check's host. A name is never replaced by an own address, a domain never by an IP
+ * (asCommunityAddress), and the registrar's record (its tunnel token) never by either. Its certificate is looked at now,
+ * not at the next hourly tick, and an address given again is a retry past the back-off of an order that failed
+ * (services/acme/schedule.ts runAcmeTickSoon). `by` ends the log line.
  */
 export function storeOwnAddress(input: string, by: string): OwnAddressResult {
     const host = normalizeAddress(input) ?? String(input ?? '').slice(0, 80);
     const problem = ownAddressProblem(host);
     if (problem) return { ok: false, error: problem };
     const kind: 'ip' | 'own' = isIpLiteral(host) ? 'ip' : 'own';
-    const pa = (getNodeConfig() as any).publicAddress;
     const owned = ownerConfirmedAddresses();
     if (!owned.includes(host) && owned.length >= MAX_OWNER_ADDRESSES) {
         return { ok: false, error: `This community already has ${MAX_OWNER_ADDRESSES} addresses of its own. Remove one it no longer uses first (Settings → Network).` };
     }
-    const same = isOwnPublicAddress(pa) && normalizeAddress(pa.hostname) === host;
-    const replace = !same && (!pa || (isOwnPublicAddress(pa) && !(kind === 'ip' && pa.mode === 'own')));
+    const { same, replace } = asCommunityAddress(host, kind);
     const update: Record<string, unknown> = {};
     if (!owned.includes(host)) update.ownerAddresses = [...owned, host];
     if (replace) update.publicAddress = { mode: kind, hostname: host, status: 'live', since: new Date().toISOString() };
@@ -259,7 +274,7 @@ export async function checkAddressRequest(now = Date.now()): Promise<void> {
         if (taken && taken.kind !== 'name') {
             const got = storeOwnAddress(taken.host, 'beanpool claim');
             if (!got.ok) console.warn(`[PublicAddr] beanpool claim gave "${taken.host}" as this server's address; not taken: ${got.error}`);
-            else console.log(`[PublicAddr] 📡 beanpool claim gave this server's address: ${got.host}${got.communityAddress ? '' : ' (kept beside its BeanPool name)'}`);
+            else console.log(`[PublicAddr] 📡 beanpool claim gave this server's address: ${got.host}${got.communityAddress ? '' : ' (kept beside the community\'s name)'}`);
         }
         const req = taken?.kind === 'name' ? taken : null;
         let fresh = false;

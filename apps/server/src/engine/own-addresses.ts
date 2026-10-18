@@ -5,7 +5,8 @@
  *
  * The set is the union of, and ONLY of, config this node already trusts:
  *   1. the hostname of resolvePublicNodeUrl(): the registrar's `publicAddress.hostname`, else `<name>.beanpool.org`,
- *      else CF_RECORD_NAME;
+ *      else CF_RECORD_NAME; and CF_RECORD_NAME as well while an own address (an IP, a domain) is stored there, so one
+ *      never hides the name the server is given, set before or after it (S2 review 4305409688);
  *   2. env BEANPOOL_ADDRESSES, a comma list (custom domains, a reverse proxy's names);
  *   3. the addresses an owner or admin confirmed in Settings (node_config `ownerAddresses`, carried in the take-over
  *      envelope beside `publicAddress`, so a promoted standby keeps them);
@@ -58,7 +59,7 @@
  */
 
 import { domainToASCII } from 'node:url';
-import { getNodeConfig, resolvePublicNodeUrl, PUBLIC_URL_RULES } from '../state-engine.js';
+import { getNodeConfig, isOwnPublicAddress, resolvePublicNodeUrl, PUBLIC_URL_RULES } from '../state-engine.js';
 import { registrarNames, registrarNamesVersion } from './registrar-names.js';
 import { isBeanPoolName, isCertifiableHost, isIpLiteral, isLocalNetworkHost, isLoopbackHost, normalizeAddress } from './host-kinds.js';
 import { logger } from '../logger.js';
@@ -155,6 +156,10 @@ export function configuredAddresses(now = Date.now()): OwnAddress[] {
     };
     const url = resolvePublicNodeUrl(PUBLIC_URL_RULES.community, config);
     add(url ? normalizeAddress(url) : null, 'public-address');
+    if (isOwnPublicAddress(config.publicAddress)) {
+        const given = resolvePublicNodeUrl(PUBLIC_URL_RULES.community, { ...config, publicAddress: null });
+        add(given ? normalizeAddress(given) : null, 'public-address');
+    }
     for (const a of envAddresses()) add(a, 'env');
     for (const a of ownerConfirmedAddresses()) add(a, 'owner');
     for (const r of names) add(r.address, 'registrar', r.role === 'former');

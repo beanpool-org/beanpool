@@ -224,7 +224,7 @@ export default function BeanPoolSheet() {
                     <Text style={[styles.rowSub, isCurrent && styles.rowSubCurrent]} numberOfLines={2}>{globalLine}</Text>
                     {/* Never cut: nothing opens it whole, and in de, fr, ru, ml and ta it takes three lines at 320 dp and 1.3×.
                         It shows only while the global community can't be reached, so the row grows instead. */}
-                    {!!globalAside && <Text style={styles.rowSub}>{globalAside}</Text>}
+                    {!!globalAside && <Text style={[styles.rowSub, isCurrent && styles.rowSubCurrent]}>{globalAside}</Text>}
                 </View>
                 {isCurrent
                     ? <MaterialCommunityIcons name="check" size={22} color={colors.accent.primary} style={styles.chevron} />

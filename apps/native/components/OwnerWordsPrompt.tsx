@@ -11,7 +11,7 @@
 import React, { useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { useFocusEffect, router } from 'expo-router';
-import { t } from '@beanpool/core';
+import { t, word } from '@beanpool/core';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useIdentity } from '../app/IdentityContext';
 import { useStyles } from '../app/ThemeContext';
@@ -23,6 +23,17 @@ import {
 } from '../utils/owner-words';
 import { runLockOpenCheck } from '../utils/takeover-unlock';
 import { ownerWordsStyleSpec } from '../utils/owner-words-style';
+
+// The prompt's words as word() keys, here and not in utils/owner-words.ts: that file is on the 12 words' key path, which
+// never reaches the words layer (core recovery-path-files.test.ts). The English is OWNER_WORDS_COPY's, unchanged.
+const PROMPT = {
+    titleNever: word("Your 12 words aren't checked"),
+    bodyNever: word("If you lose this phone you couldn't take over the server or open a backup."),
+    titleRenew: word('Time to check your 12 words'),
+    bodyRenew: word("It's a year since you last checked them. If you lose this phone, they're how you'd take over the server or open a backup."),
+    checkNow: word('Check now'),
+    later: word('Later'),
+} as const;
 
 export function OwnerWordsPrompt() {
     const { identity } = useIdentity();
@@ -59,14 +70,14 @@ export function OwnerWordsPrompt() {
 
     return (
         <View style={styles.promptCard} accessibilityRole="summary">
-            <Text style={styles.promptTitle}>{status.wordsCheckedAt ? t(COPY.promptTitleRenew) : t(COPY.promptTitleNever)}</Text>
-            <Text style={styles.promptBody}>{status.wordsCheckedAt ? t(COPY.promptBodyRenew) : t(COPY.promptBodyNever)}</Text>
+            <Text style={styles.promptTitle}>{status.wordsCheckedAt ? t(PROMPT.titleRenew) : t(PROMPT.titleNever)}</Text>
+            <Text style={styles.promptBody}>{status.wordsCheckedAt ? t(PROMPT.bodyRenew) : t(PROMPT.bodyNever)}</Text>
             <View style={styles.buttonRow}>
                 <Pressable style={styles.primaryBtn} onPress={() => router.push('/owner-words-check')} accessibilityRole="button">
-                    <Text style={styles.primaryBtnText}>{t(COPY.checkNow)}</Text>
+                    <Text style={styles.primaryBtnText}>{t(PROMPT.checkNow)}</Text>
                 </Pressable>
                 <Pressable style={styles.secondaryBtn} onPress={onLater} accessibilityRole="button" accessibilityHint={t('Hides this until your next check is due. Settings still has it.')}>
-                    <Text style={styles.secondaryBtnText}>{t(COPY.later)}</Text>
+                    <Text style={styles.secondaryBtnText}>{t(PROMPT.later)}</Text>
                 </Pressable>
             </View>
         </View>

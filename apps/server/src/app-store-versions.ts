@@ -30,6 +30,11 @@
  * anyone: a floor is enforced only once that platform's store has a build that meets it
  * (an unknown store version enforces nothing), a grace date that is not a date turns the
  * block off, and nothing on the server ever refuses a request for the app's version.
+ *
+ * DISABLE_APP_STORE_CHECK=true turns the lookup off (appStoreCheckDisabled): no request to
+ * either store, ever. The versions then stay unknown (null), never "up to date", with what
+ * unknown already means above: no phone is told of a newer build, and no floor is
+ * enforced, so an app below one gets its banner only.
  */
 
 import { logger } from './logger.js';
@@ -272,6 +277,17 @@ function isOlder(a: string, b: string): boolean {
 
 const FETCH_TIMEOUT_MS = 15000;
 
+/**
+ * DISABLE_APP_STORE_CHECK=true: this node never asks itunes.apple.com or play.google.com, as
+ * DISABLE_UPDATE_CHECK=true stops it asking GitHub on its own (routes/settings.ts). For an
+ * operator who wants no call to anyone's servers but their own, and for a suite that proves
+ * none is made (test-no-mothership). Unset, or anything but 'true', the check runs as it
+ * always has.
+ */
+export function appStoreCheckDisabled(): boolean {
+    return process.env.DISABLE_APP_STORE_CHECK === 'true';
+}
+
 async function fetchIosVersion(): Promise<string | null> {
     try {
         const res = await fetch(
@@ -304,6 +320,9 @@ async function fetchAndroidVersion(): Promise<string | null> {
 }
 
 export async function checkAppStoreVersions(): Promise<AppStoreVersions> {
+    // Off: nothing is asked and nothing is folded in, so the versions stay what they were
+    // (null on a node that never asked): unknown, not "up to date".
+    if (appStoreCheckDisabled()) return getAppStoreVersions();
     const [android, ios] = await Promise.all([fetchAndroidVersion(), fetchIosVersion()]);
     const next = applyCheckResult({ android, ios });
     if (android === null || ios === null) {
@@ -327,11 +346,16 @@ let started = false;
  * Start the periodic check. Same cadence and startup delay as the node's own
  * GitHub release check in routes/settings.ts — the store is not going to publish
  * anything we need within seconds of a boot, and a node restart loop should not
- * turn into a burst of store traffic.
+ * turn into a burst of store traffic. With DISABLE_APP_STORE_CHECK=true: no timer at all,
+ * and one line in the log saying so.
  */
 export function initAppStoreVersionChecks(): void {
     if (started) return;
     started = true;
+    if (appStoreCheckDisabled()) {
+        logger.info('SYS', '[AppVersions] the app-store check is off (DISABLE_APP_STORE_CHECK=true): this server never asks Google Play or the App Store, so phones are told of no newer app, and an app below its floor gets a banner only');
+        return;
+    }
     setTimeout(() => { void checkAppStoreVersions(); }, 30000).unref();
     setInterval(() => { void checkAppStoreVersions(); }, 6 * 60 * 60 * 1000).unref();
 }

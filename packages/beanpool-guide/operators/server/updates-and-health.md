@@ -53,6 +53,10 @@ The server asks GitHub for the newest release shortly after it starts and every 
 
 To stop the server asking on its own, put DISABLE_UPDATE_CHECK=true in .env and run docker compose up -d. Take the new docker-compose.yml first: older ones don't pass the setting to the server. Nothing else depends on the check. The button to check now still asks GitHub, but only when you press it, and /api/version no longer says whether an update is out.
 
+### The phone app's newest version
+
+The server also asks Google Play and the App Store for the newest BeanPool phone app, shortly after it starts and every 6 hours, and tells members' phones, so an old app can show that an update is available. To stop it asking, put DISABLE_APP_STORE_CHECK=true in .env and run docker compose up -d (with the new docker-compose.yml, as above). The server then never asks either store. Phones are told of no newer app, and the app's floor (see Raising the app's floor) shows its banner only: no app is stopped with the full-screen update, because the server never holds anyone to a version it has not seen in the store. Home's **Phone app versions** card says the check is off.
+
 ## Checking from outside
 
 These addresses answer without signing in, so a monitoring service or a phone browser can check them:

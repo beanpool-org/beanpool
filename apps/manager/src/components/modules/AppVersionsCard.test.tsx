@@ -17,10 +17,10 @@ function platform(p: Partial<AppPlatformVersions>): AppPlatformVersions {
     return { floor: '1.2.60', store: '1.2.61', enforced: '1.2.60', held: false, from: null, fromInvalid: false, blocking: true, versions: [], ...p };
 }
 
-function answer(android: Partial<AppPlatformVersions>, ios: Partial<AppPlatformVersions>) {
+function answer(android: Partial<AppPlatformVersions>, ios: Partial<AppPlatformVersions>, extra: Partial<AppVersionsResponse> = {}) {
     const res: AppVersionsResponse = {
         since: '2026-09-20T00:00:00.000Z', windowDays: 30, minAppVersion: '1.0.75', minAppVersionFrom: null,
-        storeCheckedAt: '2026-10-01T00:00:00.000Z', platforms: { android: platform(android), ios: platform(ios) },
+        storeCheckedAt: '2026-10-01T00:00:00.000Z', platforms: { android: platform(android), ios: platform(ios) }, ...extra,
     };
     vi.mocked(nodeClient.fetchAppVersions).mockResolvedValue(res);
 }
@@ -75,6 +75,17 @@ describe('AppVersionsCard', () => {
         const android = await screen.findByTestId('app-versions-android');
         expect(android).toHaveTextContent(/show a banner now, and stop at their next start from/);
         expect(screen.getByTestId('app-versions-iphone')).toHaveTextContent("not enforced yet: this server hasn't read the App Store's version");
+    });
+
+    it('says the store check is off, not "not read yet", when the server never asks the stores (DISABLE_APP_STORE_CHECK)', async () => {
+        const unknown = { store: null, enforced: null, blocking: false };
+        answer(unknown, unknown, { storeCheckedAt: null, storeCheckOff: true });
+        render(<AppVersionsCard node={node} />);
+        const android = await screen.findByTestId('app-versions-android');
+        expect(android).toHaveTextContent("Floor 1.2.60, not enforced: this server's app-store check is off (DISABLE_APP_STORE_CHECK), so it never reads Google Play's version. Apps below the floor show a banner only.");
+        expect(screen.getByTestId('app-versions-iphone')).toHaveTextContent("never reads the App Store's version");
+        expect(android).not.toHaveTextContent('not enforced yet');
+        expect(android).not.toHaveTextContent('Google Play has');
     });
 
     it('says a grace date that is not a date turns the block off', async () => {

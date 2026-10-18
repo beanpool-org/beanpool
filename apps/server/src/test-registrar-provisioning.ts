@@ -372,11 +372,13 @@ async function main(): Promise<void> {
             const els: Record<string, any> = {};
             for (const id of ['pubaddr-display', 'pubaddr-token-row', 'pubaddr-claim-form', 'pubaddr-offline-btn', 'pubaddr-token']) els[id] = { innerHTML: '', value: '', style: {} };
             const esc = (v: unknown) => String(v ?? '').replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
-            let fetches = 0;
+            let fetches = 0, noticeLoads = 0;
             let answer: () => Promise<unknown> = async () => ({});
             const timers: (() => unknown)[] = [];
             const ctx = vm.createContext({
                 document: { getElementById: (id: string) => els[id] || null }, esc, API: '/api/local', adminHeaders: () => ({}), pollLiveLogs: () => {},
+                // Registrar S2 (#2151): each answered status check also refreshes the operator notices it brought.
+                loadAddressNotices: () => { noticeLoads++; },
                 fetch: () => { fetches++; return answer(); },
                 setTimeout: (f: () => unknown) => { timers.push(f); return 0; },
             });
@@ -384,6 +386,7 @@ async function main(): Promise<void> {
             const respond = (status: number, body: unknown) => async () => ({ ok: status >= 200 && status < 300, status, json: async () => body });
             const open = async (r: () => Promise<unknown>) => {
                 fetches = 0;
+                noticeLoads = 0;
                 timers.length = 0;
                 answer = r;
                 await ctx.load();
@@ -394,6 +397,7 @@ async function main(): Promise<void> {
 
             const down = await open(respond(200, { success: true, status: 'live', name: 'cairns', hostname: 'cairns.beanpool.org', mode: 'tunnel', cached: true, nameServiceNote: LINE }));
             assert(fetches === 1, `a stored name with the name service unreachable: asked once, never again (${fetches} requests)`);
+            assert(noticeLoads === 1, `…and the notices it brought are loaded once (${noticeLoads})`);
             assert(/cairns\.beanpool\.org/.test(down) && down.includes(esc(LINE)) && !/#f87171/.test(down), `…the name shown, with the calm line and nothing in red (${down})`);
             const none = await open(respond(200, { success: true, status: 'none' }));
             assert(fetches === 1 && /No public address yet/.test(none) && !/pubaddr-name-service/.test(none), `no address: asked once, "No public address yet", no line (${none})`);

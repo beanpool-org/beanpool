@@ -16,12 +16,15 @@
 //     the events the digest held since the last one. Its absence is the sign the Worker or ntfy is broken.
 // This reproduces the Mac vault watcher's checks (apps/vault/custodian/watch.ts), so it can be retired after a week of
 // agreeing (§2.5). What it reads is public and unauthenticated; what it says is a server's name, what it answers and
-// what it runs. Each look is a row in watch_log (migration 0009), kept 30 days; /admin's "Our servers" reads it.
+// what it runs. Each look is a row in watch_log (migration 0009), kept 30 days; /admin's "Our servers" reads it. Last in
+// each tick, the public status line (src/status.js) is written from them: our servers STATUS_SERVERS names, never a
+// community's.
 
 import * as alerts from './alerts.js';
 import * as db from './db.js';
 import * as settings from './settings.js';
 import { verifyEd25519 } from './sign.js';
+import { writeStatus } from './status.js';
 
 // The watch's own cron entry (wrangler.toml [triggers]; the sweep keeps '*/5 * * * *'): 2 minutes after each sweep, in an
 // invocation of its own (index.js scheduled). Here, not in index.js: workerd takes every named export of the main module
@@ -378,6 +381,7 @@ export async function watchOurServers(env) {
         const seen = await inTurns(targets, AT_ONCE, (t) => (t.kind === 'vault' ? lookAtVault(env, t, nowMs) : lookAtNode(t))
             .catch(() => ({ ok: false, status: 'unreachable', ms: null })));
         const conditions = [];
+        const recent = new Map();   // per target: its newest looks and whether it is down, for the status line
         for (let i = 0; i < targets.length; i++) {
             const t = targets[i], s = seen[i];
             try {
@@ -385,7 +389,9 @@ export async function watchOurServers(env) {
                     VALUES (?,?,?,?,?,?,?,?,?,?) RETURNING id`)
                     .bind(now, t.name, s.ok ? 1 : 0, s.ms ?? null, s.status, s.version ?? null, s.commit ?? null, s.state ?? null, s.report ?? null, s.recoveries ?? null).first();
                 const rows = await lastLooks(env, t, LOOKS_TO_RAISE);
-                conditions.push(down(t, rows, s));
+                const d = down(t, rows, s);
+                conditions.push(d);
+                recent.set(t.name, { rows, down: d.active });
                 if (t.kind === 'vault' && s.ok) {
                     conditions.push(locked(t, rows));
                     if (s.state === 'open' && s.report !== 'not checked') conditions.push(...reportConditions(t, rows, s));
@@ -397,6 +403,8 @@ export async function watchOurServers(env) {
         try { conditions.push(...await unwatched(env, targets)); } catch (e) { console.error('[WATCH]', 'unwatched', String(e?.message || e).slice(0, 200)); }
         await alerts.updateConditions(env, conditions);
         try { await dailyLine(env, targets, now); } catch (e) { console.error('[WATCH]', 'daily', String(e?.message || e).slice(0, 200)); }
+        // After the alerts and the daily line, so on a tick past D1's budget what is refused is this (src/status.js).
+        try { await writeStatus(env, { targets, recent, now, missedToRaise: LOOKS_TO_RAISE, keepS: KEEP_S }); } catch (e) { console.error('[STATUS]', String(e?.message || e).slice(0, 200)); }
         try { await env.DB.prepare('DELETE FROM watch_log WHERE ran_at < ?').bind(now - KEEP_S).run(); } catch (e) { console.error('[WATCH]', 'prune', String(e?.message || e).slice(0, 200)); }
         console.log(`[WATCH] ${targets.map((t, i) => `${t.name}=${seen[i].ok ? 'up' : seen[i].status}`).join(' ')}`);
         return targets.map((t, i) => ({ name: t.name, ...seen[i] }));

@@ -10,6 +10,9 @@ Full design: [`docs/node-dns-registrar.md`](../../docs/node-dns-registrar.md).
   `POST /api/registrar/holder {name}` (who holds a name, below)
 - **Health (public):** `GET /api/registrar/health` → `{ status: 'ok', commit, accepted_proto }`: the git commit
   this Worker was deployed from (`null` if its deploy didn't say) and the signing protocols it accepts
+- **Status (public):** `GET /api/registrar/status.json` → what the last watch tick wrote: our servers' status line,
+  which beanpool.org/status draws (below, "The public status line"); `404` before the first tick or with no `STATUS`
+  binding
 - **Admin (Cloudflare Access — "Admin sign-in" below):** `GET /api/local/admin/registrar/whoami` (`{email, via}`:
   who is signed in) · `GET /api/local/admin/registrar/pending` (every name in any state but `abandoned`, each
   with `holds` — does it keep its name from other keys now — and, for a release, `takes_back` — can its old key still
@@ -262,6 +265,36 @@ refuse; "open code, private settings"; the DNS cap). Migration 0011.
   ignores all of it, and this one without it records and holds nothing: past the budget it refuses with a 429, as
   before). Set `SOURCE_KEY` first (`wrangler secret put SOURCE_KEY`, 32 random bytes, hex). By hand, as a burst brake
   only: Cloudflare's one Free rate-limit rule on `/api/registrar/claim` (design §7).
+
+### The public status line (slice A8)
+
+At the end of each watch tick the Worker writes `status.json` to the `STATUS` KV namespace (`src/status.js`, design
+`scratch/global-node/DESIGN-global-mothership-fable.md` §3.2 U4, accepted by Marty 2026-10-18), and
+`GET /api/registrar/status.json` serves it to anyone (`cache-control: public, max-age=60`, any origin): the page
+beanpool.org/status (`apps/website/status.html`) reads it from the visitor's browser. It shows the servers
+`STATUS_SERVERS` names (`wrangler.toml`: `global,test`, in that order) and the registrar itself, last — **our servers
+only: never a community's node or name** (mullum and castlemaine are watched, never shown); unset, only the registrar.
+Per server: `up` (its last look answered; `null` if it has none this tick), `checked_at`, `looks`, `answered` and
+`percent` over the last 90 days (floored to two places: a server that missed a look never reads 100), `since` (the
+first day counted) and `incident`, its last: `{ began_at, ended_at (null while it lasts), why }`. An incident is what
+the alert calls down — two failed looks in a row, from the first to the first answer; `why` is a code
+(`timed-out`, `unreachable`, `http-NNN`, `not-ours`, `checks-missed`, `no-answer`) the page puts in words. The
+registrar's own line is its checks running: its `looks` are the 5-minute slots since its first tick, `answered` the
+ticks that ran, and two or more missed in a row are an incident (`checks-missed`). No address, IP, version or key is in
+it; it stays under 2 KB (at most six servers).
+
+The counts are D1's `watch_days` (migration 0012, kept 100 days): each server's looks per UTC day, counted again from
+`watch_log` at every tick from the newest day counted, so a tick that failed loses nothing and the first tick fills in
+`watch_log`'s 30 days and, once, names the last incident already in them of each server and of the registrar. The last
+incidents and the first tick are marks in `watch_marks` (`status:…`). A quiet tick
+spends 2 D1 queries on this, after the alerts and the daily line (a watch tick already spends 38 with our five servers,
+and about 50 — Workers Free's limit for one invocation — on a tick that raises or clears an alert, where this is what
+gets refused: `status.json` is then one tick older); one write to KV a tick, 288 a day (Workers Free allows 1,000).
+`/admin`'s "Our servers" links the page and the JSON. No node reads any of it.
+
+**Turning it on** (by hand, on the live account; the deploy workflow applies migration 0012):
+`npx wrangler kv namespace create beanpool-status`, then uncomment `[[kv_namespaces]]` in `wrangler.toml` with the id it
+prints and deploy. Until then nothing is written and the GET answers 404; the watch and the sweep are untouched.
 
 ## Limits on what a key may do (the 2026-10-01 review)
 

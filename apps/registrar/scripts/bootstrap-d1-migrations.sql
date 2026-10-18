@@ -99,4 +99,9 @@ WHERE (SELECT COUNT(*) FROM sqlite_master WHERE (type = 'table' AND name IN ('cl
   AND (SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'name_allocations') LIKE '%verified_at INTEGER%'
   AND (SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'name_allocations') LIKE '%ok_sweeps INTEGER%';
 
+-- 0012: its table.
+INSERT OR IGNORE INTO d1_migrations (name)
+SELECT '0012_status.sql'
+WHERE (SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'watch_days') = 1;
+
 SELECT id, name, applied_at FROM d1_migrations ORDER BY id;

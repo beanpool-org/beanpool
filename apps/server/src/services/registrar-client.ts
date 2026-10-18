@@ -71,6 +71,7 @@ import { randomBytes } from 'node:crypto';
 import { getPrivateKey } from '../p2p.js';
 import { publicKeyToProtobuf } from '@libp2p/crypto/keys';
 import { cleanLabel, REGISTRAR_COMMUNITY_NAME_MAX, REGISTRAR_CONTACT_MAX } from '../config/clean-label.js';
+import { noticeSeenMark, takeRegistrarNotices } from './registrar-notices.js';
 
 const getRegistrarUrl = () => (process.env.REGISTRAR_URL || 'https://beanpool.org').replace(/\/$/, '');
 
@@ -232,9 +233,23 @@ export const isPublicIpv4 = (v: unknown): v is string =>
  * What the registrar holds for this key. `name`: the name this server stores, asked about by name. A registrar that reads
  * it answers about that name while this key holds it; an older one answers about the key's first name (live, then
  * pending, then paused), whatever was asked, so a caller never stores an answer that names another name.
+ * `seen`: the highest notice id this main server has had (services/registrar-notices.ts), signed with the query, so the
+ * registrar never carries those notices again; the answer's `notices` are taken there, whoever asked. An older registrar
+ * ignores `seen` and sends none.
  */
-export const addressStatus = (name?: string | null) =>
-    signedFetch('GET', `/api/registrar/status${name ? `?name=${encodeURIComponent(name)}` : ''}`);
+export async function addressStatus(name?: string | null): Promise<any> {
+    const query = new URLSearchParams();
+    if (name) query.set('name', name);
+    const seen = noticeSeenMark();
+    if (seen) query.set('seen', String(seen));
+    const search = query.toString();
+    const data = await signedFetch('GET', `/api/registrar/status${search ? `?${search}` : ''}`);
+    if (data && typeof data === 'object' && 'notices' in data) {
+        takeRegistrarNotices(data.notices, getRegistrarUrl());
+        delete data.notices;
+    }
+    return data;
+}
 /**
  * Release `name` (Take offline). Named whenever a name is stored: with no name the registrar releases the key's first name,
  * which with two names held can be the other one, leaving this one live with nothing running it.

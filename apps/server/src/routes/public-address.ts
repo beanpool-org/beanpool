@@ -27,6 +27,7 @@ import { isAddressLabel } from '../address-request.js';
 import { requireAdminRole, requireFreshProof } from '../admin-auth.js';
 import type { RouteDeps } from './types.js';
 import { noteSecurityEvent, actingAs, OWNER_ALERT_WORDS } from '../services/security-signal.js';
+import { registrarNotices } from '../services/registrar-notices.js';
 
 export interface ProbeLogEntry {
     timestamp: string;
@@ -269,6 +270,13 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
     router.get('/api/local/admin/public-address/logs', async (ctx) => {
         if (!(await checkAdminAuth(ctx))) return;
         ctx.body = { success: true, logs: probeLogs };
+    });
+
+    // Notices from the address service (services/registrar-notices.ts), newest first: Settings → Public address shows them.
+    // Kept here as each /status brought them; reading them asks the address service nothing.
+    router.get('/api/local/admin/public-address/notices', async (ctx) => {
+        if (!(await checkAdminAuth(ctx))) return;
+        ctx.body = { success: true, notices: registrarNotices() };
     });
 
     router.post('/api/local/admin/public-address/claim', async (ctx) => {

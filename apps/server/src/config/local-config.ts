@@ -85,6 +85,11 @@ export interface LocalConfig {
     // The latest names this server turned away (config/turned-away-names.ts): never stored from a registrar answer while
     // nothing is stored here.
     turnedAwayNames?: { name: string; at: number; why: 'install-request-ended' | 'request-replaced' | 'claim-replaced' | 'late-claim' | 'taken-offline' | 'unanswered' }[] | null;
+    // Notices from the address service (services/registrar-notices.ts, registrar slice S2): the latest it sent this server,
+    // newest first, as Settings shows them; and the highest notice id it has had, sent back on /status as `seen` so the
+    // address service never carries those again.
+    registrarNotices?: { id: number; at: number; level: 'info' | 'warning' | 'action'; text: string; name: string; link: string | null; receivedAt: number }[] | null;
+    registrarNoticeSeen?: number | null;
     replicationTokenHash?: string | null;
     replicationTokenSalt?: string | null;
     replicationTokenCreatedAt?: number | null;

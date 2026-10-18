@@ -398,13 +398,23 @@ test('with ctx.waitUntil (the real runtime), the claim answers first and the mes
         const text = JSON.stringify({ name: 'sydney', mode: 'tunnel', community_name: 'Sydney Commons' });
         const sig = Buffer.from(await crypto.subtle.sign('Ed25519', key.keyPair.privateKey,
             new TextEncoder().encode(`beanpool-registrar-request/v1\nPOST\n/api/registrar/claim\n${ts}\n${text}`))).toString('hex');
+        // ntfy does not answer until the test lets it: the claim must answer anyway. The request itself may already be made
+        // (the claim's own work runs under waitUntil and starts at once; on Node 22 it reaches the send before the answer is
+        // read), so what is measured is that the answer never waits for ntfy, not the order of the two.
+        let answer;
+        r.ntfy.hold = new Promise((res) => { answer = res; });
         const res = await worker.fetch(new Request('https://beanpool.org/api/registrar/claim', {
             method: 'POST', body: text, headers: { 'content-type': 'application/json', 'x-bp-pubkey': key.pubHex, 'x-bp-timestamp': ts, 'x-bp-signature': sig },
         }), r.w.env, { waitUntil: (p) => later.push(p) });
-        assert.equal((await res.json()).status, 'pending');
+        const status = await Promise.race([res.json().then((b) => b.status), new Promise((ok) => setTimeout(() => ok('stalled'), 2000))]);
+        assert.equal(status, 'pending', 'the claim answered while ntfy had not');
         // Two: the claim's own work (index.js finishing, so a node that stops waiting never cuts it off) and the send.
         assert.equal(later.length, 2, 'the claim and the send were each handed to waitUntil');
-        assert.equal(r.sent.length, 0, 'the claim answered before the message was sent');
+        let settled = false;
+        Promise.all(later).then(() => { settled = true; });
+        await new Promise((ok) => setTimeout(ok, 50));
+        assert.equal(settled, false, 'the send is still out: ntfy has not answered it');
+        answer();
         await Promise.all(later);
         assert.equal(r.sent.length, 1);
         assert.equal(r.sent[0].headers.title, 'Name request: sydney');

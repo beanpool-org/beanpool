@@ -30,10 +30,15 @@ vi.mock('expo-crypto', async () => {
     return { getRandomBytes: vi.fn((len: number) => new Uint8Array(randomBytes(len))) };
 });
 // The switch's database swap (utils/reconnect.ts switchPhoneTo imports it when it runs) and its announcement.
-const switched = vi.hoisted(() => ({ dbClosed: 0, dbOpened: 0, announced: 0 }));
+const switched = vi.hoisted(() => ({ dbClosed: 0, dbOpened: 0, announced: 0, carried: [] as string[][] }));
 vi.mock('../db', () => ({
     closeDB: vi.fn(async () => { switched.dbClosed++; }),
     initDB: vi.fn(async () => { switched.dbOpened++; }),
+    whileCopyMoves: vi.fn(async (_to: string, move: () => Promise<unknown>) => { switched.dbClosed++; return move(); }),
+}));
+// The copy's carry itself runs over real files in community-copy-carry.test.ts.
+vi.mock('../community-copy-carry', () => ({
+    carryCommunityCopy: vi.fn(async (from: string, to: string) => { switched.carried.push([from, to]); return 'carried'; }),
 }));
 vi.mock('../community-switch', () => ({ communitySwitched: vi.fn(() => { switched.announced++; }), onCommunitySwitched: vi.fn(() => () => {}) }));
 
@@ -46,6 +51,7 @@ import {
     IDENTITY_STATEMENT_PATH, type AddressFollowDeps, type AddressFollowOffer,
 } from '../address-follow';
 import { communitySwitched } from '../community-switch';
+import { carryCommunityCopy } from '../community-copy-carry';
 import { GLOBAL_NODE_URL } from '../global-node-url';
 import type { NodeProfile } from '../node-profile';
 import type { SavedNode } from '../nodes';
@@ -118,6 +124,7 @@ beforeEach(() => {
     forgetFollowChecks();
     vi.mocked(AsyncStorage.setItem).mockClear();
     switched.dbClosed = switched.dbOpened = switched.announced = 0;
+    switched.carried = [];
 });
 
 describe('the statement: who a node says it is, signed with its node key', () => {
@@ -465,7 +472,7 @@ describe('"Use the new address": the move', () => {
         await snoozeAddressFollow(offer, w.deps);
         expect(await acceptAddressFollow(offer, w.deps)).toBe('moved');
         expect(w.deps.switchTo).toHaveBeenCalledTimes(1);
-        expect(w.deps.switchTo).toHaveBeenCalledWith(NAME);
+        expect(w.deps.switchTo).toHaveBeenCalledWith(NAME, IP);
         expect(w.state.anchor).toBe(NAME);
         expect(w.state.saved).toEqual([{ url: NAME, alias: 'Beans Town', currencyType: 'image', currencyValue: 'bean' }]);
         expect(JSON.parse(store.get(FOLLOW_SNOOZE_KEY)!)).toEqual({});
@@ -513,10 +520,12 @@ describe('"Use the new address": the move', () => {
         // Every dependency the test's own but the switch: the app's (utils/reconnect.ts switchPhoneTo).
         expect(await acceptAddressFollow(offer, rest)).toBe('moved');
         expect(anchorWrites()).toEqual([['beanpool_anchor_url', NAME]]);
-        expect(switched).toEqual({ dbClosed: 1, dbOpened: 1, announced: 1 });
+        expect(switched).toEqual({ dbClosed: 1, dbOpened: 1, announced: 1, carried: [[IP, NAME]] });
         const setItem = vi.mocked(AsyncStorage.setItem).mock;
         const anchorWrite = setItem.invocationCallOrder[setItem.calls.findIndex(([k]) => k === 'beanpool_anchor_url')];
         expect(vi.mocked(communitySwitched).mock.invocationCallOrder.at(-1)).toBeGreaterThan(anchorWrite);
+        // The community's copy is carried before the address is written (review of #2138).
+        expect(vi.mocked(carryCommunityCopy).mock.invocationCallOrder[0]).toBeLessThan(anchorWrite);
     });
 });
 

@@ -35,7 +35,7 @@
  * to a number (a name survives a change of server and a number doesn't, D3), and only to an address communityOrigin
  * takes (https, a host name or a public IPv4 address). The move is the existing switch (utils/reconnect.ts switchPhoneTo:
  * the community's own database, the address, then communitySwitched), so the host signatures are bound to changes only
- * there.
+ * there; it carries the community's copy and what guards its chats to the new address first (utils/community-copy-carry.ts).
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -44,6 +44,7 @@ import { audienceOf, ed25519KeyOfPeerId, t } from '@beanpool/core';
 import { communityOrigin } from './community-origin';
 import { GLOBAL_NODE_URL } from './global-node-url';
 import { isPlainNodeAddress, plainOriginOf } from './node-url';
+import type { CopyCarry } from './community-copy-carry';
 import type { NodeProfile } from './node-profile';
 import type { SavedNode } from './nodes';
 
@@ -165,8 +166,11 @@ export interface AddressFollowDeps {
     /** The signed statement at `origin`, verified, or null (no answer, or not one). */
     statement(origin: string): Promise<CommunityIdentity | null>;
     now(): number;
-    /** Make `url` the phone's community (utils/reconnect.ts switchPhoneTo). */
-    switchTo(url: string): Promise<void>;
+    /**
+     * Make `url` the phone's community, its copy and what guards its chats carried from `carryFrom`'s first
+     * (utils/reconnect.ts switchPhoneTo, utils/community-copy-carry.ts). Resolves what the carry did.
+     */
+    switchTo(url: string, carryFrom: string): Promise<CopyCarry | null | void>;
     savedNodes(): Promise<SavedNode[]>;
     addSavedNode(url: string, alias?: string, currencyType?: 'text' | 'image', currencyValue?: string): Promise<void>;
     removeSavedNode(url: string): Promise<void>;
@@ -338,10 +342,15 @@ export async function snoozeAddressFollow(offer: AddressFollowOffer, injected?: 
     await writeEntry(FOLLOW_SNOOZE_KEY, offer.from, { to: offer.to, until: deps.now() + FOLLOW_SNOOZE_MS });
 }
 
-/** What the member's "Use the new address" did. Only 'moved' moved anything. */
+/** What the member's "Use the new address" did. Only 'moved' and 'moved-kept-both' moved anything. */
 export type FollowResult =
-    /** The phone's community is `offer.to` now. */
+    /** The phone's community is `offer.to` now, its copy and what guards its chats carried there with it. */
     | 'moved'
+    /**
+     * The phone's community is `offer.to` now, with the copy the phone already had under that address: nothing was
+     * carried over it, and the old address's copy stays on the phone (utils/community-copy-carry.ts, logged there).
+     */
+    | 'moved-kept-both'
     /** The new address isn't the same community (checked again just now): nothing moved. */
     | 'not-same'
     /** The check couldn't be made: nothing moved, and the card stays. */
@@ -352,7 +361,10 @@ export type FollowResult =
 /**
  * The member chose the new address. Checked again first (the card may have waited), then: a guest visit's mark goes with
  * it (else the app takes the guest for a mistyped address, utils/nodes.ts), the phone switches through switchPhoneTo
- * (which announces the switch), the saved list's row moves to the new address with its name, and "Not now" is forgotten.
+ * (which announces the switch), carrying the community's copy with its DM pins, DM guard list, group chats' highest epochs
+ * and sync cursors to the new address's name before the address is written (utils/community-copy-carry.ts: else the
+ * pins would be seeded again from what the node lists then, review of #2138), the saved list's row moves to the new
+ * address with its name, and "Not now" is forgotten.
  */
 export async function acceptAddressFollow(offer: AddressFollowOffer, injected?: Partial<AddressFollowDeps>): Promise<FollowResult> {
     const deps = await depsWith(injected);
@@ -366,11 +378,11 @@ export async function acceptAddressFollow(offer: AddressFollowOffer, injected?: 
     if (verdict !== 'same') return verdict;
     const saved = (await deps.savedNodes().catch(() => [] as SavedNode[])).find(n => isPlainNodeAddress(n.url) && plainOriginOf(n.url) === offer.from);
     if (await deps.isGuestNode(anchor).catch(() => false)) await deps.markGuestNode(offer.to);
-    await deps.switchTo(offer.to);
+    const carried = await deps.switchTo(offer.to, offer.from);
     await deps.addSavedNode(offer.to, saved?.alias, saved?.currencyType, saved?.currencyValue).catch(() => {});
     if (saved) await deps.removeSavedNode(saved.url).catch(() => {});
     await writeEntry(FOLLOW_SNOOZE_KEY, offer.from, undefined);
-    return 'moved';
+    return carried === 'kept-both' ? 'moved-kept-both' : 'moved';
 }
 
 /**

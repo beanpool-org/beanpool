@@ -36,7 +36,7 @@ export const CACHE_NAMES_DONE_KEY = 'beanpool_cache_names_v2';
 const SIDE_FILES = ['-wal', '-shm', '-journal'] as const;
 
 /** expo-sqlite's directory, without the scheme or a trailing slash; '' where there is none (community-cache.ts). */
-function databaseDirectory(): string {
+export function databaseDirectory(): string {
     try {
         const dir: unknown = SQLite.defaultDatabaseDirectory;
         return typeof dir === 'string' ? dir.replace(/^file:\/\//, '').replace(/\/+$/, '') : '';
@@ -45,11 +45,11 @@ function databaseDirectory(): string {
     }
 }
 
-function fileUri(directory: string, name: string): string {
+export function fileUri(directory: string, name: string): string {
     return encodeURI(`file://${directory}/${name}`);
 }
 
-async function exists(uri: string): Promise<boolean> {
+export async function exists(uri: string): Promise<boolean> {
     return (await FileSystem.getInfoAsync(uri)).exists;
 }
 
@@ -73,7 +73,16 @@ async function moveCopy(directory: string, from: string, to: string, keys: reado
         return;
     }
     if (await exists(fileUri(directory, to))) return;
+    await renameCopyFile(directory, from, to);
+    await moveCursors(from, to, keys, true);
+}
 
+/**
+ * Rename the copy `from` to `to` (steps 2 and 3 above): its log folded into it first, then one rename of one self-contained
+ * file, the old name's leftover log files gone. `from` must exist, open nowhere else, and `to` must not exist. Also how a
+ * community's copy goes with it to its new address (utils/community-copy-carry.ts). Throws when a step fails.
+ */
+export async function renameCopyFile(directory: string, from: string, to: string): Promise<void> {
     // Fold the log into the file. Opened under its old name, which nothing else opens any more, and closed again.
     let unfolded = false;
     for (const side of SIDE_FILES) {
@@ -95,8 +104,6 @@ async function moveCopy(directory: string, from: string, to: string, keys: reado
     for (const side of SIDE_FILES) {
         await FileSystem.deleteAsync(fileUri(directory, `${from}${side}`), { idempotent: true });
     }
-
-    await moveCursors(from, to, keys, true);
 }
 
 /** Move `pillar_sync_<from>_*` to `pillar_sync_<to>_*`, old key removed after the new one is written; safe to repeat. */

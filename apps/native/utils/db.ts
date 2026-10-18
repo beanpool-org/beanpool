@@ -118,6 +118,8 @@ function releaseSyncLock() {
 
 let currentDbName: string | null = null;
 let getDbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
+/** A community's copy moving to another name (whileCopyMoves): getDb opens nothing until it is done. */
+let copyMoving: Promise<unknown> | null = null;
 
 /**
  * Resolves once this phone's community copies have the names that give every community its own file
@@ -127,6 +129,8 @@ export { communityCachesRenamed };
 
 export async function getDb(): Promise<SQLite.SQLiteDatabase> {
     await communityCachesRenamed();
+    // Nor while a copy moves to another name (whileCopyMoves): it opens once the copy and the address are where they go.
+    while (copyMoving) await copyMoving.catch(() => {});
     const url = await AsyncStorage.getItem('beanpool_anchor_url');
     const expectedDbName = getDatabaseFilenameForNode(url);
 
@@ -207,6 +211,37 @@ export async function closeDB() {
         }
     } finally {
         releaseSyncLock();
+    }
+}
+
+/**
+ * Run `move` with no community copy open and none opened until it is done (getDb waits): a community's copy carried to
+ * its new address `to` (utils/community-copy-carry.ts, through reconnect.ts switchPhoneTo, which writes the address inside
+ * `move`). First the copy open is closed, every sync cycle in flight stores nothing more (a new copy generation), and every
+ * DM pin and guard-list write already on its way lands, so nothing is written under the old name once `move` has read it.
+ * Then what this run holds in memory of `to`'s file (its DM pins, the lines the update held there, the group keys opened)
+ * is dropped, so the carried copy's own is read at the next ask. `move` must not open a copy through getDb.
+ */
+export async function whileCopyMoves<T>(to: string, move: () => Promise<T>): Promise<T> {
+    while (copyMoving) await copyMoving.catch(() => {});
+    const toFile = getDatabaseFilenameForNode(to);
+    const run = (async () => {
+        await closeDB();
+        newCopyGeneration();
+        await Promise.all([dmPins.idle(), dmSeen.idle()]);
+        try {
+            return await move();
+        } finally {
+            dmPins.forgetFile(toFile);
+            for (const key of [...dmLinesHeldAtUpdate.keys()]) if (key.endsWith(`\n${toFile}`)) dmLinesHeldAtUpdate.delete(key);
+            forgetGroupKeys();
+        }
+    })();
+    copyMoving = run;
+    try {
+        return await run;
+    } finally {
+        if (copyMoving === run) copyMoving = null;
     }
 }
 

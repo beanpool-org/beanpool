@@ -48,7 +48,7 @@ export function AddressFollowCard({ colors }: { colors: AppColors }) {
             Alert.alert(t("Couldn't switch community"), (e instanceof Error && e.message) || t('Please try again.'));
             return;
         }
-        if (result === 'moved') {
+        if (result === 'moved' || result === 'moved-kept-both') {
             // As the BeanPool sheet's switch: back to the bottom of the stack, then through Welcome for the community.
             if (router.canDismiss()) router.dismissAll();
             router.replace('/welcome');

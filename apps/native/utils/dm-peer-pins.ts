@@ -507,6 +507,13 @@ export interface DmPinBook<H> {
     reset(myPubkey: string, file: string, before?: (pinIds: string[] | null) => Promise<unknown>): Promise<DmPinsReset>;
     /** Drop every copy: the next ask reads storage again (a fresh app session). */
     forget(): void;
+    /** Resolves once every turn queued so far has run: a community's copy moving to another name (db.ts whileCopyMoves) waits for the writes on their way. */
+    idle(): Promise<void>;
+    /**
+     * Drop the copies held of `file`, every account's: a community's copy carried to that name brought its own pins in
+     * storage (utils/community-copy-carry.ts), read at the next ask. A reset whose marker couldn't be written still judges.
+     */
+    forgetFile(file: string): void;
 }
 
 /**
@@ -664,7 +671,16 @@ export function createDmPinBook<H>(
             return !readable ? 'unreadable-removed' : raw != null && !marked ? 'set-aside' : 'nothing-stored';
         });
     }
-    return { read, update, reset, forget: () => { copies.clear(); queues.clear(); seeds.clear(); resetUnwritten.clear(); } };
+    async function idle(): Promise<void> {
+        await Promise.all([...queues.values()].map((turn) => turn.catch(() => {})));
+    }
+    function forgetFile(file: string): void {
+        // Every account's key for the file ends so (storage-keys.ts dmPeerPinsStoreKey); no file name has a ':' in it.
+        const tail = `:${file}`;
+        for (const key of [...copies.keys()]) if (key.endsWith(tail)) copies.delete(key);
+        for (const key of [...seeds.keys()]) if (key.endsWith(tail)) seeds.delete(key);
+    }
+    return { read, update, reset, idle, forgetFile, forget: () => { copies.clear(); queues.clear(); seeds.clear(); resetUnwritten.clear(); } };
 }
 
 /** The entry kept under this id: own entries only, so an id the node chose ("__proto__", "constructor") is never a pin. */

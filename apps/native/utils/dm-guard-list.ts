@@ -197,6 +197,8 @@ export interface DmSeenList {
      * marker that can't be written throws (the reset failed). The next read seeds `keep`, then the file's rows.
      */
     reset(myPubkey: string, file: string, pinIds: readonly string[] | null): Promise<DmSeenReset>;
+    /** Resolves once every turn queued so far has run: a community's copy moving to another name (db.ts whileCopyMoves) waits for the writes on their way. */
+    idle(): Promise<void>;
 }
 
 export function createDmSeenList(storage: SeenStorage): DmSeenList {
@@ -278,7 +280,10 @@ export function createDmSeenList(storage: SeenStorage): DmSeenList {
             return !readable ? 'unreadable-removed' : raw != null && !mark ? 'set-aside' : 'nothing-stored';
         });
     }
-    return { read, remember, reset };
+    async function idle(): Promise<void> {
+        await Promise.all([...queues.values()].map((turn) => turn.catch(() => {})));
+    }
+    return { read, remember, reset, idle };
 }
 
 /** The marker's bytes beside its `keep` list: `{"reset":"<24>","keep":` and `}`. */

@@ -114,14 +114,17 @@ export function doorLinkFromSystemPath(path: unknown): DoorLink | null {
     const m = DOOR_LINK.exec(path.trim());
     if (!m) return null;
     let named: string | null = null;
+    let unreadable = false;
     for (const part of (m[2] ?? '').split('&')) {
         const eq = part.indexOf('=');
         if (eq < 0 || part.slice(0, eq) !== 'node') continue;
-        try { named = decodeURIComponent(part.slice(eq + 1).replace(/\+/g, ' ')); } catch { named = ''; }
+        // One that can't be decoded named a community all the same: refused, as written (a `%` is in no plain address),
+        // never read as no node and so the global community's door (PR #2131 review).
+        try { named = decodeURIComponent(part.slice(eq + 1).replace(/\+/g, ' ')); } catch { named = part.slice(eq + 1); unreadable = true; }
         break;
     }
     if (named === null && m[1].toLowerCase() === 'global') return null;
-    return { node: doorNodeFromParam(named ?? undefined), named };
+    return { node: unreadable ? null : doorNodeFromParam(named ?? undefined), named };
 }
 
 /**

@@ -166,6 +166,18 @@ describe('a link to the door only opens the screen (doorLinkFromSystemPath, door
         expect(doorLinkFromSystemPath('beanpool://join-open-door?node=http%3A%2F%2Fevil.test')).toEqual({ node: null, named: 'http://evil.test' });
     });
 
+    it('a node= that can\'t be read is a refused address, never the global community\'s door (PR #2131 review)', async () => {
+        const garbled = doorLinkFromSystemPath('beanpool://join-open-door?node=%E0%A4%A')!;
+        expect(garbled).toEqual({ node: null, named: '%E0%A4%A' });
+        const to = doorLinkRoute(garbled, { account: true, wizardPending: false }, false, 1);
+        expect(to).toBe(`/join-open-door?node=${encodeURIComponent('%E0%A4%A')}&from=link`);
+        // The screen reads what the route carries as no address: its refusal page, not a door.
+        expect(doorNodeFromParam(new URL(to!, 'https://x.invalid').searchParams.get('node')!)).toBeNull();
+        phone.identity = ACCOUNT;
+        expect(await redirectSystemPath({ path: 'beanpool://join-open-door?node=https%3A%2F%2Fopen.riverbend.example%ZZ', initial: false }))
+            .toBe(`/join-open-door?node=${encodeURIComponent('https%3A%2F%2Fopen.riverbend.example%ZZ')}&from=link`);
+    });
+
     it('join-global with an address goes as the door link does: no route the screen reads as another address without from=link (PR #2131 review)', async () => {
         const ATTACKER = 'https://attacker.example';
         for (const p of [`beanpool://join-global?node=${encodeURIComponent(ATTACKER)}`, `beanpool:///join-global/?then=pair-device&node=${encodeURIComponent(ATTACKER)}`,

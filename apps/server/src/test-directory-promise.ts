@@ -16,7 +16,7 @@
  *      diagnostics say why; an off-box destination counts as backups running again
  *   5. Settings → Directory: only an owner changes the ticks or the closing day (unsigned 401, an admin 403); a bad value
  *      is a 400 and changes nothing; a saved tick is pushed at once; the closing day is pushed, and null clears it;
- *      the door at "only admins" says acceptingKnocks false
+ *      the door at "only admins" says acceptingKnocks false, and so does no published address (nothing to knock on)
  *   6. a registry that refuses the new fields (its schema predates them): the push is sent again without them and the
  *      community stays listed; the answer says the promise was refused
  *   7. the mirror treats every promise as untrusted: a promise with names inside, a list of owners, a "true" as text,
@@ -24,9 +24,10 @@
  *      accepting_knocks or closing_on is none
  *   8. the order (global profile): two communities at the same distance without the promise come in both orders over 50
  *      reads, and the one keeping the promise and taking requests is always first; a promise without knocks, and a
- *      forged promise, are not first; member count never sorts; the next band comes after; paging with the reader's own
- *      `order` walks one order; the card's answer carries promise, acceptingKnocks and closingOn; Home's find card,
- *      with ties in its band, keeps one order and one tag for a reader (a 304 on the repeat), and readers differ
+ *      forged promise, are not first, nor is one with no address; member count never sorts; the next band comes after;
+ *      paging with the reader's own `order` walks one order; the card's answer carries promise, acceptingKnocks and
+ *      closingOn; Home's find card, with ties in its band, keeps one order and one tag for a reader (a 304 on the
+ *      repeat), and readers differ
  *   9. the ticks travel to a standby with the community's settings, rewritten to their three fields, never with a closing
  *      day the route refuses; a stored one is never pushed
  *
@@ -130,7 +131,7 @@ async function main() {
     console.log('The listing promise: made by owners, measured at every push, kept by a mirror only as it is...\n');
     const { initTls } = await import('./services/tls.js');
     const { initAdminPassword, updateLocalConfig } = await import('./config/local-config.js');
-    const { initStateEngine, setNodeRole } = await import('./state-engine.js');
+    const { initStateEngine, setNodeRole, updateNodeConfig } = await import('./state-engine.js');
     const { startHttpsServer } = await import('./https-server.js');
     const { startP2P } = await import('./p2p.js');
     const { initDirectoryPublisher } = await import('./services/directory-publisher.js');
@@ -152,6 +153,9 @@ async function main() {
     // A community's genesis.json: what a backup is locked with, besides the recovery code (services/takeover-envelope.ts).
     await ensureGenesis();
     setNodeRole('primary');
+    // A community a stranger can ask: it publishes an address (getDirectoryInfo publicUrl). §5 takes it away.
+    const ADDRESS = { name: 'riverbend', hostname: 'riverbend.example.org', status: 'live' } as any;
+    updateNodeConfig({ publicAddress: ADDRESS });
     const firstOwner = harness.seedOwnerForTests('Ownerann');
     OWNER = harness.ownerSessionHeaders(firstOwner);
     BASE = `https://localhost:${await startHttpsServer(0)}`;
@@ -275,6 +279,16 @@ async function main() {
     assert(p.push?.body?.acceptingKnocks === false && same(p.push?.body?.promise, KEPT),
         `the door at "only admins": acceptingKnocks false, the promise unchanged (${JSON.stringify(p.push?.body?.acceptingKnocks)})`);
     setDoor('members');
+    // No published address: the phone has nothing to knock on (apps/native/utils/knock.ts noAddress), so the push says
+    // it takes no requests, with the switch on and the door open (the deciding review of #2142, 4305778276).
+    updateNodeConfig({ publicAddress: null });
+    p = await pushNow();
+    assert(p.push?.body?.publicUrl === null && p.push?.body?.acceptingKnocks === false && same(p.push?.body?.promise, KEPT),
+        `no published address: acceptingKnocks false, the promise unchanged (${JSON.stringify(p.push?.body && { publicUrl: p.push.body.publicUrl, acceptingKnocks: p.push.body.acceptingKnocks })})`);
+    updateNodeConfig({ publicAddress: ADDRESS });
+    p = await pushNow();
+    assert(p.push?.body?.publicUrl === 'https://riverbend.example.org' && p.push?.body?.acceptingKnocks === true,
+        `the address back: acceptingKnocks true again (${JSON.stringify(p.push?.body?.acceptingKnocks)})`);
 
     // ── 6. A registry from before the promise ───────────────────────────────────────────────────────────────────────
     console.log('\n── 6. a registry that refuses the new fields ──');
@@ -339,7 +353,8 @@ async function main() {
         { node_id: 'peer-forged', community_name: 'Harbour Forged', service_radius: at(HERE.lat, HERE.lng), accepting_knocks: true,
             promise: { ...KEPT, ownerNames: ['Ann Example', 'Bo Example'] } },
         { node_id: 'peer-far', community_name: 'North Shore', service_radius: far, member_count: 900, accepting_knocks: true },
-        { node_id: 'peer-far-keeps', community_name: 'North Shore Keeps', service_radius: far, promise: KEPT, accepting_knocks: true },
+        { node_id: 'peer-far-keeps', community_name: 'North Shore Keeps', node_url: 'https://north-keeps.example.org', service_radius: far,
+            promise: KEPT, accepting_knocks: true },
     ];
     const mirrored = await runDirectoryMirror();
     assert(mirrored.ran === true && (mirrored as any).ok === true && (mirrored as any).added === 7, `the mirror takes the seven rows (${JSON.stringify(mirrored)})`);
@@ -440,6 +455,34 @@ async function main() {
     const byName = await call('GET', '/api/global/communities', undefined, {});
     assert(same(keysOf(byName.json), ['peer-big', 'peer-forged', 'peer-keeps', 'peer-shut', 'peer-small', 'peer-far', 'peer-far-keeps']),
         `without a point: by name, as before (${JSON.stringify(keysOf(byName.json))})`);
+    // A promise and knocks with no address is a tie like any other, never first: a stranger can't ask it from here
+    // (the deciding review of #2142, 4305778276). Three in one band elsewhere, as the review measured them.
+    const THERE = { lat: -37.07, lng: 144.22 };
+    table = [...table,
+        { node_id: 'peer-no-address', community_name: 'Goldfields Keeps', service_radius: at(THERE.lat, THERE.lng), promise: KEPT, accepting_knocks: true },
+        { node_id: 'peer-addressed', community_name: 'Goldfields Open', node_url: 'https://open.example.org', service_radius: at(THERE.lat, THERE.lng),
+            accepting_knocks: true },
+        { node_id: 'peer-addressed-keeps', community_name: 'Goldfields Keeps Too', node_url: 'https://keeps-too.example.org',
+            service_radius: at(THERE.lat, THERE.lng), promise: KEPT, accepting_knocks: true },
+    ];
+    const mirroredAgain = await runDirectoryMirror();
+    assert(mirroredAgain.ran === true && (mirroredAgain as any).ok === true && (mirroredAgain as any).added === 3,
+        `the mirror takes the three (${JSON.stringify(mirroredAgain)})`);
+    const noAddressOrders = new Set<string>();
+    let noAddressWrong = 0;
+    for (let i = 0; i < 50; i++) {
+        const r = await call('GET', `/api/global/communities?lat=${THERE.lat}&lng=${THERE.lng}&limit=3`, undefined, {});
+        const cs: any[] = r.json?.communities ?? [];
+        const ks = cs.map(c => c.key);
+        const noAddress = cs.find(c => c.key === 'peer-no-address');
+        if (r.status !== 200 || ks[0] !== 'peer-addressed-keeps' || !same([...ks.slice(1)].sort(), ['peer-addressed', 'peer-no-address'])
+            || noAddress?.url !== null || !same(noAddress?.promise, KEPT)) noAddressWrong++;
+        noAddressOrders.add(ks.slice(1).join(','));
+    }
+    assert(noAddressWrong === 0,
+        `the one with an address, the promise and knocks is always first; the one with no address is shown as it is (${noAddressWrong} reads otherwise)`);
+    assert(same([...noAddressOrders].sort(), ['peer-addressed,peer-no-address', 'peer-no-address,peer-addressed']),
+        `the one with no address is only a tie: it comes before and after one without the promise (${[...noAddressOrders].join(' | ')})`);
     delete process.env.NODE_PROFILE;
 
     // ── 9. The ticks travel to a standby ────────────────────────────────────────────────────────────────────────────

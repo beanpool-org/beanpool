@@ -31,7 +31,8 @@
  * ## Also in the push
  *
  *   - `acceptingKnocks`: whether a stranger can ask to join from the directory: the knocks switch on
- *     (config/node-profile.ts), and the door not "only admins" (config/door.ts).
+ *     (config/node-profile.ts), the door not "only admins" (config/door.ts), and an address published (getDirectoryInfo
+ *     `publicUrl`): with none the phone has nothing to knock on (apps/native/utils/knock.ts noAddress).
  *   - `closingOn`: the day the community says it closes (Settings → Directory → Leave the directory), or null.
  *
  * The ticks and the day are the community's own settings (config/community-settings.ts): a standby keeps them, and a
@@ -44,6 +45,7 @@ import { getAutoSnapshotConfig } from '../services/snapshot-scheduler.js';
 import { readOffboxSettings } from '../services/offbox-backups.js';
 import { getProfileSwitches } from '../config/node-profile.js';
 import { getDoor } from '../config/door.js';
+import { resolvePublicNodeUrl, PUBLIC_URL_RULES } from '../state-engine.js';
 import { closingDay, listingPromise, MAX_CLOSING_DAYS, MAX_PROMISE_OWNERS, type ListingPromise } from './directory-cache.js';
 
 export type { ListingPromise };
@@ -188,9 +190,12 @@ export function measurePromise(): PromiseStatus {
     return { kept: gaps.length === 0, gaps, owners, backupsLocked, backupsRunning, ...ticks };
 }
 
-/** Whether a stranger can ask to join from the directory: knocks on, and the door not "only admins". */
+/**
+ * Whether a stranger can ask to join from the directory: knocks on, the door not "only admins", and the address the push
+ * publishes (getDirectoryInfo `publicUrl`, by the same rules) to ask at.
+ */
 export function acceptingKnocks(): boolean {
-    return getProfileSwitches().knocks && getDoor() !== 'admins';
+    return getProfileSwitches().knocks && getDoor() !== 'admins' && resolvePublicNodeUrl(PUBLIC_URL_RULES.community) !== null;
 }
 
 /** The three fields the directory push carries, besides what getDirectoryInfo publishes. */

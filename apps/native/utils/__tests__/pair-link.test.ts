@@ -19,7 +19,14 @@ vi.mock('expo-web-browser', () => ({ dismissBrowser: vi.fn(async () => undefined
 
 import { isPairLink, pairLinkFromRoute, pairLinkFromSystemPath, pairRouteFromSystemPath } from '../pair-link';
 import { afterJoinRedirect, parsePairingQr, readPairingCode, refusalJoin, transferTarget } from '../pair-device-target';
-import { redirectSystemPath } from '../../app/+native-intent';
+import { redirectSystemPath as routeSystemPath } from '../../app/+native-intent';
+
+/** Every link here is routed at once: only the global community's link is answered later (utils/global-link.ts). */
+function redirectSystemPath(event: { path: string; initial: boolean }): string | null {
+    const to = routeSystemPath(event);
+    if (to instanceof Promise) throw new Error(`routed later, not at once: ${event.path}`);
+    return to;
+}
 
 const SESSION = 'a1'.repeat(16);
 const PUB = 'b2'.repeat(32);
@@ -315,7 +322,7 @@ describe('a refused server: join it on this phone first, through its own door, t
         expect(slice(src, 'function joinFromRefusal(', '\n    }\n')).toMatch(/handleDismissSheet\(\);\s*router\.push\(join\.href as any\);/);
         expect(src).toContain("const label = t('🌍 Join the global community');");
         expect(src).not.toContain('Join {host}');
-        const global = code(fs.readFileSync(path.resolve(__dirname, '../../app/join-global.tsx'), 'utf-8'));
+        const global = code(fs.readFileSync(path.resolve(__dirname, '../../app/join-open-door.tsx'), 'utf-8'));
         expect(global).toContain('redirect: afterJoinRedirect(thenParam, HOME_REDIRECT), name: joined.name');
         // People's invite join is as before: no server filled in from a route, no way back to the pairing screen.
         const people = code(fs.readFileSync(path.resolve(__dirname, '../../app/(tabs)/people.tsx'), 'utf-8'));

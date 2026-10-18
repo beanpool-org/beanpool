@@ -1,13 +1,14 @@
 /**
  * Messaging authorization tests (audit findings A2-2, A2-3, A2-15) against the
- * REAL server with ENFORCE_READ_AUTH ON.
+ * REAL server, with read auth ON (the plain run) and opted out (ENFORCE_READ_AUTH=false, the readauth-off variant):
+ * a DM is its participants' alone whatever the flag says (#2119).
  *
  *   A2-2  GET /api/messages/:conversationId — only a participant may read it.
  *   A2-3  GET /api/messages/conversations/:publicKey — only the subject may read it.
  *   A2-15 POST /api/messages/conversation — the creator must be a participant.
  *
- * MUST run with ENFORCE_READ_AUTH=true (the gate is a module const read at import):
- *   ENFORCE_READ_AUTH=true BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-messaging-idor.ts
+ * The flag is a module const read at import, so each mode is its own run:
+ *   SERVER_SUITES_ONLY=test-messaging-idor node scripts/run-server-suites.mjs
  */
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
@@ -54,8 +55,7 @@ async function signedFetch(method: 'GET' | 'POST', path: string, id: { pubKeyHex
 }
 
 async function main() {
-    console.log('Running messaging IDOR tests (A2-2/A2-3/A2-15, ENFORCE_READ_AUTH on)...\n');
-    if (process.env.ENFORCE_READ_AUTH !== 'true') throw new Error('Run with ENFORCE_READ_AUTH=true');
+    console.log('Running messaging IDOR tests (A2-2/A2-3/A2-15)...\n');
     await initTls();
     initStateEngine();
     PORT = await startHttpsServer(0);
@@ -74,6 +74,15 @@ async function main() {
     assert(a2.status === 200, `A2-2: participant A reads the conversation (got ${a2.status} ${a2.error ?? ''})`);
     const a2c = await signedFetch('GET', `/api/messages/${conv.id}`, C);
     assert(a2c.status === 403, `A2-2: outsider C is DENIED the conversation (got ${a2c.status} ${a2c.error ?? ''})`);
+    // A key that is no member here and an unsigned caller: the read gate's 403 and 401 with read auth on, the route's
+    // 403 with it off (#2119). Neither is ever the conversation.
+    const OPEN = process.env.ENFORCE_READ_AUTH === 'false';
+    const { publicKey: strangerPub, privateKey: strangerPriv } = crypto.generateKeyPairSync('ed25519');
+    const stranger = { pubKeyHex: strangerPub.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex'), privateKey: strangerPriv };
+    const a2s = await signedFetch('GET', `/api/messages/${conv.id}`, stranger);
+    assert(a2s.status === 403, `A2-2: a key that is no member is DENIED the conversation (got ${a2s.status} ${a2s.error ?? ''})`);
+    const a2u = await fetch(`${BASE}/api/messages/${conv.id}`);
+    assert(a2u.status === (OPEN ? 403 : 401), `A2-2: an unsigned read is DENIED the conversation, ${OPEN ? 403 : 401} (got ${a2u.status})`);
 
     // A2-3 — subject reads own conversation list (200); other member is denied (403).
     const a3 = await signedFetch('GET', `/api/messages/conversations/${A.pubKeyHex}`, A);

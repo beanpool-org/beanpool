@@ -4,7 +4,8 @@
  * - Temp files a crash mid-write left behind (write-file-atomic.ts) are removed: each is a whole copy of its target,
  *   secrets included. Nothing else is touched.
  * - The files that hold a key or the admin's secrets are made 0600 when a group or other user can read or write them:
- *   an older install made them 0644. The container runs the node as the data dir's owner (entrypoint.sh chowns /data
+ *   an older install made them 0644. Each ACME certificate's key (tls/acme/<identifier>/key.pem, services/acme/store.ts)
+ *   is one of them, and a crash's temp files in those folders go too. The container runs the node as the data dir's owner (entrypoint.sh chowns /data
  *   and drops to PUID with su-exec; bin/beanpool does the same), so the node and the CLI still read them.
  * - local-config.json gets its last good copy (.bak) when it parses and the copy is missing, broken or older: a node
  *   upgraded from before .bak existed has one from its first start, not only from its first save.
@@ -67,15 +68,26 @@ export const SECRET_FILES = [
     'alerts.json',
 ];
 
+/** Each ACME identifier's folder under tls/acme/, relative to the data dir. */
+function acmeFolders(dataDir: string): string[] {
+    const root = path.join('tls', 'acme');
+    try {
+        return fs.readdirSync(path.join(dataDir, root), { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => path.join(root, d.name));
+    } catch {
+        return [];
+    }
+}
+
 export function secureDataDirAtBoot(dataDir: string): void {
-    for (const dir of [dataDir, path.join(dataDir, 'tls')]) {
+    const acme = acmeFolders(dataDir);
+    for (const dir of [dataDir, path.join(dataDir, 'tls'), ...acme.map((d) => path.join(dataDir, d))]) {
         const removed = cleanStaleWriteTemps(dir);
         if (removed.length) console.warn(`🧹 [Files] Removed ${removed.length} temp file(s) a stop mid-write left in ${dir}: ${removed.join(', ')}`);
     }
 
     let brokenCopies: string[] = [];
     try { brokenCopies = fs.readdirSync(dataDir).filter((n) => n.startsWith('local-config.json.broken-')); } catch { /* no dir yet */ }
-    for (const rel of [...SECRET_FILES, ...brokenCopies]) {
+    for (const rel of [...SECRET_FILES, ...brokenCopies, ...acme.map((d) => path.join(d, 'key.pem'))]) {
         const file = path.join(dataDir, rel);
         let st: fs.Stats;
         try { st = fs.lstatSync(file); } catch { continue; }

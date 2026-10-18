@@ -6,7 +6,7 @@
  * the BeanPool node.
  *
  * Rules:
- * 1. FAIL FAST — If sync takes > 20 seconds, checkpoint and abort.
+ * 1. FAIL FAST — Each request has its own time budget (requestTimeouts), started when it starts.
  * 2. DELTA ONLY — Compare hashes first, only pull changed data.
  * 3. PRUNING — Keep only current state + last ~1,000 transactions.
  */
@@ -14,7 +14,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { BeanPoolMerkleTree, LIVE_POST_TYPES, t, type LivePostChange } from '@beanpool/core';
-import { applyDelta, communityCachesRenamed, copyGenerationNow, fetchFriendsFromServer, getDb, localPostTies, newCopyGeneration, readMembersOnDemandWorld, readNearbyHeld, readNearbyTag } from '../utils/db';
+import { applyDelta, communityCachesRenamed, copyForRead, copyGenerationNow, fetchFriendsFromServer, getDb, localPostTies, newCopyGeneration, readMembersOnDemandWorld, readNearbyHeld, readNearbyTag } from '../utils/db';
 import { absentAfter, cardsToDrop, isMembersOnDemandRefusal, membersKeysPath, planMembersCycle, readAbsent, recheckCursor } from '../utils/members-on-demand';
 import { getDatabaseFilenameForNode } from '../utils/nodes';
 import { EVENT_TYPES_QUERY } from '../utils/events';
@@ -30,7 +30,14 @@ import {
     nextNearbyAreaCopy, readNearbyAreaCopy, sameArea, storeNearbyAreaCopy, NEARBY_AREA_RECHECK_MS, type NearbyArea, type NearbyAreaCopy,
 } from '../utils/nearby-area';
 
-const SYNC_TIMEOUT_MS = 20_000;
+/**
+ * How long a sync waits to read this phone's key once more when the first read found none (performSync). At a cold
+ * start, as just after an update, the key can be slow to read for a moment: a cycle that went on without it read a
+ * members-only community unsigned, was refused (401 `members_only`), and the Market's first sync failed, so it said
+ * "Having trouble connecting" (Android 1.2.66, 18 Oct). It is the same read of this phone's own key, never another; a
+ * phone that holds no key waits this once a cycle and reads as before.
+ */
+export const KEY_READ_AGAIN_MS = 500;
 /**
  * The node's key for the next page of a posts sync read, while the one it answers is full (apps/server
  * routes/marketplace.ts, paged by key). None: the read is complete. A node from before it sends none, so its one page
@@ -422,11 +429,30 @@ export function forceResyncNotice(result: Pick<SyncResult, 'success' | 'errorMes
 }
 
 /**
- * True while a sync is queued (debounce window) or running. The market uses it so a sync that is
- * still downloading on a slow connection is not reported as "trouble connecting".
+ * True while a sync is queued (debounce window, or a trailing sync's cooldown) or running. The market uses it so a sync
+ * that is still downloading on a slow connection is not reported as "trouble connecting".
  */
 export function isPillarSyncActive(): boolean {
-    return isSyncing || syncPromise !== null || debounceTimeoutId !== null;
+    return isSyncing || syncPromise !== null || debounceTimeoutId !== null || trailingTimeoutId !== null;
+}
+
+// The copy the last cycle that landed (pillar_sync_done) wrote: its node's file and the copy generation (copyForRead).
+let landedCopy: { dbName: string; generation: number } | null = null;
+
+/**
+ * Whether a sync cycle has landed on the copy this phone holds now: not one cleared since (copyGeneration), nor another
+ * community's. The Market asks as it mounts. The boot sync can end before it listens, and once it landed the Market reads
+ * what it wrote, instead of asking the node for a whole sync more over the phone's data each time it mounts (review of PR
+ * #2127). In memory: false at each start, until a cycle lands.
+ */
+export async function syncLandedOnThisCopy(): Promise<boolean> {
+    if (!landedCopy) return false;
+    try {
+        const now = await copyForRead();
+        return now.dbName === landedCopy.dbName && now.generation === landedCopy.generation;
+    } catch {
+        return false;
+    }
 }
 
 /**
@@ -444,7 +470,6 @@ export async function performSync(onProgress?: (step: number, total: number, sta
     let endCycle = () => {};
     cycleEnd = new Promise<void>(resolve => { endCycle = resolve; });
     const startTime = Date.now();
-    const deadline = startTime + SYNC_TIMEOUT_MS;
     // Pushed listing changes applied after this point are replayed over this cycle's writes (liveChangesSince).
     const liveMark = liveSeq;
 
@@ -481,7 +506,12 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         let signer: { publicKey: string; privateKey: string } | null = null;
         try {
             const { loadIdentity } = await import('../utils/identity');
-            const identity = await loadIdentity();
+            let identity = await loadIdentity();
+            // None found: read once more a moment later before the cycle goes on without it (KEY_READ_AGAIN_MS).
+            if (!identity?.publicKey || !identity?.privateKey) {
+                await new Promise(resolve => setTimeout(resolve, KEY_READ_AGAIN_MS));
+                identity = await loadIdentity();
+            }
             pubKey = identity?.publicKey || '';
             signer = identity?.publicKey && identity?.privateKey ? { publicKey: identity.publicKey, privateKey: identity.privateKey } : null;
         } catch (e) {
@@ -841,6 +871,14 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                 const note = postsRes.status === 401 ? undefined
                     : refusal?.code === 'private_preview' ? await noteForPreview(anchorUrl, signer, refusal)
                     : refusal;
+                // Said in the log, never a quiet end: the cycle fails, and the Market's wait asks for one more (market.tsx).
+                // In the node's own words: a signed read is refused 401 too, its timestamp stale on a phone whose clock is
+                // off (apps/server/src/engine/member-signature.ts), which no second try clears. Unsigned only when this
+                // phone had no key to sign with, the one thing it knows (review of PR #2127).
+                if (postsRes.status === 401) {
+                    const said = typeof answer?.error === 'string' ? `: "${answer.error.slice(0, 200)}"` : '';
+                    console.warn(`[Pillar Sync] ${anchorUrl} refused the posts read (401${said})${signer ? '' : '; this phone could not read its key, so it went unsigned'}.`);
+                }
                 if (note !== undefined) await noteRefusal(anchorUrl, note);
                 // Only a 403 drops: the node checked this phone's signature and says its key is no member here. A 401 means
                 // only that the read went unsigned (a locked iPhone can't read its key in a background sync; a community
@@ -1427,6 +1465,8 @@ export async function performSync(onProgress?: (step: number, total: number, sta
             const { DeviceEventEmitter } = require('react-native');
             DeviceEventEmitter.emit('pillar_sync_done');
         } catch (e) {}
+        // Not when its posts went unwritten (the member switched community) or the copy was cleared under it.
+        if (!postsUnwritten && sameCopy()) landedCopy = { dbName: expectedDbName, generation: copyGen };
 
         result.success = true;
         result.deltaCount = (delta.posts?.length || 0) + (delta.accounts?.length || 0);
@@ -1666,6 +1706,10 @@ let needsAnotherSync = false;
 // in the workspace has pulled @types/node into scope. Adding a test runner to this app did
 // exactly that. This spelling is correct under either.
 let debounceTimeoutId: ReturnType<typeof setTimeout> | null = null;
+// The trailing sync's cooldown (requestSync), pending. A sync asked for as a cycle ends (the Market's second try, heard on
+// PILLAR_SYNC_ENDED) waits it out before its debounce: counted as queued, or the Market read ~2 s of nothing running and
+// said "Having trouble connecting" with that sync still to come (review of PR #2127).
+let trailingTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
 /**
  * Coordinated request wrapper. Ensures that only one performSync executes at a time,
@@ -1703,7 +1747,8 @@ export async function requestSync(): Promise<void> {
                 if (needsAnotherSync) {
                     needsAnotherSync = false;
                     // Protective 2000ms cooldown delay to prevent infinite consecutive trailing sync loops
-                    setTimeout(() => {
+                    trailingTimeoutId = setTimeout(() => {
+                        trailingTimeoutId = null;
                         requestSync();
                     }, 2000);
                 }

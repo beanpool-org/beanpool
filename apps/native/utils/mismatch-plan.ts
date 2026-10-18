@@ -4,8 +4,9 @@
  * about this key. The screen asks the NODE and never guesses from a flag on the phone (§C.2): whether a stranger can do
  * anything here but leave is a property of the community.
  *
- * - `open`: a community whose door is open (the global profile, `openJoin`, not in a private preview). Being a stranger is
- *   the normal state before joining, so the first action is Join with this account.
+ * - `open`: a community whose door is open (the global profile, `openJoin`, not in a private preview): ours, or a
+ *   self-hoster's on its own domain. Being a stranger is the normal state before joining, so the first action is Join with
+ *   this account, at THAT community's door (app/join-open-door.tsx, slice P5).
  * - `invite`: a community that joins people by invite (a local profile, or one that says nothing about itself, or can't be
  *   asked): today's page, worded for "wrong address, or not joined yet", with the invite field.
  * - `preview`: a community in a private preview: its own sentence, and the invite field for an owner's or admin's invite.
@@ -29,9 +30,10 @@ export interface MismatchInput {
     /** The community answered the profile ask just now. */
     reachable: boolean;
     /**
-     * The phone's door screen can take this community (join-global.tsx): only the global community's address until slice
-     * P5 generalises it to any open-door node. Another open-door community gets the invite page meanwhile, which is true
-     * of it too ("not joined yet") and never sends anyone to a different community's door.
+     * The phone's door screen can take this community's address (app/join-open-door.tsx; utils/open-door.ts doorNodeAt):
+     * since slice P5 any open-door community's, ours or a self-hoster's, on any domain. One it can't (an address it won't
+     * sign for) gets the invite page, which is true of it too ("not joined yet") and never sends anyone to a different
+     * community's door.
      */
     doorScreenTakes: boolean;
 }
@@ -54,14 +56,15 @@ export function mismatchPlan(input: MismatchInput): MismatchPlan {
 }
 
 /** The screens the root guard never diverts a refused key off: this screen, and the ones it leads to. */
-const NOT_DIVERTED_FROM = new Set(['node-mismatch', 'welcome', 'recover-identity', 'join-global']);
+const NOT_DIVERTED_FROM = new Set(['node-mismatch', 'welcome', 'recover-identity', 'join-global', 'join-open-door']);
 
 /**
  * Whether the root guard (app/_layout.tsx) leaves a member on the screen at `segments` when the community in use answered
  * `answer` about their key, instead of sending them to this screen. Pure.
  *
  * Never off this screen or the ones it leads to: welcome, guardian recovery (a freshly minted key probes as a stranger for
- * a moment), the global community's door (this screen's Join with this account opens it). And, for an account the
+ * a moment), a community's open door (this screen's Join with this account opens it: join-global for the global community,
+ * join-open-door for another). And, for an account the
  * community closed, never off Settings: its Delete account sends `POST /api/member/purge`, the one request a community
  * still takes from a closed key (server https-server.ts `isOwnDeleteAccount`), and the only way left to erase the profile
  * a removal keeps there (Marty's card removed-member-delete, 2026-09-27). The closed page leads there

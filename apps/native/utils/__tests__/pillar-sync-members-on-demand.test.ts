@@ -579,7 +579,8 @@ describe('no copy of the profile, and the node does not answer for it', () => {
 
     it('without the phone\'s key (nothing reads by area or by key), the sync goes on as before and asks nothing more', async () => {
         const { loadIdentity } = await import('../identity');
-        vi.mocked(loadIdentity).mockResolvedValueOnce(null as any);
+        // No key on the sync's read, nor on its read again a moment later (pillar-sync.ts KEY_READ_AGAIN_MS).
+        vi.mocked(loadIdentity).mockResolvedValueOnce(null as any).mockResolvedValueOnce(null as any);
         node.info = 'down';
         expect((await performSync()).success).toBe(true);
         expect(node.requests.some(r => new URL(r).pathname === '/api/community/info')).toBe(false);

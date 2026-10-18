@@ -1532,7 +1532,7 @@ export function standbyPinConditions(): Condition[] {
 
 function tlsCondition(): Condition {
     return tlsFellBackToSelfSigned()
-        ? { key: 'tls.fallback', active: true, detail: "The Let's Encrypt certificate could not be renewed: browsers now see a self-signed one. It is retried every 2 hours." }
+        ? { key: 'tls.fallback', active: true, detail: "The Let's Encrypt certificate could not be renewed: browsers now see a self-signed one. It is tried again within a day." }
         : { key: 'tls.fallback', active: false, detail: "Let's Encrypt certificate in use again." };
 }
 

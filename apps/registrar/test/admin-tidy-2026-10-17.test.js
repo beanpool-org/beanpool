@@ -7,7 +7,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import worker, { holdsName, isOwnRow, attestSweep } from '../src/index.js';
-import { world, makeKey, liveName, nowS, routing } from './harness.js';
+import { world, makeKey, liveName, nowS, routing, unreachable } from './harness.js';
 
 const DAY = 86400;
 const COOLOFF = 30 * DAY;
@@ -314,9 +314,9 @@ test('a forget of a name already removed says so (already): no second event, no 
 });
 
 test('one bulk request of 5 names stays inside D1\'s smallest per-invocation budget (50 queries), its alert sent in it too', async () => {
-    // The alert channel set: the alert's send runs in the same invocation (waitUntil), and fails here (no network),
+    // The alert channel set: the alert's send runs in the same invocation (waitUntil), and fails here (ntfy unreachable),
     // which is its costliest path.
-    const w = await world({ env: { NTFY_URL: 'https://ntfy.example/beanpool-admin' } });
+    const w = await world({ env: { NTFY_URL: 'https://ntfy.example/beanpool-admin' }, serve: { 'ntfy.example': unreachable } });
     try {
         const names = ['bulk1', 'bulk2', 'bulk3', 'bulk4', 'bulk5'];
         for (const n of names) await freed(w, n);

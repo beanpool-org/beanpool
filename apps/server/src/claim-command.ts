@@ -54,7 +54,7 @@ Refused when the community already has an owner: use beanpool recover then.`;
 interface NodeView {
     owner: boolean;
     claim: { id: string; code: string } | null;
-    address: { name?: string; status?: string; hostname?: string; mode?: string } | null;
+    address: { name?: string; status?: string; hostname?: string; mode?: string; reason?: string } | null;
     request: { name: string; refused?: string | null } | null;
     communityName: string | null;
 }
@@ -164,6 +164,8 @@ async function askForName(dir: string, name: string, contact: string | null, cod
             if (await nameReachesThisNode(pa.hostname, codeId)) return { kind: 'live', address: `https://${pa.hostname}` };
             continue;
         }
+        // Pending as 'provisioning': no approval is coming, the address service is still making it and the node asks again.
+        if (pa?.name === name && pa.status === 'pending' && pa.reason === 'provisioning') { last = 'the address service is still setting the name up'; continue; }
         if (pa?.name === name && pa.status === 'pending') return { kind: 'pending' };
         if (view.request?.name === name && view.request.refused) return { kind: 'refused', reason: view.request.refused };
         last = view.request?.name === name ? 'the node is asking the address service' : last;

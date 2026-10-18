@@ -13,7 +13,8 @@ Full design: [`docs/node-dns-registrar.md`](../../docs/node-dns-registrar.md).
 - **Admin (Cloudflare Access — "Admin sign-in" below):** `GET /api/local/admin/registrar/whoami` (`{email, via}`:
   who is signed in) · `GET /api/local/admin/registrar/pending` (every name in any state but `abandoned`, each
   with `holds` — does it keep its name from other keys now — and, for a release, `takes_back` — can its old key still
-  take it back as its own — and, while it is still held, `held_until`) ·
+  take it back as its own — and, while it is still held, `held_until`; every row says `awaiting_approval`: true only
+  for a pending claim of a gated name) ·
   `GET /api/local/admin/registrar/events[?name=]` · `POST /api/local/admin/registrar/:name/`
   `approve | pause | resume | block | release | forget` (`revoke` is block's old name; `release` takes
   `{"free_now": true}`, below) · `POST /api/local/admin/registrar/forget {"names": [...]}` (forget in bulk, at most
@@ -64,7 +65,22 @@ Full design: [`docs/node-dns-registrar.md`](../../docs/node-dns-registrar.md).
   record or tunnel is gone or points elsewhere it is re-made as its row says (event `repaired`; a new tunnel's
   token reaches the node through `/status`). Nodes never heal a name `/status` calls live, so this is what keeps any ordering of
   requests from leaving a live name dark. A node merely asleep costs one or two reads; one that answered
-  anything costs none. Deletions Cloudflare refused earlier (`teardown`) are retried.
+  anything costs none. Deletions Cloudflare refused earlier (`teardown`) are retried, and stale request nonces
+  dropped. Then the alert conditions are updated. Last, a claim of an auto name whose provisioning never finished
+  (still `pending` over 2 minutes after its claim, its key not blocked by the admin) is finished, at most 3 a sweep and
+  only while the sweep's D1 queries allow (below): nothing the registrar did not make may be in the way, then tunnel
+  and record are made and the row goes `live` (event `healed`: finished by the sweep; the New community alert; the
+  token reaches the node through `/status`). One the budget leaves (`[ORPHAN_WAIT]` in the log) waits for the next
+  sweep, its node's claim or heal, or the admin's "Finish now". The sweep sends its alerts once, at its end.
+- **The sweep counts its D1 queries:** D1 allows 50 an invocation on Workers Free and refuses every one past them. The
+  sweep spends about 11, and 2 a live name, before its orphans; each orphan is finished only while up to 15 more and
+  the sweep's send (up to 16 with `NTFY_URL` set, none without) are left, and a send still running beside it (a
+  pause's alert) is kept 16 too. Measured: with alerts on, one orphan a sweep up to 4 live names and none from 5;
+  without, 3 up to 2, 2 up to 6, 1 up to 12. From about 18 live names with alerts on, the sweep's own send no
+  longer fits, orphans or not.
+- **The work of a claim, heal, rotate or release, and of every admin action, runs under `ctx.waitUntil`:** a node that
+  stops waiting (it gives each of its four 25 s), or an admin's page closed part way, never cuts it off half way; the
+  runtime keeps it up to 30 s past the disconnect, and the sweep finishes a claim even that missed.
 
 A tunnel or record the registrar lets go of that Cloudflare refuses to delete is recorded in `teardown`, never
 dropped: another key's take-over of a name, a pause, block or release's record, the record a heal, take-back or
@@ -74,7 +90,8 @@ tunnel. The sweep retries each one, but not while it is a live name's routing
 hostname routes as the row says) or the tunnel an admin pause keeps. A live `bp-<name>` tunnel
 no row records would make Cloudflare refuse every later tunnel for the name (1013), so a claim that meets one
 deletes it when it provably belongs to nobody: it is owed, or it was made before the claiming tenure or over 10
-minutes ago. Otherwise the claim answers **503** "cleaning up … try again shortly".
+minutes ago (over 2 minutes ago for a pending name: what a claim cut off after making its tunnel left behind, which
+the sweep and its node's heal then finish). Otherwise the claim answers **503** "cleaning up … try again shortly".
 
 ## Admin sign-in
 
@@ -210,7 +227,7 @@ or — a later PR — after a long, warned abandonment. States (`name_allocation
 
 | State | Routed | Another key may claim it | How it gets there · how it leaves |
 |---|---|---|---|
-| `pending` | no | no | a gated claim · admin approve (→ live), or a release: its key's frees it at once (nobody approved it; `pause_reason` `withdrawn`) |
+| `pending` | no | no | a gated claim (`reason` `awaiting-approval`) · admin approve (→ live), or a release: its key's frees it at once (nobody approved it; `pause_reason` `withdrawn`). Also an auto claim whose provisioning has not finished (`reason` `provisioning`; /admin "Setting up") · its next claim or heal, the sweep after 2 minutes, or the admin's Finish now (→ live) |
 | `live` | yes | no | claim / approve / heal / resume |
 | `paused` | no | no | sweep impostor (`pause_reason` `impostor`), sweep content swap (`content-swap`), admin pause (`admin`), the 09-24 incident (`incident-2026-09-24`), a take-back not yet re-attested (`unverified`, or `impostor` if another key answered) · the owner's heal (or rotate), except an admin pause, which only admin resume (or release) lifts: its owner can neither heal nor release it |
 | `released` | no | after the 30-day hold (the owner's release, `owner`; the admin's, `admin-held`; the admin's of a name it had blocked or paused, `admin-held-all`, which its own key can't claim either) or at once (the admin's with "free now", `admin`; a withdrawn or rejected claim nobody approved) | release · the same key re-claims any time (not after `admin-held-all`: it waits out the hold like anyone, then claims as a new claimant); others once free |

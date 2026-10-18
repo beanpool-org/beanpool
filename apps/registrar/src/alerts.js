@@ -301,17 +301,36 @@ export async function enqueueSummary(env, compose) {
 export async function notify(env, ev) {
     try {
         if (!(await enqueue(env, ev, nowS()))) return;
-        if (typeof env.waitUntil === 'function') env.waitUntil(flush(env));
-        else await flush(env);
+        await sendWaiting(env);
     } catch (e) {
         console.error('[ALERT]', ev.category, ev.title, String(e?.message || e).slice(0, 200));
     }
 }
 
+// Send what waits (flush): after the response, or beside the sweep, when the invocation can wait for it (env.waitUntil),
+// so a slow ntfy never holds a request or the sweep; else now.
+export async function sendWaiting(env) {
+    if (typeof env.waitUntil === 'function') env.waitUntil(flush(env));
+    else await flush(env);
+}
+
+// Into the outbox only, sent with the next send: the alerts of the orphans the sweep finishes, which go with the
+// sweep's one send after them (index.js attestSweep). Never throws.
+export async function queue(env, ev) {
+    try { await enqueue(env, ev, nowS()); }
+    catch (e) { console.error('[ALERT]', ev.category, ev.title, String(e?.message || e).slice(0, 200)); }
+}
+
+// The most D1 queries one send (flush) runs with a channel set: the channel's row (2), a waiting daily summary sent (6),
+// then the rest claimed (2), the hour's places reserved (up to 3) and the send's bookkeeping (up to 3). With none set,
+// it runs none. The sweep counts its queries and keeps these for each send (index.js d1Meter).
+export const SEND_D1 = 16;
+
 // Every condition as it is now (each sweep): raised, still (24 h on), cleared — each told once, even with two sweeps at
 // the same time (a conditional write decides who tells). A raised or still the hourly cap muted is told again in the
-// next hour (alert_state.told_id: the row that told it). Then whatever waits is sent, if a try is due.
-export async function updateConditions(env, conditions) {
+// next hour (alert_state.told_id: the row that told it). Then whatever waits is sent, if a try is due — unless `send` is
+// false: the sweep sends once, after its orphans (index.js attestSweep).
+export async function updateConditions(env, conditions, { send = true } = {}) {
     const now = nowS();
     for (const c of conditions) {
         try {
@@ -348,8 +367,7 @@ export async function updateConditions(env, conditions) {
             console.error('[ALERT_CONDITION]', c.key, String(e?.message || e).slice(0, 200));
         }
     }
-    if (typeof env.waitUntil === 'function') env.waitUntil(flush(env));
-    else await flush(env);
+    if (send) await sendWaiting(env);
 }
 
 const channelOk = (env, now, status) => env.DB.prepare("UPDATE alert_channel SET last_ok_at=?, last_try_at=?, last_status=?, failed_in_a_row=0, next_try_at=0 WHERE channel='ntfy'")

@@ -8,8 +8,9 @@
  *
  * No React and no device modules here on purpose: utils/__tests__ runs in plain node.
  */
-import { isCollapsedRun, isLockedAwayLine, lockedAwayLineText, removedLineRuns, removedRunText, type RemovedLineKind } from '@beanpool/core';
+import { formatDate, isCollapsedRun, isLockedAwayLine, lockedAwayLineText, removedLineRuns, removedRunText, t, word, type RemovedLineKind, type WordKey } from '@beanpool/core';
 import { dmQuoteLabel, type DmQuoteFrom } from './e2e-crypto';
+import { chatLineWords } from './chat-line-words';
 
 /** Authors may edit a text message for this long after sending (mirrors the node's window). */
 export const MESSAGE_EDIT_WINDOW_MS = 15 * 60 * 1000;
@@ -39,6 +40,20 @@ export const NOT_AVAILABLE_YET = 'Not available on this community yet';
 
 /** When the node refused and sent nothing readable to show for it. */
 export const CHAT_ACTION_GENERIC_ERROR = 'Could not reach the node. Try again when you have signal.';
+
+/** The words above as a member reads them: word() keys, shown through t() (the constants stay the English the rules compare). */
+const CHAT_WORDS: Readonly<Record<string, WordKey>> = {
+    [DELETED_BY_AUTHOR_TEXT]: word('This message was deleted'),
+    [REMOVED_BY_CONVENOR_TEXT]: word('Removed by a convenor'),
+    [REMOVED_BY_HOST_TEXT]: word('removed by the host'),
+    [REMOVED_BY_KEEPER_TEXT]: word('removed by a keeper'),
+    [NOT_AVAILABLE_YET]: word('Not available on this community yet'),
+    [CHAT_ACTION_GENERIC_ERROR]: word('Could not reach the node. Try again when you have signal.'),
+};
+/** One of this file's own sentences in the member's language; anything else (the node's words) as a lower layer wrote it. */
+function chatWords(text: string): string {
+    return Object.prototype.hasOwnProperty.call(CHAT_WORDS, text) ? t(CHAT_WORDS[text]) : chatLineWords(text);
+}
 
 /**
  * The two sentences an OLD node answers a group edit and a group reaction with
@@ -103,11 +118,12 @@ export interface DmQuoteView {
  * the row is, never "You" or the other person's name over words it can't confirm.
  */
 export function dmQuoteFor(parent: ChatMessage | null | undefined, myPubkey: string | null | undefined, peerName: string | null | undefined): DmQuoteView {
-    if (!parent) return { author: 'Someone', text: 'Message not found', note: null };
+    if (!parent) return { author: t('Someone'), text: t('Message not found'), note: null };
     const from = parent.quoteFrom ?? ((parent.type === 'system' || parent.senderId === 'SYSTEM') ? 'notice' : parent.unattributed ? 'nobody' : 'author');
-    if (from !== 'author') return { author: dmQuoteLabel(from), text: parent.text, note: null };
-    const text = isTombstone(parent) ? tombstoneText(parent, 'dm') : parent.type === 'image' ? '🔒 Photo' : parent.text;
-    return { author: parent.senderId === myPubkey ? 'You' : (peerName || 'Someone'), text, note: parent.integrityNote ?? null };
+    // A line that isn't its named author's: the label and the words its layer wrote, in the member's language.
+    if (from !== 'author') return { author: chatLineWords(dmQuoteLabel(from)), text: chatLineWords(parent.text), note: null };
+    const text = isTombstone(parent) ? tombstoneWords(parent, 'dm') : parent.type === 'image' ? t('🔒 Photo') : parent.text;
+    return { author: parent.senderId === myPubkey ? t('You') : (peerName || t('Someone')), text, note: chatLineWords(parent.integrityNote ?? null) ?? null };
 }
 
 /** Who the viewer is in this chat, for the action rules below. */
@@ -179,6 +195,11 @@ export function tombstoneText(
     if (by) return REMOVED_BY_CONVENOR_TEXT;
     // A node that removed a message before it recorded who did it: the neutral reading of the two.
     return DELETED_BY_AUTHOR_TEXT;
+}
+
+/** A tombstone's words as the member reads them: tombstoneText, in their language. */
+export function tombstoneWords(m: { senderId?: string; metadata?: any } | null | undefined, kind?: ChatKind): string {
+    return chatWords(tombstoneText(m, kind));
 }
 
 /** Still on its way to the node (or stuck): its id is a local one, so nothing server-side can be asked about it. */
@@ -263,12 +284,12 @@ export function hasAnyAction(a: MessageActions): boolean {
     return a.reply || a.react || a.edit || a.delete || a.remove;
 }
 
-/** WhatsApp-style day label: Today / Yesterday / "Mon, 12 May". */
+/** WhatsApp-style day label: Today / Yesterday / "Mon 12 May" (core's date, in the member's language). */
 export function formatDayLabel(d: Date, now: Date = new Date()): string {
     const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-    if (d.toDateString() === now.toDateString()) return 'Today';
-    if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
-    return d.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' });
+    if (d.toDateString() === now.toDateString()) return t('Today');
+    if (d.toDateString() === yesterday.toDateString()) return t('Yesterday');
+    return formatDate(d, 'weekday-day-month');
 }
 
 export interface ChatDaySeparator {
@@ -370,12 +391,17 @@ export function showsAuthorName(
     return previous.senderId !== m.senderId;
 }
 
-/** The one time under a bubble, in every chat: 24-hour, zero-padded, and empty for an unreadable stamp. */
+/** The one time under a bubble, in every chat: core's 24-hour time of day in the member's language ("9:05"), empty for an unreadable stamp. */
 export function formatMessageTime(iso: string | null | undefined): string {
     if (!iso) return '';
-    const t = new Date(iso);
-    if (isNaN(t.getTime())) return '';
-    return t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    return formatDate(d, 'time');
+}
+
+/** A message's time as shown: from its stamp when it has one (the DM rows come formatted by the device), else as given. */
+export function messageTime(m: { rawTimestamp?: string | null; timestamp?: string }): string {
+    return formatMessageTime(m.rawTimestamp) || (m.timestamp ?? '');
 }
 
 export interface ReactionSummary {
@@ -485,13 +511,14 @@ export function chatActionErrorMessage(err: ChatActionError | null | undefined):
     const status = err?.status ?? null;
     const text = (err?.message || '').trim();
     // No route to answer with: the verb is not in this node's build.
-    if (status === 404 && !err?.nodeAnswered) return NOT_AVAILABLE_YET;
+    if (status === 404 && !err?.nodeAnswered) return chatWords(NOT_AVAILABLE_YET);
     // The same statement, said properly.
-    if (status === 501) return NOT_AVAILABLE_YET;
+    if (status === 501) return chatWords(NOT_AVAILABLE_YET);
     // An old node's own words for "this build has no group edit / no group reactions".
-    if (status === 403 && OLD_NODE_GROUP_CHAT_REFUSALS.includes(text)) return NOT_AVAILABLE_YET;
-    // An up-to-date node refusing THIS action. Its sentence is the true one; ours would be a lie.
-    return text || CHAT_ACTION_GENERIC_ERROR;
+    if (status === 403 && OLD_NODE_GROUP_CHAT_REFUSALS.includes(text)) return chatWords(NOT_AVAILABLE_YET);
+    // An up-to-date node refusing THIS action. Its sentence is the true one; ours would be a lie. (A refusal this phone
+    // wrote, a group line's key not here, reads in the member's language; the node's own words are slice S4.)
+    return text ? chatLineWords(text) : chatWords(CHAT_ACTION_GENERIC_ERROR);
 }
 
 /**

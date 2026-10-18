@@ -19,7 +19,8 @@ import { PageTitle, useTabRetapScrollTop } from '../../components/PageTitle';
 import { useQuickReturn, QuickReturnBlock } from '../../components/QuickReturn';
 import { initialTalkView, type TalkView } from '../../utils/talk-views';
 import { unreadLabel, groupsUnreadTotal, yourGroupsPaneState, rowTime } from '../../utils/your-groups';
-import { chatLineWords } from '../../components/chat/chat-line-words';
+import { chatLineWords } from '../../utils/chat-line-words';
+import { listingStatusWords } from '../../utils/listing-status-words';
 import { YourGroupsRows, YourGroupsEmpty, YourGroupsLoading, YourGroupsError, NewGroupButton, FindGroupsButton, useCreateGroupFlow } from '../../components/YourGroupsPane';
 import { findGroupsInTalk, FIND_GROUPS_HREF } from '../../utils/commons-sections';
 import { useYourGroups } from '../../components/useYourGroups';
@@ -31,20 +32,6 @@ const TALK_PANES: ReadonlyArray<{ id: TalkView; label: WordKey }> = [
     { id: 'groups', label: word('Groups', 'talk pane') },
     { id: 'people', label: word('People', 'talk pane') },
 ];
-
-/** The pill on a listing's chat row: the listing's or its deal's status; one this build doesn't know, as the node wrote it. */
-const POST_STATUS_WORDS: Readonly<Record<string, WordKey>> = {
-    active: word('ACTIVE', 'listing status'),
-    pending: word('HELD IN TRUST'),
-    completed: word('COMPLETED', 'deal status'),
-    cancelled: word('CANCELLED', 'deal status'),
-    requested: word('REQUESTED', 'deal status'),
-    rejected: word('REJECTED', 'deal status'),
-    paused: word('PAUSED', 'listing status'),
-};
-function postStatusWords(status: string): string {
-    return POST_STATUS_WORDS[status] ? t(POST_STATUS_WORDS[status]) : String(status).toUpperCase();
-}
 
 export default function ChatsScreen() {
     const { theme, colors } = useTheme();
@@ -557,7 +544,7 @@ export default function ChatsScreen() {
                                         item.postStatus === 'pending' ? { color: colors.feedback.success.fg } :
                                         { color: colors.text.secondary }
                                     ]}>
-                                        {postStatusWords(item.postStatus)}
+                                        {listingStatusWords(item.postStatus)}
                                     </Text>
                                 </View>
                             )}

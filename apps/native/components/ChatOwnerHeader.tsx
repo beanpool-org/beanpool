@@ -12,6 +12,15 @@ import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme, useStyles } from '../app/ThemeContext';
 import { ownerHeader, type YourChatKind } from '../utils/your-groups';
+import { t } from '@beanpool/core';
+
+/** The line under the chat's name: its kind, what the screen adds ("4 members · muted"), and "tap for info", whole per variant. */
+function ownerSubLine(kind: string, detail: string | null | undefined, tapForInfo: boolean): string {
+    if (detail && tapForInfo) return t('{kind} · {detail}  ·  tap for info', { kind, detail });
+    if (detail) return t('{kind} · {detail}', { kind, detail });
+    if (tapForInfo) return t('{kind}  ·  tap for info', { kind });
+    return kind;
+}
 
 interface Props {
     kind: YourChatKind;
@@ -42,7 +51,7 @@ export function ChatOwnerHeader({ kind, name, category, lifecycle, detail, onBac
 
     return (
         <View style={styles.header}>
-            <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={onBack} style={styles.iconBtn}>
+            <Pressable accessibilityRole="button" accessibilityLabel={t('Back')} onPress={onBack} style={styles.iconBtn}>
                 <MaterialCommunityIcons name="arrow-left" size={24} color={colors.text.body} />
             </Pressable>
             <Pressable
@@ -54,11 +63,11 @@ export function ChatOwnerHeader({ kind, name, category, lifecycle, detail, onBac
             >
                 <Text style={styles.title} numberOfLines={1}>{h.title}</Text>
                 <Text style={styles.sub} numberOfLines={1}>
-                    {h.kindWord}{detail ? ` · ${detail}` : ''}{onOpenOwner ? '  ·  tap for info' : ''}
+                    {ownerSubLine(h.kindWord, detail, !!onOpenOwner)}
                 </Text>
             </Pressable>
             {onMenu && (
-                <Pressable accessibilityRole="button" accessibilityLabel="Chat menu" onPress={onMenu} style={styles.iconBtn}>
+                <Pressable accessibilityRole="button" accessibilityLabel={t('Chat menu')} onPress={onMenu} style={styles.iconBtn}>
                     <MaterialCommunityIcons name="dots-vertical" size={24} color={colors.text.body} />
                 </Pressable>
             )}

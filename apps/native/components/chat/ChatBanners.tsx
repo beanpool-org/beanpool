@@ -10,6 +10,7 @@ import { View, Text, Pressable, Modal } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '../../app/ThemeContext';
 import type { ChatStyles } from './styles';
+import { t, word, type WordKey } from '@beanpool/core';
 
 interface BannerProps {
     styles: ChatStyles;
@@ -26,11 +27,11 @@ export function ChatReplyBanner({ styles, author, text, note, onCancel }: Banner
         <View style={styles.replyPreviewContainer}>
             <View style={styles.replyPreviewBar}>
                 <View style={{ flex: 1, borderLeftWidth: 3, borderLeftColor: colors.accent.primary, paddingLeft: 8 }}>
-                    <Text style={styles.replyPreviewAuthor}>Replying to {author}</Text>
+                    <Text style={styles.replyPreviewAuthor}>{t('Replying to {name}', { name: author })}</Text>
                     <Text style={styles.replyPreviewText} numberOfLines={1}>{text}</Text>
                     {note ? <Text style={[styles.replyPreviewText, { fontStyle: 'italic', fontSize: 11 }]}>⚠️ {note}</Text> : null}
                 </View>
-                <Pressable accessibilityRole="button" accessibilityLabel="Cancel reply" onPress={onCancel} style={styles.replyPreviewClose}>
+                <Pressable accessibilityRole="button" accessibilityLabel={t('Cancel reply')} onPress={onCancel} style={styles.replyPreviewClose}>
                     <MaterialCommunityIcons name="close" size={20} color={colors.text.secondary} />
                 </Pressable>
             </View>
@@ -44,10 +45,10 @@ export function ChatEditBanner({ styles, text, onCancel }: Omit<BannerProps, 'au
         <View style={styles.replyPreviewContainer}>
             <View style={styles.replyPreviewBar}>
                 <View style={{ flex: 1, borderLeftWidth: 3, borderLeftColor: colors.brand.primary, paddingLeft: 8 }}>
-                    <Text style={[styles.replyPreviewAuthor, { color: colors.brand.primary }]}>Editing message</Text>
+                    <Text style={[styles.replyPreviewAuthor, { color: colors.brand.primary }]}>{t('Editing message')}</Text>
                     <Text style={styles.replyPreviewText} numberOfLines={1}>{text}</Text>
                 </View>
-                <Pressable accessibilityRole="button" accessibilityLabel="Cancel edit" onPress={onCancel} style={styles.replyPreviewClose}>
+                <Pressable accessibilityRole="button" accessibilityLabel={t('Cancel edit')} onPress={onCancel} style={styles.replyPreviewClose}>
                     <MaterialCommunityIcons name="close" size={20} color={colors.text.secondary} />
                 </Pressable>
             </View>
@@ -62,11 +63,11 @@ export interface ChatMenuItem {
     hidden?: boolean;
 }
 
-/** The mute choices, in the one wording every chat uses. */
-export const MUTE_CHOICES: Array<{ key: '8h' | '1w' | 'always'; label: string }> = [
-    { key: '8h', label: 'For 8 hours' },
-    { key: '1w', label: 'For a week' },
-    { key: 'always', label: 'Always' },
+/** The mute choices, in the one wording every chat uses: word() keys, shown through t(). */
+export const MUTE_CHOICES: Array<{ key: '8h' | '1w' | 'always'; label: WordKey }> = [
+    { key: '8h', label: word('For 8 hours') },
+    { key: '1w', label: word('For a week') },
+    { key: 'always', label: word('Always', 'mute for') },
 ];
 
 interface SheetProps {
@@ -87,14 +88,14 @@ export function ChatMenuSheet({ styles, menuOpen, muteOpen, title, items, muteHi
     const { colors } = useTheme();
     return (
         <Modal visible={menuOpen || muteOpen} transparent animationType="fade" onRequestClose={onClose}>
-            <Pressable style={styles.menuBackdrop} onPress={onClose} accessibilityLabel="Close menu">
+            <Pressable style={styles.menuBackdrop} onPress={onClose} accessibilityLabel={t('Close menu')}>
                 <View style={[styles.menuSheet, { paddingBottom: Math.max(bottomInset, 12) }]}>
-                    <Text style={styles.menuTitle} numberOfLines={1}>{muteOpen ? 'Mute notifications' : title}</Text>
+                    <Text style={styles.menuTitle} numberOfLines={1}>{muteOpen ? t('Mute notifications') : title}</Text>
                     {muteOpen ? (
                         <>
                             {MUTE_CHOICES.map(c => (
                                 <Pressable key={c.key} style={styles.menuRow} onPress={() => onPickMute(c.key)} accessibilityRole="button">
-                                    <Text style={styles.menuLabel}>{c.label}</Text>
+                                    <Text style={styles.menuLabel}>{t(c.label)}</Text>
                                 </Pressable>
                             ))}
                             {!!muteHint && <Text style={styles.menuHint}>{muteHint}</Text>}

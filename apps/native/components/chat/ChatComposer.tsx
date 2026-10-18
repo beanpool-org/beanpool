@@ -20,6 +20,7 @@ import { View, Text, TextInput, Pressable, ActivityIndicator } from 'react-nativ
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '../../app/ThemeContext';
 import { CHAT_INPUT_MAX_HEIGHT, CHAT_INPUT_MIN_HEIGHT, CHAT_INPUT_V_PADDING, type ChatStyles } from './styles';
+import { t } from '@beanpool/core';
 
 export interface ChatComposerHandle {
     /** Put text in the box and in both mirrors — the way an Edit fills it. */
@@ -161,7 +162,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatC
                 />
                 <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel="Send message"
+                    accessibilityLabel={t('Send message')}
                     accessibilityState={{ disabled: !canSend, busy: !!busy }}
                     style={[styles.sendBtn, canSend ? styles.sendBtnActive : styles.sendBtnInactive]}
                     onPress={handleSend}

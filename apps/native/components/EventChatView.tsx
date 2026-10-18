@@ -43,6 +43,7 @@ import { makeChatStyles } from './chat/styles';
 import { ChatMessageList, scrollChatToBottom } from './chat/ChatMessageList';
 import { ChatMessageRow } from './chat/ChatMessageRow';
 import { ChatComposer, type ChatComposerHandle } from './chat/ChatComposer';
+import { t } from '@beanpool/core';
 
 interface Props {
     /** The event's post id, which is also the chat's conversation id. */
@@ -85,7 +86,7 @@ export function EventChatView({ eventId }: Props) {
             yourGroupsStore.markRead(eventId);
         } catch (e: any) {
             // Going, and the host hasn't let them in: said as that, never as "only the host and people going".
-            setError(isWaitingForHost(e) ? eventChatWaitingText() : (e?.message || 'Could not open this event chat.'));
+            setError(isWaitingForHost(e) ? eventChatWaitingText() : (e?.message || t('Could not open this event chat.')));
         }
     }, [eventId, identity?.publicKey]);
 
@@ -121,7 +122,7 @@ export function EventChatView({ eventId }: Props) {
         setTimeout(() => { linkPressedRef.current = false; }, 350);
         const url = normaliseTappedUrl(raw);
         if (!url) return;
-        Linking.openURL(url).catch(() => Alert.alert('Cannot open link', url));
+        Linking.openURL(url).catch(() => Alert.alert(t('Cannot open link'), url));
     }, []);
 
     const send = async (raw: string) => {
@@ -134,7 +135,7 @@ export function EventChatView({ eventId }: Props) {
             await load();
             scrollChatToBottom(listRef, true);
         } catch (e: any) {
-            Alert.alert('Not sent', e?.message || 'Could not reach the node. Try again when you have signal.');
+            Alert.alert(t('Not sent'), e?.message || t('Could not reach the node. Try again when you have signal.'));
         } finally {
             setSending(false);
         }
@@ -142,16 +143,16 @@ export function EventChatView({ eventId }: Props) {
 
     const remove = (item: ChatMessage) => {
         setActiveMessageActionsId(null);
-        const author = item.authorName || (item.senderId || '').slice(0, 8) || 'Member';
-        Alert.alert('Remove this message?', 'It will read "removed by the host" to everyone in the chat.', [
-            { text: 'Keep it', style: 'cancel' },
+        const author = item.authorName || (item.senderId || '').slice(0, 8);
+        Alert.alert(t('Remove this message?'), t('It will read "removed by the host" to everyone in the chat.'), [
+            { text: t('Keep it'), style: 'cancel' },
             {
-                text: 'Remove', style: 'destructive', onPress: async () => {
+                text: t('Remove'), style: 'destructive', onPress: async () => {
                     try {
                         await removeEventChatMessage(eventId, item.id);
                         await load();
                     } catch (e: any) {
-                        Alert.alert('Not removed', e?.message || `Could not remove ${author}'s message.`);
+                        Alert.alert(t('Not removed'), e?.message || (author ? t("Could not remove {name}'s message.", { name: author }) : t("Could not remove this member's message.")));
                     }
                 },
             },
@@ -165,8 +166,8 @@ export function EventChatView({ eventId }: Props) {
         <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
         <ChatOwnerHeader
             kind="event"
-            name={view?.title || 'Event chat'}
-            detail={view?.readOnly ? 'ended' : null}
+            name={view?.title || t('Event chat')}
+            detail={view?.readOnly ? t('ended', undefined, 'event chat') : null}
             onBack={goBack}
             onOpenOwner={() => router.push(`/post/${eventId}`)}
         />
@@ -179,7 +180,7 @@ export function EventChatView({ eventId }: Props) {
                 {header}
                 <Text style={chat.errorText} accessibilityRole="alert">{error}</Text>
                 <Pressable style={chat.retryBtn} accessibilityRole="button" onPress={() => { setError(null); load(); }}>
-                    <Text style={chat.retryText}>Try again</Text>
+                    <Text style={chat.retryText}>{t('Try again')}</Text>
                 </Pressable>
             </View>
         );
@@ -240,8 +241,9 @@ export function EventChatView({ eventId }: Props) {
             {header}
 
             {!!view.privateNote && (
-                <View style={styles.noteBox} accessibilityLabel="Note for people who are going">
-                    <Text style={styles.noteLabel}>📌 NOTE FOR PEOPLE WHO ARE GOING</Text>
+                <View style={styles.noteBox} accessibilityLabel={t('Note for people who are going')}>
+                    {/* Its capitals are in the words, never made in code: a language writes its own. */}
+                    <Text style={styles.noteLabel}>{t('📌 NOTE FOR PEOPLE WHO ARE GOING')}</Text>
                     <Text style={styles.noteText} selectable>{view.privateNote}</Text>
                 </View>
             )}
@@ -260,7 +262,7 @@ export function EventChatView({ eventId }: Props) {
                 onScrollBeginDrag={() => setActiveMessageActionsId(null)}
                 ListEmptyComponent={
                     <Text style={chat.empty}>
-                        {view.readOnly ? 'Nothing was said here.' : 'No messages yet. Say hello.'}
+                        {view.readOnly ? t('Nothing was said here.') : t('No messages yet. Say hello.')}
                     </Text>
                 }
             />
@@ -273,8 +275,8 @@ export function EventChatView({ eventId }: Props) {
                     busy={sending}
                     maxLength={EVENT_CHAT_MESSAGE_MAX}
                     notice={view.notice}
-                    placeholder="Message everyone going…"
-                    accessibilityLabel="Message everyone going"
+                    placeholder={t('Message everyone going…')}
+                    accessibilityLabel={t('Message everyone going')}
                     bottomPadding={keyboardVisible ? 8 : Math.max(insets.bottom, 12)}
                 />
             ) : (

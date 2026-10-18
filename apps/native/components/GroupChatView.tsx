@@ -56,14 +56,18 @@ import { groupKeysLookUnopenable, GroupChatKeyError, GROUP_KEY_WAITING_TEXT, GRO
 import { refusedSendNotice } from '../utils/dm-lock';
 import {
     isMuted, showInvitePrompt as shouldShowInvitePrompt, chatMuteFromRows, chatMuteFromAnswer, muteMenuLabel, chatLifecycleFromRows,
-    ENTERPRISE_CHAT_NOTICE,
+    ENTERPRISE_CHAT_NOTICE, ownerKindName,
     type YourChatMute,
 } from '../utils/your-groups';
 import {
-    buildChatListItems, chatActionErrorMessage, chatListIndexOf, hasAnyAction, isTombstone, messageActions,
-    pendingAfterRead, shouldFollowNewMessages, showsAuthorName, tombstoneText,
+    buildChatListItems, chatActionErrorMessage, chatListIndexOf, formatMessageTime, hasAnyAction, isTombstone, messageActions,
+    pendingAfterRead, shouldFollowNewMessages, showsAuthorName, tombstoneWords,
     type ChatMessage, type ChatViewer,
 } from '../utils/chat-actions';
+// The key and line code above never reaches the words layer: what it writes is translated where it is shown.
+import { chatLineWords } from '../utils/chat-line-words';
+import { NotDeliveredMark } from './chat/NotDeliveredMark';
+import { t, tn } from '@beanpool/core';
 import { normaliseTappedUrl } from '../utils/chat-links';
 import { makeChatStyles } from './chat/styles';
 import { ChatMessageList, scrollChatToBottom } from './chat/ChatMessageList';
@@ -90,6 +94,16 @@ interface Props {
 }
 
 const GROUP_MESSAGE_MAX = 2000;
+
+/** The line above an enterprise chat's box, as a table so it is put through t() where it is shown. */
+const CHAT_NOTICE = { enterprise: ENTERPRISE_CHAT_NOTICE } as const;
+
+/** The header's detail: the member count and whether it is muted, one phrase per variant. */
+function headerDetail(memberCount: number | null, muted: boolean): string | null {
+    if (memberCount != null && muted) return tn(memberCount, '{n} member · muted', '{n} members · muted');
+    if (memberCount != null) return tn(memberCount, '{n} member', '{n} members');
+    return muted ? t('muted', undefined, 'chat') : null;
+}
 
 /**
  * A message this phone is still sending, or could not send. The node holds nothing for it yet, so it lives
@@ -244,7 +258,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
             }
             return msgs;
         } catch (e: any) {
-            setError(e?.message || 'Could not open this chat.');
+            setError(e?.message || t('Could not open this chat.'));
             setRefused(kind === 'group' && (e?.status === 403 || e?.status === 404));
             return null;
         } finally {
@@ -304,7 +318,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
 
     // A project's chat says "project" and 🎯 (§3.1): "Your groups" carries the kind, as it carries the mute.
     const lifecycle = kind === 'enterprise' ? chatLifecycleFromRows(yourGroupsStore.getState().items, id) : undefined;
-    const name = view?.group?.name || group?.name || view?.conversation?.name || initialName || (kind === 'group' ? 'Group' : lifecycle === 'bounded' ? 'Project' : 'Enterprise');
+    const name = view?.group?.name || group?.name || view?.conversation?.name || initialName || ownerKindName(kind, lifecycle);
     const category = view?.group?.category || group?.category || null;
     const rawMessages: any[] = view?.messages || [];
     const isConvenor = !!view?.isConvenor;
@@ -344,7 +358,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
             sendState: p.state,
             outgoing: true,
             rawTimestamp: p.timestamp,
-            timestamp: new Date(p.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            timestamp: formatMessageTime(p.timestamp),
         }));
         return [...fromNode, ...mine];
     }, [rawMessages, rawById, pending, me, kind, locked, thread, keyChanged, changedPhones, myFormer]);
@@ -393,19 +407,14 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
     });
     const muted = isMuted(mute);
 
-    const detail = useMemo(() => {
-        const bits: string[] = [];
-        if (kind === 'group' && activeCount != null) bits.push(`${activeCount} ${activeCount === 1 ? 'member' : 'members'}`);
-        if (muted) bits.push('muted');
-        return bits.join(' · ') || null;
-    }, [kind, activeCount, muted]);
+    const detail = useMemo(() => headerDetail(kind === 'group' ? activeCount : null, muted), [kind, activeCount, muted]);
 
     const openUrl = useCallback((raw: string) => {
         linkPressedRef.current = true;
         setTimeout(() => { linkPressedRef.current = false; }, 350);
         const url = normaliseTappedUrl(raw);
         if (!url) return;
-        Linking.openURL(url).catch(() => Alert.alert('Cannot open link', url));
+        Linking.openURL(url).catch(() => Alert.alert(t('Cannot open link'), url));
     }, []);
 
     /** Deliver one message. Shared by a first send and by a Resend, so both are the same code path. */
@@ -454,7 +463,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
                     await load();
                 } catch (e: any) {
                     await Promise.race([KeyboardController.dismiss(), new Promise(r => setTimeout(r, 400))]);
-                    Alert.alert('Not changed', chatActionErrorMessage(e));
+                    Alert.alert(t('Not changed'), chatActionErrorMessage(e));
                 }
                 return;
             }
@@ -480,13 +489,13 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
         const p = pending.find(x => x.clientId === item.id);
         if (!p) return;
         await Promise.race([KeyboardController.dismiss(), new Promise(r => setTimeout(r, 400))]);
-        Alert.alert('Message not delivered', 'This message could not be sent.', [
-            { text: 'Discard', style: 'destructive', onPress: () => setPending(prev => prev.filter(x => x.clientId !== p.clientId)) },
-            { text: 'Resend', onPress: () => {
+        Alert.alert(t('Message not delivered'), t('This message could not be sent.'), [
+            { text: t('Discard'), style: 'destructive', onPress: () => setPending(prev => prev.filter(x => x.clientId !== p.clientId)) },
+            { text: t('Resend'), onPress: () => {
                 setPending(prev => prev.map(x => (x.clientId === p.clientId ? { ...x, state: 'sending' } : x)));
                 deliver({ ...p, state: 'sending' });
             } },
-            { text: 'Cancel', style: 'cancel' },
+            { text: t('Cancel'), style: 'cancel' },
         ]);
     };
 
@@ -500,23 +509,23 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
             await load();
         } catch (e: any) {
             hapticWarning();
-            Alert.alert('Not reacted', chatActionErrorMessage(e));
+            Alert.alert(t('Not reacted'), chatActionErrorMessage(e));
         }
     };
 
     const removeMessage = async (item: ChatMessage) => {
         setActiveMessageActionsId(null);
         setActiveEmojiPickerId(null);
-        const author = item.authorName || (item.senderId || '').slice(0, 8) || 'this member';
+        const author = item.authorName || (item.senderId || '').slice(0, 8);
         await Promise.race([KeyboardController.dismiss(), new Promise(r => setTimeout(r, 400))]);
-        Alert.alert('Remove this message?', 'It will read "Removed by a convenor" to everyone in the chat.', [
-            { text: 'Keep it', style: 'cancel' },
-            { text: 'Remove', style: 'destructive', onPress: async () => {
+        Alert.alert(t('Remove this message?'), t('It will read "Removed by a convenor" to everyone in the chat.'), [
+            { text: t('Keep it'), style: 'cancel' },
+            { text: t('Remove'), style: 'destructive', onPress: async () => {
                 try {
                     await removeGroupChatMessage(id, item.id);
                     await load();
                 } catch (e: any) {
-                    Alert.alert('Not removed', chatActionErrorMessage(e) || `Could not remove ${author}'s message.`);
+                    Alert.alert(t('Not removed'), chatActionErrorMessage(e) || (author ? t("Could not remove {name}'s message.", { name: author }) : t("Could not remove this member's message.")));
                 }
             } },
         ]);
@@ -526,16 +535,16 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
         setActiveMessageActionsId(null);
         setActiveEmojiPickerId(null);
         await Promise.race([KeyboardController.dismiss(), new Promise(r => setTimeout(r, 400))]);
-        Alert.alert('Delete for everyone?', 'It will read "This message was deleted" to everyone in the chat.', [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Delete', style: 'destructive', onPress: async () => {
+        Alert.alert(t('Delete for everyone?'), t('It will read "This message was deleted" to everyone in the chat.'), [
+            { text: t('Cancel'), style: 'cancel' },
+            { text: t('Delete'), style: 'destructive', onPress: async () => {
                 try {
                     await deleteMessageApi(item.id);
                     hapticSuccess();
                     await load();
                 } catch (e: any) {
                     hapticWarning();
-                    Alert.alert('Not deleted', chatActionErrorMessage(e));
+                    Alert.alert(t('Not deleted'), chatActionErrorMessage(e));
                 }
             } },
         ]);
@@ -549,7 +558,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
             setMute(next);
             yourGroupsStore.setMute(id, next);
         } catch (e: any) {
-            Alert.alert('Not changed', e?.message || 'Could not reach the node.');
+            Alert.alert(t('Not changed'), e?.message || t('Could not reach the node.'));
         }
     };
 
@@ -584,9 +593,9 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
             <View style={[styles.container, { paddingTop: insets.top }]}>
                 <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
                 {header}
-                <Text style={chat.errorText} accessibilityRole="alert">{error}</Text>
+                <Text style={chat.errorText} accessibilityRole="alert">{chatLineWords(error)}</Text>
                 <Pressable style={chat.retryBtn} onPress={() => { setError(null); loadDetails().catch(() => { }); load(); }} accessibilityRole="button">
-                    <Text style={chat.retryText}>Try again</Text>
+                    <Text style={chat.retryText}>{t('Try again')}</Text>
                 </Pressable>
                 {/* Someone removed mid-vote reads no chat, but is still on the vote's roll: a push or Home's line
                     lands them here (info=1), so the votes the node answers them show below (#1784 review B1). */}
@@ -604,7 +613,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
                 <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
                 {header}
                 {/* The chat's outline while it loads: the header already names it, from the tap. */}
-                <View style={chat.listContent} accessibilityRole="progressbar" accessibilityLabel="Loading the chat">
+                <View style={chat.listContent} accessibilityRole="progressbar" accessibilityLabel={t('Loading the chat')}>
                     {[{ w: '62%', mine: false }, { w: '48%', mine: true }, { w: '70%', mine: false }].map((b, i) => (
                         <View key={i} style={[chat.skeletonRow, b.mine && chat.skeletonRowMine]}>
                             <View style={[chat.skeletonBubble, { width: b.w as any }]} />
@@ -618,37 +627,38 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
     const invitePrompt = (
         <View style={styles.inviteCard}>
             <Text style={styles.inviteEmoji} allowFontScaling={false}>👋</Text>
-            <Text style={styles.inviteTitle}>Who do you want to invite?</Text>
+            <Text style={styles.inviteTitle}>{t('Who do you want to invite?')}</Text>
             <Text style={styles.inviteBody}>
-                {name} is ready. It's just you so far — invite the people you want to talk to here.
+                {t("{name} is ready. It's just you so far — invite the people you want to talk to here.", { name })}
             </Text>
             <Pressable
                 style={styles.inviteBigBtn}
                 onPress={() => setInviteOpen(true)}
                 accessibilityRole="button"
-                accessibilityLabel="Invite people"
+                accessibilityLabel={t('Invite people')}
             >
                 <MaterialCommunityIcons name="account-plus" size={22} color={colors.text.inverse} />
-                <Text style={styles.inviteBigText} numberOfLines={1}>Invite people</Text>
+                {/* Shrinks rather than being cut: a longer language's words on the one big button. */}
+                <Text style={[styles.inviteBigText, { flexShrink: 1 }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Invite people')}</Text>
             </Pressable>
             <Pressable
                 style={styles.skipBtn}
                 onPress={() => setInviteSkipped(true)}
                 accessibilityRole="button"
-                accessibilityLabel="Not now. You can invite people later from the menu."
+                accessibilityLabel={t('Not now. You can invite people later from the menu.')}
             >
-                <Text style={styles.skipText}>Not now</Text>
+                <Text style={styles.skipText}>{t('Not now')}</Text>
             </Pressable>
-            <Text style={styles.inviteHint}>You can invite people any time from the ⋮ menu.</Text>
+            <Text style={styles.inviteHint}>{t('You can invite people any time from the ⋮ menu.')}</Text>
         </View>
     );
 
     const menuItems: ChatMenuItem[] = [
-        { icon: 'account-plus', label: 'Invite people', hidden: kind !== 'group' || !isConvenor, onPress: () => { setMenuOpen(false); setInviteOpen(true); } },
+        { icon: 'account-plus', label: t('Invite people'), hidden: kind !== 'group' || !isConvenor, onPress: () => { setMenuOpen(false); setInviteOpen(true); } },
         { icon: muted ? 'bell-ring-outline' : 'bell-off-outline', label: muteMenuLabel(mute), onPress: () => { setMenuOpen(false); if (muted) setMuteTo('off'); else setMuteOpen(true); } },
-        { icon: 'magnify', label: 'Search this chat', hidden: kind !== 'group', onPress: () => { setMenuOpen(false); setSearchOpen(true); } },
-        { icon: 'cellphone-check', label: NEW_PHONE_CONFIRM_MENU, hidden: kind !== 'group', onPress: () => { setMenuOpen(false); router.push('/confirm-new-phone'); } },
-        { icon: 'information-outline', label: kind === 'group' ? 'Group info' : 'Enterprise page', onPress: () => { setMenuOpen(false); openOwner(); } },
+        { icon: 'magnify', label: t('Search this chat'), hidden: kind !== 'group', onPress: () => { setMenuOpen(false); setSearchOpen(true); } },
+        { icon: 'cellphone-check', label: chatLineWords(NEW_PHONE_CONFIRM_MENU), hidden: kind !== 'group', onPress: () => { setMenuOpen(false); router.push('/confirm-new-phone'); } },
+        { icon: 'information-outline', label: kind === 'group' ? t('Group info') : t('Enterprise page'), onPress: () => { setMenuOpen(false); openOwner(); } },
     ];
 
     const renderMessage = (item: ChatMessage) => {
@@ -663,11 +673,11 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
         const quote = item.metadata?.replyToId ? (() => {
             const parent = messagesById.get(item.metadata.replyToId);
             const parentText = !parent
-                ? 'Message not found'
-                : isTombstone(parent) ? tombstoneText(parent, kind) : parent.text;
+                ? t('Message not found')
+                : isTombstone(parent) ? tombstoneWords(parent, kind) : parent.unattributed ? chatLineWords(parent.text) : parent.text;
             const parentAuthor = !parent
-                ? 'Someone'
-                : (me && parent.senderId === me) ? 'You' : (parent.authorName || (parent.senderId || '').slice(0, 8) || 'Someone');
+                ? t('Someone')
+                : (me && parent.senderId === me) ? t('You') : (chatLineWords(parent.authorName) || (parent.senderId || '').slice(0, 8) || t('Someone'));
             return {
                 author: parentAuthor,
                 text: parentText,
@@ -686,7 +696,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
             item.sendState === 'sending' ? (
                 <Text style={{ fontSize: 10, color: colors.chat.tickUnread }}> ◷</Text>
             ) : item.sendState === 'failed' ? (
-                <Text style={{ fontSize: 10, color: colors.feedback.danger.fg, fontWeight: '800' }}> ! not delivered</Text>
+                <NotDeliveredMark color={colors.feedback.danger.fg} />
             ) : (
                 // One tick: the node has it. A group has no single reader, so there is no second tick to earn.
                 <Text style={{ fontSize: 10, color: colors.chat.tickUnread }}> ✓</Text>
@@ -732,13 +742,14 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
                 onRemove={() => removeMessage(item)}
                 onPickEmoji={emoji => react(item.id, emoji)}
                 onPressUrl={openUrl}
-                authorLabel={showAuthorById.get(item.id) ? (item.authorName || (item.senderId || '').slice(0, 8)) : null}
+                // A name the line code wrote ("A former member") in the member's language; a member's own name as it is.
+                authorLabel={showAuthorById.get(item.id) ? (chatLineWords(item.authorName) || (item.senderId || '').slice(0, 8)) : null}
                 quote={quote}
                 status={status}
             />
             {/* The message's details, with its actions: an earlier key of the member's, or a name on a new key (§6). */}
             {activeMessageActionsId === item.id && !!item.integrityNote && (
-                <Text style={styles.sealedDetails} accessibilityRole="text">{item.integrityNote}</Text>
+                <Text style={styles.sealedDetails} accessibilityRole="text">{chatLineWords(item.integrityNote)}</Text>
             )}
             </>
         );
@@ -750,12 +761,12 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
             {header}
 
             {!!view.readOnly && (
-                <Text style={styles.readOnly} numberOfLines={3}>This chat is read-only now.</Text>
+                <Text style={styles.readOnly} numberOfLines={3}>{t('This chat is read-only now.')}</Text>
             )}
 
             {locked && (thread?.waitingForNextKey || groupKeysLookUnopenable()) && (
                 <Text style={styles.readOnly} accessibilityRole="text">
-                    {groupKeysLookUnopenable() ? GROUP_KEYS_UNOPENABLE_TEXT : GROUP_KEY_WAITING_TEXT}
+                    {chatLineWords(groupKeysLookUnopenable() ? GROUP_KEYS_UNOPENABLE_TEXT : GROUP_KEY_WAITING_TEXT)}
                 </Text>
             )}
 
@@ -766,16 +777,16 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
                         style={styles.searchInput}
                         value={searchQuery}
                         onChangeText={setSearchQuery}
-                        placeholder="Search this chat"
+                        placeholder={t('Search this chat')}
                         placeholderTextColor={colors.text.muted}
                         autoFocus
-                        accessibilityLabel="Search this chat"
+                        accessibilityLabel={t('Search this chat')}
                         returnKeyType="search"
                     />
                     <Pressable
                         onPress={() => { setSearchOpen(false); setSearchQuery(''); }}
                         accessibilityRole="button"
-                        accessibilityLabel="Close search"
+                        accessibilityLabel={t('Close search')}
                         style={styles.searchClose}
                         hitSlop={8}
                     >
@@ -795,11 +806,11 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
                 // Inverted: the footer is what renders at the visual TOP, above the oldest message.
                 ListFooterComponent={showInvitePrompt ? invitePrompt : null}
                 ListEmptyComponent={
-                    searchOpen && searchQuery.trim() ? <Text style={chat.empty}>No messages match.</Text> : showInvitePrompt ? null : (
+                    searchOpen && searchQuery.trim() ? <Text style={chat.empty}>{t('No messages match.')}</Text> : showInvitePrompt ? null : (
                         <Text style={chat.empty}>
                             {invitedCount > 0 && aloneInGroup
-                                ? `${invitedCount} ${invitedCount === 1 ? 'invitation' : 'invitations'} sent. You'll see people here as they join.`
-                                : 'No messages yet. Say hello.'}
+                                ? tn(invitedCount, "{n} invitation sent. You'll see people here as they join.", "{n} invitations sent. You'll see people here as they join.")
+                                : t('No messages yet. Say hello.')}
                         </Text>
                     )
                 }
@@ -816,19 +827,20 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
             {replyToMessage && !editingMessage && (
                 <ChatReplyBanner
                     styles={chat}
-                    author={me && replyToMessage.senderId === me ? 'You' : (replyToMessage.authorName || 'Someone')}
+                    author={me && replyToMessage.senderId === me ? t('You') : (replyToMessage.authorName || t('Someone'))}
                     text={replyToMessage.text}
                     onCancel={() => setReplyToMessage(null)}
                 />
             )}
 
             {securing && (
-                <Text style={styles.securing} accessibilityRole="progressbar" accessibilityLabel={`Securing the chat for ${securing.total} people`}>
-                    Securing the chat for {securing.total} people… {securing.done} of {securing.total}
+                // Shown from 10 people up; English writes one form for both, a language with more forms has them.
+                <Text style={styles.securing} accessibilityRole="progressbar" accessibilityLabel={tn(securing.total, 'Securing the chat for {n} people', 'Securing the chat for {n} people')}>
+                    {tn(securing.total, 'Securing the chat for {n} people… {done} of {n}', 'Securing the chat for {n} people… {done} of {n}', { done: securing.done })}
                 </Text>
             )}
             {!!keyNotice && !securing && (
-                <Text style={styles.keyNotice} accessibilityRole="alert">{keyNotice}</Text>
+                <Text style={styles.keyNotice} accessibilityRole="alert">{chatLineWords(keyNotice)}</Text>
             )}
 
             {canPost && (
@@ -839,10 +851,10 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
                     busy={sending}
                     maxLength={GROUP_MESSAGE_MAX}
                     // The phone's own words for what it decided, never the node's notice (finding 4).
-                    notice={kind === 'group' ? groupChatNotice({ nodeSaysLocked: chatIsLocked(view), seenLocked }) : view.notice}
+                    notice={kind === 'group' ? chatLineWords(groupChatNotice({ nodeSaysLocked: chatIsLocked(view), seenLocked })) : t(CHAT_NOTICE.enterprise)}
                     // A long name wrapped the placeholder to three lines at 320dp; short ones read better named.
-                    placeholder={name.length <= 18 ? `Message ${name}…` : (kind === 'group' ? 'Message the group…' : 'Message…')}
-                    accessibilityLabel={`Message ${name}`}
+                    placeholder={name.length <= 18 ? t('Message {name}…', { name }) : (kind === 'group' ? t('Message the group…') : t('Message…'))}
+                    accessibilityLabel={t('Message {name}', { name })}
                     bottomPadding={keyboardVisible ? 8 : Math.max(insets.bottom, 12)}
                 />
             )}
@@ -854,7 +866,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
                 title={name}
                 items={menuItems}
                 // Only a group's chat sends @mention pushes; an enterprise thread has none to let through.
-                muteHint={kind === 'group' ? '@mentions still reach you.' : null}
+                muteHint={kind === 'group' ? t('@mentions still reach you.') : null}
                 onClose={() => { setMenuOpen(false); setMuteOpen(false); }}
                 onPickMute={setMuteTo}
                 bottomInset={insets.bottom}

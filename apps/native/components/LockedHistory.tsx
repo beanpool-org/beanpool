@@ -11,6 +11,9 @@ import { useTheme } from '../app/ThemeContext';
 import type { AppColors } from '../constants/colors';
 import { makeChatStyles } from './chat/styles';
 import { LOCKED_HISTORY_ASK, LOCKED_HISTORY_KEEP, LOCKED_HISTORY_SHEET_BODY, LOCKED_HISTORY_SHEET_TITLE, LOCKED_HISTORY_WORDS } from '../utils/group-history-unlock';
+// group-history-unlock.ts is on the 12 words' key path and never reaches the words layer: its sentences are translated here.
+import { chatLineWords } from '../utils/chat-line-words';
+import { t } from '@beanpool/core';
 
 const makeStyles = (colors: AppColors) => StyleSheet.create({
     systemWrap: { alignItems: 'center', marginVertical: 6, paddingHorizontal: 16 },
@@ -36,8 +39,8 @@ export function SealedNoticeLine({ name, text, details }: { name: string | null;
     const styles = useStyles();
     return (
         <View style={styles.systemWrap} accessibilityRole="text">
-            <Text style={styles.sealedText}>{name ? `${name}: ${text}` : text}</Text>
-            {!!details && <Text style={styles.sealedDetails}>{details}</Text>}
+            <Text style={styles.sealedText}>{name ? t('{name}: {text}', { name: chatLineWords(name), text: chatLineWords(text) }) : chatLineWords(text)}</Text>
+            {!!details && <Text style={styles.sealedDetails}>{chatLineWords(details)}</Text>}
         </View>
     );
 }
@@ -48,7 +51,7 @@ export function LockedHistoryRow({ text, onPress }: { text: string; onPress: () 
     return (
         <View style={styles.systemWrap}>
             <Pressable onPress={onPress} accessibilityRole="button" style={styles.row}>
-                <Text style={styles.rowText}>{text}</Text>
+                <Text style={styles.rowText}>{chatLineWords(text)}</Text>
             </Pressable>
         </View>
     );
@@ -71,15 +74,15 @@ export function LockedHistorySheet({ open, bottomInset, onClose, onWords, onAsk 
     ];
     return (
         <Modal visible={open} transparent animationType="fade" onRequestClose={onClose}>
-            <Pressable style={styles.menuBackdrop} onPress={onClose} accessibilityLabel="Close">
+            <Pressable style={styles.menuBackdrop} onPress={onClose} accessibilityLabel={t('Close')}>
                 <View style={[styles.menuSheet, { paddingBottom: Math.max(bottomInset, 12) }]}>
-                    <Text style={[styles.menuTitle, { textTransform: 'none' }]}>{LOCKED_HISTORY_SHEET_TITLE}</Text>
+                    <Text style={[styles.menuTitle, { textTransform: 'none' }]}>{chatLineWords(LOCKED_HISTORY_SHEET_TITLE)}</Text>
                     {/* text.secondary, not menuHint's muted grey: 2.6:1 on the sheet in light, 3.6:1 in dark (e2e/locked-history-320.mjs). */}
-                    <Text style={[styles.menuHint, { color: colors.text.secondary }]}>{LOCKED_HISTORY_SHEET_BODY}</Text>
+                    <Text style={[styles.menuHint, { color: colors.text.secondary }]}>{chatLineWords(LOCKED_HISTORY_SHEET_BODY)}</Text>
                     {rows.map(([icon, label, onPress]) => (
                         <Pressable key={label} style={styles.menuRow} onPress={onPress} accessibilityRole="button">
                             <MaterialCommunityIcons name={icon as any} size={22} color={colors.text.body} />
-                            <Text style={[styles.menuLabel, { paddingVertical: 8 }]}>{label}</Text>
+                            <Text style={[styles.menuLabel, { paddingVertical: 8 }]}>{chatLineWords(label)}</Text>
                         </Pressable>
                     ))}
                 </View>

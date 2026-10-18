@@ -4,8 +4,8 @@
  *
  * ## Where a knock goes, and with which key
  *
- * To the community itself, at the address the directory gives for it (`communityOrigin`: https, a host name,
- * never the global node), signed with the member's OWN key, the same key on every node (one identity per
+ * To the community itself, at the address the directory gives for it (`communityOrigin`: https, a host name or a public
+ * IPv4 address, never the global node), signed with the member's OWN key, the same key on every node (one identity per
  * device). Nothing goes through the global node, which records no knocks. The signer is the only applicant a
  * community sees: the body names no key, and it says where the app came from as `fromNode`, never `from` (the
  * node's signature check reads a `from` field as the sender's key and refuses any other).

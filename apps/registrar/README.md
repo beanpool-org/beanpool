@@ -59,7 +59,8 @@ Full design: [`docs/node-dns-registrar.md`](../../docs/node-dns-registrar.md).
   one. While a run (below) is open on a name, an `ok` is asked again, up to three answers in all: two connectors on
   one tunnel share its visitors, and the owner's answer must not hide the other one. This holds only for a wrong key or a page: a second connector that answers `/api/attest` with an error (4xx/5xx) is `unverifiable`, never opens a run, and is not detected (New tunnel key cuts it off). Phase 2 runs only if the sweep
   is believable: a configured `CANARY_NAME` attested `ok`, impostors and content swaps together ≤ max(2, 10% of
-  live) and not every live name, unverifiable ≤ half of live. Otherwise it acts on no row and logs
+  live) and not every live name, unverifiable ≤ half of live, and its settings read (a read D1 fails leaves the limits
+  unknown: `suspended:settings`). Otherwise it acts on no row and logs
   `[ATTEST_SWEEP] suspended:…`. Two runs are counted, over applied sweeps in a row: impostor verdicts (the setting
   `attest_fail_limit`), or sweeps of foreign answers (`swap_fail_limit`, design D2 = b) (an
   impostor or a content swap; a swap counts only in a sweep that saw the verifier work: the canary `ok`, or with
@@ -149,7 +150,7 @@ The Worker tells its admin, through one [ntfy](https://ntfy.sh) topic, what only
 | A new community's (auto) name went live | default | names |
 | The sweep paused a name (another node's key, or a content swap) | high | names |
 | A heal refused, a name repaired by the registrar | low | names |
-| The sweep suspended itself (canary, mass, unverifiable) — raised, still every 24 h, cleared | urgent | health |
+| The sweep suspended itself (canary, mass, unverifiable, settings unread) — raised, still every 24 h, cleared | urgent | health |
 | Deletions Cloudflare has refused for over a day; the nonce table missing — raised, still, cleared | default | health |
 | Your own approve, pause, resume, block, release | low | admin |
 
@@ -248,7 +249,9 @@ refuse; "open code, private settings"; the DNS cap). Migration 0011.
   per-source, per-network and global budgets of new names, names per key, probation, the sweep's strikes and the DNS
   capacity and its two lines. Each is read once a request that needs it: a valid D1 row, else the Worker var a
   self-hoster may set (`CLAIM_LIMIT_PER_KEY`, `NEW_NAMES_PER_HOUR`, `NEW_NAMES_PER_DAY`, `ATTEST_FAIL_LIMIT`,
-  `SWAP_FAIL_LIMIT`, `CAPACITY`), else the default. Every change is told to the admin's phone, with its value. This
+  `SWAP_FAIL_LIMIT`, `CAPACITY`), else the default. Every change is told to the admin's phone, with its value. A read
+  D1 fails (overloaded, a connection lost) is never taken for a database without the table: a new name's claim answers
+  5xx, which its node retries, and the sweep acts on no verdict. This
   README and `wrangler.toml` say what each limit is for, never the live number.
 - **A node never needs any of this** (no lock-in): a name is a convenience; a node keeps serving on its own address
   whatever the registrar holds or decides.

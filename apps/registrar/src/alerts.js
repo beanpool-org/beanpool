@@ -204,6 +204,7 @@ const SUSPENDED = {
     'suspended:canary': (env) => `the canary ${env.CANARY_NAME} did not attest ok`,
     'suspended:mass': (env, s) => `mass (${s.impostor + (s.content_swap || 0)} of ${s.live} live names answered as someone else). The 24 Sep failure looked like this`,
     'suspended:unverifiable': (env, s) => `${s.unverifiable} of ${s.live} live names could not be verified`,
+    'suspended:settings': () => 'the registrar could not read its settings from D1, so the limits a verdict counts against are unknown',
 };
 export function sweepCondition(env, s) {
     const why = SUSPENDED[s.action];

@@ -1917,10 +1917,12 @@ export function swapFailLimit(env) {
 //     would otherwise pause every name.
 //   - unverifiable must not exceed half of live: a registrar that can't see most of the world shouldn't trust
 //     what it thinks it sees in the rest.
+//   - its settings must have been read (`limitsRead`): the limits a verdict counts against are D1 rows (src/settings.js),
+//     and the env's or the defaults may be other numbers than the admin's.
 // verifiedSweep: an applied sweep in which the verifier was seen working — the canary 'ok', or with no canary
 // configured at least one name 'ok'. Only such a sweep counts a content swap (design D2: "the canary passed in every
 // one of them").
-function judgeSweep(env, results) {
+function judgeSweep(env, results, limitsRead = true) {
     const count = (v) => results.filter((r) => r.verdict === v).length;
     const s = {
         live: results.length, ok: count('ok'), unverifiable: count('unverifiable'), impostor: count('impostor'),
@@ -1928,7 +1930,8 @@ function judgeSweep(env, results) {
     };
     const many = s.impostor + s.content_swap;
     const canary = env.CANARY_NAME ? results.find((r) => r.a.name === env.CANARY_NAME) : null;
-    if (env.CANARY_NAME && canary?.verdict !== 'ok') s.action = 'suspended:canary';
+    if (!limitsRead) s.action = 'suspended:settings';
+    else if (env.CANARY_NAME && canary?.verdict !== 'ok') s.action = 'suspended:canary';
     else if (many > Math.max(2, s.live * 0.1) || (s.live > 0 && many === s.live)) s.action = 'suspended:mass';
     else if (s.unverifiable > s.live / 2) s.action = 'suspended:unverifiable';
     else s.action = 'applied';
@@ -2008,8 +2011,11 @@ async function applyVerdict(env, r, limits, verified, verifiedNow = []) {
 export async function attestSweep(invocationEnv) {
     const d1 = d1Meter(invocationEnv);
     const env = d1.env;
-    const s = await settings.read(env);                         // the live limits (src/settings.js), in one read
-    const limits = {
+    // The live limits (src/settings.js), in one read. One that fails (D1 overloaded, a connection lost) leaves `s` null:
+    // the sweep is suspended (judgeSweep), since the limits a verdict counts against are unknown (review of #2132).
+    let s = null;
+    try { s = await settings.read(env); } catch (e) { console.error('[SWEEP_SETTINGS]', e.message || e); }
+    const limits = s && {
         impostor: s.attest_fail_limit,                          // consecutive IMPOSTOR verdicts before a pause
         swap: s.swap_fail_limit,                                // consecutive sweeps of foreign answers before a pause
         probation_sweeps: s.probation_sweeps, probation_s: s.probation_s,
@@ -2021,7 +2027,7 @@ export async function attestSweep(invocationEnv) {
         results.push(...await Promise.all(live.slice(i, i + BATCH).map(async (a) => ({ a, ...(await sight(env, a)) }))));
     }
 
-    const j = judgeSweep(env, results);
+    const j = judgeSweep(env, results, !!s);
     try { await db.insertSweepLog(env, j, nowS()); } catch (e) { console.error('[SWEEP_LOG]', e.message || e); }
     const line = `[ATTEST_SWEEP] ${j.action} live=${j.live} ok=${j.ok} unverifiable=${j.unverifiable} impostor=${j.impostor} content_swap=${j.content_swap}`;
     if (j.action !== 'applied') {

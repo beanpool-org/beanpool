@@ -59,15 +59,18 @@ export function resolve(env, rows = new Map(), schema = true) {
 }
 
 // The settings, in one D1 read. A database without the table (a Worker deployed before its migration) gets the defaults
-// and `schema: false`, which the callers read as "migration 0011 is not applied": nothing of it is written then.
+// and `schema: false`, which the callers read as "migration 0011 is not applied": nothing of it is written then. Any other
+// failure (D1 overloaded, a connection lost) is thrown, never read as that (review of #2132): a claim then answers 5xx,
+// which its node retries, rather than skip the blocks, the holds and probation; the sweep acts on no verdict (attestSweep).
 export async function read(env) {
+    let rs;
     try {
-        const rs = (await env.DB.prepare('SELECT key, value, updated_at, updated_by FROM settings').all()).results || [];
-        return resolve(env, new Map(rs.map((r) => [r.key, r])));
+        rs = (await env.DB.prepare('SELECT key, value, updated_at, updated_by FROM settings').all()).results || [];
     } catch (e) {
-        if (!/no such table/i.test(String(e?.message || e))) console.error('[SETTINGS]', e.message || e);
+        if (!/no such table/i.test(String(e?.message || e))) throw e;
         return resolve(env, new Map(), false);
     }
+    return resolve(env, new Map(rs.map((r) => [r.key, r])));
 }
 
 // Is the switch on at `now`?

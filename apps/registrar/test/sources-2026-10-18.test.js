@@ -577,11 +577,51 @@ test('the daily line says while "Hold all new names" is on', async () => {
         await dailyLine(w.env, [], at + 86400);
         const next = w.sqlite.prepare("SELECT body FROM alert_outbox WHERE category = 'summary' ORDER BY id DESC").get().body;
         assert.doesNotMatch(next, /Hold all new names/);
+        // A read of the switch that fails (D1 busy) says so, and the rest of the line still goes.
+        w.sqlite.prepare('DELETE FROM watch_marks').run();
+        w.failSettingsRead();
+        assert.equal(await dailyLine(w.env, [], at + 2 * 86400), true);
+        const third = w.sqlite.prepare("SELECT body FROM alert_outbox WHERE category = 'summary' ORDER BY id DESC").get().body;
+        assert.match(third, /Hold all new names: its setting could not be read just now/);
     } finally { w.restore(); }
 });
 
 // Review of #2132: a settings read that fails (D1 overloaded, a connection lost) is not a database without migration
-// 0011. Read as one, the sweep finished held names as orphans.
+// 0011. Read as one, a claim skipped the blocks, the holds, the source record and probation, and the sweep finished held
+// names as orphans.
+test('a settings read that fails stops a new name with a 5xx (its node retries): a blocked network and "Hold all new names" are never skipped', async () => {
+    const w = await sourceWorld();
+    try {
+        assert.equal((await admin(w, 'blocked', { kind: 'asn', value: 64500 })).status, 200);
+        assert.equal((await claimFrom(w, FROM.bot, await makeKey(), { name: 'blocked-a' })).status, 403);
+        w.failSettingsRead();
+        const r = await claimFrom(w, FROM.bot, await makeKey(), { name: 'blocked-b' });
+        assert.equal(r.status, 500, JSON.stringify(r.body));
+        assert.equal(row(w, 'blocked-b'), undefined, 'nothing written');
+        assert.equal(liveTunnels(w), 0, 'nothing made at Cloudflare');
+        assert.equal((await claimFrom(w, FROM.bot, await makeKey(), { name: 'blocked-b' })).status, 403, 'read again: blocked');
+        // The switch, the same.
+        await admin(w, 'settings', { hold: true });
+        assert.equal((await claimFrom(w, FROM.home, await makeKey(), { name: 'held-a' })).body.status, 'pending');
+        w.failSettingsRead();
+        const h = await claimFrom(w, FROM.home, await makeKey(), { name: 'held-b' });
+        assert.equal(h.status, 500, JSON.stringify(h.body));
+        assert.equal(row(w, 'held-b'), undefined);
+        assert.equal(liveTunnels(w), 0);
+        assert.equal(w.sqlite.prepare("SELECT COUNT(*) AS n FROM claim_sources WHERE name = 'held-b'").get().n, 0);
+        // A key taking back its own release reads them too (its claim limit): it waits as well, its row as it was.
+        await admin(w, 'settings', { hold: false });
+        const own = await makeKey();
+        const LONE = { ip: '203.0.113.40', cf: {} };   // a network not blocked above
+        assert.equal((await claimFrom(w, LONE, own, { name: 'mine' })).body.status, 'live');
+        assert.equal((await w.release(own)).body.status, 'released');
+        w.failSettingsRead();
+        assert.equal((await claimFrom(w, LONE, own, { name: 'mine' })).status, 500);
+        assert.equal(row(w, 'mine').status, 'released');
+        assert.equal((await claimFrom(w, LONE, own, { name: 'mine' })).status, 200);
+    } finally { w.restore(); }
+});
+
 test('a sweep whose settings read fails never finishes a held name as an orphan, and still finishes a real one', async () => {
     const w = await sourceWorld();
     try {
@@ -617,5 +657,31 @@ test('on a database without migration 0011 (no held_reason) the sweep still fini
         w.sqlite.prepare("UPDATE name_allocations SET requested_at = requested_at - 600 WHERE name = 'oldorphan'").run();
         await attestSweep(w.env);
         assert.equal(row(w, 'oldorphan').status, 'live');
+    } finally { w.restore(); }
+});
+
+test('a sweep whose settings read fails acts on no verdict — no strike, no pause, no probation counted — and is logged suspended and told', async () => {
+    const w = await sourceWorld();
+    try {
+        const a = await makeKey(), b = await makeKey(), stranger = await makeKey();
+        assert.equal((await claimFrom(w, FROM.home, a, { name: 'steady' })).body.status, 'live');
+        assert.equal((await claimFrom(w, FROM.other, b, { name: 'twin' })).body.status, 'live');
+        w.nodes['steady.beanpool.org'] = attestsAs(a);
+        w.nodes['twin.beanpool.org'] = attestsAs(stranger);
+        w.setting('attest_fail_limit', 5);   // the admin's, over the env's 2
+        const facts = () => [row(w, 'steady').ok_sweeps, row(w, 'twin').attest_fails, row(w, 'twin').status];
+        assert.equal((await attestSweep(w.env)).action, 'applied');
+        assert.deepEqual(facts(), [1, 1, 'live']);
+        w.failSettingsRead();
+        assert.equal((await attestSweep(w.env)).action, 'suspended:settings');
+        assert.deepEqual(facts(), [1, 1, 'live'], 'nothing counted and nothing paused: not by the env\'s limit either');
+        assert.equal(w.sqlite.prepare('SELECT action FROM sweep_log ORDER BY id DESC LIMIT 1').get().action, 'suspended:settings');
+        const t = told(w, 'Attest sweep suspended');
+        assert.equal(t.length, 1, JSON.stringify(t));
+        assert.match(t[0].body, /could not read its settings/);
+        // Read again: the sweep acts, by the admin's limit.
+        assert.equal((await attestSweep(w.env)).action, 'applied');
+        assert.deepEqual(facts(), [2, 2, 'live']);
+        assert.equal(told(w, 'Resolved: Attest sweep suspended').length, 1);
     } finally { w.restore(); }
 });

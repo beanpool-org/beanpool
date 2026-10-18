@@ -18,7 +18,7 @@ import { useStyles } from '../app/ThemeContext';
 import { anchorUrl as getAnchorUrl } from '../utils/node-post';
 import { cachedNodeRole } from '../utils/node-admin';
 import {
-    OWNER_WORDS_COPY as COPY, cachedOwnerWordsStatus, readLaterRound, rememberLater, shouldPromptOwner,
+    cachedOwnerWordsStatus, readLaterRound, rememberLater, shouldPromptOwner,
     type OwnerWordsStatus,
 } from '../utils/owner-words';
 import { runLockOpenCheck } from '../utils/takeover-unlock';

@@ -28,9 +28,11 @@
  *                                                 list (node_config.ownerAddresses, carried in the take-over envelope).
  *                                                 A lost name is refused (409, with why): confirming it would not bring it
  *                                                 back, since the mark is per host, whatever lists it.
- *   POST /api/local/admin/app-addresses/remove   { address }: takes an owner-confirmed address off the list again; an own
- *                                                 address that is also the community's address (`publicAddress`
- *                                                 `ip`/`own`, beanpool claim --ip/--address) stops being that too.
+ *   POST /api/local/admin/app-addresses/remove   { address, code? }: takes an owner-confirmed address off the list again,
+ *                                                 an owner's, with the owner's fresh proof (admin-auth.ts
+ *                                                 requireFreshProof); an own address that is also the community's address
+ *                                                 (`publicAddress` `ip`/`own`, beanpool claim --ip/--address) stops being
+ *                                                 that too.
  *
  * An address is only ever added by an owner or admin here, or by config the operator set (the registrar's name,
  * CF_RECORD_NAME, BEANPOOL_ADDRESSES). Never from a request's Host header.
@@ -49,7 +51,7 @@ import {
 } from '../engine/member-signature.js';
 import { offerablePageHost, offerStanding, type AddressSighting, type HeldBackReason } from '../engine/address-offers.js';
 import { logger } from '../logger.js';
-import { requireAdminRole } from '../admin-auth.js';
+import { requireAdminRole, requireFreshProof } from '../admin-auth.js';
 import type { RouteDeps } from './types.js';
 
 // The bound on the owner-confirmed list lives with the list (own-addresses.ts); `beanpool claim --ip/--address` adds to it too.
@@ -156,11 +158,15 @@ export function createAppAddressesRoutes(deps: RouteDeps): Router {
         ctx.body = appAddressesReport(ctx.query.host);
     });
 
-    // Members' apps that sign for a removed address are refused after it, a quiet lock-out: an owner's (design case 18, B6).
+    // Members' apps that sign for a removed address are refused after it, a quiet lock-out: an owner's (design case 18, B6),
+    // with the owner's fresh proof each time, as releasing a name and taking the community offline ask (HTTPS S4: an own IP
+    // or domain is removed here, and with it, when it is, the community's address). Asked after the address is found, so
+    // a request for one that is not listed spends no code (#2002 NB1).
     router.post('/api/local/admin/app-addresses/remove', async (ctx) => {
         if (!(await checkAdminAuth(ctx as any))) return;
         if (!requireAdminRole(ctx, ['owner'], 'Only an owner of this node can remove an app address')) return;
-        const address = normalizeAddress(bodyOf(ctx).address);
+        const body = bodyOf(ctx);
+        const address = normalizeAddress(body.address);
         // The list as this node reads it (and Settings shows it), not as stored: a take-over envelope stores the
         // primary's list as it came, and an address accepted as this community's must be one Settings can remove.
         const current = ownerConfirmedAddresses();
@@ -169,6 +175,7 @@ export function createAppAddressesRoutes(deps: RouteDeps): Router {
             ctx.body = { error: 'That address is not one confirmed in Settings. Addresses from the registrar or the server’s own settings are changed there.' };
             return;
         }
+        if (!(await requireFreshProof(ctx, body.code, `remove ${address}`))) return;
         // An own address (`beanpool claim --ip/--address`) is also the community's address while it holds no BeanPool name
         // (services/public-address-agent.ts storeOwnAddress): removed, it is that no longer either, or it would stay accepted.
         const pa = getNodeConfig().publicAddress;

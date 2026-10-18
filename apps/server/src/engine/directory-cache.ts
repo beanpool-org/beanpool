@@ -490,7 +490,7 @@ export interface CommunityQuery {
 }
 
 /** A new shuffle for one read. */
-export function newDirectoryOrder(): number {
+function newDirectoryOrder(): number {
     return crypto.randomInt(0, 0x1_0000_0000);
 }
 

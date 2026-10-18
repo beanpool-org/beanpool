@@ -172,7 +172,7 @@ export function directoryPromiseSaved(): void {
     communityNameSaved();
 }
 
-/** Fields the registry's schema took before the listing promise (mothership A2): the push without them is the old one. */
+/** The fields a registry from before the listing promise (mothership A2) doesn't know: the push without them is the old one. */
 const LISTING_FIELDS: (keyof ListingFields)[] = ['promise', 'acceptingKnocks', 'closingOn'];
 
 /** Signs `payload` with the node key and POSTs it to the registry. Throws on a network failure; the answer is the caller's. */
@@ -220,9 +220,15 @@ export async function pushDirectoryNow() {
         const timestamp = Date.now();
         
         // The listing promise (engine/directory-promise.ts), measured now: left out (null) when a measured line fails,
-        // and the log says why, as the owners' diagnostics do. Counts and booleans only.
-        const listing = listingFields();
-        if (!listing.status.kept && !listing.status.gaps.includes('not_made')) {
+        // and the log says why, as the owners' diagnostics do. Counts and booleans only. A measurement that fails sends
+        // none of the three: it must never cost the community its listing.
+        let listing: ReturnType<typeof listingFields> | null = null;
+        try {
+            listing = listingFields();
+        } catch (e: any) {
+            console.error(`[Directory] Could not measure the listing promise, pushed without it: ${e?.message || e}`);
+        }
+        if (listing && !listing.status.kept && !listing.status.gaps.includes('not_made')) {
             console.log(`[Directory] The listing promise is left out of this push: ${listing.status.gaps.map(g => PROMISE_GAP_MESSAGES[g]).join(' ')}`);
         }
 
@@ -236,7 +242,7 @@ export async function pushDirectoryNow() {
             contactEmail: null,
             contactPhone: null,
             ...directoryInfo,
-            ...listing.fields,
+            ...listing?.fields,
         };
 
         let res = await signedPush(payload, privateKey);
@@ -245,7 +251,7 @@ export async function pushDirectoryNow() {
         // registry that refuses a field it doesn't know must not cost the community its listing: it is pushed again
         // as before, without them, signed afresh.
         let listingRefused = false;
-        if (!res.ok) {
+        if (!res.ok && listing) {
             const refusal = `HTTP ${res.status}: ${(await res.text().catch(() => '')).slice(0, 300)}`;
             const before = Object.fromEntries(Object.entries(payload).filter(([k]) => !LISTING_FIELDS.includes(k as keyof ListingFields)));
             res = await signedPush({ ...before, timestamp: Date.now() }, privateKey);
@@ -267,7 +273,7 @@ export async function pushDirectoryNow() {
         return {
             success: true, timestamp: new Date().toISOString(),
             // Whether the row carries the promise: 'sent', 'none' (not kept), or 'refused' (the registry predates it).
-            promise: listingRefused ? 'refused' : listing.fields.promise ? 'sent' : 'none',
+            promise: listingRefused ? 'refused' : listing?.fields.promise ? 'sent' : 'none',
         };
     } catch (err: any) {
         console.error(`[Directory] ❌ Failed to push directory info:`, err.message);

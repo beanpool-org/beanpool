@@ -124,6 +124,27 @@ function knownLine(text: string): string | null {
     return null;
 }
 
+/** utils/group-line-display.ts: who a sealed line is from when the phone has no name for it. */
+const STAND_IN_AUTHORS: ReadonlySet<string> = new Set(['Unverified', 'A former member']);
+/** utils/group-chat-lines.ts groupChatShownLines: the node's name for someone no longer in the group, and that hint. */
+const NOT_IN_GROUP_AUTHOR = /^(.+) · no longer in this group$/s;
+
+/**
+ * Who a group chat line is from, as the screen shows it (over a bubble, a quote, the reply box, a line that names
+ * nobody): only what the line code writes there is translated, its two stand-ins and "no longer in this group" after a
+ * name the node gave (the name kept as given). Any other name is a member's, exactly as written, even one spelled like a
+ * line this table knows ("Notice", "Not confirmed").
+ */
+export function chatAuthorWords(name: string): string;
+export function chatAuthorWords(name: string | null | undefined): string | null | undefined;
+export function chatAuthorWords(name: string | null | undefined): string | null | undefined {
+    if (!name) return name;
+    if (STAND_IN_AUTHORS.has(name)) return t(FIXED[name]);
+    const m = NOT_IN_GROUP_AUTHOR.exec(name);
+    if (m) return t('{name} · no longer in this group', { name: m[1] });
+    return name;
+}
+
 /** A line a lower layer wrote, in the member's language; anything it doesn't know, exactly as given. */
 export function chatLineWords(text: string): string;
 export function chatLineWords(text: string | null | undefined): string | null | undefined;

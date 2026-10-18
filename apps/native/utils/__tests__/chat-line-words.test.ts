@@ -14,8 +14,9 @@ vi.mock('../node-post', () => ({ signedGet: async () => ({}), signedPost: async 
 import {
     pseudoLocalise, setLanguage, DM_LINE_DELETED_TEXT, DM_LINE_NOT_ENCRYPTED_TEXT, DM_LINE_NOT_VERIFIED_TEXT, dmLineMarkText, dmQuoteLabel,
 } from '@beanpool/core';
-import { chatLineWords } from '../chat-line-words';
-import { earlierKeyDetails } from '../group-line-display';
+import { chatAuthorWords, chatLineWords } from '../chat-line-words';
+import { GROUP_LINE_FORMER_MEMBER, GROUP_LINE_NOT_IN_GROUP, GROUP_LINE_UNVERIFIED_NAME, earlierKeyDetails, nameSigner, type DisplayRosterRow } from '../group-line-display';
+import { groupChatShownLines } from '../group-chat-lines';
 import { lockedHistoryRowText } from '../group-history-unlock';
 import { KEY_CHANGED_DETAILS, markKeyChanged } from '../name-key-memory';
 
@@ -134,5 +135,44 @@ describe('what it gives back', () => {
         for (const s of ['see you at the hall', 'Beans held in trust', '5 Beans held in trust. Thanks!', '', 'Unverified?']) expect(chatLineWords(s)).toBe(s);
         expect(chatLineWords(null)).toBeNull();
         expect(chatLineWords(undefined)).toBeUndefined();
+    });
+});
+
+describe('who a group chat line is from', () => {
+    const DOV = 'd0'.repeat(32);
+    const KOFI = 'c0'.repeat(32);
+    /** A sealed line as the node serves it, drawn by the real groupChatShownLines, its signer named by the real nameSigner. */
+    function authorOf(signer: string, line: { authorPubkey: string; authorCallsign: string | null }, roster: DisplayRosterRow[]): string | null | undefined {
+        const raw = { id: 'l1', ...line, type: 'text', nonce: 'group-xc20p-v1:abc', ciphertext: 'sealed', timestamp: '2026-10-18T09:00:00Z' };
+        const views = new Map([['l1', {
+            hidden: false, text: 'see you at the hall', ...nameSigner(signer, line, { roster }),
+            unverified: false, waitingKey: false, signer, after: null, epoch: 1,
+        }]]);
+        const [shown] = groupChatShownLines([raw], { locked: true, thread: { views, waitingForNextKey: false }, me: 'me-key', kind: 'group' });
+        return shown.authorName;
+    }
+
+    it('someone who has left: the node\'s name for them as given, and "no longer in this group" in the member\'s language', () => {
+        const label = authorOf(DOV, { authorPubkey: DOV, authorCallsign: 'Dov' }, []);
+        expect(label).toBe(`Dov · ${GROUP_LINE_NOT_IN_GROUP}`);
+        expect(chatAuthorWords(label)).toBe(label);
+        setLanguage('xx');
+        expect(chatAuthorWords(label)).toBe(pseudoLocalise('{name} · no longer in this group').replace('{name}', 'Dov'));
+        // A key nobody names: the phone's own stand-in, as is a line that opens under neither key.
+        const nobody = authorOf(DOV, { authorPubkey: KOFI, authorCallsign: 'Kofi' }, []);
+        expect(nobody).toBe(GROUP_LINE_FORMER_MEMBER);
+        expect(chatAuthorWords(nobody)).toBe(pseudoLocalise(GROUP_LINE_FORMER_MEMBER));
+        expect(chatAuthorWords(GROUP_LINE_UNVERIFIED_NAME)).toBe(pseudoLocalise(GROUP_LINE_UNVERIFIED_NAME));
+    });
+
+    it('a member\'s name exactly as written, even one spelled like a line the table knows', () => {
+        setLanguage('xx');
+        for (const callsign of ['Notice', 'Not confirmed', "Your community's admins", '(key changed)', 'Kofi']) {
+            const label = authorOf(KOFI, { authorPubkey: KOFI, authorCallsign: 'node says' }, [{ memberPubkey: KOFI, callsign } as DisplayRosterRow]);
+            expect(label).toBe(callsign);
+            expect(chatAuthorWords(label)).toBe(callsign);
+        }
+        expect(chatAuthorWords(null)).toBeNull();
+        expect(chatAuthorWords(undefined)).toBeUndefined();
     });
 });

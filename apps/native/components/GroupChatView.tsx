@@ -65,7 +65,7 @@ import {
     type ChatMessage, type ChatViewer,
 } from '../utils/chat-actions';
 // The key and line code above never reaches the words layer: what it writes is translated where it is shown.
-import { chatLineWords } from '../utils/chat-line-words';
+import { chatAuthorWords, chatLineWords } from '../utils/chat-line-words';
 import { NotDeliveredMark } from './chat/NotDeliveredMark';
 import { t, tn } from '@beanpool/core';
 import { normaliseTappedUrl } from '../utils/chat-links';
@@ -677,7 +677,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
                 : isTombstone(parent) ? tombstoneWords(parent, kind) : parent.unattributed ? chatLineWords(parent.text) : parent.text;
             const parentAuthor = !parent
                 ? t('Someone')
-                : (me && parent.senderId === me) ? t('You') : (chatLineWords(parent.authorName) || (parent.senderId || '').slice(0, 8) || t('Someone'));
+                : (me && parent.senderId === me) ? t('You') : (chatAuthorWords(parent.authorName) || (parent.senderId || '').slice(0, 8) || t('Someone'));
             return {
                 author: parentAuthor,
                 text: parentText,
@@ -743,7 +743,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
                 onPickEmoji={emoji => react(item.id, emoji)}
                 onPressUrl={openUrl}
                 // A name the line code wrote ("A former member") in the member's language; a member's own name as it is.
-                authorLabel={showAuthorById.get(item.id) ? (chatLineWords(item.authorName) || (item.senderId || '').slice(0, 8)) : null}
+                authorLabel={showAuthorById.get(item.id) ? (chatAuthorWords(item.authorName) || (item.senderId || '').slice(0, 8)) : null}
                 quote={quote}
                 status={status}
             />

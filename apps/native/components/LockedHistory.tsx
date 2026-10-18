@@ -12,7 +12,7 @@ import type { AppColors } from '../constants/colors';
 import { makeChatStyles } from './chat/styles';
 import { LOCKED_HISTORY_ASK, LOCKED_HISTORY_KEEP, LOCKED_HISTORY_SHEET_BODY, LOCKED_HISTORY_SHEET_TITLE, LOCKED_HISTORY_WORDS } from '../utils/group-history-unlock';
 // group-history-unlock.ts is on the 12 words' key path and never reaches the words layer: its sentences are translated here.
-import { chatLineWords } from '../utils/chat-line-words';
+import { chatAuthorWords, chatLineWords } from '../utils/chat-line-words';
 import { t } from '@beanpool/core';
 
 const makeStyles = (colors: AppColors) => StyleSheet.create({
@@ -39,7 +39,7 @@ export function SealedNoticeLine({ name, text, details }: { name: string | null;
     const styles = useStyles();
     return (
         <View style={styles.systemWrap} accessibilityRole="text">
-            <Text style={styles.sealedText}>{name ? t('{name}: {text}', { name: chatLineWords(name), text: chatLineWords(text) }) : chatLineWords(text)}</Text>
+            <Text style={styles.sealedText}>{name ? t('{name}: {text}', { name: chatAuthorWords(name), text: chatLineWords(text) }) : chatLineWords(text)}</Text>
             {!!details && <Text style={styles.sealedDetails}>{chatLineWords(details)}</Text>}
         </View>
     );

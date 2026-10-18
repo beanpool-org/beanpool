@@ -98,8 +98,8 @@ export type OwnAddressResult =
  * becomes later (D3); and, while this server holds no BeanPool name, also as the community's address, `publicAddress
  * { mode: 'ip' | 'own', hostname, status: 'live', since }`: the directory's publicUrl and the identity-epoch check's
  * host. A name is never replaced there by an IP, and the registrar's record (its tunnel token) never by either. Its
- * certificate is looked at now, not at the next hourly tick (services/acme/schedule.ts runAcmeTickSoon). `by` ends the
- * log line.
+ * certificate is looked at now, not at the next hourly tick, and an address given again is a retry past the back-off of
+ * an order that failed (services/acme/schedule.ts runAcmeTickSoon). `by` ends the log line.
  */
 export function storeOwnAddress(input: string, by: string): OwnAddressResult {
     const host = normalizeAddress(input) ?? String(input ?? '').slice(0, 80);
@@ -122,7 +122,7 @@ export function storeOwnAddress(input: string, by: string): OwnAddressResult {
         forgetOwnAddresses();
         logger.security('AUTH', `This server's own address set by ${by}: ${host}${replace ? ' (the community\'s address)' : ''}`);
     }
-    runAcmeTickSoon();
+    runAcmeTickSoon(host);
     return { ok: true, host, kind, changed, communityAddress: replace || same };
 }
 

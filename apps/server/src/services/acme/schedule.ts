@@ -16,6 +16,10 @@
  * Before an order asks the CA anything, state.json already holds the attempt as a failure would leave it (its count, its
  * next try), and the once-a-day mark is written before an unconfirmed challenge goes out: a server that stops mid-order
  * waits at its next boot instead of asking the CA again on every one.
+ * An address handed to this server again (`beanpool claim --ip/--address` run again, Settings; runAcmeTickSoon) is the
+ * owner asking for a retry, having fixed what failed: its next tick orders past the back-off and counts its failures
+ * from none. Not when an attempt began less than OWNER_RETRY_FLOOR_MS before it (that one answers it: a command run
+ * twice orders once), and never past the once-a-day limit on asking the CA unconfirmed.
  *
  * A standby orders nothing: certificates never travel, and a standby gets its own once the address points at it and it
  * has taken over (D8). A `.beanpool.org` name (Cloudflare's edge holds those) and a private host are never ordered.
@@ -47,6 +51,8 @@ export const ORDER_TIMEOUT_MS = 10 * 60_000;
  * (letsencrypt.org/docs/rate-limits, read 18 Oct 2026): one a day never comes near either.
  */
 export const UNCONFIRMED_EVERY_MS = 24 * HOUR;
+/** An address handed over this soon after an attempt for it began waits out the back-off: that attempt answers it. */
+export const OWNER_RETRY_FLOOR_MS = 60_000;
 
 /** The ACME directory: ACME_DIRECTORY_URL (Let's Encrypt staging for a trial, another CA), else Let's Encrypt production. */
 export function acmeDirectoryUrl(): string {
@@ -123,6 +129,8 @@ export interface TickReport {
 let running = false;
 /** A tick asked for (runAcmeTickSoon) while one was under way: one more runs after it. */
 let again = false;
+/** Addresses handed over (runAcmeTickSoon) and when, until the next tick looks at each: a retry past its back-off. */
+const retryAsked = new Map<string, number>();
 
 /** One tick: every identifier looked at, at most one order each. Never throws. */
 export async function runAcmeTick(): Promise<TickReport> {
@@ -158,18 +166,22 @@ export async function runAcmeTick(): Promise<TickReport> {
 }
 
 /**
- * An address just given to this server (`beanpool claim --ip/--address`, Settings): looked at now rather than at the next
- * hourly tick, so the command that gave it sees the certificate within its wait. Once the scheduler runs (index.ts starts
- * it); a tick under way is followed by one more. Not awaited.
+ * An address just given to this server (`beanpool claim --ip/--address`, Settings), new or again: looked at now rather
+ * than at the next hourly tick, so the command that gave it sees the certificate within its wait, and ordered past a
+ * back-off its failures set (the header says when not). Once the scheduler runs (index.ts starts it); a tick under way is
+ * followed by one more. Not awaited.
  */
-export function runAcmeTickSoon(): void {
+export function runAcmeTickSoon(host: string): void {
     if (!interval) return;
+    retryAsked.set(host, clock());
     if (running) { again = true; return; }
     void runAcmeTick();
 }
 
 async function considerTarget(target: AcmeTarget, now: number): Promise<TargetOutcome> {
     const dataDir = tlsDataDir();
+    const askedAt = retryAsked.get(target.host);
+    retryAsked.delete(target.host);
     let held = servedCertificate(target.host);
     if (held && held.notAfter <= now) {
         serveCertificate(target.host, null);
@@ -195,14 +207,17 @@ async function considerTarget(target: AcmeTarget, now: number): Promise<TargetOu
     // The wait and the count after failures belong to the directory they happened at: a switch (staging, port 80 shut,
     // then production once it is open) is tried at once, from the first back-off step. None recorded counts as this one.
     const sameAttempts = state.attemptDirectoryUrl === null || state.attemptDirectoryUrl === directoryUrl;
-    const failuresSoFar = sameAttempts ? state.failures : 0;
-    if (sameAttempts && now < state.nextAttemptAt) return 'waiting';
+    // Handed over again by the owner, and no attempt began in the minute before: the wait and the count are set aside.
+    const ownerRetry = askedAt !== undefined && askedAt - state.lastAttemptAt >= OWNER_RETRY_FLOOR_MS;
+    const failuresSoFar = sameAttempts && !ownerRetry ? state.failures : 0;
+    if (sameAttempts && !ownerRetry && now < state.nextAttemptAt) return 'waiting';
     const lastUnconfirmed = sameAttempts ? state.unconfirmedAttemptAt : 0;
     const ca = caName(directoryUrl);
 
     console.log(`🔐 ACME: ${held ? 'renewing' : 'ordering'} the certificate for ${target.host} (${target.challenge}) at ${directoryUrl}`
         + (otherDirectory ? `; the one held came from ${state.directoryUrl}` : '')
-        + (!sameAttempts && state.failures ? `; the failures at ${state.attemptDirectoryUrl} do not count here` : ''));
+        + (!sameAttempts && state.failures ? `; the failures at ${state.attemptDirectoryUrl} do not count here` : '')
+        + (sameAttempts && ownerRetry && state.failures ? `; given again by the owner, so the wait after ${state.failures} failed attempt(s) is set aside` : ''));
     // A failed self-check: what it said, and whether the CA was asked anyway (never once this attempt is over).
     let selfCheckProblem: string | null = null;
     let askedUnconfirmed = false;

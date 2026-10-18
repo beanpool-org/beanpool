@@ -18,6 +18,9 @@
  *   5. Removed in Settings → Network: an own address that was the community's address stops being that too.
  *   6. The command's file (address-request.ts kinds ip and domain): taken within the node's tick and stored; one that
  *      can't be this server's address is not, and the log says why.
+ *   7. Given again after its order failed (`beanpool claim --ip` run again once port 80 is open): ordered at once, past
+ *      the back-off, its count started again; not twice within a minute; and the CA is still asked unconfirmed at most
+ *      once a day.
  *
  * No real registrar, CA or BeanPool node: the registrar is a fake HTTP server here, and the certificate scheduler's order
  * is a stand-in that records what it was asked for and fails.
@@ -41,6 +44,7 @@ const own = await import('./engine/own-addresses.js');
 const agent = await import('./services/public-address-agent.js');
 const { writeAddressRequestFile, ADDRESS_REQUEST_FILE } = await import('./address-request.js');
 const schedule = await import('./services/acme/schedule.js');
+const { readState: readAcmeState } = await import('./services/acme/store.js');
 const { setNodeRole } = await import('./config/node-role.js');
 const { dataDir } = await import('./recover-command.js');
 
@@ -67,10 +71,31 @@ process.env.REGISTRAR_URL = `http://127.0.0.1:${(fakeRegistrar.address() as Addr
 se.initStateEngine();
 await startP2P(0, 0);   // the node's identity, which signs what it sends the registrar
 
-// The certificate scheduler, running as on a node, with an order that records its identifier and asks no CA.
+// The certificate scheduler, running as on a node, with an order that records its identifier and asks no CA. With
+// `selfCheck` set, the order's self-check fails with those words and asks the scheduler whether to go to the CA anyway
+// (its answers in `askedAnyway`, by identifier), as order.ts does.
 const ordered: string[] = [];
-schedule._setScheduleHooksForTests({ order: async (target) => { ordered.push(target.host); throw new Error('no CA in this suite'); } });
+let selfCheck: string | null = null;
+const askedAnyway: [string, boolean][] = [];
+schedule._setScheduleHooksForTests({ order: async (target, opts) => {
+    ordered.push(target.host);
+    if (selfCheck !== null) {
+        const anyway = !!opts.orderUnconfirmed?.(selfCheck);
+        askedAnyway.push([target.host, anyway]);
+        if (!anyway) throw new Error(selfCheck);
+    }
+    throw new Error('no CA in this suite');
+} });
 schedule.startAcmeScheduler();
+/** Every tick under way finished, then one more: what the scheduler makes of each identifier with nothing handed over. */
+async function settledTick(): Promise<Awaited<ReturnType<typeof schedule.runAcmeTick>>> {
+    for (let i = 0; i < 200; i++) {
+        const t = await schedule.runAcmeTick();
+        if (t.skipped !== 'running') return t;
+        await pause(25);
+    }
+    throw new Error('the certificate scheduler never finished its tick');
+}
 
 let role: 'owner' | 'admin' = 'owner';
 const deps = {
@@ -222,11 +247,44 @@ try {
     check('a home-network IP: taken, not stored, and the log says why', fileGone() && show(se.getNodeConfig()) === beforeBad
         && warns.some((w) => w.includes('10.0.0.5') && /home network/.test(w)), show(warns));
     check('the registrar was asked nothing about any own address', registrar.calls.every((c) => c.startsWith('GET /api/registrar/status')), show(registrar.calls));
+
+    console.log('\n7. Handing the address over again is a retry: the back-off is set aside, the once-a-day CA limit is not');
+    const H = '198.51.100.60';
+    const orders = () => ordered.filter((h) => h === H).length;
+    const acmeState = () => readAcmeState(dir, H);
+    const anywayFor = () => show(askedAnyway.filter(([h]) => h === H).map(([, a]) => a));
+    await settledTick();   // the ticks section 6's addresses started
+    const t0 = Date.now();
+    selfCheck = 'port 80 is shut';
+    const g1 = await post('/api/local/admin/public-address/own', { ip: H });
+    const s1 = await settledTick();
+    check('precondition: given with port 80 shut, one order; the CA asked anyway, once', g1.status === 200 && orders() === 1
+        && anywayFor() === show([true]), show({ g1, orders: orders(), askedAnyway }));
+    check('…it failed: one failure, the next try in an hour, and a tick with nothing handed over waits for it', acmeState().failures === 1
+        && acmeState().nextAttemptAt >= t0 + 59 * 60_000 && s1.outcomes[H] === 'waiting', show({ st: acmeState(), s1 }));
+    await post('/api/local/admin/public-address/own', { ip: H });
+    await settledTick();
+    check('given again within the minute (the command run twice): no second order', orders() === 1, show(ordered));
+    // The owner opens port 80 and runs the command again, two minutes on: still inside the hour the failure set.
+    selfCheck = null;
+    schedule._setScheduleHooksForTests({ now: () => Date.now() + 2 * 60_000 });
+    await post('/api/local/admin/public-address/own', { ip: H });
+    const s2 = await settledTick();
+    check('given again two minutes on: ordered at once, not after the hour', orders() === 2, show(ordered));
+    check('…the count starts again (one failure, not two), and with nothing handed over the next tick waits', acmeState().failures === 1
+        && acmeState().nextAttemptAt >= t0 + 61 * 60_000 && s2.outcomes[H] === 'waiting', show({ st: acmeState(), s2 }));
+    // Port 80 shut again, another two minutes on: ordered, but the CA was asked unconfirmed four minutes ago.
+    selfCheck = 'port 80 is shut';
+    schedule._setScheduleHooksForTests({ now: () => Date.now() + 4 * 60_000 });
+    await post('/api/local/admin/public-address/own', { ip: H });
+    await settledTick();
+    check('given again with the self-check failing: ordered, and the CA is not asked anyway twice in a day', orders() === 3
+        && anywayFor() === show([true, false]), show({ orders: orders(), askedAnyway }));
 } catch (e) {
     failed++;
     console.log(`  ❌ the suite threw: ${(e as Error).stack}`);
 } finally {
-    schedule._setScheduleHooksForTests({ order: null });
+    schedule._setScheduleHooksForTests({ order: null, now: null });
     server.close();
     fakeRegistrar.close();
 }

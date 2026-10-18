@@ -134,6 +134,7 @@ vi.mock('../../components/WordsOnScreen', () => ({ NoScreenCapture: ({ children 
 import NodeMismatchScreen from '../../app/node-mismatch';
 import { getSavedNodes } from '../nodes';
 import { SAVED_NODES_STORE_KEY } from '../storage-keys';
+import { takeDoorTap } from '../open-door';
 
 const LOCAL = 'https://riverside.example';
 const GLOBAL = 'https://global.beanpool.org';
@@ -428,8 +429,11 @@ describe("a self-hoster's open community (P5): Join with this account opens ITS 
         // First, before the saved communities and the delete, as on the global community's open page.
         const all = buttons().map(b => (b.getAttribute('aria-label') || b.textContent || '').trim());
         expect(all.indexOf(`Join ${SELF_NAME} with this account`)).toBeLessThan(all.findIndex(l => /Delete this account/.test(l)));
+        takeDoorTap('');
         await act(async () => { join!.click(); });
         expect(nav.pushed).toEqual([{ pathname: '/join-open-door', params: { node: SELF } }]);
+        // The door it opens is told it was the member's tap, so its work starts as it opens (a link's waits: PR #2131 review).
+        expect(takeDoorTap(SELF)).toBe(true);
         // A tap opens a screen and nothing else: no community switched, no database swapped.
         expect(store.map.get('beanpool_anchor_url')).toBe(SELF);
         expect(dbCalls.closed).toBe(0);

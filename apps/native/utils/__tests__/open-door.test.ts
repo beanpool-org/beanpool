@@ -52,6 +52,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 import { redirectSystemPath } from '../../app/+native-intent';
 import {
     GLOBAL_DOOR_PATH, OPEN_DOOR_PATH, doorLinkFromSystemPath, doorLinkRoute, doorNodeAt, doorNodeFromParam, openDoorHref,
+    openDoorHrefForTap, takeDoorTap,
 } from '../open-door';
 import {
     doorAnswerWords, doorKeeperWords, doorNameCheckWords, doorRefusalWords, doorScreenWords, globalPlace, joinedTitle, placeAt,
@@ -126,6 +127,26 @@ describe('where a tap goes (openDoorHref)', () => {
         expect(openDoorHref('http://open.riverbend.example')).toEqual({ pathname: '/join-open-door', params: { node: 'http://open.riverbend.example' } });
     });
 
+    it('the member\'s Join in the app (openDoorHrefForTap): the same place, and that door alone may start its work as it opens, once, within a minute', () => {
+        takeDoorTap(SELF);
+        expect(openDoorHrefForTap(`${SELF}/`, 1_000)).toEqual(openDoorHref(`${SELF}/`));
+        expect(takeDoorTap(SELF, 1_000)).toBe(true);
+        // Read once: the next opening of the same door (a link to it, say) is not the member's tap.
+        expect(takeDoorTap(SELF, 1_000)).toBe(false);
+        // Another community's Join opens no other door.
+        openDoorHrefForTap('https://commons.example.nz', 1_000);
+        expect(takeDoorTap(SELF, 1_000)).toBe(false);
+        expect(takeDoorTap('https://commons.example.nz', 1_000)).toBe(false);
+        // Only just now.
+        openDoorHrefForTap(SELF, 1_000);
+        expect(takeDoorTap(SELF, 61_000)).toBe(false);
+        // Nothing to hold at the global community's door (its own rule) nor at an address the screen refuses.
+        expect(openDoorHrefForTap(GLOBAL_NODE_URL, 1_000)).toBe(GLOBAL_DOOR_PATH);
+        expect(takeDoorTap(GLOBAL_NODE_URL, 1_000)).toBe(false);
+        openDoorHrefForTap('http://open.riverbend.example', 1_000);
+        expect(takeDoorTap('http://open.riverbend.example', 1_000)).toBe(false);
+    });
+
     it('both routes are one screen: join-global re-exports join-open-door', () => {
         const app = path.resolve(__dirname, '../../app');
         expect(fs.readFileSync(path.join(app, 'join-global.tsx'), 'utf8')).toMatch(/^export \{ default, ErrorBoundary \} from '\.\/join-open-door';$/m);
@@ -143,6 +164,22 @@ describe('a link to the door only opens the screen (doorLinkFromSystemPath, door
         }
         expect(doorLinkFromSystemPath('beanpool://join-open-door')).toEqual({ node: { url: GLOBAL_NODE_URL, global: true }, named: null });
         expect(doorLinkFromSystemPath('beanpool://join-open-door?node=http%3A%2F%2Fevil.test')).toEqual({ node: null, named: 'http://evil.test' });
+    });
+
+    it('join-global with an address goes as the door link does: no route the screen reads as another address without from=link (PR #2131 review)', async () => {
+        const ATTACKER = 'https://attacker.example';
+        for (const p of [`beanpool://join-global?node=${encodeURIComponent(ATTACKER)}`, `beanpool:///join-global/?then=pair-device&node=${encodeURIComponent(ATTACKER)}`,
+            `/join-global?node=${encodeURIComponent(ATTACKER)}`, `JOIN-GLOBAL?node=${encodeURIComponent(ATTACKER)}#x`]) {
+            expect(doorLinkFromSystemPath(p), p).toEqual({ node: { url: ATTACKER, global: false }, named: ATTACKER });
+        }
+        phone.identity = ACCOUNT;
+        expect(await redirectSystemPath({ path: `beanpool://join-global?node=${encodeURIComponent(ATTACKER)}`, initial: false }))
+            .toBe(`/join-open-door?node=${encodeURIComponent(ATTACKER)}&from=link`);
+        // The global community's address by that name: as the global link goes, held.
+        expect(await redirectSystemPath({ path: `beanpool://join-global?node=${encodeURIComponent(GLOBAL_NODE_URL)}`, initial: false }))
+            .toBe('/join-global?from=link');
+        phone.identity = null;
+        expect(await redirectSystemPath({ path: `beanpool://join-global?node=${encodeURIComponent(ATTACKER)}`, initial: true })).toBe('/');
     });
 
     it('not a door link: join-global is left to Expo Router as before, and lookalikes are nothing', () => {

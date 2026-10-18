@@ -30,7 +30,7 @@ import { doorStateFromCheck, type GlobalDoorState } from '../utils/global-entry'
 import { useGlobalEntry } from '../utils/use-global-entry';
 import { globalEntryLine } from '../utils/global-entry-line';
 import { askCommunityName, communityName } from '../utils/community-name';
-import { doorNodeAt, openDoorHref } from '../utils/open-door';
+import { doorNodeAt, openDoorHrefForTap } from '../utils/open-door';
 import { joinAnotherCommunity, joinedNudge, PROTECT_REDIRECT, HOME_REDIRECT } from '../utils/join-another-community';
 import { NoWordsNotice } from '../components/NoWordsNotice';
 import { NoScreenCapture, NoScreenLockNote } from '../components/WordsOnScreen';
@@ -360,7 +360,7 @@ export default function NodeMismatchScreen() {
                         {plan.page === 'open' && !!pageUrl && (
                             <Pressable
                                 style={styles.primaryBtn}
-                                onPress={() => router.push(openDoorHref(pageUrl))}
+                                onPress={() => router.push(openDoorHrefForTap(pageUrl))}
                                 disabled={busy}
                                 accessibilityRole="button"
                                 accessibilityLabel={joinLabel}

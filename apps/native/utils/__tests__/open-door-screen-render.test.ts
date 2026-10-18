@@ -4,13 +4,14 @@
  * (the runner's window): what it asks, of whom, and what it says.
  *
  *   - `?node=` a self-hoster's open community: it asks THAT address alone (its profile, its name), never the global
- *     community's; it says its own name in the header, the title and the intro, with its host under the title; and the
- *     door's work starts for that address, for the key on the phone.
+ *     community's; it says its own name in the header, the title and the intro, with its host under the title; and, opened
+ *     by the member's Join in the app, the door's work starts for that address, for the key on the phone.
  *   - no node (and its old name, join-global): the global community's door, exactly as before: its words, no host line, and
  *     only the global community asked.
  *   - an address it refuses: says so, and asks nobody.
  *   - a community that isn't open: says why, under its own name.
- *   - opened by a link (`from=link`): the work waits for the member's tap.
+ *   - opened by a link (`from=link`), or with another community's address any way but the member's Join in the app (a
+ *     link in a spelling the router's intercept doesn't know, its old name with an address): the work waits for the tap.
  *
  * Nothing is contacted: fetch answers the addresses in the test and refuses anything else.
  */
@@ -125,6 +126,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 import JoinOpenDoorScreen from '../../app/join-open-door';
 import JoinGlobalAlias from '../../app/join-global';
 import { rememberGlobalDoor } from '../global-door-offer';
+import { openDoorHrefForTap, takeDoorTap } from '../open-door';
 
 const GLOBAL = 'https://global.beanpool.org';
 const SELF = 'https://open.riverbend.example';
@@ -156,6 +158,7 @@ beforeEach(() => {
     asked.length = 0;
     work.started.length = 0;
     route.params = {};
+    takeDoorTap('');
     vi.mocked(rememberGlobalDoor).mockClear();
 });
 afterEach(() => { act(() => root.unmount()); host.remove(); });
@@ -167,7 +170,8 @@ const render = async (screen: unknown = JoinOpenDoorScreen) => { await act(async
 
 describe("a self-hoster's open community's door (?node=)", () => {
     it('asks THAT address alone, says its own name with its host under the title, and starts the work there for this key', async () => {
-        route.params = { node: SELF };
+        // The member tapped Join for it in the app (app/node-mismatch.tsx).
+        route.params = (openDoorHrefForTap(SELF) as { params: Record<string, string> }).params;
         globalThis.fetch = network({ [SELF]: OPEN });
         await render();
         const heads = Array.from(host.querySelectorAll('[role="heading"]')).map(h => h.textContent);
@@ -210,6 +214,23 @@ describe("a self-hoster's open community's door (?node=)", () => {
         await act(async () => { Array.from(host.querySelectorAll('button')).find(b => b.textContent === 'Try again')!.click(); });
         await settle();
         expect(asked.filter(u => u.endsWith('/api/community/info')).length).toBe(before + 1);
+    });
+
+    it.each([
+        ['a link in a spelling the router\'s intercept missed (beanpool://join-open-door//?node=…): no from=link, no Join', JoinOpenDoorScreen, () => {}],
+        ['its old name with an address (beanpool://join-global?node=…, any spelling)', JoinGlobalAlias, () => {}],
+        ['the member\'s Join was for another community', JoinOpenDoorScreen, () => { openDoorHrefForTap('https://commons.example.nz'); }],
+        ['the member\'s Join for it, a minute and more ago', JoinOpenDoorScreen, () => { openDoorHrefForTap(SELF, Date.now() - 61_000); }],
+    ])('opened any other way than the member\'s Join in the app (%s): held all the same (PR #2131 review)', async (_how, screen, before) => {
+        before();
+        route.params = { node: SELF };
+        globalThis.fetch = network({ [SELF]: OPEN });
+        await render(screen);
+        expect(header()!.textContent).toBe('Riverbend Open');
+        expect(text()).toContain('Create an account with 12 secret words');
+        expect(work.started).toEqual([]);
+        await act(async () => { Array.from(host.querySelectorAll('button')).find(b => b.textContent === 'Create an account with 12 secret words')!.click(); });
+        expect(work.started).toEqual([{ url: SELF, key: KEY.publicKey, door: 'words' }]);
     });
 
     it('opened by a link (from=link): the door is drawn, and its work waits for the member\'s tap', async () => {

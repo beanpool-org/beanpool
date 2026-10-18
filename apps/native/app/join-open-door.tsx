@@ -26,7 +26,7 @@ import { afterJoinRedirect } from '../utils/pair-device-target';
 import { signInCopiesAt } from '../utils/vault-config';
 import { SSO_PROVIDER_NAMES, type SsoProvider } from '../utils/sso-providers';
 import { FROM_LINK } from '../utils/global-link';
-import { doorNodeFromParam, type DoorNode } from '../utils/open-door';
+import { doorNodeFromParam, takeDoorTap, type DoorNode } from '../utils/open-door';
 import {
     doorAnswerWords, doorKeeperWords, doorNameCheckWords, doorRefusalWords, doorScreenWords, globalPlace, joinedTitle, placeAt,
     type DoorPlace,
@@ -128,7 +128,7 @@ function RefusedDoor() {
     );
 }
 
-function OpenDoor({ door, thenParam, fromParam }: { door: DoorNode; thenParam?: string; fromParam?: string }) {
+function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; thenParam?: string; fromParam?: string }) {
     const { colors } = useTheme();
     const { recheck } = useNodeStatus();
     const insets = useSafeAreaInsets();
@@ -178,8 +178,14 @@ function OpenDoor({ door, thenParam, fromParam }: { door: DoorNode; thenParam?: 
     const [way, setWay] = useState<DoorWay>('sign-in');
     const doorWork = useDoorWork();
     /**
+     * Another community's door that the member's Join in the app didn't open just now is taken as a link's: the router opens
+     * this route in spellings no intercept can all know, and only that Join leaves the mark (utils/open-door.ts takeDoorTap).
+     * Read once, as the door opens.
+     */
+    const [fromParam] = useState(() => (door.global || takeDoorTap(door.url) ? fromRoute : FROM_LINK));
+    /**
      * A link opened this door (utils/global-link.ts, `from=link`): the 12-words work, which is signed by the key on this phone
-     * and sent to the global community, waits for the member's first tap here. A link only opens a screen.
+     * and sent to the door's community, waits for the member's first tap here. A link only opens a screen.
      */
     const [heldForTap, setHeldForTap] = useState(fromParam === FROM_LINK);
     /** Join tapped before the work was done: it finishes under "Setting up your account…", and Back still works. */

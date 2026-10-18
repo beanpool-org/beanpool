@@ -11,8 +11,9 @@
  *   (utils/node-url.ts), https, or http only where the cleartext rule allows it (a private address). Anything else is
  *   refused before anything is asked, and the screen says so.
  * - A link only opens the screen (app/+native-intent.ts, {@link doorLinkRoute}): its signed work waits for the member's
- *   first tap (`from=link`), as the global community's own link does (utils/global-link.ts). Nothing joins without the
- *   member's tap, and the key that joins is the phone's own.
+ *   first tap (`from=link`), as the global community's own link does (utils/global-link.ts). Another community's door that
+ *   the member's Join in the app didn't open just now ({@link takeDoorTap}) waits the same, so a link in a spelling the
+ *   intercept doesn't know holds too. Nothing joins without the member's tap, and the key that joins is the phone's own.
  * - The community's name is its own answer (or the phone's saved name for it, or its host), never a link's.
  *
  * Kept free of the screens' imports and of the phone's storage, so the router can read a link without loading either.
@@ -67,6 +68,30 @@ export function openDoorHref(url: string): typeof GLOBAL_DOOR_PATH | { pathname:
     return { pathname: OPEN_DOOR_PATH, params: { node: door ? door.url : url } };
 }
 
+/**
+ * Another community's door the member has just tapped Join for in the app (app/node-mismatch.tsx): its signed work starts
+ * as it opens. However else the screen opens with another community's address it holds that work for the member's first
+ * tap there, as for `from=link`: the router takes the screen's route in spellings no intercept can all know
+ * (`beanpool://join-open-door//?node=…`, `beanpool:join-open-door?node=…`, a login before the name; PR #2131 review), and
+ * no link can reach this. In memory only, for one opening, within a minute.
+ */
+let tappedDoor: { url: string; atMs: number } | null = null;
+const TAPPED_DOOR_MS = 60_000;
+
+/** {@link openDoorHref} for the member's tap on Join: the door it opens may start its work as it opens ({@link takeDoorTap}). */
+export function openDoorHrefForTap(url: string, nowMs: number = Date.now()): ReturnType<typeof openDoorHref> {
+    const door = doorNodeAt(url);
+    tappedDoor = door && !door.global ? { url: door.url, atMs: nowMs } : null;
+    return openDoorHref(url);
+}
+
+/** Whether another community's door at `url` opens on the member's tap on Join just now. Read once: the next reading is no. */
+export function takeDoorTap(url: string, nowMs: number = Date.now()): boolean {
+    const tap = tappedDoor;
+    tappedDoor = null;
+    return !!tap && tap.url === url && nowMs >= tap.atMs && nowMs - tap.atMs < TAPPED_DOOR_MS;
+}
+
 /** A link to the door, as the system hands it over. */
 export interface DoorLink {
     /** The community it names (the global community when it names none), null when refused. */
@@ -77,10 +102,11 @@ export interface DoorLink {
 
 /**
  * `beanpool://join-open-door[?node=…]` in the spellings a system hands over (`beanpool:///…`, and the bare and `/` path
- * forms). Every other param is dropped: a link carries an address and nothing else. (`beanpool://join-global` is left to
+ * forms), and the door's old name with an address, `beanpool://join-global?node=…`: the same door (PR #2131 review). Every
+ * other param is dropped: a link carries an address and nothing else. (`beanpool://join-global` with no address is left to
  * Expo Router as before P5: utils/__tests__/global-link.test.ts pins it as no link of its own.)
  */
-const DOOR_LINK = /^(?:beanpool:\/\/\/?|\/)?join-open-door\/?(?:\?([^#]*))?(?:#.*)?$/i;
+const DOOR_LINK = /^(?:beanpool:\/\/\/?|\/)?join-(open-door|global)\/?(?:\?([^#]*))?(?:#.*)?$/i;
 
 /** The door link in `path`, or null for every other link. */
 export function doorLinkFromSystemPath(path: unknown): DoorLink | null {
@@ -88,12 +114,13 @@ export function doorLinkFromSystemPath(path: unknown): DoorLink | null {
     const m = DOOR_LINK.exec(path.trim());
     if (!m) return null;
     let named: string | null = null;
-    for (const part of (m[1] ?? '').split('&')) {
+    for (const part of (m[2] ?? '').split('&')) {
         const eq = part.indexOf('=');
         if (eq < 0 || part.slice(0, eq) !== 'node') continue;
         try { named = decodeURIComponent(part.slice(eq + 1).replace(/\+/g, ' ')); } catch { named = ''; }
         break;
     }
+    if (named === null && m[1].toLowerCase() === 'global') return null;
     return { node: doorNodeFromParam(named ?? undefined), named };
 }
 

@@ -33,7 +33,9 @@ The BeanPool app reaches a server on the internet only over https. Before you cl
 - **A free name ending in .beanpool.org.** beanpool claim offers it. Your server reaches it through a tunnel it runs itself, so there are no ports to open and no DNS to understand: it works on a computer at home too. Some names, such as big cities, wait for approval by the BeanPool project.
 - **Your own domain.** Make an A record for your domain with your server's public IP address, open ports 80 and 443, and claim with --address https://your.domain. Your server gets its own certificate for the domain by itself, over port 80. If a web server of your own holds the certificate in front of it, that works too. BeanPool does not need to be involved.
 
-A name survives a change of server; a number does not. If your server or its IP address changes, every member has to type the new one, while a name can be pointed at the new server. You can add a .beanpool.org name later in Settings → Public Address: members who use the IP address keep working, and new members are sent to the name.
+A name survives a change of server; a number does not. If your server or its IP address changes, every member has to type the new one, while a name can be pointed at the new server. You can add a .beanpool.org name later in Settings → Public Address, or your own domain under **Your own address** there: members who use the IP address keep working, and new members are sent to the name. Members' phones then offer to move to the name, once each has checked it is the same community (see A number or a name, in Address, identity and peers).
+
+**Your own address**, under Settings → Public Address, shows each certificate your server holds, when it renews, and why the last try failed if it did. If a certificate is not renewed in time, the owners are told (see Updates and health).
 
 Behind a home router with no ports open, use a name: nothing on the internet can reach your server to check its IP address or a domain.
 

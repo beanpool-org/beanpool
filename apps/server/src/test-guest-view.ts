@@ -1220,6 +1220,8 @@ async function main(): Promise<void> {
             'POST /api/names/consent': { version: '1:50:60' },
             'POST /api/local/admin/community-health': { debtLinePct: 90 },
             'POST /api/local/admin/start-community-url': { url: 'https://start.example.org/how' },
+            // The listing promise's ticks and closing day (owner only): past the body checks to the write.
+            'POST /api/local/admin/directory/promise': { reports: true, notice: true, closingOn: null },
             // An enterprise's keepers' vote: paying Alice out of the enterprise, and a yes on a vote.
             'POST /api/enterprise/:treasury/decisions': { title: 'Sentinel pay-out', description: 'A sentinel pay-out to Alice.', effect: 'pay_out',
                 params: { to: alice.pk, amount: 1 } },
@@ -1321,7 +1323,8 @@ async function main(): Promise<void> {
             'POST /api/local/admin/bursts/:id/undo', 'POST /api/local/admin/commons/projects',
             'POST /api/local/admin/commons/reject', 'POST /api/local/admin/csrf-token', 'POST /api/local/admin/data', 'POST /api/local/admin/decisions',
             'POST /api/local/admin/decisions/:id/accelerate', 'POST /api/local/admin/decisions/:id/halt', 'GET /api/local/admin/diagnostics',
-            'POST /api/local/admin/diagnostics', 'POST /api/local/admin/directory/push', 'GET /api/local/admin/disputes',
+            'POST /api/local/admin/diagnostics', 'POST /api/local/admin/directory/push', 'GET /api/local/admin/directory/promise',
+            'POST /api/local/admin/directory/promise', 'GET /api/local/admin/disputes',
             'GET /api/local/admin/disputes/:id', 'POST /api/local/admin/disputes/:id/resolve', 'GET /api/local/admin/gateway',
             'POST /api/local/admin/alerts-summary', 'POST /api/local/admin/gateway', 'POST /api/local/admin/health', 'POST /api/local/admin/inbox', 'POST /api/local/admin/inbox/send',
             'GET /api/local/admin/knocks', 'GET /api/local/admin/known-floor', 'POST /api/local/admin/known-floor', 'POST /api/local/admin/known-floor/exception',

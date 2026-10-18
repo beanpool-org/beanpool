@@ -37,7 +37,7 @@
  * Run (from apps/server): mkdir -p .th && TMPDIR=.th SERVER_SUITES_ONLY="test-no-mothership" node ../../scripts/run-server-suites.mjs
  */
 
-import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import net from 'node:net';
@@ -183,7 +183,7 @@ interface Node {
     up: (ms?: number) => Promise<boolean>;
     output: () => string;
     /** The `beanpool` command on the server's shell, beside the running node (`docker compose exec`), trapped as it is. */
-    beanpool: (args: string[]) => { status: number | null; output: string };
+    beanpool: (args: string[]) => Promise<{ status: number | null; output: string }>;
     /** Stopped for good: SIGKILL (a dead server) or SIGTERM (the suite's end). No restart. */
     stop: (signal: NodeJS.Signals) => Promise<void>;
 }
@@ -261,10 +261,15 @@ async function startNode(root: string, name: string, extraEnv: Record<string, st
         get base() { return base.url; },
         up: async (ms = 60_000) => (await until(`${name} to be live`, () => isUp() || gaveUp, ms)) && isUp(),
         output: () => out,
-        beanpool: (args) => {
-            const r = spawnSync(process.execPath, [...process.execArgv, SCRIPT, '--beanpool', ...args], { env: env(), input: '', encoding: 'utf-8', timeout: 30_000 });
-            return { status: r.status, output: `${r.stdout ?? ''}${r.stderr ?? ''}` };
-        },
+        // Not spawnSync: this process's own loop keeps running, so its kept-alive sockets to the nodes are not reset under it.
+        beanpool: (args) => new Promise((resolve) => {
+            const p = spawn(process.execPath, [...process.execArgv, SCRIPT, '--beanpool', ...args], { env: env(), stdio: ['ignore', 'pipe', 'pipe'] });
+            let said = '';
+            p.stdout!.on('data', (d) => { said += d.toString(); });
+            p.stderr!.on('data', (d) => { said += d.toString(); });
+            const late = setTimeout(() => p.kill('SIGKILL'), 60_000);
+            p.on('exit', (code) => { clearTimeout(late); resolve({ status: code, output: said }); });
+        }),
         stop: async (signal) => {
             stopped = true;
             const c = child;
@@ -593,7 +598,7 @@ async function main(): Promise<void> {
             // A standby has no owner of its own: node_roles travels only inside the take-over keys (engine/replication-manifest.ts),
             // and a claim is refused on a standby (claimNode meets the standby's ledger gate). Cy, on S's shell, makes
             // himself its owner as an operator whose owners cannot sign in does: `beanpool recover --key` (recover-command.ts).
-            const recovered = S.beanpool(['recover', '--key', cy.pk]);
+            const recovered = await S.beanpool(['recover', '--key', cy.pk]);
             need(recovered.status === 0, `Cy makes himself S's owner from its shell with \`beanpool recover\` (exit ${recovered.status}${recovered.status === 0 ? '' : `: ${recovered.output.slice(-300)}`})`);
             // B's main server dies.
             await B.stop('SIGKILL');

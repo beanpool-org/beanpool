@@ -2,7 +2,8 @@
 # test-merge-gate.sh — tests the local merge gate's scripts against a throwaway repository. No GitHub, no network.
 #
 # Covers scripts/test-all-merge-check.sh, scripts/test-all-pr.sh, the green record in scripts/test-all-lib.sh
-# (green_run_start / record_green_run) and scripts/check-deps-installed.mjs. The repository is a bare "origin" and a
+# (green_run_start / record_green_run), scripts/check-deps-installed.mjs, and the real test-all.sh's --all and what it
+# keeps when it is stopped part-way (CI's timeout, or Ctrl-C). The repository is a bare "origin" and a
 # clone of it in a temp dir; `gh` is a stub on PATH that answers `pr view` from files and logs `api` calls; the clone's
 # scripts/test-all.sh is a stub that sources the REAL test-all-lib.sh, so the record it writes is the real one.
 #
@@ -68,6 +69,58 @@ chmod +x "$T/nodestub/node"
 expect 1 "test-all --all drops SERVER_SUITES_ONLY, so a narrowed run cannot record a full green" "SERVER_SUITES_ONLY=[unset]" -- env SERVER_SUITES_ONLY=test-x PATH="$T/nodestub:$PATH" bash "$REPO_ROOT/scripts/test-all.sh" --all
 expect 1 "test-all --all ...and says it is ignoring it" "ignoring SERVER_SUITES_ONLY=test-x" -- env SERVER_SUITES_ONLY=test-x PATH="$T/nodestub:$PATH" bash "$REPO_ROOT/scripts/test-all.sh" --all
 expect 1 "test-all without --all keeps SERVER_SUITES_ONLY, for reproducing one suite" "SERVER_SUITES_ONLY=[test-x]" -- env SERVER_SUITES_ONLY=test-x PATH="$T/nodestub:$PATH" bash "$REPO_ROOT/scripts/test-all.sh" --fast
+
+# ── The real test-all.sh stopped part-way: CI's `timeout -s INT 115m`, or Ctrl-C ──────────────────────────────────
+# A copy of it beside the real test-all-lib.sh, with a stand-in install check and a stub pnpm on PATH: `turbo run build`
+# and `turbo run test` run until signalled, then print their held output a second later, as turbo does under GitHub
+# Actions. The deploy_preserve check is a stub that says it ran; every other check finds no script and fails at once.
+# The whole process group is signalled, as `timeout` does, once deploy_preserve has run: by then native_phone_width,
+# launched before it, is waiting for build.
+S="$T/stopped"
+mkdir -p "$S/scripts" "$S/bin" "$S/started"
+cp "$REPO_ROOT/scripts/test-all.sh" "$REPO_ROOT/scripts/test-all-lib.sh" "$S/scripts/"
+echo 'process.exit(0)' > "$S/scripts/check-deps-installed.mjs"
+echo 'echo "stub deploy_preserve: ran"; touch "$STUB_STARTED/deploy_preserve"' > "$S/scripts/test-deploy-preserve.sh"
+cat > "$S/bin/pnpm" <<'STUB'
+#!/usr/bin/env node
+const args = process.argv.slice(2).join(' ')
+const task = (args.match(/^turbo run (build|test)\b/) || [])[1]
+if (!task) process.exit(0)
+console.log(`stub ${task}: started`)
+process.on('SIGINT', () => setTimeout(() => { console.log(`stub ${task}: held output`); process.exit(130) }, 1000))
+setInterval(() => {}, 1000)
+STUB
+chmod +x "$S/bin/pnpm"
+# stopped_run <TEST_ALL_LOG_DIR, or "">: signals the run once deploy_preserve has run, then gives it 60 s to end (a run
+# that outlives that is killed and fails below, rather than hanging this suite). Sets STOP_RC.
+stopped_run() {
+  rm -f "$S/started/"*
+  env TEST_ALL_LOG_DIR="$1" STUB_STARTED="$S/started" PATH="$S/bin:$PATH" \
+    perl -e '$SIG{INT} = $SIG{TERM} = "DEFAULT"; setpgrp(0, 0); exec @ARGV' bash "$S/scripts/test-all.sh" --fast > "$S/out" 2>&1 &
+  local pg=$! i
+  for i in $(seq 600); do [ -f "$S/started/deploy_preserve" ] && break; sleep 0.1; done
+  kill -INT -- -"$pg"
+  for i in $(seq 60); do kill -0 "$pg" 2>/dev/null || break; sleep 1; done
+  kill -0 "$pg" 2>/dev/null && { kill -KILL -- -"$pg"; echo "(test: still running 60 s after the signal; killed)" >> "$S/out"; }
+  wait "$pg"; STOP_RC=$?
+}
+# has <description> <file> <fixed string it must contain>
+has() { if grep -qF -- "$3" "$2" 2>/dev/null; then ok "$1"; else bad "$1 (no line containing: $3)"; tail -25 "$S/out" | sed 's/^/      /'; fi; }
+exits_130() { if [ "$STOP_RC" = 130 ]; then ok "$1"; else bad "$1 (exit $STOP_RC)"; tail -25 "$S/out" | sed 's/^/      /'; fi; }
+
+stopped_run "$S/logs"
+exits_130 "stopped run (CI): exits 130 on SIGINT"
+has "stopped run (CI): names the checks that had not finished" "$S/out" "Checks unfinished: build test native_phone_width"
+has "stopped run (CI): prints the end of a hung check's log, with the output turbo held until it ended" "$S/out" "stub test: held output"
+has "stopped run (CI): copies the hung check's log, held output included, for the upload" "$S/logs/test.log" "stub test: held output"
+has "stopped run (CI): ...and the log of a check that had finished" "$S/logs/deploy_preserve.log" "stub deploy_preserve: ran"
+has "stopped run (CI): a check waiting for build is not started" "$S/logs/native_phone_width.log" "Not started: the run was stopped."
+stopped_run ""
+exits_130 "stopped run (local): exits 130 on SIGINT"
+has "stopped run (local): keeps its logs where they are and says where" "$S/out" "Full logs of every check kept in "
+KEPT=$(sed -n 's/^Full logs of every check kept in //p' "$S/out")
+has "stopped run (local): ...held output included" "$KEPT/test.log" "stub test: held output"
+case "$KEPT" in */tmp.*) rm -rf "$KEPT" ;; esac
 
 # ── A throwaway repository with a bare origin ────────────────────────────────────────────────────────────────────
 export TMPDIR="$T/tmp"; mkdir -p "$TMPDIR"

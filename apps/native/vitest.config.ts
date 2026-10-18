@@ -33,9 +33,10 @@ export default defineConfig({
         // starved the timing-sensitive suites elsewhere in this workspace into failing on a
         // stopwatch. See scripts/test-all.sh. Uncapped locally.
         minWorkers: process.env.CI ? 1 : undefined,
-        // One worker on CI: under a loaded 4-vCPU runner, vitest's worker→main onTaskUpdate RPC (fixed 60 s, not configurable)
-        // timed out after every test had passed, 3× on 17 Oct (scratch/reviews/ci-vitest-rpc-timeout.md). Costs ~2m44s of the step's slack.
-        maxWorkers: process.env.CI ? 1 : undefined,
+        // Two, not one: "Timeout calling onTaskUpdate" after every test passed was never the worker count — a worker whose
+        // file never yields its event loop for 60 s (members-on-demand, posts-nearby on a starved runner) tripped vitest's
+        // fixed RPC timer. patches/vitest@3.2.7.patch removes that timer, as vitest 4 does (vitest-dev/vitest#8297).
+        maxWorkers: process.env.CI ? 2 : undefined,
         // Set by scripts/test-all.sh, which runs on a machine shared with build lanes. Vitest's 5 s
         // default timed out 52 tests at load average ~60 that pass in 3.5 s alone. Unset for a
         // developer running `npx vitest` directly: the default stays.

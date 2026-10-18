@@ -26,7 +26,7 @@ import { setupRedirect, isAuthReturnLink } from '../utils/auth-return';
 import { memberRedirect } from '../utils/member-landing';
 import { notRecognisedStays } from '../utils/mismatch-plan';
 import { ThemeProvider, useTheme } from './ThemeContext';
-import { LanguageProvider } from '../components/LanguageProvider';
+import { DrawnInLanguage, LanguageProvider, useWords } from '../components/LanguageProvider';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Device from 'expo-device';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
@@ -168,7 +168,11 @@ async function tellAdminsNotMe(nodeUrl: string): Promise<void> {
 }
 
 function RootLayoutNav() {
-    const { identity, isLoading } = useIdentity();
+    const { identity, isLoading: identityLoading } = useIdentity();
+    // Loading until the account AND the language are known: the navigator is drawn only once the language has settled
+    // (DrawnInLanguage below), and nothing here routes or opens a link before it is there.
+    const { settled: languageSettled } = useWords();
+    const isLoading = identityLoading || !languageSettled;
     const { recognition, recheck } = useNodeStatus();
     const { theme, colors } = useTheme();
     const segments = useSegments();
@@ -817,7 +821,11 @@ function RootLayoutNav() {
         ? { ...NavDarkTheme, colors: { ...NavDarkTheme.colors, background: 'transparent' } }
         : { ...NavDefaultTheme, colors: { ...NavDefaultTheme.colors, background: 'transparent' } };
 
+    // A language picked in Settings or on the first screen draws the navigator again from scratch, so every screen, tab
+    // label and header writes its words in it (components/LanguageProvider.tsx DrawnInLanguage). Only what is under here:
+    // this layout's own work (deep links, App Lock, the recovery prompt) and the account above it are not done again.
     return (
+        <DrawnInLanguage>
         <View style={{ flex: 1 }}>
             {/* A plain floor under the navigator, in case a transition ever leaves a strip no
                 screen covers. It is deliberately NOT the tiled wallpaper: every screen now
@@ -874,6 +882,7 @@ function RootLayoutNav() {
             <PushNoticeWarning />
             </AppLockSurface>
         </View>
+        </DrawnInLanguage>
     );
 }
 

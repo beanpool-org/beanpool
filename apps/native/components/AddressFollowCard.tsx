@@ -12,7 +12,7 @@ import { View, Text, Pressable, StyleSheet, Alert } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { t } from '@beanpool/core';
 import { type AppColors } from '../constants/colors';
-import { acceptAddressFollow, addressFollowOffer, snoozeAddressFollow, type AddressFollowOffer } from '../utils/address-follow';
+import { acceptAddressFollow, addressFollowOffer, snoozeAddressFollow, type AddressFollowOffer, type FollowResult } from '../utils/address-follow';
 import { onCommunitySwitched } from '../utils/community-switch';
 
 export function AddressFollowCard({ colors }: { colors: AppColors }) {
@@ -38,7 +38,16 @@ export function AddressFollowCard({ colors }: { colors: AppColors }) {
         if (busyRef.current) return;
         busyRef.current = true;
         setBusy(true);
-        const result = await acceptAddressFollow(offer).catch(() => 'unreachable' as const);
+        let result: FollowResult;
+        try {
+            result = await acceptAddressFollow(offer);
+        } catch (e) {
+            // Only the switch itself throws (its database or address): said as the BeanPool sheet's switch says it.
+            busyRef.current = false;
+            setBusy(false);
+            Alert.alert(t("Couldn't switch community"), (e instanceof Error && e.message) || t('Please try again.'));
+            return;
+        }
         if (result === 'moved') {
             // As the BeanPool sheet's switch: back to the bottom of the stack, then through Welcome for the community.
             if (router.canDismiss()) router.dismissAll();

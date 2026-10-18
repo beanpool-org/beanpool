@@ -289,16 +289,22 @@ describe('offered only when the new address is the same community', () => {
         expect(await addressFollowOffer(deps)).toBeNull();
     });
 
-    it('asks the two servers once an hour at most for the same offer, and keeps no "unreachable"', async () => {
+    it('asks the two servers once an hour at most for the same offer, and again five minutes after no answer', async () => {
         const w = world({ answers: { [IP]: statement(node, COMMUNITY) } });
         expect(await addressFollowOffer(w.deps)).toBeNull();
         expect(w.state.asked).toEqual([IP, NAME]);
+        // The name answers now; Home comes back into view a minute later: not asked again yet.
         w.state.answers[NAME] = statement(node, COMMUNITY);
+        w.state.now += 60 * 1000;
+        expect(await addressFollowOffer(w.deps)).toBeNull();
+        expect(w.state.asked).toHaveLength(2);
+        w.state.now += 5 * 60 * 1000;
         expect(await addressFollowOffer(w.deps)).not.toBeNull();
         expect(w.state.asked).toHaveLength(4);
+        w.state.now += 30 * 60 * 1000;
         expect(await addressFollowOffer(w.deps)).not.toBeNull();
         expect(w.state.asked).toHaveLength(4);
-        w.state.now += 61 * 60 * 1000;
+        w.state.now += 31 * 60 * 1000;
         await addressFollowOffer(w.deps);
         expect(w.state.asked).toHaveLength(6);
     });

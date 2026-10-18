@@ -24,7 +24,8 @@
  *
  * It costs Home nothing while there is nothing to follow (Home lands with one request): the community's addresses come
  * from the phone's own copy of its profile, which the hourly profile read keeps (utils/node-profile.ts), and the two
- * servers are asked only for a move to offer, at most once an hour for the same one.
+ * servers are asked only for a move to offer, at most once an hour for the same one (after five minutes when either
+ * gave no answer).
  *
  * Never from an http address (whoever is in the middle of a home network could name both the address and the identity),
  * never from the worldwide community (the app knows it by its one address, utils/global-node-url.ts), never from a name
@@ -56,6 +57,8 @@ export const COMMUNITY_IDENTITY_KEY = 'beanpool_community_identity';
 const STATEMENT_TIMEOUT_MS = 8_000;
 /** How long an offer's check is reused before Home asks the two servers again. */
 const VERDICT_TTL_MS = 60 * 60 * 1000;
+/** The same for a check that got no answer (a name whose DNS is still on its way, a server down a moment). */
+const UNREACHABLE_TTL_MS = 5 * 60 * 1000;
 const MAX_KEPT = 50;
 
 /** Who a node says it is, from a statement signed with its node key. */
@@ -259,7 +262,7 @@ async function checkFollow(offer: AddressFollowOffer, deps: AddressFollowDeps): 
     return sameCommunity(here, there) ? 'same' : 'not-same';
 }
 
-/** Offers checked this run: `from to` → the answer and when. 'unreachable' is never kept. */
+/** Offers checked this run: `from to` → the answer and when (VERDICT_TTL_MS, or UNREACHABLE_TTL_MS for 'unreachable'). */
 const checked = new Map<string, { verdict: FollowCheck; at: number }>();
 
 /** Forget this run's checks (tests). */
@@ -286,11 +289,11 @@ export async function addressFollowOffer(injected?: Partial<AddressFollowDeps>):
     if (!offer || await snoozed(offer, deps.now())) return null;
     const id = `${offer.from} ${offer.to}`;
     const memo = checked.get(id);
-    let verdict = memo && deps.now() - memo.at < VERDICT_TTL_MS ? memo.verdict : null;
+    const ttl = memo?.verdict === 'unreachable' ? UNREACHABLE_TTL_MS : VERDICT_TTL_MS;
+    let verdict = memo && deps.now() - memo.at >= 0 && deps.now() - memo.at < ttl ? memo.verdict : null;
     if (!verdict) {
         verdict = await checkFollow(offer, deps);
-        if (verdict === 'unreachable') checked.delete(id);
-        else checked.set(id, { verdict, at: deps.now() });
+        checked.set(id, { verdict, at: deps.now() });
     }
     return verdict === 'same' ? offer : null;
 }

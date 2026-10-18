@@ -148,6 +148,16 @@ describe('the follow card at 320 dp, text at 1.3x', () => {
         expect(Alert.alert).toHaveBeenCalledWith(`Couldn't check ${OFFER.host}`, 'Nothing has changed. Try again in a little while.');
     });
 
+    it('a switch that fails: nothing more moves, the card stays, and it says so as the BeanPool sheet does', async () => {
+        vi.mocked(acceptAddressFollow).mockImplementationOnce(async () => { throw new Error('The database could not be opened.'); });
+        const host = await render();
+        await act(async () => { byId(host, 'address-follow-use').click(); });
+        expect(nav.router.replace).not.toHaveBeenCalled();
+        expect(card(host)).not.toBeNull();
+        expect(byId(host, 'address-follow-use').textContent).toBe('Use the new address');
+        expect(Alert.alert).toHaveBeenCalledWith("Couldn't switch community", 'The database could not be opened.');
+    });
+
     it('asked again after any switch of community', async () => {
         await render();
         expect(addressFollowOffer).toHaveBeenCalledTimes(1);

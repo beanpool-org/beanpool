@@ -90,7 +90,7 @@ The server watches itself every minute and tells its owners when it needs them:
 - the host watchdog restarted it after a freeze, or the watchdog has gone quiet;
 - the standby needs attention;
 - on a standby: it is not paired with a main server, or the server it copies from answers with a key that is not its main server's (see Which server a standby trusts, in Backups and replicas);
-- a certificate the server holds for one of its own addresses could not be renewed for a day after it was due (once a day while it lasts), has less than a day left (urgent), or is gone, so apps and browsers see a self-signed one there and refuse it (it expired before it was renewed, or none was issued yet). Each names the address, so an owner with two knows which one, and says when it expires. The server keeps trying, at least once a day and more often near the end; once a new certificate arrives, the alert is resolved.
+- a certificate the server holds for one of its own addresses could not be renewed for a day after it was due (once a day while it lasts), has less than a day left (urgent), or expired before it was renewed, so apps and browsers see a self-signed one there and refuse it. Each names the address, so an owner with two knows which one, and says when it expires. The server keeps trying, at least once a day and more often near the end; once a new certificate arrives, the alert is resolved.
 
 It also tells them when someone gains power on the server, saying what happened and how, never who:
 

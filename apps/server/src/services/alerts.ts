@@ -12,7 +12,7 @@
  * failed integrity check is urgent), the host watchdog restarting a frozen server or going quiet, the standby needing its
  * owners (services/standby-health.ts), and the certificates this server holds for its own addresses (services/acme,
  * design scratch/global-node/DESIGN-https-anywhere-fable.md §2): a renewal a day past due, a certificate with less than
- * a day left (urgent), and an address left with the self-signed one (expired before it was renewed, or never issued).
+ * a day left (urgent), and one that expired before it was renewed, leaving its address with the self-signed one.
  *
  * And who gains power on it (slice S4, services/security-signal.ts): an owner, admin or moderator role granted or taken
  * away, and how (by an owner, by the password, break-glass, with the claim code); the community claimed; a break-glass
@@ -90,7 +90,8 @@ import { readStandbyMain } from './standby-main.js';
 import { readCopyRecord } from './standby-copy-record.js';
 import { timeInWords } from './standby-report.js';
 import { snapshotFailuresInARow } from './snapshot-scheduler.js';
-import { certificateStandings, type CertificateStanding } from './acme/schedule.js';
+import { heldCertificates, type HeldCertificate } from './acme/schedule.js';
+import { selfSignedHosts } from './tls.js';
 import { getReplacedInfo } from './identity-epoch.js';
 import { reportKind, type ReportKind } from './report-kind.js';
 import { setSecurityAlertHandler, SECURITY_PUSHES_PER_HOUR, NAME_ALERT_WORDS, OWNER_ALERT_WORDS, type SecurityNote } from './security-signal.js';
@@ -1546,33 +1547,39 @@ export const TLS_RENEWAL_LATE_MS = DAY;
 export const TLS_EXPIRING_MS = DAY;
 
 /**
- * The certificates this server holds for its own addresses (services/acme/schedule.ts certificateStandings, design
- * scratch/global-node/DESIGN-https-anywhere-fable.md §2): only identifiers a renewal tick has looked at since this start,
- * so nothing on a standby (it orders none) and nothing before the scheduler has had its go.
- *   - tls.renewal-late: one served whose renewal fell due TLS_RENEWAL_LATE_MS ago or more, not renewed since;
- *   - tls.expiring: one served with less than TLS_EXPIRING_MS left, beside the late renewal (a renewal also ends both);
- *   - tls.fallback: one with no CA certificate at all (expired before it was renewed, or never issued), so apps and
- *     browsers see the self-signed pair there. Was the fleet's Cloudflare name only; now any address this server certifies.
+ * The certificates this server holds for its own addresses (services/acme/schedule.ts heldCertificates, tls.ts
+ * selfSignedHosts; design scratch/global-node/DESIGN-https-anywhere-fable.md §2): only identifiers a renewal tick has
+ * looked at since this start, so nothing on a standby (it orders none) and nothing before the scheduler has had its go.
+ *   - tls.renewal-late: one held whose renewal fell due TLS_RENEWAL_LATE_MS ago or more, not renewed since;
+ *   - tls.expiring: one held with less than TLS_EXPIRING_MS left, beside the late renewal (a renewal ends both);
+ *   - tls.fallback: one whose certificate expired before it was renewed, so apps and browsers see the self-signed pair
+ *     there; and, as before, the fleet's Cloudflare name with none. Was that name only; now any address this server
+ *     certifies. Not an address never issued one: a proxy in front may hold its certificate.
  * Each names the address (the soonest to expire first) and when; several are one line. The retries they promise are the
  * scheduler's: never more than a day apart, and at most a third of what is left (so within 8 hours under the last day).
  */
 function tlsConditions(at: number): Condition[] {
-    let standings: CertificateStanding[];
-    try { standings = certificateStandings(at); } catch { return []; }
-    const bySoonest = (a: CertificateStanding, b: CertificateStanding) => (a.notAfter ?? 0) - (b.notAfter ?? 0);
-    const late = standings.filter((s) => s.renewDueAt !== null && at - s.renewDueAt >= TLS_RENEWAL_LATE_MS).sort(bySoonest);
-    const expiring = standings.filter((s) => s.notAfter !== null && s.notAfter - at < TLS_EXPIRING_MS).sort(bySoonest);
-    const fallen = standings.filter((s) => s.notAfter === null);
-    const hosts = (list: CertificateStanding[]) => list.map((s) => s.host).join(', ');
-    const lateDue = late.length ? when(Math.min(...late.map((s) => s.renewDueAt!))) : '';
+    let held: HeldCertificate[];
+    let fallen: ReturnType<typeof selfSignedHosts>;
+    try {
+        held = heldCertificates(at);
+        fallen = selfSignedHosts(at);
+    } catch {
+        return [];
+    }
+    const bySoonest = (a: HeldCertificate, b: HeldCertificate) => a.notAfter - b.notAfter;
+    const late = held.filter((c) => at - c.renewDueAt >= TLS_RENEWAL_LATE_MS).sort(bySoonest);
+    const expiring = held.filter((c) => c.notAfter - at < TLS_EXPIRING_MS).sort(bySoonest);
+    const hosts = (list: { host: string }[]) => list.map((c) => c.host).join(', ');
+    const lateDue = late.length ? when(Math.min(...late.map((c) => c.renewDueAt))) : '';
     return [
         fallen.length === 0
             ? { key: 'tls.fallback', active: false, detail: tr('No address of this server is left with the self-signed certificate now.') }
             : {
                 key: 'tls.fallback', active: true,
                 detail: fallen.length > 1
-                    ? tr('The certificates for {hosts} have expired or were never issued: browsers now see a self-signed one. They are tried again within a day.', { hosts: hosts(fallen) })
-                    : fallen[0].hadOne
+                    ? tr('The certificates for {hosts} expired or were never issued: browsers now see a self-signed one. They are tried again within a day.', { hosts: hosts(fallen) })
+                    : fallen[0].expired
                     ? tr("The certificate for {host} expired before it could be renewed: browsers now see a self-signed one. It is tried again within a day.", { host: fallen[0].host })
                     : tr('There is no certificate for {host} yet: browsers now see a self-signed one. It is tried again within a day.', { host: fallen[0].host }),
             },
@@ -1582,9 +1589,9 @@ function tlsConditions(at: number): Condition[] {
                 key: 'tls.renewal-late', active: true,
                 detail: late.length > 1
                     ? tr('The certificates for {hosts} could not be renewed since {due}; the first expires {expires}. They are tried again within a day, and more often as that nears.',
-                        { hosts: hosts(late), due: lateDue, expires: when(late[0].notAfter!) })
+                        { hosts: hosts(late), due: lateDue, expires: when(late[0].notAfter) })
                     : tr('The certificate for {host} could not be renewed since {due}; it expires {expires}. It is tried again within a day, and more often as that nears.',
-                        { host: late[0].host, due: lateDue, expires: when(late[0].notAfter!) }),
+                        { host: late[0].host, due: lateDue, expires: when(late[0].notAfter) }),
             },
         expiring.length === 0
             ? { key: 'tls.expiring', active: false, detail: tr('No certificate this server serves expires within a day now.') }
@@ -1592,9 +1599,9 @@ function tlsConditions(at: number): Condition[] {
                 key: 'tls.expiring', active: true,
                 detail: expiring.length > 1
                     ? tr('The certificates for {hosts} expire in less than a day, the first {expires}, and have not been renewed. After that, apps and browsers refuse this server at those addresses until new ones come. They are tried again within a few hours.',
-                        { hosts: hosts(expiring), expires: when(expiring[0].notAfter!) })
+                        { hosts: hosts(expiring), expires: when(expiring[0].notAfter) })
                     : tr('The certificate for {host} expires {expires}, in less than a day, and has not been renewed. After that, apps and browsers refuse this server at that address until a new one comes. It is tried again within a few hours.',
-                        { host: expiring[0].host, expires: when(expiring[0].notAfter!) }),
+                        { host: expiring[0].host, expires: when(expiring[0].notAfter) }),
             },
     ];
 }

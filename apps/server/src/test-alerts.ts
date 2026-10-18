@@ -31,9 +31,10 @@
  * 11. An end is told after 15 minutes, and not at all if the condition is back before that: a disk swinging 81 % ↔ 76 %
  *     every 5 minutes for a day is one message. While the end is held, the banner and the panel no longer count it.
  * 12. The server's own certificates (HTTPS-anywhere S7; the real renewal tick, a stand-in order, no CA asked; the TLS and
- *     renewal clocks are the alert book's): no ACME certificate, or one no renewal check has looked at yet, raises none of
- *     the three; a renewal due and not done for 24 hours is `tls.renewal-late`, not before; under a day left is
- *     `tls.expiring` (urgent); renewed, both clear; expired, `tls.fallback` names the address, and clears when renewed.
+ *     renewal clocks are the alert book's): no ACME certificate, an address no renewal check has looked at yet, or one
+ *     never issued a certificate (a proxy may hold it) raises none of the three; a renewal due and not done for 24 hours
+ *     is `tls.renewal-late`, not before; under a day left is `tls.expiring` (urgent); renewed, both clear; expired,
+ *     `tls.fallback` names the address, and clears when renewed; the fleet's Cloudflare name with none is told as before.
  *
  * Run (as test-all does, through scripts/run-server-suites.mjs):
  *   BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-alerts.ts
@@ -667,6 +668,13 @@ async function main(): Promise<void> {
     forgetOwnAddresses();
     await tick();
     assert(tlsKeys().length === 0, `12. an address no renewal check has looked at yet: nothing raised before it had its go (${tlsKeys()})`);
+    caAnswers = false;
+    const refused12 = await schedule.runAcmeTick();
+    await tick();
+    assert(refused12.outcomes[IP] === 'failed' && tlsKeys().length === 0 && !tlsMod.tlsFellBackToSelfSigned(),
+        `12. never issued one (its order refused): nothing raised, as a proxy in front may hold its certificate (${tlsKeys()})`);
+    caAnswers = true;
+    advance(HOUR + MIN);
     const first12 = await schedule.runAcmeTick();
     await tick();
     const issued = tlsMod.servedCertificate(IP);
@@ -739,6 +747,16 @@ async function main(): Promise<void> {
     advance(15 * MIN);
     await tick();
     assert(tlsKeys().length === 0 && !!tlsMod.servedCertificate(IP) && !tlsMod.tlsFellBackToSelfSigned(), `12. renewed: tls.fallback over (${tlsKeys()})`);
+    // The fleet's Cloudflare name (dns-01) with no certificate at all is still told, as it was before any other address was.
+    Object.assign(process.env, { CF_RECORD_NAME: 'fleet.example.org', CF_API_TOKEN: 'cf-suite-token', CF_ZONE_ID: 'cf-suite-zone' });
+    forgetOwnAddresses();
+    caAnswers = false;
+    const fleet12 = await schedule.runAcmeTick();
+    await tick();
+    assert(fleet12.outcomes['fleet.example.org'] === 'failed' && fleet12.outcomes[IP] === 'fresh'
+        && tlsLine('tls.fallback')?.detail === 'There is no certificate for fleet.example.org yet: browsers now see a self-signed one. It is tried again within a day.',
+        `12. the fleet's Cloudflare name with none: tls.fallback, as before (${JSON.stringify(fleet12.outcomes)}: ${tlsLine('tls.fallback')?.detail})`);
+    for (const k of ['CF_RECORD_NAME', 'CF_API_TOKEN', 'CF_ZONE_ID']) delete process.env[k];
     delete process.env.BEANPOOL_ADDRESSES;
     forgetOwnAddresses();
     schedule._setScheduleHooksForTests({ now: null, order: null });

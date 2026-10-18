@@ -534,12 +534,12 @@ function isIpLiteral(host: string): boolean {
 
 /** The web address's host as signatures carry it (its hostname, else its registrar name), or null. */
 function webAddressHost(pa: unknown): string | null {
-    const p: any = pa;
-    if (typeof p === 'string') return audienceOf(p.trim());
-    if (!p || typeof p !== 'object') return null;
-    if (typeof p.hostname === 'string' && p.hostname.trim()) return audienceOf(p.hostname.trim());
-    if (typeof p.name === 'string' && p.name.trim()) {
-        const n = p.name.trim();
+    if (typeof pa === 'string') return audienceOf(pa.trim());
+    if (!pa || typeof pa !== 'object') return null;
+    const { hostname, name } = pa as { hostname?: unknown; name?: unknown };
+    if (typeof hostname === 'string' && hostname.trim()) return audienceOf(hostname.trim());
+    if (typeof name === 'string' && name.trim()) {
+        const n = name.trim();
         return audienceOf(n.includes('.') ? n : `${n}.${BEANPOOL_ZONE}`);
     }
     return null;

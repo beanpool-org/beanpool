@@ -25,7 +25,7 @@ import net from 'node:net';
 import tls from 'node:tls';
 import selfsigned from 'selfsigned';
 import { audienceOf } from '@beanpool/core';
-import { certCovers, certTimes, readPair, storedHosts, writePair, type CertPair } from './acme/store.js';
+import { certCovers, certTimes, readPair, readState, storedHosts, writePair, type CertPair } from './acme/store.js';
 
 const DATA_DIR = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
 const TLS_DIR = path.join(DATA_DIR, 'tls');
@@ -96,12 +96,28 @@ export function fleetIdentifier(): string | null {
 }
 
 /**
- * A public node serving its self-signed certificate for one of its identifiers after a renewal check looked at it (none
- * valid from the CA, expired or never issued): what services/alerts.ts tells the owners (tls.fallback), and the AI
- * assistants' health read. Any identifier this server certifies, not only the fleet's Cloudflare name.
+ * The identifiers a renewal check has looked at since this start that are left with the self-signed pair, where that is
+ * what apps and browsers get: one whose CA certificate expired before it was renewed (`expired`), or the fleet's dns-01
+ * name with none at all. An http-01 identifier never issued one is not here: a proxy in front of this server may hold
+ * its certificate, so nobody may see the self-signed pair, and why it has none yet is its order's (state.json lastError).
+ * What services/alerts.ts tells the owners (tls.fallback). Any identifier this server certifies, not only the fleet's.
  */
+export function selfSignedHosts(now = clock()): Array<{ host: string; expired: boolean }> {
+    if (!serverCertPem) return [];
+    const fleet = fleetIdentifier();
+    const out: Array<{ host: string; expired: boolean }> = [];
+    for (const host of checkedHosts()) {
+        if (servesCaCertificateFor(host, now)) continue;
+        const state = readState(DATA_DIR, host);
+        const expired = state.validUntil > 0 || state.lastSuccessAt > 0;
+        if (expired || host === fleet) out.push({ host, expired });
+    }
+    return out;
+}
+
+/** Whether any identifier is left with the self-signed pair (selfSignedHosts): tls.fallback, and the AI assistants' health read. */
 export function tlsFellBackToSelfSigned(now = clock()): boolean {
-    return !!serverCertPem && checkedHosts().some((host) => !servesCaCertificateFor(host, now));
+    return selfSignedHosts(now).length > 0;
 }
 
 /** schedule.ts: a tick has looked at this identifier's certificate. */

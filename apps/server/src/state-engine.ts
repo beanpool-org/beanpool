@@ -636,12 +636,19 @@ export interface NodeConfig {
     publishHealth?: boolean;
     directoryPushIntervalHours?: number;
     lastDirectoryPush?: string;
+    /**
+     * The community's address: the BeanPool registrar's record of its name (`tunnel` or `direct`, with the tunnel's token),
+     * or, while it holds no such name, an own address given with `beanpool claim --ip/--address` or in Settings: this
+     * server's public IP (`ip`) or the owner's own domain (`own`), `{ mode, hostname, status: 'live', since }`, which the
+     * registrar never hears of (isOwnPublicAddress; services/public-address-agent.ts storeOwnAddress).
+     */
     publicAddress?: {
         name?: string;
-        mode?: 'tunnel' | 'direct';
+        mode?: 'tunnel' | 'direct' | 'ip' | 'own';
         hostname?: string;
         status?: string;
         tunnelToken?: string;
+        since?: string;
     } | null;
     /**
      * Addresses an owner or admin confirmed in Settings as this community's own (engine/own-addresses.ts, source 3): a
@@ -8677,6 +8684,15 @@ export function getNodeConfig(): NodeConfig {
     }
 
     return finalConfig;
+}
+
+/**
+ * Whether a stored `publicAddress` is an own address (this server's IP, `ip`, or the owner's domain, `own`) rather than
+ * the registrar's record: nothing about it is asked of the registrar, and no tunnel runs for it.
+ */
+export function isOwnPublicAddress(pa: unknown): pa is { mode: 'ip' | 'own'; hostname: string } {
+    const mode = pa && typeof pa === 'object' ? (pa as { mode?: unknown }).mode : undefined;
+    return (mode === 'ip' || mode === 'own') && typeof (pa as { hostname?: unknown }).hostname === 'string';
 }
 
 let publicAddressWrites = 0;

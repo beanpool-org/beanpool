@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ur",
     "name": "Urdu",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-19",
@@ -305,5 +305,25 @@
   "Sunset {time}.": "غروب آفتاب {time}۔",
   "Look around ›": "جائزہ لیں ›",
   "Pick up the tour at step {step} ›": "مرحلہ {step} سے ٹور دوبارہ شروع کریں ›",
-  "This is your Home. You choose what goes here. Before you start, take a one-minute look at the other tabs.": "یہ آپ کا ہوم ہے۔ آپ چنتے ہیں کہ یہاں کیا ہو۔ شروع کرنے سے پہلے دیگر ٹیبز کا ایک منٹ کا جائزہ لیں۔"
+  "This is your Home. You choose what goes here. Before you start, take a one-minute look at the other tabs.": "یہ آپ کا ہوم ہے۔ آپ چنتے ہیں کہ یہاں کیا ہو۔ شروع کرنے سے پہلے دیگر ٹیبز کا ایک منٹ کا جائزہ لیں۔",
+  "Save this search to Home": "اس تلاش کو ہوم میں محفوظ کریں",
+  "Save the search \"{q}\" to Home": "تلاش \"{q}\" کو ہوم میں محفوظ کریں",
+  "The 1 vote came from a new or 12-word account": "1 ووٹ نئے یا 12 الفاظ والے اکاؤنٹ سے آیا",
+  "All {n} votes came from new or 12-word accounts|All {n} votes came from new or 12-word accounts": {
+    "one": "تمام {n} ووٹ نئے یا 12 الفاظ والے اکاؤنٹس سے آئے",
+    "other": "تمام {n} ووٹ نئے یا 12 الفاظ والے اکاؤنٹس سے آئے"
+  },
+  "{n} of {total} votes came from a new or 12-word account|{n} of {total} votes came from new or 12-word accounts": {
+    "one": "{total} میں سے {n} ووٹ نئے یا 12 الفاظ والے اکاؤنٹ سے آیا",
+    "other": "{total} میں سے {n} ووٹ نئے یا 12 الفاظ والے اکاؤنٹس سے آئے"
+  },
+  "This 1 from a new or 12-word account": "یہ 1 نئے یا 12 الفاظ والے اکاؤنٹ سے",
+  "All {n} from new or 12-word accounts|All {n} from new or 12-word accounts": {
+    "one": "تمام {n} نئے یا 12 الفاظ والے اکاؤنٹس سے",
+    "other": "تمام {n} نئے یا 12 الفاظ والے اکاؤنٹس سے"
+  },
+  "{n} of these {count} from a new or 12-word account|{n} of these {count} from new or 12-word accounts": {
+    "one": "ان {count} میں سے {n} نئے یا 12 الفاظ والے اکاؤنٹ سے",
+    "other": "ان {count} میں سے {n} نئے یا 12 الفاظ والے اکاؤنٹس سے"
+  }
 }

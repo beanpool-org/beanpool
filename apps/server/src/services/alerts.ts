@@ -1560,7 +1560,8 @@ export const TLS_EXPIRING_MS = DAY;
  *     certifies. Not an address never issued one: a proxy in front may hold its certificate.
  * An expiry is not a renewal: while an address is left with the self-signed pair after its certificate expired,
  * tls.fallback tells it, and the other two end untold (Condition.endUntold), never as resolved.
- * Each names the address (the soonest to expire first) and when; several are one line. The retries they promise are the
+ * Each names the address (the soonest to expire first); the late and expiring rows say when it expires, tls.fallback
+ * that it expired or there is none yet (no date). Several are one line. The retries they promise are the
  * scheduler's: never more than a day apart, and at most a third of what is left (so within 8 hours under the last day).
  */
 function tlsConditions(at: number): Condition[] {

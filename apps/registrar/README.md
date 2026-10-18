@@ -5,7 +5,7 @@ Full design: [`docs/node-dns-registrar.md`](../../docs/node-dns-registrar.md).
 
 - **Node-facing (signed):** `GET /api/registrar/available` (public) · `POST /api/registrar/claim` (a new
   name, or a heal of the claimant's own) · `POST /api/registrar/heal` · `POST /api/registrar/rotate` (a fresh
-  tunnel, below) · `GET /api/registrar/status` ·
+  tunnel, below) · `GET /api/registrar/status` (with `?seen=`, and its `notices`: "Notices to operators", below) ·
   `POST /api/registrar/update` · `POST /api/registrar/release` (`/offline` is its old name and still works) ·
   `POST /api/registrar/holder {name}` (who holds a name, below)
 - **Health (public):** `GET /api/registrar/health` → `{ status: 'ok', commit, accepted_proto }`: the git commit
@@ -41,7 +41,8 @@ Full design: [`docs/node-dns-registrar.md`](../../docs/node-dns-registrar.md).
   `GET …/sources` · `POST …/sources {source, block?, run?, total?}` or `{asn}` (Reject all held / Block all;
   `{asn}`: that network's names with no source, as the panel groups them when `SOURCE_KEY` is unset) ·
   `POST …/blocked {kind, value, days?, remove?}` · `POST …/settings {key, value}`, `{key, reset: true}` or `{hold}`
-  (a missing or null value is refused, never read as a reset). Every pending row of `/pending` also says
+  (a missing or null value is refused, never read as a reset). Notices (below): `GET …/notices[?id=]` ·
+  `POST …/notices {to, text, level?, reply?, days?}`. Every pending row of `/pending` also says
   `held_reason` (held for approval although its name is auto) and its `source` (network, country, the source's
   keyed-hash id), and a live one `probation` while it is on it. The page's tables fit their card at every width: the
   registrar tests pin its CSS, and `node apps/registrar/scripts/check-admin-layout.mjs [<shots dir>]` measures it in a
@@ -262,6 +263,39 @@ refuse; "open code, private settings"; the DNS cap). Migration 0011.
   ignores all of it, and this one without it records and holds nothing: past the budget it refuses with a 429, as
   before). Set `SOURCE_KEY` first (`wrangler secret put SOURCE_KEY`, 32 random bytes, hex). By hand, as a burst brake
   only: Cloudflare's one Free rate-limit rule on `/api/registrar/claim` (design §7).
+
+## Notices to operators, and reply links (slice S2)
+
+Design: `scratch/global-node/DESIGN-registrar-trust-fable.md` §3.2 (D4, decided by Marty 2026-10-18). Migration 0012.
+
+- **Reaching a living node without collecting anything:** the admin writes a notice in /admin ("Notices to operators")
+  to one or more names, a group from "New names, last 24 h" (its Notice button: a source, or a network) or every name
+  held. One recipient row per key, the key's live name first. Each node hears it on its own signed `/status` (every 5 or
+  15 minutes): up to 5 not yet seen, oldest first, as `notices: [{id, at, level, text, name, link?}]`. The node sends back
+  `?seen=<the highest id it has>`, signed with the query (`x-bp-signature-query`); every notice carried to it up to that
+  id is marked seen and never carried again. A notice is carried only while its name is still held by that key
+  (pending, live, paused or **blocked**: a blocked operator hears why); it stops at release. An older node ignores the
+  field and sends no `seen`. A failure here never fails a `/status`.
+- **The words:** at most 500 characters, lines kept, no control or text-reordering characters; level `info`, `warning` or
+  `action`; carried for `days` (default 14, at most 90). Each name's history (`name_events`, event `notice`) records the
+  notice's number and level, never its words; the admin's phone is told it was sent (how many names), never the words.
+  The node shows the words in its Settings and tells its owners in its own words (`reg.notice`), never the notice's.
+- **Reply links** (`REPLY_URL` in wrangler.toml, off until apps/feedback serves `/reply/`): a notice sent with `reply`
+  carries, to each key, `REPLY_URL<token>` — 32 random bytes, made at its first carry. Only its SHA-256 is kept past the
+  node's `seen` (`reply_tokens`); the token says nothing of the name or the key. It works once, for 14 days, and only
+  while the name is still held by that key (blocked included). apps/feedback's page checks it and takes its use through
+  this Worker's **ReplyTokens** entrypoint (`src/worker.js`, `wrangler.toml` `main`): a service binding only, never
+  reachable from the internet; the feedback Worker never reads this database. The reply is filed in the feedback inbox
+  (source `address-reply`, under the name); the admin's phone is told "Reply from <name>", never the words.
+- **Contact retention:** a name's optional `contact` (never checked, shown in /admin only, never in an alert or a log)
+  is cleared by the sweep once the name's hold is over — a release past its 30 days, one that freed it at once, or the
+  name abandoned — in one statement; Remove from the list clears it at once.
+- **Upkeep:** once an hour the sweep deletes reply links past their time and notices 30 days past theirs, with their
+  recipients — each only with D1 queries to spare.
+- **Deploy:** migration 0012 before the Worker (the workflow applies `migrations/` first; this Worker without it carries
+  no notices and answers everything else as before). The node release after the Worker (an older node ignores
+  `notices`). Reply links: deploy apps/feedback (its README, "Reply links") after this Worker, then uncomment
+  `REPLY_URL` and deploy this Worker again.
 
 ## Limits on what a key may do (the 2026-10-01 review)
 
@@ -636,7 +670,11 @@ retried in one message, the hourly cap, no channel set, the category toggles, `/
 log line. `test/sources-2026-10-18.test.js` covers S3: a source past its limit held (never refused) and approved, Block
 all and Reject all held, a network blocked by hand, probation (the switchboard, `/status`, the alert at verification,
 a burst told once), the hold switch, the DNS cap's alert and hold, the settings beating the env and the defaults, no
-address stored anywhere, and one Block all request inside D1's budget.
+address stored anywhere, and one Block all request inside D1's budget. `test/notices-2026-10-18.test.js` covers S2: a
+notice carried once per `/status` until `seen` (a `seen` outside its signature acknowledges nothing), a blocked key still
+hearing it and a released name not, reply links (one use, expiry, a released name, only the hash kept), the audiences
+(one per key, a source and a network group), the words never in an event or an alert, contact retention, the hourly
+tidying, and a database without migration 0012.
 
 The signing contract with the node is tested from the node's side: `apps/server/src/test-registrar-contract.ts`
 (run by `scripts/test-all.sh`) imports this Worker's `src/` and the harness. `node scripts/check-migrations.mjs`

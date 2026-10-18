@@ -61,9 +61,10 @@ export function isOurDomain(host: string): boolean {
     const h = bare(host);
     return OUR_DOMAINS.some((d) => under(h, d));
 }
+/** An address is read as an address, a name as a name: 127.0.0.1.beanpool.org is not loopback (review 4305779620). */
 const loopbackName = (host: string) => {
     const h = bare(host);
-    return h === 'localhost' || h.endsWith('.localhost') || isLoopback(h);
+    return net.isIP(h) ? isLoopback(h) : h === 'localhost' || h.endsWith('.localhost');
 };
 
 /** The first frame of this repository's code below the trap: the line that asked. */

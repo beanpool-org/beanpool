@@ -420,8 +420,17 @@ async function main(): Promise<void> {
             assert(fetched === 'ENOTFOUND' && looked === 'ENOTFOUND' && socket === 'ENOTFOUND',
                 `a fetch, a lookup and a TLS socket to our domains each fail as an unresolvable name (${fetched}, ${looked}, ${socket})`);
             assert(seen.length === 3 && seen.every((c) => c.domain === 'beanpool.org'), `…and each is counted against beanpool.org (${describeOutsideCalls(seen).join('; ')})`);
+            // A name that reads like a loopback address is a name (review 4305779620).
+            const named = allCalls().length;
+            const dotted = await fetch('https://127.0.0.1.beanpool.org/x').then(() => 'answered', (e) => e?.cause?.code);
+            const dottedLookup = await dns.promises.lookup('127.0.0.1.beanpool.org').then((a) => a.address, (e) => e?.code);
+            assert(dotted === 'ENOTFOUND' && dottedLookup === 'ENOTFOUND' && allCalls().length - named === 2,
+                `a name starting 127. is refused and counted, not answered as loopback (${dotted}, ${dottedLookup}, ${allCalls().length - named} counted)`);
         });
-        // Those three were this check's own: the count is of everything after it.
+        // Those were this check's own: the count is of everything after it, from the next millisecond on, so the last of
+        // them cannot share the count's first.
+        const lastOwn = Date.now();
+        while (Date.now() <= lastOwn) await new Promise((r) => setTimeout(r, 1));
         countFrom = Date.now();
 
         // The three nodes. S boots on B's genesis, as setup-backup.mjs and `beanpool pair` set a standby up.

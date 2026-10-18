@@ -212,6 +212,65 @@ test('without SOURCE_KEY the names with no source group by network, and a group\
     } finally { w.restore(); }
 });
 
+// Review of #2132: a held name outlived its claim_sources row (pruned at 24 h), so after a day a bot's held batch was in
+// no group, its /pending rows had no source, and Reject all held and Block all both reached none of it.
+test('a held batch keeps its source past 24 h: still grouped, and Reject all held and Block all reach every held name; a decided name\'s source goes on schedule', async () => {
+    const w = await sourceWorld();
+    try {
+        // Two sources of one network, 9 and 8 new names each in an hour: 3 live, the rest held for `source`.
+        const batch = async (from, prefix, n) => {
+            for (let i = 0; i < n; i++)
+                assert.equal((await claimFrom(w, from, await makeKey(), { name: `${prefix}-${i}` })).body.status, i < 3 ? 'live' : 'pending', `${prefix}-${i}`);
+        };
+        await batch(FROM.bot, 'old', 9);
+        await batch(FROM.other, 'oldb', 8);
+        // 25 hours on (a tenure is its claim's time: the claim and its row move back together). One held name approved then.
+        const ago = 25 * 3600;
+        w.sqlite.prepare('UPDATE claim_sources SET at = at - ?').run(ago);
+        w.sqlite.prepare('UPDATE name_allocations SET requested_at = requested_at - ?, decided_at = decided_at - ?').run(ago, ago);
+        assert.equal((await w.admin('old-8', 'approve')).body.status, 'live');
+        // Both prunes run: a new claim's and the sweep's.
+        assert.equal((await claimFrom(w, FROM.home, await makeKey(), { name: 'today' })).body.status, 'live');
+        await attestSweep(w.env);
+        const heldOf = (p, from, to) => Array.from({ length: to - from + 1 }, (_, i) => `${p}-${from + i}`);
+        const sourcesOf = () => w.sqlite.prepare("SELECT name FROM claim_sources WHERE name LIKE 'old%' ORDER BY name").all().map((r) => r.name);
+        assert.deepEqual(sourcesOf(), [...heldOf('old', 3, 7), ...heldOf('oldb', 3, 7)], 'the held names\' sources kept; the decided ones\' (live, approved) gone');
+        // The panel still groups each held batch by its source.
+        const panel = (await admin(w, 'sources')).body;
+        const groupWith = (n) => panel.groups.find((g) => g.rows.some((r) => r.name === n));
+        const [a, b] = [groupWith('old-3'), groupWith('oldb-3')];
+        assert.ok(a && b && a.source && b.source && a.source !== b.source, JSON.stringify(panel.groups));
+        assert.deepEqual([a.names, a.held, a.asn, b.names, b.held, b.asn], [5, 5, 64500, 5, 5, 64500]);
+        // /pending says where each held name came from.
+        const pending = (await admin(w, 'pending')).body.allocations.filter((r) => r.name.startsWith('old') && r.status === 'pending');
+        assert.equal(pending.length, 10);
+        for (const r of pending) {
+            assert.equal(r.awaiting_approval, true, r.name);
+            assert.equal(r.source?.id, r.name.startsWith('oldb-') ? b.source : a.source, r.name);
+        }
+        // Reject all held on one, Block all on the other, in the page's batches: each reaches all 5.
+        const press = async (body) => {
+            const out = { rejected: [], blocked: [], refused: [] };
+            let r, rounds = 0;
+            do {
+                r = await admin(w, 'sources', body);
+                assert.equal(r.status, 200, JSON.stringify(r.body));
+                for (const k of Object.keys(out)) out[k].push(...r.body[k]);
+            } while (r.body.more && ++rounds < 10);
+            return out;
+        };
+        assert.deepEqual(await press({ source: a.source }), { rejected: heldOf('old', 3, 7), blocked: [], refused: [] });
+        assert.deepEqual(await press({ source: b.source, block: true }), { rejected: heldOf('oldb', 3, 7), blocked: [], refused: [] });
+        for (const n of [...heldOf('old', 3, 7), ...heldOf('oldb', 3, 7)]) assert.equal(row(w, n).status, 'released', n);
+        assert.deepEqual((await admin(w, 'sources')).body.blocked.map((x) => [x.kind, x.value]), [['source', b.source]]);
+        assert.equal((await claimFrom(w, FROM.other, await makeKey(), { name: 'oldb-again' })).status, 403, 'the blocked source refused');
+        // Decided now: their sources go at the next prune.
+        await attestSweep(w.env);
+        assert.deepEqual(sourcesOf(), []);
+        assert.equal(w.sqlite.prepare("SELECT COUNT(*) AS n FROM claim_sources WHERE name = 'today'").get().n, 1, 'the last day\'s kept');
+    } finally { w.restore(); }
+});
+
 test('probation: a new name is live but "not found" on /i/ and the directory waits, until 3 ok sweeps and an hour', async () => {
     const w = await sourceWorld();
     try {

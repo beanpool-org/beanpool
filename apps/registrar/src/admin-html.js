@@ -187,7 +187,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
 
         <div class="admin-card">
             <h2 style="font-size: 1.1rem; font-family: var(--font-header); color: #f472b6; margin-bottom: 0.5rem;">🧭 New names, last 24 h</h2>
-            <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1rem;">Where each new name came from: its source (one connecting address, kept only as a keyed hash, never the address) and its network. No limit refuses a claim: past one, a new name waits above for your approval. Approve the real ones; Reject all held frees a group's held names; Block all also blocks its live ones and refuses that source's new claims for 7 days. Kept 24 hours.</p>
+            <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1rem;">Where each new name came from: its source (one connecting address, kept only as a keyed hash, never the address) and its network. No limit refuses a claim: past one, a new name waits above for your approval. Approve the real ones; Reject all held frees a group's held names; Block all also blocks its live ones and refuses that source's new claims for 7 days. Kept 24 hours, or while a name from it is held.</p>
             <div id="sourcesContainer"><p style="color: var(--text-muted); font-size: 0.85rem;">Loading new names...</p></div>
         </div>
 

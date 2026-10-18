@@ -855,7 +855,8 @@ async function takeName(env, existing, pubkey, b, now, gate = null) {
             : `claimed by key ${key16(pubkey)}; it was ${existing.status}, last held by ${key16(existing.node_pubkey)}`);
     }
 
-    // Where a new name came from, kept a day (claim_sources): the per-source budgets count it, /admin groups it.
+    // Where a new name came from, kept a day, or while the name is held (claim_sources): the per-source budgets count it,
+    // /admin groups it.
     if (gate?.src && !sameKey) await recordSource(env, { at: now, name, node_pubkey: pubkey, ...gate.src, held_reason: held });
 
     if (!approved) {
@@ -984,7 +985,7 @@ async function sourceOf(request, env) {
 const SOURCE_KEEP_S = 86400;
 async function recordSource(env, r) {
     try {
-        await db.pruneSources(env, r.at - SOURCE_KEEP_S);   // a day, no longer (the sweep deletes them too: pruneSources)
+        await db.pruneSources(env, r.at - SOURCE_KEEP_S);   // a day, or while held (the sweep deletes them too: pruneSources)
         await db.recordSource(env, r);
     } catch (e) { console.error('[CLAIM_SOURCE]', r.name, e.message || e); }
 }
@@ -1615,7 +1616,8 @@ async function handleForgetMany(env, bodyText, who = null) {
 }
 
 // --- New names, last 24 h (design §4.4, slice S3) ---
-// /admin's panel: the last day's new names (claim_sources, kept 24 h) grouped by their source — one connecting address,
+// /admin's panel: the last day's new names, and older ones still held (claim_sources, kept 24 h or while the name is
+// held: a bot's held batch stays one group however long it waits), grouped by their source — one connecting address,
 // as its keyed hash; the names with none (SOURCE_KEY unset) by their network, so a group's Reject all held ({ asn })
 // acts on exactly its names — and by network, each name with its row as it is now (held, live, on probation). Counts,
 // names, networks and countries: never an address, never a contact.
@@ -2161,9 +2163,10 @@ async function finishOrphans(d1) {
     } catch (e) { console.error('[ORPHAN]', e.message || e); }
 }
 
-// Where new names came from is kept a day, no longer (migration 0011): the sweep deletes older rows last, with a query it
-// has to spare (d1Meter) — never one the orphans or its send need. A sweep with none left (orphans took them) leaves it
-// to the next; every new name's claim deletes them too (recordSource), so the table never outgrows a day of claims.
+// Where new names came from is kept a day, or while the name is held for approval, no longer (migration 0011): the sweep
+// deletes older rows last, with a query it has to spare (d1Meter) — never one the orphans or its send need. A sweep with
+// none left (orphans took them) leaves it to the next; every new name's claim deletes them too (recordSource), so the
+// table never outgrows a day of claims and the names still held.
 async function pruneSources(d1, s) {
     if (!s?.schema || d1.left() < 1 + sendD1(d1.env)) return;
     try { await db.pruneSources(d1.env, nowS() - SOURCE_KEEP_S); } catch (e) { console.error('[SOURCE_PRUNE]', e.message || e); }

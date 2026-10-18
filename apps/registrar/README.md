@@ -80,7 +80,8 @@ Full design: [`docs/node-dns-registrar.md`](../../docs/node-dns-registrar.md).
   and record are made and the row goes `live` (event `healed`: finished by the sweep; the New community alert; the
   token reaches the node through `/status`). One the budget leaves (`[ORPHAN_WAIT]` in the log) waits for the next
   sweep, its node's claim or heal, or the admin's "Finish now"; a name held for approval is never one. Then, with a D1
-  query to spare, claim sources older than a day are deleted. The sweep sends its alerts once, at its end.
+  query to spare, claim sources older than a day are deleted (a held name's stays while it is held). The sweep sends
+  its alerts once, at its end.
 - **The sweep counts its D1 queries:** D1 allows 50 an invocation on Workers Free and refuses every one past them. The
   sweep spends about 11 (its settings read among them; with the settings table there, the nonce table is not asked
   for), and 2 a live name, before its orphans — a few more in a sweep that verifies a name (its one alert); each orphan is finished only while up to 15 more and
@@ -214,7 +215,9 @@ refuse; "open code, private settings"; the DNS cap). Migration 0011.
   IPv6 address by its /64 — its network (`request.cf.asn`, `asOrganization`) and its country. The address itself is
   never stored, logged, shown or sent; without `SOURCE_KEY` nothing of it is kept (an unkeyed hash of an IPv4 address
   is a lookup away from it) and no per-source budget applies. Rows older than a day are deleted by the sweep (with a
-  query it has to spare) and by every new claim.
+  query it has to spare) and by every new claim, except a name's that is still held for approval: its source stays
+  until the admin decides the name, so a bot's held batch is still one group, rejected or blocked in one click,
+  however long it waits (then it goes at the next prune).
 - **Held, never refused.** A new auto name is held for the admin's approval — `pending`, `held_reason` set, nothing
   made at Cloudflare, its node told `awaiting-approval` as for a gated claim — when its source passed its hourly or
   daily budget (`source`), when the new-name budget across all keys is spent (`budget`), while "Hold all new names" is

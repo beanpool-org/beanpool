@@ -7,7 +7,7 @@
 --                    connecting address (HMAC-SHA-256 under the Worker secret SOURCE_KEY; the address itself is never
 --                    stored, and without the secret nothing is), the network (ASN, its organisation) and the country.
 --                    The per-source budgets count it; /admin groups the last 24 h by it. The sweep deletes rows older
---                    than 24 h.
+--                    than 24 h, except a name's still held for approval (kept until the name is decided).
 --   blocked_sources  a source (its hash) or a network (an ASN) the admin blocked: a claim of a new name from it is refused
 --                    403 before anything is written, until `until`. "Block all" on a source group writes one for 7 days.
 --   settings         the live limits (per-source and global budgets, names per key, probation, the sweep's strikes, the

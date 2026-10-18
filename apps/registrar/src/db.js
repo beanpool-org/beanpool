@@ -283,31 +283,41 @@ export const claimFacts = async (env, { hash, asn }, now, hourAgo, dayAgo) => {
 const ON_ZONE = "status = 'live' OR (status = 'pending' AND held_reason IS NULL)";
 export const namesOnZone = async (env) => Number((await env.DB.prepare(`SELECT COUNT(*) AS n FROM name_allocations WHERE ${ON_ZONE}`).first())?.n) || 0;
 
-// One new name's source, kept 24 h (pruneSources). Never the connecting address: its keyed hash only.
+// One new name's source, kept 24 h, or for as long as its name is held for approval (pruneSources). Never the
+// connecting address: its keyed hash only.
 export const recordSource = (env, r) =>
     env.DB.prepare('INSERT INTO claim_sources (at, name, node_pubkey, source_hash, asn, as_org, country, held_reason) VALUES (?,?,?,?,?,?,?,?)')
         .bind(r.at, r.name, r.node_pubkey, r.source_hash ?? null, r.asn ?? null, r.as_org ?? null, r.country ?? null, r.held_reason ?? null).run();
 
-export const pruneSources = (env, before) => env.DB.prepare('DELETE FROM claim_sources WHERE at < ?').bind(before).run();
+// The row (`a`) of the tenure a claim (`s`) began, still held for the admin's approval: its source is kept past the day
+// while it waits, so a bot's held batch is still rejected or blocked by source in one click however long it waits
+// (Marty 2026-10-18: bulk action on a batch always works). Once the name is decided its source goes at the next prune.
+const TENURE = 'a.name = s.name AND a.node_pubkey = s.node_pubkey AND a.requested_at = s.at';
+const STILL_HELD = "a.status = 'pending' AND a.held_reason IS NOT NULL";
 
-// The last day's new names with where they came from and their row as it is now (null when it is gone or another
-// tenure's), newest first: /admin's "New names, last 24 h", grouped there by source and by network.
+export const pruneSources = (env, before) => env.DB.prepare(
+    `DELETE FROM claim_sources WHERE at < ? AND NOT EXISTS (SELECT 1 FROM name_allocations a
+       WHERE a.name = claim_sources.name AND a.node_pubkey = claim_sources.node_pubkey AND a.requested_at = claim_sources.at AND ${STILL_HELD})`
+).bind(before).run();
+
+// The last day's new names, and older ones still held, with where they came from and their row as it is now (null when
+// it is gone or another tenure's), newest first: /admin's "New names, last 24 h", grouped there by source and by network.
 export const recentSources = async (env, since) => ((await env.DB.prepare(
     `SELECT s.at, s.name, s.node_pubkey, s.source_hash, s.asn, s.as_org, s.country, s.held_reason AS held_at_claim,
             a.status, a.held_reason, a.verified_at, a.community_name
-     FROM claim_sources s LEFT JOIN name_allocations a ON a.name = s.name AND a.node_pubkey = s.node_pubkey AND a.requested_at = s.at
-     WHERE s.at > ? ORDER BY s.at DESC LIMIT 1000`
+     FROM claim_sources s LEFT JOIN name_allocations a ON ${TENURE}
+     WHERE s.at > ? OR (${STILL_HELD}) ORDER BY s.at DESC LIMIT 1000`
 ).bind(since).all()).results || []);
 
-// A group's names (claimed since `since` from one source, or with no source — SOURCE_KEY unset — from one network: the
-// panel's group of that network's names with no source, never a keyed source's) still held by the tenure its claim
-// made, that /admin's "Block all" acts on — every pending one (rejected: held, gated or being set up), live and paused
-// (blocked) — or, `heldOnly`, "Reject all held": the pending ones held for approval (held_reason set), never a gated
-// claim or a name still being set up. At most `limit`, oldest first.
+// A group's names (claimed since `since`, or before it and still held, from one source, or with no source — SOURCE_KEY
+// unset — from one network: the panel's group of that network's names with no source, never a keyed source's) still
+// held by the tenure its claim made, that /admin's "Block all" acts on — every pending one (rejected: held, gated or
+// being set up), live and paused (blocked) — or, `heldOnly`, "Reject all held": the pending ones held for approval
+// (held_reason set), never a gated claim or a name still being set up. At most `limit`, oldest first.
 export const groupNames = async (env, { source = null, asn = null, heldOnly = false }, since, limit) => ((await env.DB.prepare(
-    `SELECT DISTINCT a.* FROM claim_sources s JOIN name_allocations a ON a.name = s.name AND a.node_pubkey = s.node_pubkey AND a.requested_at = s.at
-     WHERE ${source ? 's.source_hash = ?' : 's.source_hash IS NULL AND s.asn = ?'} AND s.at > ?
-       AND ${heldOnly ? "a.status = 'pending' AND a.held_reason IS NOT NULL" : "a.status IN ('pending', 'live', 'paused')"}
+    `SELECT DISTINCT a.* FROM claim_sources s JOIN name_allocations a ON ${TENURE}
+     WHERE ${source ? 's.source_hash = ?' : 's.source_hash IS NULL AND s.asn = ?'} AND (s.at > ? OR (${STILL_HELD}))
+       AND ${heldOnly ? STILL_HELD : "a.status IN ('pending', 'live', 'paused')"}
      ORDER BY a.requested_at LIMIT ?`
 ).bind(source || asn, since, limit).all()).results || []);
 

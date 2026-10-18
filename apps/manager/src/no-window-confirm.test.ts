@@ -45,7 +45,8 @@ describe('no window confirm() for a destructive action', () => {
             return hits.filter((i) => !/await\s*$/.test(f.text.slice(Math.max(0, i - 12), i + 1))).map(() => f.rel);
         });
         expect(unawaited).toEqual([]);
-        // And the hook is in use: the eleven actions, in nine files, this lane moved off window.confirm().
+        // And the hook is in use: the eleven actions, in nine files, this lane moved off window.confirm(); and Settings →
+        // Public Address → "Your own address" asks before Remove (HTTPS S4).
         const asking = files.filter((f) => /await ask\(\{/.test(f.text)).map((f) => f.rel).sort();
         expect(asking).toEqual([
             'App.tsx',
@@ -55,6 +56,7 @@ describe('no window confirm() for a destructive action', () => {
             'components/modules/ConnectedAssistantsPanel.tsx',
             'components/modules/EconomySection.tsx',
             'components/modules/OffboxBackupsPanel.tsx',
+            'components/modules/OwnAddressCard.tsx',
             'components/modules/PeopleSafetySection.tsx',
             'components/modules/TopologyModule.tsx',
         ]);

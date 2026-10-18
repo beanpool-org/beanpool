@@ -32,6 +32,19 @@
  *      code, nothing changed; moved with a current one, the old address still accepted. The same one again, an IP kept
  *      beside a domain, the first address and a first name over an IP stay plain. One refused anyway (the list is full)
  *      is refused for that, with no code asked for.
+ *  10. The global community's address (GLOBAL_COMMUNITY_URL, a self-hoster's own) is never a local community's own: /own
+ *      and the command's file refuse it, in words, nothing changed; on a global node (NODE_PROFILE=global) it is its own.
+ *  11. Removing an address in Settings (app-addresses/remove) asks for the owner's fresh proof (HTTPS S4): no code 401,
+ *      nothing changed; an admin 403 whatever the code; an address not on the list 404 without spending the code, which
+ *      then removes the community's domain; spent, it removes nothing more.
+ *  12. GET /tls/status (HTTPS S4): per identifier the certificate served (issued, expires), when it is renewed or tried
+ *      next, the failures and last error in the scheduler's words, where it comes from and whether an owner can remove it;
+ *      the CA by name and whether it is a test CA; that a standby orders nothing. Owner-only. Never a key: no PEM, nothing
+ *      of the served pair or the ACME account.
+ *  13. Whether giving an address again is only a retry (retryOnly, which Settings draws "Try again now" by; #2148 review
+ *      4306126212): the community's own address and an IP kept beside its domain are, and the IP given again with its
+ *      order failing leaves the domain the community's; a domain kept beside the domain that replaced it, a domain
+ *      beside the community's IP, and any address while none is stored would become the community's address, and are not.
  *
  * No real registrar, CA or BeanPool node: the registrar is a fake HTTP server here, and the certificate scheduler's order
  * is a stand-in that records what it was asked for and fails.
@@ -41,6 +54,8 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
+import { createRequire } from 'node:module';
 import Koa from 'koa';
 import type { AddressInfo } from 'node:net';
 
@@ -60,6 +75,29 @@ const { setNodeRole } = await import('./config/node-role.js');
 const { dataDir } = await import('./recover-command.js');
 const { updateLocalConfig } = await import('./config/local-config.js');
 const { generateTotpSecret, generateTotpCode, forgetUsedTotpCodesForTests } = await import('./totp.js');
+const tls = await import('./services/tls.js');
+const acmeStore = await import('./services/acme/store.js');
+
+// A leaf certificate for `host`, valid from now + `from` to now + `to` (ms), signed by a throwaway CA (as test-tls-first-boot).
+const require = createRequire(import.meta.url);
+const forge = require(require.resolve('node-forge', { paths: [path.dirname(require.resolve('selfsigned'))] }));
+const rsaPem = () => crypto.generateKeyPairSync('rsa', { modulusLength: 2048, privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+    publicKeyEncoding: { type: 'spki', format: 'pem' } }).privateKey;
+const caKey = forge.pki.privateKeyFromPem(rsaPem());
+function leaf(host: string, from: number, to: number): { cert: string; key: string } {
+    const keyPem = rsaPem();
+    const k = forge.pki.privateKeyFromPem(keyPem);
+    const c = forge.pki.createCertificate();
+    c.publicKey = forge.pki.setRsaPublicKey(k.n, k.e);
+    c.serialNumber = '7' + crypto.randomBytes(8).toString('hex');
+    c.validity.notBefore = new Date(Date.now() + from);
+    c.validity.notAfter = new Date(Date.now() + to);
+    c.setSubject([{ name: 'commonName', value: host }]);
+    c.setIssuer([{ name: 'commonName', value: 'Own Address Suite CA' }]);
+    c.setExtensions([{ name: 'subjectAltName', altNames: [{ type: 2, value: host }] }]);
+    c.sign(caKey, forge.md.sha256.create());
+    return { cert: forge.pki.certificateToPem(c), key: keyPem };
+}
 
 let passed = 0, failed = 0;
 function check(name: string, ok: boolean, detail = '') {
@@ -111,8 +149,12 @@ async function settledTick(): Promise<Awaited<ReturnType<typeof schedule.runAcme
 }
 
 let role: 'owner' | 'admin' = 'owner';
+// The node's 2FA is on throughout, as the owner's fresh proof needs (it fails closed without it).
+const secret = generateTotpSecret();
+updateLocalConfig({ totpEnabled: true, totpSecret: secret } as any);
+forgetUsedTotpCodesForTests();
 // `fresh`: as the real checkAdminAuth for the password sent with a current code (the owner's fresh proof). Off, the
-// session alone: a change that asks for the proof wants a `code` with the request (section 9).
+// session alone: a change that asks for the proof wants a `code` with the request (sections 9 and 11).
 let fresh = true;
 const deps = {
     checkAdminAuth: async (ctx: any) => {
@@ -368,9 +410,7 @@ try {
     own.forgetOwnAddresses();
 
     console.log('\n9. Moving the live own address to another of its kind asks for the owner\'s fresh proof');
-    // The node's 2FA is on, and the owner's session alone is not the proof: a change that asks for it wants a current code.
-    const secret = generateTotpSecret();
-    updateLocalConfig({ totpEnabled: true, totpSecret: secret } as any);
+    // The owner's session alone is not the proof: a change that asks for it wants a current code.
     forgetUsedTotpCodesForTests();
     fresh = false;
     se.updateNodeConfig({ publicAddress: null, registrarNames: [], ownerAddresses: [] } as any);
@@ -398,8 +438,11 @@ try {
     const beside = await post(OWN, { ip: IP9 });
     check('an IP beside the domain with no code: 200, kept beside, plain', beside.status === 200 && beside.body?.communityAddress === false
         && pa()?.hostname === OTHER && own.audienceStanding(IP9) === 'own', show(beside));
-    // An IP as the community's address: the domain removed in Settings, then an IP given with none.
-    await post('/api/local/admin/app-addresses/remove', { address: OTHER });
+    // An IP as the community's address: the domain removed in Settings (with a current code, as removing asks: section 11),
+    // then an IP given with none.
+    forgetUsedTotpCodesForTests();
+    const removedOther = await post('/api/local/admin/app-addresses/remove', { address: OTHER, code: generateTotpCode(secret) });
+    check('precondition: the domain removed with a current code', removedOther.status === 200 && pa() === null, show(removedOther.status));
     const firstIp = await post(OWN, { ip: IP9 });
     check('with none, the first IP with no code: 200, the community\'s address, plain', firstIp.status === 200 && firstIp.body?.communityAddress === true
         && pa()?.mode === 'ip' && pa()?.hostname === IP9, show({ firstIp, pa: pa() }));
@@ -425,6 +468,194 @@ try {
     const nameOverIp = await post(OWN, { domain: 'third.example.org' });
     check('a first name over an IP with no code: 200, plain, as a first claim is', nameOverIp.status === 200 && pa()?.mode === 'own'
         && pa()?.hostname === 'third.example.org', show(nameOverIp));
+    fresh = true;
+
+    console.log('\n10. The global community\'s address is never a local community\'s own');
+    se.updateNodeConfig({ publicAddress: null, registrarNames: [], ownerAddresses: [] } as any);
+    own.forgetOwnAddresses();
+    const LOBBY = 'lobby.example.net';
+    try {
+        // A self-hoster's own global community, named by the operator (config/global-community.ts).
+        process.env.GLOBAL_COMMUNITY_URL = `https://${LOBBY}/`;
+        const before10 = show(se.getNodeConfig());
+        const lobby = await post(OWN, { domain: LOBBY });
+        check('the global community this server points members to: 400, saying why', lobby.status === 400
+            && /global community's address/.test(lobby.body?.error ?? ''), show(lobby));
+        const lobbyAgain = await post(OWN, { domain: 'Lobby.Example.NET.' });
+        check('…written another way: 400 too', lobbyAgain.status === 400 && /global community's address/.test(lobbyAgain.body?.error ?? ''), show(lobbyAgain));
+        const warns10: string[] = [];
+        const realWarn10 = console.warn;
+        console.warn = (...a: unknown[]) => { warns10.push(a.join(' ')); };
+        try {
+            writeAddressRequestFile(dir, { kind: 'domain', host: LOBBY, at: Date.now() });
+            await agent.checkAddressRequest();
+        } finally { console.warn = realWarn10; }
+        check('the command\'s file naming it: taken, not stored, and the log says why', fileGone()
+            && warns10.some((w) => w.includes(LOBBY) && /global community's address/.test(w)), show(warns10));
+        check('nothing changed by any of them', show(se.getNodeConfig()) === before10 && !owned().includes(LOBBY) && pa() === null, show(pa()));
+        // BeanPool's own (the default when none is named) is a beanpool.org name, refused as one (section 2).
+        delete process.env.GLOBAL_COMMUNITY_URL;
+        const dflt = await post(OWN, { domain: 'global.beanpool.org' });
+        check('with none named, BeanPool\'s own global node: 400', dflt.status === 400 && pa() === null, show(dflt));
+        // On the global node itself (NODE_PROFILE=global), that address is its own.
+        process.env.GLOBAL_COMMUNITY_URL = `https://${LOBBY}`;
+        process.env.NODE_PROFILE = 'global';
+        const onGlobal = await post(OWN, { domain: LOBBY });
+        check('on a global node it is its own address: 200, the community\'s address', onGlobal.status === 200
+            && onGlobal.body?.communityAddress === true && pa()?.hostname === LOBBY, show(onGlobal));
+    } finally {
+        delete process.env.GLOBAL_COMMUNITY_URL;
+        delete process.env.NODE_PROFILE;
+    }
+
+    console.log('\n11. Removing an address in Settings asks for the owner\'s fresh proof');
+    const RM = '/api/local/admin/app-addresses/remove';
+    se.updateNodeConfig({ publicAddress: null, registrarNames: [], ownerAddresses: [] } as any);
+    own.forgetOwnAddresses();
+    await post(OWN, { ip: IP });
+    await post(OWN, { domain: DOMAIN });
+    check('precondition: the domain is the community\'s address, the IP kept beside it', pa()?.hostname === DOMAIN
+        && show(owned()) === show([IP, DOMAIN]), show({ pa: pa(), owned: owned() }));
+    fresh = false;
+    forgetUsedTotpCodesForTests();
+    const before11 = show(se.getNodeConfig());
+    const rmNoCode = await post(RM, { address: DOMAIN });
+    check('the community\'s own domain with no code: 401, asking for one', rmNoCode.status === 401 && rmNoCode.body?.totpRequired === true, show(rmNoCode));
+    check('…nothing changed: still the community\'s address, on the list, accepted', show(se.getNodeConfig()) === before11
+        && pa()?.hostname === DOMAIN && own.audienceStanding(DOMAIN) === 'own');
+    role = 'admin';
+    const rmAdmin = await post(RM, { address: DOMAIN, code: generateTotpCode(secret) });
+    role = 'owner';
+    check('an admin, even with a current code: 403, nothing changed', rmAdmin.status === 403 && show(se.getNodeConfig()) === before11, show(rmAdmin));
+    forgetUsedTotpCodesForTests();
+    const code11 = generateTotpCode(secret);
+    const notListed = await post(RM, { address: 'never.example.org', code: code11 });
+    check('an address not on the list, with a current code: 404, before the code is looked at', notListed.status === 404, show(notListed));
+    const rmCode = await post(RM, { address: DOMAIN, code: code11 });
+    check('…so the same code removes the domain: 200, off the list, no longer the community\'s address nor accepted', rmCode.status === 200
+        && !owned().includes(DOMAIN) && pa() === null && own.audienceStanding(DOMAIN) === 'foreign', show({ status: rmCode.status, pa: pa() }));
+    const rmSpent = await post(RM, { address: IP, code: code11 });
+    check('the same code again, for the IP: 401, spent; the IP stays', rmSpent.status === 401 && owned().includes(IP)
+        && own.audienceStanding(IP) === 'own', show(rmSpent));
+    fresh = true;
+
+    console.log('\n12. GET /tls/status: each certificate as Settings shows it; owner-only; never a key');
+    const STATUS = '/api/local/admin/tls/status';
+    se.updateNodeConfig({ publicAddress: null, registrarNames: [], ownerAddresses: [] } as any);
+    own.forgetOwnAddresses();
+    const S_IP = '203.0.113.50';
+    const S_DOM = 'status.example.org';
+    await post(OWN, { ip: S_IP });
+    await post(OWN, { domain: S_DOM });
+    await settledTick();   // the stand-in orders those started have failed; the states below are written over theirs
+    const tdir = tls.tlsDataDir();
+    const DAY = 86_400_000;
+    const pair = leaf(S_DOM, -DAY, 89 * DAY);
+    check('precondition: a certificate served for the domain', tls.serveCertificate(S_DOM, pair) === null);
+    const served = tls.servedCertificate(S_DOM)!;
+    acmeStore.writeState(tdir, { ...acmeStore.emptyState(S_DOM), validUntil: served.notAfter, lifetimeMs: served.notAfter - served.notBefore,
+        lastAttemptAt: Date.now() - DAY, lastSuccessAt: Date.now() - DAY });
+    const t12 = Date.now();
+    const WHY = 'port 80 is not reachable from the internet';
+    acmeStore.writeState(tdir, { ...acmeStore.emptyState(S_IP), failures: 2, lastError: WHY, lastAttemptAt: t12 - 60_000, nextAttemptAt: t12 + 4 * 3_600_000 });
+    const getStatus = async () => {
+        const res = await fetch(`${base}${STATUS}`);
+        const text = await res.text();
+        let json: any = null;
+        try { json = JSON.parse(text); } catch { /* shown below */ }
+        return { status: res.status, text, json, cache: res.headers.get('cache-control') };
+    };
+    const s12 = await getStatus();
+    const ids = (s12.json?.identifiers ?? []) as any[];
+    const byId = (h: string) => ids.find((i) => i.identifier === h);
+    check('the owner: 200, not cached, every identifier the scheduler looks at', s12.status === 200 && s12.cache === 'no-store'
+        && s12.json?.success === true && show(ids.map((i) => i.identifier).sort()) === show([S_DOM, S_IP].sort()), s12.text.slice(0, 300));
+    const d12 = byId(S_DOM);
+    check('the domain: a name, on http-01, the community\'s address, an owner\'s to remove', d12?.kind === 'name' && d12.challenge === 'http-01'
+        && d12.communityAddress === true && d12.ownerAdded === true && d12.source === 'public-address', show(d12));
+    const renewAt = served.notAfter - (served.notAfter - served.notBefore) / 3;
+    check('…its certificate as served (issued, expires), renewed when a third of its life is left, no error', d12?.certificate?.issuedAt === new Date(served.notBefore).toISOString()
+        && d12.certificate.expiresAt === new Date(served.notAfter).toISOString() && Math.abs(Date.parse(d12.nextRenewalAt) - renewAt) < 1000
+        && d12.failures === 0 && d12.lastError === null && d12.lastSuccessAt !== null, show(d12));
+    const i12 = byId(S_IP);
+    check('the IP: an ip, on http-01, beside the domain, no certificate yet', i12?.kind === 'ip' && i12.challenge === 'http-01'
+        && i12.communityAddress === false && i12.ownerAdded === true && i12.source === 'owner' && i12.certificate === null, show(i12));
+    check('…why the last try failed, in the scheduler\'s words, how many in a row, and when it is tried next', i12?.lastError === WHY && i12.failures === 2
+        && i12.nextRenewalAt === new Date(t12 + 4 * 3_600_000).toISOString() && i12.lastAttemptAt === new Date(t12 - 60_000).toISOString(), show(i12));
+    check('the CA as the owner reads it, not a test CA, and this server orders', s12.json?.ca === 'the CA' && s12.json?.testCa === false
+        && s12.json?.orders === true, show({ ca: s12.json?.ca, testCa: s12.json?.testCa, orders: s12.json?.orders }));
+    // Never a key: no PEM at all, nothing of the served pair or of the ACME account, no field that could hold one.
+    const fields: string[] = [];
+    const walk = (v: unknown, at: string) => {
+        if (v && typeof v === 'object') for (const [k, x] of Object.entries(v)) { fields.push(`${at}.${k}`); walk(x, `${at}.${k}`); }
+    };
+    walk(s12.json, '');
+    const keyish = fields.filter((f) => /key|pem|private|secret|token|account|cert(?!ificate($|\.(issuedAt|expiresAt)$))/i.test(f));
+    const account = JSON.parse(fs.readFileSync(path.join(tdir, 'tls', 'acme-account.json'), 'utf-8')).key as string;
+    const inner = (pem: string) => pem.split('\n').filter((l) => l && !l.startsWith('-----'));
+    const leaked = [...inner(pair.key), ...inner(pair.cert), ...inner(account)].filter((line) => s12.text.includes(line));
+    check('never a key: no PEM, nothing of the pair or the ACME account, no field that could hold one', !/-----|BEGIN|PRIVATE/.test(s12.text)
+        && leaked.length === 0 && keyish.length === 0, show({ keyish, leaked: leaked.length }));
+    role = 'admin';
+    const asAdmin12 = await getStatus();
+    role = 'owner';
+    check('an admin who is not an owner: 403, and nothing of the certificates', asAdmin12.status === 403 && !asAdmin12.text.includes(S_DOM)
+        && !asAdmin12.text.includes('identifiers'), asAdmin12.text.slice(0, 200));
+    process.env.ACME_DIRECTORY_URL = 'https://acme-staging-v02.api.letsencrypt.org/directory';
+    const staging = await getStatus();
+    process.env.ACME_DIRECTORY_URL = 'http://127.0.0.1:9/directory';
+    check('Let\'s Encrypt\'s staging directory: named, and marked a test CA', staging.json?.ca === "Let's Encrypt" && staging.json?.testCa === true, show(staging.json?.ca));
+    setNodeRole('backup');
+    const standby12 = await getStatus();
+    setNodeRole('primary');
+    check('on a standby: it orders nothing, and says so', standby12.status === 200 && standby12.json?.orders === false, show(standby12.json?.orders));
+
+    console.log('\n13. "Try again now" only where giving the address again is a retry: never one that moves the community\'s address');
+    // The status's retryOnly, which Settings draws the button by (#2148 review 4306126212), and what giving it again does.
+    const only = async () => Object.fromEntries(((await getStatus()).json?.identifiers ?? []).map((i: any) => [i.identifier, i.retryOnly]));
+    const byIdIn = (json: any, h: string) => ((json?.identifiers ?? []) as any[]).find((i) => i.identifier === h);
+    const r13 = await only();
+    check('the community\'s domain and the IP kept beside it (an IP never takes a domain\'s place): retries', r13[S_DOM] === true && r13[S_IP] === true, show(r13));
+    const ipAgain = await post(OWN, { ip: S_IP });
+    check('…the IP, its order failing, given again: 200, not the community\'s address; the domain stays the community\'s, primary and the directory\'s publicUrl',
+        ipAgain.status === 200 && ipAgain.body?.communityAddress === false && pa()?.hostname === S_DOM && own.primaryAddress() === S_DOM
+        && se.getDirectoryInfo().publicUrl === `https://${S_DOM}`, show({ ipAgain, pa: pa() }));
+    // The review's case: a domain kept beside the domain that replaced it (section 9), its order failing.
+    fresh = false;
+    forgetUsedTotpCodesForTests();
+    const KEPT = 'kept.example.net';
+    const NOW13 = 'now.example.net';
+    se.updateNodeConfig({ publicAddress: null, registrarNames: [], ownerAddresses: [] } as any);
+    own.forgetOwnAddresses();
+    await post(OWN, { domain: KEPT });
+    const moved13 = await post(OWN, { domain: NOW13, code: generateTotpCode(secret) });
+    await settledTick();
+    acmeStore.writeState(tdir, { ...acmeStore.emptyState(KEPT), failures: 1, lastError: WHY, lastAttemptAt: Date.now() - 60_000, nextAttemptAt: Date.now() + 3_600_000 });
+    const kept13 = byIdIn((await getStatus()).json, KEPT);
+    check('precondition: the domain moved with a code; the old one listed, an owner\'s, not the community\'s, no certificate, its last try failed',
+        moved13.status === 200 && pa()?.hostname === NOW13 && kept13?.ownerAdded === true && kept13.communityAddress === false
+        && kept13.certificate === null && kept13.lastError === WHY, show({ moved13: moved13.status, kept13 }));
+    check('…given again, it would be the community\'s address: no retry', kept13?.retryOnly === false, show(kept13));
+    check('…the community\'s domain itself: a retry', (await only())[NOW13] === true);
+    // A domain beside the community's IP would take its place with no code asked (a first name over an IP).
+    const IP13 = '203.0.113.60';
+    const DOM13 = 'beside.example.net';
+    se.updateNodeConfig({ publicAddress: null, registrarNames: [], ownerAddresses: [] } as any);
+    own.forgetOwnAddresses();
+    await post(OWN, { ip: IP13 });
+    se.updateNodeConfig({ ownerAddresses: [...owned(), DOM13] } as any);
+    own.forgetOwnAddresses();
+    const r13b = await only();
+    check('a domain on the list beside the community\'s IP: no retry; the IP: a retry', r13b[DOM13] === false && r13b[IP13] === true
+        && pa()?.hostname === IP13, show({ r13b, pa: pa() }));
+    // No address stored and no name given: giving any of them again would make it the community's address.
+    forgetUsedTotpCodesForTests();
+    const rm13 = await post('/api/local/admin/app-addresses/remove', { address: IP13, code: generateTotpCode(secret) });
+    se.updateNodeConfig({ ownerAddresses: [...owned(), S_IP] } as any);
+    own.forgetOwnAddresses();
+    const r13c = await only();
+    check('with no address stored and no name given: no retry for any', rm13.status === 200 && pa() === null && r13c[DOM13] === false
+        && r13c[S_IP] === false, show({ rm13: rm13.status, r13c }));
     fresh = true;
 } catch (e) {
     failed++;

@@ -14,7 +14,7 @@
  *   - Escape answers "no" and closes only the question: the keepers modal stays open and nothing is sent;
  *   - asked again, its Revoke sends the revoke call, the question closes, and the keepers modal stays open.
  * And every question asked from the page (assistant Disconnect, off-box Remove, Pulse channel Remove, Remove from the
- * Pulse, Prune Stale Posts, proposal Dismiss) is on top and on screen the same way.
+ * Pulse, Prune Stale Posts, proposal Dismiss, Public Address's own-address Remove) is on top and on screen the same way.
  *
  *   node e2e/in-page-confirm.mjs
  *
@@ -33,6 +33,8 @@ const PAGE_QUESTIONS = [
     { name: 'Remove from the Pulse', screen: { tab: 'people', sub: 'moderation' }, button: /^Remove from the Pulse$/ },
     { name: 'Prune Stale Posts', screen: { tab: 'people', sub: 'moderation' }, button: /^Prune Stale Posts$/ },
     { name: 'proposal Dismiss', screen: { tab: 'economy', sub: 'decisions' }, button: /^Dismiss$/ },
+    // Public Address → Your own address (HTTPS S4): its accessible name is "Remove <the address>" (aria-label).
+    { name: 'own address Remove', screen: { tab: 'appliance', sub: 'network' }, button: /^Remove 203\.0\.113\.5$/ },
 ];
 const QUESTION = '[role="alertdialog"][data-testid="in-page-confirm"]';
 const failures = [];

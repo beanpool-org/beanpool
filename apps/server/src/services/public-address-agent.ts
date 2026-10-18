@@ -43,6 +43,8 @@ import { recordRegistrarAnswer } from '../engine/registrar-names.js';
 import { forgetOwnAddresses, ownerConfirmedAddresses, MAX_OWNER_ADDRESSES } from '../engine/own-addresses.js';
 import { isIpLiteral, normalizeAddress, ownAddressProblem } from '../engine/host-kinds.js';
 import { runAcmeTickSoon } from './acme/schedule.js';
+import { getGlobalCommunityUrl } from '../config/global-community.js';
+import { getNodeProfile } from '../config/node-profile.js';
 import { logger } from '../logger.js';
 import { persistAddressIfUnchanged, answersAboutAnotherName, healPausedAddress, noteUnansweredClaim, LOOPBACK_ORIGIN, withKeptTunnelToken, withLiveToken } from './tunnel-connector.js';
 import { addressVerified } from './directory-publisher.js';
@@ -114,10 +116,27 @@ function asCommunityAddress(host: string, kind: 'ip' | 'own'): { same: boolean; 
     return { same, replace };
 }
 
-/** Why storeOwnAddress takes nothing of `host`: it can't be this server's address, or the list is full. Null when it takes it. */
+/**
+ * The global community's address (config/global-community.ts: global.beanpool.org, or the one the operator names), which a
+ * local community's server never takes for its own, as the phone never takes it for a community's (apps/native
+ * utils/community-origin.ts). Null on a global node: a self-hoster's lobby at its own domain is that address.
+ */
+function globalCommunityHost(): string | null {
+    if (getNodeProfile() === 'global') return null;
+    const url = getGlobalCommunityUrl();
+    return url ? normalizeAddress(url) : null;
+}
+
+/**
+ * Why storeOwnAddress takes nothing of `host`: it can't be this server's address (engine/host-kinds.ts), it is the global
+ * community's, or the list is full. Null when it takes it.
+ */
 function ownAddressRefused(host: string): string | null {
     const problem = ownAddressProblem(host);
     if (problem) return problem;
+    if (host === globalCommunityHost()) {
+        return `${host} is the global community's address, not this server's: give this server's own public IP address, or a domain pointed at it`;
+    }
     const owned = ownerConfirmedAddresses();
     if (!owned.includes(host) && owned.length >= MAX_OWNER_ADDRESSES) {
         return `This community already has ${MAX_OWNER_ADDRESSES} addresses of its own. Remove one it no longer uses first (Settings → Network).`;
@@ -138,6 +157,20 @@ export function replacesLiveOwnAddress(input: string): boolean {
     const kind: 'ip' | 'own' = isIpLiteral(host) ? 'ip' : 'own';
     const pa = getNodeConfig().publicAddress;
     return pa?.status === 'live' && isOwnPublicAddress(pa) && pa.mode === kind && asCommunityAddress(host, kind).replace;
+}
+
+/**
+ * Whether giving `host` again (Settings' "Try again now", `beanpool claim` run again) is only a retry of its certificate
+ * (runAcmeTickSoon): it is in the owner-confirmed list, storeOwnAddress takes it, and would not store it as the
+ * community's address (asCommunityAddress). False for one kept beside the community's own address that would take its
+ * place (another of its kind, a domain beside an IP), and for every one while the community has no address stored and
+ * no name given: the button that says retry never moves where newcomers are sent (#2148 review 4306126212). Adding it in
+ * Settings stays the one way to.
+ */
+export function givenAgainOnlyRetries(input: string): boolean {
+    const host = normalizeAddress(input);
+    if (!host || !ownerConfirmedAddresses().includes(host) || ownAddressRefused(host)) return false;
+    return !asCommunityAddress(host, isIpLiteral(host) ? 'ip' : 'own').replace;
 }
 
 /**

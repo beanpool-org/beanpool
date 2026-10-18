@@ -171,7 +171,7 @@ export interface PromiseStatus {
 export function measurePromise(): PromiseStatus {
     const ticks = readPromiseTicks();
     const owners = actingOwnerCount();
-    let backupsLocked = false;
+    let backupsLocked: boolean;
     try { backupsLocked = backupLockState().locked; } catch { backupsLocked = false; }
     let backupsRunning = getAutoSnapshotConfig().enabled;
     if (!backupsRunning) {

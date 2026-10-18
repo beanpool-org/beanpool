@@ -96,7 +96,7 @@ async function call(method: 'GET' | 'POST', path: string, body?: unknown, header
         body: body === undefined ? undefined : JSON.stringify(body),
     });
     const text = await res.text();
-    let json: any = null;
+    let json: any;
     try { json = JSON.parse(text); } catch { json = text; }
     return { status: res.status, json };
 }
@@ -194,7 +194,7 @@ async function main() {
     assert(raw.length > 0 && !raw.includes('Ownerann') && !raw.includes('Ownerbo') && !raw.includes(firstOwner) && !raw.includes(secondOwner),
         'no owner\'s name or key anywhere in the push');
     const keyBytes = Buffer.from(p.push?.publicKey ?? '', 'hex');
-    let verified = false;
+    let verified: boolean;
     try {
         verified = ed25519.verify(Buffer.from(p.push?.signature ?? '', 'hex'), new TextEncoder().encode(raw), keyBytes.subarray(keyBytes.length - 32), { zip215: false });
     } catch { verified = false; }

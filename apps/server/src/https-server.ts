@@ -23,7 +23,7 @@ import crypto from 'node:crypto';
 import Koa from 'koa';
 import Router from '@koa/router';
 import serve from 'koa-static';
-import { getCaCertPem, getServerCertPem, getServerKeyPem, isUsingLetsEncrypt } from './services/tls.js';
+import { attachTlsListener, getCaCertPem, httpsCertOptions, servesCaCertificateFor } from './services/tls.js';
 import {
     getLocalConfig, saveLocalConfig, hashPassword, verifyPassword, verifyPasswordAsync,
     getThresholds, updateThresholds, DEFAULT_THRESHOLDS,
@@ -1789,14 +1789,14 @@ export async function startHttpsServer(port: number): Promise<number> {
     // account's day answers 429 before any handler runs, and one the handler refuses gives its count back.
     app.use(moneyLimitsGate);
 
-    // Trust endpoint — only for self-signed mode
-    if (!isUsingLetsEncrypt()) {
-        router.get('/trust', async (ctx) => {
-            ctx.type = 'application/x-pem-file';
-            ctx.set('Content-Disposition', 'attachment; filename="beanpool-ca.pem"');
-            ctx.body = getCaCertPem();
-        });
-    }
+    // Trust endpoint — the self-signed CA, decided per request (certificates come and go after startup): a host with a
+    // CA certificate here is answered as if there were no such route; beanpool.local and a LAN address get the CA.
+    router.get('/trust', async (ctx, next) => {
+        if (servesCaCertificateFor(ctx.hostname)) return next();
+        ctx.type = 'application/x-pem-file';
+        ctx.set('Content-Disposition', 'attachment; filename="beanpool-ca.pem"');
+        ctx.body = getCaCertPem();
+    });
 
 
     // ===================== ADMIN AUTH =====================
@@ -1963,14 +1963,15 @@ export async function startHttpsServer(port: number): Promise<number> {
     });
 
     const serverOptions: https.ServerOptions = {
-        cert: getServerCertPem(),
-        key: getServerKeyPem(),
+        // Each identifier's own certificate by SNI, else the IP's, a name's or the self-signed pair (services/tls.ts).
+        ...httpsCertOptions(),
         // DoS review F3: the header and request timeouts (server-limits.ts).
         ...serverTimeoutOptions(),
     };
 
     return new Promise<number>((resolve) => {
         const server = https.createServer(serverOptions, app.callback());
+        attachTlsListener(server);
         applyServerLimits(server);
 
         // WebSocket upgrade handler (shared with the plain HTTP server — see createUpgradeHandler). A frame over

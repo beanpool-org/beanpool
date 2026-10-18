@@ -253,6 +253,56 @@ export function primaryAddress(): string | null {
     return published.find((a) => !notLive.has(a)) ?? null;
 }
 
+/** Top-level names no public CA certifies (RFC 6761, RFC 8375 and the usual home and company ones). */
+const NON_PUBLIC_TLDS = new Set(['local', 'localhost', 'internal', 'lan', 'home', 'corp', 'test', 'invalid', 'example', 'onion', 'arpa']);
+
+/** An IPv4 literal anyone on the Internet could reach: not 0/8, 10/8, 100.64/10 (carrier NAT), 127/8, 169.254/16, 172.16/12,
+ *  192.168/16, nor multicast and above (224/3). */
+function isPublicIpv4(host: string): boolean {
+    const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
+    if (!m) return false;
+    const o = m.slice(1).map(Number);
+    if (o.some((n, i) => n > 255 || String(n) !== m[i + 1])) return false;
+    const [a, b] = o;
+    return !(a === 0 || a === 10 || a === 127 || a >= 224 || (a === 100 && b >= 64 && b <= 127) || (a === 169 && b === 254)
+        || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168));
+}
+
+/** A bracketed IPv6 literal anyone on the Internet could reach: global unicast (2000::/3) only, never an IPv4-mapped one. */
+function isPublicIpv6(host: string): boolean {
+    if (!/^\[[0-9a-f:.]+\]$/.test(host)) return false;
+    let canonical: string;
+    try { canonical = new URL(`http://${host}/`).hostname; } catch { return false; }
+    const first = parseInt(canonical.slice(1).split(':')[0] || '0', 16);
+    return first >= 0x2000 && first <= 0x3fff;
+}
+
+/**
+ * Whether a public CA can certify `host` by fetching it from the Internet (services/acme): a public IP literal, or a name of
+ * two labels or more, each a-z, 0-9 and inner hyphens, under a top-level name that is not numeric and not a home, test or
+ * special-use one. Never a beanpool.org name (Cloudflare's edge holds those), never loopback or a local-network host.
+ */
+export function isCertifiableHost(host: string): boolean {
+    if (normalizeAddress(host) !== host || isBeanPoolName(host) || isLocalNetworkHost(host)) return false;
+    if (host.startsWith('[')) return isPublicIpv6(host);
+    if (/^[\d.]+$/.test(host)) return isPublicIpv4(host);
+    const labels = host.split('.');
+    if (labels.length < 2) return false;
+    if (!labels.every((l) => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(l))) return false;
+    const tld = labels[labels.length - 1];
+    return !/^\d+$/.test(tld) && !NON_PUBLIC_TLDS.has(tld);
+}
+
+/**
+ * The hosts this server holds a certificate of its own for (services/acme/schedule.ts, design
+ * scratch/global-node/DESIGN-https-anywhere-fable.md §1): every name it accepts members' signatures for (1–4) that a public
+ * CA can certify (isCertifiableHost), in the order of configuredAddresses. Never a former or lost name, never a
+ * beanpool.org one, loopback, a private-range address or a `.local` name. Each is ordered on its own.
+ */
+export function tlsIdentifiers(): string[] {
+    return configuredAddresses().filter((a) => !a.former && !a.lost && isCertifiableHost(a.address)).map((a) => a.address);
+}
+
 /**
  * The BeanPool names this community had before (4), for `/api/community/info`: only so that the web app, opened at one
  * of them, can say where the community lives now (primaryAddress; design §6). Never an address to send an app to:

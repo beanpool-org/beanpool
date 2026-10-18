@@ -501,6 +501,7 @@ export const SUITES = [
     'test-group-keys-http',
     'test-group-keys-over-time',
     'test-tls-first-boot',
+    'test-acme-http01',
     'test-key-succession',
     'test-dm-former-keys-readers',
     'test-group-history-after-rekey',

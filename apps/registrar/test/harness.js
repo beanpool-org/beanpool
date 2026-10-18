@@ -1,12 +1,46 @@
 // The registrar's test world, shared by ownership-states.test.js and fuzz.test.js: the Worker against a real in-memory
 // SQLite loaded with the migrations, a stateful fake of the Cloudflare API (tunnels + DNS records, with Cloudflare's
-// collision errors, and refusals a test switches on), and nodes answering at hostnames. No network.
+// collision errors, and refusals a test switches on), and nodes answering at hostnames. No network: every registrar
+// test file loads this harness, and with it the fetch trap below.
 
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
+import { afterEach } from 'node:test';
 import worker from '../src/index.js';
 import * as db from '../src/db.js';
+
+// --- No test reaches the network ---
+// Loading the harness puts noNetwork in place of the process's fetch, so every fetch that no fake answers ends here —
+// past a world's routes, past a test's own stub, between tests: refused (a TypeError, as a failed connection is) and
+// kept. The test it happened in then fails at its end (the afterEach below), even where the code under test caught the
+// refusal and carried on — src/access.js turns a failed certs fetch into a 401, src/alerts.js a failed send into a
+// retry, and a test expecting either would otherwise pass on a host its fake never served. A fetch after a file's last
+// test fails the file (its exit code). Hosts a test may reach on the real network: none.
+export const NETWORK_ALLOWLIST = Object.freeze([]);
+export const networkRefused = [];
+const realFetch = globalThis.fetch;
+export async function noNetwork(input, init) {
+    const href = String(typeof input === 'string' || input instanceof URL ? input : input?.url);
+    let host = null;
+    try { host = new URL(href).hostname; } catch { /* not a URL: refused like any other */ }
+    if (host && NETWORK_ALLOWLIST.includes(host)) return realFetch(input, init);
+    networkRefused.push(href);
+    throw new TypeError(`test network: ${href} is served by no fake (no test reaches the network; test/harness.js)`);
+}
+globalThis.fetch = noNetwork;
+afterEach(() => {
+    const reached = networkRefused.splice(0);
+    if (reached.length) throw new Error(`this test reached for the network, served by no fake: ${reached.join(', ')}`);
+});
+process.on('exit', () => {
+    if (!networkRefused.length) return;
+    console.error(`[TEST_NETWORK] reached for the network after the file's last test, served by no fake: ${networkRefused.join(', ')}`);
+    process.exitCode = 1;
+});
+
+// A host that doesn't answer, as fetch fails one that doesn't resolve: for a world's `serve` (an ntfy topic nobody runs).
+export const unreachable = async () => { throw new TypeError('fetch failed'); };
 
 export const nowS = () => Math.floor(Date.now() / 1000);
 export const toHex = (buf) => Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
@@ -171,8 +205,10 @@ export function workerdFetchInit(init = {}) {
 }
 
 // One world per test: D1, fake Cloudflare, and nodes answering at hostnames — but only while Cloudflare routes the
-// hostname (a DNS record exists), so an edge attest can only pass once the registrar has routing back up.
-export async function world({ migrations, env: extra } = {}) {
+// hostname (a DNS record exists), so an edge attest can only pass once the registrar has routing back up. `serve`:
+// { host: (input, init) => Response } for any other host the Worker is sent to (NTFY_URL's); every host neither serves
+// is the network, which noNetwork refuses.
+export async function world({ migrations, env: extra, serve = {} } = {}) {
     const { sqlite, d1, all, afterRead, beforeRun, atWrite, writes, runHooks } = sqliteD1(migrations);
     const cf = fakeCloudflare();
     const nodes = {};
@@ -199,6 +235,9 @@ export async function world({ migrations, env: extra } = {}) {
             const res = await cf.handle(init.method || 'GET', url, init.body ? JSON.parse(init.body) : null);
             return cancelled() ? never() : res;
         }
+        if (Object.hasOwn(serve, url.hostname)) return serve[url.hostname](input, init);
+        if (!url.hostname.endsWith(`.${env.BASE_DOMAIN}`)) return noNetwork(input, init);
+        // A node's hostname: answered by its node, or, with none there or no record routing it, a node that is down.
         if (url.pathname !== '/api/attest' || !nodes[url.hostname]) throw new Error(`test network: no route to ${url}`);
         if (!cf.recordAt(url.hostname)) throw new Error(`test network: ${url.hostname} does not resolve`);
         return nodes[url.hostname](url.searchParams.get('nonce'));

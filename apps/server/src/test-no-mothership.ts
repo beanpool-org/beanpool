@@ -298,12 +298,15 @@ let core!: Core;
 
 interface Answer { status: number; body: any; headers: Headers; bytes?: Buffer }
 
-/** A member's phone: a key made from 12 words as the app makes it, signing every request as the app signs it. */
+/**
+ * A member's phone: a key made from 12 words as the app makes it, signing every request as the app signs it. It calls its
+ * home node where that node is now: a node started again on new ports after one was taken moves (review 4305779785).
+ */
 class Phone {
     readonly seedHex: string;
     readonly pk: string;
     private readonly sign: (b: Uint8Array) => Uint8Array | Promise<Uint8Array>;
-    constructor(readonly name: string, readonly words: string[], public home: string) {
+    constructor(readonly name: string, readonly words: string[], public homeNode: Pick<Node, 'base'>) {
         // apps/native/utils/crypto.ts mnemonicToKeypair: the seed is SHA-256(SHA-256(the words, one space between)).
         const seed = crypto.createHash('sha256').update(crypto.createHash('sha256').update(words.join(' ')).digest()).digest();
         this.seedHex = seed.toString('hex');
@@ -311,8 +314,9 @@ class Phone {
         this.pk = (pub.export({ type: 'spki', format: 'der' }) as Buffer).subarray(-32).toString('hex');
         this.sign = core.ed25519Signer(new Uint8Array(seed));
     }
-    static fresh(name: string, home: string): Phone {
-        return new Phone(name, core.recoveryWordsFromEntropy(new Uint8Array(crypto.randomBytes(core.RECOVERY_ENTROPY_LEN))), home);
+    get home(): string { return this.homeNode.base; }
+    static fresh(name: string, homeNode: Pick<Node, 'base'>): Phone {
+        return new Phone(name, core.recoveryWordsFromEntropy(new Uint8Array(crypto.randomBytes(core.RECOVERY_ENTROPY_LEN))), homeNode);
     }
     /** `unsigned`: as the app sends what it sends before it has a key there (the claim, whose body carries its own signature). */
     async call(method: 'GET' | 'POST', route: string, body?: unknown, opts: { at?: string; headers?: Record<string, string>; raw?: Buffer; bytes?: boolean; unsigned?: boolean } = {}): Promise<Answer> {
@@ -429,10 +433,10 @@ async function main(): Promise<void> {
         const S = await startNode(root, 'S', { NODE_ROLE: 'backup', BACKUP_PULL_INTERVAL_MS: '1000' });
         nodes.push(S);
 
-        const olive = Phone.fresh('Olive', A.base);
-        const ann = Phone.fresh('Ann', A.base);
-        const bo = Phone.fresh('Bo', A.base);
-        const cy = Phone.fresh('Cy', B.base);
+        const olive = Phone.fresh('Olive', A);
+        const ann = Phone.fresh('Ann', A);
+        const bo = Phone.fresh('Bo', A);
+        const cy = Phone.fresh('Cy', B);
         let oliveAdmin: Record<string, string> = {};
         let cyAdmin: Record<string, string> = {};
         let bRecoveryCode = '';
@@ -546,7 +550,7 @@ async function main(): Promise<void> {
 
         // ── 6. A 12-words restore ──
         await step('6. a 12-words restore: Ann\'s new phone, from her words alone', async () => {
-            const newPhone = new Phone('Ann', [...ann.words], A.base);
+            const newPhone = new Phone('Ann', [...ann.words], A);
             assert(newPhone.pk === ann.pk && core.recoveryWordsMatchPublicKey(ann.words, ann.pk), 'the words make the same key, as the app makes it');
             const member = await newPhone.get(`/api/community/membership/${newPhone.pk}`);
             assert(ok(member) && member.body?.isMember === true && member.body?.callsign === 'Ann', `the node knows her: she is back in as Ann (${brief(member)})`);
@@ -610,7 +614,7 @@ async function main(): Promise<void> {
             need(recovered.status === 0, `Cy makes himself S's owner from its shell with \`beanpool recover\` (exit ${recovered.status}${recovered.status === 0 ? '' : `: ${recovered.output.slice(-300)}`})`);
             // B's main server dies.
             await B.stop('SIGKILL');
-            cy.home = S.base;
+            cy.homeNode = S;
             const session = await cy.adminSession(S.base);
             const opened = await cy.admin('/api/local/admin/takeover/open', { code: bRecoveryCode }, session, S.base);
             need(ok(opened) && opened.body?.preview?.sessionId, `Cy opens B's keys on S with the recovery code (${brief(opened)})`);

@@ -16,11 +16,15 @@
  * that doesn't answer, or an answer that isn't signed so, offers nothing. The statement is public, so this tells a wrong
  * or stale address from the community's own; it is not a proof that whoever answers holds the key.
  *
- * What the phone first verified at its own address is kept (COMMUNITY_IDENTITY_KEY, per address; asked once a run while
- * nothing is kept, a small public read), and is what a new address is checked against: so a community whose number has
- * stopped answering can still be followed to a name the phone had heard of, and a number that now answers as some other
- * community (a server's number given to someone else) offers nothing at all. A number the phone never heard another
- * address for can't be followed: the member types the new address or scans a new QR.
+ * What the phone first verified at its own address, the first time it checked a move from there, is kept
+ * (COMMUNITY_IDENTITY_KEY, per address), and is what a new address is checked against from then on: so a community whose
+ * number has stopped answering can still be followed to a name the phone had heard of, and a number that later answers
+ * as some other community (a server's number given to someone else) offers nothing. A number the phone never heard
+ * another address for can't be followed: the member types the new address or scans a new QR.
+ *
+ * It costs Home nothing while there is nothing to follow (Home lands with one request): the community's addresses come
+ * from the phone's own copy of its profile, which the hourly profile read keeps (utils/node-profile.ts), and the two
+ * servers are asked only for a move to offer, at most once an hour for the same one.
  *
  * Never from an http address (whoever is in the middle of a home network could name both the address and the identity),
  * never from the worldwide community (the app knows it by its one address, utils/global-node-url.ts), never from a name
@@ -150,7 +154,7 @@ export function sameCommunity(here: CommunityIdentity, there: CommunityIdentity)
 export interface AddressFollowDeps {
     /** The phone's community address, as stored. */
     anchor(): Promise<string | null>;
-    /** What the phone knows of `url`'s community: its copy when fresh, else asked. */
+    /** What the phone knows of `url`'s community: its own copy, never asked here (the hourly profile read keeps it). */
     profile(url: string): Promise<NodeProfile | null>;
     /** The signed statement at `origin`, verified, or null (no answer, or not one). */
     statement(origin: string): Promise<CommunityIdentity | null>;
@@ -187,11 +191,7 @@ async function defaultDeps(): Promise<AddressFollowDeps> {
     ]);
     return {
         anchor: anchorUrl,
-        profile: async (url) => {
-            const held = await profiles.getCachedNodeProfile(url);
-            if (profiles.nodeProfileIsFresh(held)) return held;
-            return (await profiles.fetchNodeProfile(url)) ?? held;
-        },
+        profile: profiles.getCachedNodeProfile,
         statement: (origin) => fetchIdentityStatement(origin),
         now: () => Date.now(),
         switchTo: switchPhoneTo,
@@ -261,27 +261,10 @@ async function checkFollow(offer: AddressFollowOffer, deps: AddressFollowDeps): 
 
 /** Offers checked this run: `from to` → the answer and when. 'unreachable' is never kept. */
 const checked = new Map<string, { verdict: FollowCheck; at: number }>();
-/** The addresses whose identity this run has asked for already, with nothing to follow. */
-const asked = new Set<string>();
 
 /** Forget this run's checks (tests). */
 export function forgetFollowChecks(): void {
     checked.clear();
-    asked.clear();
-}
-
-/**
- * With nothing to follow yet: keep who the phone's community is, once per run while nothing is kept for its address, so
- * the first move it is ever offered is checked against who the community was before, not against what its address
- * says on that day (a server's number can be given to someone else).
- */
-async function keepIdentityOnce(from: string, deps: AddressFollowDeps): Promise<void> {
-    if (asked.has(from)) return;
-    asked.add(from);
-    if (readKeptIdentity((await readMap<CommunityIdentity>(COMMUNITY_IDENTITY_KEY))[from])) return;
-    const now = await deps.statement(from).catch(() => null);
-    if (now) await writeEntry(COMMUNITY_IDENTITY_KEY, from, now);
-    else asked.delete(from);
 }
 
 /** The offer declined until a time still ahead, for this same new address. */
@@ -298,14 +281,9 @@ async function snoozed(offer: AddressFollowOffer, now: number): Promise<boolean>
 export async function addressFollowOffer(injected?: Partial<AddressFollowDeps>): Promise<AddressFollowOffer | null> {
     const deps = await depsWith(injected);
     const anchor = await deps.anchor().catch(() => null);
-    const from = followableOrigin(anchor);
-    if (!anchor || !from) return null;
+    if (!anchor || !followableOrigin(anchor)) return null;
     const offer = followCandidate(anchor, await deps.profile(anchor).catch(() => null));
-    if (!offer) {
-        await keepIdentityOnce(from, deps);
-        return null;
-    }
-    if (await snoozed(offer, deps.now())) return null;
+    if (!offer || await snoozed(offer, deps.now())) return null;
     const id = `${offer.from} ${offer.to}`;
     const memo = checked.get(id);
     let verdict = memo && deps.now() - memo.at < VERDICT_TTL_MS ? memo.verdict : null;

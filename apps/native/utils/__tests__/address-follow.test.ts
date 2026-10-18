@@ -242,16 +242,37 @@ describe('offered only when the new address is the same community', () => {
         expect(await addressFollowOffer(newer.deps)).not.toBeNull();
     });
 
-    it('checked against who the phone first knew at its address: a number that now answers as another community offers nothing', async () => {
-        // Asked once with nothing to follow yet: the phone keeps who its community is.
-        const first = world({ prof: profile({ addresses: ['203.0.113.5'], primaryAddress: '203.0.113.5' }), answers: { [IP]: statement(node, COMMUNITY) } });
+    it('checked against who the phone first knew at its address: a number that later answers as another community offers nothing', async () => {
+        // The first check of a move keeps who the phone's community is (here the new name didn't answer yet).
+        const first = world({ answers: { [IP]: statement(node, COMMUNITY) } });
         expect(await addressFollowOffer(first.deps)).toBeNull();
         expect(JSON.parse(store.get(COMMUNITY_IDENTITY_KEY)!)[IP]).toEqual({ peerId: node.peerId, communityId: COMMUNITY, epoch: 0 });
-        // Later the number is someone else's server, with a name of its own, and it says so of itself consistently.
+        // Later the number is someone else's server, naming a name of its own, and both say so of themselves consistently.
         forgetFollowChecks();
         const stranger = nodeKey();
         const later = world({ answers: { [IP]: statement(stranger, 'f00d'), [NAME]: statement(stranger, 'f00d') } });
         expect(await addressFollowOffer(later.deps)).toBeNull();
+        expect(await acceptAddressFollow({ from: IP, to: NAME, host: 'beans.example.org' }, later.deps)).toBe('not-same');
+        expect(later.deps.switchTo).not.toHaveBeenCalled();
+        // What was kept is not overwritten by the stranger.
+        expect(JSON.parse(store.get(COMMUNITY_IDENTITY_KEY)!)[IP]).toEqual({ peerId: node.peerId, communityId: COMMUNITY, epoch: 0 });
+    });
+
+    it('a take-over at the same address raises the kept count, so its replaced server is never followed', async () => {
+        const w = world({ answers: { [IP]: statement(node, COMMUNITY, 0) } });
+        await addressFollowOffer(w.deps);
+        forgetFollowChecks();
+        w.state.answers[IP] = statement(node, COMMUNITY, 1);
+        w.state.answers[NAME] = statement(node, COMMUNITY, 0);
+        expect(await addressFollowOffer(w.deps)).toBeNull();
+        expect(JSON.parse(store.get(COMMUNITY_IDENTITY_KEY)!)[IP].epoch).toBe(1);
+    });
+
+    it('with nothing to follow, Home asks nobody: no statement read, no profile read beyond the phone\'s own copy', async () => {
+        const w = world({ prof: profile({ addresses: ['203.0.113.5'], primaryAddress: '203.0.113.5' }), answers: { [IP]: statement(node, COMMUNITY) } });
+        expect(await addressFollowOffer(w.deps)).toBeNull();
+        expect(w.state.asked).toEqual([]);
+        expect(vi.mocked(AsyncStorage.setItem)).not.toHaveBeenCalled();
     });
 
     it('a number that stopped answering can still be followed to a name the phone heard of, checked against what it kept', async () => {

@@ -18,6 +18,7 @@ import { useIdentity } from '../IdentityContext';
 import { PageTitle, useTabRetapScrollTop } from '../../components/PageTitle';
 import { OneWayBackCard } from '../../components/OneWayBackCard';
 import { KeyMovedCard } from '../../components/KeyMovedCard';
+import { AddressFollowCard } from '../../components/AddressFollowCard';
 import { NewPostTypeSheet } from '../../components/NewPostTypeSheet';
 import { NewPollModal } from '../../components/NewPollModal';
 import { NewEventModal } from '../../components/NewEventModal';
@@ -1019,6 +1020,7 @@ export default function HomeScreen() {
                 >
                     <PageTitle title="Home" testID="page-title-home" />
                     <KeyMovedCard colors={colors} />
+                    <AddressFollowCard colors={colors} />
                     {offlineNote && (
                         <Text style={[st.offline, { color: colors.text.secondary }]} accessibilityLiveRegion="polite" testID="home-offline-note">
                             Couldn't reach your community; showing what we had.

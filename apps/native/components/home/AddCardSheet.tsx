@@ -1,14 +1,17 @@
 import React from 'react';
 import { View, Text, Pressable, Modal, ScrollView, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { t, word } from '@beanpool/core';
 import type { AppColors } from '../../constants/colors';
 import type { PickerGroup, PickerRow } from '../../utils/home-cards';
 import { HOME_TARGET_DP } from './HomeParts';
 import { editHomeStyles } from './EditHomeSheet';
 
 /** The picker's note, and the one it says when Home holds 24 cards (CARD-FRAME §1.2). */
-export const ADD_CARD_NOTE = 'Pick a card to put on Home. You can move or remove it any time.';
-export const ADD_CARD_FULL_NOTE = 'Home is full: remove a card to add one.';
+export const ADD_CARD_NOTE = word('Pick a card to put on Home. You can move or remove it any time.');
+export const ADD_CARD_FULL_NOTE = word('Home is full: remove a card to add one.');
+/** Shown through t() in the member's language. */
+const NOTES = { open: ADD_CARD_NOTE, full: ADD_CARD_FULL_NOTE };
 
 /**
  * Add a card (scratch/home/CARD-FRAME-DESIGN-fable.md §1.2): every card type this node can show and this build draws, in
@@ -39,13 +42,13 @@ export function AddCardSheet({ visible, groups, full, colors, onAdd, onClose }: 
                     onPress={() => onAdd(r)}
                     style={({ pressed }) => [addCardStyles.add, { backgroundColor: colors.brand.fill }, pressed && { opacity: 0.85 }]}
                     accessibilityRole="button"
-                    accessibilityLabel={`Add ${r.name} to Home`}
+                    accessibilityLabel={t('Add {card} to Home', { card: r.name })}
                     testID={`add-card-${r.type}-add`}
                 >
-                    <Text style={[addCardStyles.addText, { color: colors.text.inverse }]}>Add</Text>
+                    <Text style={[addCardStyles.addText, { color: colors.text.inverse }]}>{t('Add')}</Text>
                 </Pressable>
             ) : r.state === 'on-home' ? (
-                <Text style={[addCardStyles.onHome, { color: colors.text.secondary }]} accessibilityLabel={`${r.name} is already on Home`} testID={`add-card-${r.type}-on-home`}>On Home</Text>
+                <Text style={[addCardStyles.onHome, { color: colors.text.secondary }]} accessibilityLabel={t('{card} is already on Home', { card: r.name })} testID={`add-card-${r.type}-on-home`}>{t('On Home')}</Text>
             ) : null}
         </View>
     );
@@ -55,13 +58,13 @@ export function AddCardSheet({ visible, groups, full, colors, onAdd, onClose }: 
             <View style={editHomeStyles.backdrop}>
                 <View style={[editHomeStyles.sheet, { backgroundColor: colors.surface.card, paddingBottom: 12 + insets.bottom, marginTop: insets.top + 24 }]} testID="add-card-sheet">
                     <View style={editHomeStyles.head}>
-                        <Text style={[editHomeStyles.title, { color: colors.text.heading }]} accessibilityRole="header">Add a card</Text>
-                        <Pressable onPress={onClose} style={editHomeStyles.done} accessibilityRole="button" accessibilityLabel="Done adding cards" testID="add-card-done">
-                            <Text style={[editHomeStyles.doneText, { color: colors.text.link }]}>Done</Text>
+                        <Text style={[editHomeStyles.title, { color: colors.text.heading }]} accessibilityRole="header">{t('Add a card')}</Text>
+                        <Pressable onPress={onClose} style={editHomeStyles.done} accessibilityRole="button" accessibilityLabel={t('Done adding cards')} testID="add-card-done">
+                            <Text style={[editHomeStyles.doneText, { color: colors.text.link }]}>{t('Done')}</Text>
                         </Pressable>
                     </View>
                     <ScrollView contentContainerStyle={editHomeStyles.list}>
-                        <Text style={[editHomeStyles.note, { color: colors.text.secondary }]} testID="add-card-note">{full ? ADD_CARD_FULL_NOTE : ADD_CARD_NOTE}</Text>
+                        <Text style={[editHomeStyles.note, { color: colors.text.secondary }]} testID="add-card-note">{full ? t(NOTES.full) : t(NOTES.open)}</Text>
                         {groups.map(g => (
                             <View key={g.id}>
                                 <Text style={[editHomeStyles.section, { color: colors.text.secondary }]} accessibilityRole="header" accessibilityLabel={g.name} testID={`add-card-group-${g.id}`}>{g.name}</Text>

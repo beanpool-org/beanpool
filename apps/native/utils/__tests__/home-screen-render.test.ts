@@ -141,6 +141,8 @@ import * as tourStore from '../tour-store';
 import { START_CARD_WORDS } from '@beanpool/core';
 import { homeAnswerStoreKey, homeHintStoreKey, homeLayoutPhoneOnlySentStoreKey, homeLayoutPhoneOnlyStoreKey, homeLayoutStoreKey, homeTipsStoreKey } from '../storage-keys';
 import { HOME_TIPS, localDay, skyToday, translateV1 } from '@beanpool/core';
+import { setLanguage, type UiLang } from '@beanpool/core';
+import { LanguageProvider } from '../../components/LanguageProvider';
 import { AccessibilityInfo, AppState, DeviceEventEmitter } from 'react-native';
 import { FEWER_CARDS_LINE, HOME_SAFETY_POLL_MS, SKY_NO_PLACE_LINE, decideOnNode, mergeNeeds, type HomeAnswer } from '../home-cards';
 import { decisionsOn, hiddenTabsFor } from '../node-profile';
@@ -3015,5 +3017,155 @@ describe('the Your Beans card where Beans are previewed: its own card, put away 
         await render();
         expect(cards()).toContain('steps');
         expect(beansCard()).toBeNull();
+    });
+});
+
+// ── Home in the member's language (words slice S3, first lane) ────────────────────────────────────────────────────────
+/**
+ * In the pseudo-locale every sentence is accented, padded and bracketed (`[Ĥöɱé~]`), so any word drawn or said to a screen
+ * reader with letters outside a bracket bypassed t(). What others wrote is shown as written and never translated: member
+ * content (titles, names, places, a search's words) and, until the server's own words are translated (slice S4), the
+ * node's sentences in its answer (a Needs you line's label, a notice's line, a level's name).
+ */
+describe('Home in the pseudo-locale: every word on it came through t() (words S3a)', () => {
+    afterEach(() => setLanguage('en'));
+
+    async function renderIn(lang: UiLang) {
+        host = document.createElement('div');
+        document.body.appendChild(host);
+        root = createRoot(host);
+        await act(async () => {
+            root!.render(createElement(LanguageProvider as any, { deviceTags: ['en-US'], initial: lang }, createElement(HomeScreen)) as unknown as Parameters<Root['render']>[0]);
+        });
+        await settle();
+    }
+    const OTHERS_KEYS = new Set(['title', 'name', 'place', 'callsign', 'label', 'line', 'tier', 'q']);
+    function writtenByOthers(answer: unknown, extra: string[] = []): string[] {
+        const out = new Set<string>(extra);
+        const walk = (v: unknown, key?: string) => {
+            if (typeof v === 'string') { if (key && OTHERS_KEYS.has(key) && /\p{L}/u.test(v)) out.add(v); return; }
+            if (Array.isArray(v)) { v.forEach(x => walk(x, key)); return; }
+            if (v && typeof v === 'object') for (const [k, x] of Object.entries(v)) walk(x, k);
+        };
+        walk(answer);
+        // The Market's own example listings (mocked above: components/ExampleListings.tsx is the Market's, not Home's).
+        out.add('Examples of what people post');
+        return [...out].sort((a, b) => b.length - a.length);
+    }
+    /** Every text on screen, screen-reader label and announcement with letters outside a pseudo-locale bracket. */
+    function bypassing(others: string[]): string[] {
+        const out: string[] = [];
+        const check = (text: string | null | undefined, where: string) => {
+            if (!text) return;
+            // Innermost brackets first: a translated sentence can hold another as a value ("[[Ƒööđ~], ñöţ šţāŕŕéđ~]").
+            let rest = text;
+            for (let was = ''; was !== rest;) { was = rest; rest = rest.replace(/\[[^[\]]*\]/g, ''); }
+            for (const o of others) rest = rest.split(o).join('');
+            if (/\p{L}/u.test(rest)) out.push(`${where}: ${JSON.stringify(text)}`);
+        };
+        const walker = document.createTreeWalker(host!, NodeFilter.SHOW_TEXT);
+        for (let n = walker.nextNode(); n; n = walker.nextNode()) check(n.nodeValue, 'text');
+        for (const e of Array.from(host!.querySelectorAll('[aria-label]'))) check(e.getAttribute('aria-label'), 'label');
+        for (const [said] of vi.mocked(AccessibilityInfo.announceForAccessibility).mock.calls) check(said, 'said');
+        return [...new Set(out)];
+    }
+    const pseudoText = () => {
+        const walker = document.createTreeWalker(host!, NodeFilter.SHOW_TEXT);
+        let n = 0;
+        for (let x = walker.nextNode(); x; x = walker.nextNode()) if (/^\[.*\]$/s.test(x.nodeValue ?? '')) n += 1;
+        return n;
+    };
+    const click = async (sel: string) => {
+        const el = document.querySelector(sel) as HTMLElement | null;
+        expect(el, sel).not.toBeNull();
+        await act(async () => { el!.click(); });
+        await settle(3);
+    };
+
+    for (const [name, make] of [
+        ['a local member with every card (first branches)', () => everyCard('local', 1)],
+        ['a local member with every card (other branches)', () => everyCard('local', 2)],
+        ['a member of the worldwide community with every card it sends', () => everyCard('global', 1)],
+        ['a new local member: First steps, tips, interests, the Market, Who joined, the Pulse, Beans', () => localMember()],
+        ['a new member of the worldwide community: Find your community, the global First steps, the limits', () => globalMember(3)],
+    ] as const) {
+        it(`${name}: every card's words, captions, links and screen-reader labels`, async () => {
+            node.answer = make();
+            mem.store.set(homeLayoutStoreKey(who.identity.publicKey, NODE), JSON.stringify(node.answer.layout));
+            vi.mocked(AccessibilityInfo.announceForAccessibility).mockClear();
+            await renderIn('xx');
+            expect(cards().length).toBeGreaterThan(5);
+            expect(pseudoText()).toBeGreaterThan(20);
+            expect(bypassing(writtenByOthers(node.answer))).toEqual([]);
+        });
+    }
+
+    it("a newcomer's Getting started card", async () => {
+        const a = localMember();
+        const { tour: _t, ...me } = a.me!;
+        node.answer = { ...a, me, layout: null };
+        mem.store.delete(homeLayoutStoreKey(who.identity.publicKey, NODE));
+        tourStore.closeTour();
+        await renderIn('xx');
+        expect(cards()).toContain('start');
+        expect(bypassing(writtenByOthers(node.answer))).toEqual([]);
+    });
+
+    it('the menus and sheets: a card\'s "…", Edit home, Add a card, a saved search\'s settings; and what a Remove says', async () => {
+        node.answer = localMember();
+        vi.mocked(AccessibilityInfo.announceForAccessibility).mockClear();
+        await renderIn('xx');
+        const others = writtenByOthers(node.answer, ['eggs']);
+        await click('[data-testid="home-card-events-menu"]');
+        expect(document.querySelector('[data-modal]')).not.toBeNull();
+        expect(bypassing(others)).toEqual([]);
+        await click('[data-testid="home-menu-remove"]');
+        expect(vi.mocked(AccessibilityInfo.announceForAccessibility).mock.calls.length).toBeGreaterThan(0);
+        expect(bypassing(others)).toEqual([]);
+        await click('[data-testid="home-edit"]');
+        expect(document.querySelector('[data-testid="edit-home-done"]')).not.toBeNull();
+        expect(bypassing(others)).toEqual([]);
+        await click('[data-testid="edit-home-done"]');
+        await click('[data-testid="home-add-card"]');
+        expect(document.querySelector('[data-modal]')).not.toBeNull();
+        expect(bypassing(others)).toEqual([]);
+        await click('[data-testid="add-card-search-add"]');
+        await settle(5);
+        expect(document.querySelector('[data-testid="card-settings-sheet"]')).not.toBeNull();
+        expect(bypassing(others)).toEqual([]);
+    });
+
+    it('the sun and moon card', async () => {
+        const now = Date.now();
+        const base = localMember();
+        const layout = { v: 2 as const, cards: [{ id: 'sky', type: 'sky' }, { id: 'steps', type: 'steps' }], dismissed: {}, updatedAt: iso(now - 72 * H) };
+        node.answer = { ...base, layout, cards: { ...base.cards, community: { ...base.cards.community!, place: { lat: -28.55, lng: 153.5 } } } };
+        mem.store.set(homeLayoutStoreKey(who.identity.publicKey, NODE), JSON.stringify(layout));
+        await renderIn('xx');
+        expect(cards()).toContain('sky');
+        expect(bypassing(writtenByOthers(node.answer))).toEqual([]);
+    });
+
+    for (const [name, arrange] of [
+        ['members only', () => { node.status = 403; }],
+        ['the server needs an update', () => { node.status = 404; }],
+        ['no answer yet', () => { node.hang = true; }],
+        ['no connection', () => { node.down = true; }],
+        ['no community', () => { mem.store.delete('beanpool_anchor_url'); }],
+    ] as const) {
+        it(`with no Home to draw (${name}): what it says, and its buttons`, async () => {
+            mem.store.delete(homeLayoutStoreKey(who.identity.publicKey, NODE));
+            arrange();
+            await renderIn('xx');
+            expect(pseudoText()).toBeGreaterThan(1);
+            expect(bypassing(writtenByOthers(null))).toEqual([]);
+        });
+    }
+
+    it('in English, nothing is bracketed (t() returns the sentence it is given)', async () => {
+        node.answer = everyCard('local', 1);
+        await renderIn('en');
+        expect(pseudoText()).toBe(0);
+        expect(document.body.textContent).toContain('New in the Market');
     });
 });

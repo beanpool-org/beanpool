@@ -12,6 +12,7 @@
  * Pure: no I/O and no Node built-ins (the barrel is bundled for the phone).
  */
 import { defaultCards, homeCardType, starterCards, type HomeNodeFacts, type HomeReaderRole } from './home-frame.js';
+import { t, word } from './words.js';
 
 // ── The steps ─────────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -198,12 +199,12 @@ export const resumeStep = (progress: TourProgress | null, total: number): number
 
 /** The Getting started card's button: "Look around ›", or where a tour is part way, "Pick up the tour at step 3 ›". */
 export function startCardButton(progress: TourProgress | null, total: number): string {
-    if (!progress || progress.step === 0) return 'Look around ›';
-    return `Pick up the tour at step ${resumeStep(progress, total) + 1} ›`;
+    if (!progress || progress.step === 0) return t('Look around ›');
+    return t('Pick up the tour at step {step} ›', { step: resumeStep(progress, total) + 1 });
 }
 
-/** The Getting started card's words (§1). */
-export const START_CARD_WORDS = 'This is your Home. You choose what goes here. Before you start, take a one-minute look at the other tabs.';
+/** The Getting started card's words (§1): shown through t(). */
+export const START_CARD_WORDS = word('This is your Home. You choose what goes here. Before you start, take a one-minute look at the other tabs.');
 
 /**
  * The cards a Home with no saved layout shows: Getting started while the tour hasn't ended, else the starter set (a Done

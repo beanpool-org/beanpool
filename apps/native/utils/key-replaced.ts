@@ -10,13 +10,15 @@
  * signed request from a replaced key, read or write, https-server.ts REPLACED_KEY_REFUSAL), and the card goes.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { word } from '@beanpool/core';
 
-export const KEY_MOVED_TITLE = 'This account moved to a new phone';
-export const KEY_MOVED_BODY = "This phone's key was replaced by a new one. If your new phone can't read earlier group messages, type these 12 words there: they unlock them.";
+// The card's words (components/KeyMovedCard.tsx), shown through t() in the member's language.
+export const KEY_MOVED_TITLE = word('This account moved to a new phone');
+export const KEY_MOVED_BODY = word("This phone's key was replaced by a new one. If your new phone can't read earlier group messages, type these 12 words there: they unlock them.");
 /** Under the body (finding 5): the words are this account's, and belong only in the member's own phone. */
-export const KEY_MOVED_OWN_ONLY = "These are this account's own words. Type them only into your own new phone, never into a phone someone else holds out.";
-export const KEY_MOVED_SHOW = 'Show my old 12 words, so my new phone can unlock earlier messages';
-export const KEY_MOVED_REASON = 'Show your old 12 words';
+export const KEY_MOVED_OWN_ONLY = word("These are this account's own words. Type them only into your own new phone, never into a phone someone else holds out.");
+export const KEY_MOVED_SHOW = word('Show my old 12 words, so my new phone can unlock earlier messages');
+export const KEY_MOVED_REASON = word('Show your old 12 words');
 
 /** The screens showing the offer (a plain set, not DeviceEventEmitter: db.ts imports this, and runs outside React Native in tests). */
 const listeners = new Set<() => void>();

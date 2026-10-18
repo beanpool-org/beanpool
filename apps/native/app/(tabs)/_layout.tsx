@@ -7,7 +7,8 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useIdentity } from '../IdentityContext';
 import { usePathname, router } from 'expo-router';
 import { useMemo } from 'react';
-import { helpSheetFor, phoneHelpKey, tourStepForTab, tourSteps as coreTourSteps } from '@beanpool/core';
+import { helpSheetFor, phoneHelpKey, tourStepForTab, tourSteps as coreTourSteps, word } from '@beanpool/core';
+import { useWords } from '../../components/LanguageProvider';
 import { TourBar, tourSceneInset } from '../../components/TourBar';
 import { HelpSheet } from '../../components/HelpSheet';
 import { OPEN_HELP_EVENT, closeTour, helpContext, moveTour, startTour, useTour } from '../../utils/tour-store';
@@ -27,6 +28,23 @@ const TOUR_ROUTES: Record<string, '/(tabs)' | '/(tabs)/market' | '/(tabs)/map' |
     index: '/(tabs)', market: '/(tabs)/market', map: '/(tabs)/map', chats: '/(tabs)/chats', projects: '/(tabs)/projects', ledger: '/(tabs)/ledger',
 };
 
+/**
+ * Each tab's name, in the member's language: the label over its icon, the screen's title and what a screen reader says.
+ * The `tab` context lets a language choose a shorter word for the strip than it uses elsewhere (six tabs share 320dp;
+ * translation design §5 (c)).
+ */
+const TAB = {
+    index: word('Home', 'tab'),
+    market: word('Market', 'tab'),
+    map: word('Map', 'tab'),
+    chats: word('Talk', 'tab'),
+    people: word('People', 'tab'),
+    pulse: word('Pulse', 'tab'),
+    projects: word('Commons', 'tab'),
+    ledger: word('Ledger', 'tab'),
+    settings: word('Settings', 'tab'),
+};
+
 // A small label sits ABOVE each icon,
 // so the text is buffered from the busy page below. Height is fixed here because the library
 // would add the status-bar inset a second time (GlobalHeader already consumes it).
@@ -36,6 +54,11 @@ const LABEL_SIZE = 10;
 // Six tabs share 320dp, ~53dp each. "Commons" is the widest label; this cap was measured on
 // the emulator at 320dp + 1.3x text as the largest scale that keeps it on one unclipped line.
 const LABEL_MAX_SCALE = 1.1;
+// A longer word in another language shrinks to fit its tab rather than being cut off, down to this (as the welcome
+// screen's two big buttons do); the label stays one line, as the strip's fixed height needs. 0.6 (6.6 dp) is only the
+// safety net that keeps a label whole: every catalog's tab word must fit at 0.8, 8.8 dp, so a translator gives the
+// short `tab` word, never a full one that needs more shrink (tab-bar-words-render.test.ts; deciding review of #2152).
+const LABEL_MIN_SCALE = 0.6;
 const UNDERLINE_HEIGHT = 3;
 const TAB_BUTTON_INSET = 5;
 
@@ -56,6 +79,8 @@ function TabItem({ label, icon, focused, color, count, badge }: {
             <View style={{ alignItems: 'center', opacity: focused ? 1 : 0.6 }}>
                 <Text
                     numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={LABEL_MIN_SCALE}
                     maxFontSizeMultiplier={LABEL_MAX_SCALE}
                     // The library's tab button pads 5dp a side (tabVerticalUiKit, not reachable via
                     // tabBarItemStyle), which left "Commons" 43dp of a 53dp tab at 320dp. The negative
@@ -100,6 +125,7 @@ function TabItem({ label, icon, focused, color, count, badge }: {
 
 export default function TabLayout() {
     const { theme, colors } = useTheme();
+    const { t } = useWords();
     const { identity } = useIdentity();
     const pathname = usePathname();
     const insets = useSafeAreaInsets();
@@ -350,28 +376,28 @@ export default function TabLayout() {
                 <Tabs.Screen
                     name="index"
                     options={{
-                        title: 'Home',
-                        tabBarAccessibilityLabel: 'Home',
+                        title: t(TAB.index),
+                        tabBarAccessibilityLabel: t(TAB.index),
                         tabBarButtonTestID: 'tab-home',
-                        tabBarIcon: ({ focused, color }) => <TabItem label="Home" icon="🏠" focused={focused} color={color} />
+                        tabBarIcon: ({ focused, color }) => <TabItem label={t(TAB.index)} icon="🏠" focused={focused} color={color} />
                     }}
                 />
                 <Tabs.Screen
                     name="market"
                     options={{
-                        title: 'Market',
-                        tabBarAccessibilityLabel: 'Market',
+                        title: t(TAB.market),
+                        tabBarAccessibilityLabel: t(TAB.market),
                         tabBarButtonTestID: 'tab-market',
-                        tabBarIcon: ({ focused, color }) => <TabItem label="Market" icon="🤝" focused={focused} color={color} count={dealsCount} />
+                        tabBarIcon: ({ focused, color }) => <TabItem label={t(TAB.market)} icon="🤝" focused={focused} color={color} count={dealsCount} />
                     }}
                 />
                 <Tabs.Screen
                     name="map"
                     options={{
-                        title: 'Map',
-                        tabBarAccessibilityLabel: 'Map',
+                        title: t(TAB.map),
+                        tabBarAccessibilityLabel: t(TAB.map),
                         tabBarButtonTestID: 'tab-map',
-                        tabBarIcon: ({ focused, color }) => <TabItem label="Map" icon="🗺️" focused={focused} color={color} />
+                        tabBarIcon: ({ focused, color }) => <TabItem label={t(TAB.map)} icon="🗺️" focused={focused} color={color} />
                     }}
                 />
 
@@ -380,10 +406,10 @@ export default function TabLayout() {
                 <Tabs.Screen
                     name="chats"
                     options={{
-                        title: 'Talk',
-                        tabBarAccessibilityLabel: 'Talk',
+                        title: t(TAB.chats),
+                        tabBarAccessibilityLabel: t(TAB.chats),
                         tabBarButtonTestID: 'tab-talk',
-                        tabBarIcon: ({ focused, color }) => <TabItem label="Talk" icon="💬" focused={focused} color={color} count={unread} />
+                        tabBarIcon: ({ focused, color }) => <TabItem label={t(TAB.chats)} icon="💬" focused={focused} color={color} count={unread} />
                     }}
                 />
                 {/* Still a route: GlobalHeader and public-profile deep-link here with a `view`
@@ -391,51 +417,51 @@ export default function TabLayout() {
                 <Tabs.Screen
                     name="people"
                     options={{
-                        title: 'People',
-                        tabBarAccessibilityLabel: 'People',
+                        title: t(TAB.people),
+                        tabBarAccessibilityLabel: t(TAB.people),
                         href: null,
-                        tabBarIcon: ({ focused, color }) => <TabItem label="People" icon="👥" focused={focused} color={color} />
+                        tabBarIcon: ({ focused, color }) => <TabItem label={t(TAB.people)} icon="👥" focused={focused} color={color} />
                     }}
                 />
                 {/* A card on Home since H2 (its slot went to Home), and still a route: the card's "See all" opens it. */}
                 <Tabs.Screen
                     name="pulse"
                     options={{
-                        title: 'Pulse',
-                        tabBarAccessibilityLabel: 'Pulse',
+                        title: t(TAB.pulse),
+                        tabBarAccessibilityLabel: t(TAB.pulse),
                         href: null,
-                        tabBarIcon: ({ focused, color }) => <TabItem label="Pulse" icon="📡" focused={focused} color={color} />
+                        tabBarIcon: ({ focused, color }) => <TabItem label={t(TAB.pulse)} icon="📡" focused={focused} color={color} />
                     }}
                 />
                 <Tabs.Screen
                     name="projects"
                     options={{
                         ...(hiddenTabs.includes('projects') ? { href: null } : {}),
-                        title: 'Commons',
-                        tabBarAccessibilityLabel: 'Commons',
+                        title: t(TAB.projects),
+                        tabBarAccessibilityLabel: t(TAB.projects),
                         tabBarButtonTestID: 'tab-commons',
-                        tabBarIcon: ({ focused, color }) => <TabItem label="Commons" icon={Platform.OS === 'ios' ? '🌱' : '🌳'} focused={focused} color={color} /> 
+                        tabBarIcon: ({ focused, color }) => <TabItem label={t(TAB.projects)} icon={Platform.OS === 'ios' ? '🌱' : '🌳'} focused={focused} color={color} /> 
                     }} 
                 />
                 <Tabs.Screen
                     name="ledger"
                     options={{
                         ...(hiddenTabs.includes('ledger') ? { href: null } : {}),
-                        title: 'Ledger',
-                        tabBarAccessibilityLabel: 'Ledger',
+                        title: t(TAB.ledger),
+                        tabBarAccessibilityLabel: t(TAB.ledger),
                         tabBarButtonTestID: 'tab-ledger',
-                        tabBarIcon: ({ focused, color }) => <TabItem label="Ledger" icon="📊" focused={focused} color={color} /> 
+                        tabBarIcon: ({ focused, color }) => <TabItem label={t(TAB.ledger)} icon="📊" focused={focused} color={color} /> 
                     }} 
                 />
                 <Tabs.Screen 
                     name="settings" 
                     options={{ 
-                        title: 'Settings',
-                        tabBarAccessibilityLabel: 'Settings',
+                        title: t(TAB.settings),
+                        tabBarAccessibilityLabel: t(TAB.settings),
                         href: null,
                         tabBarIcon: ({ focused, color }) => (
                             <TabItem
-                                label="Settings"
+                                label={t(TAB.settings)}
                                 icon="⚙️"
                                 focused={focused}
                                 color={color}

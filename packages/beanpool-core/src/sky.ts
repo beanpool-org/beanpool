@@ -12,6 +12,8 @@
  * Pure: no I/O, no Node built-ins, no regular expressions (the barrel is bundled for the phone, barrel-is-universal.test.ts).
  */
 
+import { currentLanguage, t, word, type WordKey } from './words.js';
+
 const RAD = Math.PI / 180;
 const DAY_MS = 86_400_000;
 /** Julian day of 1970-01-01T00:00Z. */
@@ -36,15 +38,28 @@ const julianDay = (ms: number) => ms / DAY_MS + UNIX_EPOCH_JD;
 export type MoonPhase =
     | 'new' | 'waxing-crescent' | 'first-quarter' | 'waxing-gibbous' | 'full' | 'waning-gibbous' | 'last-quarter' | 'waning-crescent';
 
-export const MOON_PHASE_NAMES: Readonly<Record<MoonPhase, string>> = {
-    'new': 'New moon',
-    'waxing-crescent': 'Waxing crescent',
-    'first-quarter': 'First quarter',
-    'waxing-gibbous': 'Waxing gibbous',
-    'full': 'Full moon',
-    'waning-gibbous': 'Waning gibbous',
-    'last-quarter': 'Last quarter',
-    'waning-crescent': 'Waning crescent',
+/** Each phase's name, shown through t(). */
+export const MOON_PHASE_NAMES: Readonly<Record<MoonPhase, WordKey>> = {
+    'new': word('New moon'),
+    'waxing-crescent': word('Waxing crescent'),
+    'first-quarter': word('First quarter'),
+    'waxing-gibbous': word('Waxing gibbous'),
+    'full': word('Full moon'),
+    'waning-gibbous': word('Waning gibbous'),
+    'last-quarter': word('Last quarter'),
+    'waning-crescent': word('Waning crescent'),
+};
+
+/** The moon as a screen reader says it, the picture left out: the new and full moons by name, the rest "Moon waxing …". */
+const MOON_PHASE_SAID: Readonly<Record<MoonPhase, WordKey>> = {
+    'new': word('New moon'),
+    'waxing-crescent': word('Moon waxing crescent'),
+    'first-quarter': word('Moon first quarter'),
+    'waxing-gibbous': word('Moon waxing gibbous'),
+    'full': word('Full moon'),
+    'waning-gibbous': word('Moon waning gibbous'),
+    'last-quarter': word('Moon last quarter'),
+    'waning-crescent': word('Moon waning crescent'),
 };
 
 /** The moon as seen from the northern hemisphere (lit on the right while waxing). */
@@ -276,8 +291,9 @@ const shown = (clock: SkyClock, ms: number) => {
     const { hours, minutes } = clock(nearestMinute(ms));
     return `${hours}:${pad2(minutes)}`;
 };
-/** "6:12 am", "5:48 pm": as a screen reader says it. */
+/** "6:12 am", "5:48 pm": as a screen reader says it in English; in every other language the 24-hour time it shows. */
 const spoken = (clock: SkyClock, ms: number) => {
+    if (currentLanguage() !== 'en') return shown(clock, ms);
     const { hours, minutes } = clock(nearestMinute(ms));
     return `${hours % 12 === 0 ? 12 : hours % 12}:${pad2(minutes)} ${hours < 12 ? 'am' : 'pm'}`;
 };
@@ -314,23 +330,28 @@ export function skyToday(place: SkyPlace, now: number, opts: { day?: { from: num
     const moon = moonAt(now);
     const sun = sunDay(place.lat, place.lng, day.from, day.to);
     const percent = moonPercentShown(moon);
-    const name = MOON_PHASE_NAMES[moon.phase];
+    const moonText = t('{phase}, {percent}%', { phase: t(MOON_PHASE_NAMES[moon.phase]), percent });
+    const moonSaid = t('{moon}, {percent} percent lit.', { moon: t(MOON_PHASE_SAID[moon.phase]), percent });
     const picture = moonPicture(moon.phase, place.lat);
     let sunText: string;
     let sunSaid: string;
     if (sun.allDay === 'up') {
-        sunText = 'Sun up all day';
-        sunSaid = 'Sun up all day.';
+        sunText = t('Sun up all day');
+        sunSaid = t('Sun up all day.');
     } else if (sun.allDay === 'down') {
-        sunText = 'Sun down all day';
-        sunSaid = 'Sun down all day.';
+        sunText = t('Sun down all day');
+        sunSaid = t('Sun down all day.');
     } else {
-        sunText = `${sun.rise === null ? 'No sunrise today' : `Sunrise ${shown(clock, sun.rise)}`} · ${sun.set === null ? 'No sunset today' : `Sunset ${shown(clock, sun.set)}`}`;
-        sunSaid = `${sun.rise === null ? 'No sunrise today.' : `Sunrise ${spoken(clock, sun.rise)}.`} ${sun.set === null ? 'No sunset today.' : `Sunset ${spoken(clock, sun.set)}.`}`;
+        const rise = sun.rise === null ? t('No sunrise today') : t('Sunrise {time}', { time: shown(clock, sun.rise) });
+        const set = sun.set === null ? t('No sunset today') : t('Sunset {time}', { time: shown(clock, sun.set) });
+        const riseSaid = sun.rise === null ? t('No sunrise today.') : t('Sunrise {time}.', { time: spoken(clock, sun.rise) });
+        const setSaid = sun.set === null ? t('No sunset today.') : t('Sunset {time}.', { time: spoken(clock, sun.set) });
+        sunText = `${rise} · ${set}`;
+        sunSaid = `${riseSaid} ${setSaid}`;
     }
     return {
         place, moon, sun, picture,
-        text: `${picture} ${name}, ${percent}% · ${sunText}`,
-        label: `${moon.phase === 'new' || moon.phase === 'full' ? name : `Moon ${name.charAt(0).toLowerCase()}${name.slice(1)}`}, ${percent} percent lit. ${sunSaid}`,
+        text: `${picture} ${moonText} · ${sunText}`,
+        label: `${moonSaid} ${sunSaid}`,
     };
 }

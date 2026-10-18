@@ -9,7 +9,7 @@ import {
     TIPS_ALL_SEEN, dismissTips, emptyTipsRecord, homeCardType, localDay, nextTip, normalizeCategory, allTipsSeen, restartTips, tipNow, tipOnLanding,
     tipsCaption, tipsFor, type TipsRecord,
     START_CARD_WORDS, endTourLayout, resumeStep, startCardButton, tourChips, tourEnded, tourRecord, tourSteps, type TourProgress,
-    SAVE_SEARCH_NOT_NOW, saveSearchLine, saveSearchState, type HomeAddRefusal,
+    SAVE_SEARCH_NOT_NOW, saveSearchLine, saveSearchState, type HomeAddRefusal, t,
 } from '@beanpool/core';
 import { readSaveSearchParam } from '../../utils/market-filters';
 import { closeTour, lendTourHome, readProgress, resendTourRecord, saveTourRecord, startTour, useTour } from '../../utils/tour-store';
@@ -91,6 +91,9 @@ import type { NeedsYouEntry } from '../../utils/needs-you';
  */
 
 type Status = 'loading' | 'ok' | 'offline' | 'members_only' | 'no_community' | 'needs_update';
+
+/** Lines kept as word() in utils/home-cards.ts and core, shown here in the member's language. */
+const LINES = { hint: HOME_HINT_LINE, fewer: FEWER_CARDS_LINE, saveNotNow: SAVE_SEARCH_NOT_NOW, start: START_CARD_WORDS };
 
 const REVEAL_MS = 300;
 
@@ -479,7 +482,7 @@ export default function HomeScreen() {
                     if (stillOnPhone(whose) && identityRef.current?.publicKey === id.publicKey) setKnocks(list);
                 });
             }
-            if (why === 'pull') AccessibilityInfo.announceForAccessibility('Home updated');
+            if (why === 'pull') AccessibilityInfo.announceForAccessibility(t('Home updated'));
         } else if (read.kind === 'members_only') {
             setStatus('members_only');
         } else if (read.kind === 'needs_update') {
@@ -487,11 +490,11 @@ export default function HomeScreen() {
             storedRef.current = null;
             setStored(null);
             setOfflineNote(false);
-            if (why === 'pull') AccessibilityInfo.announceForAccessibility("This community's server needs an update before Home works. Market and Talk still work.");
+            if (why === 'pull') AccessibilityInfo.announceForAccessibility(t("This community's server needs an update before Home works. Market and Talk still work."));
         } else {
             setStatus(storedRef.current ? 'ok' : 'offline');
             setOfflineNote(!!storedRef.current);
-            if (why === 'pull') AccessibilityInfo.announceForAccessibility("Couldn't reach your community; showing what we had");
+            if (why === 'pull') AccessibilityInfo.announceForAccessibility(t("Couldn't reach your community; showing what we had"));
         }
         // No answer this time (offline, members only, needs an update): land from what the phone holds.
         if (why === 'focus' && !tipsLandNow && read.kind !== 'answer') await landTips(whose);
@@ -553,7 +556,7 @@ export default function HomeScreen() {
         if (!id || !ans || !tipsRef.current) return;
         const step = nextTip(tipsRef.current, tipsFor(ans, role), localDay());
         keepTips(homeAccount(id.publicKey), step.record);
-        AccessibilityInfo.announceForAccessibility(step.view ? step.view.tip.text : 'That was the last tip. Add a card brings them back.');
+        AccessibilityInfo.announceForAccessibility(step.view ? t(step.view.tip.text) : t('That was the last tip. Add a card brings them back.'));
     }, [role, keepTips]);
 
     // ── The member's edits ──
@@ -611,7 +614,7 @@ export default function HomeScreen() {
     // Said and shown when a search the Market saved can't go on Home.
     const noteSaveSearch = useCallback((state: ReturnType<typeof saveSearchState> | 'not-now', settings?: Record<string, unknown>) => {
         const words = typeof settings?.q === 'string' ? settings.q : '';
-        const line = state === 'not-now' ? SAVE_SEARCH_NOT_NOW : saveSearchLine(state, words);
+        const line = state === 'not-now' ? t(LINES.saveNotNow) : saveSearchLine(state, words);
         if (!line) return;
         setSaveNote(line);
         AccessibilityInfo.announceForAccessibility(line);
@@ -704,9 +707,9 @@ export default function HomeScreen() {
     }, [openTune]);
 
     const openNeeds = useCallback((e: NeedsYouEntry) => {
-        const t = e.target;
-        if (t.to === 'admin') { manage.start(storedRef.current?.answer.cards.community?.name || 'this community', t.section); return; }
-        goToNeedsTarget(t);
+        const target = e.target;
+        if (target.to === 'admin') { manage.start(storedRef.current?.answer.cards.community?.name || t('this community'), target.section); return; }
+        goToNeedsTarget(target);
     }, [manage]);
 
     // A kept notice: its whole text from the node (one read on the tap), then marked seen.
@@ -714,7 +717,7 @@ export default function HomeScreen() {
         const id = identityRef.current;
         const first = storedRef.current?.answer.cards.notices?.first;
         if (!id || !url) return;
-        let title = first?.title ?? 'From your community';
+        let title = first?.title ?? t('From your community');
         let body = first?.line ?? '';
         try {
             const res = await signedGet(url, '/api/notices?unseen=1', id);
@@ -863,7 +866,7 @@ export default function HomeScreen() {
                 const total = tourSteps('phone', { global: answer.profile === 'global', beans: !hiddenTabsFor(answer.features).includes('ledger') }).length;
                 return frame(
                     <StartBody
-                        words={START_CARD_WORDS}
+                        words={t(LINES.start)}
                         button={startCardButton(tourProgress, total)}
                         colors={colors}
                         onLookAround={() => {
@@ -900,8 +903,8 @@ export default function HomeScreen() {
                     // The interests are a member's (a visitor's answer has no `me`, so no interests card to open).
                     right: tailor ? (
                         <Pressable onPress={openTune} style={{ minHeight: 48, minWidth: 48, paddingHorizontal: 8, justifyContent: 'center', alignItems: 'center' }}
-                            accessibilityRole="button" accessibilityLabel="Tune: pick what you're into" testID="home-market-tune">
-                            <Text style={{ fontSize: 13, fontWeight: '700', color: colors.text.link }}>Tune</Text>
+                            accessibilityRole="button" accessibilityLabel={t("Tune: pick what you're into")} testID="home-market-tune">
+                            <Text style={{ fontSize: 13, fontWeight: '700', color: colors.text.link }}>{t('Tune')}</Text>
                         </Pressable>
                     ) : undefined,
                 },
@@ -959,38 +962,38 @@ export default function HomeScreen() {
         if (status === 'members_only') {
             empty = (
                 <View style={st.empty}>
-                    <Text style={[st.emptyText, { color: colors.text.body }]}>Home shows once you're a member of this community.</Text>
-                    <HomeButton colors={colors} text="Open the Market" onPress={() => router.navigate('/(tabs)/market')} />
+                    <Text style={[st.emptyText, { color: colors.text.body }]}>{t("Home shows once you're a member of this community.")}</Text>
+                    <HomeButton colors={colors} text={t('Open the Market')} onPress={() => router.navigate('/(tabs)/market')} />
                 </View>
             );
         } else if (status === 'needs_update') {
             empty = (
                 <View style={st.empty}>
                     <Text style={[st.emptyText, { color: colors.text.body }]} accessibilityLiveRegion="polite" testID="home-needs-update-note">
-                        This community's server needs an update before Home works. Market and Talk still work.
+                        {t("This community's server needs an update before Home works. Market and Talk still work.")}
                     </Text>
                     <View style={s.buttonRow}>
-                        <HomeButton colors={colors} text="Open the Market" onPress={() => router.navigate('/(tabs)/market')} testID="home-open-market" />
-                        <HomeButton colors={colors} text="Open Talk" onPress={() => router.navigate('/(tabs)/chats')} testID="home-open-talk" />
+                        <HomeButton colors={colors} text={t('Open the Market')} onPress={() => router.navigate('/(tabs)/market')} testID="home-open-market" />
+                        <HomeButton colors={colors} text={t('Open Talk')} onPress={() => router.navigate('/(tabs)/chats')} testID="home-open-talk" />
                     </View>
                 </View>
             );
         } else if (status === 'no_community') {
             empty = (
                 <View style={st.empty}>
-                    <Text style={[st.emptyText, { color: colors.text.body }]}>Connect to a community to see your Home.</Text>
-                    <HomeButton colors={colors} primary text="Connect" onPress={() => router.push({ pathname: '/(tabs)/settings', params: { section: 'advanced' } })} />
+                    <Text style={[st.emptyText, { color: colors.text.body }]}>{t('Connect to a community to see your Home.')}</Text>
+                    <HomeButton colors={colors} primary text={t('Connect')} onPress={() => router.push({ pathname: '/(tabs)/settings', params: { section: 'advanced' } })} />
                 </View>
             );
         } else if (status === 'offline') {
             empty = (
                 <View style={st.empty}>
                     <Text style={[st.emptyText, { color: colors.text.body }]} accessibilityLiveRegion="polite">
-                        Couldn't reach your community yet. Home fills in when it answers.
+                        {t("Couldn't reach your community yet. Home fills in when it answers.")}
                     </Text>
                     <View style={s.buttonRow}>
-                        <HomeButton colors={colors} primary text="Try again" onPress={() => void refresh('pull')} testID="home-retry" />
-                        <HomeButton colors={colors} text="Open the Market" onPress={() => router.navigate('/(tabs)/market')} />
+                        <HomeButton colors={colors} primary text={t('Try again')} onPress={() => void refresh('pull')} testID="home-retry" />
+                        <HomeButton colors={colors} text={t('Open the Market')} onPress={() => router.navigate('/(tabs)/market')} />
                     </View>
                 </View>
             );
@@ -998,7 +1001,7 @@ export default function HomeScreen() {
             empty = (
                 <View style={st.empty} accessibilityLiveRegion="polite">
                     <ActivityIndicator color={colors.text.secondary} />
-                    <Text style={[st.emptyText, { color: colors.text.secondary }]}>Getting your Home…</Text>
+                    <Text style={[st.emptyText, { color: colors.text.secondary }]}>{t('Getting your Home…')}</Text>
                 </View>
             );
         }
@@ -1018,25 +1021,25 @@ export default function HomeScreen() {
                     refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onPull} />}
                     testID="home-scroll"
                 >
-                    <PageTitle title="Home" testID="page-title-home" />
+                    <PageTitle title={t('Home')} testID="page-title-home" />
                     <KeyMovedCard colors={colors} />
                     <AddressFollowCard colors={colors} />
                     {offlineNote && (
                         <Text style={[st.offline, { color: colors.text.secondary }]} accessibilityLiveRegion="polite" testID="home-offline-note">
-                            Couldn't reach your community; showing what we had.
+                            {t("Couldn't reach your community; showing what we had.")}
                         </Text>
                     )}
                     {saveNote && (
                         <View style={[st.hint, { marginTop: 0, borderColor: colors.accent.border, backgroundColor: colors.accent.tint }]} testID="home-save-search-note">
                             <Text style={[st.hintText, { color: colors.text.body }]}>{saveNote}</Text>
-                            <Pressable onPress={() => setSaveNote(null)} style={st.hintClose} accessibilityRole="button" accessibilityLabel="Close this note">
+                            <Pressable onPress={() => setSaveNote(null)} style={st.hintClose} accessibilityRole="button" accessibilityLabel={t('Close this note')}>
                                 <Text style={{ fontSize: 16, fontWeight: '700', color: colors.accent.primary }}>✕</Text>
                             </Pressable>
                         </View>
                     )}
                     {answer?.me?.standing === 'suspended' && (
                         <Text style={[st.offline, { color: colors.text.body }]} testID="home-suspended-note">
-                            Your account here is paused for now. You can still read your own messages, deals and Beans.
+                            {t('Your account here is paused for now. You can still read your own messages, deals and Beans.')}
                         </Text>
                     )}
                     {empty}
@@ -1046,16 +1049,16 @@ export default function HomeScreen() {
                                 {card(c)}
                                 {hint && tailor && c.id === firstDrawn?.id && (
                                     <View style={[st.hint, { borderColor: colors.accent.border, backgroundColor: colors.accent.tint }]} testID="home-hint">
-                                        <Text style={[st.hintText, { color: colors.text.body }]}>{HOME_HINT_LINE}</Text>
-                                        <Pressable onPress={() => setHint(false)} style={st.hintClose} accessibilityRole="button" accessibilityLabel="Got it, hide this tip">
+                                        <Text style={[st.hintText, { color: colors.text.body }]}>{t(LINES.hint)}</Text>
+                                        <Pressable onPress={() => setHint(false)} style={st.hintClose} accessibilityRole="button" accessibilityLabel={t('Got it, hide this tip')}>
                                             <Text style={{ fontSize: 16, fontWeight: '700', color: colors.accent.primary }}>✕</Text>
                                         </Pressable>
                                     </View>
                                 )}
                                 {fewer && tailor && c.id === firstDrawn?.id && (
                                     <View style={[st.hint, { borderColor: colors.accent.border, backgroundColor: colors.accent.tint }]} testID="home-fewer">
-                                        <Text style={[st.hintText, { color: colors.text.body }]}>{FEWER_CARDS_LINE}</Text>
-                                        <Pressable onPress={() => setFewer(false)} style={st.hintClose} accessibilityRole="button" accessibilityLabel="Got it, hide this line">
+                                        <Text style={[st.hintText, { color: colors.text.body }]}>{t(LINES.fewer)}</Text>
+                                        <Pressable onPress={() => setFewer(false)} style={st.hintClose} accessibilityRole="button" accessibilityLabel={t('Got it, hide this line')}>
                                             <Text style={{ fontSize: 16, fontWeight: '700', color: colors.accent.primary }}>✕</Text>
                                         </Pressable>
                                     </View>
@@ -1068,10 +1071,10 @@ export default function HomeScreen() {
                 </ScrollView>
 
                 {!fabAside && (
-                    <Pressable accessibilityRole="button" accessibilityLabel="Add a post" style={[st.fab, { backgroundColor: colors.action.fab }]} onPress={() => setPostPicker(true)} testID="home-add-post">
+                    <Pressable accessibilityRole="button" accessibilityLabel={t('Add a post')} style={[st.fab, { backgroundColor: colors.action.fab }]} onPress={() => setPostPicker(true)} testID="home-add-post">
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                             <Text style={{ color: colors.text.inverse, fontSize: 20, fontWeight: '400', marginTop: -2 }}>+</Text>
-                            <Text style={{ color: colors.text.inverse, fontSize: 13, fontWeight: '800', letterSpacing: 0.5 }}>ADD POST</Text>
+                            <Text style={{ color: colors.text.inverse, fontSize: 13, fontWeight: '800', letterSpacing: 0.5 }}>{t('ADD POST')}</Text>
                         </View>
                     </Pressable>
                 )}

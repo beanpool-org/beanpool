@@ -849,7 +849,9 @@ describe('review of #1844: path B against a node that rewrites names, wraps list
         off();
         // The card shows only while the note is kept, and says the words are this account's and belong in no other phone.
         const card = readFileSync(fileURLToPath(new URL('../../components/KeyMovedCard.tsx', import.meta.url).href), 'utf8');
-        expect(card).toContain('{KEY_MOVED_OWN_ONLY}');
+        // Drawn in the member's language (words S3a): through t(), from the same constant.
+        expect(card).toContain('{t(KEY_WORDS.ownOnly)}');
+        expect(card).toMatch(/const KEY_WORDS = \{[^}]*\bownOnly: KEY_MOVED_OWN_ONLY\b/);
         expect(card).toMatch(/const yes = await keyReplacedHere\(url, identity\.publicKey\);/);
         expect(card).toMatch(/if \(!moved\) return null;/);
         expect(KEY_MOVED_OWN_ONLY).toBe("These are this account's own words. Type them only into your own new phone, never into a phone someone else holds out.");

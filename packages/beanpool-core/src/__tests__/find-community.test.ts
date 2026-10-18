@@ -60,6 +60,8 @@ describe('findCommunityState: what "Find your community" may say', () => {
         expect(FIND_COMMUNITY_WORDS.noneNear).toBe('No community near you yet.');
         expect(FIND_COMMUNITY_WORDS.farLead(1)).toBe('The nearest listed is far from here:');
         expect(FIND_COMMUNITY_WORDS.farLead(3)).toBe('The nearest listed are far from here:');
+        expect(FIND_COMMUNITY_WORDS.farLine(1)).toBe('No community near you yet. The nearest listed is far from here:');
+        expect(FIND_COMMUNITY_WORDS.farLine(3)).toBe('No community near you yet. The nearest listed are far from here:');
         const all = [FIND_COMMUNITY_WORDS.notLoaded, FIND_COMMUNITY_WORDS.noneNear, FIND_COMMUNITY_WORDS.farLead(2), FIND_COMMUNITY_WORDS.start].join(' ');
         expect(all).not.toMatch(/ask to be told|Beans|Ʀ/i);
         expect(FIND_COMMUNITY_WORDS.notLoaded).not.toMatch(/\bno community\b|\bnone\b/i);

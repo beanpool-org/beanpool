@@ -2,7 +2,7 @@
   "_meta": {
     "language": "uk",
     "name": "Ukrainian",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-19",
@@ -339,5 +339,33 @@
   "Sunset {time}.": "Захід сонця {time}.",
   "Look around ›": "Озирнутися ›",
   "Pick up the tour at step {step} ›": "Продовжити огляд із кроку {step} ›",
-  "This is your Home. You choose what goes here. Before you start, take a one-minute look at the other tabs.": "Це ваша Головна. Ви самі обираєте, що тут розмістити. Перш ніж почати, приділіть хвилину огляду інших вкладок."
+  "This is your Home. You choose what goes here. Before you start, take a one-minute look at the other tabs.": "Це ваша Головна. Ви самі обираєте, що тут розмістити. Перш ніж почати, приділіть хвилину огляду інших вкладок.",
+  "Save this search to Home": "Зберегти цей пошук на Головну",
+  "Save the search \"{q}\" to Home": "Зберегти пошук «{q}» на Головну",
+  "The 1 vote came from a new or 12-word account": "1 голос надійшов від нового акаунта або акаунта з 12 слів",
+  "All {n} votes came from new or 12-word accounts|All {n} votes came from new or 12-word accounts": {
+    "one": "Усі {n} голос надійшли від нових акаунтів або акаунтів із 12 слів",
+    "few": "Усі {n} голоси надійшли від нових акаунтів або акаунтів із 12 слів",
+    "many": "Усі {n} голосів надійшли від нових акаунтів або акаунтів із 12 слів",
+    "other": "Усі {n} голосу надійшли від нових акаунтів або акаунтів із 12 слів"
+  },
+  "{n} of {total} votes came from a new or 12-word account|{n} of {total} votes came from new or 12-word accounts": {
+    "one": "{n} із {total} голосу надійшов від нового акаунта або акаунта з 12 слів",
+    "few": "{n} із {total} голосів надійшли від нового акаунта або акаунта з 12 слів",
+    "many": "{n} із {total} голосів надійшли від нового акаунта або акаунта з 12 слів",
+    "other": "{n} із {total} голосу надійшли від нового акаунта або акаунта з 12 слів"
+  },
+  "This 1 from a new or 12-word account": "Цей 1 голос від нового акаунта або акаунта з 12 слів",
+  "All {n} from new or 12-word accounts|All {n} from new or 12-word accounts": {
+    "one": "Усі {n} від нових акаунтів або акаунтів із 12 слів",
+    "few": "Усі {n} від нових акаунтів або акаунтів із 12 слів",
+    "many": "Усі {n} від нових акаунтів або акаунтів із 12 слів",
+    "other": "Усі {n} від нових акаунтів або акаунтів із 12 слів"
+  },
+  "{n} of these {count} from a new or 12-word account|{n} of these {count} from new or 12-word accounts": {
+    "one": "{n} із цих {count} від нового акаунта або акаунта з 12 слів",
+    "few": "{n} із цих {count} від нового акаунта або акаунта з 12 слів",
+    "many": "{n} із цих {count} від нового акаунта або акаунта з 12 слів",
+    "other": "{n} із цих {count} від нового акаунта або акаунта з 12 слів"
+  }
 }

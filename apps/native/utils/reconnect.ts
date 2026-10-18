@@ -21,6 +21,7 @@ import { assertPlainNodeAddress } from './node-url';
 import { membershipAnswerOf } from './membership-answer';
 import { communitySwitched } from './community-switch';
 import type { NodeProfile } from './node-profile';
+import type { CopyCarry } from './community-copy-carry';
 
 export type ReconnectAnswer =
     /** A member there: the phone switched to it. */
@@ -40,18 +41,31 @@ export interface ReconnectDeps {
     fetchProfile(url: string): Promise<NodeProfile | null>;
     cachedProfile(url: string): Promise<NodeProfile | null>;
     /** Make `url` the phone's community: its own database, the anchor, the update screen told. */
-    switchTo(url: string): Promise<void>;
+    switchTo(url: string): Promise<unknown>;
 }
 
-/** The phone's community becomes `url`, as Settings and the BeanPool sheet switch: each community has its own database. */
-export async function switchPhoneTo(url: string): Promise<void> {
+/**
+ * The phone's community becomes `url`, as Settings and the BeanPool sheet switch: each community has its own database.
+ * `carryFrom`, following the community from that address to its new one (utils/address-follow.ts): its copy and what
+ * guards its chats go to `url`'s name first, and the carry writes the address once they are there and before the old
+ * copy goes (utils/community-copy-carry.ts), with no copy open and none opened until it is done. Resolves what the carry
+ * did (null with none). A carry that fails throws, the address unchanged.
+ */
+export async function switchPhoneTo(url: string, carryFrom?: string): Promise<CopyCarry | null> {
     assertPlainNodeAddress(url);
-    const { closeDB, initDB } = await import('./db');
-    await closeDB();
-    await AsyncStorage.setItem('beanpool_anchor_url', url);
+    const { closeDB, initDB, whileCopyMoves } = await import('./db');
+    let carried: CopyCarry | null = null;
+    if (carryFrom) {
+        const { carryCommunityCopy } = await import('./community-copy-carry');
+        carried = await whileCopyMoves(url, () => carryCommunityCopy(carryFrom, url, () => AsyncStorage.setItem('beanpool_anchor_url', url)));
+    } else {
+        await closeDB();
+        await AsyncStorage.setItem('beanpool_anchor_url', url);
+    }
     await initDB();
     // The update screen asks the community now in use (utils/community-switch.ts).
     communitySwitched();
+    return carried;
 }
 
 async function defaultDeps(): Promise<ReconnectDeps> {

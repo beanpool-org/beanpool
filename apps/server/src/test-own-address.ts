@@ -177,6 +177,9 @@ try {
         ['a home-network IP', { ip: '192.168.1.20' }, /home network/],
         ['this machine', { ip: '127.0.0.1' }, /home network or this machine/],
         ['a carrier-NAT IP', { ip: '100.64.0.9' }, /not a public IP address/],
+        // core's isPublicIpv4, the phone's rule too: a number the phone refuses as a community's address is never stored here.
+        ['a benchmarking-network IP', { ip: '198.18.0.1' }, /not a public IP address/],
+        ['the last benchmarking-network IP', { ip: '198.19.255.254' }, /not a public IP address/],
         ['an IPv6 address as ip', { ip: '2001:db8::7' }, /not an IPv4 address/],
         ['not an address at all', { ip: 'yes please' }, /not an IPv4 address/],
         ['a beanpool.org name', { domain: 'riverbend.beanpool.org' }, /BeanPool name/],

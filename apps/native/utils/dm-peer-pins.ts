@@ -317,6 +317,64 @@ function storedPinsOf(raw: string | null): StoredPins {
 }
 
 /**
+ * The pins value one community file takes when the same community's copy at another address comes to it (a community
+ * followed to its new address: utils/community-copy-carry.ts), add-only: nothing `here` holds is replaced or dropped.
+ * `here`: this file's value now; `carried`: the other file's, as stored. Null: nothing to write.
+ *  - Nothing here: the carried value as stored (with it, the record that its seed ran).
+ *  - The member's reset's marker here: the carried pins take its place. A reset's re-seed judges the rows of the file it
+ *    was made for, and the carry first runs each seed waiting in the signed-in account's copies (db.ts
+ *    seedDmPinsBeforeCarry), so a marker still here has no rows of its account here to judge: no copy at this name, or
+ *    another account's (this phone's copies are the signed-in account's; Sign Out deletes them). Left as it was, its
+ *    re-seed would judge the carried copy's rows, or a copy of that account's yet to come, and the carried pins, which no
+ *    reset removed, would go as if the member had reset them (confirmation 3 of #2138). What the reset set aside stays.
+ *  - Here unreadable: left as it is.
+ *  - Carried unreadable, or a marker (the member's reset removed what it pinned): nothing to add.
+ *  - Both pins: each DM here keeps nothing for takes the carried entry, while the value stays within
+ *    {@link DM_PINS_MAX_BYTES} (at the cap a DM is refused, never one dropped). A DM both pin to different keys keeps
+ *    this file's pin, and the carried key is offered there ({@link DmPeerOffer}): nothing is sealed to it, and sends stop
+ *    until the member decides, as when a node lists another key. One that already offers a key, or isn't a pin here (an
+ *    unplaced sight), stays as it is.
+ */
+export function pinsWithCarried(here: string | null, carried: string, now: string): string | null {
+    if (here == null) return carried;
+    let mine: StoredPins;
+    let theirs: StoredPins;
+    try {
+        mine = storedPinsOf(here);
+    } catch {
+        console.warn('[DM pins] A carried community\'s pins were not added: the pins here can\'t be read, and nothing is written over them');
+        return null;
+    }
+    try {
+        theirs = storedPinsOf(carried);
+    } catch {
+        console.warn('[DM pins] A carried community\'s pins can\'t be read, so none were added; they stay under its old address');
+        return null;
+    }
+    if (!theirs.pins) return null;
+    if (!mine.pins) return carried;
+    const pins = measured(mine.pins);
+    let changed = false;
+    let refused = 0;
+    for (const id of Object.keys(theirs.pins)) {
+        const entry = theirs.pins[id];
+        const held = ownPin(pins, id);
+        if (!held) {
+            if (roomFor(pins, id, entry)) changed = resized(pins, id, () => setPin(pins, id, entry)) || changed;
+            else refused++;
+            continue;
+        }
+        if (isUnplacedSight(held) || isUnplacedSight(entry) || held.peer === entry.peer || held.offered) continue;
+        const offered: DmPeerPin = { ...held, offered: { peer: entry.peer, at: now } };
+        const size = sizes.get(pins)!;
+        if (valueBytes(size) - (size.byId.get(id) ?? 0) + entryBytes(id, offered) > DM_PINS_MAX_BYTES) { refused++; continue; }
+        changed = resized(pins, id, () => setPin(pins, id, offered)) || changed;
+    }
+    if (refused) console.warn(`[DM pins] ${refused} of a carried community's chats couldn't be added here: this community's pins are full; they stay under its old address`);
+    return changed ? JSON.stringify({ pins }) : null;
+}
+
+/**
  * The stored value's own member names: object keys that are never a conversation's id ({@link salvagePinIds} skips them).
  * The four the case 14 rule names (`pins`, `offered`, `heard`, `nodeSays`), and the rest of the format's (a pin's, an
  * offer's, a first sight's, what the listing said, the reset's marker), which would otherwise come back as inert ids.
@@ -507,6 +565,13 @@ export interface DmPinBook<H> {
     reset(myPubkey: string, file: string, before?: (pinIds: string[] | null) => Promise<unknown>): Promise<DmPinsReset>;
     /** Drop every copy: the next ask reads storage again (a fresh app session). */
     forget(): void;
+    /** Resolves once every turn queued so far has run: a community's copy moving to another name (db.ts whileCopyMoves) waits for the writes on their way. */
+    idle(): Promise<void>;
+    /**
+     * Drop the copies held of `file`, every account's: a community's copy carried to that name brought its own pins in
+     * storage (utils/community-copy-carry.ts), read at the next ask. A reset whose marker couldn't be written still judges.
+     */
+    forgetFile(file: string): void;
 }
 
 /**
@@ -664,7 +729,16 @@ export function createDmPinBook<H>(
             return !readable ? 'unreadable-removed' : raw != null && !marked ? 'set-aside' : 'nothing-stored';
         });
     }
-    return { read, update, reset, forget: () => { copies.clear(); queues.clear(); seeds.clear(); resetUnwritten.clear(); } };
+    async function idle(): Promise<void> {
+        await Promise.all([...queues.values()].map((turn) => turn.catch(() => {})));
+    }
+    function forgetFile(file: string): void {
+        // Every account's key for the file ends so (storage-keys.ts dmPeerPinsStoreKey); no file name has a ':' in it.
+        const tail = `:${file}`;
+        for (const key of [...copies.keys()]) if (key.endsWith(tail)) copies.delete(key);
+        for (const key of [...seeds.keys()]) if (key.endsWith(tail)) seeds.delete(key);
+    }
+    return { read, update, reset, idle, forgetFile, forget: () => { copies.clear(); queues.clear(); seeds.clear(); resetUnwritten.clear(); } };
 }
 
 /** The entry kept under this id: own entries only, so an id the node chose ("__proto__", "constructor") is never a pin. */

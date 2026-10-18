@@ -168,6 +168,53 @@ export function withSeen(seen: readonly string[], ids: Iterable<string>, maxByte
     return { list, added, refused };
 }
 
+/**
+ * The list value one community file takes when the same community's copy at another address comes to it (a community
+ * followed to its new address: utils/community-copy-carry.ts), add-only: no id `here` holds is dropped. `carried`: the
+ * other file's value as stored; its ids are its list, its marker's `keep`, or, for a value that can't be read, what the
+ * member's reset would salvage of it ({@link salvageSeenIds}: it can only add DM-ness). `copyHere`: this file already has
+ * a copy of the community, whose own `dm` rows nothing has read into a list while none is stored. Null: nothing to write.
+ *  - Nothing here, and no copy: the carried value as stored (the carried copy comes with it).
+ *  - Nothing here, and a copy: the marker the member's reset leaves, its `keep` the carried ids, so the next read seeds
+ *    them first and then this copy's own rows, in one write, as after a reset.
+ *  - A list here: the carried ids it lacks added after it, within {@link DM_SEEN_MAX_BYTES} (at the cap one is refused,
+ *    never a stored one dropped). The reset's marker here: added to its `keep` the same way.
+ *  - Here unreadable: left as it is (nothing is written over it).
+ */
+export function seenWithCarried(here: string | null, carried: string, copyHere: boolean, now: string): string | null {
+    let ids: string[];
+    try {
+        const v: unknown = JSON.parse(carried);
+        ids = Array.isArray(v) ? v.filter(isRememberableId) : seenResetMarkOf(v)?.keep ?? salvageSeenIds(carried);
+    } catch {
+        ids = salvageSeenIds(carried);
+    }
+    if (here == null) {
+        if (!copyHere) return carried;
+        if (!ids.length) return null;
+        const { list: keep, refused } = withSeen([], ids, DM_SEEN_MAX_BYTES - MARK_BYTES);
+        if (refused.length) console.warn(`[DM guard] ${refused.length} of a carried community's DM(s) couldn't be remembered here: the list is full`);
+        return JSON.stringify({ reset: now, keep });
+    }
+    let stored: unknown;
+    try {
+        stored = JSON.parse(here);
+    } catch {
+        stored = undefined;
+    }
+    const mark = seenResetMarkOf(stored);
+    if (!Array.isArray(stored) && !mark) {
+        console.warn('[DM guard] A carried community\'s DMs were not added: the list here can\'t be read, and nothing is written over it');
+        return null;
+    }
+    const { list, added, refused } = mark
+        ? withSeen(mark.keep, ids, DM_SEEN_MAX_BYTES - MARK_BYTES)
+        : withSeen((stored as unknown[]).filter(isRememberableId), ids);
+    if (refused.length) console.warn(`[DM guard] ${refused.length} of a carried community's DM(s) couldn't be remembered here: the list is full`);
+    if (!added) return null;
+    return JSON.stringify(mark ? { reset: mark.reset, keep: list } : list);
+}
+
 /** Write one file's list; throws, with nothing written, when it is over {@link DM_SEEN_MAX_BYTES} as UTF-8. */
 async function writeDmSeen(storage: Pick<SeenStorage, 'setItem'>, myPubkey: string, file: string, list: readonly string[]): Promise<void> {
     const value = JSON.stringify(list);
@@ -197,6 +244,8 @@ export interface DmSeenList {
      * marker that can't be written throws (the reset failed). The next read seeds `keep`, then the file's rows.
      */
     reset(myPubkey: string, file: string, pinIds: readonly string[] | null): Promise<DmSeenReset>;
+    /** Resolves once every turn queued so far has run: a community's copy moving to another name (db.ts whileCopyMoves) waits for the writes on their way. */
+    idle(): Promise<void>;
 }
 
 export function createDmSeenList(storage: SeenStorage): DmSeenList {
@@ -278,7 +327,10 @@ export function createDmSeenList(storage: SeenStorage): DmSeenList {
             return !readable ? 'unreadable-removed' : raw != null && !mark ? 'set-aside' : 'nothing-stored';
         });
     }
-    return { read, remember, reset };
+    async function idle(): Promise<void> {
+        await Promise.all([...queues.values()].map((turn) => turn.catch(() => {})));
+    }
+    return { read, remember, reset, idle };
 }
 
 /** The marker's bytes beside its `keep` list: `{"reset":"<24>","keep":` and `}`. */

@@ -253,21 +253,29 @@ export function claimOutcomeMessage(outcome: ClaimOutcome, communityName: string
 }
 
 /**
- * Whether the node already has a public address (`/api/community/info` `addresses`: its own names, empty on a node that
- * knows none). `beanpool claim` usually sets one first, so the success screen offers "Set the address" only on `false`;
- * `null` (no answer, an older node) offers Settings as usual.
+ * The node's own addresses (`/api/community/info` `addresses`: its names, and its public number once it has one; empty on
+ * a node that knows none), the non-blank strings of them. Null for no answer or an older node that doesn't say.
  */
-export async function readNodeHasAddress(origin: string, fetchImpl: Fetch = fetch): Promise<boolean | null> {
+export async function readNodeAddresses(origin: string, fetchImpl: Fetch = fetch): Promise<string[] | null> {
     if (!isPlainNodeAddress(origin)) return null;
     try {
         const res = await fetchImpl(`${origin}/api/community/info`, { method: 'GET', headers: { Accept: 'application/json' } });
         if (!res.ok) return null;
         const body = await res.json().catch(() => null) as { addresses?: unknown } | null;
         if (!body || !Array.isArray(body.addresses)) return null;
-        return body.addresses.some(a => typeof a === 'string' && a.trim() !== '');
+        return body.addresses.filter((a): a is string => typeof a === 'string' && a.trim() !== '').map(a => a.trim());
     } catch {
         return null;
     }
+}
+
+/**
+ * Whether the node already has a public address (readNodeAddresses). `beanpool claim` usually sets one first, so the
+ * success screen offers "Set the address" only on `false`; `null` (no answer, an older node) offers Settings as usual.
+ */
+export async function readNodeHasAddress(origin: string, fetchImpl: Fetch = fetch): Promise<boolean | null> {
+    const addresses = await readNodeAddresses(origin, fetchImpl);
+    return addresses ? addresses.length > 0 : null;
 }
 
 /**

@@ -348,6 +348,10 @@ async function main(): Promise<void> {
             'the node keeps the IP and keeps trying, and says so');
         const lan = await cli(failNode, ['--ip', '192.168.1.20']);
         check(lan.code === 2 && /home network/.test(lan.err), `--ip with a home-network address: refused in words (${lan.code})`);
+        // A benchmarking-network number (198.18.0.0/15): no CA reaches it, and the phone (core isPublicIpv4) never takes it either.
+        const bench = await cli(failNode, ['--ip', '198.18.0.1']);
+        check(bench.code === 2 && /198\.18\.0\.1 is not a public IP address/.test(bench.err), `--ip 198.18.0.1: refused in words (${bench.code} ${bench.err.trim()})`);
+        check(nodeConfigOf(failNode).publicAddress?.hostname === '198.51.100.7', '…and the node still keeps the IP it had');
     } finally {
         for (const n of started) { try { if (n.proc.pid && n.proc.exitCode === null) process.kill(-n.proc.pid, 'SIGKILL'); } catch { /* gone */ } }
         registrar.close();

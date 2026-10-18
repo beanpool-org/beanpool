@@ -14,7 +14,7 @@
  * 10. Admin authentication enforcement across all management endpoints.
  * 11. Settings' status read with nothing to ask the registrar about (no address, or after Take offline) asks it nothing,
  *     and with a stored name and the registrar unreachable or faulty answers 200: the stored name and one calm line
- *     (#2143 item 1).
+ *     (#2143 item 1). A 200 with no status (a captive portal's page) is no answer either: the same line, nothing recorded.
  * 12. With only PUBLIC_ADDRESS_NAME and nothing stored, the registrar unreachable: none and the line, never the env's name
  *     as live. The registrar answering and storing its answer failing: 200, what this server holds as it stands, and the
  *     error; the next read stores it (PR #2158 review).
@@ -130,12 +130,19 @@ async function run() {
     let registrarRequests = 0;
     /** Set: the registrar answers every request with this status and its own JSON error (a registrar with a fault). */
     let registrarFault: number | null = null;
+    /** Set: every request is answered 200 with an HTML page (a captive portal, a filter or a proxy in front of the registrar). */
+    let registrarPage = false;
 
     const mockRegistrar = http.createServer(async (req, res) => {
         registrarRequests++;
         if (registrarFault !== null) {
             res.writeHead(registrarFault, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: 'down for maintenance' }));
+            return;
+        }
+        if (registrarPage) {
+            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+            res.end('<!doctype html><html><body><h1>Sign in to continue</h1></body></html>');
             return;
         }
         let bodyText = '';
@@ -410,6 +417,24 @@ async function run() {
                 `…and one calm line with what it said (${JSON.stringify(faultBody.nameServiceNote)})`);
         } finally {
             registrarFault = null;
+        }
+
+        // --- Test 5d: a 200 that is not the registrar's word (a captive portal's page, read as {}): no answer either, the
+        // same calm line, and nothing of it recorded (PR #2158 review 4307110254) ---
+        registrarPage = true;
+        const namesBefore = JSON.stringify((getNodeConfig() as any).registrarNames ?? null);
+        const storedBefore = JSON.stringify((getNodeConfig() as any).publicAddress ?? null);
+        try {
+            const pageRes = await fetch(`${baseUrl}/api/local/admin/public-address/status`);
+            const pageBody = await pageRes.json().catch(() => ({}));
+            assert(pageRes.status === 200 && pageBody.status === 'live' && pageBody.hostname === 'mullum-test.beanpool.org' && pageBody.cached === true && pageBody.error === undefined,
+                `with an HTML page answering 200, GET /status answers 200 with the stored name and no error (${pageRes.status} ${JSON.stringify(pageBody)})`);
+            assert(pageBody.nameServiceNote === "The BeanPool name service couldn't answer right now (the answer had no status).",
+                `…and the one calm line (${JSON.stringify(pageBody.nameServiceNote)})`);
+            assert(JSON.stringify((getNodeConfig() as any).registrarNames ?? null) === namesBefore && JSON.stringify((getNodeConfig() as any).publicAddress ?? null) === storedBefore,
+                `…and neither the record of names nor the stored address changed (${JSON.stringify((getNodeConfig() as any).registrarNames)})`);
+        } finally {
+            registrarPage = false;
         }
 
         // --- Test 6: Metadata Update ---

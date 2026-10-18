@@ -610,6 +610,12 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
             ctx.body = { success: true, pubkey: pubkeyOrNull(), ...held(), nameServiceNote: nameServiceNote(e), ...serverSide() };
             return;
         }
+        // A 200 with no status is no registrar answer either (a captive portal's, a filter's or a proxy's page reads as {}):
+        // the same calm line, and nothing of it is recorded.
+        if (typeof result?.status !== 'string') {
+            ctx.body = { success: true, pubkey: pubkeyOrNull(), ...held(), nameServiceNote: nameServiceNote({ status: 200, message: tr('the answer had no status') }), ...serverSide() };
+            return;
+        }
         try {
             // A live answer about another name this key holds (an older registrar answers about its first one) is never
             // stored: Settings shows the stored address. With nothing stored, nor one this server left (one the owner took

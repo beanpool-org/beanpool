@@ -264,6 +264,10 @@ async function main(): Promise<void> {
             // Removing an app address (B6) asks the fresh proof since HTTPS S4: section 3.
             { what: "the certificates' state (HTTPS S4)", method: 'GET', route: '/api/local/admin/tls/status', body: undefined,
                 ok: (r) => r.status === 200 && Array.isArray(r.json?.identifiers) },
+            // An own address (HTTPS S2, S4): past the gate, the owner's home-network IP is refused for what it is, nothing stored.
+            { what: 'an own address (HTTPS S4)', method: 'POST', route: '/api/local/admin/public-address/own', body: { ip: '192.168.1.20' },
+                unchanged: () => JSON.stringify([(getNodeConfig() as any).publicAddress ?? null, (getNodeConfig() as any).ownerAddresses ?? null]),
+                ok: (r) => r.status === 400 && /home network/.test(r.json?.error || '') },
             { what: 'the alerts channel (C11)', method: 'POST', route: '/api/local/admin/alerts/settings', body: { remove: true },
                 ok: (r) => r.status === 200 },
             { what: 'bulk post deletion (D1)', method: 'POST', route: '/api/local/admin/posts/bulk-delete', body: { postIds: ['no-such-post'] },

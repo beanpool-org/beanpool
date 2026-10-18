@@ -16,16 +16,19 @@
  * that doesn't answer, or an answer that isn't signed so, offers nothing. The statement is public, so this tells a wrong
  * or stale address from the community's own; it is not a proof that whoever answers holds the key.
  *
- * What the phone first verified at its own address, the first time it checked a move from there, is kept
- * (COMMUNITY_IDENTITY_KEY, per address), and is what a new address is checked against from then on: so a community whose
- * number has stopped answering can still be followed to a name the phone had heard of, and a number that later answers
- * as some other community (a server's number given to someone else) offers nothing. A number the phone never heard
- * another address for can't be followed: the member types the new address or scans a new QR.
+ * What the phone first verified at its own address is kept (COMMUNITY_IDENTITY_KEY, per address), from the first time it
+ * reads its community there (keepCommunityIdentity, from the tab strip's read at each app start and switch,
+ * app/(tabs)/_layout.tsx), before any move is on offer, and is what a new address is checked against from then on: so a
+ * community whose number has stopped answering can still be followed to a name the phone had heard of, and a number or a
+ * name that later answers as some other community (a server's number given to someone else, a name granted again)
+ * offers nothing. That holds from the phone's first read at that address: a phone that first reads it after it went to
+ * someone else has nothing older, and keeps what answers then. A number the phone never heard another address for can't
+ * be followed: the member types the new address or scans a new QR.
  *
  * It costs Home nothing while there is nothing to follow (Home lands with one request): the community's addresses come
  * from the phone's own copy of its profile, which the hourly profile read keeps (utils/node-profile.ts), and the two
  * servers are asked only for a move to offer, at most once an hour for the same one (after five minutes when either
- * gave no answer).
+ * gave no answer). Keeping who the community is costs one more read, once per address, and none once kept.
  *
  * Never from an http address (whoever is in the middle of a home network could name both the address and the identity),
  * never from the worldwide community (the app knows it by its one address, utils/global-node-url.ts), never from a name
@@ -264,10 +267,41 @@ async function checkFollow(offer: AddressFollowOffer, deps: AddressFollowDeps): 
 
 /** Offers checked this run: `from to` → the answer and when (VERDICT_TTL_MS, or UNREACHABLE_TTL_MS for 'unreachable'). */
 const checked = new Map<string, { verdict: FollowCheck; at: number }>();
+/** Addresses whose statement gave no answer this run when there was nothing kept for them, and when (UNREACHABLE_TTL_MS). */
+const unanswered = new Map<string, number>();
 
 /** Forget this run's checks (tests). */
 export function forgetFollowChecks(): void {
     checked.clear();
+    unanswered.clear();
+}
+
+/**
+ * Keep who the phone's community is at `url` (its signed statement there, verified), the first time the phone reads its
+ * community at that address: the tab strip's read, at each app start and switch (app/(tabs)/_layout.tsx). So a move
+ * later on offer is checked against the community from before it, not against whoever answers at that address on the
+ * day one first is (review of #2138). One read, once per address: none once something is kept, and after no answer
+ * none for five minutes. Only for an address a move may start from (followableOrigin). Never throws.
+ */
+export async function keepCommunityIdentity(
+    url: string | null | undefined, injected?: Partial<Pick<AddressFollowDeps, 'statement' | 'now'>>,
+): Promise<void> {
+    try {
+        const from = followableOrigin(url);
+        if (!from) return;
+        const kept = async () => readKeptIdentity((await readMap<CommunityIdentity>(COMMUNITY_IDENTITY_KEY))[from]);
+        if (await kept()) return;
+        const now = injected?.now ?? (() => Date.now());
+        const at = unanswered.get(from);
+        if (at !== undefined && now() - at >= 0 && now() - at < UNREACHABLE_TTL_MS) return;
+        const identity = await (injected?.statement ?? ((origin: string) => fetchIdentityStatement(origin)))(from);
+        if (!identity) { unanswered.set(from, now()); return; }
+        unanswered.delete(from);
+        // A check of a move that ran meanwhile kept one first: that one stays.
+        if (!(await kept())) await writeEntry(COMMUNITY_IDENTITY_KEY, from, identity);
+    } catch {
+        // Not kept: asked again at the next read.
+    }
 }
 
 /** The offer declined until a time still ahead, for this same new address. */

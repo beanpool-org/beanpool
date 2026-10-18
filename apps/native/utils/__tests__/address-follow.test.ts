@@ -7,7 +7,8 @@
  * What is pinned here, through the module's own functions with real Ed25519 node keys and statements signed in the
  * server's own bytes (apps/server services/identity-epoch.ts):
  *   - offered only when the new address is the same community: the same PeerId and community id, signed by the key the
- *     PeerId names, not an older server of it; checked against who the phone first knew at its address;
+ *     PeerId names, not an older server of it; checked against who the phone first knew at its address, kept from its
+ *     first read of its community there, before any move is on offer;
  *   - never silent: asking for the offer writes no community address and switches nothing;
  *   - "Not now" asks again in 7 days, for that same new address;
  *   - the move goes through utils/reconnect.ts switchPhoneTo, which writes the address and says communitySwitched().
@@ -40,7 +41,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { bytesToHex, randomBytes } from '@noble/hashes/utils.js';
 import {
-    acceptAddressFollow, addressFollowOffer, followCandidate, fetchIdentityStatement, forgetFollowChecks, numberOnlyAddress,
+    acceptAddressFollow, addressFollowOffer, followCandidate, fetchIdentityStatement, forgetFollowChecks, keepCommunityIdentity, numberOnlyAddress,
     readIdentityStatement, sameCommunity, snoozeAddressFollow, COMMUNITY_IDENTITY_KEY, FOLLOW_SNOOZE_KEY, FOLLOW_SNOOZE_MS,
     IDENTITY_STATEMENT_PATH, type AddressFollowDeps, type AddressFollowOffer,
 } from '../address-follow';
@@ -307,6 +308,106 @@ describe('offered only when the new address is the same community', () => {
         w.state.now += 31 * 60 * 1000;
         await addressFollowOffer(w.deps);
         expect(w.state.asked).toHaveLength(6);
+    });
+});
+
+// Review of #2138: kept only by a check of a move, the identity came too late for the case it is there for. A community
+// at its number with no name yet has nothing to follow, so nothing was kept, and the first identity the phone recorded
+// was whoever answered at the number on the day a move first appeared. Kept now from the phone's first read there.
+describe('who the community is, kept from the phone\'s first read of it at its address', () => {
+    const node = nodeKey();
+    const Y = 'https://y.example.org';
+    const keptAt = (origin: string) => JSON.parse(store.get(COMMUNITY_IDENTITY_KEY) ?? '{}')[origin];
+    const x = () => ({ peerId: node.peerId, communityId: COMMUNITY, epoch: 0 });
+
+    it('at a number with no name yet; the number given to another community later offers nothing (the review\'s case)', async () => {
+        // The phone at the number, nothing to follow: no move on offer, so no check of one ever runs.
+        const first = world({ prof: profile({ addresses: ['203.0.113.5'], primaryAddress: undefined }), answers: { [IP]: statement(node, COMMUNITY) } });
+        expect(await addressFollowOffer(first.deps)).toBeNull();
+        expect(first.state.asked).toEqual([]);
+        await keepCommunityIdentity(IP, first.deps);
+        expect(first.state.asked).toEqual([IP]);
+        expect(keptAt(IP)).toEqual(x());
+        // The number is community Y's server now: Y names its own name as where it lives, and signs both addresses.
+        const y = nodeKey();
+        const later = world({
+            prof: profile({ addresses: ['203.0.113.5', 'y.example.org'], primaryAddress: 'y.example.org' }),
+            answers: { [IP]: statement(y, 'f00d'), [Y]: statement(y, 'f00d') },
+        });
+        // The next app start's read asks nothing and keeps what it had.
+        await keepCommunityIdentity(IP, later.deps);
+        expect(later.state.asked).toEqual([]);
+        expect(await addressFollowOffer(later.deps)).toBeNull();
+        expect(await acceptAddressFollow({ from: IP, to: Y, host: 'y.example.org' }, later.deps)).toBe('not-same');
+        expect(later.deps.switchTo).not.toHaveBeenCalled();
+        expect(anchorWrites()).toEqual([]);
+        expect(keptAt(IP)).toEqual(x());
+    });
+
+    it('a name granted again to someone else, who then names an address of its own, offers nothing', async () => {
+        const first = world({ anchor: NAME, prof: profile({ addresses: ['beans.example.org'], primaryAddress: 'beans.example.org' }), answers: { [NAME]: statement(node, COMMUNITY) } });
+        await keepCommunityIdentity(NAME, first.deps);
+        expect(keptAt(NAME)).toEqual(x());
+        const y = nodeKey();
+        const later = world({
+            anchor: NAME, prof: profile({ addresses: ['beans.example.org', 'y.example.org'], primaryAddress: 'y.example.org' }),
+            answers: { [NAME]: statement(y, 'f00d'), [Y]: statement(y, 'f00d') },
+        });
+        expect(await addressFollowOffer(later.deps)).toBeNull();
+        expect(keptAt(NAME)).toEqual(x());
+    });
+
+    it('the community itself moving on is still followed, checked against what was kept', async () => {
+        const w = world({ prof: profile({ addresses: ['203.0.113.5'], primaryAddress: undefined }), answers: { [IP]: statement(node, COMMUNITY) } });
+        await keepCommunityIdentity(IP, w.deps);
+        w.state.prof = profile();
+        w.state.answers[NAME] = statement(node, COMMUNITY);
+        expect(await addressFollowOffer(w.deps)).toEqual({ from: IP, to: NAME, host: 'beans.example.org' });
+    });
+
+    it('one read per address: none once kept, and none for five minutes after no answer', async () => {
+        const w = world({ answers: {} });
+        await keepCommunityIdentity(IP, w.deps);
+        expect(w.state.asked).toEqual([IP]);
+        expect(store.has(COMMUNITY_IDENTITY_KEY)).toBe(false);
+        w.state.answers[IP] = statement(node, COMMUNITY);
+        w.state.now += 60 * 1000;
+        await keepCommunityIdentity(IP, w.deps);
+        expect(w.state.asked).toHaveLength(1);
+        w.state.now += 5 * 60 * 1000;
+        await keepCommunityIdentity(IP, w.deps);
+        expect(w.state.asked).toHaveLength(2);
+        expect(keptAt(IP)).toEqual(x());
+        w.state.now += 365 * DAY;
+        await keepCommunityIdentity(`${IP}/`, w.deps);
+        await keepCommunityIdentity(IP, w.deps);
+        expect(w.state.asked).toHaveLength(2);
+    });
+
+    it('a statement that isn\'t signed by the key it names is not kept', async () => {
+        const w = world({ answers: { [IP]: statement(node, COMMUNITY, 0, null, nodeKey().seed) } });
+        await keepCommunityIdentity(IP, w.deps);
+        expect(store.has(COMMUNITY_IDENTITY_KEY)).toBe(false);
+    });
+
+    it('only where a move may start from: never over http, at the worldwide community, or with no address', async () => {
+        const w = world({ answers: { [IP]: statement(node, COMMUNITY) } });
+        for (const url of ['http://203.0.113.5', 'http://192.168.1.10:8443', GLOBAL_NODE_URL, '', null, undefined, 'https://user@beans.example.org']) {
+            await keepCommunityIdentity(url, w.deps);
+        }
+        expect(w.state.asked).toEqual([]);
+        expect(vi.mocked(AsyncStorage.setItem)).not.toHaveBeenCalled();
+    });
+
+    it('the tab strip keeps it after its community answered, at each app start and switch, without waiting for it', () => {
+        const src = fs.readFileSync(path.resolve(__dirname, '../../app/(tabs)/_layout.tsx'), 'utf-8');
+        expect(src).toMatch(/import \{ keepCommunityIdentity \} from '\.\.\/\.\.\/utils\/address-follow';/);
+        const start = src.indexOf('const fresh = await fetchNodeProfile(url);');
+        const end = src.indexOf('}, [nodeUrl, pathname]);', start);
+        expect(start).toBeGreaterThan(-1);
+        expect(end).toBeGreaterThan(start);
+        expect(src.slice(start, end)).toMatch(/if \(fresh\) keepCommunityIdentity\(url\)\.catch\(\(\) => \{\}\);/);
+        expect(src.slice(start, end)).not.toMatch(/await keepCommunityIdentity/);
     });
 });
 

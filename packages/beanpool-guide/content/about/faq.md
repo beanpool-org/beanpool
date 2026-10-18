@@ -65,7 +65,7 @@ Yes. On the phone you can save several communities and switch between them, usin
 
 ## Can I join another community that anyone can join?
 
-Yes, with the account you have. Some communities let anyone join, as the global community does, and their own people run them at their own addresses. When your phone reaches one where you are not a member yet, it says **You're not a member here yet** and offers **Join ‹its name› with this account**. You join it the same way as the global community: with the 12 words already on your phone, or with a sign-in if it asks for one. It is under that community's own name, and its address is shown, so you can see where you are joining. Your key and your 12 words stay the same, and nothing changes in your other communities. A link only opens that screen: nothing is sent until you tap.
+Yes, with the account you have. Some communities let anyone join, as the global community does, and their own people run them at their own addresses. When your phone reaches one where you are not a member yet, it says **You're not a member here yet** and offers **Join ‹its name› with this account**. You join it the same way as the global community: with the 12 words already on your phone, or with a sign-in if it asks for one. It is under that community's own name, and its address is shown, so you can see where you are joining. Your key and your 12 words stay the same, and nothing changes in your other communities. A link only opens that screen, and nobody joins until you tap. To show it, your phone asks that community for its name and whether it lets people join, so whoever runs that address can see that someone opened the link (nothing about your account is sent).
 
 ## I am going away. What should I do?
 

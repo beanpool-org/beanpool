@@ -2,6 +2,7 @@
 // regression planted: each must fail, naming where. What the check guards is in its header.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import './harness.js';   // its fetch trap: no test here reaches the network
 import { readFileSync } from 'node:fs';
 import { WORKFLOW, workflowProblems } from '../scripts/check-deploy-workflow.mjs';
 

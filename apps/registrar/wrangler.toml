@@ -73,9 +73,10 @@ migrations_dir = "migrations"
 # day; Workers Free allows 1,000) and read by GET /api/registrar/status.json. Unbound, nothing is written and the GET
 # answers 404 — the watch and the sweep are untouched. To turn it on (by hand, on the live account):
 # `npx wrangler kv namespace create beanpool-status`, then uncomment these three lines with the id it prints.
-# [[kv_namespaces]]
-# binding = "STATUS"
-# id = "<the id wrangler prints>"
+# Created 2026-10-18 on the live account (beanpool-status).
+[[kv_namespaces]]
+binding = "STATUS"
+id = "4cad86c733c24b9dbabc0f511342061a"
 
 # Routes on the beanpool.org zone. The Worker intercepts these paths; the Pages static
 # site continues to serve everything else. Uncomment + set zone_id at deploy time.

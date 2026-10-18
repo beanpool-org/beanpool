@@ -410,7 +410,7 @@ test('STATUS_SERVERS names our servers only (never mullum or castlemaine); unset
     assert.equal(listed, 'global,test', "wrangler.toml shows global and test: ours, a community's never");
     const ours = ['global', 'test', 'vault'];
     for (const name of listed.split(',')) assert.ok(ours.includes(name), `${name} is one of our servers`);
-    assert.match(toml, /^# \[\[kv_namespaces\]\]\n# binding = "STATUS"/m, 'the STATUS binding is written down, for its id to be filled in');
+    assert.match(toml, /^\[\[kv_namespaces\]\]\nbinding = "STATUS"\nid = "[0-9a-f]{32}"/m, 'the STATUS binding is live, with the namespace id created on the live account (18 Oct 2026)');
 
     const r = await room({ env: { STATUS_SERVERS: undefined } });
     try {

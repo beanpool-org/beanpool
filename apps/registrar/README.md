@@ -295,6 +295,7 @@ gets refused: `status.json` is then one tick older); one write to KV a tick, 288
 **Turning it on** (by hand, on the live account; the deploy workflow applies migration 0012):
 `npx wrangler kv namespace create beanpool-status`, then uncomment `[[kv_namespaces]]` in `wrangler.toml` with the id it
 prints and deploy. Until then nothing is written and the GET answers 404; the watch and the sweep are untouched.
+**On since 2026-10-18:** namespace `beanpool-status` on the live account, bound in `wrangler.toml`.
 
 ## Limits on what a key may do (the 2026-10-01 review)
 

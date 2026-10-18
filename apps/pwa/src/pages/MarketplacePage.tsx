@@ -178,6 +178,12 @@ function feedListFilter(typeFilter: PostType | 'all' | 'for-you', categoryFilter
 /** How long the first read waits to learn whether this node reads by area, before it reads as before. */
 const NEAR_WAIT_MS = 1500;
 
+/**
+ * The Save-search button's words: core's word() key, shown here through t(), so the words a member sees are in the same
+ * language as the button's screen-reader name (saveSearchLabel), and a voice-control member can say what they see.
+ */
+const SAVE_SEARCH_LINES = { button: SAVE_SEARCH_BUTTON };
+
 export function MarketplacePage({ identity, marketClickCount = 0, openPostId, onPostOpened, sayWhenPostUnopened = false, openReviewTxId, onReviewOpened, openSearch, onSearchOpened, onSaveSearch, onNavigate, onOpenProfile, transactions: externalTransactions, onRefreshTransactions, isMember, visitor }: Props) {
     // Asks the node nothing about people: no authors' ratings, faces, profiles or enterprises, and no member-only read.
     const isVisitor = !!visitor;
@@ -2540,7 +2546,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         className="mt-1.5 w-full min-h-[44px] px-3 py-2 rounded-xl border border-border-primary bg-bg-card text-text-primary text-sm font-bold flex items-center gap-2 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                     >
                         <span aria-hidden="true" className="text-text-primary text-base leading-none">＋</span>
-                        <span className="min-w-0 flex-1 text-left break-words">{SAVE_SEARCH_BUTTON}</span>
+                        <span className="min-w-0 flex-1 text-left break-words">{t(SAVE_SEARCH_LINES.button)}</span>
                     </button>
                 )}
 

@@ -67,9 +67,16 @@ const loopbackName = (host: string) => {
     return net.isIP(h) ? isLoopback(h) : h === 'localhost' || h.endsWith('.localhost');
 };
 
-/** The first frame of this repository's code below the trap: the line that asked. */
+/**
+ * The first frame of this repository's code below the trap: the line that asked. Read past V8's default 10 frames, which
+ * an https.request uses up inside Node before it reaches the socket (review 4305779651).
+ */
 function caller(): string | null {
-    const frames = (new Error().stack ?? '').split('\n').slice(1);
+    const limit = Error.stackTraceLimit;
+    Error.stackTraceLimit = Math.max(limit, 64);
+    let stack: string;
+    try { stack = new Error().stack ?? ''; } finally { Error.stackTraceLimit = limit; }
+    const frames = stack.split('\n').slice(1);
     for (const f of frames) {
         if (f.includes('outside-calls-test-harness') || f.includes('node_modules') || f.includes('node:')) continue;
         const m = /\(?((?:file:\/\/)?\/[^():]+):(\d+):\d+\)?$/.exec(f.trim());

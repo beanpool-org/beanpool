@@ -426,6 +426,13 @@ async function main(): Promise<void> {
             const dottedLookup = await dns.promises.lookup('127.0.0.1.beanpool.org').then((a) => a.address, (e) => e?.code);
             assert(dotted === 'ENOTFOUND' && dottedLookup === 'ENOTFOUND' && allCalls().length - named === 2,
                 `a name starting 127. is refused and counted, not answered as loopback (${dotted}, ${dottedLookup}, ${allCalls().length - named} counted)`);
+            // A socket reached through https's agent, many frames down, still names the line that asked (review 4305779651).
+            const https = (await import('node:https')).default;
+            const agentBefore = allCalls().length;
+            const viaAgent = await new Promise<string>((r) => { const q = https.get('https://registrar.beanpool.org/x', () => r('answered')); q.once('error', (e: any) => r(e.code)); });
+            const fromAgent = allCalls().slice(agentBefore);
+            assert(viaAgent === 'ENOTFOUND' && fromAgent.length === 1 && [...seen, ...fromAgent].every((c) => c.from?.includes('test-no-mothership')),
+                `each try names this file's line, an https.get's too (${viaAgent}; ${[...seen, ...fromAgent].map((c) => `${c.via} from ${c.from ?? 'no line of ours'}`).join(', ')})`);
         });
         // Those were this check's own: the count is of everything after it, from the next millisecond on, so the last of
         // them cannot share the count's first.

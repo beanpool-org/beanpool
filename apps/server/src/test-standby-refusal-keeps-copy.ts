@@ -51,7 +51,8 @@
  *     and the trade is on S once after the next delta too. A record an older version wrote (no lastLacking, lastLeftOut
  *     naming listings) reads them as lacking until the next whole copy, which leaves nothing out, clears both.
  * 15. The flood running on and a membership gone from S: the canary finds it at the first delta, the next pull's whole
- *     copy brings it back, and no listing of M's is ever missing from S; S's ledger is M's.
+ *     copy brings it back, and no listing of M's is ever missing from S; S's ledger is M's, before the mend and after it,
+ *     each as M stood around S's pull (M's own timers rewrite a ledger row now and then: ledgerNotMains).
  *
  * Run:
  *   ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-standby-refusal-keeps-copy.ts
@@ -84,6 +85,8 @@ const HASHED = [
     'conversations', 'conversation_participants', 'messages', 'invite_codes', 'deferred_wage_claims', 'treasury_operators',
     'enterprise_pledges', 'invalidated_keys', 'groups', 'group_members', 'ratings', 'friends', 'tombstones', 'member_blocks',
 ];
+/** The ledger's tables, S's held to M's as M stood around S's last pull (ledgerNotMains). */
+const LEDGER = ['accounts', 'transactions', 'marketplace_transactions'];
 /** Long chat messages S holds of its own for step 10, and the cap on its files then: its clear needs more room than that. */
 const LONG_MESSAGES = 12_000;
 const CAPPED_BYTES = 4 * 1024 * 1024;
@@ -372,6 +375,17 @@ function snapDiff(a: Snap, b: Snap): string[] {
 }
 const first = (xs: string[]) => (xs.length === 0 ? 'none' : `${xs.length}: ${xs.slice(0, 6).join(' | ')}`);
 const counts = (s: Snap, ...ts: string[]) => ts.map((t) => `${t} ${s.tables[t]?.count}`).join(', ');
+/**
+ * The ledger's tables S doesn't hold as M did when S's last pull read it: M read just before that pull (`before`) and
+ * after S was (`after`). M's own timers rewrite a ledger row now and then: the ledger audit two minutes after its boot,
+ * and the flush every five minutes, put its COMMONS_POOL row back with the same balance and a new last_updated_at
+ * (engine/audit.ts persistCommonsBalance), and the next delta brings it to S. One that lands after the pull read M is
+ * on M and not yet on S, so each table is M's from one read or the other. With M still across the pull the two reads
+ * are the same, and S is held to it exactly.
+ */
+function ledgerNotMains(s: Snap, before: Snap, after: Snap): string[] {
+    return LEDGER.filter((t) => s.tables[t].hash !== before.tables[t].hash && s.tables[t].hash !== after.tables[t].hash);
+}
 
 function withDb(dir: string, fn: (db: Database.Database) => void): void {
     const db = new Database(path.join(dir, 'state.db'));
@@ -844,13 +858,14 @@ async function main(): Promise<void> {
         const after14: string | null = (await standby.send('snapshot', { tables: [] }) as Snap).savedCursor;
         assert(whole14.ok === true && whole14.mode === 'full' && r14a.lastLeftOut === null && r14a.lastLacking === null && after14 !== cursor14,
             `the whole copy lands with every listing, and moves S's cursor to its own (${JSON.stringify({ pull: whole14, leftOut: r14a.lastLeftOut, lacking: r14a.lastLacking, cursor: [cursor14, after14] })}; before: listings left out, the cursor kept)`);
+        const m14k: Snap = await main.send('snapshot', { tables: LEDGER });
         const next14 = await standby.send('pull', {});
-        const LEDGER = ['accounts', 'transactions', 'marketplace_transactions'];
         const s14l: Snap = await standby.send('snapshot', { tables: [...LEDGER, 'posts'] });
         const m14l: Snap = await main.send('snapshot', { tables: [...LEDGER, 'posts'] });
-        assert(next14.ok === true && next14.mode === 'delta' && LEDGER.every((t) => s14l.tables[t].hash === m14l.tables[t].hash) && s14l.ledgerSum === m14l.ledgerSum
+        const off14 = ledgerNotMains(s14l, m14k, m14l);
+        assert(next14.ok === true && next14.mode === 'delta' && off14.length === 0 && s14l.ledgerSum === m14l.ledgerSum
             && s14l.tables.posts.count === m14l.tables.posts.count,
-            `the trade M made in that window, in the whole copy and again in the next delta, is on S once: its accounts, transactions and trades are M's, and every listing (${counts(s14l, ...LEDGER, 'posts')}; M ${counts(m14l, ...LEDGER, 'posts')})`);
+            `the trade M made in that window, in the whole copy and again in the next delta, is on S once: its accounts, transactions and trades are M's, and every listing (${counts(s14l, ...LEDGER, 'posts')}; M ${counts(m14l, ...LEDGER, 'posts')}; not M's: ${first(off14)})`);
         // A record an older version wrote: no lastLacking, and lastLeftOut naming listings (no copy leaves a table out now,
         // but a record from before P2 may say one did). It reads them as lacking until a whole copy clears it, as before.
         require_((await standby.send('sql', {
@@ -867,6 +882,9 @@ async function main(): Promise<void> {
 
         // ── 15. Drift found while listings flood on: mended at once, the cursor moved, nothing missed ──
         console.log('\n— 15. the flood running on and a membership gone from S: one whole copy mends it, and no listing is missed —');
+        // S's ledger before the mend, held to M's (ledgerNotMains): M read before this step's first pull (the flood writes
+        // no ledger row) and after S is.
+        const m15a: Snap = await main.send('snapshot', { tables: LEDGER });
         for (let i = 0; i < 3; i++) {
             await main.send('flood', { kind: 'posts', n: 60, author: gwen.pk });
             const d = await standby.send('pull', {});
@@ -874,10 +892,14 @@ async function main(): Promise<void> {
         }
         require_((await standby.send('sql', { sql: 'DELETE FROM group_members WHERE group_id = ?', args: [groupId] })) > 0,
             'S: the group\'s membership deleted, with no tombstone');
-        const ledger15: Snap = await standby.send('snapshot', { tables: ['accounts', 'transactions', 'marketplace_transactions'] });
+        const ledger15: Snap = await standby.send('snapshot', { tables: LEDGER });
+        const m15l: Snap = await main.send('snapshot', { tables: LEDGER });
         const pulls15: { mode: string; ok: boolean; whole: boolean; gap: number; members: string }[] = [];
+        /** M's ledger just before S's latest pull. */
+        let m15k = m15l;
         for (let i = 0; i < 6; i++) {
             await main.send('flood', { kind: 'posts', n: 5, author: gwen.pk });
+            m15k = await main.send('snapshot', { tables: LEDGER });
             const p = await standby.send('pull', {});
             const gs: Snap = await standby.send('snapshot', { tables: ['posts', 'group_members'] });
             const gm: Snap = await main.send('snapshot', { tables: ['posts', 'group_members'] });
@@ -892,10 +914,12 @@ async function main(): Promise<void> {
             `the canary finds the drift at the first delta, the next pull's whole copy brings the membership back, and no listing of M's is ever missing from S (${show15}; before: held back until the routine time)`);
         const sk15 = await standby.send('keys', { table: 'posts', key: 'id' });
         const mk15 = await main.send('keys', { table: 'posts', key: 'id' });
-        assert(sk15.hash === mk15.hash && sk15.count === sk15.distinct
-            && ['accounts', 'transactions', 'marketplace_transactions'].every((t) => s15b.tables[t].hash === ledger15.tables[t].hash && s15b.tables[t].hash === m15b.tables[t].hash)
+        // S's ledger is M's before the mend and after it, each as M stood around S's pull: with M still throughout, the
+        // same rows as before; a row M rewrote meanwhile, as M rewrote it, and no other.
+        const off15 = { before: ledgerNotMains(ledger15, m15a, m15l), after: ledgerNotMains(s15b, m15k, m15b) };
+        assert(sk15.hash === mk15.hash && sk15.count === sk15.distinct && off15.before.length === 0 && off15.after.length === 0
             && s15b.ledgerSum === m15b.ledgerSum,
-            `S holds M's listings, each once, and its accounts, transactions and trades are as before and M's (${JSON.stringify({ S: sk15, M: mk15, sum: [s15b.ledgerSum, m15b.ledgerSum] })})`);
+            `S holds M's listings, each once, and its accounts, transactions and trades are as before and M's (${JSON.stringify({ S: sk15, M: mk15, sum: [s15b.ledgerSum, m15b.ledgerSum], notMains: off15 })})`);
         await main.send('unflood');
 
         refused.push(...(await standby.send('fetches')).blocked, ...(await main.send('fetches')).blocked);

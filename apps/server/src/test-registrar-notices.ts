@@ -13,7 +13,8 @@
  *     it), so the registrar stops carrying it.
  *  4. A standby asks for none, takes none and sends no `seen`: its main server's owners must hear them.
  *  5. The agent's tick (reconcile) takes them too, and the address it stores carries no `notices`.
- *  6. Settings shows them under Public address: the words as text, a Reply link only when kept, nothing when there are none.
+ *  6. Settings shows them under Public address: the words as text, a Reply link only when kept, nothing when there are none;
+ *     the legacy page reads them whatever the name's state, paused, blocked and released included (#2151 review 4306341103).
  *  7. A burst is bounded as every server alert is: three told in the hour, the rest folded.
  *  8. Kept on this server only: classified per-server, and never in a backup file's local config or the stager's copy
  *     (each holds a live one-use reply link; #2151 review 4306271971).
@@ -237,6 +238,37 @@ async function main(): Promise<void> {
             assert(/Action needed/.test(html) && /Information/.test(html), 'each with its level in words');
             ctx.renderAddressNotices([]);
             assert(box.style.display === 'none' && box.innerHTML === '', 'nothing while there are none');
+
+            // The page reads the notices once /status answered, whatever the name's state: a paused, blocked or released
+            // name's too (they take the retry-then-show branch), the case notices are for.
+            const fnAt = (sig: string) => {
+                const at = src.indexOf(sig);
+                let d = 0;
+                for (let i = src.indexOf('{', at); at >= 0 && i < src.length; i++) {
+                    if (src[i] === '{') d++;
+                    else if (src[i] === '}' && --d === 0) return src.slice(at, i + 1);
+                }
+                return '';
+            };
+            const loaders = `${fnAt('async function loadPublicAddress(')}\n${fnAt('async function loadAddressNotices()')}`;
+            assert(loaders.includes('loadPublicAddress') && loaders.includes('loadAddressNotices'), 'the page\'s loaders found');
+            for (const state of ['live', 'pending', 'none', 'paused', 'blocked', 'released']) {
+                const asked: string[] = [];
+                const later: Array<() => unknown> = [];
+                const page = vm.createContext({
+                    API: '/api/local', adminHeaders: () => ({}), pollLiveLogs: () => {}, renderPublicAddress: () => {}, renderAddressNotices: () => {},
+                    setTimeout: (fn: () => unknown) => { later.push(fn); },
+                    document: { getElementById: (id: string) => (id === 'pubaddr-display' ? { innerHTML: '' } : null) },
+                    fetch: async (url: string) => {
+                        asked.push(url);
+                        return { ok: true, json: async () => (url.endsWith('/status') ? { status: state, name: 'kestrel' } : { notices: [] }) };
+                    },
+                });
+                vm.runInContext(`${loaders}\nthis.loadPublicAddress = loadPublicAddress;`, page);
+                await page.loadPublicAddress();
+                while (later.length) await later.shift()!();
+                assert(asked.some((u) => u === '/api/local/admin/public-address/notices'), `a ${state} name's notices are read (${asked.join(', ')})`);
+            }
         });
 
         await section('7. a burst is bounded as every server alert is', async () => {

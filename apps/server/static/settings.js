@@ -216,6 +216,8 @@
                     setTimeout(() => loadPublicAddress(retryCount + 1), 1200);
                 } else {
                     renderPublicAddress(res.ok ? d : { status: 'error', error: d.error });
+                    // Paused, blocked or released: the notices are for this case too ("even while the name is blocked").
+                    if (res.ok) loadAddressNotices();
                 }
             } catch (e) {
                 if (retryCount < 2) {

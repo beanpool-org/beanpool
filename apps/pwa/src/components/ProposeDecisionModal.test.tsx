@@ -191,6 +191,31 @@ describe('ProposeDecisionModal Accessibility & UX', () => {
         })));
     });
 
+    it('applies focus ring classes to form inputs and enterprise selection buttons', () => {
+        const roof = 'r'.repeat(64);
+        render(
+            <ProposeDecisionModal
+                isOpen={true}
+                onClose={vi.fn()}
+                onCreated={vi.fn()}
+                identity={mockIdentity}
+                commonsBalance={100}
+                treasuries={[
+                    { publicKey: roof, name: 'New hall roof', lifecycle: 'bounded' },
+                ]}
+            />
+        );
+
+        const titleInput = screen.getByPlaceholderText('e.g. Grant 200 beans to the Tool Library');
+        expect(titleInput.className).toContain('focus:ring-2');
+        expect(titleInput.className).toContain('focus:ring-emerald-500');
+
+        fireEvent.click(screen.getByRole('radio', { name: /Remove a lead keeper or project leader/ }));
+        const enterpriseBtn = screen.getByRole('button', { name: 'New hall roof' });
+        expect(enterpriseBtn.className).toContain('focus-visible:ring-2');
+        expect(enterpriseBtn.className).toContain('focus-visible:ring-emerald-500');
+    });
+
     it("shows the node's grant-cap sentence as it comes, and keeps the form open", async () => {
         // The node refuses a grant bigger than the Commons could pay (decisions-engine.ts grantCapRefusal); request()
         // throws its `error` field. The screen is not the rule, so it shows the node's words unchanged.

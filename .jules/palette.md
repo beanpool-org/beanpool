@@ -253,3 +253,7 @@ handler *and* an explicit close button *and* `type="button"`. One open nit worth
 ## 2026-10-19 - HeaderTitle ARIA Button Semantics & Keyboard Navigation
 **Learning:** `HeaderControls.tsx` rendered the `HeaderTitle` span with an `onClick` handler (to toggle community status) without keyboard navigation (`role="button"`, `tabIndex={0}`, `onKeyDown` Enter/Space key listener) or focus ring indicators.
 **Action:** Added conditional `role="button"`, `tabIndex={0}`, `onKeyDown` handler (triggering `onClick` on Enter/Space), and `focus-visible:ring-2 focus-visible:ring-bp-gold-fill` focus ring styling to `HeaderTitle` when `onClick` is provided, and added test coverage in `HeaderControls.test.tsx`.
+
+## 2026-10-20 - ProposeDecisionModal Focus Ring Styling & Verification
+**Learning:** `ProposeDecisionModal.tsx` form input controls (`input`, `textarea`) relied on `focus:outline-none focus:border-emerald-500` without visible focus ring indicators (`focus:ring-2 focus:ring-emerald-500 focus:border-transparent`), and project/enterprise selection quick buttons lacked explicit `focus-visible` ring styling.
+**Action:** Added `focus:ring-2 focus:ring-emerald-500 focus:border-transparent` across modal form input controls and `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500` to project/enterprise selection quick buttons in `ProposeDecisionModal.tsx`, and updated `ProposeDecisionModal.test.tsx` with assertions for focus ring classes.

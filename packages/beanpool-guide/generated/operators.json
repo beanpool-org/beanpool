@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 137,
-  "hash": "a33c46dc5c07926c1713dc1f7c12a378f3f56cc3dd5243f2d658234d773af631",
+  "version": 138,
+  "hash": "3f371cfc766ae13a268b026836fb94ccabfd5ec072ca552eecaac4caca96eed6",
   "sections": [
     {
       "id": "setup",
@@ -4274,7 +4274,7 @@
         },
         {
           "type": "p",
-          "text": "On a local community, the web app's Settings has a **Global community** row: a link to the worldwide community, where anyone can look around and join. With nothing set, that is https://global.beanpool.org. Your community doesn't need it, and your server never contacts it: it is only a link your members may follow."
+          "text": "On a local community, the web app's Settings has a **Global community** row: a link to the worldwide community, where anyone can look around and join. With nothing set, that is https://global.beanpool.org. Your community doesn't need it, and your server never contacts it: it is only a link your members may follow. Under the address the row tells them so: **The global community is one community among many. Your own community runs on its own server and never needs it.**"
         },
         {
           "type": "ul",

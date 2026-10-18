@@ -54,32 +54,57 @@ import { ExampleListings } from '../../components/ExampleListings';
 import { exampleListingsOn, showExampleListings } from '../../utils/example-listings';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { listPhotoUrl, readsOwnData } from '@beanpool/core';
+import { listPhotoUrl, readsOwnData, t, tn, word, type WordKey } from '@beanpool/core';
 
-export const MARKETPLACE_CATEGORIES = [
-    { id: 'all', emoji: '🏷️', label: 'All Categories' },
-    { id: 'food', emoji: '🥕', label: 'Food' },
-    { id: 'services', emoji: '🤝', label: 'Services' },
-    { id: 'labour', emoji: '👷', label: 'Labour' },
-    { id: 'tools', emoji: '🛠️', label: 'Tools' },
-    { id: 'goods', emoji: '📦', label: 'Goods' },
-    { id: 'garden', emoji: '🌻', label: 'Garden' },
-    { id: 'housing', emoji: '🏠', label: 'Housing' },
-    { id: 'transport', emoji: '🚗', label: 'Transport' },
-    { id: 'education', emoji: '📚', label: 'Education' },
-    { id: 'arts', emoji: '🎨', label: 'Arts' },
-    { id: 'health', emoji: '🌿', label: 'Health' },
-    { id: 'care', emoji: '❤️', label: 'Care' },
-    { id: 'animals', emoji: '🐾', label: 'Animals' },
-    { id: 'tech', emoji: '💻', label: 'Tech' },
-    { id: 'energy', emoji: '☀️', label: 'Energy' },
-    { id: 'general', emoji: '🌱', label: 'General' },
+/** The For You interests' categories. Labels are word() keys (the same as constants/categories.ts), shown through t(). */
+export const MARKETPLACE_CATEGORIES: ReadonlyArray<{ id: string; emoji: string; label: WordKey }> = [
+    { id: 'all', emoji: '🏷️', label: word('All Categories') },
+    { id: 'food', emoji: '🥕', label: word('Food') },
+    { id: 'services', emoji: '🤝', label: word('Services') },
+    { id: 'labour', emoji: '👷', label: word('Labour') },
+    { id: 'tools', emoji: '🛠️', label: word('Tools') },
+    { id: 'goods', emoji: '📦', label: word('Goods') },
+    { id: 'garden', emoji: '🌻', label: word('Garden') },
+    { id: 'housing', emoji: '🏠', label: word('Housing') },
+    { id: 'transport', emoji: '🚗', label: word('Transport') },
+    { id: 'education', emoji: '📚', label: word('Education') },
+    { id: 'arts', emoji: '🎨', label: word('Arts') },
+    { id: 'health', emoji: '🌿', label: word('Health') },
+    { id: 'care', emoji: '❤️', label: word('Care') },
+    { id: 'animals', emoji: '🐾', label: word('Animals') },
+    { id: 'tech', emoji: '💻', label: word('Tech') },
+    { id: 'energy', emoji: '☀️', label: word('Energy') },
+    { id: 'general', emoji: '🌱', label: word('General') },
 ];
 
 // ⚡ Bolt: O(1) Map lookup for marketplace categories instead of repeated O(C) .find() scans
 export const MARKETPLACE_CATEGORIES_BY_ID = new Map(MARKETPLACE_CATEGORIES.map(c => [c.id, c]));
 
 const MIN_FEED_UNDER_PANEL = 48;
+
+/** The headings the list view draws between its rows: word() keys, shown through t() (renderItem). */
+const YOUR_EVENTS_HEADING = word('Your events');
+const FOR_YOU_HEADING = word('★ For You Feed');
+
+/** A listing's type badge, in the member's language (the listing branch only: polls and events have cards of their own). */
+const typeBadge = (type: string): string => (type === 'offer' ? t('OFFER') : t('NEED'));
+
+/** The unit after a listing's price: per hour, day, week or month, or none for a total. */
+function priceUnit(priceType: string | null | undefined): string {
+    if (priceType === 'hourly') return t('/Hr', undefined, 'price per hour');
+    if (priceType === 'daily') return t('/Dy', undefined, 'price per day');
+    if (priceType === 'weekly') return t('/Wk', undefined, 'price per week');
+    if (priceType === 'monthly') return t('/Mo', undefined, 'price per month');
+    return '';
+}
+
+/** The compact row's author line: whole sentences per variant, with the Elder mark and the member's own. */
+function byLine(name: string, elder: boolean, own: boolean): string {
+    if (elder && own) return t('by {name} ⛰️ 👤 (You)', { name });
+    if (elder) return t('by {name} ⛰️', { name });
+    if (own) return t('by {name} 👤 (You)', { name });
+    return t('by {name}', { name });
+}
 
 /** How long the Market waits on a first sync (and on its one retry) before it says "Having trouble connecting". */
 const FIRST_SYNC_WAIT_MS = 12_000;
@@ -88,7 +113,7 @@ export default function MarketScreen() {
     const { theme, colors } = useTheme();
     // At 320dp with large text the field has room for one word; the long placeholder wrapped or was cut.
     const { width: winW, fontScale } = useWindowDimensions();
-    const searchPlaceholder = winW / Math.min(fontScale, 1.3) < 360 ? 'Search' : 'Search marketplace...';
+    const searchPlaceholder = winW / Math.min(fontScale, 1.3) < 360 ? t('Search') : t('Search marketplace...');
     const { identity } = useIdentity();
 
     // What kind of community this is (utils/node-profile.ts): the phone's copy first, then the node's own answer.
@@ -163,7 +188,8 @@ export default function MarketScreen() {
         searchInput: { flex: 1, marginLeft: 8, paddingVertical: 0, fontSize: 14, color: colors.text.body, fontWeight: '500', includeFontPadding: false, textAlignVertical: 'center' },
         iconBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.default, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1 },
         dealsIconBtn: {
-            paddingHorizontal: 14, height: 38, borderRadius: 19,
+            // Capped, so My Deals in a longer language never squeezes the search field to nothing: its words shrink instead.
+            paddingHorizontal: 14, height: 38, borderRadius: 19, maxWidth: 120,
             backgroundColor: theme === 'dark' ? colors.feedback.warning.bg : palette.amber50,
             borderWidth: 1,
             borderColor: theme === 'dark' ? colors.feedback.warning.border : palette.amber300,
@@ -262,7 +288,9 @@ export default function MarketScreen() {
         gridImage: { width: '100%', height: '100%' },
         gridFallback: { backgroundColor: colors.surface.subtle, justifyContent: 'center', alignItems: 'center' },
         gridFallbackEmoji: { fontSize: 32, opacity: 0.3 },
-        gridPriceBadge: { position: 'absolute', bottom: 8, right: 8, backgroundColor: colors.overlay.scrim, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: colors.overlay.scrimEdge },
+        gridBadgeRow: { position: 'absolute', left: 8, right: 8, bottom: 8, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-end', gap: 4 },
+        gridBadge: { backgroundColor: colors.overlay.scrim, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: colors.overlay.scrimEdge, maxWidth: '100%' },
+        gridPriceEnd: { marginLeft: 'auto' },
         gridPriceText: { color: colors.text.inverse, fontSize: 13, fontWeight: 'bold' },
         gridTypeBadge: { position: 'absolute', top: 8, left: 8, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
         gridTextContent: { padding: 12 },
@@ -1052,7 +1080,7 @@ export default function MarketScreen() {
                         onBlur={() => setSearchFocused(false)}
                         returnKeyType="search"
                         maxFontSizeMultiplier={1.3}
-                        accessibilityLabel="Search marketplace"
+                        accessibilityLabel={t('Search marketplace')}
                     />
                 </View>
                 </Pressable>
@@ -1060,11 +1088,12 @@ export default function MarketScreen() {
                     onPress={() => setShowDealsSheet(true)}
                     style={styles.dealsIconBtn}
                     accessibilityRole="button"
-                    accessibilityLabel={pendingCount > 0 ? `My Deals, ${pendingCount} pending` : 'My Deals'}
-                    accessibilityHint="Opens your active and pending deals sheet"
+                    accessibilityLabel={pendingCount > 0 ? tn(pendingCount, 'My Deals, {n} pending', 'My Deals, {n} pending') : t('My Deals')}
+                    accessibilityHint={t('Opens your active and pending deals sheet')}
                 >
                     <Text style={{ fontSize: 18, marginBottom: -2 }}>🤝</Text>
-                    <Text style={{ fontSize: 11, fontWeight: '800', color: colors.feedback.warning.fg }}>My Deals</Text>
+                    {/* Capped (dealsIconBtn maxWidth): a longer name in another language shrinks to fit, never squeezing the search. */}
+                    <Text style={{ fontSize: 11, fontWeight: '800', color: colors.feedback.warning.fg }} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{t('My Deals')}</Text>
                     {pendingCount > 0 && (
                         <View style={styles.dealsIconBadge}>
                             <Text style={{ color: colors.text.inverse, fontSize: 8, fontWeight: '900' }}>{pendingCount}</Text>
@@ -1075,7 +1104,7 @@ export default function MarketScreen() {
                     onPress={() => setViewMode(v => v === 'list' ? 'grid' : (v === 'grid' ? 'compact' : 'list'))}
                     style={styles.iconBtn}
                     accessibilityRole="button"
-                    accessibilityLabel={viewMode === 'list' ? 'Grid view' : (viewMode === 'grid' ? 'Compact view' : 'List view')}
+                    accessibilityLabel={viewMode === 'list' ? t('Grid view') : (viewMode === 'grid' ? t('Compact view') : t('List view'))}
                 >
                     <MaterialCommunityIcons
                         name={viewMode === 'list' ? 'view-grid-outline' : (viewMode === 'grid' ? 'view-headline' : 'view-list-outline')} 
@@ -1102,7 +1131,7 @@ export default function MarketScreen() {
                     // 8dp sides, not 12: the six pills fit one line on a normal phone (~338dp of 379).
                     chipStyle={styles.typePill}
                     style={styles.filterRow}
-                    accessibilityLabel="Show"
+                    accessibilityLabel={t('Show', undefined, 'the row of the kinds of post the Market shows')}
                 />
 
                 {secondRow.kind === 'eventWindows' ? (
@@ -1115,10 +1144,10 @@ export default function MarketScreen() {
                         fill
                         moreHint
                         style={styles.filterRow}
-                        accessibilityLabel="Filter events by date"
+                        accessibilityLabel={t('Filter events by date')}
                     />
                 ) : (
-                    <FilterChipBar key="filters" fill moreHint style={styles.filterRow} accessibilityLabel="Filters">
+                    <FilterChipBar key="filters" fill moreHint style={styles.filterRow} accessibilityLabel={t('Filters')}>
                         {secondRow.category && (
                             <FilterChipButton
                                 variant="flat"
@@ -1127,7 +1156,7 @@ export default function MarketScreen() {
                                 activeColor={filterColor}
                                 expanded={categoryPanel.open}
                                 onPress={() => dispatchCategoryPanel({ kind: 'toggle' })}
-                                accessibilityLabel="Filter by category"
+                                accessibilityLabel={t('Filter by category')}
                                 style={styles.filterGrow}
                             />
                         )}
@@ -1138,7 +1167,7 @@ export default function MarketScreen() {
                                 active={radiusKm !== null}
                                 activeColor={filterColor}
                                 onPress={() => { closeCategoryPanel(); setShowRadiusPicker(true); }}
-                                accessibilityLabel="Filter by distance"
+                                accessibilityLabel={t('Filter by distance')}
                                 style={styles.filterGrow}
                             />
                         )}
@@ -1149,7 +1178,7 @@ export default function MarketScreen() {
                                 active={trustFilter !== 'all'}
                                 activeColor={filterColor}
                                 onPress={() => { closeCategoryPanel(); setShowTrustPicker(true); }}
-                                accessibilityLabel="Filter by trust level"
+                                accessibilityLabel={t('Filter by trust level')}
                                 style={styles.filterGrow}
                             />
                         )}
@@ -1162,7 +1191,7 @@ export default function MarketScreen() {
                                 selected={beansOnly}
                                 activeColor={filterColor}
                                 onPress={() => { closeCategoryPanel(); setBeansOnly(!beansOnly); }}
-                                accessibilityLabel="Show only listings that need no cash"
+                                accessibilityLabel={t('Show only listings that need no cash')}
                                 style={styles.filterGrow}
                             />
                         )}
@@ -1184,7 +1213,7 @@ export default function MarketScreen() {
                             accessibilityState={{ selected: groupFilter === 'all' }}
                         >
                             <Text style={[styles.chipText, groupFilter === 'all' && styles.chipTextOnAccent]}>
-                                👥 All Groups & Public
+                                {t('👥 All Groups & Public')}
                             </Text>
                         </Pressable>
                         {userGroups.map((g) => {
@@ -1232,7 +1261,10 @@ export default function MarketScreen() {
     );
 
     const filterSummary = marketFilterSummary(filterState, searchQuery, {
-        trustLabel: id => TRUST_FILTERS.find(t => t.id === id)?.label,
+        trustLabel: id => {
+            const trust = TRUST_FILTERS.find(f => f.id === id);
+            return trust ? t(trust.label) : undefined;
+        },
         groupName: id => userGroupsById.get(id)?.name,
     });
     // "Save this search to Home" (Marty, 7 Oct): a member's search, Offers and Needs only, handed to Home, which opens the
@@ -1279,21 +1311,21 @@ export default function MarketScreen() {
                 <View style={{ marginHorizontal: 16, marginBottom: 8, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(245, 158, 11, 0.4)', backgroundColor: 'rgba(245, 158, 11, 0.10)', padding: 14 }}>
                     <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
                         <Text style={{ fontSize: 15, fontWeight: '800', color: colors.text.heading, flex: 1 }}>
-                            🫘 Welcome{identity?.callsign ? `, ${identity.callsign}` : ''}! One step to unlock trading
+                            {identity?.callsign ? t('🫘 Welcome, {name}! One step to unlock trading', { name: identity.callsign }) : t('🫘 Welcome! One step to unlock trading')}
                         </Text>
-                        <Pressable onPress={dismissFirstOfferQuest} hitSlop={8} accessibilityRole="button" accessibilityLabel="Dismiss">
+                        <Pressable onPress={dismissFirstOfferQuest} hitSlop={8} accessibilityRole="button" accessibilityLabel={t('Dismiss')}>
                             <Text style={{ fontSize: 15, color: colors.text.secondary, fontWeight: '700', paddingLeft: 8 }}>✕</Text>
                         </Pressable>
                     </View>
                     <Text style={{ fontSize: 13.5, color: colors.text.body, lineHeight: 19, marginTop: 4 }}>
-                        List one Offer — anything you can give: a skill, produce, tools, a lift. That unlocks accepting Offers and posting Needs.
+                        {t('List one Offer — anything you can give: a skill, produce, tools, a lift. That unlocks accepting Offers and posting Needs.')}
                     </Text>
                     <Pressable
                         style={{ marginTop: 10, backgroundColor: colors.feedback.warning.solid, borderRadius: 10, paddingVertical: 10, alignItems: 'center' }}
                         onPress={() => router.push({ pathname: '/map', params: { newPost: 'true' } })}
                         accessibilityRole="button"
                     >
-                        <Text style={{ color: colors.text.onGold, fontSize: 14, fontWeight: '800' }}>➕ Post your first Offer</Text>
+                        <Text style={{ color: colors.text.onGold, fontSize: 14, fontWeight: '800' }}>{t('➕ Post your first Offer')}</Text>
                     </Pressable>
                 </View>
             )}
@@ -1302,16 +1334,16 @@ export default function MarketScreen() {
                 isCustomizerExpanded ? (
                     <View style={styles.favPanel}>
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                            <Text style={styles.favPanelTitle}>★ CUSTOMIZE INTERESTS</Text>
+                            <Text style={styles.favPanelTitle}>{t('★ CUSTOMIZE INTERESTS')}</Text>
                             <Pressable
                                 onPress={() => setIsCustomizerExpanded(false)}
                                 style={{ backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.accent.border, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 }}
                                 accessibilityRole="button"
                             >
-                                <Text style={{ fontSize: 10, fontWeight: '800', color: colors.accent.primary }}>✕ HIDE</Text>
+                                <Text style={{ fontSize: 10, fontWeight: '800', color: colors.accent.primary }}>{t('✕ HIDE')}</Text>
                             </Pressable>
                         </View>
-                        <Text style={styles.favPanelSub}>Select categories to prioritize in your feed:</Text>
+                        <Text style={styles.favPanelSub}>{t('Select categories to prioritize in your feed:')}</Text>
                         <View style={styles.favTagsContainer}>
                             {MARKETPLACE_CATEGORIES.filter(c => c.id !== 'all').map(cat => {
                                 const isFav = favCategories.includes(cat.id);
@@ -1332,7 +1364,7 @@ export default function MarketScreen() {
                                         accessibilityState={{ selected: isFav }}
                                     >
                                         <Text style={[styles.favTagText, isFav && styles.favTagTextActive]}>
-                                            {cat.emoji} {cat.label} {isFav ? '★' : ''}
+                                            {isFav ? t('{emoji} {label} ★', { emoji: cat.emoji, label: t(cat.label) }) : t('{emoji} {label}', { emoji: cat.emoji, label: t(cat.label) })}
                                         </Text>
                                     </Pressable>
                                 );
@@ -1349,13 +1381,13 @@ export default function MarketScreen() {
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
                                 <Text style={{ fontSize: 13, color: colors.accent.primary, fontWeight: 'bold' }}>★</Text>
                                 <Text style={styles.favSummaryText} numberOfLines={1}>
-                                    Prioritizing: {favCategories.length > 0 
-                                        ? favCategories.map(id => MARKETPLACE_CATEGORIES_BY_ID.get(id)?.emoji || '').join(' ')
-                                        : 'None selected yet'}
+                                    {favCategories.length > 0
+                                        ? t('Prioritizing: {emojis}', { emojis: favCategories.map(id => MARKETPLACE_CATEGORIES_BY_ID.get(id)?.emoji || '').join(' ') })
+                                        : t('Prioritizing: None selected yet')}
                                 </Text>
                             </View>
                             <View style={styles.favSummaryEditBadge}>
-                                <Text style={styles.favSummaryEditBtn}>⚙️ CUSTOMIZE</Text>
+                                <Text style={styles.favSummaryEditBtn}>{t('⚙️ CUSTOMIZE')}</Text>
                             </View>
                         </View>
                     </Pressable>
@@ -1373,22 +1405,22 @@ export default function MarketScreen() {
                         pressed && { opacity: 0.7, transform: [{ scale: 0.98 }] }
                     ]}
                     accessibilityRole="button"
-                    accessibilityLabel={`${freshTodayCount} fresh listing${freshTodayCount > 1 ? 's' : ''} posted today`}
-                    accessibilityHint="Dismisses this banner"
+                    accessibilityLabel={tn(freshTodayCount, '{n} fresh listing posted today', '{n} fresh listings posted today')}
+                    accessibilityHint={t('Dismisses this banner')}
                 >
                     <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: 10 }}>
                         <Text style={{ fontSize: 20 }}>🔥</Text>
                         <View style={{ flex: 1 }}>
                             <Text style={styles.freshBannerTitle}>
-                                {freshTodayCount} fresh listing{freshTodayCount > 1 ? 's' : ''} posted today!
+                                {tn(freshTodayCount, '{n} fresh listing posted today!', '{n} fresh listings posted today!')}
                             </Text>
                             <Text style={styles.freshBannerSub}>
-                                Tap to dismiss • Scroll down to explore
+                                {t('Tap to dismiss • Scroll down to explore')}
                             </Text>
                         </View>
                     </View>
                     <View style={styles.liveBadge}>
-                        <Text style={styles.liveBadgeText}>LIVE</Text>
+                        <Text style={styles.liveBadgeText}>{t('LIVE')}</Text>
                     </View>
                 </Pressable>
             )}
@@ -1403,11 +1435,11 @@ export default function MarketScreen() {
             // What you said you would be at, above what you might like: it is the one part of For You you
             // have already committed to (decision 1). It stays even when nothing starred matched today.
             if (myEvents.length > 0) {
-                listData.push({ isHeader: true, title: 'Your events', id: 'header-your-events' });
+                listData.push({ isHeader: true, title: YOUR_EVENTS_HEADING, id: 'header-your-events' });
                 listData.push(...myEvents.map(myEventAsPost));
             }
             if (filteredPosts.length > 0) {
-                listData.push({ isHeader: true, title: '★ For You Feed', id: 'header-for-you' });
+                listData.push({ isHeader: true, title: FOR_YOU_HEADING, id: 'header-for-you' });
                 listData.push(...filteredPosts);
             }
         } else {
@@ -1422,9 +1454,10 @@ export default function MarketScreen() {
 
     const renderItem = ({ item }: { item: any }) => {
         if (item.isHeader) {
+            const heading: { title: WordKey } = item;
             return (
                 <View style={styles.sectionHeader}>
-                    <Text style={styles.sectionHeaderText}>{item.title.toUpperCase()}</Text>
+                    <Text style={styles.sectionHeaderText}>{t(heading.title).toUpperCase()}</Text>
                     <View style={styles.sectionHeaderLine} />
                 </View>
             );
@@ -1461,19 +1494,16 @@ export default function MarketScreen() {
             } catch {}
         }
 
-        const cardAuthor = item.author_callsign || item.author_pubkey?.slice(0, 6) || 'Unknown';
+        const cardAuthor = item.author_callsign || item.author_pubkey?.slice(0, 6) || t('Unknown');
         const isPulse = (item.author_callsign || item.authorCallsign) === 'Daily Pulse';
         // Elder is a tier, and a tier is Beans: no Elder look where the community shows none (as the tier chip below).
         const elderCard = !isPulse && showsBeans && isElder(item.author_energy_cycled);
         const isOwn = !isPulse && !!(identity?.publicKey && item.author_pubkey === identity.publicKey);
         const isGroupScope = item.audience_scope === 'group' || item.audienceScope === 'group' || !!item.target_group_id || !!item.targetGroupId;
-        const groupName = item.target_group_name || item.targetGroupName || 'Group';
-        const groupScopeBadgeText = isGroupScope ? `🔒 Only ${groupName} can see this` : null;
+        const groupName = item.target_group_name || item.targetGroupName || t('Group');
+        const groupScopeBadgeText = isGroupScope ? t('🔒 Only {group} can see this', { group: groupName }) : null;
 
-        const priceLabel = item.price_type === 'hourly' ? '/Hr' :
-                           item.price_type === 'daily' ? '/Dy' :
-                           item.price_type === 'weekly' ? '/Wk' :
-                           item.price_type === 'monthly' ? '/Mo' : '';
+        const priceLabel = priceUnit(item.price_type);
 
         const catEmoji = categoryEmoji(item.category);
         const catLabel = categoryLabel(item.category);
@@ -1501,8 +1531,34 @@ export default function MarketScreen() {
                                 </Text>
                             </View>
                         )}
+                        {/* One row along the photo's foot, the badges at its start and the price at its end. It wraps,
+                            growing upwards: RECURRING and YOU in a longer language (or at 320dp and 1.3x) stack instead
+                            of overlapping each other or the price, as fixed offsets did. */}
+                        <View style={styles.gridBadgeRow} testID="grid-badge-row">
+                        {isPulse && (
+                            <View style={[
+                                styles.gridBadge,
+                                {
+                                    backgroundColor: theme === 'dark' ? colors.feedback.warning.bg : '#fef3c7',
+                                    borderColor: theme === 'dark' ? colors.feedback.warning.border : '#f59e0b',
+                                    borderWidth: 1,
+                                }
+                            ]}>
+                                <Text style={[styles.gridPriceText, { color: colors.feedback.warning.fg, fontWeight: '900' }]}>{t('🗞️ PULSE')}</Text>
+                            </View>
+                        )}
+                        {!!item.repeatable && !isPulse && (
+                            <View style={styles.gridBadge}>
+                                <Text style={styles.gridPriceText}>{t('↻ RECURRING')}</Text>
+                            </View>
+                        )}
+                        {isOwn && (
+                            <View style={[styles.gridBadge, { backgroundColor: '#2563eb' }]}>
+                                <Text style={styles.gridPriceText}>{t('👤 YOU')}</Text>
+                            </View>
+                        )}
                         {!isPulse && showsBeans && (
-                            <View style={styles.gridPriceBadge}>
+                            <View style={[styles.gridBadge, styles.gridPriceEnd]}>
                                 <CurrencyDisplay
                                     amount={`${item.credits !== undefined && item.credits !== null ? item.credits : '?'}${priceLabel || ''}`}
                                     style={styles.gridPriceText}
@@ -1510,33 +1566,10 @@ export default function MarketScreen() {
                                 />
                             </View>
                         )}
-                        {isPulse && (
-                            <View style={[
-                                styles.gridPriceBadge,
-                                {
-                                    left: 8,
-                                    right: undefined,
-                                    backgroundColor: theme === 'dark' ? colors.feedback.warning.bg : '#fef3c7',
-                                    borderColor: theme === 'dark' ? colors.feedback.warning.border : '#f59e0b',
-                                    borderWidth: 1,
-                                }
-                            ]}>
-                                <Text style={[styles.gridPriceText, { color: colors.feedback.warning.fg, fontWeight: '900' }]}>🗞️ PULSE</Text>
-                            </View>
-                        )}
-                        {!!item.repeatable && !isPulse && (
-                            <View style={[styles.gridPriceBadge, { left: 8, right: undefined }]}>
-                                <Text style={styles.gridPriceText}>↻ RECURRING</Text>
-                            </View>
-                        )}
-                        {isOwn && (
-                            <View style={[styles.gridPriceBadge, { left: item.repeatable ? 95 : 8, right: undefined, backgroundColor: '#2563eb' }]}>
-                                <Text style={styles.gridPriceText}>👤 YOU</Text>
-                            </View>
-                        )}
+                        </View>
                         {!isPulse && (
                             <View style={[styles.gridTypeBadge, item.type === 'offer' ? styles.badgeOffer : styles.badgeNeed]}>
-                                <Text style={[styles.badgeText, { color: item.type === 'offer' ? colors.market.offer.fg : colors.market.need.fg }]}>{item.type.toUpperCase()}</Text>
+                                <Text style={[styles.badgeText, { color: item.type === 'offer' ? colors.market.offer.fg : colors.market.need.fg }]}>{typeBadge(item.type)}</Text>
                             </View>
                         )}
                     </View>
@@ -1574,7 +1607,7 @@ export default function MarketScreen() {
                                 {item.cash_also_needed === 1 ? '💸 ' : ''}{item.title}
                             </Text>
                             <Text style={styles.compactAuthor} numberOfLines={1}>
-                                by {cardAuthor} {elderCard ? '⛰️' : ''} {isOwn ? '👤 (You)' : ''}
+                                {byLine(cardAuthor, elderCard, isOwn)}
                             </Text>
                             {groupScopeBadgeText && (
                                 <View style={{ marginTop: 2, alignSelf: 'flex-start', backgroundColor: colors.brand.tint, borderColor: colors.brand.primary, borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 1 }}>
@@ -1607,7 +1640,7 @@ export default function MarketScreen() {
                                         fontWeight: '800',
                                     }
                                 ]}>
-                                    {isPulse ? 'PULSE' : item.type.toUpperCase()}
+                                    {isPulse ? t('PULSE') : typeBadge(item.type)}
                                 </Text>
                             </View>
                         </View>
@@ -1638,7 +1671,7 @@ export default function MarketScreen() {
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', flex: 1 }}>
                                 {!isPulse && (
                                     <View style={[styles.badge, item.type === 'offer' ? styles.badgeOffer : styles.badgeNeed, { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, margin: 0 }]}>
-                                        <Text style={[styles.badgeText, { fontSize: 10, color: item.type === 'offer' ? colors.market.offer.fg : colors.market.need.fg }]}>{item.type.toUpperCase()}</Text>
+                                        <Text style={[styles.badgeText, { fontSize: 10, color: item.type === 'offer' ? colors.market.offer.fg : colors.market.need.fg }]}>{typeBadge(item.type)}</Text>
                                     </View>
                                 )}
                                 {isPulse && (
@@ -1654,12 +1687,12 @@ export default function MarketScreen() {
                                             fontSize: 10,
                                             fontWeight: '800',
                                             color: colors.feedback.warning.fg
-                                        }}>🗞️ DAILY PULSE</Text>
+                                        }}>{t('🗞️ DAILY PULSE')}</Text>
                                     </View>
                                 )}
                                 {isOwn && (
                                     <View style={{ backgroundColor: '#dbeafe', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8 }}>
-                                        <Text style={{ fontSize: 10, fontWeight: '700', color: '#1e40af' }}>👤 YOU</Text>
+                                        <Text style={{ fontSize: 10, fontWeight: '700', color: '#1e40af' }}>{t('👤 YOU')}</Text>
                                     </View>
                                 )}
                                 <Text style={{ fontSize: 11, fontWeight: '700', color: colors.text.secondary }}>
@@ -1667,13 +1700,13 @@ export default function MarketScreen() {
                                 </Text>
                                 {!!item.repeatable && (
                                     <View style={{ backgroundColor: colors.surface.subtle, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, borderWidth: 1, borderColor: colors.border.default }}>
-                                        <Text style={{ fontSize: 10, fontWeight: '700', color: colors.text.secondary }}>↻ RECURRING</Text>
+                                        <Text style={{ fontSize: 10, fontWeight: '700', color: colors.text.secondary }}>{t('↻ RECURRING')}</Text>
                                     </View>
                                 )}
                                 {/* #108: on the card, not just the detail view */}
                                 {item.cash_also_needed === 1 && (
                                     <View style={{ backgroundColor: colors.feedback.warning.bg, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, borderWidth: 1, borderColor: colors.feedback.warning.border }}>
-                                        <Text style={{ fontSize: 10, fontWeight: '700', color: colors.feedback.warning.fg }}>💸 CASH TOO</Text>
+                                        <Text style={{ fontSize: 10, fontWeight: '700', color: colors.feedback.warning.fg }}>{t('💸 CASH TOO')}</Text>
                                     </View>
                                 )}
                                 {groupScopeBadgeText && (
@@ -1712,7 +1745,7 @@ export default function MarketScreen() {
         <View style={styles.safeArea} onLayout={e => setScreenH(e.nativeEvent.layout.height)}>
             {/* The feed and, riding over its top, the controls. Clipped, so the block slides up under the tab bar. */}
             <View style={{ flex: 1, overflow: 'hidden' }}>
-            <QuickReturnBlock qr={qr} title={<PageTitle title="Market" testID="page-title-market" />} below={categoryPanelOverlay}>
+            <QuickReturnBlock qr={qr} title={<PageTitle title={t('Market')} testID="page-title-market" />} below={categoryPanelOverlay}>
                 {controls}
             </QuickReturnBlock>
             <Animated.FlatList
@@ -1747,17 +1780,17 @@ export default function MarketScreen() {
                         <View style={{ padding: 32, alignItems: 'center' }} testID="members-only-listings">
                             <Text style={{ fontSize: 40, opacity: 0.4, marginBottom: 12 }}>🔒</Text>
                             <Text style={{ fontSize: 17, fontWeight: '800', color: colors.text.body, marginBottom: 8, textAlign: 'center' }}>
-                                This community's listings are for its members
+                                {t("This community's listings are for its members")}
                             </Text>
                             <Text style={{ fontSize: 14, color: colors.text.secondary, textAlign: 'center', marginBottom: 18 }}>
-                                To join, ask a member for an invite. Anyone can look around the global community, and ask a community near them to let them in from there.
+                                {t('To join, ask a member for an invite. Anyone can look around the global community, and ask a community near them to let them in from there.')}
                             </Text>
                             <Pressable
                                 accessibilityRole="link"
                                 style={{ backgroundColor: colors.brand.fill, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 12, maxWidth: '100%' }}
                                 onPress={() => { Linking.openURL(GLOBAL_NODE_URL).catch(() => {}); }}
                             >
-                                <Text style={{ fontWeight: '800', color: colors.text.inverse, fontSize: 14, textAlign: 'center' }}>🌍 Look around the global community</Text>
+                                <Text style={{ fontWeight: '800', color: colors.text.inverse, fontSize: 14, textAlign: 'center' }}>{t('🌍 Look around the global community')}</Text>
                             </Pressable>
                         </View>
                     ) : refusedLines && emptyState.kind === 'refused' ? (
@@ -1776,10 +1809,10 @@ export default function MarketScreen() {
                         <View style={{ padding: 48, alignItems: 'center' }}>
                             <ActivityIndicator size="large" color={colors.brand.primary} />
                             <Text style={{ fontSize: 16, fontWeight: '800', color: colors.text.body, marginTop: 16 }}>
-                                Loading the marketplace…
+                                {t('Loading the marketplace…')}
                             </Text>
                             <Text style={{ fontSize: 13, color: colors.text.secondary, marginTop: 4 }}>
-                                Syncing with your community
+                                {t('Syncing with your community')}
                             </Text>
                         </View>
                     ) : emptyState.kind === 'trouble_connecting' ? (
@@ -1787,17 +1820,17 @@ export default function MarketScreen() {
                         <View style={{ padding: 40, alignItems: 'center' }}>
                             <Text style={{ fontSize: 40, opacity: 0.3, marginBottom: 12 }}>📡</Text>
                             <Text style={{ fontSize: 16, fontWeight: '800', color: colors.text.body, marginBottom: 6 }}>
-                                Having trouble connecting
+                                {t('Having trouble connecting')}
                             </Text>
                             <Text style={{ fontSize: 13, color: colors.text.secondary, textAlign: 'center', marginBottom: 16 }}>
-                                Couldn't reach your community node yet. Check your connection.
+                                {t("Couldn't reach your community node yet. Check your connection.")}
                             </Text>
                             <Pressable
                                 accessibilityRole="button"
                                 style={{ backgroundColor: colors.brand.fill, paddingHorizontal: 22, paddingVertical: 11, borderRadius: 12 }}
                                 onPress={() => { armSyncWait(); requestSync(); }}
                             >
-                                <Text style={{ fontWeight: '800', color: colors.text.inverse, fontSize: 14 }}>Retry</Text>
+                                <Text style={{ fontWeight: '800', color: colors.text.inverse, fontSize: 14 }}>{t('Retry')}</Text>
                             </Pressable>
                         </View>
                     ) : emptyState.kind === 'feed' ? (
@@ -1809,24 +1842,24 @@ export default function MarketScreen() {
                     <View style={{ padding: 32, alignItems: 'center' }}>
                         <Text style={{ fontSize: 40, opacity: 0.3, marginBottom: 16 }}>🛒</Text>
                         <Text style={{ fontSize: 18, fontWeight: '800', color: colors.text.body, marginBottom: 8 }}>
-                            No items found
+                            {t('No items found')}
                         </Text>
                         <Text style={{ fontSize: 14, color: colors.text.secondary, textAlign: 'center', marginBottom: 20 }}>
-                            Try adjusting your filters to see more results.
+                            {t('Try adjusting your filters to see more results.')}
                         </Text>
                         <Pressable
                             accessibilityRole="button"
                             style={{ backgroundColor: colors.surface.subtle, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 12, marginBottom: 12 }}
                             onPress={() => { setFilter('all'); dispatchCategoryPanel({ kind: 'pick', category: 'all' }); setEventWindow('all'); setRadiusKm(null); setLocationCenter(null); setTrustFilter('all'); setBeansOnly(false); setGroupFilter('all'); }}
                         >
-                            <Text style={{ fontWeight: '700', color: theme === 'dark' ? colors.text.secondary : palette.gray600, fontSize: 14 }}>Clear All Filters</Text>
+                            <Text style={{ fontWeight: '700', color: theme === 'dark' ? colors.text.secondary : palette.gray600, fontSize: 14 }}>{t('Clear All Filters')}</Text>
                         </Pressable>
                         <Pressable
                             accessibilityRole="button"
                             style={{ backgroundColor: palette.gray900, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 12 }}
                             onPress={() => router.push({ pathname: '/map', params: { newPost: 'true' } })}
                         >
-                            <Text style={{ fontWeight: '700', color: colors.text.inverse, fontSize: 14 }}>+ Post a Deal</Text>
+                            <Text style={{ fontWeight: '700', color: colors.text.inverse, fontSize: 14 }}>{t('+ Post a Deal')}</Text>
                         </Pressable>
                     </View>
                     )
@@ -1838,7 +1871,7 @@ export default function MarketScreen() {
                 <Pressable
                     style={StyleSheet.absoluteFill}
                     accessibilityRole="button"
-                    accessibilityLabel="Close categories"
+                    accessibilityLabel={t('Close categories')}
                     onPress={closeCategoryPanel}
                 />
             )}
@@ -1851,7 +1884,7 @@ export default function MarketScreen() {
             <Pressable accessibilityRole="button" style={styles.fab} onPress={() => setShowNewPostTypePicker(true)}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                     <Text style={{ color: colors.text.inverse, fontSize: 20, fontWeight: '400', marginTop: -2 }}>+</Text>
-                    <Text style={{ color: colors.text.inverse, fontSize: 13, fontWeight: '800', letterSpacing: 0.5 }}>ADD POST</Text>
+                    <Text style={{ color: colors.text.inverse, fontSize: 13, fontWeight: '800', letterSpacing: 0.5 }}>{t('ADD POST')}</Text>
                 </View>
             </Pressable>
             )}

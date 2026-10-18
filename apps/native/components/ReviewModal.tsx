@@ -5,6 +5,8 @@ import { submitRating, getDb } from '../utils/db';
 import { useIdentity } from '../app/IdentityContext';
 import { palette } from '../constants/colors';
 import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext';
+import { t, tn } from '@beanpool/core';
+import { Sentence } from './Sentence';
 
 interface ReviewModalProps {
     visible: boolean;
@@ -74,7 +76,7 @@ export function ReviewModal({ visible, txId, targetPubkey, targetCallsign, onClo
             await submitRating(identity.publicKey, targetPubkey, stars, comment, txId);
             onSuccess();
         } catch (e: any) {
-            Alert.alert('Error', e.message || 'Failed to submit review');
+            Alert.alert(t('Error'), e.message || t('Failed to submit review'));
         } finally {
             setSubmitting(false);
         }
@@ -96,14 +98,14 @@ export function ReviewModal({ visible, txId, targetPubkey, targetCallsign, onClo
                 >
                     <View style={styles.card}>
                         <Text style={styles.emoji}>🎉</Text>
-                        <Text style={styles.title}>{isExisting ? 'Edit Your Review' : 'Deal Complete!'}</Text>
+                        <Text style={styles.title}>{isExisting ? t('Edit Your Review') : t('Deal Complete!')}</Text>
                         <Text style={styles.subtitle}>
-                            How was your experience with <Text style={styles.bold}>{targetCallsign}</Text>?
+                            <Sentence text={t('How was your experience with {name}?')} parts={{ name: <Text style={styles.bold}>{targetCallsign}</Text> }} />
                         </Text>
 
                         <View style={styles.starsRow}>
                             {[1, 2, 3, 4, 5].map(s => (
-                                <Pressable key={s} accessibilityRole="button" accessibilityLabel={`Rate ${s} stars`} accessibilityState={{ selected: s <= stars }} onPress={() => setStars(s)}>
+                                <Pressable key={s} accessibilityRole="button" accessibilityLabel={tn(s, 'Rate {n} stars', 'Rate {n} stars')} accessibilityState={{ selected: s <= stars }} onPress={() => setStars(s)}>
                                     <Text style={[styles.star, s <= stars ? styles.starActive : styles.starInactive]}>★</Text>
                                 </Pressable>
                             ))}
@@ -111,8 +113,8 @@ export function ReviewModal({ visible, txId, targetPubkey, targetCallsign, onClo
 
                         <TextInput
                             style={styles.input}
-                            accessibilityLabel="Review comment"
-                            placeholder="Write a short review (optional)..."
+                            accessibilityLabel={t('Review comment')}
+                            placeholder={t('Write a short review (optional)...')}
                             placeholderTextColor={colors.text.muted}
                             multiline
                             numberOfLines={3}
@@ -122,12 +124,12 @@ export function ReviewModal({ visible, txId, targetPubkey, targetCallsign, onClo
 
                         <View style={styles.buttonRow}>
                             <Pressable style={styles.skipBtn} accessibilityRole="button" accessibilityState={{ disabled: submitting }} onPress={onClose} disabled={submitting}>
-                                <Text style={styles.skipText}>Skip for now</Text>
+                                <Text style={styles.skipText}>{t('Skip for now')}</Text>
                             </Pressable>
                             <Pressable
                                 style={[styles.submitBtn, submitting && styles.btnDisabled]}
                                 accessibilityRole="button"
-                                accessibilityLabel={submitting ? (isExisting ? 'Updating rating...' : 'Submitting rating...') : (isExisting ? 'Update Rating' : 'Submit Rating')}
+                                accessibilityLabel={submitting ? (isExisting ? t('Updating rating...') : t('Submitting rating...')) : (isExisting ? t('Update Rating') : t('Submit Rating'))}
                                 accessibilityState={{ disabled: submitting, busy: submitting }}
                                 onPress={handleSubmit}
                                 disabled={submitting}
@@ -135,7 +137,7 @@ export function ReviewModal({ visible, txId, targetPubkey, targetCallsign, onClo
                                 {submitting ? (
                                     <ActivityIndicator size="small" color={colors.text.inverse} />
                                 ) : (
-                                    <Text style={styles.submitText}>{isExisting ? 'Update Rating' : 'Submit Rating'}</Text>
+                                    <Text style={styles.submitText}>{isExisting ? t('Update Rating') : t('Submit Rating')}</Text>
                                 )}
                             </Pressable>
                         </View>

@@ -17,7 +17,7 @@ import { recordRequestSigning } from './nodes';
 import { trackInfoRead } from './request-signing-version';
 
 import { GLOBAL_NODE_URL } from './global-node-url';
-import { featureModeFor, normaliseLang, type FeatureMode, type Lang, type ShowcaseFeature } from '@beanpool/core';
+import { featureModeFor, normaliseLang, word, type FeatureMode, type Lang, type ShowcaseFeature } from '@beanpool/core';
 
 /** The worldwide community's one address (utils/global-node-url.ts, which imports nothing). */
 export { GLOBAL_NODE_URL };
@@ -429,8 +429,8 @@ export function invitesOn(features: NodeFeatures | null | undefined): boolean {
     return features?.invites !== false;
 }
 
-/** What a poll card says on the worldwide community, above how its ballot works. */
-export const INFORMAL_POLL_NOTE = 'An informal poll; it decides nothing';
+/** What a poll card says on the worldwide community, above how its ballot works: a word() key, shown through t(). */
+export const INFORMAL_POLL_NOTE = word('An informal poll; it decides nothing');
 
 /**
  * Whether this node's polls are labelled informal: the worldwide community's are. Anyone may join it with a sign-in, so

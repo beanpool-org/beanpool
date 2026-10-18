@@ -9,15 +9,19 @@
 
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import { t } from '@beanpool/core';
 import { useTheme } from '../app/ThemeContext';
 import { EXAMPLE_BADGE, EXAMPLE_LISTINGS, EXAMPLES_HEADING, EXAMPLES_NOTE, exampleCardA11y } from '../utils/example-listings';
+
+/** The section's words, word() keys from utils/example-listings.ts, shown here through t(). */
+const LINES = { badge: EXAMPLE_BADGE, heading: EXAMPLES_HEADING, note: EXAMPLES_NOTE };
 
 export function ExampleListings() {
     const { colors } = useTheme();
     return (
         <View testID="example-listings" style={styles.section}>
-            <Text accessibilityRole="header" style={[styles.heading, { color: colors.text.heading }]}>{EXAMPLES_HEADING}</Text>
-            <Text style={[styles.note, { color: colors.text.secondary }]}>{EXAMPLES_NOTE}</Text>
+            <Text accessibilityRole="header" style={[styles.heading, { color: colors.text.heading }]}>{t(LINES.heading)}</Text>
+            <Text style={[styles.note, { color: colors.text.secondary }]}>{t(LINES.note)}</Text>
             {EXAMPLE_LISTINGS.map(example => {
                 const type = example.type === 'offer' ? colors.market.offer : colors.market.need;
                 return (
@@ -33,16 +37,16 @@ export function ExampleListings() {
                         <View style={styles.body}>
                             <View style={styles.badges}>
                                 <View style={[styles.badge, { backgroundColor: colors.border.default, borderColor: colors.border.strong }]}>
-                                    <Text style={[styles.badgeText, { color: colors.text.heading }]} maxFontSizeMultiplier={1.3}>{EXAMPLE_BADGE.toUpperCase()}</Text>
+                                    <Text style={[styles.badgeText, { color: colors.text.heading }]} maxFontSizeMultiplier={1.3}>{t(LINES.badge).toUpperCase()}</Text>
                                 </View>
                                 <View style={[styles.badge, { backgroundColor: type.bg, borderColor: type.bg }]}>
                                     <Text style={[styles.badgeText, { color: type.fg }]} maxFontSizeMultiplier={1.3}>
-                                        {example.type === 'offer' ? 'OFFER' : 'NEED'}
+                                        {example.type === 'offer' ? t('OFFER') : t('NEED')}
                                     </Text>
                                 </View>
                             </View>
-                            <Text style={[styles.title, { color: colors.text.body }]}>{example.title}</Text>
-                            <Text style={[styles.description, { color: colors.text.secondary }]}>{example.description}</Text>
+                            <Text style={[styles.title, { color: colors.text.body }]}>{t(example.title)}</Text>
+                            <Text style={[styles.description, { color: colors.text.secondary }]}>{t(example.description)}</Text>
                         </View>
                     </View>
                 );

@@ -8,6 +8,7 @@
 
 import React from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { t } from '@beanpool/core';
 import { useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { NEW_POST_TYPES, composeOptionA11yLabel, type ComposePostType } from '../utils/compose-options';
 
@@ -28,10 +29,10 @@ export function NewPostTypeSheet({ visible, onClose, onSelect }: NewPostTypeShee
             animationType="fade"
             onRequestClose={onClose}
         >
-            <Pressable style={styles.actionSheetBackdrop} accessibilityRole="button" accessibilityLabel="Close create post sheet" onPress={onClose}>
+            <Pressable style={styles.actionSheetBackdrop} accessibilityRole="button" accessibilityLabel={t('Close create post sheet')} onPress={onClose}>
                 <Pressable style={styles.actionSheetContainer} onPress={(e) => e.stopPropagation()}>
-                    <Text style={styles.actionSheetTitle}>Create New Post</Text>
-                    <Text style={styles.actionSheetSubtitle}>What would you like to share with the village?</Text>
+                    <Text style={styles.actionSheetTitle}>{t('Create New Post')}</Text>
+                    <Text style={styles.actionSheetSubtitle}>{t('What would you like to share with the village?')}</Text>
 
                     {NEW_POST_TYPES.map((option, i) => (
                         <Pressable
@@ -46,8 +47,8 @@ export function NewPostTypeSheet({ visible, onClose, onSelect }: NewPostTypeShee
                         >
                             <Text style={styles.actionSheetEmoji}>{option.emoji}</Text>
                             <View style={{ flex: 1 }}>
-                                <Text style={styles.actionSheetOptionTitle}>{option.title}</Text>
-                                <Text style={styles.actionSheetOptionDesc}>{option.description}</Text>
+                                <Text style={styles.actionSheetOptionTitle}>{t(option.title)}</Text>
+                                <Text style={styles.actionSheetOptionDesc}>{t(option.description)}</Text>
                             </View>
                         </Pressable>
                     ))}
@@ -55,10 +56,10 @@ export function NewPostTypeSheet({ visible, onClose, onSelect }: NewPostTypeShee
                     <Pressable
                         style={styles.actionSheetCancel}
                         accessibilityRole="button"
-                        accessibilityLabel="Cancel"
+                        accessibilityLabel={t('Cancel')}
                         onPress={onClose}
                     >
-                        <Text style={styles.actionSheetCancelText}>Cancel</Text>
+                        <Text style={styles.actionSheetCancelText}>{t('Cancel')}</Text>
                     </Pressable>
                 </Pressable>
             </Pressable>

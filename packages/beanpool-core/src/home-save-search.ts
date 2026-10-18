@@ -71,9 +71,9 @@ export function saveSearchState(layout: Pick<HomeLayoutV2, 'cards'> | null, sett
     return 'add';
 }
 
-/** The Market's button, and its screen-reader name with the words in it. */
-export const SAVE_SEARCH_BUTTON = 'Save this search to Home';
-export const saveSearchLabel = (q: string): string => `Save the search "${q.trim()}" to Home`;
+/** The Market's button (a word() key, shown through t()), and its screen-reader name with the words in it. */
+export const SAVE_SEARCH_BUTTON = word('Save this search to Home');
+export const saveSearchLabel = (q: string): string => t('Save the search "{q}" to Home', { q: q.trim() });
 
 /**
  * Home's line when it can't keep a search yet: the community hasn't answered (offline with nothing kept, a server older

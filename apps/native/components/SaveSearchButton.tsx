@@ -6,8 +6,11 @@
  */
 import React from 'react';
 import { Pressable, StyleSheet, Text } from 'react-native';
-import { SAVE_SEARCH_BUTTON, saveSearchLabel } from '@beanpool/core';
+import { SAVE_SEARCH_BUTTON, saveSearchLabel, t } from '@beanpool/core';
 import { colors as defaultColors, type AppColors } from '../constants/colors';
+
+/** The button's words: core's word() key, shown here through t(). */
+const LINES = { button: SAVE_SEARCH_BUTTON };
 
 export function SaveSearchButton({ q, onPress, colors = defaultColors }: { q: string; onPress: () => void; colors?: AppColors }): React.JSX.Element {
     return (
@@ -19,7 +22,7 @@ export function SaveSearchButton({ q, onPress, colors = defaultColors }: { q: st
             testID="market-save-search"
         >
             <Text style={[styles.icon, { color: colors.accent.primary }]} importantForAccessibility="no" accessibilityElementsHidden>＋</Text>
-            <Text style={[styles.line, { color: colors.accent.primary }]}>{SAVE_SEARCH_BUTTON}</Text>
+            <Text style={[styles.line, { color: colors.accent.primary }]}>{t(LINES.button)}</Text>
         </Pressable>
     );
 }

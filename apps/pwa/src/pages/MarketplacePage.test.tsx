@@ -4,7 +4,7 @@ import React from 'react';
 import { MarketplacePage } from './MarketplacePage';
 import type { BeanPoolIdentity } from '../lib/identity';
 import * as api from '../lib/api';
-import { livePostChange } from '@beanpool/core';
+import { SAVE_SEARCH_BUTTON, livePostChange, setLanguage } from '@beanpool/core';
 import { routeLivePostChange, resetLivePostsForTest } from '../lib/live-posts';
 import { ACCOUNT_EPOCH_KEY, resetAccountEpochForTest } from '../lib/account-epoch';
 import { epochEndsInAnotherTab } from '../lib/another-tab';
@@ -135,6 +135,24 @@ describe("MarketplacePage: a saved search's See more on Home fills the search (C
         expect(save).toHaveAccessibleName('Save the search "fresh eggs" to Home');
         fireEvent.click(save);
         expect(onSaveSearch).toHaveBeenCalledWith({ q: 'fresh eggs', kind: 'offer' });
+    });
+
+    it('Save this search to Home: the words shown and the screen-reader name are one language (review of #2166)', async () => {
+        // A French catalog that gives both keys a value (the drafting pass will write the real ones).
+        setLanguage('fr', [{
+            [SAVE_SEARCH_BUTTON]: 'Garder cette recherche sur l’Accueil',
+            'Save the search "{q}" to Home': 'Garder la recherche « {q} » sur l’Accueil',
+        }]);
+        try {
+            render(<MarketplacePage identity={identity} onSaveSearch={vi.fn()} />);
+            await screen.findByText('Bicycle Repair');
+            fireEvent.change(screen.getByPlaceholderText('Search marketplace...'), { target: { value: 'eggs' } });
+            const save = await screen.findByTestId('market-save-search');
+            expect(save).toHaveTextContent('Garder cette recherche sur l’Accueil');
+            expect(save).toHaveAccessibleName('Garder la recherche « eggs » sur l’Accueil');
+        } finally {
+            setLanguage('en');
+        }
     });
 
     it('Save this search to Home: none under Events or Polls, none without the way to Home, none for a non-member', async () => {

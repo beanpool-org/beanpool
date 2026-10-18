@@ -20,7 +20,7 @@ import {
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useIdentity } from '../IdentityContext';
 import { loadIdentity } from '../../utils/identity';
-import { getProfileStatus, describeMissing } from '../../utils/profile-status';
+import { getProfileStatus, acceptNeedsProfileLine } from '../../utils/profile-status';
 import { ReviewModal } from '../../components/ReviewModal';
 import { CurrencyDisplay } from '../../components/CurrencyDisplay';
 import { MemberAvatar } from '../../components/MemberAvatar';
@@ -38,32 +38,49 @@ import { useReaderFeatures } from '../../utils/use-reader-features';
 import { readsOwn } from '../../utils/reads-own';
 import { showcaseMode } from '../../utils/node-profile';
 import { LocalCommunityMark } from '../../components/showcase/LocalCommunityMark';
-import { LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_EMOJI, placeShownRoughly, PLACE_WORDS, t } from '@beanpool/core';
+import { LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_EMOJI, placeShownRoughly, PLACE_WORDS, formatNumber, t, tn } from '@beanpool/core';
+import { Sentence } from '../../components/Sentence';
 import { hostLetsInDefault } from '../../utils/events';
 import { marketShowsBeans, NO_BEANS_TERMS, NO_BEANS_EDIT_NOTE, noBeansTermsNote } from '../../utils/market-global';
 import { isDmNotLocked, dmNotLockedLine } from '../../utils/dm-lock';
 import { REPORT_REASONS, CHILD_SAFETY_REASON, CHILD_SAFETY_HINT, reportedAlertBody } from '../../utils/reportReasons';
 
 // Turn a server trade-gate rejection into a friendly title + message. The covenant / contribution
-// / holiday gates carry a stable "PREFIX: <human text>" so we can give them a helpful heading.
+// / holiday gates carry a stable "PREFIX: <human text>" so we can give them a helpful heading. The headings and the
+// phone's own sentences are in the member's language; the node's own sentence is shown as it sent it (slice S4).
 function explainTradeError(e: any): { title: string; message: string } {
-    const raw = String(e?.message || e || 'Something went wrong');
+    const raw = String(e?.message || e || t('Something went wrong'));
     // Offer covenant, banded (Trust Model v3): "FLOOR_LOCKED:live:need:unlockedAt:wouldReach: <sentence>".
     // The trailing sentence already has the exact numbers — surface it verbatim.
     if (raw.startsWith('FLOOR_LOCKED')) {
-        return { title: '🎣 Post an Offer to go deeper', message: raw.replace(/^FLOOR_LOCKED(:\d+){4}:\s*/, '') };
+        return { title: t('🎣 Post an Offer to go deeper'), message: raw.replace(/^FLOOR_LOCKED(:\d+){4}:\s*/, '') };
     }
     if (raw.startsWith('COVENANT_REQUIRED')) {
-        return { title: '🎣 Post an Offer first', message: 'To spend on community credit (take your balance negative) you need at least one active Offer posted — a line in the water so others can trade with you in return. Post an Offer, then try again.' };
+        return { title: t('🎣 Post an Offer first'), message: t('To spend on community credit (take your balance negative) you need at least one active Offer posted — a line in the water so others can trade with you in return. Post an Offer, then try again.') };
     }
     if (raw.startsWith('CONTRIBUTION_REQUIRED')) {
-        return { title: 'List an Offer first', message: 'List at least one Offer of your own before you can request or accept from others.' };
+        return { title: t('List an Offer first'), message: t('List at least one Offer of your own before you can request or accept from others.') };
     }
     if (raw.startsWith('HOLIDAY_MODE')) {
-        return { title: '🌴 Holiday mode is on', message: 'Turn off holiday mode in Settings before trading.' };
+        return { title: t('🌴 Holiday mode is on'), message: t('Turn off holiday mode in Settings before trading.') };
     }
-    return { title: 'Error', message: raw.replace(/^[A-Z_]+:\s*/, '') };
+    return { title: t('Error'), message: raw.replace(/^[A-Z_]+:\s*/, '') };
 }
+
+/** Lines kept as word() elsewhere (utils/market-global.ts, core), shown here in the member's language. */
+const LINES = { noBeansEditNote: NO_BEANS_EDIT_NOTE, childSafety: CHILD_SAFETY_REASON, childSafetyHint: CHILD_SAFETY_HINT };
+
+/** The unit after a price: per hour, day, week or month, or none for a total. */
+function priceUnitWords(priceType: string | null | undefined): string {
+    if (priceType === 'hourly') return t('/ Hr', undefined, 'price per hour');
+    if (priceType === 'daily') return t('/ Dy', undefined, 'price per day');
+    if (priceType === 'weekly') return t('/ Wk', undefined, 'price per week');
+    if (priceType === 'monthly') return t('/ Mo', undefined, 'price per month');
+    return '';
+}
+
+/** "(4.5) • 3 Reviews": a member's average and how many reviews, in the member's language. */
+const reviewsLine = (average: number, count: number) => tn(count, '({average}) • {n} Reviews', '({average}) • {n} Reviews', { average: formatNumber(average, 1) });
 
 export default function PostDetailModal() {
     const insets = useSafeAreaInsets();
@@ -76,7 +93,8 @@ export default function PostDetailModal() {
         closeBtnText: { color: colors.text.inverse, fontWeight: 'bold' },
 
         header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.surface.subtle },
-        backButton: { flexDirection: 'row', width: 68, height: 40, alignItems: 'center' },
+        // Grows for a longer word than Back (up to 120, then the word shrinks), so it is never cut at 320dp and 1.3x.
+        backButton: { flexDirection: 'row', minWidth: 68, maxWidth: 120, height: 40, alignItems: 'center' },
         backText: { color: colors.text.body, fontSize: 24, marginTop: -2 },
         headerTitle: { fontSize: 18, fontWeight: 'bold', color: colors.text.body, letterSpacing: 1, textTransform: 'uppercase' },
 
@@ -692,9 +710,9 @@ export default function PostDetailModal() {
         }
         return (
             <View style={[styles.errorContainer, { paddingTop: insets.top }]}>
-                <Text style={styles.errorText}>Post not found. It may have been expired by the Network.</Text>
+                <Text style={styles.errorText}>{t('Post not found. It may have been expired by the Network.')}</Text>
                 <Pressable accessibilityRole="button" onPress={() => { if (router.canGoBack()) router.back(); else router.replace('/(tabs)'); }} style={styles.closeBtn}>
-                    <Text style={styles.closeBtnText}>Return to Market</Text>
+                    <Text style={styles.closeBtnText}>{t('Return to Market')}</Text>
                 </Pressable>
             </View>
         );
@@ -720,8 +738,8 @@ export default function PostDetailModal() {
         ? (activeTx.seller_pubkey === identity?.publicKey || (isOperatorOfAuthor && activeTx.seller_pubkey === post.author_pubkey))
         : ((post.type === 'offer' && isOwnPost) || (post.type === 'need' && isAcceptedByMe));
     const targetPeerCallsign = activeTx 
-        ? (isPayer ? activeTx.seller_callsign || 'Peer' : activeTx.buyer_callsign || 'Peer')
-        : (isOwnPost ? (post.accepted_by_callsign || 'Peer') : (post.author_callsign || post.author_pubkey?.slice(0, 6) || 'Unknown'));
+        ? (isPayer ? activeTx.seller_callsign || t('Peer') : activeTx.buyer_callsign || t('Peer'))
+        : (isOwnPost ? (post.accepted_by_callsign || t('Peer')) : (post.author_callsign || post.author_pubkey?.slice(0, 6) || t('Unknown')));
     const targetPeerPubkey = activeTx
         ? (isPayer ? activeTx.seller_pubkey : activeTx.buyer_pubkey)
         : (isOwnPost ? post.accepted_by : post.author_pubkey);
@@ -731,8 +749,8 @@ export default function PostDetailModal() {
 
     const isOffer = post.type === 'offer';
     const emoji = categoryEmoji(post.category);
-    const cardAuthor = post.author_callsign || post.author_pubkey?.slice(0, 6) || 'Unknown';
-    const priceLabel = isOffer ? 'ASKING PRICE' : 'WILLING TO PAY';
+    const cardAuthor = post.author_callsign || post.author_pubkey?.slice(0, 6) || t('Unknown');
+    const priceLabel = isOffer ? t('ASKING PRICE') : t('WILLING TO PAY');
 
     let photos: string[] = [];
     if (post.photos) {
@@ -755,7 +773,7 @@ export default function PostDetailModal() {
     };
 
     const handleSave = async () => {
-        if (!editTitle.trim()) { Alert.alert('Error', 'Title is required'); return; }
+        if (!editTitle.trim()) { Alert.alert(t('Error'), t('Title is required')); return; }
         setSaving(true);
         try {
             await updatePost(post.id, {
@@ -774,7 +792,7 @@ export default function PostDetailModal() {
             setEditMode(false);
         } catch (e: any) {
             // The node's own words when it gave any: a price held by an open deal says so, and how to change it.
-            Alert.alert('Error', String(e?.message || 'Failed to save changes'));
+            Alert.alert(t('Error'), String(e?.message || t('Failed to save changes')));
         }
         setSaving(false);
     };
@@ -788,22 +806,22 @@ export default function PostDetailModal() {
             else await resumePost(post.id);
             setPost({ ...post, status: willPause ? 'paused' : 'active' });
         } catch (e: any) {
-            Alert.alert('Error', String(e?.message || 'Failed to update offer'));
+            Alert.alert(t('Error'), String(e?.message || t('Failed to update offer')));
         } finally {
             setToggling(false);
         }
     };
 
     const handleDelete = () => {
-        Alert.alert('Delete Post', 'Are you sure you want to delete this post?', [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Delete', style: 'destructive', onPress: async () => {
+        Alert.alert(t('Delete Post'), t('Are you sure you want to delete this post?'), [
+            { text: t('Cancel'), style: 'cancel' },
+            { text: t('Delete'), style: 'destructive', onPress: async () => {
                 setDeleting(true);
                 try {
                     await deletePost(post.id);
                     if (router.canGoBack()) router.back(); else router.replace('/(tabs)');
                 } catch (e) {
-                    Alert.alert('Error', 'Failed to delete post');
+                    Alert.alert(t('Error'), t('Failed to delete post'));
                     setDeleting(false);
                 }
             }},
@@ -824,7 +842,7 @@ export default function PostDetailModal() {
             const updated = await getPost(post.id);
             setPost(updated);
             hapticSuccess();
-            Alert.alert('Approved', 'Funds locked in trust successfully.');
+            Alert.alert(t('Approved'), t('Funds locked in trust successfully.'));
             
             // Route to chat with requester
             const req = requests.find(r => r.id === transactionId);
@@ -838,7 +856,7 @@ export default function PostDetailModal() {
                     console.error('Failed to create chat on approve', e);
                 }
             }
-        } catch (e: any) { hapticWarning(); Alert.alert('Error', e.message); }
+        } catch (e: any) { hapticWarning(); Alert.alert(t('Error'), e.message); }
         setAccepting(false);
     };
 
@@ -868,18 +886,20 @@ export default function PostDetailModal() {
                 try {
                     const conv = await createConversationApi('dm', [peerPubkey, identity.publicKey], identity.publicKey, undefined, post.id);
                     convId = conv?.id ?? null;
-                    if (!convId) throw new Error('The chat could not be opened.');
+                    if (!convId) throw new Error(t('The chat could not be opened.'));
                     await insertMessage(convId, identity.publicKey, words);
                 } catch (e: any) {
                     // The offer is declined either way. The words are not lost: the chat opens with them in the box.
                     console.error('Failed to send the decline message', e);
                     if (convId) {
-                        Alert.alert('Offer declined', isDmNotLocked(e)
+                        Alert.alert(t('Offer declined'), isDmNotLocked(e)
                             ? dmNotLockedLine(null)
-                            : "Your message wasn't sent. It's in the chat, ready to send again.");
+                            : t("Your message wasn't sent. It's in the chat, ready to send again."));
                         router.push({ pathname: '/chat/[id]', params: { id: convId, prefill: words } });
                     } else {
-                        Alert.alert('Offer declined', `Your message wasn't sent: ${e?.message || 'the chat could not be opened'}`);
+                        Alert.alert(t('Offer declined'), e?.message
+                            ? t("Your message wasn't sent: {reason}", { reason: e.message })
+                            : t("Your message wasn't sent: the chat could not be opened"));
                     }
                 }
             }
@@ -887,7 +907,7 @@ export default function PostDetailModal() {
             setRequests(prev => prev.filter(r => r.id !== rejectModalTxId));
             setRejectModalTxId(null);
             hapticSuccess();
-        } catch (e: any) { Alert.alert('Error', e.message); }
+        } catch (e: any) { Alert.alert(t('Error'), e.message); }
         setAccepting(false);
     };
 
@@ -897,14 +917,14 @@ export default function PostDetailModal() {
         try {
             await cancelMarketplaceRequest(myRequest.id, identity.publicKey);
             setRequests(prev => prev.filter(r => r.id !== myRequest.id));
-        } catch (e: any) { Alert.alert('Error', e.message); }
+        } catch (e: any) { Alert.alert(t('Error'), e.message); }
         setAccepting(false);
     };
 
     const pickEditPhoto = async () => {
         if (editPhotos.length >= 5) return;
-        Alert.alert('Add Photo', 'Choose a source', [
-            { text: 'Camera', onPress: async () => {
+        Alert.alert(t('Add Photo'), t('Choose a source'), [
+            { text: t('Camera'), onPress: async () => {
                 try {
                     const perm = await ImagePicker.requestCameraPermissionsAsync();
                     if (!perm.granted) return;
@@ -920,10 +940,10 @@ export default function PostDetailModal() {
                         }
                     }
                 } catch (e: any) {
-                    Alert.alert('Camera Unavailable', e?.message || 'Could not launch camera.');
+                    Alert.alert(t('Camera Unavailable'), e?.message || t('Could not launch camera.'));
                 }
             }},
-            { text: 'Gallery', onPress: async () => {
+            { text: t('Gallery'), onPress: async () => {
                 const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.7, base64: false });
                 if (!result.canceled && result.assets[0].uri) {
                     const manipResult = await ImageManipulator.manipulateAsync(
@@ -936,7 +956,7 @@ export default function PostDetailModal() {
                     }
                 }
             }},
-            { text: 'Cancel', style: 'cancel' },
+            { text: t('Cancel'), style: 'cancel' },
         ]);
     };
 
@@ -948,9 +968,9 @@ export default function PostDetailModal() {
             <View style={styles.header}>
                 <Pressable accessibilityRole="button" onPress={goBack} style={styles.backButton}>
                     <Text style={styles.backText}>←</Text>
-                    <Text style={{ color: colors.text.body, fontSize: 16, fontWeight: 'bold', marginLeft: 4 }}>Back</Text>
+                    <Text style={{ color: colors.text.body, fontSize: 16, fontWeight: 'bold', marginLeft: 4, flexShrink: 1 }} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Back')}</Text>
                 </Pressable>
-                <Text style={[styles.headerTitle, { flex: 1, textAlign: 'center' }]}>{isOffer ? 'Offer' : 'Need'}</Text>
+                <Text style={[styles.headerTitle, { flex: 1, textAlign: 'center' }]} numberOfLines={1}>{isOffer ? t('Offer') : t('Need')}</Text>
                 <View style={{ width: 68 }} />
             </View>
 
@@ -963,7 +983,9 @@ export default function PostDetailModal() {
                     <View style={styles.catBadge}>
                         <Text style={styles.catEmoji}>{isPulsePost ? '🗞️' : emoji}</Text>
                         <Text style={[styles.catLabel, { color: isPulsePost ? colors.feedback.warning.fg : (isOffer ? colors.brand.primary : colors.market.need.fg) }]} numberOfLines={1}>
-                            {isPulsePost ? '● DAILY PULSE' : `${isOffer ? '● ' : '● '}${post.type.toUpperCase()} · ${categoryLabel(post.category).toUpperCase()}${post.repeatable ? ' · RECURRING' : ''}`}
+                            {isPulsePost ? t('● DAILY PULSE') : post.repeatable
+                                ? t('● {type} · {category} · RECURRING', { type: isOffer ? t('OFFER') : t('NEED'), category: categoryLabel(post.category).toUpperCase() })
+                                : t('● {type} · {category}', { type: isOffer ? t('OFFER') : t('NEED'), category: categoryLabel(post.category).toUpperCase() })}
                         </Text>
                     </View>
                     <Text style={styles.timeAgo} numberOfLines={1}>{getTimeAgo(post.created_at)}</Text>
@@ -973,7 +995,10 @@ export default function PostDetailModal() {
                 {post.cash_also_needed === 1 && (
                     <View style={{ backgroundColor: colors.feedback.warning.bg, borderColor: colors.feedback.warning.border, borderWidth: 1, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8, marginBottom: 10 }}>
                         <Text style={{ color: colors.feedback.warning.fg, fontSize: 12, lineHeight: 17 }}>
-                            💸 <Text style={{ fontWeight: '700' }}>Cash also needed</Text> for fuel or materials, at cost. Time and tools are beans. Agree the details in chat — the app never handles the money.
+                            <Sentence
+                                text={t('💸 {cash} for fuel or materials, at cost. Time and tools are beans. Agree the details in chat — the app never handles the money.')}
+                                parts={{ cash: <Text style={{ fontWeight: '700' }}>{t('Cash also needed')}</Text> }}
+                            />
                         </Text>
                     </View>
                 )}
@@ -983,7 +1008,9 @@ export default function PostDetailModal() {
                     <View style={{ backgroundColor: colors.brand.tint, borderColor: colors.brand.primary, borderWidth: 1.5, borderRadius: 12, padding: 12, marginHorizontal: 20, marginBottom: 12, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                         <MaterialCommunityIcons name="lock" size={18} color={colors.brand.primary} />
                         <Text style={{ fontSize: 13, fontWeight: '800', color: colors.brand.primary, flex: 1 }}>
-                            Only {post.target_group_name || post.targetGroupName || 'group members'} can see this
+                            {post.target_group_name || post.targetGroupName
+                                ? t('Only {group} can see this', { group: post.target_group_name || post.targetGroupName })
+                                : t('Only group members can see this')}
                         </Text>
                     </View>
                 )}
@@ -992,7 +1019,7 @@ export default function PostDetailModal() {
                 <Text style={styles.postTitle}>{post.title}</Text>
 
                 {/* Description */}
-                <Text style={styles.description}>{post.description || 'No description provided.'}</Text>
+                <Text style={styles.description}>{post.description || t('No description provided.')}</Text>
 
                 {/* Photos */}
                 {photos.length > 0 && (
@@ -1006,12 +1033,12 @@ export default function PostDetailModal() {
                     that group, so VoiceOver reads it and reaches it as a button (review of #1852, finding 8). */}
                 {!isPulsePost && !showsBeans && (
                     <View style={styles.priceCard} testID="no-beans-terms">
-                        <View style={{ alignSelf: 'stretch', alignItems: 'center' }} accessible accessibilityLabel={`${NO_BEANS_TERMS.value}. ${noBeansTermsNote(beansPreview)}`}>
-                            <Text style={styles.priceLabel}>{NO_BEANS_TERMS.label}</Text>
-                            <Text style={[styles.priceValue, { fontSize: 22, textAlign: 'center', paddingHorizontal: 12 }]}>{NO_BEANS_TERMS.value}</Text>
+                        <View style={{ alignSelf: 'stretch', alignItems: 'center' }} accessible accessibilityLabel={t('{terms}. {note}', { terms: t(NO_BEANS_TERMS.value), note: noBeansTermsNote(beansPreview) })}>
+                            <Text style={styles.priceLabel}>{t(NO_BEANS_TERMS.label)}</Text>
+                            <Text style={[styles.priceValue, { fontSize: 22, textAlign: 'center', paddingHorizontal: 12 }]}>{t(NO_BEANS_TERMS.value)}</Text>
                             <Text style={{ color: colors.text.secondary, fontSize: 13, lineHeight: 18, textAlign: 'center', marginTop: 6, paddingHorizontal: 16 }}>{noBeansTermsNote(beansPreview)}</Text>
                         </View>
-                        {beansPreview && <View style={{ paddingHorizontal: 16 }}><LocalCommunityMark variant="line" feature="beans" text={LOCAL_COMMUNITY_LINES.price} /></View>}
+                        {beansPreview && <View style={{ paddingHorizontal: 16 }}><LocalCommunityMark variant="line" feature="beans" text={t(LOCAL_COMMUNITY_LINES.price)} /></View>}
                     </View>
                 )}
                 {!isPulsePost && showsBeans && (
@@ -1019,9 +1046,8 @@ export default function PostDetailModal() {
                         <Text style={styles.priceLabel}>{priceLabel}</Text>
                         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
                             <CurrencyDisplay amount={post.credits} style={styles.priceValue} asView={true} />
-                            <Text style={[styles.priceCurrency, { marginLeft: 2 }]}>{
-                                { fixed: '', hourly: ' / Hr', daily: ' / Dy', weekly: ' / Wk', monthly: ' / Mo' }[post.price_type as string] || ''
-                            }</Text>
+                            {/* The unit, a space after the amount: " / Hr". */}
+                            <Text style={[styles.priceCurrency, { marginLeft: 2 }]}>{priceUnitWords(post.price_type) ? ` ${priceUnitWords(post.price_type)}` : ''}</Text>
                         </View>
                     </View>
                 )}
@@ -1029,7 +1055,7 @@ export default function PostDetailModal() {
                 {/* Author / Counterparty Card */}
                 {isOwnPost && targetPeerPubkey ? (
                     <Pressable accessibilityRole="button" style={styles.authorCard} onPress={() => router.push({ pathname: '/public-profile', params: { publicKey: targetPeerPubkey, callsign: targetPeerCallsign } })}>
-                        <Text style={styles.authorCardLabel}>{isOffer ? 'ACCEPTED BY' : 'PROVIDER'}</Text>
+                        <Text style={styles.authorCardLabel}>{isOffer ? t('ACCEPTED BY') : t('PROVIDER')}</Text>
                         <View style={styles.authorRow}>
                             <View style={styles.avatar}>
                                 <MemberAvatar avatarUrl={targetPeerAvatar} pubkey={targetPeerPubkey} callsign={targetPeerCallsign} size={48} borderRadius={24} />
@@ -1040,10 +1066,10 @@ export default function PostDetailModal() {
                                     {targetPeerAvgRating !== null && targetPeerRatingCount > 0 ? (
                                         <>
                                             <Text style={{ color: palette.amber400, letterSpacing: -1 }}>{renderBeans(targetPeerAvgRating)}</Text>
-                                            <Text> {`(${targetPeerAvgRating.toFixed(1)}) • ${targetPeerRatingCount} Reviews`}</Text>
+                                            <Text> {reviewsLine(targetPeerAvgRating, targetPeerRatingCount)}</Text>
                                         </>
                                     ) : (
-                                        <Text>☆☆☆☆☆ No ratings yet</Text>
+                                        <Text>{t('☆☆☆☆☆ No ratings yet')}</Text>
                                     )}
                                 </Text>
                             </View>
@@ -1057,7 +1083,7 @@ export default function PostDetailModal() {
                         disabled={isHiddenAuthor(post.author_pubkey)}
                         onPress={() => router.push({ pathname: '/public-profile', params: { publicKey: post.author_pubkey, callsign: cardAuthor } })}
                     >
-                        <Text style={styles.authorCardLabel}>POSTED BY</Text>
+                        <Text style={styles.authorCardLabel}>{t('POSTED BY')}</Text>
                         <View style={styles.authorRow}>
                             <View style={styles.avatar}>
                                 <MemberAvatar avatarUrl={post.author_avatar} pubkey={post.author_pubkey} callsign={cardAuthor} size={48} borderRadius={24} />
@@ -1068,10 +1094,10 @@ export default function PostDetailModal() {
                                     {authorAvgRating !== null && authorRatingCount > 0 ? (
                                         <>
                                             <Text style={{ color: palette.amber400, letterSpacing: -1 }}>{renderBeans(authorAvgRating)}</Text>
-                                            <Text> {`(${authorAvgRating.toFixed(1)}) • ${authorRatingCount} Reviews`}</Text>
+                                            <Text> {reviewsLine(authorAvgRating, authorRatingCount)}</Text>
                                         </>
                                     ) : (
-                                        <Text>☆☆☆☆☆ No ratings yet</Text>
+                                        <Text>{t('☆☆☆☆☆ No ratings yet')}</Text>
                                     )}
                                 </Text>
                             </View>
@@ -1093,34 +1119,38 @@ export default function PostDetailModal() {
                         {isPayer ? (
                             <>
                                 <Text style={{ color: colors.brand.primary, fontSize: 13, fontWeight: '700', textAlign: 'center', marginBottom: 4 }}>
-                                    ✅ Action Required: Release Credits
+                                    {t('✅ Action Required: Release Credits')}
                                 </Text>
                                 <Text style={{ color: colors.text.secondary, fontSize: 11, textAlign: 'center', marginBottom: 12, paddingHorizontal: 16 }}>
-                                    You are the Payer. Once {targetPeerCallsign} has fulfilled the terms, release the funds to complete the transaction.
+                                    {t('You are the Payer. Once {name} has fulfilled the terms, release the funds to complete the transaction.', { name: targetPeerCallsign })}
                                 </Text>
                                 
                                 {showCompleteConfirm ? (
                                     <View style={styles.confirmBox}>
-                                        <Text style={styles.confirmBoxTitle}>Finalize Transaction</Text>
+                                        <Text style={styles.confirmBoxTitle}>{t('Finalize Transaction')}</Text>
                                         {post.price_type !== 'fixed' && (
                                             <View style={{ marginBottom: 16 }}>
-                                                <Text style={styles.confirmBoxLabel}>CONFIRM ACTUAL {
-                                                    { hourly: 'HOURS', daily: 'DAYS', weekly: 'WEEKS', monthly: 'MONTHS' }[post.price_type as string] || 'UNITS'
-                                                } WORKED</Text>
-                                                <TextInput accessibilityLabel="Actual time worked" style={styles.confirmBoxInput} value={completeHours} onChangeText={setCompleteHours} keyboardType="numeric" placeholder="e.g. 2.5" placeholderTextColor={colors.text.muted} />
+                                                <Text style={styles.confirmBoxLabel}>{
+                                                    post.price_type === 'hourly' ? t('CONFIRM ACTUAL HOURS WORKED')
+                                                        : post.price_type === 'daily' ? t('CONFIRM ACTUAL DAYS WORKED')
+                                                        : post.price_type === 'weekly' ? t('CONFIRM ACTUAL WEEKS WORKED')
+                                                        : post.price_type === 'monthly' ? t('CONFIRM ACTUAL MONTHS WORKED')
+                                                        : t('CONFIRM ACTUAL UNITS WORKED')
+                                                }</Text>
+                                                <TextInput accessibilityLabel={t('Actual time worked')} style={styles.confirmBoxInput} value={completeHours} onChangeText={setCompleteHours} keyboardType="numeric" placeholder={t('e.g. 2.5')} placeholderTextColor={colors.text.muted} />
                                                 <Text style={{ color: colors.text.secondary, fontSize: 12, textAlign: 'center', marginTop: 4, paddingHorizontal: 12 }}>
-                                                    Adjust the final time up or down if the scope changed. The final credits released will be calculated automatically.
+                                                    {t('Adjust the final time up or down if the scope changed. The final credits released will be calculated automatically.')}
                                                 </Text>
                                             </View>
                                         )}
                                         <View style={{ flexDirection: 'row', gap: 10 }}>
                                             <Pressable accessibilityRole="button" style={styles.cancelActionBtn} onPress={() => setShowCompleteConfirm(false)} disabled={accepting}>
-                                                <Text style={styles.cancelActionBtnText} numberOfLines={1}>Cancel</Text>
+                                                <Text style={styles.cancelActionBtnText} numberOfLines={1}>{t('Cancel')}</Text>
                                             </Pressable>
                                             <Pressable accessibilityRole="button" style={[styles.confirmActionBtn, styles.confirmActionBtnGreen]} disabled={accepting || (post.price_type !== 'fixed' && !completeHours)} onPress={async () => {
                                                 const txToComplete = activeTx?.id || post.pending_transaction_id;
                                                 if (!txToComplete) {
-                                                    Alert.alert("Loading", "Trust transaction details are still loading. Please wait a moment and try again.");
+                                                    Alert.alert(t('Loading'), t('Trust transaction details are still loading. Please wait a moment and try again.'));
                                                     return;
                                                 }
                                                 if (!identity) return;
@@ -1140,30 +1170,33 @@ export default function PostDetailModal() {
                                                         targetCallsign: targetPeerCallsign 
                                                     });
                                                     hapticSuccess();
-                                                } catch(e: any) { hapticWarning(); Alert.alert('Error', e.message); } finally { setAccepting(false); }
+                                                } catch(e: any) { hapticWarning(); Alert.alert(t('Error'), e.message); } finally { setAccepting(false); }
                                             }}>
-                                                <Text style={styles.confirmActionBtnText}>{accepting ? 'Processing...' : 'Release Credits'}</Text>
+                                                <Text style={styles.confirmActionBtnText}>{accepting ? t('Processing...') : t('Release Credits')}</Text>
                                             </Pressable>
                                         </View>
                                     </View>
                                 ) : (
                                     <Pressable accessibilityRole="button" style={[styles.acceptBtn, styles.acceptBtnOffer]} onPress={() => { setShowCompleteConfirm(true); if(post.price_type !== 'fixed' && !completeHours) setCompleteHours(activeTx?.hours ? String(activeTx.hours) : '1'); }}>
-                                        <Text style={styles.acceptBtnText}>✅ Release Credits</Text>
+                                        <Text style={styles.acceptBtnText}>{t('✅ Release Credits')}</Text>
                                     </Pressable>
                                 )}
                             </>
                         ) : (
                             <>
                                 <Text style={{ color: colors.feedback.warning.fg, fontSize: 13, fontWeight: '700', textAlign: 'center', marginTop: 8, marginBottom: 8 }}>
-                                    ⏳ Pending Release by {targetPeerCallsign}
+                                    {t('⏳ Pending Release by {name}', { name: targetPeerCallsign })}
                                 </Text>
                                 <View style={{ paddingHorizontal: 16, marginBottom: 16, gap: 8 }}>
                                     <Text style={{ color: colors.text.body, fontSize: 14, textAlign: 'center', fontWeight: '600', lineHeight: 20 }}>
-                                        You are the Payee. Fulfill the terms exactly as agreed, then ask the Payer to release your credits. You will receive the net amount minus 1.5% transaction fee<Text style={{ color: colors.brand.primary, fontWeight: 'bold' }}> (100% community owned)</Text> (retained to balance the pool).
+                                        <Sentence
+                                            text={t('You are the Payee. Fulfill the terms exactly as agreed, then ask the Payer to release your credits. You will receive the net amount minus 1.5% transaction fee {owned} (retained to balance the pool).')}
+                                            parts={{ owned: <Text style={{ color: colors.brand.primary, fontWeight: 'bold' }}>{t('(100% community owned)')}</Text> }}
+                                        />
                                     </Text>
                                     <View style={{ backgroundColor: colors.feedback.danger.bg, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, borderColor: colors.feedback.danger.border }}>
                                         <Text style={{ color: colors.feedback.danger.fg, fontSize: 13, textAlign: 'center', fontWeight: '700' }}>
-                                            Note: If this post is still visible here, you have not yet received your credits.
+                                            {t('Note: If this post is still visible here, you have not yet received your credits.')}
                                         </Text>
                                     </View>
                                 </View>
@@ -1179,11 +1212,11 @@ export default function PostDetailModal() {
                                         const conv = await createConversationApi('dm', [targetPeerPubkey, identity.publicKey], identity.publicKey, undefined, post.id);
                                         if (conv) router.push(`/chat/${conv.id}`);
                                     } catch (e: any) {
-                                        Alert.alert("Error", e.message || "Failed to start chat.");
+                                        Alert.alert(t('Error'), e.message || t('Failed to start chat.'));
                                     }
                                 }}>
                                     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
-                                        <Text style={styles.messageBtnText}>💬 Message {targetPeerCallsign}</Text>
+                                        <Text style={styles.messageBtnText}>{t('💬 Message {name}', { name: targetPeerCallsign })}</Text>
                                         {unreadCount > 0 && (
                                             <View style={styles.unreadBadge}>
                                                 <Text style={styles.unreadBadgeText}>{unreadCount}</Text>
@@ -1193,15 +1226,15 @@ export default function PostDetailModal() {
                                 </Pressable>
                             )}
 
-                            <Pressable accessibilityRole="button" accessibilityHint="Cancels the transaction and returns the post to the market" style={styles.cancelTxBtn} disabled={accepting} onPress={() => {
+                            <Pressable accessibilityRole="button" accessibilityHint={t('Cancels the transaction and returns the post to the market')} style={styles.cancelTxBtn} disabled={accepting} onPress={() => {
                                 const txToCancel = activeTx?.id || post.pending_transaction_id;
                                 if (!txToCancel) {
-                                    Alert.alert("Loading", "Trust transaction details are still loading. Please wait a moment and try again.");
+                                    Alert.alert(t('Loading'), t('Trust transaction details are still loading. Please wait a moment and try again.'));
                                     return;
                                 }
-                                Alert.alert('Cancel Transaction', 'Return post to the market?', [
-                                    { text: 'No', style: 'cancel' },
-                                    { text: 'Yes, Cancel', style: 'destructive', onPress: async () => {
+                                Alert.alert(t('Cancel Transaction'), t('Return post to the market?'), [
+                                    { text: t('No'), style: 'cancel' },
+                                    { text: t('Yes, Cancel'), style: 'destructive', onPress: async () => {
                                         if(!identity) return;
                                         setAccepting(true);
                                         try {
@@ -1209,18 +1242,18 @@ export default function PostDetailModal() {
                                             if (router.canGoBack()) router.back(); else router.replace('/(tabs)');
                                         } catch(e:any) { 
                                             if (e.message?.includes('not found') || e.message?.includes('not authorized')) {
-                                                Alert.alert('Already Updated', 'This transaction was already cancelled or completed on another device. Your feed will automatically refresh.');
+                                                Alert.alert(t('Already Updated'), t('This transaction was already cancelled or completed on another device. Your feed will automatically refresh.'));
                                                 const { requestSync } = require('../../services/pillar-sync');
                                                 requestSync().catch(console.error);
                                                 if (router.canGoBack()) router.back(); else router.replace('/(tabs)');
                                             } else {
-                                                Alert.alert('Error', e.message); 
+                                                Alert.alert(t('Error'), e.message);
                                             }
                                         } finally { setAccepting(false); }
                                     }}
                                 ]);
                             }}>
-                                <Text style={styles.cancelTxBtnText}>❌ Cancel Trust Hold</Text>
+                                <Text style={styles.cancelTxBtnText}>{t('❌ Cancel Trust Hold')}</Text>
                             </Pressable>
                         </View>
                     </View>
@@ -1229,9 +1262,9 @@ export default function PostDetailModal() {
                 {/* 2. Own Completed Posts (Badge) */}
                 {isOwnPost && (post.status === 'completed' || activeTx?.status === 'completed') && (
                     <View style={styles.confirmBox}>
-                        <Text style={[styles.confirmBoxTitle, { color: colors.brand.primary }]}>✅ Deal Completed</Text>
+                        <Text style={[styles.confirmBoxTitle, { color: colors.brand.primary }]}>{t('✅ Deal Completed')}</Text>
                         <Text style={{ color: theme === 'dark' ? colors.text.secondary : palette.gray600, fontSize: 13, textAlign: 'center', marginBottom: 12 }}>
-                            This deal has concluded successfully and credits have been processed on the Ledger.
+                            {t('This deal has concluded successfully and credits have been processed on the Ledger.')}
                         </Text>
                     </View>
                 )}
@@ -1240,47 +1273,45 @@ export default function PostDetailModal() {
                 {isOwnPost && post.status === 'active' && (!activeTx || activeTx.status !== 'pending') && (
                     editMode ? (
                         <View style={styles.editSection}>
-                            <Text style={styles.editSectionTitle}>✏️ Edit Post</Text>
+                            <Text style={styles.editSectionTitle}>{t('✏️ Edit Post')}</Text>
 
                             {/* Type Toggle */}
                             <View style={styles.editTypeRow}>
                                 <Pressable accessibilityRole="button" accessibilityState={{ selected: editType === 'offer' }} style={[styles.editTypeBtn, editType === 'offer' && styles.editTypeBtnOffer]} onPress={() => setEditType('offer')}>
-                                    <Text style={[styles.editTypeBtnText, editType === 'offer' && styles.editTypeBtnTextActive]}>🟢 Offer</Text>
+                                    <Text style={[styles.editTypeBtnText, editType === 'offer' && styles.editTypeBtnTextActive]}>{t('🟢 Offer')}</Text>
                                 </Pressable>
                                 <Pressable accessibilityRole="button" accessibilityState={{ selected: editType === 'need' }} style={[styles.editTypeBtn, editType === 'need' && styles.editTypeBtnNeed]} onPress={() => setEditType('need')}>
-                                    <Text style={[styles.editTypeBtnText, editType === 'need' && styles.editTypeBtnTextActive]}>🟠 Need</Text>
+                                    <Text style={[styles.editTypeBtnText, editType === 'need' && styles.editTypeBtnTextActive]}>{t('🟠 Need')}</Text>
                                 </Pressable>
                             </View>
 
                             {/* Category */}
                             <View style={styles.editPickerWrap}>
                                 <Picker selectedValue={editCategory} onValueChange={v => setEditCategory(v)} style={styles.editPicker} dropdownIconColor={colors.text.secondary}>
-                                    {POST_CATEGORIES.map(c => <Picker.Item key={c.id} label={`${c.emoji} ${c.label}`} value={c.id} />)}
+                                    {POST_CATEGORIES.map(c => <Picker.Item key={c.id} label={t('{emoji} {label}', { emoji: c.emoji, label: t(c.label) })} value={c.id} />)}
                                 </Picker>
                             </View>
 
                             {/* Title */}
-                            <TextInput accessibilityLabel="Title" style={styles.editInput} value={editTitle} onChangeText={setEditTitle} placeholder="Title" placeholderTextColor={colors.text.muted} />
+                            <TextInput accessibilityLabel={t('Title')} style={styles.editInput} value={editTitle} onChangeText={setEditTitle} placeholder={t('Title')} placeholderTextColor={colors.text.muted} />
 
                             {/* Description */}
-                            <TextInput accessibilityLabel="Description" style={[styles.editInput, { minHeight: 80 }]} value={editDescription} onChangeText={setEditDescription} placeholder="Description" placeholderTextColor={colors.text.muted} multiline textAlignVertical="top" />
+                            <TextInput accessibilityLabel={t('Description')} style={[styles.editInput, { minHeight: 80 }]} value={editDescription} onChangeText={setEditDescription} placeholder={t('Description')} placeholderTextColor={colors.text.muted} multiline textAlignVertical="top" />
 
                             {/* Credits + Price Type; where there are no Beans, a note instead */}
                             {!showsBeans ? (
                                 <View style={{ marginBottom: 10 }}>
-                                    <Text style={{ color: colors.text.secondary, fontSize: 13, lineHeight: 18 }}>{NO_BEANS_EDIT_NOTE}</Text>
-                                    {beansPreview && <LocalCommunityMark variant="line" feature="beans" text={LOCAL_COMMUNITY_LINES.price} />}
+                                    <Text style={{ color: colors.text.secondary, fontSize: 13, lineHeight: 18 }}>{t(LINES.noBeansEditNote)}</Text>
+                                    {beansPreview && <LocalCommunityMark variant="line" feature="beans" text={t(LOCAL_COMMUNITY_LINES.price)} />}
                                 </View>
                             ) : (
                             <View style={{ flexDirection: 'row', gap: 8, marginBottom: 10 }}>
-                                <TextInput accessibilityLabel="Credits" style={[styles.editInput, { flex: 1, marginBottom: 0 }]} value={editCredits} onChangeText={setEditCredits} placeholder="Credits (B)" placeholderTextColor={colors.text.muted} keyboardType="numeric" />
+                                <TextInput accessibilityLabel={t('Credits')} style={[styles.editInput, { flex: 1, marginBottom: 0 }]} value={editCredits} onChangeText={setEditCredits} placeholder={t('Credits (B)')} placeholderTextColor={colors.text.muted} keyboardType="numeric" />
                                 <Pressable accessibilityRole="button" onPress={() => {
                                     const types = ['fixed', 'hourly', 'daily', 'weekly', 'monthly'];
                                     setEditPriceType(types[(types.indexOf(editPriceType) + 1) % types.length]);
                                 }} style={{ backgroundColor: colors.surface.card, borderRadius: 12, borderWidth: 1, borderColor: colors.border.default, paddingHorizontal: 16, justifyContent: 'center' }}>
-                                    <Text style={{ color: colors.text.body, fontSize: 13, fontWeight: '700' }}>{
-                                        { fixed: 'Total', hourly: '/ Hr', daily: '/ Dy', weekly: '/ Wk', monthly: '/ Mo' }[editPriceType] || 'Total'
-                                    }</Text>
+                                    <Text style={{ color: colors.text.body, fontSize: 13, fontWeight: '700' }}>{priceUnitWords(editPriceType) || t('Total', undefined, 'a price for the whole job')}</Text>
                                 </Pressable>
                             </View>
                             )}
@@ -1296,26 +1327,26 @@ export default function PostDetailModal() {
                                     {editRepeatable && <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 14 }}>✓</Text>}
                                 </View>
                                 <View style={{ flex: 1 }}>
-                                    <Text style={{ color: colors.text.heading, fontSize: 14, fontWeight: '700' }}>Recurring Need / Offer</Text>
-                                    <Text style={{ color: colors.text.secondary, fontSize: 12, marginTop: 2 }}>Post remains active after completion.</Text>
+                                    <Text style={{ color: colors.text.heading, fontSize: 14, fontWeight: '700' }}>{t('Recurring Need / Offer')}</Text>
+                                    <Text style={{ color: colors.text.secondary, fontSize: 12, marginTop: 2 }}>{t('Post remains active after completion.')}</Text>
                                 </View>
                             </Pressable>
 
                             {/* Photos */}
-                            <Text style={styles.editPhotoLabel}>PHOTOS ({editPhotos.length}/5)</Text>
+                            <Text style={styles.editPhotoLabel}>{t('PHOTOS ({n}/{max})', { n: editPhotos.length, max: 5 })}</Text>
                             <View style={styles.editPhotosRow}>
                                 {editPhotos.map((uri, i) => (
                                     uri && typeof uri === 'string' && uri.trim() !== '' && uri !== 'null' && uri !== 'undefined' ? (
                                         <View key={i} style={styles.editPhotoThumb}>
-                                            <Image accessibilityLabel="Post photo" source={{ uri }} style={styles.editPhotoImg} />
-                                            <Pressable accessibilityRole="button" accessibilityLabel="Remove photo" accessibilityHint="Removes this photo from the post" style={styles.editPhotoRemove} onPress={() => setEditPhotos(prev => prev.filter((_, j) => j !== i))}>
+                                            <Image accessibilityLabel={t('Post photo')} source={{ uri }} style={styles.editPhotoImg} />
+                                            <Pressable accessibilityRole="button" accessibilityLabel={t('Remove photo')} accessibilityHint={t('Removes this photo from the post')} style={styles.editPhotoRemove} onPress={() => setEditPhotos(prev => prev.filter((_, j) => j !== i))}>
                                                 <Text style={styles.editPhotoRemoveText}>✕</Text>
                                             </Pressable>
                                         </View>
                                     ) : null
                                 ))}
                                 {editPhotos.length < 5 && (
-                                    <Pressable accessibilityRole="button" accessibilityLabel="Add photo" style={styles.editPhotoAdd} onPress={pickEditPhoto}>
+                                    <Pressable accessibilityRole="button" accessibilityLabel={t('Add photo')} style={styles.editPhotoAdd} onPress={pickEditPhoto}>
                                         <Text style={styles.editPhotoAddIcon}>+</Text>
                                     </Pressable>
                                 )}
@@ -1324,25 +1355,25 @@ export default function PostDetailModal() {
                             {/* Save / Cancel */}
                             <View style={styles.editBtnRow}>
                                 <Pressable accessibilityRole="button" style={styles.editCancelBtn} onPress={() => setEditMode(false)}>
-                                    <Text style={styles.editCancelBtnText}>Cancel</Text>
+                                    <Text style={styles.editCancelBtnText}>{t('Cancel')}</Text>
                                 </Pressable>
                                 <Pressable accessibilityRole="button" style={[styles.editSaveBtn, (saving || !editTitle.trim()) && styles.editSaveBtnDisabled]} onPress={handleSave} disabled={saving || !editTitle.trim()}>
-                                    <Text style={styles.editSaveBtnText}>{saving ? 'Saving...' : '💾 Save'}</Text>
+                                    <Text style={styles.editSaveBtnText}>{saving ? t('Saving...') : t('💾 Save')}</Text>
                                 </Pressable>
                             </View>
                         </View>
                     ) : (
                         <View style={styles.ownPostActions}>
                             {post.type === 'offer' && (
-                                <Pressable accessibilityRole="button" accessibilityHint="Hides this Offer from the marketplace" style={styles.pauseOfferBtn} onPress={handleToggleActive} disabled={toggling}>
-                                    <Text style={styles.pauseOfferBtnText}>{toggling ? 'Pausing…' : '⏸️ Pause Offer'}</Text>
+                                <Pressable accessibilityRole="button" accessibilityHint={t('Hides this Offer from the marketplace')} style={styles.pauseOfferBtn} onPress={handleToggleActive} disabled={toggling}>
+                                    <Text style={styles.pauseOfferBtnText}>{toggling ? t('Pausing…') : t('⏸️ Pause Offer')}</Text>
                                 </Pressable>
                             )}
                             <Pressable accessibilityRole="button" style={styles.editPostBtn} onPress={startEdit}>
-                                <Text style={styles.editPostBtnText}>✏️ Edit Post</Text>
+                                <Text style={styles.editPostBtnText}>{t('✏️ Edit Post')}</Text>
                             </Pressable>
-                            <Pressable accessibilityRole="button" accessibilityHint="Permanently deletes this post" style={styles.deletePostBtn} onPress={handleDelete} disabled={deleting}>
-                                <Text style={styles.deletePostBtnText}>{deleting ? 'Deleting...' : '🗑️ Delete Post'}</Text>
+                            <Pressable accessibilityRole="button" accessibilityHint={t('Permanently deletes this post')} style={styles.deletePostBtn} onPress={handleDelete} disabled={deleting}>
+                                <Text style={styles.deletePostBtnText}>{deleting ? t('Deleting...') : t('🗑️ Delete Post')}</Text>
                             </Pressable>
                         </View>
                     )
@@ -1352,16 +1383,16 @@ export default function PostDetailModal() {
                 {isOwnPost && post.status === 'paused' && (
                     <View style={styles.ownPostActions}>
                         <View style={styles.confirmBox}>
-                            <Text style={[styles.confirmBoxTitle, { color: colors.feedback.warning.fg }]}>⏸️ Offer paused</Text>
+                            <Text style={[styles.confirmBoxTitle, { color: colors.feedback.warning.fg }]}>{t('⏸️ Offer paused')}</Text>
                             <Text style={{ color: theme === 'dark' ? colors.text.secondary : palette.gray600, fontSize: 13, textAlign: 'center' }}>
-                                This offer is hidden from the marketplace and isn't counting toward your credit line. Re-activate it to make it live again.
+                                {t("This offer is hidden from the marketplace and isn't counting toward your credit line. Re-activate it to make it live again.")}
                             </Text>
                         </View>
                         <Pressable accessibilityRole="button" style={[styles.editPostBtn, { backgroundColor: colors.brand.fill }]} onPress={handleToggleActive} disabled={toggling}>
-                            <Text style={styles.editPostBtnText}>{toggling ? 'Activating…' : '▶️ Activate Offer'}</Text>
+                            <Text style={styles.editPostBtnText}>{toggling ? t('Activating…') : t('▶️ Activate Offer')}</Text>
                         </Pressable>
-                        <Pressable accessibilityRole="button" accessibilityHint="Permanently deletes this post" style={styles.deletePostBtn} onPress={handleDelete} disabled={deleting}>
-                            <Text style={styles.deletePostBtnText}>{deleting ? 'Deleting...' : '🗑️ Delete Post'}</Text>
+                        <Pressable accessibilityRole="button" accessibilityHint={t('Permanently deletes this post')} style={styles.deletePostBtn} onPress={handleDelete} disabled={deleting}>
+                            <Text style={styles.deletePostBtnText}>{deleting ? t('Deleting...') : t('🗑️ Delete Post')}</Text>
                         </Pressable>
                     </View>
                 )}
@@ -1369,7 +1400,7 @@ export default function PostDetailModal() {
                 {/* Where deals are previewed, the deal action keeps its place as the marker's action: it opens the sheet. */}
                 {!isPulsePost && !isOwnPost && post.status === 'active' && escrowPreview && (
                     <View style={styles.otherPostActions}>
-                        <LocalCommunityMark variant="action" feature="escrow" label={LOCAL_COMMUNITY_LINES.dealAction.replace(LOCAL_COMMUNITY_EMOJI, '').trim()} />
+                        <LocalCommunityMark variant="action" feature="escrow" label={t(LOCAL_COMMUNITY_LINES.dealAction).replace(LOCAL_COMMUNITY_EMOJI, '').trim()} />
                     </View>
                 )}
 
@@ -1377,78 +1408,76 @@ export default function PostDetailModal() {
                 {isPulsePost ? (
                     <View style={styles.pulseInspirationBox}>
                         <Text style={styles.pulseIcon} aria-hidden={true} accessibilityElementsHidden={true} importantForAccessibility="no-hide-descendants">🗞️</Text>
-                        <Text style={styles.pulseInspirationTitle}>Feeling Inspired?</Text>
+                        <Text style={styles.pulseInspirationTitle}>{t('Feeling Inspired?')}</Text>
                         <Text style={styles.pulseInspirationText}>
-                            The best way to participate in BeanPool is by offering your skills, surplus produce, or lending tools to your neighbors.
+                            {t('The best way to participate in BeanPool is by offering your skills, surplus produce, or lending tools to your neighbors.')}
                         </Text>
                         <Pressable
                             accessibilityRole="button"
-                            accessibilityLabel="Post your own offer"
+                            accessibilityLabel={t('Post your own offer')}
                             style={styles.pulsePostOfferBtn}
                             onPress={() => {
                                 router.push({ pathname: '/(tabs)/map', params: { newPost: 'true' } });
                             }}
                         >
                             <Text style={styles.pulsePostOfferBtnText}>
-                                <Text aria-hidden={true} accessibilityElementsHidden={true}>💡 </Text>Post Your Own Offer →
+                                <Text aria-hidden={true} accessibilityElementsHidden={true}>💡 </Text>{t('Post Your Own Offer →')}
                             </Text>
                         </Pressable>
                         <Text style={styles.pulseFooterText}>
-                            Daily Pulse — a daily thought for the post-extraction economy
+                            {t('Daily Pulse — a daily thought for the post-extraction economy')}
                         </Text>
                     </View>
                 ) : !isOwnPost && post.status === 'active' && !isAcceptedByMe && escrowOn && (
                     <View style={styles.otherPostActions}>
                         {myRequest ? (
                             <View style={styles.confirmBox}>
-                                <Text style={[styles.confirmBoxTitle, { color: colors.brand.primary }]}>Deal Established</Text>
+                                <Text style={[styles.confirmBoxTitle, { color: colors.brand.primary }]}>{t('Deal Established')}</Text>
                                 <Text style={{ color: theme === 'dark' ? colors.text.secondary : palette.gray600, fontSize: 13, textAlign: 'center', marginBottom: 12 }}>
                                     {isOffer ? (
-                                        `You have committed ${myRequest.credits} credits ${myRequest.hours ? `(${myRequest.hours} hours)` : ''} to a Trust Wallet for this offer.`
+                                        myRequest.hours
+                                            ? t('You have committed {credits} credits ({hours} hours) to a Trust Wallet for this offer.', { credits: myRequest.credits, hours: myRequest.hours })
+                                            : t('You have committed {credits} credits to a Trust Wallet for this offer.', { credits: myRequest.credits })
                                     ) : (
-                                        <>
-                                            {`You have requested to earn ${myRequest.credits} credits ${myRequest.hours ? `(${myRequest.hours} hours)` : ''} (${(myRequest.credits * 0.985).toFixed(2)} net after 1.5% transaction fee)`}
-                                            <Text style={{ color: colors.brand.primary, fontWeight: 'bold' }}> (100% community owned)</Text>
-                                            {` for fulfilling this need.`}
-                                        </>
+                                        <Sentence
+                                            text={myRequest.hours
+                                                ? t('You have requested to earn {credits} credits ({hours} hours) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.', { credits: myRequest.credits, hours: myRequest.hours, net: formatNumber(myRequest.credits * 0.985, 2) })
+                                                : t('You have requested to earn {credits} credits ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.', { credits: myRequest.credits, net: formatNumber(myRequest.credits * 0.985, 2) })}
+                                            parts={{ owned: <Text style={{ color: colors.brand.primary, fontWeight: 'bold' }}>{t('(100% community owned)')}</Text> }}
+                                        />
                                     )}
                                 </Text>
                                 <Pressable accessibilityRole="button" style={[styles.cancelActionBtn, { width: '100%' }]} onPress={handleWithdraw} disabled={accepting}>
-                                    <Text style={styles.cancelActionBtnText}>{accepting ? 'Withdrawing...' : 'Withdraw Request'}</Text>
+                                    <Text style={styles.cancelActionBtnText}>{accepting ? t('Withdrawing...') : t('Withdraw Request')}</Text>
                                 </Pressable>
                             </View>
                         ) : showAcceptConfirm ? (
                             <View style={styles.confirmBox}>
-                                <Text style={styles.confirmBoxTitle}>{isOffer ? 'Accept this Offer?' : 'Offer to Fulfill?'}</Text>
+                                <Text style={styles.confirmBoxTitle}>{isOffer ? t('Accept this Offer?') : t('Offer to Fulfill?')}</Text>
                                 
                                 <View style={{ backgroundColor: colors.feedback.warning.bg, padding: 12, borderRadius: 8, borderColor: colors.feedback.warning.border, borderWidth: 1, marginBottom: 16 }}>
-                                    <Text style={{ color: theme === 'dark' ? colors.feedback.warning.fg : palette.orange700, fontSize: 12, fontWeight: 'bold', marginBottom: 4 }}>🔒 Trust Wallet Protocol</Text>
+                                    <Text style={{ color: theme === 'dark' ? colors.feedback.warning.fg : palette.orange700, fontSize: 12, fontWeight: 'bold', marginBottom: 4 }}>{t('🔒 Trust Wallet Protocol')}</Text>
                                     <Text style={{ color: theme === 'dark' ? colors.text.secondary : palette.gray600, fontSize: 12, lineHeight: 18 }}>
-                                        {isOffer ? (
-                                            <>
-                                                {`By proceeding, you commit ${post.price_type === 'fixed' ? post.credits : `your authorized`} credits to a temporary Trust Wallet. Upon completion, the provider receives the credits net of 1.5% transaction fee`}
-                                                <Text style={{ color: colors.brand.primary, fontWeight: 'bold' }}> (100% community owned)</Text>
-                                                {` to fund the Commons Pool.`}
-                                            </>
-                                        ) : (
-                                            <>
-                                                {`This transaction is protected and held in trust. The payer has already committed the credits. Upon completion, you will receive the credits net of 1.5% transaction fee`}
-                                                <Text style={{ color: colors.brand.primary, fontWeight: 'bold' }}> (100% community owned)</Text>
-                                                {` to fund the Commons Pool.`}
-                                            </>
-                                        )}
+                                        <Sentence
+                                            text={!isOffer
+                                                ? t('This transaction is protected and held in trust. The payer has already committed the credits. Upon completion, you will receive the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.')
+                                                : post.price_type === 'fixed'
+                                                    ? t('By proceeding, you commit {credits} credits to a temporary Trust Wallet. Upon completion, the provider receives the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.', { credits: post.credits })
+                                                    : t('By proceeding, you commit your authorized credits to a temporary Trust Wallet. Upon completion, the provider receives the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.')}
+                                            parts={{ owned: <Text style={{ color: colors.brand.primary, fontWeight: 'bold' }}>{t('(100% community owned)')}</Text> }}
+                                        />
                                     </Text>
                                 </View>
                                 {post.price_type !== 'fixed' && (
                                     <View style={{ marginBottom: 12 }}>
-                                        <Text style={styles.confirmBoxLabel}>TRUST COMMITMENT (HOURS)</Text>
-                                        <TextInput accessibilityLabel="Trust commitment in hours" style={styles.confirmBoxInput} value={acceptHours} onChangeText={setAcceptHours} placeholder="Hours" placeholderTextColor={colors.text.muted} keyboardType="numeric" editable={post.price_type !== 'fixed'} />
-                                        <Text style={{ color: colors.text.muted, fontSize: 10, textAlign: 'center', marginTop: 4 }}>Credits will be required upon approval.</Text>
+                                        <Text style={styles.confirmBoxLabel}>{t('TRUST COMMITMENT (HOURS)')}</Text>
+                                        <TextInput accessibilityLabel={t('Trust commitment in hours')} style={styles.confirmBoxInput} value={acceptHours} onChangeText={setAcceptHours} placeholder={t('Hours')} placeholderTextColor={colors.text.muted} keyboardType="numeric" editable={post.price_type !== 'fixed'} />
+                                        <Text style={{ color: colors.text.muted, fontSize: 10, textAlign: 'center', marginTop: 4 }}>{t('Credits will be required upon approval.')}</Text>
                                     </View>
                                 )}
                                 <View style={{ flexDirection: 'row', gap: 10 }}>
                                     <Pressable accessibilityRole="button" style={styles.cancelActionBtn} onPress={() => setShowAcceptConfirm(false)} disabled={accepting}>
-                                        <Text style={styles.cancelActionBtnText}>Cancel</Text>
+                                        <Text style={styles.cancelActionBtnText}>{t('Cancel')}</Text>
                                     </Pressable>
                                     <Pressable accessibilityRole="button" style={[styles.confirmActionBtn, styles.confirmActionBtnGreen]} disabled={accepting || (post.price_type !== 'fixed' && !acceptHours)} onPress={async () => {
                                         if (accepting) return;
@@ -1484,7 +1513,7 @@ export default function PostDetailModal() {
                                             router.replace({ pathname: '/(tabs)/market', params: { tab: 'deals', dealsTab: 'pending' } });
                                         } catch (e: any) {
                                             if (e.message?.includes('not found') || e.message?.includes('not active')) {
-                                                Alert.alert('Already Updated', 'This post was already accepted or modified elsewhere. Refreshing your screen...');
+                                                Alert.alert(t('Already Updated'), t('This post was already accepted or modified elsewhere. Refreshing your screen...'));
                                                 const { requestSync } = require('../../services/pillar-sync');
                                                 requestSync().catch(console.error);
                                                 setShowAcceptConfirm(false);
@@ -1496,7 +1525,7 @@ export default function PostDetailModal() {
                                             setAccepting(false); 
                                         }
                                     }}>
-                                        <Text style={styles.confirmActionBtnText}>{accepting ? 'Processing...' : 'Confirm'}</Text>
+                                        <Text style={styles.confirmActionBtnText}>{accepting ? t('Processing...') : t('Confirm')}</Text>
                                     </Pressable>
                                 </View>
                             </View>
@@ -1506,11 +1535,11 @@ export default function PostDetailModal() {
                                 const status = await getProfileStatus(identity);
                                 if (!status.complete) {
                                     Alert.alert(
-                                        'Finish your profile first',
-                                        `Your community likes to know who they're dealing with, so you need ${describeMissing(status)} before you can accept. It only takes a moment.`,
+                                        t('Finish your profile first'),
+                                        acceptNeedsProfileLine(status),
                                         [
-                                            { text: 'Not now', style: 'cancel' },
-                                            { text: 'Set up profile', onPress: () => router.push('/profile-setup') },
+                                            { text: t('Not now'), style: 'cancel' },
+                                            { text: t('Set up profile'), onPress: () => router.push('/profile-setup') },
                                         ]
                                     );
                                     return;
@@ -1523,7 +1552,7 @@ export default function PostDetailModal() {
                                 }
                             }}>
                                 <Text style={styles.acceptBtnText}>
-                                    {accepting ? 'Processing...' : (post.status === 'pending' ? '⏳ Pending Confirmation' : (isOffer ? '🤝 Accept Offer' : '✋ Offer to Fulfill'))}
+                                    {accepting ? t('Processing...') : (post.status === 'pending' ? t('⏳ Pending Confirmation') : (isOffer ? t('🤝 Accept Offer') : t('✋ Offer to Fulfill')))}
                                 </Text>
                             </Pressable>
                         )}
@@ -1533,11 +1562,11 @@ export default function PostDetailModal() {
                 {/* 3.5 Author Requests Display */}
                 {isOwnPost && post.status === 'active' && requests.length > 0 && (
                     <View style={styles.requestsContainer}>
-                        <Text style={styles.requestsTitle}>✋ Fulfillment Requests ({requests.length})</Text>
+                        <Text style={styles.requestsTitle}>{t('✋ Fulfillment Requests ({n})', { n: requests.length })}</Text>
                         {requests.map(req => {
                             const reqPubkey = req.resolvedReqPubkey || ((post.type === 'need' && req.seller_pubkey) ? req.seller_pubkey : req.buyer_pubkey);
                             // Fallback gracefully if pubkey is somehow still empty
-                            const safePubkeyStr = reqPubkey ? reqPubkey.slice(0, 8) : "Unknown";
+                            const safePubkeyStr = reqPubkey ? reqPubkey.slice(0, 8) : t('Unknown');
                             
                             let reqCallsign = safePubkeyStr;
                             if (post.type === 'need' && req.seller_pubkey) {
@@ -1558,9 +1587,11 @@ export default function PostDetailModal() {
                                                 </Text>
                                             </Pressable>
                                             <Text style={{ fontSize: 12, color: colors.feedback.warning.fg, marginTop: 2, fontWeight: '600' }}>
-                                                {req.count > 0 ? `★ ${req.avgRating.toFixed(1)} (${req.count} reviews)` : '☆☆☆☆☆ No ratings yet'}
+                                                {req.count > 0
+                                                    ? tn(req.count, '★ {average} ({n} reviews)', '★ {average} ({n} reviews)', { average: formatNumber(req.avgRating, 1) })
+                                                    : t('☆☆☆☆☆ No ratings yet')}
                                             </Text>
-                                            <Text style={styles.requestAmt}>{req.hours ? `${req.hours} hours estimated` : 'Offered to fulfill'}</Text>
+                                            <Text style={styles.requestAmt}>{req.hours ? tn(req.hours, '{n} hours estimated', '{n} hours estimated') : t('Offered to fulfill')}</Text>
                                         </View>
                                         <Pressable
                                             accessibilityRole="button"
@@ -1570,10 +1601,10 @@ export default function PostDetailModal() {
                                                 try {
                                                     const conv = await createConversationApi('dm', [reqPubkey, identity.publicKey], identity.publicKey, undefined, post.id);
                                                     if (conv) router.push(`/chat/${conv.id}`);
-                                                } catch (e: any) { Alert.alert("Error", e.message); }
+                                                } catch (e: any) { Alert.alert(t('Error'), e.message); }
                                             }}
                                         >
-                                            <Text style={styles.reqMessageBtnText}>💬 Message</Text>
+                                            <Text style={styles.reqMessageBtnText}>{t('💬 Message')}</Text>
                                             {(reqUnreadCounts[req.id] || 0) > 0 && (
                                                 <View style={styles.unreadBadgeSmall}>
                                                     <Text style={styles.unreadBadgeTextSmall}>{reqUnreadCounts[req.id]}</Text>
@@ -1583,10 +1614,10 @@ export default function PostDetailModal() {
                                     </View>
                                     <View style={{flexDirection: 'row', gap: 8}}>
                                         <Pressable accessibilityRole="button" style={[styles.rejectBtn, accepting && {opacity: 0.5}, { flex: 1, alignItems: 'center' }]} disabled={accepting} onPress={() => handleReject(req.id)}>
-                                            <Text style={styles.rejectBtnText} numberOfLines={1}>Deny</Text>
+                                            <Text style={styles.rejectBtnText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Deny')}</Text>
                                         </Pressable>
                                         <Pressable accessibilityRole="button" style={[styles.approveBtn, accepting && {opacity: 0.5}, { flex: 2, alignItems: 'center' }]} disabled={accepting} onPress={() => handleApprove(req.id)}>
-                                            <Text style={styles.approveBtnText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>Approve & Commit</Text>
+                                            <Text style={styles.approveBtnText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Approve & Commit')}</Text>
                                         </Pressable>
                                     </View>
                                 </View>
@@ -1605,11 +1636,11 @@ export default function PostDetailModal() {
                                     const conv = await createConversationApi('dm', [targetPeerPubkey, identity.publicKey], identity.publicKey, undefined, post.id);
                                     if (conv) router.push(`/chat/${conv.id}`);
                                 } catch (e: any) {
-                                    Alert.alert("Error", e.message || "Failed to start chat.");
+                                    Alert.alert(t('Error'), e.message || t('Failed to start chat.'));
                                 }
                             }}>
                                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
-                                    <Text style={styles.messageBtnText}>💬 Message {!isOwnPost ? targetPeerCallsign : ''}</Text>
+                                    <Text style={styles.messageBtnText}>{!isOwnPost ? t('💬 Message {name}', { name: targetPeerCallsign }) : t('💬 Message')}</Text>
                                     {unreadCount > 0 && (
                                         <View style={styles.unreadBadge}>
                                             <Text style={styles.unreadBadgeText}>{unreadCount}</Text>
@@ -1622,19 +1653,19 @@ export default function PostDetailModal() {
                             <View style={{ marginTop: 16 }}>
                                 <Pressable accessibilityRole="button" style={[styles.messageBtn, { borderColor: hasExistingRating ? colors.brand.primary : colors.feedback.warning.border, backgroundColor: hasExistingRating ? colors.feedback.success.bg : colors.feedback.warning.bg }]} onPress={() => setShowRatingForm(!showRatingForm)}>
                                     <Text style={[styles.messageBtnText, { color: hasExistingRating ? colors.brand.primary : colors.feedback.warning.fg }]}>
-                                        {hasExistingRating ? `★ Edit rating for ${targetPeerCallsign}` : `★ Rate ${targetPeerCallsign}`}
+                                        {hasExistingRating ? t('★ Edit rating for {name}', { name: targetPeerCallsign }) : t('★ Rate {name}', { name: targetPeerCallsign })}
                                     </Text>
                                 </Pressable>
                                 {showRatingForm && (
                                     <View style={[styles.confirmBox, { marginTop: 8 }]}>
                                         <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 8, marginBottom: 12 }}>
                                             {[1,2,3,4,5].map(star => (
-                                                <Pressable key={star} accessibilityRole="button" accessibilityLabel={`Rate ${star} star${star === 1 ? '' : 's'}`} accessibilityState={{ selected: star <= myRating }} onPress={() => { setMyRating(star); hapticTick(); }}>
+                                                <Pressable key={star} accessibilityRole="button" accessibilityLabel={tn(star, 'Rate {n} star', 'Rate {n} stars')} accessibilityState={{ selected: star <= myRating }} onPress={() => { setMyRating(star); hapticTick(); }}>
                                                     <Text style={{ fontSize: 32, color: star <= myRating ? palette.amber400 : colors.border.strong }}>{star <= myRating ? '★' : '☆'}</Text>
                                                 </Pressable>
                                             ))}
                                         </View>
-                                        <TextInput accessibilityLabel="Rating comment" style={[styles.editInput, { minHeight: 60, marginBottom: 12 }]} value={ratingComment} onChangeText={setRatingComment} placeholder="Leave an optional comment..." placeholderTextColor={colors.text.muted} multiline />
+                                        <TextInput accessibilityLabel={t('Rating comment')} style={[styles.editInput, { minHeight: 60, marginBottom: 12 }]} value={ratingComment} onChangeText={setRatingComment} placeholder={t('Leave an optional comment...')} placeholderTextColor={colors.text.muted} multiline />
                                         <Pressable accessibilityRole="button" style={[styles.confirmActionBtn, { backgroundColor: myRating >= 1 ? (hasExistingRating ? colors.brand.fill : colors.feedback.warning.solid) : colors.border.default }]} disabled={myRating < 1 || submittingRating} onPress={async () => {
                                             const txToRate = activeTx?.id || post.pending_transaction_id;
                                             if(!identity || !txToRate) return;
@@ -1644,11 +1675,11 @@ export default function PostDetailModal() {
                                                 setShowRatingForm(false);
                                                 setHasExistingRating(true);
                                                 hapticSuccess();
-                                                Alert.alert('Success', hasExistingRating ? 'Rating updated!' : 'Rating submitted!');
-                                            } catch(e:any) { hapticWarning(); Alert.alert('Error', e.message); } finally { setSubmittingRating(false); }
+                                                Alert.alert(t('Success'), hasExistingRating ? t('Rating updated!') : t('Rating submitted!'));
+                                            } catch(e:any) { hapticWarning(); Alert.alert(t('Error'), e.message); } finally { setSubmittingRating(false); }
                                         }}>
                                             <Text style={[styles.confirmActionBtnText, myRating >= 1 && !hasExistingRating && { color: colors.text.onGold }]}>
-                                                {submittingRating ? 'Submitting...' : hasExistingRating ? 'Update Rating' : 'Submit Rating'}
+                                                {submittingRating ? t('Submitting...') : hasExistingRating ? t('Update Rating') : t('Submit Rating')}
                                             </Text>
                                         </Pressable>
                                     </View>
@@ -1660,33 +1691,35 @@ export default function PostDetailModal() {
                         {!isOwnPost && isConvenor && Boolean(post.target_group_id || post.targetGroupId) && (
                             <View style={{ marginTop: 14, padding: 14, borderRadius: 14, borderWidth: 1, borderColor: colors.brand.primary, backgroundColor: colors.brand.tint }}>
                                 <Text style={{ fontSize: 13, fontWeight: '800', color: colors.brand.primary, marginBottom: 8 }}>
-                                    🛡️ Convenor Moderation ({post.target_group_name || post.targetGroupName || 'Group'})
+                                    {t('🛡️ Convenor Moderation ({group})', { group: post.target_group_name || post.targetGroupName || t('Group') })}
                                 </Text>
                                 <Pressable
                                     accessibilityRole="button"
-                                    accessibilityHint="Deletes this post as convenor"
+                                    accessibilityHint={t('Deletes this post as convenor')}
                                     disabled={deletingAsConvenor}
                                     style={[styles.deletePostBtn, { backgroundColor: colors.surface.card }]}
                                     onPress={() => {
-                                        const groupTitle = post.target_group_name || post.targetGroupName || 'the group';
+                                        const groupTitle = post.target_group_name || post.targetGroupName;
                                         Alert.alert(
-                                            `Delete Group Post?`,
-                                            `Delete this post as Convenor of ${groupTitle}? This action cannot be undone.`,
+                                            t('Delete Group Post?'),
+                                            groupTitle
+                                                ? t('Delete this post as Convenor of {group}? This action cannot be undone.', { group: groupTitle })
+                                                : t('Delete this post as Convenor of the group? This action cannot be undone.'),
                                             [
-                                                { text: 'Cancel', style: 'cancel' },
+                                                { text: t('Cancel'), style: 'cancel' },
                                                 {
-                                                    text: 'Delete Post',
+                                                    text: t('Delete Post'),
                                                     style: 'destructive',
                                                     onPress: async () => {
                                                         try {
                                                             setDeletingAsConvenor(true);
                                                             const gId = (post.target_group_id || post.targetGroupId)!;
                                                             await deleteGroupPostApi(gId, post.id);
-                                                            Alert.alert('Post Deleted', 'The post has been removed from the group.', [
-                                                                { text: 'OK', onPress: () => router.back() }
+                                                            Alert.alert(t('Post Deleted'), t('The post has been removed from the group.'), [
+                                                                { text: t('OK'), onPress: () => router.back() }
                                                             ]);
                                                         } catch (e: any) {
-                                                            Alert.alert('Error', e?.message || 'Failed to delete post');
+                                                            Alert.alert(t('Error'), e?.message || t('Failed to delete post'));
                                                         } finally {
                                                             setDeletingAsConvenor(false);
                                                         }
@@ -1697,7 +1730,7 @@ export default function PostDetailModal() {
                                     }}
                                 >
                                     <Text style={styles.deletePostBtnText}>
-                                        {deletingAsConvenor ? 'Deleting...' : '🗑️ Delete Group Post (Convenor)'}
+                                        {deletingAsConvenor ? t('Deleting...') : t('🗑️ Delete Group Post (Convenor)')}
                                     </Text>
                                 </Pressable>
                             </View>
@@ -1706,7 +1739,7 @@ export default function PostDetailModal() {
                         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 16, marginTop: 12 }}>
                             <Pressable 
                                 accessibilityRole="button"
-                                accessibilityLabel="Report Post"
+                                accessibilityLabel={t('Report Post')}
                                 hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                                 onPress={() => {
                                     const next = !showReportForm;
@@ -1718,36 +1751,40 @@ export default function PostDetailModal() {
                                     }
                                 }}
                             >
-                                <Text style={{ color: colors.feedback.danger.fg, fontSize: 13, fontWeight: '700' }}>🚩 Report Post</Text>
+                                <Text style={{ color: colors.feedback.danger.fg, fontSize: 13, fontWeight: '700' }}>{t('🚩 Report Post')}</Text>
                             </Pressable>
                             <Text style={{ color: colors.text.muted }}>•</Text>
                             <Pressable
                                 accessibilityRole="button"
-                                accessibilityLabel={`Block user ${post?.author_callsign || ''}`}
+                                accessibilityLabel={post?.author_callsign ? t('Block user {name}', { name: post.author_callsign }) : t('Block user')}
                                 accessibilityState={{ busy: isBlocking }}
                                 hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
                                 disabled={isBlocking}
                                 style={{ flexDirection: 'row', alignItems: 'center', minHeight: 44, paddingVertical: 4 }}
                                 onPress={() => {
                                     if (!post?.author_pubkey || isBlocking) return;
-                                    const authorName = post.author_callsign || 'this user';
+                                    const authorName = post.author_callsign;
                                     Alert.alert(
-                                        `Block ${authorName}?`,
-                                        `This will instantly hide all posts from ${authorName} and notify moderation.`,
+                                        authorName ? t('Block {name}?', { name: authorName }) : t('Block this user?'),
+                                        authorName
+                                            ? t('This will instantly hide all posts from {name} and notify moderation.', { name: authorName })
+                                            : t('This will instantly hide all posts from this user and notify moderation.'),
                                         [
-                                            { text: 'Cancel', style: 'cancel' },
+                                            { text: t('Cancel'), style: 'cancel' },
                                             {
-                                                text: 'Block User',
+                                                text: t('Block User'),
                                                 style: 'destructive',
                                                 onPress: async () => {
                                                     try {
                                                         setIsBlocking(true);
                                                         await blockUser(post.author_pubkey, identity?.publicKey, 'Abusive content reported via Post', post.id);
-                                                        Alert.alert('User Blocked', `${authorName} has been blocked and removed from your feed.`, [
-                                                            { text: 'OK', onPress: () => router.back() }
+                                                        Alert.alert(t('User Blocked'), authorName
+                                                            ? t('{name} has been blocked and removed from your feed.', { name: authorName })
+                                                            : t('This user has been blocked and removed from your feed.'), [
+                                                            { text: t('OK'), onPress: () => router.back() }
                                                         ]);
                                                     } catch (e) {
-                                                        Alert.alert('Error', 'Failed to block user. Please try again.');
+                                                        Alert.alert(t('Error'), t('Failed to block user. Please try again.'));
                                                     } finally {
                                                         setIsBlocking(false);
                                                     }
@@ -1761,15 +1798,16 @@ export default function PostDetailModal() {
                                     <ActivityIndicator size="small" color={colors.feedback.danger.fg} style={{ marginRight: 4 }} />
                                 ) : null}
                                 <Text style={{ color: colors.feedback.danger.fg, fontSize: 13, fontWeight: '700', opacity: isBlocking ? 0.6 : 1 }}>
-                                    {isBlocking ? 'Blocking…' : (<><Text aria-hidden={true} importantForAccessibility="no">🚫 </Text>Block User</>)}
+                                    {isBlocking ? t('Blocking…') : (<><Text aria-hidden={true} importantForAccessibility="no">🚫 </Text>{t('Block User')}</>)}
                                 </Text>
                             </Pressable>
                         </View>
                         {showReportForm && (
                             <View style={[styles.confirmBox, { backgroundColor: colors.feedback.danger.bg, borderColor: colors.feedback.danger.border }]}>
-                                <Text style={styles.confirmBoxLabel}>SELECT REPORT REASON</Text>
+                                <Text style={styles.confirmBoxLabel}>{t('SELECT REPORT REASON')}</Text>
                                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
-                                    {REPORT_REASONS.map((r) => {
+                                    {REPORT_REASONS.map((r, i) => {
+                                        // The reason goes to the node as it is written (English: the server reads Child safety); shown translated.
                                         const isSelected = reportReason === r;
                                         return (
                                             <Pressable
@@ -1790,21 +1828,21 @@ export default function PostDetailModal() {
                                                 }}
                                             >
                                                 <Text style={{ fontSize: 13, fontWeight: '700', color: isSelected ? colors.text.inverse : colors.text.body }}>
-                                                    {isSelected ? '✓ ' : ''}{r}
+                                                    {isSelected ? t('✓ {reason}', { reason: t(REPORT_REASONS[i]) }) : t(REPORT_REASONS[i])}
                                                 </Text>
                                             </Pressable>
                                         );
                                     })}
                                 </View>
                                 <Text style={{ fontSize: 13, color: colors.text.body, marginBottom: 12 }}>
-                                    <Text style={{ fontWeight: '700' }}>{CHILD_SAFETY_REASON}:</Text> {CHILD_SAFETY_HINT}
+                                    <Sentence text={t('{reason}: {hint}', { hint: t(LINES.childSafetyHint) })} parts={{ reason: <Text style={{ fontWeight: '700' }}>{t(LINES.childSafety)}</Text> }} />
                                 </Text>
 
                                 <TextInput
                                     style={[styles.editInput, { minHeight: 48, marginBottom: 12, backgroundColor: colors.surface.card }]}
                                     value={reportDetails}
                                     onChangeText={setReportDetails}
-                                    placeholder="Optional details or comments..."
+                                    placeholder={t('Optional details or comments...')}
                                     placeholderTextColor={colors.text.muted}
                                     multiline
                                 />
@@ -1823,15 +1861,15 @@ export default function PostDetailModal() {
                                             setReportDetails('');
                                             setReportReason('');
                                             // The thanks, and why the member's words were left out when they were (case 14).
-                                            Alert.alert('Reported', reportedAlertBody(sent?.wordsLeftOut, finalReason));
+                                            Alert.alert(t('Reported'), reportedAlertBody(sent?.wordsLeftOut, finalReason));
                                         } catch (e: any) {
-                                            Alert.alert('Error', e.message);
+                                            Alert.alert(t('Error'), e.message);
                                         } finally {
                                             setSubmittingReport(false);
                                         }
                                     }}
                                 >
-                                    <Text style={styles.confirmActionBtnText}>{submittingReport ? 'Sending...' : 'Submit Report'}</Text>
+                                    <Text style={styles.confirmActionBtnText}>{submittingReport ? t('Sending...') : t('Submit Report')}</Text>
                                 </Pressable>
                             </View>
                         )}
@@ -1859,27 +1897,27 @@ export default function PostDetailModal() {
             {/* Reject Request Modal */}
             {rejectModalTxId && (
                 <View style={StyleSheet.absoluteFill}>
-                    <Pressable accessibilityRole="button" accessibilityLabel="Close" style={styles.modalOverlay} onPress={() => setRejectModalTxId(null)}>
+                    <Pressable accessibilityRole="button" accessibilityLabel={t('Close')} style={styles.modalOverlay} onPress={() => setRejectModalTxId(null)}>
                         <KeyboardAvoidingView behavior="padding" style={{ width: '100%' }}>
                             <Pressable style={styles.modalContent} onPress={e => e.stopPropagation()}>
-                                <Text style={styles.modalTitle}>Decline Offer</Text>
-                                <Text style={styles.modalSubtext}>Are you sure you want to decline this offer?</Text>
+                                <Text style={styles.modalTitle}>{t('Decline Offer')}</Text>
+                                <Text style={styles.modalSubtext}>{t('Are you sure you want to decline this offer?')}</Text>
                                 <TextInput
-                                    accessibilityLabel="Decline message"
+                                    accessibilityLabel={t('Decline message')}
                                     style={[styles.editInput, { minHeight: 80, marginBottom: 16 }]}
                                     value={rejectMessage}
                                     onChangeText={setRejectMessage}
-                                    placeholder="Add a brief message (optional)..."
+                                    placeholder={t('Add a brief message (optional)...')}
                                     placeholderTextColor={colors.text.muted}
                                     multiline
                                     textAlignVertical="top"
                                 />
                                 <View style={{ flexDirection: 'row', gap: 12 }}>
                                     <Pressable accessibilityRole="button" style={[styles.editCancelBtn, { flex: 1 }]} onPress={() => setRejectModalTxId(null)}>
-                                        <Text style={styles.editCancelBtnText}>Cancel</Text>
+                                        <Text style={styles.editCancelBtnText}>{t('Cancel')}</Text>
                                     </Pressable>
                                     <Pressable accessibilityRole="button" style={[styles.deletePostBtn, { flex: 1, marginVertical: 0 }]} disabled={accepting} onPress={confirmReject}>
-                                        <Text style={styles.deletePostBtnText}>{accepting ? '...' : 'Decline'}</Text>
+                                        <Text style={styles.deletePostBtnText}>{accepting ? '...' : t('Decline')}</Text>
                                     </Pressable>
                                 </View>
                             </Pressable>
@@ -1891,23 +1929,23 @@ export default function PostDetailModal() {
             {/* Contribution-first gate: blocks accepting an Offer until the member lists one. */}
             {showContributionRequired && (
                 <View style={StyleSheet.absoluteFill}>
-                    <Pressable accessibilityRole="button" accessibilityLabel="Close" style={styles.modalOverlay} onPress={() => setShowContributionRequired(false)}>
+                    <Pressable accessibilityRole="button" accessibilityLabel={t('Close')} style={styles.modalOverlay} onPress={() => setShowContributionRequired(false)}>
                         <Pressable style={styles.modalContent} onPress={e => e.stopPropagation()}>
-                            <Text style={[styles.modalTitle, { textAlign: 'center' }]}>🔒 Contribution Required</Text>
+                            <Text style={[styles.modalTitle, { textAlign: 'center' }]}>{t('🔒 Contribution Required')}</Text>
                             <Text style={[styles.modalSubtext, { textAlign: 'center' }]}>
-                                To accept Offers or post Needs, first list at least one Offer detailing what you can contribute to the community.
+                                {t('To accept Offers or post Needs, first list at least one Offer detailing what you can contribute to the community.')}
                             </Text>
                             <Pressable
                                 accessibilityRole="button"
                                 style={{ marginTop: 8, paddingVertical: 14, borderRadius: 12, backgroundColor: colors.brand.fill, alignItems: 'center' }}
                                 onPress={() => { setShowContributionRequired(false); router.push({ pathname: '/(tabs)/map', params: { newPost: 'true' } }); }}
                             >
-                                <Text style={{ color: '#fff', fontWeight: '800', fontSize: 15 }}>➕ Create an Offer</Text>
+                                <Text style={{ color: '#fff', fontWeight: '800', fontSize: 15 }}>{t('➕ Create an Offer')}</Text>
                             </Pressable>
                             {/* flex: 0 — editCancelBtn is flex: 1 for the row layouts; in this column it squashed the
                                 button to ~30dp and hid the label. */}
                             <Pressable accessibilityRole="button" style={[styles.editCancelBtn, { flex: 0, marginTop: 10, minHeight: 48 }]} onPress={() => setShowContributionRequired(false)}>
-                                <Text style={styles.editCancelBtnText}>Not now</Text>
+                                <Text style={styles.editCancelBtnText}>{t('Not now')}</Text>
                             </Pressable>
                         </Pressable>
                     </Pressable>
@@ -1925,13 +1963,13 @@ function renderBeans(rating: number): string {
 function getTimeAgo(dateStr: string): string {
     try {
         const secs = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
-        if (secs < 60) return 'just now';
+        if (secs < 60) return t('just now');
         const mins = Math.floor(secs / 60);
-        if (mins < 60) return `${mins}m ago`;
+        if (mins < 60) return t('{n}m ago', { n: mins });
         const hrs = Math.floor(mins / 60);
-        if (hrs < 24) return `${hrs}h ago`;
+        if (hrs < 24) return t('{n}h ago', { n: hrs });
         const days = Math.floor(hrs / 24);
-        return `${days}d ago`;
+        return t('{n}d ago', { n: days });
     } catch { return ''; }
 }
 

@@ -2,6 +2,7 @@ import React, { useRef, useState } from 'react';
 import { View, ScrollView, Text, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useStyles, useTheme } from '../app/ThemeContext';
+import { t } from '@beanpool/core';
 import { FilterChipButton } from './FilterChipPicker';
 import type { FilterChip } from '../utils/filter-chips';
 
@@ -135,8 +136,8 @@ export function FilterChipRow<Id extends string>({ chips, selected, onSelect, ac
                     <FilterChipButton
                         key={c.id}
                         variant="flat"
-                        label={c.emoji ? `${c.emoji} ${c.label}` : c.label}
-                        accessibilityLabel={c.label}
+                        label={c.emoji ? t('{emoji} {label}', { emoji: c.emoji, label: t(c.label) }) : t(c.label)}
+                        accessibilityLabel={t(c.label)}
                         active={on}
                         selected={on}
                         activeColor={activeColor}

@@ -16,20 +16,21 @@
  * screen: a filter the member cannot see never hides a post.
  */
 
-import { foldApostrophes, HOME_SEARCH_MAX_CHARS, readSearchSettings, searchFromMarket, searchTermsFor, tierIndexForCredit, type HomeSearchSettings } from '@beanpool/core';
+import { foldApostrophes, HOME_SEARCH_MAX_CHARS, readSearchSettings, searchFromMarket, searchTermsFor, t, tierIndexForCredit, word, type HomeSearchSettings, type WordKey } from '@beanpool/core';
 import { CATEGORY_META, normalizeCategory } from '../constants/categories';
 import { EVENT_WINDOWS, eventInWindow, isEventInFeed, type EventWindow } from './events';
 import type { FilterChip } from './filter-chips';
 
 export type MarketTypeFilter = 'all' | 'for-you' | 'offers' | 'needs' | 'events' | 'polls';
 
-export const MARKET_TYPE_PILLS: ReadonlyArray<{ id: MarketTypeFilter; label: string }> = [
-    { id: 'all', label: 'All' },
-    { id: 'for-you', label: '★ For You' },
-    { id: 'offers', label: 'Offers' },
-    { id: 'needs', label: 'Needs' },
-    { id: 'events', label: 'Events' },
-    { id: 'polls', label: 'Polls' },
+/** The type row's pills: word() keys, shown through t() by the chip row (components/FilterChipRow). */
+export const MARKET_TYPE_PILLS: ReadonlyArray<{ id: MarketTypeFilter; label: WordKey }> = [
+    { id: 'all', label: word('All') },
+    { id: 'for-you', label: word('★ For You') },
+    { id: 'offers', label: word('Offers') },
+    { id: 'needs', label: word('Needs') },
+    { id: 'events', label: word('Events') },
+    { id: 'polls', label: word('Polls') },
 ];
 
 /**
@@ -256,25 +257,30 @@ export function marketFiltersActive(state: MarketFilterState): boolean {
         || (show.beans && state.beansOnly);
 }
 
+/** A search radius as the Distance chip and its picker write it: "500m", "5km" (components/RadiusPickerModal's steps). */
+export function radiusWords(radiusKm: number): string {
+    return radiusKm < 1 ? t('{n}m', { n: Math.round(radiusKm * 1000) }) : t('{n}km', { n: radiusKm });
+}
+
 export function distanceChipLabel(radiusKm: number | null): string {
-    if (radiusKm === null) return '📍 Distance ▾';
-    return `📍 ${radiusKm < 1 ? `${Math.round(radiusKm * 1000)}m` : `${radiusKm}km`} ▾`;
+    if (radiusKm === null) return t('📍 Distance ▾');
+    return t('📍 {distance} ▾', { distance: radiusWords(radiusKm) });
 }
 
 /** `trust` is the chosen TRUST_FILTERS entry (components/TrustPickerSheet). */
-export function trustChipLabel(trust: { id: string; emoji: string; label: string } | undefined): string {
-    return trust && trust.id !== 'all' ? `${trust.emoji} ${trust.label} ▾` : '🤝 Trust ▾';
+export function trustChipLabel(trust: { id: string; emoji: string; label: WordKey } | undefined): string {
+    return trust && trust.id !== 'all' ? t('{emoji} {label} ▾', { emoji: trust.emoji, label: t(trust.label) }) : t('🤝 Trust ▾');
 }
 
 export function beansChipLabel(beansOnly: boolean): string {
-    return beansOnly ? '🫘 Beans only ✓' : '🫘 Beans only';
+    return beansOnly ? t('🫘 Beans only ✓') : t('🫘 Beans only');
 }
 
 /** Longest the search term may run in the active-filter chip before it is cut with an ellipsis. */
 const SUMMARY_SEARCH_MAX = 16;
 
 export interface MarketFilterSummaryLabels {
-    /** Trust filter label by id (TRUST_FILTERS lives with its React Native sheet). */
+    /** Trust filter label by id, in the member's language (TRUST_FILTERS lives with its React Native sheet). */
     trustLabel?: (id: string) => string | undefined;
     /** Group name by id. */
     groupName?: (id: string) => string | undefined;
@@ -284,7 +290,7 @@ export interface MarketFilterSummaryLabels {
  * The one line for the chip that stays on screen while the Market's controls are scrolled away, e.g.
  * "🔍 honey · Offers · Food · 5km". Null when nothing narrows the feed, so the chip never shows then.
  * Only filters whose chip is on screen count, as in marketFiltersActive: a remembered filter that is not
- * hiding anything is not named.
+ * hiding anything is not named. Each name in the member's language; the search and a group's name as written.
  */
 export function marketFilterSummary(state: MarketFilterState, search: string, labels: MarketFilterSummaryLabels = {}): string | null {
     const show = onScreen(state);
@@ -293,18 +299,19 @@ export function marketFilterSummary(state: MarketFilterState, search: string, la
     if (q) parts.push(`🔍 ${q.length > SUMMARY_SEARCH_MAX ? `${q.slice(0, SUMMARY_SEARCH_MAX - 1).trimEnd()}…` : q}`);
     if (state.type !== 'all') {
         const pill = MARKET_TYPE_PILLS.find(p => p.id === state.type);
-        if (pill) parts.push(pill.label);
+        if (pill) parts.push(t(pill.label));
     }
-    if (show.category && state.category !== 'all') parts.push(CATEGORY_META[state.category]?.label ?? state.category);
+    if (show.category && state.category !== 'all') {
+        const meta = CATEGORY_META[state.category];
+        parts.push(meta ? t(meta.label) : state.category);
+    }
     if (show.eventWindow && state.eventWindow !== 'all') {
         const w = EVENT_WINDOWS.find(e => e.id === state.eventWindow);
-        if (w) parts.push(w.label);
+        if (w) parts.push(t(w.label));
     }
-    if (show.distance && state.radiusKm !== null) {
-        parts.push(state.radiusKm < 1 ? `${Math.round(state.radiusKm * 1000)}m` : `${state.radiusKm}km`);
-    }
+    if (show.distance && state.radiusKm !== null) parts.push(radiusWords(state.radiusKm));
     if (show.trust && state.trust !== 'all') parts.push(labels.trustLabel?.(state.trust) ?? state.trust);
-    if (show.beans && state.beansOnly) parts.push('Beans only');
-    if (state.groupId !== 'all') parts.push(labels.groupName?.(state.groupId) ?? 'Group');
+    if (show.beans && state.beansOnly) parts.push(t('Beans only'));
+    if (state.groupId !== 'all') parts.push(labels.groupName?.(state.groupId) ?? t('Group'));
     return parts.length ? parts.join(' · ') : null;
 }

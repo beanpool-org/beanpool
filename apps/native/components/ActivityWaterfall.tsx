@@ -19,6 +19,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../app/ThemeContext';
 import { withJitter } from '../utils/jitter';
 import { signedGet } from '../utils/db';
+import { t, tn } from '@beanpool/core';
+import { Sentence } from './Sentence';
 
 export interface ActivityFeedItem {
     id: number;
@@ -34,12 +36,12 @@ export interface ActivityFeedItem {
 function formatRelativeTime(isoDate: string): string {
     const diffMs = Date.now() - new Date(isoDate).getTime();
     const diffMins = Math.floor(diffMs / 60000);
-    if (diffMins < 1) return 'just now';
-    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffMins < 1) return t('just now');
+    if (diffMins < 60) return t('{n}m ago', { n: diffMins });
     const diffHours = Math.floor(diffMins / 60);
-    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffHours < 24) return t('{n}h ago', { n: diffHours });
     const diffDays = Math.floor(diffHours / 24);
-    return `${diffDays}d ago`;
+    return t('{n}d ago', { n: diffDays });
 }
 
 interface Props {
@@ -132,9 +134,9 @@ export function ActivityWaterfall({ onCreatePostPress }: Props) {
         return (
             <View style={[styles.emptyCard, { backgroundColor: isDark ? '#18181b' : '#f4f4f5', borderColor: colors.border.default }]}>
                 <Text style={styles.bigEmoji}>🌱</Text>
-                <Text style={[styles.emptyTitle, { color: colors.text.body }]}>Community activity is for members</Text>
+                <Text style={[styles.emptyTitle, { color: colors.text.body }]}>{t('Community activity is for members')}</Text>
                 <Text style={[styles.emptySubtitle, { color: colors.text.secondary }]}>
-                    Join this community to see who is trading and who is new.
+                    {t('Join this community to see who is trading and who is new.')}
                 </Text>
             </View>
         );
@@ -145,7 +147,7 @@ export function ActivityWaterfall({ onCreatePostPress }: Props) {
             <View style={styles.centerContainer}>
                 <ActivityIndicator size="small" color={colors.brand.primary} />
                 <Text style={[styles.loadingText, { color: colors.text.secondary }]}>
-                    Tuning into community pulse…
+                    {t('Tuning into community pulse…')}
                 </Text>
             </View>
         );
@@ -155,19 +157,19 @@ export function ActivityWaterfall({ onCreatePostPress }: Props) {
         return (
             <View style={[styles.emptyCard, { backgroundColor: isDark ? '#18181b' : '#f4f4f5', borderColor: colors.border.default }]}>
                 <Text style={styles.bigEmoji}>🌱</Text>
-                <Text style={[styles.emptyTitle, { color: colors.text.body }]}>Welcome to the Community</Text>
+                <Text style={[styles.emptyTitle, { color: colors.text.body }]}>{t('Welcome to the Community')}</Text>
                 <Text style={[styles.emptySubtitle, { color: colors.text.secondary }]}>
-                    You're among the first here! Create an offer or need to start local circulation.
+                    {t("You're among the first here! Create an offer or need to start local circulation.")}
                 </Text>
                 {onCreatePostPress && (
                     <Pressable
                         accessibilityRole="button"
-                        accessibilityLabel="Create First Post"
-                        accessibilityHint="Opens form to create a new offer or need post"
+                        accessibilityLabel={t('Create First Post')}
+                        accessibilityHint={t('Opens form to create a new offer or need post')}
                         style={[styles.primaryButton, { backgroundColor: colors.brand.fill }]}
                         onPress={onCreatePostPress}
                     >
-                        <Text style={[styles.primaryButtonText, { color: colors.text.inverse }]}>+ Create First Post</Text>
+                        <Text style={[styles.primaryButtonText, { color: colors.text.inverse }]}>{t('+ Create First Post')}</Text>
                     </Pressable>
                 )}
             </View>
@@ -180,17 +182,22 @@ export function ActivityWaterfall({ onCreatePostPress }: Props) {
                 <View style={[styles.pulseBadge, { backgroundColor: isDark ? 'rgba(16, 185, 129, 0.15)' : '#ecfdf5', borderColor: isDark ? '#065f46' : '#a7f3d0' }]}>
                     <View style={[styles.pulseDot, { backgroundColor: colors.brand.fill }]} />
                     <Text style={[styles.pulseBadgeText, { color: colors.feedback.success.fg }]}>
-                        Community Pulse
+                        {t('Community Pulse')}
                     </Text>
                 </View>
-                <Text style={[styles.sectionTitle, { color: colors.text.body }]}>Recent Activity</Text>
+                <Text style={[styles.sectionTitle, { color: colors.text.body }]}>{t('Recent Activity')}</Text>
             </View>
 
             <View style={styles.cardsList}>
                 {feed.map((item) => {
-                    const actorName = item.actorCallsign || 'Member';
-                    const targetName = item.targetCallsign || 'Member';
+                    const actorName = item.actorCallsign || t('Member');
+                    const targetName = item.targetCallsign || t('Member');
                     const timeStr = formatRelativeTime(item.createdAt);
+                    // Each line is one sentence in the member's language; the names are bold parts of it, wherever the
+                    // language puts them (components/Sentence).
+                    const actor = <Text style={styles.bold}>{actorName}</Text>;
+                    const target = <Text style={styles.bold}>{targetName}</Text>;
+                    const names = { actor: actorName, target: targetName };
 
                     let emoji = '✨';
                     let content = null;
@@ -199,61 +206,66 @@ export function ActivityWaterfall({ onCreatePostPress }: Props) {
                     switch (item.eventType) {
                         case 'member_joined':
                             emoji = '🎉';
-                            summaryText = `${actorName} joined the community`;
+                            summaryText = t('{actor} joined the community', names);
                             content = (
                                 <Text style={[styles.itemText, { color: colors.text.body }]}>
-                                    <Text style={styles.bold}>{actorName}</Text> joined the community
+                                    <Sentence text={t('{actor} joined the community')} parts={{ actor }} />
                                 </Text>
                             );
                             break;
-                        case 'trade_completed':
+                        case 'trade_completed': {
                             emoji = '✅';
-                            summaryText = `${actorName} traded with ${targetName}${item.metadata?.credits ? ` for ${item.metadata.credits} Beans` : ''}`;
+                            const credits = item.metadata?.credits;
+                            summaryText = credits
+                                ? tn(Number(credits), '{actor} traded with {target} for {n} Beans', '{actor} traded with {target} for {n} Beans', names)
+                                : t('{actor} traded with {target}', names);
                             content = (
                                 <Text style={[styles.itemText, { color: colors.text.body }]}>
-                                    <Text style={styles.bold}>{actorName}</Text> traded with{' '}
-                                    <Text style={styles.bold}>{targetName}</Text>
-                                    {item.metadata?.credits ? (
-                                        <Text style={{ fontWeight: 'bold', color: colors.brand.primary }}> (🫘 {item.metadata.credits})</Text>
+                                    <Sentence text={t('{actor} traded with {target}')} parts={{ actor, target }} />
+                                    {credits ? (
+                                        <Text style={{ fontWeight: 'bold', color: colors.brand.primary }}> (🫘 {credits})</Text>
                                     ) : null}
                                 </Text>
                             );
                             break;
+                        }
                         case 'rating_given': {
                             const starCount = Math.max(1, Math.min(5, Math.round(Number(item.metadata?.stars) || 5)));
                             emoji = '⭐️';
-                            summaryText = `${actorName} rated ${targetName} ${starCount} out of 5 stars`;
+                            summaryText = tn(starCount, '{actor} rated {target} {n} out of 5 stars', '{actor} rated {target} {n} out of 5 stars', names);
+                            const stars = (
+                                <Text
+                                    style={{ color: colors.feedback.warning.fg, fontWeight: 'bold' }}
+                                    accessibilityLabel={tn(starCount, '{n} out of 5 stars', '{n} out of 5 stars')}
+                                >
+                                    {'★'.repeat(starCount)}
+                                </Text>
+                            );
                             content = (
                                 <Text style={[styles.itemText, { color: colors.text.body }]}>
-                                    <Text style={styles.bold}>{actorName}</Text> rated{' '}
-                                    <Text style={styles.bold}>{targetName}</Text>{' '}
-                                    <Text
-                                        style={{ color: colors.feedback.warning.fg, fontWeight: 'bold' }}
-                                        accessibilityLabel={`${starCount} out of 5 stars`}
-                                    >
-                                        {'★'.repeat(starCount)}
-                                    </Text>
+                                    <Sentence text={t('{actor} rated {target} {stars}')} parts={{ actor, target, stars }} />
                                 </Text>
                             );
                             break;
                         }
-                        case 'post_created':
+                        case 'post_created': {
                             emoji = '📍';
-                            summaryText = `${actorName} posted "${item.metadata?.title || 'Listing'}"`;
+                            const title = item.metadata?.title || t('Listing');
+                            summaryText = t('{actor} posted "{title}"', { actor: actorName, title });
                             content = (
                                 <Text style={[styles.itemText, { color: colors.text.body }]}>
-                                    <Text style={styles.bold}>{actorName}</Text> posted{' '}
-                                    <Text style={styles.bold}>"{item.metadata?.title || 'Listing'}"</Text>
+                                    <Sentence text={t('{actor} posted "{title}"')} parts={{ actor, title: <Text style={styles.bold}>{title}</Text> }} />
                                 </Text>
                             );
                             break;
+                        }
                     }
 
                     return (
                         <View
                             key={item.id}
                             accessible={true}
-                            accessibilityLabel={`${summaryText}, ${timeStr}`}
+                            accessibilityLabel={t('{summary}, {time}', { summary: summaryText, time: timeStr })}
                             style={[
                                 styles.card,
                                 {

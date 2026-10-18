@@ -33,7 +33,7 @@ import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext'
 import { palette } from '../constants/colors';
 import { votePoll, closePoll } from '../utils/db';
 import { INFORMAL_POLL_NOTE } from '../utils/node-profile';
-import { pollVoteOriginsLine, pollOptionOriginsLine, pollOriginsShown, LOCAL_COMMUNITY_LINES } from '@beanpool/core';
+import { pollVoteOriginsLine, pollOptionOriginsLine, pollOriginsShown, LOCAL_COMMUNITY_LINES, t, tn } from '@beanpool/core';
 import { LocalCommunityMark } from './showcase/LocalCommunityMark';
 
 export interface PollOption {
@@ -51,6 +51,9 @@ export interface PollVoteRecord {
     optionId: string;
     createdAt: string;
 }
+
+/** Lines kept as word() elsewhere, shown here in the member's language. */
+const LINES = { informal: INFORMAL_POLL_NOTE };
 
 interface PollCardProps {
     post: any;
@@ -82,7 +85,7 @@ export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false,
     const isAuthor = Boolean(currentPubkey && (livePost.author_pubkey === currentPubkey || livePost.authorPublicKey === currentPubkey));
     const closesAt = livePost.pollClosesAt || livePost.poll_closes_at;
     const isClosed = livePost.status === 'completed' || (closesAt ? new Date(closesAt).getTime() <= Date.now() : false);
-    const authorName = livePost.author_callsign || livePost.authorCallsign || (livePost.author_pubkey ? livePost.author_pubkey.slice(0, 6) : 'Unknown');
+    const authorName = livePost.author_callsign || livePost.authorCallsign || (livePost.author_pubkey ? livePost.author_pubkey.slice(0, 6) : t('Unknown'));
     const avatarUrl = livePost.author_avatar || livePost.authorAvatarUrl;
 
     const rawOptions = livePost.pollOptions || livePost.poll_options;
@@ -114,11 +117,11 @@ export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false,
 
     const handleVote = async (optionId: string) => {
         if (isClosed) {
-            Alert.alert('Poll Closed', 'This poll has ended and can no longer receive votes.');
+            Alert.alert(t('Poll Closed'), t('This poll has ended and can no longer receive votes.'));
             return;
         }
         if (!currentPubkey) {
-            Alert.alert('Sign In Required', 'Please connect your member identity to vote in polls.');
+            Alert.alert(t('Sign In Required'), t('Please connect your member identity to vote in polls.'));
             return;
         }
 
@@ -130,7 +133,7 @@ export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false,
             }
             onVoteSuccess?.();
         } catch (err: any) {
-            Alert.alert('Voting Error', err.message || 'Could not record your vote.');
+            Alert.alert(t('Voting Error'), err.message || t('Could not record your vote.'));
         } finally {
             setVotingOptionId(null);
         }
@@ -138,12 +141,12 @@ export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false,
 
     const handleClosePoll = () => {
         Alert.alert(
-            'Close Poll',
-            'Are you sure you want to close this poll early? No more votes will be accepted.',
+            t('Close Poll'),
+            t('Are you sure you want to close this poll early? No more votes will be accepted.'),
             [
-                { text: 'Cancel', style: 'cancel' },
+                { text: t('Cancel'), style: 'cancel' },
                 {
-                    text: 'Close Poll',
+                    text: t('Close Poll'),
                     style: 'destructive',
                     onPress: async () => {
                         setIsClosing(true);
@@ -156,7 +159,7 @@ export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false,
                             }
                             onVoteSuccess?.();
                         } catch (err: any) {
-                            Alert.alert('Error', err.message || 'Failed to close poll');
+                            Alert.alert(t('Error'), err.message || t('Failed to close poll'));
                         } finally {
                             setIsClosing(false);
                         }
@@ -167,15 +170,15 @@ export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false,
     };
 
     const formatTimeRemaining = () => {
-        if (isClosed) return 'Closed';
+        if (isClosed) return t('Closed', undefined, 'poll');
         const closesAt = livePost.pollClosesAt || livePost.poll_closes_at;
-        if (!closesAt) return 'Active';
+        if (!closesAt) return t('Active', undefined, 'poll');
         const diffMs = new Date(closesAt).getTime() - Date.now();
-        if (diffMs <= 0) return 'Closed';
+        if (diffMs <= 0) return t('Closed', undefined, 'poll');
         const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-        if (diffHours < 24) return `Closes in ${diffHours}h`;
+        if (diffHours < 24) return t('Closes in {n}h', { n: diffHours });
         const diffDays = Math.floor(diffHours / 24);
-        return `Closes in ${diffDays}d`;
+        return t('Closes in {n}d', { n: diffDays });
     };
 
     return (
@@ -184,7 +187,7 @@ export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false,
             <View style={styles.headerRow}>
                 <View style={styles.badgeGroup}>
                     <View style={styles.pollBadge}>
-                        <Text style={styles.pollBadgeText}>🗳️ POLL</Text>
+                        <Text style={styles.pollBadgeText}>{t('🗳️ POLL')}</Text>
                     </View>
                     <View style={[styles.statusBadge, isClosed ? styles.statusClosed : styles.statusActive]}>
                         <Text style={isClosed ? styles.statusClosedText : styles.statusActiveText}>
@@ -200,13 +203,13 @@ export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false,
                         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                         style={styles.closeBtn}
                         accessibilityRole="button"
-                        accessibilityLabel={isClosing ? "Closing poll..." : "Close poll"}
+                        accessibilityLabel={isClosing ? t('Closing poll...') : t('Close poll')}
                         accessibilityState={{ busy: isClosing }}
                     >
                         {isClosing ? (
                             <ActivityIndicator size="small" color="#ef4444" />
                         ) : (
-                            <Text style={styles.closeBtnText}>Close Poll</Text>
+                            <Text style={styles.closeBtnText}>{t('Close Poll')}</Text>
                         )}
                     </Pressable>
                 )}
@@ -217,7 +220,7 @@ export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false,
                 <MemberAvatar pubkey={livePost.author_pubkey || livePost.authorPublicKey || ''} avatarUrl={avatarUrl} callsign={authorName} size={30} />
                 <View style={{ marginLeft: 8 }}>
                     <Text style={styles.authorText}>
-                        {authorName} {isAuthor ? '👤 (You)' : ''}
+                        {isAuthor ? t('{name} 👤 (You)', { name: authorName }) : authorName}
                     </Text>
                 </View>
             </View>
@@ -236,6 +239,11 @@ export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false,
                     const pct = opt.percentage ?? (totalVotes > 0 ? Math.round(((opt.votes || 0) / totalVotes) * 100) : 0);
                     const count = opt.votes ?? 0;
                     const optionOrigins = showOrigins ? pollOptionOriginsLine(count, opt.newOrWordsVotes) : null;
+                    // One sentence for a screen reader, in the member's language: the option, its share, its votes, then
+                    // where they came from and whether it is the member's own, each said after the last.
+                    let optionLabel = tn(count, '{option}, {pct} percent, {n} vote', '{option}, {pct} percent, {n} votes', { option: opt.text, pct });
+                    if (optionOrigins) optionLabel = t('{label}, {origins}', { label: optionLabel, origins: optionOrigins });
+                    if (isVoted) optionLabel = t('{label}, your vote', { label: optionLabel });
 
                     return (
                         <Pressable
@@ -249,7 +257,7 @@ export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false,
                             ]}
                             accessibilityRole="button"
                             accessibilityState={{ selected: isVoted, disabled: isClosed || Boolean(votingOptionId) }}
-                            accessibilityLabel={`${opt.text}, ${pct} percent, ${count} ${count === 1 ? 'vote' : 'votes'}${optionOrigins ? `, ${optionOrigins}` : ''}${isVoted ? ', your vote' : ''}`}
+                            accessibilityLabel={optionLabel}
                         >
                             {/* Background percentage fill bar */}
                             <View
@@ -278,7 +286,7 @@ export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false,
                                         {pct}%
                                     </Text>
                                     <Text style={styles.optionVotes}>
-                                        ({count} {count === 1 ? 'vote' : 'votes'})
+                                        {tn(count, '({n} vote)', '({n} votes)')}
                                     </Text>
                                 </View>
                             </View>
@@ -295,33 +303,33 @@ export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false,
             {/* On the worldwide community: a show of opinion, never a decision. */}
             {informal && (
                 <Text style={styles.informalNote} testID="poll-informal-note">
-                    💬 {INFORMAL_POLL_NOTE}
+                    {t('💬 {note}', { note: t(LINES.informal) })}
                 </Text>
             )}
-            {informal && decisionsPreview && <LocalCommunityMark variant="line" feature="decisions" text={LOCAL_COMMUNITY_LINES.poll} />}
+            {informal && decisionsPreview && <LocalCommunityMark variant="line" feature="decisions" text={t(LOCAL_COMMUNITY_LINES.poll)} />}
 
             {/* Where its votes came from, once it has closed, where the node says: all of them still count. */}
             {originsLine && (
                 <Text style={styles.originsNote} testID="poll-vote-origins">
-                    🌱 {originsLine}
+                    {t('🌱 {line}', { line: originsLine })}
                 </Text>
             )}
 
             {/* Which ballot this is, said before anyone votes: anonymous unless its creator made it an open vote. */}
             {openVote ? (
                 <Text style={styles.openBallotNote} testID="poll-open-ballot-note">
-                    👁️ Open vote: members can see who chose what
+                    {t('👁️ Open vote: members can see who chose what')}
                 </Text>
             ) : (
                 <Text style={styles.openBallotNote} testID="poll-anonymous-note">
-                    🔒 Anonymous: everyone sees only the totals
+                    {t('🔒 Anonymous: everyone sees only the totals')}
                 </Text>
             )}
 
             {/* Turnout Tally */}
             <View style={styles.turnoutRow}>
                 <Text style={styles.turnoutText}>
-                    📊 {totalVotes} total {totalVotes === 1 ? 'vote' : 'votes'} cast
+                    {tn(totalVotes, '📊 {n} total vote cast', '📊 {n} total votes cast')}
                 </Text>
                 {openVote && votesList.length > 0 && (
                     <Pressable
@@ -329,10 +337,10 @@ export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false,
                         style={styles.votersToggleBtn}
                         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                         accessibilityRole="button"
-                        accessibilityLabel={showVoters ? 'Hide voters list' : `View voters list, ${votesList.length} votes`}
+                        accessibilityLabel={showVoters ? t('Hide voters list') : tn(votesList.length, 'View voters list, {n} votes', 'View voters list, {n} votes')}
                     >
                         <Text style={styles.votersToggleText}>
-                            {showVoters ? 'Hide voters ▲' : `View voters (${votesList.length}) ▼`}
+                            {showVoters ? t('Hide voters ▲') : t('View voters ({n}) ▼', { n: votesList.length })}
                         </Text>
                     </Pressable>
                 )}
@@ -342,12 +350,12 @@ export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false,
             {openVote && showVoters && votesList.length > 0 && (
                 <View style={styles.votersSection}>
                     <Text style={styles.votersNotice}>
-                        This is an open vote: its creator chose to let members see who chose what.
+                        {t('This is an open vote: its creator chose to let members see who chose what.')}
                     </Text>
                     {votesList.map((v, i) => {
                         const matchedOpt = optionsById.get(v.optionId);
                         const optText = matchedOpt ? matchedOpt.text : v.optionId;
-                        const voterName = v.voterCallsign || (v.voterPubkey ? v.voterPubkey.slice(0, 8) : 'Member');
+                        const voterName = v.voterCallsign || (v.voterPubkey ? v.voterPubkey.slice(0, 8) : t('Member'));
 
                         return (
                             <View key={`${v.voterPubkey}_${i}`} style={styles.voterItem}>

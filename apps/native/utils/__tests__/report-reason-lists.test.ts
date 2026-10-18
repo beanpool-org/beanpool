@@ -48,8 +48,11 @@ describe('the phone\'s report lists', () => {
         const src = read('app/post/[id].tsx');
         expect(src).toMatch(/import \{[^}]*\bREPORT_REASONS\b[^}]*\} from '\.\.\/\.\.\/utils\/reportReasons'/);
         const b = box(src, 'SELECT REPORT REASON', 'Optional details or comments');
-        expect(b).toContain('{REPORT_REASONS.map((r) =>');
-        expect(b).toContain(HINT);
+        // In the member's language since words S3b: the same shared reasons and hint, through t() (the reason sent stays
+        // as written), the hint one sentence with Child safety in bold inside it.
+        expect(b).toContain('{REPORT_REASONS.map((r, i) =>');
+        expect(b).toContain("<Sentence text={t('{reason}: {hint}', { hint: t(LINES.childSafetyHint) })} parts={{ reason: <Text style={{ fontWeight: '700' }}>{t(LINES.childSafety)}</Text> }} />");
+        expect(src).toContain('childSafety: CHILD_SAFETY_REASON, childSafetyHint: CHILD_SAFETY_HINT');
         // The reason goes first, the member's words after it: where the server reads the choice.
         expect(src).toContain('const finalReason = reportDetails ? `${reportReason}: ${reportDetails}` : reportReason;');
     });
@@ -105,8 +108,9 @@ describe('the phone\'s report lists', () => {
         it(`${rel} says the shared thanks, and why the words were left out, in its one "Reported" dialog`, () => {
             const src = read(rel);
             expect(src).toMatch(/import \{[^}]*\breportedAlertBody\b[^}]*\} from '(\.\.\/)+utils\/reportReasons';/);
-            expect(src).toMatch(new RegExp(`const sent = await reportAbuse\\([^)]*\\b${reasonSent}\\b[^)]*\\);[\\s\\S]{0,480}Alert\\.alert\\('Reported', reportedAlertBody\\(sent\\?\\.wordsLeftOut, ${reasonSent}\\)\\);`));
-            expect(src.match(/Alert\.alert\('Reported'/g)).toHaveLength(1);
+            // The title as written, or through t() (the post screen since words S3b).
+            expect(src).toMatch(new RegExp(`const sent = await reportAbuse\\([^)]*\\b${reasonSent}\\b[^)]*\\);[\\s\\S]{0,480}Alert\\.alert\\((?:'Reported'|t\\('Reported'\\)), reportedAlertBody\\(sent\\?\\.wordsLeftOut, ${reasonSent}\\)\\);`));
+            expect(src.match(/Alert\.alert\((?:'Reported'|t\('Reported'\))/g)).toHaveLength(1);
             for (const old of ["moderators will review it", 'has been flagged for review', "Thanks. This community's moderators will take a look."]) expect(src).not.toContain(old);
         });
     }

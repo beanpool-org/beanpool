@@ -1,14 +1,15 @@
 /**
  * The reasons a member picks when reporting (the post screen, the Pulse card). "Child safety" is read by the server as
  * it is picked (services/alerts.ts pickedChildSafety): the owners and admins are told at once, urgent, by count only.
- * Keep its words exactly.
+ * Keep its words exactly: each reason is sent as it is written here (English, the node's to read) and SHOWN through t(),
+ * as a word() key, in the member's language.
  */
 import { t, word, reportKind } from '@beanpool/core';
 
-export const CHILD_SAFETY_REASON = 'Child safety';
-export const CHILD_SAFETY_HINT = 'A child at risk, or sexual content involving a minor.';
+export const CHILD_SAFETY_REASON = word('Child safety');
+export const CHILD_SAFETY_HINT = word('A child at risk, or sexual content involving a minor.');
 
-export const REPORT_REASONS = ['Spam or scam', 'Offensive content', 'Misleading post', CHILD_SAFETY_REASON, 'Other'] as const;
+export const REPORT_REASONS = [word('Spam or scam'), word('Offensive content'), word('Misleading post'), CHILD_SAFETY_REASON, word('Other')] as const;
 
 /** Why a report went with the reason picked but not the member's words (reportAbuse's `wordsLeftOut`, #1938 case 14). */
 export type ReportWordsLeftOut = 'private' | 'unread';

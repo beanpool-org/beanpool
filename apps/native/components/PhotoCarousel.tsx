@@ -14,6 +14,7 @@ import {
     LayoutChangeEvent,
 } from 'react-native';
 import { Image } from 'expo-image';
+import { t } from '@beanpool/core';
 import { colors } from '../constants/colors';
 
 interface Props {
@@ -60,7 +61,7 @@ export function PhotoCarousel({ photos, height = 280, borderRadius = 16 }: Props
                             contentFit="cover"
                             cachePolicy="memory-disk"
                             transition={150}
-                            accessibilityLabel={`Photo ${i + 1} of ${valid.length}`}
+                            accessibilityLabel={t('Photo {n} of {count}', { n: i + 1, count: valid.length })}
                         />
                     ))}
             </ScrollView>

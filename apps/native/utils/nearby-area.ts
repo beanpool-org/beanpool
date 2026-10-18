@@ -11,6 +11,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getDatabaseFilenameForNode } from './nodes';
 import { getCachedNodeProfile } from './node-profile';
+import { word } from '@beanpool/core';
 
 export interface NearbyArea {
     lat: number;
@@ -84,10 +85,13 @@ export async function noteAreaSent(url: string, publicKey: string, area: NearbyA
     }
 }
 
-/** The Market's line for a member with no area on a by-area community (design §3.4), in two parts: what, and the way on. */
+/**
+ * The Market's line for a member with no area on a by-area community (design §3.4), in two parts: what, and the way on.
+ * word() keys, shown through t() (components/NoAreaLine).
+ */
 export const NO_AREA_LINE = {
-    seeing: "You're seeing the newest listings worldwide.",
-    action: "Set your area to see what's near you.",
+    seeing: word("You're seeing the newest listings worldwide."),
+    action: word("Set your area to see what's near you."),
 } as const;
 
 /**

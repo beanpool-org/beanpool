@@ -9,7 +9,7 @@
 
 import {
     eventWhenParts, deviceLocalClock, zoneLabelFor, utcOffsetName, offsetMinutesOf, localClockMs, CURRENT_ZONE_IDS,
-    LOCAL_CLOCK_RE, formatDate, formatNumber, t, tn, word, type EventWhenParts,
+    LOCAL_CLOCK_RE, formatDate, formatNumber, t, tn, word, type EventWhenParts, type WordKey,
     repeatCaption, repeatChoiceKeyOf, repeatChoicesFor, repeatLengthProblem, repeatPatternFor, repeatUntilProblem, type RepeatChoiceKey, type RepeatPattern,
 } from '@beanpool/core';
 
@@ -406,11 +406,12 @@ export function isEventInFeed(post: any, nowMs: number = Date.now()): boolean {
  */
 export type EventWindow = 'all' | 'today' | 'weekend' | 'week';
 
-export const EVENT_WINDOWS: ReadonlyArray<{ id: EventWindow; label: string }> = [
-    { id: 'all', label: 'All' },
-    { id: 'today', label: 'Today' },
-    { id: 'weekend', label: 'This weekend' },
-    { id: 'week', label: 'Next 7 days' },
+/** Each label a word() key, shown through t() by the chip row (components/FilterChipRow). */
+export const EVENT_WINDOWS: ReadonlyArray<{ id: EventWindow; label: WordKey }> = [
+    { id: 'all', label: word('All') },
+    { id: 'today', label: word('Today') },
+    { id: 'weekend', label: word('This weekend') },
+    { id: 'week', label: word('Next 7 days') },
 ] as const;
 
 function startOfLocalDay(ms: number): Date {
@@ -490,8 +491,9 @@ export function applyRsvp(counts: RsvpCounts, next: EventRsvpStatus | null): Rsv
     return { going, interested, mine: next };
 }
 
+/** "2 going · 1 interested", in the member's language. */
 export function formatRsvpCounts(going: number, interested: number): string {
-    return `${going} going · ${interested} interested`;
+    return t('{going} going · {interested} interested', { going, interested });
 }
 
 export function formatDistance(km: number | null | undefined): string | null {

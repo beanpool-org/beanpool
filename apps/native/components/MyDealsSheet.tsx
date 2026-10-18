@@ -7,12 +7,31 @@ import { ReviewModal } from './ReviewModal';
 import { MemberAvatar } from './MemberAvatar';
 import { palette } from '../constants/colors';
 import { useTheme, useStyles } from '../app/ThemeContext';
-import { listPhotoUrl } from '@beanpool/core';
+import { formatDate, listPhotoUrl, t, word, type WordKey } from '@beanpool/core';
+import { Sentence } from './Sentence';
 import { ExampleHeader, LocalCommunityMark, LocalCommunitySheet } from './showcase/LocalCommunityMark';
 import { SAMPLE_DEALS_ME, sampleDeals } from './showcase/sample-screens';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const NONE: any[] = [];
+
+/** A deal's status on its badge: word() keys, shown through t(); a status this build doesn't know, as the node wrote it. */
+const DEAL_STATUS_WORDS: Readonly<Record<string, WordKey>> = {
+    pending: word('PENDING', 'deal status'),
+    requested: word('REQUESTED', 'deal status'),
+    completed: word('COMPLETED', 'deal status'),
+    cancelled: word('CANCELLED', 'deal status'),
+    rejected: word('REJECTED', 'deal status'),
+};
+function dealStatusWords(status: string): string {
+    return DEAL_STATUS_WORDS[status] ? t(DEAL_STATUS_WORDS[status]) : String(status ?? '').toUpperCase();
+}
+
+/** The day a deal began, as core writes dates ("3 Oct 2026"), in the member's language; nothing for a date it can't read. */
+function dealDate(iso: string | null | undefined): string {
+    const d = iso ? new Date(iso) : null;
+    return d && Number.isFinite(d.getTime()) ? formatDate(d, 'day-month-year') : '';
+}
 
 interface MyDealsSheetProps {
     visible: boolean;
@@ -115,10 +134,13 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
             shadowRadius: 2,
             elevation: 1,
         },
+        // Wraps inside its third of the bar (a longer name in another language), never past it.
         tabText: {
             fontSize: 13,
             fontWeight: '700',
             color: colors.text.secondary,
+            flexShrink: 1,
+            textAlign: 'center',
         },
         tabTextActive: {
             color: colors.text.body,
@@ -139,6 +161,7 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
         // History sub-filter
         historyFilterRow: {
             flexDirection: 'row',
+            flexWrap: 'wrap',
             justifyContent: 'center',
             gap: 8,
             marginBottom: 16,
@@ -462,11 +485,11 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
                         <View testID={`deal-top-${item.id}`} style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 6, rowGap: 2 }}>
                             <View style={[styles.statusBadge, isCompleted && styles.statusCompleted]}>
                                 <Text style={[styles.statusText, isCompleted && styles.statusTextCompleted]}>
-                                    {item.status.toUpperCase()}
+                                    {dealStatusWords(item.status)}
                                 </Text>
                             </View>
                             <Text style={styles.dateText}>
-                                {new Date(item.createdAt).toLocaleDateString()}
+                                {dealDate(item.createdAt)}
                             </Text>
                             {showsBeans && (
                             <View testID={`deal-amount-${item.id}`} style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 'auto', flexShrink: 0 }}>
@@ -482,8 +505,7 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
                                 <MemberAvatar avatarUrl={partnerAvatar} pubkey={partnerPubkey || ''} callsign={partnerCallsign || '?'} size={20} />
                                 <Text style={[styles.partnerText, { fontSize: 11 }]} numberOfLines={1}>
-                                    {isBuyer ? 'From ' : 'To '}
-                                    <Text style={styles.partnerName}>{partnerCallsign}</Text>
+                                    <Sentence text={isBuyer ? t('From {name}') : t('To {name}')} parts={{ name: <Text style={styles.partnerName}>{partnerCallsign}</Text> }} />
                                 </Text>
                             </View>
                             {isCompleted && (
@@ -493,7 +515,7 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
                                         style={[styles.reviewBtn, { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 }]}
                                         onPress={preview ? openMark : () => setPromptReview({ txId: item.id, targetPubkey: partnerPubkey, targetCallsign: partnerCallsign })}
                                     >
-                                        <Text style={[styles.reviewBtnText, { fontSize: 11 }]}>Review</Text>
+                                        <Text style={[styles.reviewBtnText, { fontSize: 11 }]}>{t('Review', undefined, 'button: review a finished deal')}</Text>
                                     </Pressable>
                                 ) : (
                                     <Pressable
@@ -501,7 +523,7 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
                                         style={[styles.reviewBtn, { backgroundColor: colors.surface.subtle, borderColor: colors.border.strong, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6 }]}
                                         onPress={preview ? openMark : () => setPromptReview({ txId: item.id, targetPubkey: partnerPubkey, targetCallsign: partnerCallsign })}
                                     >
-                                        <Text style={[styles.reviewBtnText, { color: theme === 'dark' ? colors.text.secondary : palette.gray600, fontSize: 11 }]}>Edit</Text>
+                                        <Text style={[styles.reviewBtnText, { color: theme === 'dark' ? colors.text.secondary : palette.gray600, fontSize: 11 }]}>{t('Edit', undefined, 'button: change your review')}</Text>
                                     </Pressable>
                                 )
                             )}
@@ -530,22 +552,25 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
         }
 
         const relatedTx = activeTxsByPostId.get(item.id)?.[0];
-        let displayStatusText = 'Active';
+        let displayStatusText = t('Active', undefined, 'listing status');
         let highlightStyle = {};
         // The status line's ink: light as it was (muted, amber for Action Required); dark, its card's tone.
         let statusInk: string | undefined;
+        // Action Required is drawn bold.
+        let actionRequired = false;
 
         if (item.status === 'pending' || relatedTx?.status === 'pending') {
-            displayStatusText = '🤝 Held in Trust';
+            displayStatusText = t('🤝 Held in Trust');
             highlightStyle = heldTone;
             if (isDark) statusInk = colors.feedback.success.fg;
         } else if (relatedTx?.status === 'requested') {
             if (item.author_pubkey === identity?.publicKey) {
-                displayStatusText = '⚠️ Action Required';
+                displayStatusText = t('⚠️ Action Required');
+                actionRequired = true;
                 highlightStyle = actionTone;
                 statusInk = colors.feedback.warning.fg;
             } else {
-                displayStatusText = '⏳ Awaiting Approval';
+                displayStatusText = t('⏳ Awaiting Approval');
                 highlightStyle = { backgroundColor: colors.surface.subtle, borderColor: colors.border.default };
                 if (isDark) statusInk = colors.text.secondary;
             }
@@ -565,10 +590,10 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                                 <View style={[styles.typeBadge, item.type === 'offer' ? styles.badgeOffer : styles.badgeNeed]}>
-                                    <Text style={styles.typeBadgeText}>{item.type?.toUpperCase()}</Text>
+                                    <Text style={styles.typeBadgeText}>{item.type === 'offer' ? t('OFFER') : item.type === 'need' ? t('NEED') : item.type?.toUpperCase()}</Text>
                                 </View>
                                 {item.status === 'paused' && (
-                                    <View style={styles.pausedBadge}><Text style={styles.pausedBadgeText}>⏸ PAUSED</Text></View>
+                                    <View style={styles.pausedBadge}><Text style={styles.pausedBadgeText}>{t('⏸ PAUSED')}</Text></View>
                                 )}
                             </View>
                             {showsBeans && (
@@ -581,7 +606,7 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
                             )}
                         </View>
                         <Text style={styles.dealTitle} numberOfLines={1}>{item.title}</Text>
-                        <Text style={[styles.dateText, statusInk !== undefined && { color: statusInk }, displayStatusText.includes('Action') && { fontWeight: '800' }, { marginTop: 2 }]}>{displayStatusText}</Text>
+                        <Text style={[styles.dateText, statusInk !== undefined && { color: statusInk }, actionRequired && { fontWeight: '800' }, { marginTop: 2 }]}>{displayStatusText}</Text>
                     </View>
                 </View>
             </Pressable>
@@ -590,15 +615,15 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
 
     return (
         <Modal visible={visible} transparent animationType="slide">
-            <Pressable accessibilityRole="button" accessibilityLabel="Close" style={styles.overlay} onPress={onClose}>
+            <Pressable accessibilityRole="button" accessibilityLabel={t('Close')} style={styles.overlay} onPress={onClose}>
                 <Pressable accessibilityRole="button" style={styles.sheet} onPress={e => e.stopPropagation()}>
                     {/* Handle bar */}
                     <View style={styles.handleBar} />
 
                     {/* Header */}
                     <View style={styles.sheetHeader}>
-                        <Text style={styles.sheetTitle}>My Deals</Text>
-                        <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={onClose}>
+                        <Text style={styles.sheetTitle}>{t('My Deals')}</Text>
+                        <Pressable accessibilityRole="button" accessibilityLabel={t('Close')} onPress={onClose}>
                             <Text style={styles.closeBtn}>✕</Text>
                         </Pressable>
                     </View>
@@ -606,9 +631,9 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
                     {/* Tab bar */}
                     <View style={styles.tabBar}>
                         {[
-                            { id: 'pending' as const, label: 'In Progress', badge: pendingCount },
-                            { id: 'active' as const, label: 'My Posts' },
-                            { id: 'history' as const, label: 'History' },
+                            { id: 'pending' as const, label: t('In Progress'), badge: pendingCount },
+                            { id: 'active' as const, label: t('My Posts') },
+                            { id: 'history' as const, label: t('History') },
                         ].map(tab => (
                             <Pressable
                                 accessibilityRole="button"
@@ -632,7 +657,7 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
                     {/* History sub-filter */}
                     {dealsTab === 'history' && (
                         <View style={styles.historyFilterRow}>
-                            {[{ id: 'all' as const, label: 'All' }, { id: 'buying' as const, label: 'Received' }, { id: 'selling' as const, label: 'Given' }].map(f => (
+                            {[{ id: 'all' as const, label: t('All') }, { id: 'buying' as const, label: t('Received') }, { id: 'selling' as const, label: t('Given') }].map(f => (
                                 <Pressable
                                     accessibilityRole="button"
                                     accessibilityState={{ selected: historyFilter === f.id }}
@@ -670,14 +695,14 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
                                     {dealsTab === 'history' ? '📜' : dealsTab === 'pending' ? '🤝' : '📋'}
                                 </Text>
                                 <Text style={styles.emptyTitle}>
-                                    {dealsTab === 'history' ? 'No history yet' : dealsTab === 'pending' ? 'No deals in progress' : 'No active posts'}
+                                    {dealsTab === 'history' ? t('No history yet') : dealsTab === 'pending' ? t('No deals in progress') : t('No active posts')}
                                 </Text>
                                 <Text style={styles.emptySubtext}>
                                     {dealsTab === 'active'
-                                        ? 'Post an offer or need to get started!'
+                                        ? t('Post an offer or need to get started!')
                                         : dealsTab === 'pending'
-                                        ? 'Accepted deals will appear here while they are held in trust.'
-                                        : 'Completed deals will show up here.'}
+                                        ? t('Accepted deals will appear here while they are held in trust.')
+                                        : t('Completed deals will show up here.')}
                                 </Text>
                                 {dealsTab === 'active' && (
                                     <Pressable
@@ -685,7 +710,7 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
                                         style={styles.ctaBtn}
                                         onPress={() => { onClose(); router.push('/(tabs)/market'); }}
                                     >
-                                        <Text style={styles.ctaBtnText}>+ Create a Post</Text>
+                                        <Text style={styles.ctaBtnText}>{t('+ Create a Post')}</Text>
                                     </Pressable>
                                 )}
                             </View>

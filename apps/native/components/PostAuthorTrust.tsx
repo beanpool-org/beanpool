@@ -4,7 +4,8 @@ import { getMemberRatings } from '../utils/db';
 import { router } from 'expo-router';
 import { MemberAvatar } from './MemberAvatar';
 import { useStyles, useTheme, type ThemeContextType } from '../app/ThemeContext';
-import { getTrustTier } from '../utils/trust-tier';
+import { getTrustTier, TIER_WORDS } from '../utils/trust-tier';
+import { t } from '@beanpool/core';
 import { isHiddenAuthor } from '../utils/posts-view';
 
 // Re-exported for the screens that import them from here (Market feed Elder cards).
@@ -59,7 +60,7 @@ export function PostAuthorTrust({ pubkey, callsign, energyCycled = 0, avatarUrl,
 
     if (mode === 'compact') {
         return (
-            <Wrapper {...(canOpen ? { onPress: handlePress, accessibilityRole: 'button' as const, accessibilityLabel: `View ${callsign}'s profile` } : {})} style={styles.compactContainer}>
+            <Wrapper {...(canOpen ? { onPress: handlePress, accessibilityRole: 'button' as const, accessibilityLabel: t("View {name}'s profile", { name: callsign }) } : {})} style={styles.compactContainer}>
                 {/* Avatar */}
                 <MemberAvatar avatarUrl={avatarUrl} pubkey={pubkey} callsign={callsign} size={18} />
                 {/* Tier badge */}
@@ -86,14 +87,14 @@ export function PostAuthorTrust({ pubkey, callsign, energyCycled = 0, avatarUrl,
 
     // Full mode (list cards)
     return (
-        <Wrapper {...(canOpen ? { onPress: handlePress, accessibilityRole: 'button' as const, accessibilityLabel: `View ${callsign}'s profile` } : {})} style={styles.fullContainer}>
+        <Wrapper {...(canOpen ? { onPress: handlePress, accessibilityRole: 'button' as const, accessibilityLabel: t("View {name}'s profile", { name: callsign }) } : {})} style={styles.fullContainer}>
             {/* Avatar */}
             <MemberAvatar avatarUrl={avatarUrl} pubkey={pubkey} callsign={callsign} size={24} />
             {/* Tier badge with label */}
             {showTier && (
                 <View testID="author-tier" style={[styles.tierBadgeFull, { backgroundColor: tierColors.bg, borderColor: tierColors.border }]}>
                     <Text style={styles.tierEmojiFull}>{tier.emoji}</Text>
-                    <Text style={[styles.tierLabelFull, { color: tierColors.fg }]}>{tier.label}</Text>
+                    <Text style={[styles.tierLabelFull, { color: tierColors.fg }]}>{t(TIER_WORDS[tier.label])}</Text>
                 </View>
             )}
             {/* Callsign */}
@@ -112,7 +113,7 @@ export function PostAuthorTrust({ pubkey, callsign, energyCycled = 0, avatarUrl,
             ) : (
                 isFounding && (
                     <View style={{ backgroundColor: colors.trust.founding.bg, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, borderWidth: 1, borderColor: colors.trust.founding.border, marginLeft: 4 }}>
-                        <Text style={{ fontSize: 10, fontWeight: '800', color: colors.trust.founding.fg }}>🔑 FOUNDING</Text>
+                        <Text style={{ fontSize: 10, fontWeight: '800', color: colors.trust.founding.fg }}>{t('🔑 FOUNDING')}</Text>
                     </View>
                 )
             )}
@@ -151,11 +152,14 @@ const makeStyles = ({ colors }: ThemeContextType) => StyleSheet.create({
         letterSpacing: -1,
     },
 
-    // Full mode (list cards)
+    // Full mode (list cards). It wraps: at 320dp and 1.3x text a longer tier name or FOUNDING in another language moves
+    // the badge after it to a second line instead of pushing it past the card's edge.
     fullContainer: {
         flexDirection: 'row',
+        flexWrap: 'wrap',
         alignItems: 'center',
         gap: 6,
+        rowGap: 4,
     },
     tierBadgeFull: {
         flexDirection: 'row',

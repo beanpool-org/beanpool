@@ -27,6 +27,11 @@
  *      the IP or domain, from /own or the command's file, is kept beside it, and the name stays this community's (no
  *      421 for members' apps signing for it), published, primary and the directory's publicUrl. A name set on the server
  *      after an own address became the community's is this community's too.
+ *   9. Moving the community's live own address to another of its kind (a domain to another domain, an IP to another IP)
+ *      asks for the owner's fresh proof, as the claim route does over a live name (design case 18, B3): refused with no
+ *      code, nothing changed; moved with a current one, the old address still accepted. The same one again, an IP kept
+ *      beside a domain, the first address and a first name over an IP stay plain. One refused anyway (the list is full)
+ *      is refused for that, with no code asked for.
  *
  * No real registrar, CA or BeanPool node: the registrar is a fake HTTP server here, and the certificate scheduler's order
  * is a stand-in that records what it was asked for and fails.
@@ -53,6 +58,8 @@ const schedule = await import('./services/acme/schedule.js');
 const { readState: readAcmeState } = await import('./services/acme/store.js');
 const { setNodeRole } = await import('./config/node-role.js');
 const { dataDir } = await import('./recover-command.js');
+const { updateLocalConfig } = await import('./config/local-config.js');
+const { generateTotpSecret, generateTotpCode, forgetUsedTotpCodesForTests } = await import('./totp.js');
 
 let passed = 0, failed = 0;
 function check(name: string, ok: boolean, detail = '') {
@@ -104,11 +111,14 @@ async function settledTick(): Promise<Awaited<ReturnType<typeof schedule.runAcme
 }
 
 let role: 'owner' | 'admin' = 'owner';
+// `fresh`: as the real checkAdminAuth for the password sent with a current code (the owner's fresh proof). Off, the
+// session alone: a change that asks for the proof wants a `code` with the request (section 9).
+let fresh = true;
 const deps = {
     checkAdminAuth: async (ctx: any) => {
         ctx.state.adminRole = role;
         ctx.state.actor = `the ${role} in this suite`;
-        ctx.state.secondFactorJustVerified = true;
+        if (fresh) ctx.state.secondFactorJustVerified = true;
         return true;
     },
 } as any;
@@ -354,6 +364,65 @@ try {
     delete process.env.CF_RECORD_NAME;
     own.forgetOwnAddresses();
 
+    console.log('\n9. Moving the live own address to another of its kind asks for the owner\'s fresh proof');
+    // The node's 2FA is on, and the owner's session alone is not the proof: a change that asks for it wants a current code.
+    const secret = generateTotpSecret();
+    updateLocalConfig({ totpEnabled: true, totpSecret: secret } as any);
+    forgetUsedTotpCodesForTests();
+    fresh = false;
+    se.updateNodeConfig({ publicAddress: null, registrarNames: [], ownerAddresses: [] } as any);
+    own.forgetOwnAddresses();
+    const COOP = 'coop.example.net';
+    const OTHER = 'elsewhere.example.net';
+    const first = await post(OWN, { domain: COOP });
+    check('the first domain with no code: 200, the community\'s address, plain', first.status === 200 && first.body?.communityAddress === true, show(first));
+    check('precondition: a domain is the community\'s address, primary and the directory\'s publicUrl', pa()?.mode === 'own' && pa()?.hostname === COOP
+        && own.primaryAddress() === COOP && se.getDirectoryInfo().publicUrl === `https://${COOP}`, show(pa()));
+    const before9 = show(se.getNodeConfig());
+    const noCode = await post(OWN, { domain: OTHER });
+    check('another domain with no code: 401, asking for one', noCode.status === 401 && noCode.body?.totpRequired === true, show(noCode));
+    check('…nothing changed: the community\'s address, the list, where newcomers and the directory are sent', show(se.getNodeConfig()) === before9
+        && own.primaryAddress() === COOP && se.getDirectoryInfo().publicUrl === `https://${COOP}` && own.audienceStanding(OTHER) === 'foreign',
+        show({ pa: pa(), primary: own.primaryAddress() }));
+    const withCode = await post(OWN, { domain: OTHER, code: generateTotpCode(secret) });
+    check('with a current code: 200, the community\'s address, primary and the directory\'s publicUrl', withCode.status === 200
+        && withCode.body?.communityAddress === true && pa()?.hostname === OTHER && own.primaryAddress() === OTHER
+        && se.getDirectoryInfo().publicUrl === `https://${OTHER}`, show({ withCode, pa: pa() }));
+    check('…and the domain it replaced stays this community\'s: members\' apps holding it keep working', own.audienceStanding(COOP) === 'own');
+    const sameAgain = await post(OWN, { domain: OTHER });
+    check('the same domain again with no code: 200, plain', sameAgain.status === 200 && pa()?.hostname === OTHER, show(sameAgain));
+    const IP9 = '198.51.100.70';
+    const beside = await post(OWN, { ip: IP9 });
+    check('an IP beside the domain with no code: 200, kept beside, plain', beside.status === 200 && beside.body?.communityAddress === false
+        && pa()?.hostname === OTHER && own.audienceStanding(IP9) === 'own', show(beside));
+    // An IP as the community's address: the domain removed in Settings, then an IP given with none.
+    await post('/api/local/admin/app-addresses/remove', { address: OTHER });
+    const firstIp = await post(OWN, { ip: IP9 });
+    check('with none, the first IP with no code: 200, the community\'s address, plain', firstIp.status === 200 && firstIp.body?.communityAddress === true
+        && pa()?.mode === 'ip' && pa()?.hostname === IP9, show({ firstIp, pa: pa() }));
+    const IP9B = '198.51.100.71';
+    const before9b = show(se.getNodeConfig());
+    const ipNoCode = await post(OWN, { ip: IP9B });
+    check('another IP with no code: 401, nothing changed', ipNoCode.status === 401 && ipNoCode.body?.totpRequired === true
+        && show(se.getNodeConfig()) === before9b && own.audienceStanding(IP9B) === 'foreign' && se.getDirectoryInfo().publicUrl === `https://${IP9}`, show(ipNoCode));
+    forgetUsedTotpCodesForTests();
+    const ipCode = await post(OWN, { ip: IP9B, code: generateTotpCode(secret) });
+    check('with a current code: 200, the community\'s address and the directory\'s publicUrl; the IP it replaced stays this community\'s',
+        ipCode.status === 200 && pa()?.hostname === IP9B && se.getDirectoryInfo().publicUrl === `https://${IP9B}` && own.audienceStanding(IP9) === 'own',
+        show({ ipCode, pa: pa() }));
+    // A full list: the address is refused for that before any code is asked for, so none is spent on it.
+    const fullList = Array.from({ length: own.MAX_OWNER_ADDRESSES - 2 }, (_, i) => `198.51.100.${100 + i}`);
+    se.updateNodeConfig({ ownerAddresses: [...owned(), ...fullList] } as any);
+    own.forgetOwnAddresses();
+    const full = await post(OWN, { ip: '198.51.100.99' });
+    check('another IP with the list full: 400 for that, no code asked for, nothing changed', full.status === 400
+        && /already has 20 addresses/.test(full.body?.error ?? '') && full.body?.totpRequired === undefined && pa()?.hostname === IP9B, show(full));
+    se.updateNodeConfig({ ownerAddresses: owned().filter((a) => !fullList.includes(a)) } as any);
+    own.forgetOwnAddresses();
+    const nameOverIp = await post(OWN, { domain: 'third.example.org' });
+    check('a first name over an IP with no code: 200, plain, as a first claim is', nameOverIp.status === 200 && pa()?.mode === 'own'
+        && pa()?.hostname === 'third.example.org', show(nameOverIp));
+    fresh = true;
 } catch (e) {
     failed++;
     console.log(`  ❌ the suite threw: ${(e as Error).stack}`);

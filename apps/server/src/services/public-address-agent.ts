@@ -100,11 +100,37 @@ export type OwnAddressResult =
  */
 function asCommunityAddress(host: string, kind: 'ip' | 'own'): { same: boolean; replace: boolean } {
     const config = getNodeConfig();
-    const pa = (config as any).publicAddress;
+    const pa = config.publicAddress;
     const same = isOwnPublicAddress(pa) && normalizeAddress(pa.hostname) === host;
     const named = !pa && !!resolvePublicNodeUrl(PUBLIC_URL_RULES.community, config);
     const replace = !same && ((!pa && !named) || (isOwnPublicAddress(pa) && !(kind === 'ip' && pa.mode === 'own')));
     return { same, replace };
+}
+
+/** Why storeOwnAddress takes nothing of `host`: it can't be this server's address, or the list is full. Null when it takes it. */
+function ownAddressRefused(host: string): string | null {
+    const problem = ownAddressProblem(host);
+    if (problem) return problem;
+    const owned = ownerConfirmedAddresses();
+    if (!owned.includes(host) && owned.length >= MAX_OWNER_ADDRESSES) {
+        return `This community already has ${MAX_OWNER_ADDRESSES} addresses of its own. Remove one it no longer uses first (Settings → Network).`;
+    }
+    return null;
+}
+
+/**
+ * Whether storing `input` would move the community's live own address to another of its kind: a domain to another
+ * domain, an IP to another IP. Settings' /own asks for the owner's fresh proof first, as the claim route does over a live
+ * name (design case 18, B3; S2 review 4305409734). The first own address, the same one again, one kept beside, and a
+ * first name over an IP (as a first claim) stay plain. One storeOwnAddress refuses moves nothing: no code is spent on it
+ * (#2002 NB1).
+ */
+export function replacesLiveOwnAddress(input: string): boolean {
+    const host = normalizeAddress(input);
+    if (!host || ownAddressRefused(host)) return false;
+    const kind: 'ip' | 'own' = isIpLiteral(host) ? 'ip' : 'own';
+    const pa = getNodeConfig().publicAddress;
+    return pa?.status === 'live' && isOwnPublicAddress(pa) && pa.mode === kind && asCommunityAddress(host, kind).replace;
 }
 
 /**
@@ -120,13 +146,10 @@ function asCommunityAddress(host: string, kind: 'ip' | 'own'): { same: boolean; 
  */
 export function storeOwnAddress(input: string, by: string): OwnAddressResult {
     const host = normalizeAddress(input) ?? String(input ?? '').slice(0, 80);
-    const problem = ownAddressProblem(host);
-    if (problem) return { ok: false, error: problem };
+    const refused = ownAddressRefused(host);
+    if (refused) return { ok: false, error: refused };
     const kind: 'ip' | 'own' = isIpLiteral(host) ? 'ip' : 'own';
     const owned = ownerConfirmedAddresses();
-    if (!owned.includes(host) && owned.length >= MAX_OWNER_ADDRESSES) {
-        return { ok: false, error: `This community already has ${MAX_OWNER_ADDRESSES} addresses of its own. Remove one it no longer uses first (Settings → Network).` };
-    }
     const { same, replace } = asCommunityAddress(host, kind);
     const update: Record<string, unknown> = {};
     if (!owned.includes(host)) update.ownerAddresses = [...owned, host];

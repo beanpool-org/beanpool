@@ -8,8 +8,9 @@
  *   - POST /api/local/admin/public-address/own { ip } or { domain } (owner-only, main server only): an address of this
  *     server's own, its public IPv4 address or the owner's domain pointed at it, as `beanpool claim --ip/--address`
  *     gives one (services/public-address-agent.ts storeOwnAddress; design scratch/global-node/DESIGN-https-anywhere-fable.md
- *     §4). Nothing is asked of the registrar; the server gets its own certificate for it. The registrar's routes below
- *     leave an own address alone: it has no BeanPool name to release, rotate or ask about.
+ *     §4). Nothing is asked of the registrar; the server gets its own certificate for it. Moving the community's live own
+ *     address to another of its kind asks for the owner's fresh proof, as a claim over a live name does. The registrar's
+ *     routes below leave an own address alone: it has no BeanPool name to release, rotate or ask about.
  */
 
 import Router from '@koa/router';
@@ -18,7 +19,7 @@ import { buildAttestation, claimAddress, updateAddressMetadata, addressStatus, r
 import { syncTunnel, restartTunnel, persistAddress, persistAddressIfUnchanged, answersAboutAnotherName, noteUnansweredClaim, getTunnelStatus, dockerSocketMounted, LOOPBACK_ORIGIN, type TunnelStatus } from '../services/tunnel-connector.js';
 import { getNodeConfig, getNodeRole, updateNodeConfig, publicAddressGeneration, adminBroadcastAnnouncement, isOwnPublicAddress } from '../state-engine.js';
 import { recordRegistrarAnswer, registrarNames, REGISTRAR_ZONE } from '../engine/registrar-names.js';
-import { dropAddressRequest, nameAskedFor, storeOwnAddress } from '../services/public-address-agent.js';
+import { dropAddressRequest, nameAskedFor, replacesLiveOwnAddress, storeOwnAddress } from '../services/public-address-agent.js';
 import { isPublicIpv4Host, normalizeAddress, ownAddressProblem } from '../engine/host-kinds.js';
 import { primaryAddress, publishedAddresses } from '../engine/own-addresses.js';
 import { noteTurnedAway, settleUnansweredClaims, turnedAwayList } from '../config/turned-away-names.js';
@@ -365,7 +366,11 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
             ctx.body = { error: `${domain} is not a name: send an IP address as { "ip": … }.` };
             return;
         }
-        const got = storeOwnAddress((ip ?? domain)!, `Settings (${(ctx.state as any)?.actor || 'the admin password'})`);
+        const given = (ip ?? domain)!;
+        // Moving the community's live own address to another IP, or another domain, changes where newcomers and the directory
+        // are sent: the fresh proof, as the claim route asks over a live name (design case 18, B3; S2 review 4305409734).
+        if (replacesLiveOwnAddress(given) && !(await requireFreshProof(ctx, b.code, 'replace this community\'s live address'))) return;
+        const got = storeOwnAddress(given, `Settings (${(ctx.state as any)?.actor || 'the admin password'})`);
         if (!got.ok) { ctx.status = 400; ctx.body = { error: got.error }; return; }
         ctx.set('Cache-Control', 'no-store');
         ctx.body = { success: true, address: got.host, kind: got.kind, communityAddress: got.communityAddress, addresses: publishedAddresses(), primaryAddress: primaryAddress() };

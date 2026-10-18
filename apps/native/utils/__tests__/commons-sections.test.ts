@@ -196,7 +196,7 @@ describe('the screens go through the helpers (source check)', () => {
         expect(src).toContain('onFindGroups={() => router.push(FIND_GROUPS_HREF)}');
         expect(src.split('<FindGroupsButton').length - 1).toBe(1);
         expect(src).not.toContain("params: { section: 'groups' }");
-        expect(read('components/YourGroupsPane.tsx')).toContain('accessibilityLabel="Find groups"');
+        expect(read('components/YourGroupsPane.tsx')).toContain("accessibilityLabel={t('Find groups')}");
     });
 
     it('Commons: the section drawn is commonsSectionFor, and Decide, its pill and the propose form only where shown', () => {

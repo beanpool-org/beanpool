@@ -11,6 +11,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '../../app/ThemeContext';
 import { CHAT_REACTION_EMOJIS, type MessageActions } from '../../utils/chat-actions';
 import type { ChatStyles } from './styles';
+import { t } from '@beanpool/core';
 
 interface ActionsProps {
     actions: MessageActions;
@@ -31,14 +32,14 @@ export function ChatMessageActions({
     return (
         <View style={[styles.actionButtonsContainer, isMe ? styles.actionButtonsMe : styles.actionButtonsOther]}>
             {actions.reply && (
-                <Pressable accessibilityRole="button" accessibilityLabel="Reply" style={styles.circleActionButton} onPress={onReply}>
+                <Pressable accessibilityRole="button" accessibilityLabel={t('Reply')} style={styles.circleActionButton} onPress={onReply}>
                     <MaterialCommunityIcons name="reply" size={16} color={colors.text.inverse} />
                 </Pressable>
             )}
             {actions.react && (
                 <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel="React"
+                    accessibilityLabel={t('React')}
                     accessibilityState={{ expanded: emojiPickerOpen }}
                     style={[styles.circleActionButton, emojiPickerOpen ? styles.circleActionButtonActive : {}]}
                     onPress={onToggleEmojiPicker}
@@ -47,17 +48,17 @@ export function ChatMessageActions({
                 </Pressable>
             )}
             {actions.edit && (
-                <Pressable accessibilityRole="button" accessibilityLabel="Edit message" style={styles.circleActionButton} onPress={onEdit}>
+                <Pressable accessibilityRole="button" accessibilityLabel={t('Edit message')} style={styles.circleActionButton} onPress={onEdit}>
                     <MaterialCommunityIcons name="pencil" size={15} color={colors.text.inverse} />
                 </Pressable>
             )}
             {actions.delete && (
-                <Pressable accessibilityRole="button" accessibilityLabel="Delete message" style={styles.circleActionButton} onPress={onDelete}>
+                <Pressable accessibilityRole="button" accessibilityLabel={t('Delete message')} style={styles.circleActionButton} onPress={onDelete}>
                     <MaterialCommunityIcons name="delete-outline" size={16} color={colors.text.inverse} />
                 </Pressable>
             )}
             {actions.remove && (
-                <Pressable accessibilityRole="button" accessibilityLabel="Remove this message" style={[styles.circleActionButton, styles.circleActionButtonDanger]} onPress={onRemove}>
+                <Pressable accessibilityRole="button" accessibilityLabel={t('Remove this message')} style={[styles.circleActionButton, styles.circleActionButtonDanger]} onPress={onRemove}>
                     <MaterialCommunityIcons name="close-octagon-outline" size={16} color={colors.text.inverse} />
                 </Pressable>
             )}
@@ -84,7 +85,7 @@ export function ChatEmojiPicker({ isMe, styles, position, onPick }: PickerProps)
                 <Pressable
                     key={emoji}
                     accessibilityRole="button"
-                    accessibilityLabel={`React with ${emoji}`}
+                    accessibilityLabel={t('React with {emoji}', { emoji })}
                     style={styles.reactionEmojiButton}
                     onPress={() => onPick(emoji)}
                 >

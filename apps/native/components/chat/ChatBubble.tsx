@@ -10,8 +10,10 @@
 import React from 'react';
 import { View, Text, Pressable } from 'react-native';
 import type { ChatMessage, ChatKind, ChatRemovedRun } from '../../utils/chat-actions';
-import { isTombstone, tombstoneText, reactionSummary, removedRunLineText } from '../../utils/chat-actions';
+import { isTombstone, messageTime, tombstoneWords, reactionSummary, removedRunLineText } from '../../utils/chat-actions';
 import { splitTextWithLinks } from '../../utils/chat-links';
+import { chatLineWords } from '../../utils/chat-line-words';
+import { t, tn } from '@beanpool/core';
 import type { ChatStyles } from './styles';
 
 export interface ChatQuote {
@@ -73,13 +75,13 @@ export function ChatBubble({ item, isMe, styles, kind, authorLabel, quote, onPre
             )}
             {/* Its own line, free to wrap: the name's one line may be cut, the mark never is. */}
             {!!authorLabel && !removed && !!item.authorHint && (
-                <Text style={styles.messageAuthorHint}>{item.authorHint}</Text>
+                <Text style={styles.messageAuthorHint}>{chatLineWords(item.authorHint)}</Text>
             )}
 
             {!!quote && !removed && (
                 <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel={`Replying to ${quote.author}. Show the message.`}
+                    accessibilityLabel={t('Replying to {name}. Show the message.', { name: quote.author })}
                     onPress={quote.onPress}
                     style={[styles.quoteContainer, isMe ? styles.quoteMe : styles.quoteOther]}
                 >
@@ -95,16 +97,16 @@ export function ChatBubble({ item, isMe, styles, kind, authorLabel, quote, onPre
 
             {removed ? (
                 <Text style={[styles.messageText, textStyle, styles.messageRemoved]}>
-                    {tombstoneText(item, kind)}
+                    {tombstoneWords(item, kind)}
                     {'  '}
-                    <Text style={[styles.messageTime, timeStyle, { fontSize: 10 }]}>{item.timestamp}</Text>
+                    <Text style={[styles.messageTime, timeStyle, { fontSize: 10 }]}>{messageTime(item)}</Text>
                 </Text>
             ) : (!!item.text || !attachment) ? (
                 <Text style={[styles.messageText, textStyle, attachment ? { marginTop: 6 } : null]}>
                     {renderTextWithLinks(item.text, isMe ? styles.linkMe : styles.linkOther, onPressUrl)}
                     {'  '}
                     <Text style={[styles.messageTime, timeStyle, { fontSize: 10 }]}>
-                        {item.edited ? 'edited · ' : ''}{item.timestamp}
+                        {item.edited ? t('edited · {time}', { time: messageTime(item) }) : messageTime(item)}
                     </Text>
                     {status}
                 </Text>
@@ -119,7 +121,7 @@ export function ChatBubble({ item, isMe, styles, kind, authorLabel, quote, onPre
                     total === 1 ? { width: 28, paddingHorizontal: 0, justifyContent: 'center' } : {},
                 ]}>
                     <Text
-                        accessibilityLabel={`${total} ${total === 1 ? 'reaction' : 'reactions'}: ${emojis.join(' ')}`}
+                        accessibilityLabel={tn(total, '{n} reaction: {emojis}', '{n} reactions: {emojis}', { emojis: emojis.join(' ') })}
                         style={[
                             styles.reactionBadgeText,
                             total === 1 ? { fontSize: 14, lineHeight: 14, marginTop: 1.5, marginLeft: 3.5 } : { marginTop: -1 },

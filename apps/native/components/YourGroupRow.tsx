@@ -10,7 +10,16 @@ import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme, useStyles } from '../app/ThemeContext';
-import { chatEmoji, ownerKindWord, previewLine, rowRoleWord, rowTime, rowBadge, isMuted, type YourChat } from '../utils/your-groups';
+import { chatEmoji, ownerKindName, previewLine, rowSpokenName, rowTime, rowBadge, isMuted, type YourChat } from '../utils/your-groups';
+import { t, tn } from '@beanpool/core';
+
+/** The whole spoken label: the row's name phrase, then its unread count and muting, then the last line, as sentences. */
+function rowSpoken(head: string, unread: number, muted: boolean, preview: string): string {
+    if (unread && muted) return tn(unread, '{head}, {n} unread, muted. {preview}', '{head}, {n} unread, muted. {preview}', { head, preview });
+    if (unread) return tn(unread, '{head}, {n} unread. {preview}', '{head}, {n} unread. {preview}', { head, preview });
+    if (muted) return t('{head}, muted. {preview}', { head, preview });
+    return t('{head}. {preview}', { head, preview });
+}
 
 interface Props {
     item: YourChat;
@@ -64,15 +73,14 @@ export function YourGroupRow({ item, myPubkey, showUnread = false, onPress, flus
     const muted = isMuted(item.mute);
     // A project is a project (🎯) and an enterprise an enterprise (🥖), §3.1. The member's part (Leader, Collaborator,
     // Lead keeper, Keeper) is in the spoken label only: drawn beside the kind it would leave the preview a few dp at 320dp.
-    const kindWord = item.kind === 'group' ? null : ownerKindWord(item.kind, item.lifecycle).replace(/^./, c => c.toUpperCase());
-    const roleWord = rowRoleWord(item);
+    const kindWord = item.kind === 'group' ? null : ownerKindName(item.kind, item.lifecycle);
     const preview = previewLine(item, myPubkey);
     const time = rowTime(item.lastMessage?.timestamp ?? null);
 
     return (
         <Pressable
             accessibilityRole="button"
-            accessibilityLabel={`${item.name}${kindWord ? `, ${kindWord.toLowerCase()}` : ', group'}${roleWord ? `, ${roleWord.toLowerCase()}` : ''}${unread ? `, ${unread} unread` : ''}${muted ? ', muted' : ''}. ${preview}`}
+            accessibilityLabel={rowSpoken(rowSpokenName(item), unread, muted, preview)}
             style={[styles.row, flush && { marginHorizontal: 0 }]}
             onPress={() => onPress(item)}
         >

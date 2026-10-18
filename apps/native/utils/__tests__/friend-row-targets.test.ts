@@ -28,7 +28,7 @@ describe('the friends list row', () => {
     }
 
     it('Remove friend is the ✕ button with its label', () => {
-        expect(SRC).toMatch(/accessibilityLabel="Remove friend"[\s\S]{0,300}style=\{styles\.removeFriendBtn\}/);
+        expect(SRC).toMatch(/accessibilityLabel=\{t\('Remove friend'\)\}[\s\S]{0,300}style=\{styles\.removeFriendBtn\}/);
     });
 
     it('the name gives way to the buttons at 320dp (one line, a flexible column)', () => {

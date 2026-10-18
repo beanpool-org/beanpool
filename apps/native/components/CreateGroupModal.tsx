@@ -25,6 +25,7 @@ import { GROUP_CATEGORY_OPTIONS, GROUP_JOIN_POLICY_OPTIONS, CREATE_GROUP_DEFAULT
 import { router } from 'expo-router';
 import { useNodeProfile } from '../utils/use-node-profile';
 import { beansOn } from '../utils/node-profile';
+import { t } from '@beanpool/core';
 
 interface CreateGroupModalProps {
     isOpen: boolean;
@@ -228,8 +229,9 @@ export function CreateGroupModal({ isOpen, onClose, onCreated }: CreateGroupModa
                 setJoinPolicy(CREATE_GROUP_DEFAULTS.joinPolicy);
                 onClose();
             },
-            onInvalidName: () => Alert.alert('Invalid Name', 'Group name must be at least 2 characters long.'),
-            onError: (e: any) => Alert.alert('Creation Failed', e?.message || 'Failed to create group'),
+            onInvalidName: () => Alert.alert(t('Invalid Name'), t('Group name must be at least 2 characters long.')),
+            // The node's own reason is shown as it sent it (its words are slice S4).
+            onError: (e: any) => Alert.alert(t('Creation Failed'), e?.message || t('Failed to create group')),
         });
     };
 
@@ -246,12 +248,12 @@ export function CreateGroupModal({ isOpen, onClose, onCreated }: CreateGroupModa
             >
                 <View style={[styles.sheet, { paddingBottom: insets.bottom, maxHeight: lift.maxHeight, marginBottom: lift.lift }]}>
                     <View style={styles.header}>
-                        <Text style={styles.title}>Create a Group</Text>
+                        <Text style={styles.title}>{t('Create a Group')}</Text>
                         <Pressable
                             style={styles.closeBtn}
                             onPress={onClose}
                             accessibilityRole="button"
-                            accessibilityLabel="Close create group modal"
+                            accessibilityLabel={t('Close create group modal')}
                             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                         >
                             <MaterialCommunityIcons name="close" size={22} color={colors.text.muted} />
@@ -264,24 +266,24 @@ export function CreateGroupModal({ isOpen, onClose, onCreated }: CreateGroupModa
                         <View style={styles.infoNotice}>
                             <MaterialCommunityIcons name="information-outline" size={18} color={colors.text.secondary} />
                             <Text style={styles.infoNoticeText}>
-                                A group is a place to talk to some people rather than everyone. It does not hold beans and does not confer trust or voting standing.
+                                {t('A group is a place to talk to some people rather than everyone. It does not hold beans and does not confer trust or voting standing.')}
                             </Text>
                         </View>
 
-                        <Text style={styles.fieldLabel}>Group Name *</Text>
+                        <Text style={styles.fieldLabel}>{t('Group Name *')}</Text>
                         <TextInput
                             style={styles.input}
-                            placeholder="e.g. Bindarrabi Garden Crew, Solar Guild"
+                            placeholder={t('e.g. Bindarrabi Garden Crew, Solar Guild')}
                             placeholderTextColor={colors.text.muted}
                             value={name}
                             onChangeText={setName}
                             maxLength={60}
                         />
 
-                        <Text style={styles.fieldLabel}>Purpose / Description</Text>
+                        <Text style={styles.fieldLabel}>{t('Purpose / Description')}</Text>
                         <TextInput
                             style={[styles.input, styles.textArea]}
-                            placeholder="What does this group discuss or coordinate?"
+                            placeholder={t('What does this group discuss or coordinate?')}
                             placeholderTextColor={colors.text.muted}
                             value={description}
                             onChangeText={setDescription}
@@ -289,7 +291,7 @@ export function CreateGroupModal({ isOpen, onClose, onCreated }: CreateGroupModa
                             maxLength={300}
                         />
 
-                        <Text style={styles.fieldLabel}>Category</Text>
+                        <Text style={styles.fieldLabel}>{t('Category')}</Text>
                         <View style={styles.optionRow}>
                             {CATEGORIES.map(cat => {
                                 const selected = category === cat.key;
@@ -298,7 +300,7 @@ export function CreateGroupModal({ isOpen, onClose, onCreated }: CreateGroupModa
                                         key={cat.key}
                                         style={[styles.optionCard, selected && styles.optionCardActive]}
                                         accessibilityRole="button"
-                                        accessibilityLabel={`${cat.label}, ${cat.desc}`}
+                                        accessibilityLabel={t('{label}, {description}', { label: t(cat.label), description: t(cat.desc) })}
                                         accessibilityState={{ selected }}
                                         onPress={() => {
                                             hapticTick();
@@ -309,8 +311,8 @@ export function CreateGroupModal({ isOpen, onClose, onCreated }: CreateGroupModa
                                             <Text style={{ fontSize: 20 }} allowFontScaling={false}>{cat.emoji}</Text>
                                         </View>
                                         <View style={styles.optionTextWrap}>
-                                            <Text style={styles.optionLabel}>{cat.label}</Text>
-                                            <Text style={styles.optionDesc}>{cat.desc}</Text>
+                                            <Text style={styles.optionLabel}>{t(cat.label)}</Text>
+                                            <Text style={styles.optionDesc}>{t(cat.desc)}</Text>
                                         </View>
                                         {selected && (
                                             <MaterialCommunityIcons name="check-circle" size={20} color={colors.brand.primary} />
@@ -325,18 +327,18 @@ export function CreateGroupModal({ isOpen, onClose, onCreated }: CreateGroupModa
                         <Pressable
                             style={styles.bridge}
                             accessibilityRole="link"
-                            accessibilityLabel={`${START_ENTERPRISE_BRIDGE.lead} ${START_ENTERPRISE_BRIDGE.link}`}
+                            accessibilityLabel={t('{question} {action}', { question: t(START_ENTERPRISE_BRIDGE.lead), action: t(START_ENTERPRISE_BRIDGE.link) })}
                             onPress={async () => {
                                 await Promise.race([KeyboardController.dismiss(), new Promise(r => setTimeout(r, 400))]);
                                 onClose();
                                 router.push(START_ENTERPRISE_BRIDGE.route);
                             }}
                         >
-                            <Text style={styles.bridgeText}>{START_ENTERPRISE_BRIDGE.lead} <Text style={styles.bridgeLink}>{START_ENTERPRISE_BRIDGE.link}</Text></Text>
+                            <Text style={styles.bridgeText}>{t(START_ENTERPRISE_BRIDGE.lead)} <Text style={styles.bridgeLink}>{t(START_ENTERPRISE_BRIDGE.link)}</Text></Text>
                         </Pressable>
                         )}
 
-                        <Text style={styles.fieldLabel}>Join Policy</Text>
+                        <Text style={styles.fieldLabel}>{t('Join Policy')}</Text>
                         <View style={styles.optionRow}>
                             {JOIN_POLICIES.map(pol => {
                                 const selected = joinPolicy === pol.key;
@@ -345,7 +347,7 @@ export function CreateGroupModal({ isOpen, onClose, onCreated }: CreateGroupModa
                                         key={pol.key}
                                         style={[styles.optionCard, selected && styles.optionCardActive]}
                                         accessibilityRole="button"
-                                        accessibilityLabel={`${pol.label}, ${pol.desc}`}
+                                        accessibilityLabel={t('{label}, {description}', { label: t(pol.label), description: t(pol.desc) })}
                                         accessibilityState={{ selected }}
                                         onPress={() => {
                                             hapticTick();
@@ -360,8 +362,8 @@ export function CreateGroupModal({ isOpen, onClose, onCreated }: CreateGroupModa
                                             />
                                         </View>
                                         <View style={styles.optionTextWrap}>
-                                            <Text style={styles.optionLabel}>{pol.label}</Text>
-                                            <Text style={styles.optionDesc}>{pol.desc}</Text>
+                                            <Text style={styles.optionLabel}>{t(pol.label)}</Text>
+                                            <Text style={styles.optionDesc}>{t(pol.desc)}</Text>
                                         </View>
                                         {selected && (
                                             <MaterialCommunityIcons name="check-circle" size={20} color={colors.brand.primary} />
@@ -376,15 +378,15 @@ export function CreateGroupModal({ isOpen, onClose, onCreated }: CreateGroupModa
                             onPress={handleSubmit}
                             disabled={!name.trim() || submitting}
                             accessibilityRole="button"
-                            accessibilityLabel={submitting ? "Creating group..." : "Create Group. You become its convenor."}
+                            accessibilityLabel={submitting ? t('Creating group...') : t('Create Group. You become its convenor.')}
                             accessibilityState={{ disabled: !name.trim() || submitting, busy: submitting }}
                         >
                             {submitting ? (
                                 <ActivityIndicator size="small" color={colors.text.inverse} />
                             ) : (
                                 <>
-                                    <Text style={styles.createBtnText} numberOfLines={1}>Create Group</Text>
-                                    <Text style={styles.createBtnSubtext} numberOfLines={1}>You become its convenor</Text>
+                                    <Text style={styles.createBtnText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Create Group')}</Text>
+                                    <Text style={styles.createBtnSubtext} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('You become its convenor')}</Text>
                                 </>
                             )}
                         </Pressable>

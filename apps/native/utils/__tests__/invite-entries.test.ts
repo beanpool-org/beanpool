@@ -19,7 +19,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 import { invitesOn, readNodeProfile } from '../node-profile';
 import {
     communityLinkMessage, invitesOffRefusal, INVITES_OFF_FALLBACK, joinWays, bringSomeoneHereText, invitesOffFallback, GUEST_NO_INVITES_TEXT, GUEST_AT_GLOBAL_WAITING_TEXT, guestNoInvitesText,
-    guestDoorText, guestDoorButton, onlyAdminsInvite, mayInviteHere, mayMakeOfflineTicket, offlineTicketRefusal, adminsOnlyText,
+    guestDoorText, guestDoorButton, guestDoorLabel, onlyAdminsInvite, mayInviteHere, mayMakeOfflineTicket, offlineTicketRefusal, adminsOnlyText,
     adminsOnlyRefusal, ADMINS_ONLY_FALLBACK, MEMBER_TICKET_REFUSED_TEXT,
 } from '../invite-entries';
 
@@ -176,7 +176,7 @@ describe('People → Invites goes through the helpers (source check)', () => {
         const end = src.indexOf('{isGuest && (', start);
         expect(start).toBeGreaterThan(0);
         const form = src.slice(start, end);
-        for (const part of ['REDEEM INVITE SECTION', 'placeholder="Invite URL or token"', 'onPress={handleRedeem}', 'Complete Registration']) {
+        for (const part of ['REDEEM INVITE SECTION', "placeholder={t('Invite URL or token')}", 'onPress={handleRedeem}', 'Complete Registration']) {
             expect(count(part) >= 1).toBe(true);
             expect(form).toContain(part);
         }
@@ -213,7 +213,9 @@ describe('People → Invites goes through the helpers (source check)', () => {
         const button = banner.slice(banner.indexOf('{guestDoor && ('));
         expect(button).toContain("router.push('/join-global')");
         expect(button).toContain('{guestDoorButton(nodeProfile?.features)}');
-        expect(button).toContain('accessibilityLabel={`Join the global community with ${joinWays(nodeProfile?.features)}`}');
+        expect(button).toContain('accessibilityLabel={guestDoorLabel(nodeProfile?.features)}');
+        expect(guestDoorLabel({ wordsDoor: true } as never)).toBe('Join the global community with 12 words or a sign-in');
+        expect(guestDoorLabel({} as never)).toBe('Join the global community with a sign-in');
         expect(count("router.push('/join-global')")).toBe(1);
         for (const features of [{ wordsDoor: true }, {}, null] as const) {
             const text = guestDoorText(features as never);

@@ -2,7 +2,7 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { View, Text, StyleSheet, Pressable, FlatList, ScrollView, Alert, Image, ActivityIndicator, Linking, Modal, DeviceEventEmitter, AppState, useWindowDimensions, type AppStateStatus } from 'react-native';
 import { KeyboardAvoidingView, KeyboardController, useKeyboardState } from 'react-native-keyboard-controller';
 import { withJitter } from '../../utils/jitter';
-import { t } from '@beanpool/core';
+import { t, tn } from '@beanpool/core';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, useFocusEffect, Stack, ErrorBoundary } from 'expo-router';
 
@@ -37,11 +37,16 @@ import { ChatComposer, type ChatComposerHandle } from '../../components/chat/Cha
 import { useChatSoftInputMode } from '../../components/chat/useChatSoftInputMode';
 import { refusedSendNotice, restoredDraft, dmKeyChangedLine, dmLineSlotText, DM_LOCK_WORDS } from '../../utils/dm-lock';
 import {
-    buildChatListItems, chatActionErrorMessage, dmQuoteFor, hasAnyAction, isTombstone, messageActions, tombstoneText,
+    buildChatListItems, chatActionErrorMessage, dmQuoteFor, hasAnyAction, isTombstone, messageActions, messageTime, tombstoneText,
     shouldFollowNewMessages, shouldShowChatLoadError, type ChatViewer,
 } from '../../utils/chat-actions';
 import { normaliseTappedUrl } from '../../utils/chat-links';
 import { isMuted, muteMenuLabel, type YourChatMute } from '../../utils/your-groups';
+// db.ts and the DM line checks never reach the words layer: the sentences they write are translated where shown.
+import { chatLineWords } from '../../utils/chat-line-words';
+import { listingHeaderStatusWords } from '../../utils/listing-status-words';
+import { NotDeliveredMark } from '../../components/chat/NotDeliveredMark';
+import { Sentence } from '../../components/Sentence';
 
 // The edit window, the emoji row, the day labels, the link splitting, the bubble, the action buttons and
 // the composer all moved to utils/chat-actions, utils/chat-links and components/chat/* (chat parity,
@@ -56,10 +61,10 @@ const MESSAGE_PAGE_SIZE = 50;
 // insertMessage left the send button silently dead until an app restart
 // (field report 2026-07-18). The underlying work isn't cancelled; the caller's
 // catch/finally run and the UI stays usable.
-function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+function withTimeout<T>(promise: Promise<T>, ms: number, tooLong: string): Promise<T> {
     return Promise.race([
         promise,
-        new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`${label} is taking too long — please try again.`)), ms)),
+        new Promise<T>((_, reject) => setTimeout(() => reject(new Error(tooLong)), ms)),
     ]);
 }
 
@@ -76,11 +81,11 @@ function ChatImage({ conversationId, messageId, onOpen }: { conversationId: stri
             .catch(() => { if (active) setFailed(true); });
         return () => { active = false; };
     }, [conversationId, messageId]);
-    if (failed) return <Text style={{ color: colors.text.muted, fontStyle: 'italic', padding: 8 }}>🔒 Image unavailable</Text>;
+    if (failed) return <Text style={{ color: colors.text.muted, fontStyle: 'italic', padding: 8 }}>{t('🔒 Image unavailable')}</Text>;
     if (!uri) return <View style={{ width: 220, height: 220, alignItems: 'center', justifyContent: 'center' }}><ActivityIndicator color={colors.text.muted} /></View>;
     return (
-        <Pressable accessibilityRole="button" accessibilityLabel="View photo full screen" onPress={() => onOpen?.(uri)}>
-            <Image accessibilityLabel="Photo message" source={{ uri }} style={{ width: 220, height: 220, borderRadius: 12 }} resizeMode="cover" />
+        <Pressable accessibilityRole="button" accessibilityLabel={t('View photo full screen')} onPress={() => onOpen?.(uri)}>
+            <Image accessibilityLabel={t('Photo message')} source={{ uri }} style={{ width: 220, height: 220, borderRadius: 12 }} resizeMode="cover" />
         </Pressable>
     );
 }
@@ -136,7 +141,7 @@ function ChatScreen({ id }: { id: string }) {
     const [activeMessageActionsId, setActiveMessageActionsId] = useState<string | null>(null);
     const [activeEmojiPickerId, setActiveEmojiPickerId] = useState<string | null>(null);
     const [pickerPosition, setPickerPosition] = useState<'top' | 'bottom'>('top');
-    const [peerName, setPeerName] = useState('Loading...');
+    const [peerName, setPeerName] = useState(() => t('Loading...'));
     const [peerPubkey, setPeerPubkey] = useState<string | null>(null);
     const [isPeerBlocked, setIsPeerBlocked] = useState(false);
     const [peerAvatar, setPeerAvatar] = useState<string | null>(null);
@@ -264,7 +269,8 @@ function ChatScreen({ id }: { id: string }) {
         dealCard: { backgroundColor: colors.surface.card, borderRadius: 12, padding: 10, borderWidth: 1, borderColor: theme === 'dark' ? colors.border.default : palette.emerald100, width: 200 },
         dealCardTitle: { fontSize: 14, fontWeight: '800', color: colors.text.body },
         dealCardMeta: { fontSize: 12, color: colors.text.secondary, marginTop: 2, marginBottom: 8 },
-        dealCardActions: { flexDirection: 'row', gap: 6, alignItems: 'center' },
+        // Wraps: in a longer language Cancel goes under Release rather than squeezing it in the 200dp card.
+        dealCardActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, alignItems: 'center' },
         dealBtn: { paddingVertical: 7, paddingHorizontal: 12, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
         dealBtnRelease: { backgroundColor: colors.brand.fill, flex: 1 },
         dealBtnReleaseText: { color: colors.text.inverse, fontWeight: '800', fontSize: 13 },
@@ -298,7 +304,7 @@ function ChatScreen({ id }: { id: string }) {
         setTimeout(() => { linkPressedRef.current = false; }, 350);
         const url = normaliseTappedUrl(raw);
         if (!url) return;
-        Linking.openURL(url).catch(() => Alert.alert('Cannot open link', url));
+        Linking.openURL(url).catch(() => Alert.alert(t('Cannot open link'), url));
     }, []);
 
     // The list is inverted (newest message = index 0), so "bottom" is offset 0.
@@ -493,7 +499,6 @@ function ChatScreen({ id }: { id: string }) {
 
                 appStateSub = AppState.addEventListener('change', handleAppStateChange);
 
-                const { DeviceEventEmitter } = require('react-native');
                 sub = DeviceEventEmitter.addListener('sync_data_updated', () => {
                     loadConversationData();
                     loadMessages(true);
@@ -540,7 +545,7 @@ function ChatScreen({ id }: { id: string }) {
             setLoadError(null);
         } catch (e: any) {
             console.warn('[Chat] Could not read this conversation:', e?.message || e);
-            setLoadError(e?.message || 'Could not open this chat.');
+            setLoadError(e?.message || t('Could not open this chat.'));
             return;
         } finally {
             setFirstLoadDone(true);
@@ -597,7 +602,7 @@ function ChatScreen({ id }: { id: string }) {
         const wasEditing = editingMessage;
         try {
             if (wasEditing) {
-                await withTimeout(editMessage(id as string, wasEditing.id, currentDraft), 15_000, 'Editing');
+                await withTimeout(editMessage(id as string, wasEditing.id, currentDraft), 15_000, t('Editing is taking too long — please try again.'));
                 setEditingMessage(null);
                 loadMessages(true);
             } else {
@@ -605,7 +610,7 @@ function ChatScreen({ id }: { id: string }) {
                 if (replyToMessage) {
                     metadata = JSON.stringify({ replyToId: replyToMessage.id });
                 }
-                await withTimeout(insertMessage(id as string, identity.publicKey, currentDraft, metadata), 15_000, 'Sending');
+                await withTimeout(insertMessage(id as string, identity.publicKey, currentDraft, metadata), 15_000, t('Sending is taking too long — please try again.'));
                 setReplyToMessage(null);
                 loadMessages();
             }
@@ -620,7 +625,7 @@ function ChatScreen({ id }: { id: string }) {
                 setLockNotice(refused);
                 return;
             }
-            Alert.alert(wasEditing ? "Edit Failed" : "Message Failed", err.message || "Could not execute send.");
+            Alert.alert(wasEditing ? t('Edit Failed') : t('Message Failed'), err.message || t('Could not execute send.'));
             if (wasEditing) setEditingMessage(null); // drop back to normal compose on failure (e.g. window expired)
         } finally {
             sendingRef.current = false;
@@ -636,16 +641,16 @@ function ChatScreen({ id }: { id: string }) {
         setActiveMessageActionsId(null);
         setActiveEmojiPickerId(null);
         await KeyboardController.dismiss(); // Alert = separate window; see the phantom-keyboard note above
-        Alert.alert('Delete for everyone?', 'It will read "This message was deleted" for both of you.', [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Delete', style: 'destructive', onPress: async () => {
+        Alert.alert(t('Delete for everyone?'), t('It will read "This message was deleted" for both of you.'), [
+            { text: t('Cancel'), style: 'cancel' },
+            { text: t('Delete'), style: 'destructive', onPress: async () => {
                 try {
                     await deleteMessageApi(item.id);
                     hapticSuccess();
                     loadMessages(true);
                 } catch (e: any) {
                     hapticWarning();
-                    Alert.alert('Not deleted', chatActionErrorMessage(e));
+                    Alert.alert(t('Not deleted'), chatActionErrorMessage(e));
                 }
             } },
         ]);
@@ -658,7 +663,7 @@ function ChatScreen({ id }: { id: string }) {
             const res = await muteChatApi(id as string, duration);
             setMute(duration === 'off' ? null : (res?.mute ?? { conversationId: String(id), mutedUntil: null, always: duration === 'always' }));
         } catch (e: any) {
-            Alert.alert('Not changed', chatActionErrorMessage(e));
+            Alert.alert(t('Not changed'), chatActionErrorMessage(e));
         }
     };
 
@@ -671,12 +676,12 @@ function ChatScreen({ id }: { id: string }) {
     // A failed optimistic send renders a red "!" — tapping the bubble lands here.
     const handleFailedMessagePress = async (item: any) => {
         await KeyboardController.dismiss(); // Alert = separate window; see phantom-keyboard note above
-        Alert.alert('Message not delivered', 'This message could not be sent.', [
-            { text: 'Discard', style: 'destructive', onPress: async () => {
+        Alert.alert(t('Message not delivered'), t('This message could not be sent.'), [
+            { text: t('Discard'), style: 'destructive', onPress: async () => {
                 await deleteLocalMessage(item.id).catch(() => {});
                 loadMessages(true);
             }},
-            { text: 'Resend', onPress: async () => {
+            { text: t('Resend'), onPress: async () => {
                 if (!identity?.publicKey) return;
                 const meta = { ...(item.metadata || {}) };
                 delete meta.__sendState;
@@ -692,11 +697,11 @@ function ChatScreen({ id }: { id: string }) {
                 } catch (e: any) {
                     const refused = refusedSendNotice(e, peerPubkey ? peerName : null);
                     if (refused) setLockNotice(refused);
-                    else Alert.alert('Message Failed', e.message || 'Could not resend.');
+                    else Alert.alert(t('Message Failed'), e.message || t('Could not resend.'));
                 }
                 loadMessages(true);
             }},
-            { text: 'Cancel', style: 'cancel' },
+            { text: t('Cancel'), style: 'cancel' },
         ]);
     };
 
@@ -712,15 +717,15 @@ function ChatScreen({ id }: { id: string }) {
                     uri,
                     [{ resize: { width: 1000 } }],
                     { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG, base64: true }
-                ), 30_000, 'Processing the image');
-                if (!manip.base64) throw new Error('Could not process image.');
+                ), 30_000, t('Processing the image is taking too long — please try again.'));
+                if (!manip.base64) throw new Error(t('Could not process image.'));
                 let metadata: string | undefined = undefined;
                 if (replyToMessage) {
                     metadata = JSON.stringify({ replyToId: replyToMessage.id });
                 }
                 // Image sends still await the server round-trip (not optimistic) —
                 // the timeout keeps a dead network from latching sendingRef forever.
-                await withTimeout(sendImageMessage(id as string, `data:image/jpeg;base64,${manip.base64}`, '', metadata), 60_000, 'Sending the image');
+                await withTimeout(sendImageMessage(id as string, `data:image/jpeg;base64,${manip.base64}`, '', metadata), 60_000, t('Sending the image is taking too long — please try again.'));
                 setReplyToMessage(null);
                 setLockNotice(null);
                 hapticSuccess();
@@ -729,43 +734,44 @@ function ChatScreen({ id }: { id: string }) {
                 hapticWarning();
                 const refused = refusedSendNotice(err, peerPubkey ? peerName : null);
                 if (refused) setLockNotice(refused);
-                else Alert.alert('Image Failed', err.message || 'Could not send image.');
+                else Alert.alert(t('Image Failed'), err.message || t('Could not send image.'));
             } finally {
                 sendingRef.current = false;
             }
         };
-        Alert.alert('Send Photo', 'Choose a source', [
-            { text: 'Camera', onPress: async () => {
+        Alert.alert(t('Send Photo'), t('Choose a source'), [
+            { text: t('Camera'), onPress: async () => {
                 const perm = await ImagePicker.requestCameraPermissionsAsync();
-                if (!perm.granted) { Alert.alert('Permission needed', 'Camera access is required.'); return; }
+                if (!perm.granted) { Alert.alert(t('Permission needed'), t('Camera access is required.')); return; }
                 const r = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 1 });
                 if (!r.canceled && r.assets[0]?.uri) sendUri(r.assets[0].uri);
             }},
-            { text: 'Gallery', onPress: async () => {
+            { text: t('Gallery'), onPress: async () => {
                 const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
                 if (!r.canceled && r.assets[0]?.uri) sendUri(r.assets[0].uri);
             }},
-            { text: 'Cancel', style: 'cancel' },
+            { text: t('Cancel'), style: 'cancel' },
         ]);
     };
 
     const handleReleaseCredits = async () => {
         if (!pendingTx || !identity?.publicKey) return;
         await KeyboardController.dismiss(); // Alert = separate window; see review-modal note
+        // English writes one form for both; a language with more forms has them.
         Alert.alert(
-            'Release Credits',
-            `Release ${pendingTx.amount} Beans to the provider? This action cannot be undone.`,
+            t('Release Credits'),
+            tn(pendingTx.amount, 'Release {n} Beans to the provider? This action cannot be undone.', 'Release {n} Beans to the provider? This action cannot be undone.'),
             [
-                { text: 'Cancel', style: 'cancel' },
+                { text: t('Cancel'), style: 'cancel' },
                 {
-                    text: 'Release',
+                    text: t('Release'),
                     style: 'destructive',
                     onPress: async () => {
                         setActionLoading(true);
                         try {
                             await completeMarketplaceTransaction(pendingTx.id, identity.publicKey);
                             hapticSuccess();
-                            Alert.alert('Success', 'Credits have been released!');
+                            Alert.alert(t('Success'), t('Credits have been released!'));
                             
                             // Immediately prompt for review
                             const targetPubkey = peerPubkey;
@@ -785,7 +791,7 @@ function ChatScreen({ id }: { id: string }) {
                             });
                         } catch (e: any) {
                             hapticWarning();
-                            Alert.alert('Failed', e.message || 'Could not release credits.');
+                            Alert.alert(t('Failed'), e.message || t('Could not release credits.'));
                         } finally {
                             setActionLoading(false);
                         }
@@ -799,19 +805,19 @@ function ChatScreen({ id }: { id: string }) {
         if (!pendingTx || !identity?.publicKey) return;
         await KeyboardController.dismiss();
         Alert.alert(
-            'Cancel Escrow',
-            'Are you sure you want to cancel this escrow? The credits will be refunded.',
+            t('Cancel Escrow'),
+            t('Are you sure you want to cancel this escrow? The credits will be refunded.'),
             [
-                { text: 'Keep', style: 'cancel' },
+                { text: t('Keep'), style: 'cancel' },
                 {
-                    text: 'Cancel Escrow',
+                    text: t('Cancel Escrow'),
                     style: 'destructive',
                     onPress: async () => {
                         setActionLoading(true);
                         try {
                             await cancelMarketplaceTransaction(pendingTx.id, identity.publicKey);
                             hapticWarning();
-                            Alert.alert('Cancelled', 'Escrow has been cancelled and credits refunded.');
+                            Alert.alert(t('Cancelled'), t('Escrow has been cancelled and credits refunded.'));
                             syncSingleConversation(id as string).then(() => {
                                 loadConversationData();
                                 loadDeals();
@@ -819,7 +825,7 @@ function ChatScreen({ id }: { id: string }) {
                             });
                         } catch (e: any) {
                             hapticWarning();
-                            Alert.alert('Failed', e.message || 'Could not cancel escrow.');
+                            Alert.alert(t('Failed'), e.message || t('Could not cancel escrow.'));
                         } finally {
                             setActionLoading(false);
                         }
@@ -866,7 +872,7 @@ function ChatScreen({ id }: { id: string }) {
             });
             setPostContext({
                 id: selectedDeal.postId || '',
-                title: selectedDeal.postTitle || 'Deal',
+                title: selectedDeal.postTitle || t('Deal'),
                 status: selectedDeal.status || 'pending',
                 priceType: 'fixed',
                 credits: selectedDeal.credits
@@ -887,9 +893,9 @@ function ChatScreen({ id }: { id: string }) {
     const handleReleaseDeal = async (txId: string, amount: number) => {
         if (!identity?.publicKey) return;
         await KeyboardController.dismiss();
-        Alert.alert('Release Credits', `Release ${amount} Beans to the provider? This action is final.`, [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Release', style: 'destructive', onPress: async () => {
+        Alert.alert(t('Release Credits'), tn(amount, 'Release {n} Beans to the provider? This action is final.', 'Release {n} Beans to the provider? This action is final.'), [
+            { text: t('Cancel'), style: 'cancel' },
+            { text: t('Release'), style: 'destructive', onPress: async () => {
                 setActionLoading(true);
                 try {
                     await completeMarketplaceTransaction(txId, identity.publicKey);
@@ -900,7 +906,7 @@ function ChatScreen({ id }: { id: string }) {
                     loadMessages(true);
                 } catch (e: any) {
                     hapticWarning();
-                    Alert.alert('Failed', e.message || 'Could not release credits.');
+                    Alert.alert(t('Failed'), e.message || t('Could not release credits.'));
                 } finally { setActionLoading(false); }
             }}
         ]);
@@ -909,9 +915,9 @@ function ChatScreen({ id }: { id: string }) {
     const handleCancelDeal = async (txId: string) => {
         if (!identity?.publicKey) return;
         await KeyboardController.dismiss();
-        Alert.alert('Cancel Deal', 'Cancel this deal? The escrow will be refunded.', [
-            { text: 'Keep', style: 'cancel' },
-            { text: 'Cancel Deal', style: 'destructive', onPress: async () => {
+        Alert.alert(t('Cancel Deal'), t('Cancel this deal? The escrow will be refunded.'), [
+            { text: t('Keep'), style: 'cancel' },
+            { text: t('Cancel Deal'), style: 'destructive', onPress: async () => {
                 setActionLoading(true);
                 try {
                     await cancelMarketplaceTransaction(txId, identity.publicKey);
@@ -921,7 +927,7 @@ function ChatScreen({ id }: { id: string }) {
                     loadMessages(true);
                 } catch (e: any) {
                     hapticWarning();
-                    Alert.alert('Failed', e.message || 'Could not cancel.');
+                    Alert.alert(t('Failed'), e.message || t('Could not cancel.'));
                 } finally { setActionLoading(false); }
             }}
         ]);
@@ -978,10 +984,12 @@ function ChatScreen({ id }: { id: string }) {
                 <View style={[chat.systemMessageBubble, { backgroundColor: bgColor, borderColor: borderColor, borderWidth: 1 }]}>
                     <MaterialCommunityIcons name={iconName} size={16} color={iconColor} style={{ marginRight: 6 }} />
                     <Text style={[chat.systemMessageText, { color: theme === 'dark' ? colors.text.secondary : palette.gray700, fontSize: 13, fontWeight: '500' }]}>
-                        {item.metadata?.postId && dealTitleByPostId[item.metadata.postId] ? `${dealTitleByPostId[item.metadata.postId]}: ` : ''}{item.text}
+                        {item.metadata?.postId && dealTitleByPostId[item.metadata.postId]
+                            ? t('{title}: {text}', { title: dealTitleByPostId[item.metadata.postId], text: chatLineWords(item.text) })
+                            : chatLineWords(item.text)}
                     </Text>
                 </View>
-                <Text style={chat.systemTimestamp}>{item.timestamp}</Text>
+                <Text style={chat.systemTimestamp}>{messageTime(item)}</Text>
 
                 {/* Inline post link — only when it points somewhere the sticky header doesn't already cover */}
                 {item.metadata?.postId && item.metadata.postId !== postContext?.id && (
@@ -991,7 +999,7 @@ function ChatScreen({ id }: { id: string }) {
                         onPress={() => router.push(`/post/${item.metadata.postId}`)}
                     >
                         <MaterialCommunityIcons name="tag-outline" size={14} color={colors.brand.primary} style={{ marginRight: 4 }} />
-                        <Text style={chat.systemActionText}>View Post</Text>
+                        <Text style={chat.systemActionText}>{t('View Post')}</Text>
                     </Pressable>
                 )}
 
@@ -1026,11 +1034,11 @@ function ChatScreen({ id }: { id: string }) {
                                             targetCallsign: peerName
                                         });
                                     } else {
-                                        Alert.alert("Notice", "Transaction details not found locally. Please try viewing the post.");
+                                        Alert.alert(t('Notice', undefined, 'alert title'), t('Transaction details not found locally. Please try viewing the post.'));
                                     }
                                 } catch (e) {
                                     console.error(e);
-                                    Alert.alert("Error", "Could not load transaction details for rating.");
+                                    Alert.alert(t('Error'), t('Could not load transaction details for rating.'));
                                 }
                             }}
                         >
@@ -1041,7 +1049,7 @@ function ChatScreen({ id }: { id: string }) {
                                 style={{ marginRight: 4 }}
                             />
                             <Text style={[chat.systemActionText, { color: hasRated ? colors.brand.primary : colors.feedback.warning.fg }]}>
-                                {hasRated ? '✓ Rating submitted (Tap to edit)' : 'Rate your partner'}
+                                {hasRated ? t('✓ Rating submitted (Tap to edit)') : t('Rate your partner')}
                             </Text>
                         </Pressable>
                     );
@@ -1059,13 +1067,13 @@ function ChatScreen({ id }: { id: string }) {
             <View style={[chat.systemMessageBubble, { maxWidth: '90%', backgroundColor: colors.chatSystem.defaultBg, borderColor: colors.chatSystem.defaultBorder, borderWidth: 1 }]}>
                 <MaterialCommunityIcons name={item.integrityNote ? 'bullhorn-outline' : 'shield-alert-outline'} size={16} color={colors.text.secondary} style={{ marginRight: 6 }} />
                 <Text style={[chat.systemMessageText, { flexShrink: 1, color: theme === 'dark' ? colors.text.secondary : palette.gray700, fontSize: 13, fontWeight: '500' }]}>
-                    {dmLineSlotText(item)}
+                    {chatLineWords(dmLineSlotText(item))}
                 </Text>
             </View>
             {item.integrityNote ? (
-                <Text style={[chat.systemTimestamp, { fontSize: 12, fontStyle: 'italic', textAlign: 'center', maxWidth: '90%' }]}>{item.integrityNote}</Text>
+                <Text style={[chat.systemTimestamp, { fontSize: 12, fontStyle: 'italic', textAlign: 'center', maxWidth: '90%' }]}>{chatLineWords(item.integrityNote)}</Text>
             ) : null}
-            <Text style={chat.systemTimestamp}>{item.timestamp}</Text>
+            <Text style={chat.systemTimestamp}>{messageTime(item)}</Text>
         </View>
     );
 
@@ -1088,7 +1096,7 @@ function ChatScreen({ id }: { id: string }) {
                 loadMessages(true);
             } catch (e: any) {
                 console.error('Failed to react to message:', e);
-                Alert.alert('Not reacted', chatActionErrorMessage(e));
+                Alert.alert(t('Not reacted'), chatActionErrorMessage(e));
             }
         };
 
@@ -1151,7 +1159,7 @@ function ChatScreen({ id }: { id: string }) {
             item.sendState === 'sending' ? (
                 <Text style={{ fontSize: 10, color: colors.chat.tickUnread }}> ◷</Text>
             ) : item.sendState === 'failed' ? (
-                <Text style={{ fontSize: 10, color: colors.feedback.danger.fg, fontWeight: '800' }}> ! not delivered</Text>
+                <NotDeliveredMark color={colors.feedback.danger.fg} />
             ) : (
                 <Text style={{ fontSize: 10, color: item.readByPeer ? palette.cyan200 : colors.chat.tickUnread }}>
                     {item.readByPeer ? ' ✓✓' : ' ✓'}
@@ -1187,7 +1195,7 @@ function ChatScreen({ id }: { id: string }) {
                         {item.type === 'image' && !item.text ? (
                             <View style={{ flexDirection: 'row', alignItems: 'center', alignSelf: isMe ? 'flex-end' : 'flex-start', marginTop: 4 }}>
                                 <Text style={[chat.messageTime, isMe ? chat.messageTimeMe : chat.messageTimeOther]}>
-                                    {item.timestamp}
+                                    {messageTime(item)}
                                 </Text>
                                 {isMe && item.outgoing && (
                                     <MaterialCommunityIcons
@@ -1202,7 +1210,7 @@ function ChatScreen({ id }: { id: string }) {
                         {/* A line the node moved or reordered, or an old-format line (e2e-crypto checkDmThread). */}
                         {item.integrityNote ? (
                             <Text style={[chat.messageTime, isMe ? chat.messageTimeMe : chat.messageTimeOther, { fontSize: 12, fontStyle: 'italic', alignSelf: 'flex-start' }]}>
-                                ⚠️ {item.integrityNote}
+                                ⚠️ {chatLineWords(item.integrityNote)}
                             </Text>
                         ) : null}
                     </>
@@ -1219,7 +1227,7 @@ function ChatScreen({ id }: { id: string }) {
         },
         {
             icon: 'account-outline',
-            label: 'View profile',
+            label: t('View profile'),
             hidden: !peerPubkey,
             onPress: () => {
                 setMenuOpen(false);
@@ -1234,7 +1242,7 @@ function ChatScreen({ id }: { id: string }) {
             
             {/* Header */}
             <View style={styles.header} onLayout={measuredEdge('header')}>
-                <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => router.back()} style={styles.backButton}>
+                <Pressable accessibilityRole="button" accessibilityLabel={t('Back')} onPress={() => router.back()} style={styles.backButton}>
                     <MaterialCommunityIcons name="arrow-left" size={28} color={colors.text.body} />
                 </Pressable>
 
@@ -1259,12 +1267,12 @@ function ChatScreen({ id }: { id: string }) {
                     <View style={styles.headerTextContainer}>
                         <Text style={styles.headerTitle} numberOfLines={1}>{peerName}</Text>
                         <Text style={styles.headerSubtitle} numberOfLines={1}>
-                            {isEncrypted ? '🔒 End-to-end encrypted' : 'Connected via Mullum Node'}
+                            {isEncrypted ? t('🔒 End-to-end encrypted') : t('Connected via Mullum Node')}
                         </Text>
                     </View>
                 </Pressable>
 
-                <Pressable accessibilityRole="button" accessibilityLabel="More options" style={styles.moreButton} onPress={openMenu}>
+                <Pressable accessibilityRole="button" accessibilityLabel={t('More options')} style={styles.moreButton} onPress={openMenu}>
                     <MaterialCommunityIcons name="dots-horizontal" size={28} color={colors.text.secondary} />
                 </Pressable>
             </View>
@@ -1302,27 +1310,27 @@ function ChatScreen({ id }: { id: string }) {
                                 style={styles.dealCard}
                                 onPress={() => d.postId && router.push(`/post/${d.postId}`)}
                             >
-                                <Text style={styles.dealCardTitle} numberOfLines={1}>{d.postTitle || 'Deal'}</Text>
+                                <Text style={styles.dealCardTitle} numberOfLines={1}>{d.postTitle || t('Deal')}</Text>
                                 <Text style={styles.dealCardMeta} numberOfLines={1}>
-                                    <CurrencyDisplay amount={d.credits} style={styles.dealCardMeta} /> · {d.status === 'completed' ? 'completed' : 'in escrow'}
+                                    <Sentence text={d.status === 'completed' ? t('{amount} · completed') : t('{amount} · in escrow')} parts={{ amount: <CurrencyDisplay amount={d.credits} style={styles.dealCardMeta} /> }} />
                                 </Text>
                                 <View style={styles.dealCardActions}>
                                     {d.status === 'pending' && d.iAmBuyer && (
                                         <>
-                                            <Pressable accessibilityRole="button" accessibilityLabel={`Release credits for ${d.postTitle || 'deal'}`} style={[styles.dealBtn, styles.dealBtnRelease]} disabled={actionLoading} onPress={() => handleReleaseDeal(d.txId, d.credits)}>
-                                                <Text style={styles.dealBtnReleaseText}>{actionLoading ? '…' : 'Release'}</Text>
+                                            <Pressable accessibilityRole="button" accessibilityLabel={d.postTitle ? t('Release credits for {title}', { title: d.postTitle }) : t('Release credits for deal')} style={[styles.dealBtn, styles.dealBtnRelease]} disabled={actionLoading} onPress={() => handleReleaseDeal(d.txId, d.credits)}>
+                                                <Text style={styles.dealBtnReleaseText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{actionLoading ? '…' : t('Release')}</Text>
                                             </Pressable>
-                                            <Pressable accessibilityRole="button" accessibilityLabel="Cancel deal" style={[styles.dealBtn, styles.dealBtnCancel]} disabled={actionLoading} onPress={() => handleCancelDeal(d.txId)}>
-                                                <Text style={styles.dealBtnCancelText}>Cancel</Text>
+                                            <Pressable accessibilityRole="button" accessibilityLabel={t('Cancel deal')} style={[styles.dealBtn, styles.dealBtnCancel]} disabled={actionLoading} onPress={() => handleCancelDeal(d.txId)}>
+                                                <Text style={styles.dealBtnCancelText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Cancel')}</Text>
                                             </Pressable>
                                         </>
                                     )}
                                     {d.status === 'pending' && !d.iAmBuyer && (
-                                        <Text style={styles.dealAwaiting}>⏳ Awaiting release</Text>
+                                        <Text style={styles.dealAwaiting}>{t('⏳ Awaiting release')}</Text>
                                     )}
                                     {d.status === 'completed' && !d.iRated && (
-                                        <Pressable accessibilityRole="button" accessibilityLabel={`Leave a review for ${d.postTitle || 'deal'}`} style={[styles.dealBtn, styles.dealBtnReview]} onPress={() => handleReviewDeal(d)}>
-                                            <Text style={styles.dealBtnReviewText}>⭐ Review</Text>
+                                        <Pressable accessibilityRole="button" accessibilityLabel={d.postTitle ? t('Leave a review for {title}', { title: d.postTitle }) : t('Leave a review for deal')} style={[styles.dealBtn, styles.dealBtnReview]} onPress={() => handleReviewDeal(d)}>
+                                            <Text style={styles.dealBtnReviewText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('⭐ Review')}</Text>
                                         </Pressable>
                                     )}
                                 </View>
@@ -1339,7 +1347,10 @@ function ChatScreen({ id }: { id: string }) {
                         <MaterialCommunityIcons name="shopping-outline" size={24} color={colors.brand.primary} />
                         <View style={{ marginLeft: 12 }}>
                             <Text style={styles.stickyPostTitle} numberOfLines={1}>{postContext.title}</Text>
-                            {showsBeans && <Text style={styles.stickyPostCredits}>{postContext.credits} Beans{postContext.priceType === 'hourly' ? ' / hr' : ''}</Text>}
+                            {/* English writes one form for both; a language with more forms has them. */}
+                            {showsBeans && <Text style={styles.stickyPostCredits}>{postContext.priceType === 'hourly'
+                                ? tn(Number(postContext.credits) || 0, '{n} Beans / hr', '{n} Beans / hr')
+                                : tn(Number(postContext.credits) || 0, '{n} Beans', '{n} Beans')}</Text>}
                         </View>
                     </View>
                     <View style={[styles.statusBadge,
@@ -1351,7 +1362,7 @@ function ChatScreen({ id }: { id: string }) {
                             postContext.status === 'active' ? { color: theme === 'dark' ? colors.feedback.success.fg : colors.brand.dark } :
                             postContext.status === 'pending' ? { color: colors.feedback.warning.fg } :
                             { color: theme === 'dark' ? colors.text.secondary : palette.gray600 }
-                        ]}>{postContext.status?.toUpperCase() || 'UNKNOWN'}</Text>
+                        ]}>{listingHeaderStatusWords(postContext.status)}</Text>
                     </View>
                 </Pressable>
             )}
@@ -1361,10 +1372,10 @@ function ChatScreen({ id }: { id: string }) {
                 <View style={[styles.inlineActionBar, { flexDirection: 'column' }]}>
                     <View style={{ width: '100%', marginBottom: 10 }}>
                         <Text style={{ color: colors.feedback.warning.fg, fontSize: 13, fontWeight: '700', textAlign: 'center', marginBottom: 4 }}>
-                            ⚠️ Action Required: Release Credits
+                            {t('⚠️ Action Required: Release Credits')}
                         </Text>
                         <Text style={{ color: theme === 'dark' ? colors.text.body : palette.amber900, fontSize: 11, textAlign: 'center', paddingHorizontal: 16 }}>
-                            Only release credits ONCE the provider has fulfilled the terms of the agreement. This action is final.
+                            {t('Only release credits ONCE the provider has fulfilled the terms of the agreement. This action is final.')}
                         </Text>
                     </View>
                     <View style={{ flexDirection: 'row', gap: 8 }}>
@@ -1375,11 +1386,9 @@ function ChatScreen({ id }: { id: string }) {
                             disabled={actionLoading}
                         >
                             <MaterialCommunityIcons name="check-circle-outline" size={18} color={colors.text.inverse} style={{ marginRight: 6 }} />
-                            <Text style={styles.inlineActionReleaseText}>
-                                {actionLoading ? 'Processing...' : (
-                                    <>
-                                        Release <CurrencyDisplay amount={pendingTx.amount} style={styles.inlineActionReleaseText} />
-                                    </>
+                            <Text style={[styles.inlineActionReleaseText, { flexShrink: 1 }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+                                {actionLoading ? t('Processing...') : (
+                                    <Sentence text={t('Release {amount}')} parts={{ amount: <CurrencyDisplay amount={pendingTx.amount} style={styles.inlineActionReleaseText} /> }} />
                                 )}
                             </Text>
                         </Pressable>
@@ -1390,7 +1399,7 @@ function ChatScreen({ id }: { id: string }) {
                             disabled={actionLoading}
                         >
                             <MaterialCommunityIcons name="close-circle-outline" size={18} color={colors.feedback.danger.fg} style={{ marginRight: 6 }} />
-                            <Text style={styles.inlineActionCancelText}>Cancel</Text>
+                            <Text style={[styles.inlineActionCancelText, { flexShrink: 1 }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Cancel')}</Text>
                         </Pressable>
                     </View>
                 </View>
@@ -1406,12 +1415,12 @@ function ChatScreen({ id }: { id: string }) {
                     <View style={{ flex: 1 }}>
                         <Text style={chat.errorText} accessibilityRole="alert">{loadError}</Text>
                         <Pressable style={chat.retryBtn} accessibilityRole="button" onPress={() => { setLoadError(null); loadMessages(); }}>
-                            <Text style={chat.retryText}>Try again</Text>
+                            <Text style={chat.retryText}>{t('Try again')}</Text>
                         </Pressable>
                     </View>
                 ) : !firstLoadDone ? (
                     // The thread's outline while the first read comes back: the header already names who it is with.
-                    <View style={[chat.listContent, { flex: 1 }]} accessibilityRole="progressbar" accessibilityLabel="Loading the chat">
+                    <View style={[chat.listContent, { flex: 1 }]} accessibilityRole="progressbar" accessibilityLabel={t('Loading the chat')}>
                         {[{ w: '62%', mine: false }, { w: '48%', mine: true }, { w: '70%', mine: false }].map((b, k) => (
                             <View key={k} style={[chat.skeletonRow, b.mine && chat.skeletonRowMine]}>
                                 <View style={[chat.skeletonBubble, { width: b.w as any }]} />
@@ -1461,7 +1470,7 @@ function ChatScreen({ id }: { id: string }) {
                 {isPeerBlocked ? (
                     <View accessibilityRole="alert" accessibilityLiveRegion="polite" style={[styles.blockedNotice, { marginBottom: Math.max(insets.bottom, 12) }]}>
                         <Text style={styles.blockedNoticeText}>
-                            <Text aria-hidden={true} importantForAccessibility="no">🚫 </Text>You have blocked this user. Messaging is disabled.
+                            <Text aria-hidden={true} importantForAccessibility="no">🚫 </Text>{t('You have blocked this user. Messaging is disabled.')}
                         </Text>
                     </View>
                 ) : (
@@ -1471,12 +1480,12 @@ function ChatScreen({ id }: { id: string }) {
                         onSend={handleSend}
                         canSend={canSendNow}
                         disabled={keyChangePending}
-                        notice={unplaced ? t(DM_LOCK_WORDS.unplaced) : keyChangePending ? dmKeyChangedLine(keyChange?.name) : lockNotice}
-                        placeholder="Message..."
-                        accessibilityLabel="Message"
+                        notice={unplaced ? t(DM_LOCK_WORDS.unplaced) : keyChangePending ? dmKeyChangedLine(keyChange?.name) : lockNotice ? chatLineWords(lockNotice) : null}
+                        placeholder={t('Message...')}
+                        accessibilityLabel={t('Message', undefined, 'message box')}
                         bottomPadding={keyboardVisible ? 8 : Math.max(insets.bottom, 12)}
                         leading={
-                            <Pressable accessibilityRole="button" accessibilityLabel="Attach image" style={chat.attachBtn} onPress={pickAndSendImage}>
+                            <Pressable accessibilityRole="button" accessibilityLabel={t('Attach image')} style={chat.attachBtn} onPress={pickAndSendImage}>
                                 <MaterialCommunityIcons name="plus-circle-outline" size={26} color={colors.text.muted} />
                             </Pressable>
                         }
@@ -1510,7 +1519,7 @@ function ChatScreen({ id }: { id: string }) {
                         }
                     }}
                     onSuccess={() => {
-                        Alert.alert("Success", "Your rating has been submitted!");
+                        Alert.alert(t('Success'), t('Your rating has been submitted!'));
                         setPromptReviewForTx(null);
                         loadRatedTransactions();
                         loadDeals(); // reviewed deal drops off the pinned strip
@@ -1527,9 +1536,9 @@ function ChatScreen({ id }: { id: string }) {
                 button takes the status-bar inset itself: a fixed 50 is less than the 59pt inset on Dynamic Island iPhones. */}
             {viewerUri && (
                 <Modal visible transparent animationType="fade" onRequestClose={() => setViewerUri(null)}>
-                    <Pressable accessibilityRole="button" accessibilityLabel="Dismiss full-size photo" style={styles.imageViewerOverlay} onPress={() => setViewerUri(null)}>
-                        <Image source={{ uri: viewerUri }} style={styles.imageViewerImage} resizeMode="contain" accessibilityLabel="Full-size photo" />
-                        <Pressable accessibilityRole="button" accessibilityLabel="Close photo" style={[styles.imageViewerClose, { top: Math.max(50, insets.top + 8) }]} onPress={() => setViewerUri(null)}>
+                    <Pressable accessibilityRole="button" accessibilityLabel={t('Dismiss full-size photo')} style={styles.imageViewerOverlay} onPress={() => setViewerUri(null)}>
+                        <Image source={{ uri: viewerUri }} style={styles.imageViewerImage} resizeMode="contain" accessibilityLabel={t('Full-size photo')} />
+                        <Pressable accessibilityRole="button" accessibilityLabel={t('Close photo')} style={[styles.imageViewerClose, { top: Math.max(50, insets.top + 8) }]} onPress={() => setViewerUri(null)}>
                             <MaterialCommunityIcons name="close" size={28} color={colors.text.inverse} />
                         </Pressable>
                     </Pressable>

@@ -8,7 +8,7 @@
  * The helpers below are pure so the row wording and the one-header-for-every-chat label are unit tested.
  */
 
-import { formatDate, keeperWords } from '@beanpool/core';
+import { formatDate, t, tn, word, type WordKey } from '@beanpool/core';
 import type { GroupCategory, GroupItem } from './db';
 
 export type YourChatKind = 'group' | 'enterprise' | 'event';
@@ -68,20 +68,34 @@ export const GROUP_CATEGORY_EMOJI: Readonly<Record<GroupCategory, string>> = {
     guild: '🛡️',
 };
 
-/** The words after the dot in every chat header (decision 9). */
-export const OWNER_KIND_WORD: Readonly<Record<YourChatKind | 'dm', string>> = {
-    group: 'group',
-    enterprise: 'enterprise',
-    event: 'event',
-    dm: 'message',
+/** The words after the dot in every chat header (decision 9): word() keys, shown through t() (ownerKindWord). */
+export const OWNER_KIND_WORD: Readonly<Record<YourChatKind | 'dm', WordKey>> = {
+    group: word('group', 'chat kind'),
+    enterprise: word('enterprise', 'chat kind'),
+    event: word('event', 'chat kind'),
+    dm: word('message', 'chat kind'),
 };
+
+/** The same kinds as a name: a row's kind pill, a chat's name while it has none. Written capitalised, never upper-cased in code. */
+const OWNER_KIND_NAME: Readonly<Record<YourChatKind, WordKey>> = {
+    group: word('Group', 'chat kind'),
+    enterprise: word('Enterprise', 'chat kind'),
+    event: word('Event', 'chat kind'),
+};
+/** A project, both ways: an enterprise-kind chat whose lifecycle is bounded. */
+const PROJECT_WORDS = { kind: word('project', 'chat kind'), name: word('Project', 'chat kind') } as const;
 
 /** An enterprise-kind chat is a project when the node says its lifecycle is 'bounded' (group decisions §3.1). */
 const isProject = (kind: YourChatKind, lifecycle?: string | null) => kind === 'enterprise' && lifecycle === 'bounded';
 
 /** The kind word a member reads: a project is a project, never an enterprise (§3.1). */
 export function ownerKindWord(kind: YourChatKind, lifecycle?: string | null): string {
-    return isProject(kind, lifecycle) ? 'project' : OWNER_KIND_WORD[kind];
+    return isProject(kind, lifecycle) ? t(PROJECT_WORDS.kind) : t(OWNER_KIND_WORD[kind]);
+}
+
+/** The kind as a name ('Group', 'Enterprise', 'Project', 'Event'), in the member's language. */
+export function ownerKindName(kind: YourChatKind, lifecycle?: string | null): string {
+    return isProject(kind, lifecycle) ? t(PROJECT_WORDS.name) : t(OWNER_KIND_NAME[kind]);
 }
 
 export function chatEmoji(kind: YourChatKind, category?: string | null, lifecycle?: string | null): string {
@@ -96,13 +110,20 @@ export function chatEmoji(kind: YourChatKind, category?: string | null, lifecycl
  * on a narrow screen while the kind word always shows.
  */
 export function ownerHeader(kind: YourChatKind, name: string, category?: string | null, lifecycle?: string | null): { title: string; kindWord: string; a11y: string } {
-    const word = ownerKindWord(kind, lifecycle);
-    const clean = (name || '').trim() || (kind === 'group' ? 'Group' : word.charAt(0).toUpperCase() + word.slice(1));
+    const clean = (name || '').trim() || ownerKindName(kind, lifecycle);
     return {
         title: `${chatEmoji(kind, category, lifecycle)} ${clean}`,
-        kindWord: word,
-        a11y: `${clean}, ${word}. Opens the ${word} page.`,
+        kindWord: ownerKindWord(kind, lifecycle),
+        a11y: ownerHeaderSpoken(kind, clean, lifecycle),
     };
+}
+
+/** What a screen reader says for a chat's owner line: one sentence per kind. */
+function ownerHeaderSpoken(kind: YourChatKind, name: string, lifecycle?: string | null): string {
+    if (isProject(kind, lifecycle)) return t('{name}, project. Opens the project page.', { name });
+    if (kind === 'enterprise') return t('{name}, enterprise. Opens the enterprise page.', { name });
+    if (kind === 'event') return t('{name}, event. Opens the event page.', { name });
+    return t('{name}, group. Opens the group page.', { name });
 }
 
 /**
@@ -112,14 +133,14 @@ export function ownerHeader(kind: YourChatKind, name: string, category?: string 
 export function previewLine(item: Pick<YourChat, 'lastMessage' | 'kind' | 'role'>, myPubkey?: string | null): string {
     const m = item.lastMessage;
     if (!m) {
-        if (item.kind === 'group' && item.role === 'convenor') return 'New group · invite people to get started';
-        return 'No messages yet';
+        if (item.kind === 'group' && item.role === 'convenor') return t('New group · invite people to get started');
+        return t('No messages yet');
     }
     const text = (m.text || '').replace(/\s+/g, ' ').trim();
     if (m.type === 'system' || m.authorPubkey === 'SYSTEM') return text;
     if (m.type === 'removed') return text;
-    const who = myPubkey && m.authorPubkey === myPubkey ? 'You' : (m.authorCallsign || 'Someone');
-    return `${who}: ${text}`;
+    if (myPubkey && m.authorPubkey === myPubkey) return t('You: {text}', { text });
+    return m.authorCallsign ? t('{name}: {text}', { name: m.authorCallsign, text }) : t('Someone: {text}', { text });
 }
 
 /** "14:05" today, "Tue" this week, "12 Sep" before that. Empty for an unreadable timestamp. */
@@ -168,7 +189,7 @@ export function unreadLabel(n: number): string {
  * coordination for this enterprise". It is not the keepers' private chat, so never say it is (PR #963 review, B1).
  * A group's chat gets its line from the node (members only); an event chat's is EVENT_CHAT_NOTICE.
  */
-export const ENTERPRISE_CHAT_NOTICE = "Any member of this community can read this, and so can the node's operator.";
+export const ENTERPRISE_CHAT_NOTICE = word("Any member of this community can read this, and so can the node's operator.");
 
 /** Muted until a time in the future, or for good. */
 export function isMuted(mute: YourChatMute | null | undefined, now: Date = new Date()): boolean {
@@ -193,13 +214,13 @@ export function groupsYouCouldJoin(all: GroupItem[], yourGroupIds: ReadonlySet<s
 
 /** What the invite landing's main button says, from the group's join policy and the viewer's standing. */
 export function inviteLandingAction(group: Pick<GroupItem, 'joinPolicy' | 'viewerStatus'>): { label: string; enabled: boolean; note?: string } {
-    if (group.viewerStatus === 'active') return { label: 'Open the group chat', enabled: true };
-    if (group.viewerStatus === 'pending_approval') return { label: 'Request sent', enabled: false, note: 'The convenor will look at your request.' };
-    if (group.viewerStatus === 'removed') return { label: 'You can’t rejoin this group', enabled: false, note: 'A convenor removed you. Only they can let you back in.' };
-    if (group.viewerStatus === 'invited') return { label: 'Join the group', enabled: true };
-    if (group.joinPolicy === 'request_to_join') return { label: 'Ask to join', enabled: true, note: 'The convenor approves new members.' };
-    if (group.joinPolicy === 'invite_only') return { label: 'Invitation needed', enabled: false, note: 'Only people the convenor invites can join.' };
-    return { label: 'Join the group', enabled: true };
+    if (group.viewerStatus === 'active') return { label: t('Open the group chat'), enabled: true };
+    if (group.viewerStatus === 'pending_approval') return { label: t('Request sent'), enabled: false, note: t('The convenor will look at your request.') };
+    if (group.viewerStatus === 'removed') return { label: t('You can’t rejoin this group'), enabled: false, note: t('A convenor removed you. Only they can let you back in.') };
+    if (group.viewerStatus === 'invited') return { label: t('Join the group'), enabled: true };
+    if (group.joinPolicy === 'request_to_join') return { label: t('Ask to join'), enabled: true, note: t('The convenor approves new members.') };
+    if (group.joinPolicy === 'invite_only') return { label: t('Invitation needed'), enabled: false, note: t('Only people the convenor invites can join.') };
+    return { label: t('Join the group'), enabled: true };
 }
 
 /**
@@ -253,12 +274,25 @@ export function chatLifecycleFromRows(items: ReadonlyArray<Pick<YourChat, 'id' |
 
 /**
  * The member's part in an enterprise-kind row, in its kind's words: Leader / Collaborator on a project, Lead keeper /
- * Keeper on an enterprise (core keeperWords). Null for a group or an event, whose rows say no role.
+ * Keeper on an enterprise (the same words as core keeperWords). Null for a group or an event, whose rows say no role.
  */
 export function rowRoleWord(item: Pick<YourChat, 'kind' | 'role' | 'lifecycle'>): string | null {
     if (item.kind !== 'enterprise') return null;
-    const w = keeperWords(item.lifecycle);
-    return item.role === 'lead' ? w.Lead : w.Keeper;
+    if (item.lifecycle === 'bounded') return item.role === 'lead' ? t('Leader', undefined, 'project role') : t('Collaborator', undefined, 'project role');
+    return item.role === 'lead' ? t('Lead keeper', undefined, 'enterprise role') : t('Keeper', undefined, 'enterprise role');
+}
+
+/**
+ * The start of what a screen reader says for a row: its name, its kind and the member's part, one phrase per variant
+ * ("Garden Crew, group", "Bakery, enterprise, lead keeper"). The row adds its unread count, muting and preview.
+ */
+export function rowSpokenName(item: Pick<YourChat, 'kind' | 'role' | 'lifecycle' | 'name'>): string {
+    const name = item.name;
+    if (item.kind === 'event') return t('{name}, event', { name });
+    if (item.kind !== 'enterprise') return t('{name}, group', { name });
+    const lead = item.role === 'lead';
+    if (item.lifecycle === 'bounded') return lead ? t('{name}, project, leader', { name }) : t('{name}, project, collaborator', { name });
+    return lead ? t('{name}, enterprise, lead keeper', { name }) : t('{name}, enterprise, keeper', { name });
 }
 
 /** The chat's answer wins when it carries a mute (null included); an answer without the field keeps what we had. */
@@ -273,8 +307,8 @@ export function setChatMute<T extends Pick<YourChat, 'conversationId' | 'mute'>>
 }
 
 /** The chat menu's mute row: Unmute while muted, otherwise the way into the mute choices. */
-export function muteMenuLabel(mute: YourChatMute | null | undefined, now: Date = new Date()): 'Unmute' | 'Mute notifications' {
-    return isMuted(mute, now) ? 'Unmute' : 'Mute notifications';
+export function muteMenuLabel(mute: YourChatMute | null | undefined, now: Date = new Date()): string {
+    return isMuted(mute, now) ? t('Unmute') : t('Mute notifications');
 }
 
 /**
@@ -354,18 +388,23 @@ export function inviteLandingConvenor(
 /** "Garden Crew · 4 members": the facts line, from the node's answer or the tap's preview. */
 export function inviteLandingFacts(p: { category?: string | null; memberCount?: number | null; joinPolicy?: string | null }): string {
     const bits: string[] = [];
-    if (p.category) bits.push(GROUP_CATEGORY_WORDS[p.category as GroupCategory] || 'Group');
-    if (typeof p.memberCount === 'number' && p.memberCount >= 0) bits.push(`${p.memberCount} ${p.memberCount === 1 ? 'member' : 'members'}`);
-    if (p.joinPolicy && JOIN_POLICY_WORDS[p.joinPolicy]) bits.push(JOIN_POLICY_WORDS[p.joinPolicy]);
+    // Separate facts, each whole in the member's language, side by side. The tables' own names only: these come from the
+    // route's params too, and a "constructor" there is not one.
+    const own = (table: object, name: string) => Object.prototype.hasOwnProperty.call(table, name);
+    if (p.category) bits.push(own(GROUP_CATEGORY_WORDS, p.category) ? t(GROUP_CATEGORY_WORDS[p.category as GroupCategory]) : t(OWNER_KIND_NAME.group));
+    if (typeof p.memberCount === 'number' && p.memberCount >= 0) bits.push(tn(p.memberCount, '{n} member', '{n} members'));
+    if (p.joinPolicy && own(JOIN_POLICY_WORDS, p.joinPolicy)) bits.push(t(JOIN_POLICY_WORDS[p.joinPolicy]));
     return bits.join(' · ');
 }
 
-export const GROUP_CATEGORY_WORDS: Readonly<Record<GroupCategory, string>> = {
-    social: 'Social Circle', general: 'General', working_group: 'Working Group', project: 'Team', guild: 'Guild',
+/** A group's category by name: word() keys, shown through t(). */
+export const GROUP_CATEGORY_WORDS: Readonly<Record<GroupCategory, WordKey>> = {
+    social: word('Social Circle'), general: word('General'), working_group: word('Working Group'), project: word('Team'), guild: word('Guild'),
 };
 
-export const JOIN_POLICY_WORDS: Readonly<Record<string, string>> = {
-    open: 'Anyone can join', request_to_join: 'Ask to join', invite_only: 'Invite only',
+/** How a group is joined, as its landing says it: word() keys, shown through t(). */
+export const JOIN_POLICY_WORDS: Readonly<Record<string, WordKey>> = {
+    open: word('Anyone can join'), request_to_join: word('Ask to join'), invite_only: word('Invite only'),
 };
 
 /** Where the landing is opened from a row: the preview travels as route params (strings). */

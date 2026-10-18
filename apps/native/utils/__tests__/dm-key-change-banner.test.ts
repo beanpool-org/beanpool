@@ -341,7 +341,8 @@ describe('the DM screen: the rule-5 line, the banner\'s name and its height', ()
         const src = readFileSync(join(process.cwd(), 'app', 'chat', '[id].tsx'), 'utf8');
         expect(src).toMatch(/if \(item\.unattributed \|\| item\.fromOfferedKey\) return renderUnattributedLine\(item\);/);
         const slot = src.slice(src.indexOf('const renderUnattributedLine'), src.indexOf('const renderMessage'));
-        expect(slot).toMatch(/\{dmLineSlotText\(item\)\}/);
+        // In the member's language (utils/chat-line-words: the stand-in sentences dm-crypto writes), still never its words.
+        expect(slot).toMatch(/\{chatLineWords\(dmLineSlotText\(item\)\)\}/);
         expect(slot).not.toMatch(/\{item\.text\}/);
         expect(DM_OFFERED_KEY_LINE).toBe('Sent from the new key. Shown after you continue.');
         expect(dmLineSlotText({ text: 'PUPPET: what is the door code?', fromOfferedKey: true })).toBe(DM_OFFERED_KEY_LINE);

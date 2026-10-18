@@ -14,7 +14,8 @@ import { getDb, createConversationApi, getRecentChatMembers, getFriendsLocal } f
 import { useNodeProfile } from '../utils/use-node-profile';
 import { membersByKey } from '../utils/node-profile';
 import { keepCards, lookUpMembers, searchPath } from '../utils/members-lookup';
-import { pickerEmpty, pickerHeading } from '../utils/community-list-note';
+import { joinedWords, pickerEmpty, pickerHeading } from '../utils/community-list-note';
+import { t, tn } from '@beanpool/core';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { useTheme, useStyles } from './ThemeContext';
 
@@ -43,22 +44,6 @@ function ShimmerRow({ index, styles }: { index: number; styles: any }) {
             </View>
         </Animated.View>
     );
-}
-
-// ── Utilities ───────────────────────────────────────────────────────────────
-function formatJoinDate(dateStr: string | null) {
-    if (!dateStr) return 'Member';
-    try {
-        const d = new Date(dateStr);
-        const now = new Date();
-        const diffDays = Math.floor((now.getTime() - d.getTime()) / (1000 * 60 * 60 * 24));
-        if (diffDays < 1) return 'Joined today';
-        if (diffDays < 7) return `Joined ${diffDays}d ago`;
-        if (diffDays < 30) return `Joined ${Math.floor(diffDays / 7)}w ago`;
-        return `Joined ${d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`;
-    } catch {
-        return 'Member';
-    }
 }
 
 /** Build a cache-busting URI for avatar images so updates propagate immediately. */
@@ -311,11 +296,11 @@ export default function NewMessageScreen() {
 
                 <View style={styles.memberInfo}>
                     <View style={styles.memberNameRow}>
-                        <Text style={styles.memberName} numberOfLines={1}>{item.callsign || 'Unknown'}</Text>
-                        {isFriend && <Text style={styles.friendLabel}>Friend</Text>}
+                        <Text style={styles.memberName} numberOfLines={1}>{item.callsign || t('Unknown')}</Text>
+                        {isFriend && <Text style={styles.friendLabel} numberOfLines={1}>{t('Friend')}</Text>}
                     </View>
                     <Text style={styles.memberMeta} numberOfLines={1}>
-                        {formatJoinDate(item.joined_at)}
+                        {joinedWords(item.joined_at)}
                     </Text>
                 </View>
 
@@ -356,7 +341,7 @@ export default function NewMessageScreen() {
             {/* Recents */}
             {showRecents && (
                 <View style={styles.recentsSection}>
-                    <Text style={styles.sectionTitle}>💬 Recently Chatted</Text>
+                    <Text style={styles.sectionTitle}>{t('💬 Recently Chatted')}</Text>
                     <FlatList
                         data={recents}
                         keyExtractor={item => item.publicKey}
@@ -371,10 +356,10 @@ export default function NewMessageScreen() {
             {/* Directory Header */}
             <View style={styles.directoryHeader}>
                 <Text style={styles.sectionTitle}>
-                    {membersOnDemand ? pickerHeading(searchQuery) : searchQuery ? '🔍 Results' : '🏘️ Community Directory'}
+                    {membersOnDemand ? pickerHeading(searchQuery) : searchQuery ? t('🔍 Results') : t('🏘️ Community Directory')}
                 </Text>
                 <Text style={styles.memberCount}>
-                    {filteredMembers.length} {filteredMembers.length === 1 ? 'member' : 'members'}
+                    {tn(filteredMembers.length, '{n} member', '{n} members')}
                 </Text>
             </View>
         </>
@@ -389,10 +374,10 @@ export default function NewMessageScreen() {
             >
                 {/* Header Bar */}
                 <View style={styles.header}>
-                    <Pressable style={styles.backBtn} onPress={() => router.back()} accessibilityRole="button" accessibilityLabel="Go back">
+                    <Pressable style={styles.backBtn} onPress={() => router.back()} accessibilityRole="button" accessibilityLabel={t('Go back')}>
                         <MaterialCommunityIcons name="arrow-left" size={24} color={colors.text.body} />
                     </Pressable>
-                    <Text style={styles.title}>New Message</Text>
+                    <Text style={styles.title} numberOfLines={1}>{t('New Message')}</Text>
                     <View style={{ width: 40 }} />
                 </View>
 
@@ -400,10 +385,10 @@ export default function NewMessageScreen() {
                 <View style={styles.searchContainer}>
                     <MaterialCommunityIcons name="magnify" size={20} color={colors.text.muted} style={styles.searchIcon} />
                     <TextInput
-                        accessibilityLabel="Search by callsign or public key"
+                        accessibilityLabel={t('Search by callsign or public key')}
                         ref={searchRef}
                         style={styles.searchInput}
-                        placeholder="Search by callsign or public key..."
+                        placeholder={t('Search by callsign or public key...')}
                         placeholderTextColor={colors.text.muted}
                         value={searchQuery}
                         onChangeText={setSearchQuery}
@@ -413,7 +398,7 @@ export default function NewMessageScreen() {
                         autoCorrect={false}
                     />
                     {searchQuery.length > 0 && (
-                        <Pressable onPress={() => setSearchQuery('')} style={styles.clearBtn} accessibilityRole="button" accessibilityLabel="Clear search">
+                        <Pressable onPress={() => setSearchQuery('')} style={styles.clearBtn} accessibilityRole="button" accessibilityLabel={t('Clear search')}>
                             <MaterialCommunityIcons name="close-circle" size={18} color={colors.text.muted} />
                         </Pressable>
                     )}
@@ -443,14 +428,14 @@ export default function NewMessageScreen() {
                             <View style={styles.emptyContainer}>
                                 <MaterialCommunityIcons name="account-search-outline" size={48} color={colors.border.strong} />
                                 <Text style={styles.emptyTitle}>
-                                    {membersOnDemand ? pickerEmpty(searchQuery, nodeSearch).title : searchQuery ? 'No members match your search' : 'No community members found'}
+                                    {membersOnDemand ? pickerEmpty(searchQuery, nodeSearch).title : searchQuery ? t('No members match your search') : t('No community members found')}
                                 </Text>
                                 <Text style={[styles.emptySubtitle, membersOnDemand && styles.emptySubtitleOnDemand]}>
                                     {membersOnDemand
                                         ? pickerEmpty(searchQuery, nodeSearch).subtitle
                                         : searchQuery
-                                        ? 'Try a different callsign or public key.'
-                                        : 'Sync with a node to populate your directory.'}
+                                        ? t('Try a different callsign or public key.')
+                                        : t('Sync with a node to populate your directory.')}
                                 </Text>
                             </View>
                         }

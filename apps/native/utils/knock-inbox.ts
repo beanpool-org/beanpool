@@ -45,6 +45,8 @@ export type AnswerResult =
     | { ok: false; message: string };
 
 const UNREACHABLE = "Couldn't reach your community. Check your connection and try again.";
+/** What a list or an answer says when the community couldn't be reached (the screen words it in the member's language). */
+export const KNOCK_UNREACHABLE_TEXT = UNREACHABLE;
 
 function readRequest(raw: unknown): JoinRequest | null {
     if (!raw || typeof raw !== 'object') return null;
@@ -119,12 +121,17 @@ export function wantsToJoinTitle(total: number): string {
     return `Wants to join (${total})`;
 }
 
+/** How many whole days ago a request was made (0 today), or null for a date that can't be read. */
+export function joinRequestAge(r: Pick<JoinRequest, 'createdAt'>, now: number = Date.now()): number | null {
+    const at = Date.parse(r.createdAt);
+    return Number.isFinite(at) ? Math.max(0, Math.floor((now - at) / 86_400_000)) : null;
+}
+
 /** Under each request: when, and where they came from. */
 export function joinRequestMeta(r: Pick<JoinRequest, 'createdAt' | 'fromNode'>, now: number = Date.now()): string {
-    const at = Date.parse(r.createdAt);
+    const days = joinRequestAge(r, now);
     let when = '';
-    if (Number.isFinite(at)) {
-        const days = Math.floor((now - at) / 86_400_000);
+    if (days !== null) {
         when = days <= 0 ? 'Asked today' : days === 1 ? 'Asked yesterday' : `Asked ${days} days ago`;
     }
     const from = r.fromNode ? `from ${r.fromNode}` : '';

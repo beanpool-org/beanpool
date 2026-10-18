@@ -18,7 +18,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme, useStyles } from '../app/ThemeContext';
 import { getInvitablePeople, inviteGroupMemberApi } from '../utils/db';
 import { sendGroupInvitations } from '../utils/group-invite-send';
-import { t } from '@beanpool/core';
+import { t, tn } from '@beanpool/core';
 import { useNodeProfile } from '../utils/use-node-profile';
 import { membersByKey } from '../utils/node-profile';
 import { lookUpMembers, searchPath } from '../utils/members-lookup';
@@ -169,10 +169,10 @@ export function InvitePeopleSheet({ isOpen, groupId, groupName, existing, myPubk
                 }]}>
                     <View style={styles.header}>
                         <View style={styles.titleWrap}>
-                            <Text style={styles.title} numberOfLines={1}>Invite people</Text>
-                            <Text style={styles.sub} numberOfLines={1}>to {groupName}</Text>
+                            <Text style={styles.title} numberOfLines={1}>{t('Invite people')}</Text>
+                            <Text style={styles.sub} numberOfLines={1}>{t('to {name}', { name: groupName })}</Text>
                         </View>
-                        <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={onClose} style={styles.closeBtn}>
+                        <Pressable accessibilityRole="button" accessibilityLabel={t('Close')} onPress={onClose} style={styles.closeBtn}>
                             <MaterialCommunityIcons name="close" size={24} color={colors.text.muted} />
                         </Pressable>
                     </View>
@@ -182,9 +182,9 @@ export function InvitePeopleSheet({ isOpen, groupId, groupName, existing, myPubk
                             style={styles.searchInput}
                             value={query}
                             onChangeText={setQuery}
-                            placeholder="Search people in this community"
+                            placeholder={t('Search people in this community')}
                             placeholderTextColor={colors.text.muted}
-                            accessibilityLabel="Search people"
+                            accessibilityLabel={t('Search people')}
                         />
                     </View>
                     <FlatList
@@ -193,13 +193,13 @@ export function InvitePeopleSheet({ isOpen, groupId, groupName, existing, myPubk
                         keyExtractor={m => m.publicKey}
                         keyboardShouldPersistTaps="handled"
                         ListEmptyComponent={members === null
-                            ? <ActivityIndicator style={{ padding: 24 }} color={colors.brand.primary} accessibilityLabel="Loading people" />
+                            ? <ActivityIndicator style={{ padding: 24 }} color={colors.brand.primary} accessibilityLabel={t('Loading people')} />
                             : membersOnDemand
                             ? <View>
                                 <Text style={styles.emptyTitle}>{pickerEmpty(query, nodeSearch).title}</Text>
                                 <Text style={styles.emptySubtitle}>{pickerEmpty(query, nodeSearch).subtitle}</Text>
                               </View>
-                            : <Text style={styles.empty}>{query ? 'Nobody by that name.' : 'Nobody else is in this community yet.'}</Text>}
+                            : <Text style={styles.empty}>{query ? t('Nobody by that name.') : t('Nobody else is in this community yet.')}</Text>}
                         renderItem={({ item }) => {
                             const already = existing.has(item.publicKey);
                             const on = already || picked.has(item.publicKey);
@@ -210,11 +210,11 @@ export function InvitePeopleSheet({ isOpen, groupId, groupName, existing, myPubk
                                     onPress={() => toggle(item.publicKey)}
                                     accessibilityRole="checkbox"
                                     accessibilityState={{ checked: on, disabled: already }}
-                                    accessibilityLabel={`${item.callsign}${already ? ', already in the group' : ''}`}
+                                    accessibilityLabel={already ? t('{name}, already in the group', { name: item.callsign }) : item.callsign}
                                 >
                                     <MemberAvatar avatarUrl={item.avatarUrl} pubkey={item.publicKey} callsign={item.callsign} size={36} />
                                     <Text style={styles.name} numberOfLines={1}>{item.callsign}</Text>
-                                    {already && <Text style={styles.already}>In the group</Text>}
+                                    {already && <Text style={styles.already}>{t('In the group')}</Text>}
                                     <MaterialCommunityIcons
                                         name={on ? 'checkbox-marked-circle' : 'checkbox-blank-circle-outline'}
                                         size={26}
@@ -230,13 +230,13 @@ export function InvitePeopleSheet({ isOpen, groupId, groupName, existing, myPubk
                             disabled={!count || sending}
                             style={[styles.inviteBtn, (!count || sending) && styles.inviteBtnDisabled]}
                             accessibilityRole="button"
-                            accessibilityLabel={sending ? 'Sending invitations...' : count ? `Invite ${count} ${count === 1 ? 'person' : 'people'}` : 'Pick people to invite'}
-                            accessibilityHint={count && !sending ? `Sends group invitations to ${count} ${count === 1 ? 'selected person' : 'selected people'}` : undefined}
+                            accessibilityLabel={sending ? t('Sending invitations...') : count ? tn(count, 'Invite {n} person', 'Invite {n} people') : t('Pick people to invite')}
+                            accessibilityHint={count && !sending ? tn(count, 'Sends group invitations to {n} selected person', 'Sends group invitations to {n} selected people') : undefined}
                             accessibilityState={{ disabled: !count || sending, busy: sending }}
                         >
                             {sending
                                 ? <ActivityIndicator color={colors.text.inverse} />
-                                : <Text style={styles.inviteText} numberOfLines={1}>{count ? `Invite ${count} ${count === 1 ? 'person' : 'people'}` : 'Pick people to invite'}</Text>}
+                                : <Text style={styles.inviteText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{count ? tn(count, 'Invite {n} person', 'Invite {n} people') : t('Pick people to invite')}</Text>}
                         </Pressable>
                     </View>
                 </View>

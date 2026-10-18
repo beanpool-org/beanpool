@@ -18,11 +18,20 @@ import { talkSort } from '../../utils/beans-off';
 import { PageTitle, useTabRetapScrollTop } from '../../components/PageTitle';
 import { useQuickReturn, QuickReturnBlock } from '../../components/QuickReturn';
 import { initialTalkView, type TalkView } from '../../utils/talk-views';
-import { unreadLabel, groupsUnreadTotal, yourGroupsPaneState } from '../../utils/your-groups';
+import { unreadLabel, groupsUnreadTotal, yourGroupsPaneState, rowTime } from '../../utils/your-groups';
+import { chatLineWords } from '../../utils/chat-line-words';
+import { listingStatusWords } from '../../utils/listing-status-words';
 import { YourGroupsRows, YourGroupsEmpty, YourGroupsLoading, YourGroupsError, NewGroupButton, FindGroupsButton, useCreateGroupFlow } from '../../components/YourGroupsPane';
 import { findGroupsInTalk, FIND_GROUPS_HREF } from '../../utils/commons-sections';
 import { useYourGroups } from '../../components/useYourGroups';
-import { listPhotoUrl, t } from '@beanpool/core';
+import { listPhotoUrl, t, tn, word, type WordKey } from '@beanpool/core';
+
+/** Talk's three panes: word() keys, shown through t() where the switch is drawn. */
+const TALK_PANES: ReadonlyArray<{ id: TalkView; label: WordKey }> = [
+    { id: 'messages', label: word('Messages', 'talk pane') },
+    { id: 'groups', label: word('Groups', 'talk pane') },
+    { id: 'people', label: word('People', 'talk pane') },
+];
 
 export default function ChatsScreen() {
     const { theme, colors } = useTheme();
@@ -398,10 +407,10 @@ export default function ChatsScreen() {
 
 
     const getActionLabel = (deal: any) => {
-        if (deal.action === 'release') return '🔓 Release Credits';
-        if (deal.action === 'fulfill') return '📦 Fulfill Order';
-        if (deal.action === 'review') return '⭐ Leave Review';
-        return '⚡ Action Required';
+        if (deal.action === 'release') return t('🔓 Release Credits');
+        if (deal.action === 'fulfill') return t('📦 Fulfill Order');
+        if (deal.action === 'review') return t('⭐ Leave Review');
+        return t('⚡ Action Required');
     };
 
     const renderActionCard = ({ item }: { item: any }) => (
@@ -421,7 +430,7 @@ export default function ChatsScreen() {
                     <MemberAvatar avatarUrl={item.peerAvatar} pubkey={item.peerPubkey || ''} callsign={item.peerCallsign || ''} size={28} />
                 </View>
                 <View style={styles.actionCardInfo}>
-                    <Text style={styles.actionCardTitle} numberOfLines={1}>{item.postTitle || 'Transaction'}</Text>
+                    <Text style={styles.actionCardTitle} numberOfLines={1}>{item.postTitle || t('Transaction')}</Text>
                     <Text style={styles.actionCardPeer}>{item.peerCallsign || (item.peerPubkey || '').slice(0, 8)}</Text>
                 </View>
                 {item.credits ? (
@@ -443,20 +452,21 @@ export default function ChatsScreen() {
         let actionText = '';
         let actionIcon: any = 'alert-circle-outline';
         if (item.actionableCount > 0) {
+            // English writes one form for both; a language with more forms has them.
             if (item.releaseCount > 0 && item.reviewCount > 0) {
-                actionText = `Action Required (${item.actionableCount})`;
+                actionText = tn(item.actionableCount, 'Action Required ({n})', 'Action Required ({n})');
                 actionIcon = 'lightning-bolt';
             } else if (item.releaseCount > 0) {
-                actionText = `Release Credits (${item.releaseCount})`;
+                actionText = tn(item.releaseCount, 'Release Credits ({n})', 'Release Credits ({n})');
                 actionIcon = 'lock-open-outline';
             } else if (item.reviewCount > 0) {
-                actionText = `Review Needed (${item.reviewCount})`;
+                actionText = tn(item.reviewCount, 'Review Needed ({n})', 'Review Needed ({n})');
                 actionIcon = 'star-outline';
             } else if (item.fulfillCount > 0) {
-                actionText = `Fulfill Order (${item.fulfillCount})`;
+                actionText = tn(item.fulfillCount, 'Fulfill Order ({n})', 'Fulfill Order ({n})');
                 actionIcon = 'package-variant-closed';
             } else {
-                actionText = `Action Required (${item.actionableCount})`;
+                actionText = tn(item.actionableCount, 'Action Required ({n})', 'Action Required ({n})');
                 actionIcon = 'lightning-bolt';
             }
         }
@@ -510,13 +520,15 @@ export default function ChatsScreen() {
                 
                 <View style={styles.chatDetails}>
                     <View style={styles.chatHeader}>
-                        <Text style={[styles.peerName, item.unread > 0 && styles.peerNameUnread]}>{item.peer}</Text>
+                        {/* Gives way (one line) so a longer language's "key changed" tag and the time keep their room. */}
+                        <Text style={[styles.peerName, item.unread > 0 && styles.peerNameUnread, { flexShrink: 1 }]} numberOfLines={1}>{item.peer}</Text>
                         {item.keyChanged && (
                             <View style={styles.keyChangedTag} accessibilityLabel={t('The key behind this chat changed')}>
                                 <Text style={styles.keyChangedTagText}>{t('key changed')}</Text>
                             </View>
                         )}
-                        <Text style={[styles.timestamp, item.unread > 0 && styles.timestampUnread]}>{item.timestamp}</Text>
+                        {/* When, as the Groups rows say it ("14:05" today, "Tue" this week, "12 Sep" before), in the member's language. */}
+                        <Text style={[styles.timestamp, item.unread > 0 && styles.timestampUnread]}>{item.rawTimestamp ? rowTime(item.rawTimestamp) : t('New', undefined, 'conversation')}</Text>
                     </View>
                     
                     {item.postTitle && (
@@ -533,7 +545,7 @@ export default function ChatsScreen() {
                                         item.postStatus === 'pending' ? { color: colors.feedback.success.fg } :
                                         { color: colors.text.secondary }
                                     ]}>
-                                        {item.postStatus === 'pending' ? 'HELD IN TRUST' : item.postStatus.toUpperCase()}
+                                        {listingStatusWords(item.postStatus)}
                                     </Text>
                                 </View>
                             )}
@@ -547,7 +559,7 @@ export default function ChatsScreen() {
                             </Text>
                         ) : (
                             <Text style={[styles.lastMessage, item.unread > 0 && styles.lastMessageUnread]} numberOfLines={1}>
-                                {item.lastMessage}
+                                {chatLineWords(item.lastMessage)}
                             </Text>
                         )}
                         {item.unread > 0 && (
@@ -571,7 +583,7 @@ export default function ChatsScreen() {
                 <View style={styles.actionSection}>
                     <View style={styles.actionSectionHeader}>
                         <MaterialCommunityIcons name="lightning-bolt" size={18} color={colors.brand.primary} />
-                        <Text style={styles.actionSectionTitle}>Action Required</Text>
+                        <Text style={styles.actionSectionTitle}>{t('Action Required')}</Text>
                         <View style={styles.actionCountBadge}>
                             <Text style={styles.actionCountText}>{actionRequired.length}</Text>
                         </View>
@@ -588,29 +600,28 @@ export default function ChatsScreen() {
 
     const talkSwitch = (
         <View style={styles.talkBar}>
-            {([
-                { id: 'messages' as const, label: 'Messages', count: 0 },
-                { id: 'groups' as const, label: 'Groups', count: groupsUnread },
-                { id: 'people' as const, label: 'People', count: 0 },
-            ]).map(t => {
-                const active = talkView === t.id;
+            {TALK_PANES.map(pane => {
+                const active = talkView === pane.id;
+                const label = t(pane.label);
+                const count = pane.id === 'groups' ? groupsUnread : 0;
                 return (
                     <Pressable
-                        key={t.id}
-                        onPress={() => setTalkView(t.id)}
+                        key={pane.id}
+                        onPress={() => setTalkView(pane.id)}
                         style={[styles.talkTab, active && styles.talkTabActive]}
                         accessibilityRole="radio"
                         accessibilityState={{ selected: active }}
-                        accessibilityLabel={t.count ? `${t.label}, ${t.count} unread` : t.label}
+                        accessibilityLabel={count ? tn(count, '{label}, {n} unread', '{label}, {n} unread', { label }) : label}
                     >
-                        <Text style={[styles.talkTabText, active && styles.talkTabTextActive]} numberOfLines={1}>
-                            {t.label}
+                        {/* A third of the bar each: a longer name in another language shrinks to fit rather than being cut. */}
+                        <Text style={[styles.talkTabText, active && styles.talkTabTextActive]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
+                            {label}
                         </Text>
                         {/* On the tab's corner, not beside the label: at 320dp and 1.3x text a badge in the row
                             squeezed "Groups" to "Grou…". */}
-                        {t.count > 0 && (
+                        {count > 0 && (
                             <View style={styles.talkTabBadge} pointerEvents="none">
-                                <Text style={styles.talkTabBadgeText} maxFontSizeMultiplier={1.1}>{unreadLabel(t.count)}</Text>
+                                <Text style={styles.talkTabBadgeText} maxFontSizeMultiplier={1.1}>{unreadLabel(count)}</Text>
                             </View>
                         )}
                     </Pressable>
@@ -623,7 +634,7 @@ export default function ChatsScreen() {
     const optionsDrawer = showOptions ? (
         <View style={styles.optionsDrawer}>
             {/* Sort Section */}
-            <Text style={styles.optionsLabel}>Sort by</Text>
+            <Text style={styles.optionsLabel}>{t('Sort by')}</Text>
             <View style={styles.chipsRow}>
                 <Pressable
                     accessibilityRole="button"
@@ -631,7 +642,7 @@ export default function ChatsScreen() {
                     style={[styles.chip, sortBy === 'recent' && styles.chipActive]}
                     onPress={() => setSortBy('recent')}
                 >
-                    <Text style={[styles.chipText, sortBy === 'recent' && styles.chipTextActive]}>⇅ Recent</Text>
+                    <Text style={[styles.chipText, sortBy === 'recent' && styles.chipTextActive]}>{t('⇅ Recent')}</Text>
                 </Pressable>
                 <Pressable
                     accessibilityRole="button"
@@ -639,7 +650,7 @@ export default function ChatsScreen() {
                     style={[styles.chip, sortBy === 'unread' && styles.chipActive]}
                     onPress={() => setSortBy('unread')}
                 >
-                    <Text style={[styles.chipText, sortBy === 'unread' && styles.chipTextActive]}>✉ Unread</Text>
+                    <Text style={[styles.chipText, sortBy === 'unread' && styles.chipTextActive]}>{t('✉ Unread')}</Text>
                 </Pressable>
                 {showsBeans && (
                 <>
@@ -653,7 +664,7 @@ export default function ChatsScreen() {
                         source={require('../../assets/images/bean.png')}
                         style={{ width: 14, height: 14, resizeMode: 'contain' }}
                     />
-                    <Text style={[styles.chipText, sortBy === 'credits_desc' && styles.chipTextActive]}>Credits: High</Text>
+                    <Text style={[styles.chipText, sortBy === 'credits_desc' && styles.chipTextActive]}>{t('Credits: High')}</Text>
                 </Pressable>
                 <Pressable
                     accessibilityRole="button"
@@ -665,14 +676,14 @@ export default function ChatsScreen() {
                         source={require('../../assets/images/bean.png')}
                         style={{ width: 14, height: 14, resizeMode: 'contain' }}
                     />
-                    <Text style={[styles.chipText, sortBy === 'credits_asc' && styles.chipTextActive]}>Credits: Low</Text>
+                    <Text style={[styles.chipText, sortBy === 'credits_asc' && styles.chipTextActive]}>{t('Credits: Low')}</Text>
                 </Pressable>
                 </>
                 )}
             </View>
 
             {/* Read State Filter Section */}
-            <Text style={styles.optionsLabel}>Read Status</Text>
+            <Text style={styles.optionsLabel}>{t('Read Status')}</Text>
             <View style={styles.chipsRow}>
                 <Pressable
                     accessibilityRole="button"
@@ -680,7 +691,7 @@ export default function ChatsScreen() {
                     style={[styles.chip, readFilter === 'all' && styles.chipActive]}
                     onPress={() => setReadFilter('all')}
                 >
-                    <Text style={[styles.chipText, readFilter === 'all' && styles.chipTextActive]}>✓ All</Text>
+                    <Text style={[styles.chipText, readFilter === 'all' && styles.chipTextActive]}>{t('✓ All')}</Text>
                 </Pressable>
                 <Pressable
                     accessibilityRole="button"
@@ -688,12 +699,12 @@ export default function ChatsScreen() {
                     style={[styles.chip, readFilter === 'unread' && styles.chipActive]}
                     onPress={() => setReadFilter('unread')}
                 >
-                    <Text style={[styles.chipText, readFilter === 'unread' && styles.chipTextActive]}>✉ Unread Only</Text>
+                    <Text style={[styles.chipText, readFilter === 'unread' && styles.chipTextActive]}>{t('✉ Unread Only')}</Text>
                 </Pressable>
             </View>
 
             {/* People Filter Section */}
-            <Text style={styles.optionsLabel}>People</Text>
+            <Text style={styles.optionsLabel}>{t('People')}</Text>
             <View style={styles.chipsRow}>
                 <Pressable
                     accessibilityRole="button"
@@ -701,7 +712,7 @@ export default function ChatsScreen() {
                     style={[styles.chip, peopleFilter === 'all' && styles.chipActive]}
                     onPress={() => setPeopleFilter('all')}
                 >
-                    <Text style={[styles.chipText, peopleFilter === 'all' && styles.chipTextActive]}>✓ All</Text>
+                    <Text style={[styles.chipText, peopleFilter === 'all' && styles.chipTextActive]}>{t('✓ All')}</Text>
                 </Pressable>
                 <Pressable
                     accessibilityRole="button"
@@ -709,17 +720,17 @@ export default function ChatsScreen() {
                     style={[styles.chip, peopleFilter === 'friends' && styles.chipActive]}
                     onPress={() => setPeopleFilter('friends')}
                 >
-                    <Text style={[styles.chipText, peopleFilter === 'friends' && styles.chipTextActive]}>👫 Friends Only</Text>
+                    <Text style={[styles.chipText, peopleFilter === 'friends' && styles.chipTextActive]}>{t('👫 Friends Only')}</Text>
                 </Pressable>
             </View>
 
             {/* Reset Footer */}
             <View style={styles.optionsFooter}>
                 <Pressable accessibilityRole="button" style={styles.resetBtn} onPress={resetFilters}>
-                    <Text style={styles.resetBtnText}>Reset Defaults</Text>
+                    <Text style={styles.resetBtnText}>{t('Reset Defaults')}</Text>
                 </Pressable>
                 <Pressable accessibilityRole="button" style={styles.closeBtn} onPress={() => setShowOptions(false)}>
-                    <Text style={styles.closeBtnText}>✕ Close</Text>
+                    <Text style={styles.closeBtnText}>{t('✕ Close')}</Text>
                 </Pressable>
             </View>
         </View>
@@ -728,13 +739,13 @@ export default function ChatsScreen() {
     const listEmpty = actionRequired.length === 0 ? (
         <View style={styles.emptyContainer}>
             <MaterialCommunityIcons name="message-outline" size={48} color={colors.border.strong} />
-            <Text style={styles.emptyText}>No conversations yet.</Text>
+            <Text style={styles.emptyText}>{t('No conversations yet.')}</Text>
             <Pressable
                 accessibilityRole="button"
                 onPress={() => router.push('/(tabs)/market')}
                 style={{ marginTop: 12, backgroundColor: colors.accent.fill, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8 }}
             >
-                <Text style={{ color: colors.text.onAccent, fontWeight: 'bold' }}>Browse Market</Text>
+                <Text style={{ color: colors.text.onAccent, fontWeight: 'bold' }}>{t('Browse Market')}</Text>
             </Pressable>
         </View>
     ) : null;
@@ -750,7 +761,7 @@ export default function ChatsScreen() {
                     contentContainerStyle={{ paddingBottom: 100 }}
                     refreshControl={<RefreshControl refreshing={false} onRefresh={yourGroupsLive.refresh} tintColor={colors.brand.primary} colors={[colors.brand.primary]} />}
                 >
-                    <PageTitle title="Talk" />
+                    <PageTitle title={t('Talk')} />
                     {talkSwitch}
                     {/* The empty state has its own "Find a group to join". */}
                     {(hasAny || (findGroups && paneState !== 'empty')) && (
@@ -760,7 +771,7 @@ export default function ChatsScreen() {
                         </View>
                     )}
                     {paneState === 'loading' && <YourGroupsLoading />}
-                    {paneState === 'error' && <YourGroupsError message={yourGroupsLive.error || 'Could not load your groups.'} onRetry={yourGroupsLive.refresh} />}
+                    {paneState === 'error' && <YourGroupsError message={yourGroupsLive.error || t('Could not load your groups.')} onRetry={yourGroupsLive.refresh} />}
                     {paneState === 'list' && <YourGroupsRows items={yourGroups || []} myPubkey={identity?.publicKey} showUnread />}
                     {paneState === 'empty' && <YourGroupsEmpty onNew={createGroup.open} onFindGroups={() => router.push(FIND_GROUPS_HREF)} />}
                 </Animated.ScrollView>
@@ -772,7 +783,7 @@ export default function ChatsScreen() {
     if (talkView === 'people') {
         return (
             <View style={styles.safeArea}>
-                <PageTitle title="Talk" testID="page-title-talk" />
+                <PageTitle title={t('Talk')} testID="page-title-talk" />
                 {talkSwitch}
                 <PeopleScreen />
             </View>
@@ -785,16 +796,16 @@ export default function ChatsScreen() {
                 and the search row sit over the list and ride away with it (QuickReturnBlock); the
                 compose button lives in the search row, so it comes back with the first scroll up. */}
             <View style={{ flex: 1, overflow: 'hidden' }}>
-            <QuickReturnBlock qr={qr} title={<PageTitle title="Talk" testID="page-title-talk" />} below={optionsDrawer}>
+            <QuickReturnBlock qr={qr} title={<PageTitle title={t('Talk')} testID="page-title-talk" />} below={optionsDrawer}>
             {talkSwitch}
             {/* Search, Sort, and Filter row */}
             <View style={styles.searchBarRow}>
                 <View style={styles.searchContainer}>
                     <MaterialCommunityIcons name="magnify" size={20} color={colors.text.muted} style={styles.searchIcon} />
                     <TextInput
-                        accessibilityLabel="Search chats, posts, partners"
+                        accessibilityLabel={t('Search chats, posts, partners')}
                         style={styles.searchInput}
-                        placeholder="Search chats, posts, partners..."
+                        placeholder={t('Search chats, posts, partners...')}
                         placeholderTextColor={colors.text.muted}
                         value={searchQuery}
                         onChangeText={setSearchQuery}
@@ -802,14 +813,14 @@ export default function ChatsScreen() {
                         onBlur={() => setSearchFocused(false)}
                     />
                     {searchQuery.trim() !== '' && (
-                        <Pressable accessibilityRole="button" accessibilityLabel="Clear search" onPress={() => setSearchQuery('')} style={styles.clearBtn}>
+                        <Pressable accessibilityRole="button" accessibilityLabel={t('Clear search')} onPress={() => setSearchQuery('')} style={styles.clearBtn}>
                             <MaterialCommunityIcons name="close-circle" size={18} color={colors.text.muted} />
                         </Pressable>
                     )}
                 </View>
                 <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel="Filter and sort"
+                    accessibilityLabel={t('Filter and sort')}
                     accessibilityState={{ selected: showOptions || activeFiltersCount > 0 }}
                     style={[styles.optionsToggleBtn, (showOptions || activeFiltersCount > 0) && styles.optionsToggleBtnActive]}
                     onPress={() => setShowOptions(!showOptions)}
@@ -821,9 +832,9 @@ export default function ChatsScreen() {
                         </View>
                     )}
                 </Pressable>
-                <Pressable accessibilityRole="button" accessibilityLabel="New message" style={[styles.optionsToggleBtn, { backgroundColor: colors.accent.tint }]} onPress={() => {
+                <Pressable accessibilityRole="button" accessibilityLabel={t('New message')} style={[styles.optionsToggleBtn, { backgroundColor: colors.accent.tint }]} onPress={() => {
                     if (Platform.OS === 'web') {
-                        const val = window.prompt("Enter PubKey or Callsign:");
+                        const val = window.prompt(t('Enter PubKey or Callsign:'));
                         if (val) router.push(`/chat/${val}`);
                     } else {
                         router.push('/new-message');

@@ -26,7 +26,7 @@ export function isNodeReadableChatType(type: string | null | undefined): boolean
 /** What a DM line that could not be locked throws, before anything is written or sent. */
 export class DmNotLockedError extends Error {
     constructor() {
-        super("This message couldn't be locked yet.");
+        super(t("This message couldn't be locked yet."));
         this.name = 'DmNotLockedError';
     }
 }
@@ -35,10 +35,12 @@ export function isDmNotLocked(e: unknown): e is DmNotLockedError {
     return e instanceof DmNotLockedError || (e as { name?: unknown } | null)?.name === 'DmNotLockedError';
 }
 
-/** The one line the member sees; the words stay where they typed them. */
+/** The one line the member sees, in their language; the words stay where they typed them. */
 export function dmNotLockedLine(peerName?: string | null): string {
     const name = peerName?.trim();
-    return `This message couldn't be locked for ${name && name !== 'Loading...' ? name : 'the other person'} yet, so it wasn't sent. Try again in a moment.`;
+    return name && name !== 'Loading...'
+        ? t("This message couldn't be locked for {name} yet, so it wasn't sent. Try again in a moment.", { name })
+        : t("This message couldn't be locked for the other person yet, so it wasn't sent. Try again in a moment.");
 }
 
 /**

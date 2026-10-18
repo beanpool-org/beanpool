@@ -1,6 +1,7 @@
 import { getMemberProfile } from './db';
 import { getCanonicalAvatar } from './canonical-profile';
 import { BeanPoolIdentity } from './identity';
+import { t } from '@beanpool/core';
 
 /**
  * Does this member have a usable avatar? Mirrors the publish path: the node's
@@ -43,4 +44,15 @@ export function describeMissing(status: ProfileStatus): string {
     if (status.missingName && status.missingAvatar) return 'a name and a photo';
     if (status.missingName) return 'a name';
     return 'a photo';
+}
+
+/** Why accepting waits for the profile, in the member's language: one whole sentence for each thing missing. */
+export function acceptNeedsProfileLine(status: ProfileStatus): string {
+    if (status.missingName && status.missingAvatar) {
+        return t("Your community likes to know who they're dealing with, so you need a name and a photo before you can accept. It only takes a moment.");
+    }
+    if (status.missingName) {
+        return t("Your community likes to know who they're dealing with, so you need a name before you can accept. It only takes a moment.");
+    }
+    return t("Your community likes to know who they're dealing with, so you need a photo before you can accept. It only takes a moment.");
 }

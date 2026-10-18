@@ -94,14 +94,15 @@ describe('the preview sources', () => {
 
     it('the lines and the deal action sit where design §1 rows 2, 4, 7, 8 and 9 put them, each only in preview', () => {
         const post = read('app/post/[id].tsx');
-        expect(post).toMatch(/\{beansPreview && <View style=\{\{ paddingHorizontal: 16 \}\}><LocalCommunityMark variant="line" feature="beans" text=\{LOCAL_COMMUNITY_LINES\.price\} \/><\/View>\}/);
-        expect(post).toMatch(/\{beansPreview && <LocalCommunityMark variant="line" feature="beans" text=\{LOCAL_COMMUNITY_LINES\.price\} \/>\}/);
+        // The lines in the member's language since words S3b: the same lines, through t().
+        expect(post).toMatch(/\{beansPreview && <View style=\{\{ paddingHorizontal: 16 \}\}><LocalCommunityMark variant="line" feature="beans" text=\{t\(LOCAL_COMMUNITY_LINES\.price\)\} \/><\/View>\}/);
+        expect(post).toMatch(/\{beansPreview && <LocalCommunityMark variant="line" feature="beans" text=\{t\(LOCAL_COMMUNITY_LINES\.price\)\} \/>\}/);
         // The price card's words are one element to a screen reader, and the line is outside that group, so VoiceOver
         // reads it and reaches it as a button (review of #1852, finding 8); the note says "in a local community" only in
         // preview (finding 7).
-        expect(post).toMatch(/<View style=\{styles\.priceCard\} testID="no-beans-terms">\s*<View [^>]*accessible accessibilityLabel=\{`\$\{NO_BEANS_TERMS\.value\}\. \$\{noBeansTermsNote\(beansPreview\)\}`\}>(?:(?!<View)[\s\S])*?<\/View>\s*\{beansPreview && <View style=\{\{ paddingHorizontal: 16 \}\}><LocalCommunityMark variant="line"/);
+        expect(post).toMatch(/<View style=\{styles\.priceCard\} testID="no-beans-terms">\s*<View [^>]*accessible accessibilityLabel=\{t\('\{terms\}\. \{note\}', \{ terms: t\(NO_BEANS_TERMS\.value\), note: noBeansTermsNote\(beansPreview\) \}\)\}>(?:(?!<View)[\s\S])*?<\/View>\s*\{beansPreview && <View style=\{\{ paddingHorizontal: 16 \}\}><LocalCommunityMark variant="line"/);
         expect(post).not.toMatch(/\{NO_BEANS_TERMS\.note\}/);
-        expect(post).toMatch(/escrowPreview && \(\s*<View style=\{styles\.otherPostActions\}>\s*<LocalCommunityMark variant="action" feature="escrow" label=\{LOCAL_COMMUNITY_LINES\.dealAction/);
+        expect(post).toMatch(/escrowPreview && \(\s*<View style=\{styles\.otherPostActions\}>\s*<LocalCommunityMark variant="action" feature="escrow" label=\{t\(LOCAL_COMMUNITY_LINES\.dealAction\)/);
         // The line in the member's language since words S3b: the same line, through t().
         expect(read('components/PollCard.tsx')).toMatch(/\{informal && decisionsPreview && <LocalCommunityMark variant="line" feature="decisions" text=\{t\(LOCAL_COMMUNITY_LINES\.poll\)\} \/>\}/);
         expect(read('app/(tabs)/market.tsx')).toMatch(/decisionsPreview=\{decisionsPreview\}/);

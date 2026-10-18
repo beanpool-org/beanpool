@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 142,
-  "hash": "2544746755b018536a18a203ba3efb9dee404131f649040ccacfc93d968e18d1",
+  "version": 143,
+  "hash": "7234ae5b7dede9a6c05ea807fccd92ef1df3ca3cf77b575980d6a6d89b8240ea",
   "sections": [
     {
       "id": "setup",
@@ -3780,6 +3780,7 @@
             "Your server's key can hold a second name it doesn't use: the name asked for at install, if the address service gave it only after an owner had picked another one here. Your community stays on the name it has; it is never moved onto the other one. An owner sees one line about it: \"This community also holds NAME.beanpool.org from the install; it is not used. Release it?\" **Release** asks first (\"Release NAME.beanpool.org? Your community's address stays …\"), then lets go of that name only, never your community's address. If the address service answers about any other name, Settings says it was not released, and if that other name is your community's address, your server claims it straight back. If the address service can't release a single name by name (an older one), the line has no button.",
             "Only an owner sees the tunnel's key (the **Tunnel Token**). Anyone holding it could answer at your address and see some of your visitors' traffic, owners' sign-ins included, so an admin sees \"Only an owner can see the tunnel token\" instead.",
             "The panel shows the tunnel as it is: connected, retrying and why, or not running. **Restart tunnel** restarts it; visitors' connections drop for a few seconds. If the BeanPool project re-makes your tunnel, your server picks up the new key by itself within a few minutes.",
+            "Opening the panel asks the BeanPool address service only about a .beanpool.org name your server holds or has been asked for. With no such name (none yet, or only your server's own IP address or domain), your server answers from what it holds, so the panel opens the same whether or not the BeanPool project's servers can be reached. With a name, if the address service can't be reached, the panel shows the name as your server last stored it, with one line: \"The BeanPool name service can't be reached right now.\" Nothing is wrong with your server, and your community keeps its name.",
             "Every few minutes the BeanPool address service checks that the name still answers with your server's key. If something else answers there instead, it **pauses** the name. That might be another BeanPool server, or, for about an hour, something that isn't a BeanPool server at all, such as a stranger's website. While the name is paused, visitors can't reach your community at that address. But the name stays yours, and nobody else can claim it. The panel says **Paused** and why.",
             "You don't need to do anything about a pause. Your server asks for the name back by itself within a few minutes. It gets it back as soon as it shows its own key, on a new tunnel that only your server is given, so whoever was answering there is cut off. The one exception is a pause by the BeanPool project itself: only the project can lift it.",
             "**New tunnel key** gives the tunnel a new key, and the old key stops working at once. Use it if someone else may have only the tunnel's key: someone saw it on this screen, or you gave away a machine that was a standby. Anyone with the old key could answer at your address. Your server switches to the new key by itself; visitors' connections drop for a few seconds.",

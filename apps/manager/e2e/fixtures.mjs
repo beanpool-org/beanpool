@@ -1141,6 +1141,13 @@ export function mockResponse(method, pathname, searchParams, bodyText) {
     // ---- public address ----
     if (pathname === '/api/local/admin/public-address/status') return ok(PUBLIC_ADDRESS_STATUS);
     if (pathname === '/api/local/admin/public-address/logs') return ok({ logs: PUBLIC_ADDRESS_LOGS });
+    // Notices from the address service (registrar slice S2): a long one with lines, a reply link and an unbroken word, and a
+    // short one, so the phone-width check measures the block at its widest.
+    if (pathname === '/api/local/admin/public-address/notices') return ok({ success: true, notices: [
+        { id: 12, at: 1_760_000_000, level: 'action', name: 'a-name-of-the-longest-kind-32ch', link: `https://beanpool.org/reply/${'a'.repeat(43)}`,
+            text: 'This name was blocked with others made from the same network on 18 Oct.\nIf this is a mistake, reply here: an-unbroken-word-that-must-wrap-rather-than-push-the-card-wider-than-the-phone' },
+        { id: 7, at: 1_759_500_000, level: 'info', name: 'a-name-of-the-longest-kind-32ch', link: null, text: 'Your name is set up. Thank you for running a node.' },
+    ] });
     // The longest name the registrar gives (32 characters), held besides the address: the line and its Release button at 320px.
     if (pathname === '/api/local/admin/public-address/extra-names') return ok({ success: true, names: [{ name: 'install-race-name-thirty-two-chr', hostname: 'install-race-name-thirty-two-chr.beanpool.org', state: 'live', releasable: true, fromInstall: true }] });
     if (pathname === '/api/local/admin/public-address/claim') return ok({ success: true, status: 'pending' });

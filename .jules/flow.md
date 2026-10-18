@@ -142,3 +142,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/DX insight specific to the m
 ## 2026-12-10 - Replace catch e any in NodeRolesPanel
 **Learning:** `NodeRolesPanel.tsx` used `catch (e: any)` in async role fetching, granting, and revoking handlers, bypassing strict type checking for error objects.
 **Action:** Replace `catch (e: any)` with `catch (e: unknown)` and safe type guards checking `e instanceof Error` or object message properties.
+
+## 2026-12-11 - Replace catch err any in EnterpriseLocationPicker
+**Learning:** `EnterpriseLocationPicker.tsx` used `catch (err: any)` in `handleSave` and `handleClear` async handlers, bypassing strict type checking for caught errors.
+**Action:** Replace `catch (err: any)` with `catch (err: unknown)` and safe `err instanceof Error && err.message ? err.message : ...` guards.

@@ -485,6 +485,115 @@ describe('a copy already at the new address takes what guards the chats, add-onl
     });
 });
 
+describe('a chat-memory reset still waiting at either address never makes the carry skip the pins (confirmation 3 of #2138, dm-peer-pins.ts:348)', () => {
+    /**
+     * After a fresh start, the node lists another key for the DM at the name and serves none of its lines: the pin holds,
+     * the node's key is only offered, and the member's next line is refused before anything is sealed or written.
+     */
+    async function heldBackAtTheName(app: App, pinned: string): Promise<void> {
+        expect(stored(ANCHOR)).toBe(TO);
+        const other = await nodeListsAnotherKey(app);
+        expect(pinOf(TO_FILE)?.peer, 'never pinned to the node\'s key at first sight').toBe(pinned);
+        expect((await app.db.getDmKeyChange(dm.id))?.offeredPeer, 'held back as an offer').toBe(other.publicKey);
+        const sent = await app.db.insertMessage(dm.id, me.publicKey, 'see you at the market').then(() => null, (e: Error) => e);
+        expect(sent?.name, 'the member\'s next line is refused, never sealed to the node\'s key').toBe('DmKeyChangedError');
+        expect(await (await app.db.getDb()).getAllAsync('SELECT id FROM messages WHERE conversation_id = ?', [dm.id]), 'nothing written').toEqual([]);
+    }
+
+    async function afterAFreshStart(): Promise<App> {
+        await firstApp.db.closeDB();
+        return startedAgain();
+    }
+
+    it('the reviewer\'s case: a copy at the name and the member\'s reset of the name waiting there: the number\'s pin goes in, the reset re-checks the name\'s own rows', async () => {
+        await phoneWasAtTheName();
+        await phoneAtTheNumber();
+        expect(await firstApp.db.resetDmChatMemory(TO)).toBe('set-aside');
+        expect(JSON.parse(stored(dmPeerPinsStoreKey(me.publicKey, TO_FILE))!).reset, 'precondition: the reset\'s marker waits at the name').toBeTruthy();
+        const warn = quiet();
+        expect(await follow()).toBe('moved-kept-both');
+        warn.mockRestore();
+
+        expect(stored(dmPeerPinsSetAsideStoreKey(me.publicKey, TO_FILE)), 'what the reset set aside at the name stays').toBe('{"pins":{}}');
+        expect(pinOf(TO_FILE)?.peer, 'the number\'s pin is in the name\'s pin book').toBe(peer.publicKey);
+        const app = await afterAFreshStart();
+        await heldBackAtTheName(app, peer.publicKey);
+        await app.db.closeDB();
+    });
+
+    it('the member\'s reset of the number waiting there (the follow before the next sync): the reset is judged on the number\'s rows, and what it pins goes to the name', async () => {
+        await phoneWasAtTheName();
+        await phoneAtTheNumber();
+        const before = stored(dmPeerPinsStoreKey(me.publicKey, FROM_FILE));
+        expect(await firstApp.db.resetDmChatMemory(FROM)).toBe('set-aside');
+        const warn = quiet();
+        expect(await follow()).toBe('moved-kept-both');
+        warn.mockRestore();
+
+        expect(stored(dmPeerPinsSetAsideStoreKey(me.publicKey, FROM_FILE)), 'the reset set the number\'s pins aside').toBe(before);
+        expect(pinOf(FROM_FILE)?.peer, 'the number\'s re-seed ran over its own rows').toBe(peer.publicKey);
+        expect(pinOf(TO_FILE)?.peer, 'and its pin is in the name\'s pin book').toBe(peer.publicKey);
+        expect(JSON.parse(stored(dmConversationsSeenStoreKey(me.publicKey, TO_FILE))!), 'and the DM in the name\'s guard list').toContain(dm.id);
+        const app = await afterAFreshStart();
+        await heldBackAtTheName(app, peer.publicKey);
+        await app.db.closeDB();
+    });
+
+    it('no copy at the name and a reset of the name waiting there: the number\'s pins go in whole, the member\'s own Continue with them, never judged again as if reset', async () => {
+        await phoneAtTheNumber();
+        // The person re-keyed at the number, and the member checked the new key's code with them and continued.
+        const renewed = await nodeListsAnotherKey();
+        expect(await firstApp.db.acceptOfferedPeer(dm.id, renewed.publicKey), 'precondition: the member\'s Continue').toBe(true);
+        const continued = pinOf(FROM_FILE);
+        expect({ peer: continued?.peer, by: continued?.by, former: continued?.former }).toEqual({ peer: renewed.publicKey, by: 'member', former: [peer.publicKey] });
+        expect(await firstApp.db.resetDmChatMemory(TO)).toBe('nothing-stored');
+        expect(await follow()).toBe('moved');
+
+        expect(pinOf(TO_FILE), 'the number\'s pin, as the member left it').toEqual(continued);
+        const app = await afterAFreshStart();
+        const third = await nodeListsAnotherKey(app);
+        const pin = pinOf(TO_FILE);
+        expect({ peer: pin?.peer, by: pin?.by, former: pin?.former }, 'still the member\'s choice, its old lines still open').toEqual({ peer: renewed.publicKey, by: 'member', former: [peer.publicKey] });
+        expect((await app.db.getDmKeyChange(dm.id))?.offeredPeer).toBe(third.publicKey);
+        const sent = await app.db.insertMessage(dm.id, me.publicKey, 'see you at the market').then(() => null, (e: Error) => e);
+        expect(sent?.name).toBe('DmKeyChangedError');
+        await app.db.closeDB();
+    });
+
+    it('another account\'s reset waiting at the name: its pins at the number go in, and what its reset set aside stays', async () => {
+        const x = 'cd'.repeat(32);
+        const xPins = JSON.stringify({ pins: { 'x-dm': { peer: 'ef'.repeat(32), since: '2026-08-01T00:00:00.000Z', by: 'member' } } });
+        h.store.set(dmPeerPinsStoreKey(x, FROM_FILE), xPins);
+        h.store.set(dmPeerPinsStoreKey(x, TO_FILE), JSON.stringify({ reset: '2026-10-01T00:00:00.000Z' }));
+        h.store.set(dmPeerPinsSetAsideStoreKey(x, TO_FILE), '{"pins":{"x-before":1}}');
+        await phoneAtTheNumber();
+        expect(await follow()).toBe('moved');
+
+        expect(stored(dmPeerPinsStoreKey(x, TO_FILE))).toBe(xPins);
+        expect(stored(dmPeerPinsStoreKey(x, FROM_FILE))).toBe(xPins);
+        expect(stored(dmPeerPinsSetAsideStoreKey(x, TO_FILE))).toBe('{"pins":{"x-before":1}}');
+    });
+
+    it('pins at the name this phone can\'t read: nothing changes, and after the member\'s reset of the name the next tap carries the pin', async () => {
+        await phoneWasAtTheName();
+        const { keys } = await phoneAtTheNumber();
+        h.store.set(dmPeerPinsStoreKey(me.publicKey, TO_FILE), '{"pins":');
+        firstApp.db._resetDmPeerPinsForTests();   // a fresh app session: nothing of the name's pins held in memory
+        const warn = quiet();
+        await expect(follow()).rejects.toThrow('Nothing has changed');
+        expect(stored(ANCHOR)).toBe(FROM);
+        for (const [k, v] of Object.entries(keys)) expect(stored(k), k).toBe(v);
+
+        expect(await firstApp.db.resetDmChatMemory(TO)).toBe('set-aside');
+        expect(await follow()).toBe('moved-kept-both');
+        warn.mockRestore();
+        expect(pinOf(TO_FILE)?.peer).toBe(peer.publicKey);
+        const app = await afterAFreshStart();
+        await heldBackAtTheName(app, peer.publicKey);
+        await app.db.closeDB();
+    });
+});
+
 describe('another account\'s keys under the new name are never touched (confirmation 2 of #2138, :89)', () => {
     it('X\'s pins and guard list under the new name stay, and so does the current account\'s own set-aside there', async () => {
         const x = 'cd'.repeat(32);

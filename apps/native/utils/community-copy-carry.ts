@@ -9,6 +9,11 @@
  * server's take-over count (`pillar_sync_<file>_*`). A switch to the new address alone opens an empty file there: the pins
  * seeded again from whatever the node lists then (#1863 T5), every group chat back at epoch 0, and the whole community
  * synced again over mobile data (review of #2138). So they go with it, in this order:
+ *   0. In each of the two copies the phone has, the signed-in account's seed waiting there runs first, over that copy's
+ *      own rows (db.ts seedDmPinsBeforeCarry): the update's, or the re-seed the member's reset left waiting, so the reset
+ *      is judged on the rows it was made for. Then both names hold pins, never a reset's marker or nothing, and the merge
+ *      below can't skip a DM the old address pinned (confirmation 3 of #2138). A seed's writes are the ones the next read
+ *      there makes anyway; one that fails changes nothing.
  *   1. Each per-account key the old name holds goes to the new name add-only ({@link MERGES}): nothing the new name holds
  *      is replaced or removed, and an account the old name holds nothing for is not touched (an account's pins stay on the
  *      phone when it leaves: storage-keys.ts). A DM both names pin to different keys keeps the new name's pin, and the old
@@ -46,7 +51,7 @@ import {
 import { pinsWithCarried } from './dm-peer-pins';
 import { seenWithCarried } from './dm-guard-list';
 import { addGroupKeyState, type SqliteLike } from './group-chat-store';
-import { linesHeldWithCarried } from './db';
+import { linesHeldWithCarried, seedDmPinsBeforeCarry } from './db';
 
 /** What a carry did: 'carried', or 'kept-both' (a copy was already under the new address's name: its rows stay). */
 export type CopyCarry = 'carried' | 'kept-both';
@@ -98,7 +103,7 @@ function cursorIdsOf(keys: readonly string[], file: string): string[] {
 
 const cursorKey = (file: string, id: string) => `pillar_sync_${file}_${id}`;
 
-/** 1: each per-account key the old name holds, into the new name's add-only. Throws when a read or write fails. */
+/** 1: each per-account key the old name holds, into the new name's add-only (after 0). Throws when a read or write fails. */
 async function carryKeys(keys: readonly string[], fromFile: string, toFile: string, copyHere: boolean): Promise<void> {
     const now = new Date().toISOString();
     for (const k of perAccountKeysOf(keys, fromFile)) {
@@ -142,6 +147,8 @@ export async function carryCommunityCopy(from: string, to: string, writeAddress:
         if (fromFile !== toFile) {
             const copyHere = await exists(fileUri(directory, toFile));
             const copyThere = await exists(fileUri(directory, fromFile));
+            // 0. The seeds waiting in either copy, before the keys are read: a seed writes the keys it records.
+            await seedDmPinsBeforeCarry([...(copyThere ? [fromFile] : []), ...(copyHere ? [toFile] : [])]);
             const keys = await AsyncStorage.getAllKeys();
             await carryKeys(keys, fromFile, toFile, copyHere);
             if (copyHere) {

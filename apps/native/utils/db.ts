@@ -5051,6 +5051,31 @@ export async function seedDmPinsBeforeLeaving(me: string, files: readonly string
     }
 }
 
+/**
+ * Before a community's copy is carried to its new address (utils/community-copy-carry.ts, inside whileCopyMoves): in each
+ * named file, opened through a handle the pins know, the signed-in account's pins are read, which runs the seed waiting
+ * there over that file's own rows (the update's, or the re-seed after the member's reset: the reset judged on the rows it
+ * was made for), and its DM guard list likewise. So the carry merges two pin books, never a reset's marker or nothing,
+ * and no DM pinned at the old address is left to first sight at the new one (confirmation 3 of #2138). Throws when a
+ * file's pins can't be read or seeded: the carry then changes nothing. A guard list that can't be read is logged: the
+ * pins decide first, and the carry adds to it what it can. With no identity, no account's seed waits here.
+ */
+export async function seedDmPinsBeforeCarry(files: readonly string[]): Promise<void> {
+    const me = (await loadIdentity())?.publicKey;
+    if (!me) return;
+    for (const file of files) {
+        const handle = await SQLite.openDatabaseAsync(file, { useNewConnection: true });
+        dbFileOf.set(handle, file);
+        try {
+            await dmPins.read(me, handle);
+            await dmSeen.read(me, file, dmRowsOf(handle))
+                .catch((e) => console.warn(`[DM guard] Could not read which chats are private in ${file} before it is carried; the carry adds what it can`, e));
+        } finally {
+            await handle.closeAsync().catch(() => {});
+        }
+    }
+}
+
 /** For tests: a fresh app session (an update, a restore): the DM pins are read from storage again. */
 export function _resetDmPeerPinsForTests(): void {
     dmPins.forget();

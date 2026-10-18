@@ -321,8 +321,14 @@ function storedPinsOf(raw: string | null): StoredPins {
  * followed to its new address: utils/community-copy-carry.ts), add-only: nothing `here` holds is replaced or dropped.
  * `here`: this file's value now; `carried`: the other file's, as stored. Null: nothing to write.
  *  - Nothing here: the carried value as stored (with it, the record that its seed ran).
- *  - Here unreadable, or the member's reset's marker (its re-seed judges this file's rows): left as it is.
- *  - Carried unreadable, or a marker: nothing to add.
+ *  - The member's reset's marker here: the carried pins take its place. A reset's re-seed judges the rows of the file it
+ *    was made for, and the carry first runs each seed waiting in the signed-in account's copies (db.ts
+ *    seedDmPinsBeforeCarry), so a marker still here has no rows of its account here to judge: no copy at this name, or
+ *    another account's (this phone's copies are the signed-in account's; Sign Out deletes them). Left as it was, its
+ *    re-seed would judge the carried copy's rows, or a copy of that account's yet to come, and the carried pins, which no
+ *    reset removed, would go as if the member had reset them (confirmation 3 of #2138). What the reset set aside stays.
+ *  - Here unreadable: left as it is.
+ *  - Carried unreadable, or a marker (the member's reset removed what it pinned): nothing to add.
  *  - Both pins: each DM here keeps nothing for takes the carried entry, while the value stays within
  *    {@link DM_PINS_MAX_BYTES} (at the cap a DM is refused, never one dropped). A DM both pin to different keys keeps
  *    this file's pin, and the carried key is offered there ({@link DmPeerOffer}): nothing is sealed to it, and sends stop
@@ -345,7 +351,8 @@ export function pinsWithCarried(here: string | null, carried: string, now: strin
         console.warn('[DM pins] A carried community\'s pins can\'t be read, so none were added; they stay under its old address');
         return null;
     }
-    if (!mine.pins || !theirs.pins) return null;
+    if (!theirs.pins) return null;
+    if (!mine.pins) return carried;
     const pins = measured(mine.pins);
     let changed = false;
     let refused = 0;

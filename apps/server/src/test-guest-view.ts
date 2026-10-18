@@ -1363,6 +1363,7 @@ async function main(): Promise<void> {
             'POST /api/local/admin/takeover/confirm', 'POST /api/local/admin/takeover/open', 'POST /api/local/admin/takeover/phone/start',
             'POST /api/local/admin/takeover/phone/wait', 'POST /api/local/admin/takeover/progress', 'POST /api/local/admin/takeover/recovery-code',
             'POST /api/local/admin/takeover/recovery-code/check', 'POST /api/local/admin/takeover/status', 'POST /api/local/admin/takeover/words-checks',
+            'GET /api/local/admin/tls/status',
             'GET /api/local/admin/treasury', 'POST /api/local/admin/treasury', 'POST /api/local/admin/treasury/:treasury/ceiling', 'DELETE /api/local/admin/treasury/:treasury/location',
             'POST /api/local/admin/treasury/:treasury/location', 'POST /api/local/admin/treasury/:treasury/need',
             'POST /api/local/admin/treasury/:treasury/offer', 'GET /api/local/admin/treasury/:treasury/operators',

@@ -13,7 +13,8 @@
  *  3. Every OWNER + FRESH PROOF row: a password session with no code 401 totpRequired, with a current code passes and the
  *     code is spent (sent again: 401); a phone hand-off whose unlock is 91 s old 403 step_up_required, a fresh one passes;
  *     a computer's key session 403 phone_required; an admin 403; an admin token 403 token_not_allowed. Removing or
- *     re-pointing an off-box destination is held on each refusal. In break-glass mode the password and an earlier 2FA
+ *     re-pointing an off-box destination is held on each refusal, and so is removing an app address (B6, a row here
+ *     since HTTPS S4; section 2 has the owner-only certificates' state in its place). In break-glass mode the password and an earlier 2FA
  *     session enrol no owner key; a current code does. Re-keying an owner or admin (making the code and binding it) asks
  *     the same, and each refusal leaves their key, status and role as they were; cancelling, and a member's or a
  *     moderator's re-key, ask nothing more. Removing or suspending an owner (pruning, offboarding, a branch with one in
@@ -121,6 +122,7 @@ async function main(): Promise<void> {
     const { removalInGraceFromBefore } = await import('./decisions-from-before-test-fixture.js');
     const { cancelRekeyCode } = await import('./engine/member-wizards.js');
     const { initTls } = await import('./services/tls.js');
+    const { ownerConfirmedAddresses, forgetOwnAddresses } = await import('./engine/own-addresses.js');
     const https = await import('./https-server.js');
     const { pruneAuthAttempts } = await import('./auth-rate-limit.js');
 
@@ -259,8 +261,9 @@ async function main(): Promise<void> {
                 ok: (r) => r.status === 409 },
             { what: 'restart the tunnel (B5)', method: 'POST', route: '/api/local/admin/public-address/restart-tunnel', body: {},
                 ok: (r) => r.status !== 401 && r.status !== 403 },
-            { what: 'remove an app address (B6)', method: 'POST', route: '/api/local/admin/app-addresses/remove', body: { address: 'app.example.invalid' },
-                ok: (r) => r.status !== 401 && r.status !== 403 },
+            // Removing an app address (B6) asks the fresh proof since HTTPS S4: section 3.
+            { what: "the certificates' state (HTTPS S4)", method: 'GET', route: '/api/local/admin/tls/status', body: undefined,
+                ok: (r) => r.status === 200 && Array.isArray(r.json?.identifiers) },
             { what: 'the alerts channel (C11)', method: 'POST', route: '/api/local/admin/alerts/settings', body: { remove: true },
                 ok: (r) => r.status === 200 },
             { what: 'bulk post deletion (D1)', method: 'POST', route: '/api/local/admin/posts/bulk-delete', body: { postIds: ['no-such-post'] },
@@ -330,6 +333,13 @@ async function main(): Promise<void> {
             if (!r.ok || storedDest()?.endpoint !== gatesDest.endpoint) throw new Error(`setup: no off-box destination: ${r.error}`);
         };
         const destHeld = (): boolean => storedDest()?.endpoint === gatesDest.endpoint;
+        // An address confirmed in Settings, put back before each request of its row.
+        const APP_ADDRESS = 'app.example.invalid';
+        const appAddressHeld = (): boolean => ownerConfirmedAddresses().includes(APP_ADDRESS);
+        const putAppAddressBack = (): void => {
+            if (!appAddressHeld()) updateNodeConfig({ ownerAddresses: [...ownerConfirmedAddresses(), APP_ADDRESS] } as any);
+            forgetOwnAddresses();
+        };
         const passes = (r: any) => r.status !== 401 && r.status !== 403;
         let retention = 30;
         const fresh: Row[] = [
@@ -340,6 +350,9 @@ async function main(): Promise<void> {
             { what: 'release a name (B2)', method: 'POST', route: '/api/local/admin/public-address/release-name', body: () => ({ name: 'sparevale' }), ok: passes },
             { what: 'claim over a different live name (B3)', method: 'POST', route: '/api/local/admin/public-address/claim', body: () => ({ name: 'newvale', mode: 'tunnel' }), ok: passes,
                 before: () => updateNodeConfig({ publicAddress: { name: 'oldvale', mode: 'direct', hostname: null, status: 'live' } } as any) },
+            // Members' apps signing for it are refused after it (B6); an own IP or domain is removed here (HTTPS S4).
+            { what: 'remove an app address (B6, HTTPS S4)', method: 'POST', route: '/api/local/admin/app-addresses/remove', body: () => ({ address: APP_ADDRESS }),
+                before: putAppAddressBack, ok: (r) => r.status === 200 && !appAddressHeld(), held: appAddressHeld },
             { what: 'break-glass mode (C5)', method: 'POST', route: '/api/local/admin/auth/break-glass-mode', body: () => ({ enabled: false }),
                 ok: (r) => r.status === 200 && r.json?.breakGlassMode === false },
             { what: 'enrol an admin key (C6)', method: 'POST', route: '/api/local/admin/auth/enrol', body: () => ({ memberPubkey: addMember('Enrolee'), role: 'admin' }),
@@ -526,6 +539,14 @@ async function main(): Promise<void> {
             const goodClaim = await call('POST', '/api/local/admin/public-address/claim', pwSession(), { name: 'newvale', mode: 'tunnel', code });
             assert(goodClaim.status !== 401 && goodClaim.status !== 403, `3-NB2. …and the same code still gets past the proof: it was not spent (${short(goodClaim)})`);
             updateNodeConfig({ publicAddress: { name: 'oldvale', mode: 'direct', hostname: null, status: 'live' } } as any);
+
+            // Removing an app address that is not on the list (HTTPS S4).
+            putAppAddressBack();
+            code = tfa.code();
+            const notListed = await call('POST', '/api/local/admin/app-addresses/remove', pwSession(), { address: 'never.example.invalid', code });
+            assert(notListed.status === 404 && appAddressHeld(), `3-NB2. removing an app address that is not on the list → 404, unchanged (${short(notListed)})`);
+            const removedListed = await call('POST', '/api/local/admin/app-addresses/remove', pwSession(), { address: APP_ADDRESS, code });
+            assert(removedListed.status === 200 && !appAddressHeld(), `3-NB2. …and the same code still removes one that is: it was not spent (${short(removedListed)})`);
         }
 
         // ── 3a. A standby (design case 19, rows a and g): no session makes another key its main server's pin ──

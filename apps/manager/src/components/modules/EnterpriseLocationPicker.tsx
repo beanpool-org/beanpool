@@ -155,8 +155,8 @@ export const EnterpriseLocationPicker: React.FC<EnterpriseLocationPickerProps> =
             );
             onLocationSaved(res.lat, res.lng);
             onClose();
-        } catch (err: any) {
-            setError(err?.message || 'Failed to save location');
+        } catch (err: unknown) {
+            setError(err instanceof Error && err.message ? err.message : 'Failed to save location');
         } finally {
             setSaving(false);
         }
@@ -178,8 +178,8 @@ export const EnterpriseLocationPicker: React.FC<EnterpriseLocationPickerProps> =
             setLngInput('');
             onLocationSaved(null, null);
             onClose();
-        } catch (err: any) {
-            setError(err?.message || 'Failed to clear location');
+        } catch (err: unknown) {
+            setError(err instanceof Error && err.message ? err.message : 'Failed to clear location');
         } finally {
             setClearing(false);
         }

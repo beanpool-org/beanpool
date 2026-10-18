@@ -230,3 +230,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap:** [What was untested]\n**Learning:** [A
 **Gap:** `InPageConfirm` component hook (`useInPageConfirm`) and portal dialog in `apps/manager/src/components/common/InPageConfirm.tsx` lacked a direct unit test suite.
 **Learning:** Testing `InPageConfirm` required rendering a test harness component that consumes `useInPageConfirm` and asserts portal alertdialog creation in `document.body`, confirm/cancel promise resolutions, fallback cancel button labels, backdrop dismissal, and overwriting pending promises when `ask` is invoked multiple times consecutively.
 **Action:** Continue identifying remaining untested common UI components or hooks in `apps/manager/src/components/common/`.
+
+## 2026-10-18 - [manager tests] rollBackDoneWords unit tests
+**Gap:** `rollBackDoneWords` and `openedBy` attribution in `apps/manager/src/lib/restore-words.ts` were untested directly.
+**Learning:** Testing `rollBackDoneWords` verified default restart message fallbacks when body is non-object/null and confirmed custom `restorePointNote` and `restartNote` string formatting.
+**Action:** Continue identifying utility functions with missing direct assertions across `apps/manager/src/lib/`.

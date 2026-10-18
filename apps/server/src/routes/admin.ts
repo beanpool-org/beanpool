@@ -101,6 +101,7 @@ import { bindRekeyByMatch, declineRekeyProposal, rekeyCodeUnderAttack, RekeyRede
 import { getShutdownStatus, acknowledgeShutdownRecovery } from '../engine/shutdown-recovery.js';
 import { getStandbyHealthBanner, watchesStandbys } from '../services/standby-health.js';
 import { getOffboxHealth } from '../services/offbox-backups.js';
+import { serverAlertsBanner } from '../services/alerts.js';
 import { directoryHeldBack, directoryPromiseStatus } from '../services/directory-publisher.js';
 import { getUnhandledRejectionSummary } from '../process-handlers.js';
 import { getDiskHealth, getStorageCleanPreview, cleanStorageAndCompressLogs, type DiskHealth } from '../engine/storage-health.js';
@@ -1074,6 +1075,15 @@ function withLoggedAlerts<T extends { flags: Array<{ members: string[] }> }>(ctx
     }
 }
 
+/** The banner's alerts for an owner's diagnostics, or undefined (left out of the answer) when the book can't be read. */
+function readableServerAlerts(): ReturnType<typeof serverAlertsBanner> | undefined {
+    try {
+        return serverAlertsBanner();
+    } catch {
+        return undefined;
+    }
+}
+
 router.post('/api/local/admin/data', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     
@@ -1138,6 +1148,9 @@ router.post('/api/local/admin/data', async (ctx) => {
         // Each member's posts and messages; of trades, only the community's totals (queue item 29, Marty 4 Oct).
         memberStats: getMemberStats(),
         tradeTotals: getTradeTotals(),
+        // The Commons pot, as members' apps show it (public in /api/community/info): Settings' Home card. Before this the
+        // card read a field no node sent, and said 0.0 on every node.
+        commonsBalance: getCommonsBalance(),
     };
 });
 
@@ -1307,6 +1320,11 @@ const getDiagnosticsHandler = async (ctx: any) => {
             // Off-box backups (services/offbox-backups.ts) when they need the owners: failing, stale, a destination that
             // can't be used, or none sent for want of a recovery code. In words; nothing about any member. Owners only.
             offboxBackups: ctx.state?.adminRole === 'owner' ? getOffboxHealth() : null,
+            // The alerts the phone's "This server has alerts: N" counts (services/alerts.ts serverAlertsBanner), each in
+            // the node's words, for Settings' Home: the same set and count, never worked out again in the browser. Owners
+            // only, as on the phone (null to anyone else); left out when the alert book can't be read, so Home says it
+            // couldn't read them rather than "all clear".
+            serverAlerts: ctx.state?.adminRole === 'owner' ? readableServerAlerts() : null,
             diskHealth: getCachedDiskHealth(),
             // Stray rejected promises the process-level net caught and kept serving through. The error
             // text only — no request body, no parameter, no key — and already redacted on the way in.

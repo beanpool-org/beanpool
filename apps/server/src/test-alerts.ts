@@ -9,8 +9,8 @@
  *  1. Owner only: an owner's key session reaches status, settings and test; an admin's and a moderator's are refused 403
  *     in words; an owner's automation token reaches none of it; no credential is 401.
  *  2. No channel: a disk at 79 % for three minutes is nothing; at 80 % it is raised at the third minute, not before: one
- *     `owner.alert` push to the owner's phone only, the owner's admin queue shows `server_alert` and an admin's doesn't;
- *     nothing is sent anywhere. Backups that never leave the server (no destination, no recovery code) nudge the owners
+ *     `owner.alert` push to the owner's phone only, the owner's admin queue shows `server_alert` and an admin's doesn't,
+ *     and the owner's diagnostics list the same alerts in words for Settings' Home (an admin's none); nothing is sent anywhere. Backups that never leave the server (no destination, no recovery code) nudge the owners
  *     and are never sent to the channel.
  *  3. The channel set in Settings: data/alerts.json is mode 600, the status shows the host and never the path or token;
  *     the waiting alert goes at the next minute with ntfy's Title, Priority and Authorization; 95 % raises 90 and 95 in one
@@ -337,6 +337,20 @@ async function main(): Promise<void> {
     assert(!getAdminQueue({}).items.some((i) => i.kind === 'server_alert'), "2. an admin's queue does not");
     const qHttp = await call('/api/local/admin/queue', {}, asAdmin);
     assert(!qHttp.text.includes('server_alert'), "2. an admin's queue over HTTP has no server_alert");
+    // Settings' Home lists exactly what the phone counts, each in the node's words, from the owner's diagnostics.
+    const diagOf = async (headers: Record<string, string>) => {
+        resetAdminAuthTarpit();
+        https.resetAdminRateLimit();
+        const res = await fetch(base + '/api/local/admin/diagnostics', { headers });
+        return { status: res.status, json: await res.json().catch(() => null) as any };
+    };
+    const ownerDiag = await diagOf(asOwner);
+    const listed = ownerDiag.json?.serverAlerts;
+    assert(listed?.count === ownerQ!.count && listed.items.length === ownerQ!.count, `2. the owner's diagnostics list the alerts the queue counts (${listed?.count} vs ${ownerQ?.count})`);
+    assert(JSON.stringify(listed.items.map((i: any) => i.key).sort()) === JSON.stringify(['backups.none', 'disk.80']), `2. the disk and the backups (${JSON.stringify(listed.items.map((i: any) => i.key))})`);
+    assert(listed.items.every((i: any) => typeof i.detail === 'string' && i.detail.length > 0 && typeof i.since === 'number'), '2. each in words, with since when');
+    const adminDiag = await diagOf(asAdmin);
+    assert(adminDiag.status === 200 && adminDiag.json?.serverAlerts === null, `2. an admin's diagnostics carry no server alerts (${JSON.stringify(adminDiag.json?.serverAlerts)})`);
     assert((await ntfy.hits()).length === 0, '2. with no channel nothing is sent anywhere');
 
     // ── 3. The channel, set in Settings ──────────────────────────────────────────────────────────────────────────────

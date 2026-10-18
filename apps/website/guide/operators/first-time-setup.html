@@ -76,7 +76,8 @@
             <li><strong>A free name ending in .beanpool.org.</strong> beanpool claim offers it. Your server reaches it through a tunnel it runs itself, so there are no ports to open and no DNS to understand: it works on a computer at home too. Some names, such as big cities, wait for approval by the BeanPool project.</li>
             <li><strong>Your own domain.</strong> Make an A record for your domain with your server's public IP address, open ports 80 and 443, and claim with --address https://your.domain. Your server gets its own certificate for the domain by itself, over port 80. If a web server of your own holds the certificate in front of it, that works too. BeanPool does not need to be involved.</li>
         </ul>
-        <p>A name survives a change of server; a number does not. If your server or its IP address changes, every member has to type the new one, while a name can be pointed at the new server. You can add a .beanpool.org name later in Settings → Public Address: members who use the IP address keep working, and new members are sent to the name.</p>
+        <p>A name survives a change of server; a number does not. If your server or its IP address changes, every member has to type the new one, while a name can be pointed at the new server. You can add a .beanpool.org name later in Settings → Public Address, or your own domain under <strong>Your own address</strong> there: members who use the IP address keep working, and new members are sent to the name. Members' phones then offer to move to the name, once each has checked it is the same community (see A number or a name, in Address, identity and peers).</p>
+        <p><strong>Your own address</strong>, under Settings → Public Address, shows each certificate your server holds, when it renews, and why the last try failed if it did. If a certificate is not renewed in time, the owners are told (see Updates and health).</p>
         <p>Behind a home router with no ports open, use a name: nothing on the internet can reach your server to check its IP address or a domain.</p>
         <p>A plain http:// address, such as http://203.0.113.7, works only on a home network. A phone never uses plain http to a server on the internet, so a claim QR code that carries one does not open. beanpool claim warns you before it shows such a QR code, and when you press Enter to skip the name on a server with no https address. Run it again with --ip, a name or your own address: the claim code waits until a phone uses it.</p>
         <p>Setting your server up with an AI assistant? See Setting up your server with an AI assistant: what to ask it, and what stays yours.</p>
@@ -136,7 +137,7 @@
             <li><strong>Address, identity and peers</strong> (in Settings, under Manual)</li>
             <li><strong>Setting up your server with an AI assistant</strong> (in Settings, under Manual)</li>
         </ul>
-        <p class="guide-foot">The whole manual is on your community's server, matching the version it runs: sign in to Settings (your server's address followed by /settings) and press Manual, or the ? beside a screen's title. Only this part of it is on the website. Manual version 140.</p>
+        <p class="guide-foot">The whole manual is on your community's server, matching the version it runs: sign in to Settings (your server's address followed by /settings) and press Manual, or the ? beside a screen's title. Only this part of it is on the website. Manual version 141.</p>
     </main>
 </body>
 </html>

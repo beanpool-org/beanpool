@@ -3,8 +3,14 @@ import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { router } from 'expo-router';
 import { useStyles } from '../app/ThemeContext';
 import type { BeanPoolIdentity } from '../utils/identity';
-import { rememberedKnocks, readKnockStatus, knockCardState, type KnockStatusResult, type RememberedKnock } from '../utils/knock';
+import { rememberedKnocks, readKnockStatus, knockCardState, KNOCK_MESSAGES, type KnockStatusResult, type RememberedKnock } from '../utils/knock';
 import { t } from '@beanpool/core';
+
+/** A note the phone wrote (KNOCK_MESSAGES), in the member's language; a community's own words as it sent them (slice S4). */
+function noteWords(note: string): string {
+    const said = (Object.keys(KNOCK_MESSAGES) as Array<keyof typeof KNOCK_MESSAGES>).find((k) => KNOCK_MESSAGES[k] === note);
+    return said ? t(KNOCK_MESSAGES[said]) : note;
+}
 
 /**
  * On the worldwide community's People: the communities this phone asked to join, and what each has said, read from
@@ -45,7 +51,7 @@ export function MyJoinRequests({ identity }: { identity: BeanPoolIdentity }) {
             <Text style={styles.help}>{t('Communities near you are where neighbours trade. Ask to join one, and any member there can let you in.')}</Text>
             {asked.map(k => {
                 const state = knockCardState(true, true, statuses[k.url]);
-                const note = state.kind === 'checking' ? t('Checking…') : 'note' in state && state.note ? state.note : t('No answer yet.');
+                const note = state.kind === 'checking' ? t('Checking…') : 'note' in state && state.note ? noteWords(state.note) : t('No answer yet.');
                 return (
                     <View key={k.url} style={styles.row}>
                         <Text style={styles.name} numberOfLines={2}>{k.name ?? k.url.replace(/^https:\/\//, '')}</Text>

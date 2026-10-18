@@ -136,8 +136,10 @@ const ME = { publicKey: 'me-key', privateKey: 'me-priv', callsign: 'Ana' };
 vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => ({ identity: ME }) }));
 // A member's picture: drawn from what they chose, never words.
 vi.mock('../../components/MemberAvatar', () => ({ MemberAvatar: () => createElement('span', { 'data-avatar': 'true' }) }));
+/** What a community this phone asked to join answers its signed status read with (utils/knock.ts); by its origin. */
+const knockReads = vi.hoisted(() => ({ answers: new Map<string, () => Promise<Response>>() }));
 vi.mock('../node-post', () => ({
-    signedGet: () => new Promise(() => {}), signedPost: () => new Promise(() => {}),
+    signedGet: (origin: string) => knockReads.answers.get(origin)?.() ?? new Promise(() => {}), signedPost: () => new Promise(() => {}),
     anchorUrl: async () => store.map.get('beanpool_anchor_url') ?? null,
 }));
 vi.mock('../blocklist', () => ({ getBlockedUsers: async () => [], BLOCKLIST_UPDATED_EVENT: 'blocklist_updated' }));
@@ -169,6 +171,8 @@ import { DrawnInLanguage, LanguageProvider } from '../../components/LanguageProv
 import { LanguageRow } from '../../components/LanguagePicker';
 import { yourGroupsStore } from '../../components/useYourGroups';
 import { joinRequestMeta, wantsToJoinTitle, WANTS_TO_JOIN_HELP } from '../knock-inbox';
+import { KNOCK_MESSAGES } from '../knock';
+import { MyJoinRequests } from '../../components/MyJoinRequests';
 import ChatsScreen from '../../app/(tabs)/chats';
 import NewMessageScreen from '../../app/new-message';
 
@@ -213,6 +217,16 @@ const MEMBERS = [
 const ADDED_YOU = [{ publicKey: 'rosa-key', callsign: 'Rosa', avatarUrl: null }];
 const INVITES = [{ code: 'ab12-cd34', createdBy: ME.publicKey, createdAt: iso(now - DAY), intendedFor: 'Rosa' }];
 const KNOCKS = [{ id: 'k1', pubkey: 'ivo-key', callsign: 'Ivo', message: 'I grow tomatoes', avatar: null, fromNode: 'castlemaine.example', createdAt: iso(now - 2 * DAY) }];
+/** The communities this phone asked to join (utils/knock.ts's memory), each answering its own way. */
+const ASKED: Array<{ url: string; name: string; answer: 'unreachable' | { status: number; body: Record<string, unknown> } }> = [
+    { url: 'https://hills.example', name: 'Hills Commons', answer: { status: 200, body: { status: 'pending' } } },
+    { url: 'https://river.example', name: 'River Town', answer: { status: 200, body: { status: 'approved', invite: 'RIVR2345' } } },
+    { url: 'https://coast.example', name: 'Coast Swap', answer: { status: 200, body: { status: 'none' } } },
+    { url: 'https://far.example', name: 'Far Valley', answer: 'unreachable' },
+    { url: 'https://odd.example', name: 'Odd Grove', answer: { status: 200, body: { nonsense: true } } },
+    { url: 'https://shut.example', name: 'Shut Gate', answer: { status: 404, body: { error: 'We take no requests here' } } },
+];
+const CLOSED_WORDS = 'We take no requests here';
 
 /** Everything members and the community wrote: shown as written, in every language. */
 const OTHERS = [
@@ -221,6 +235,7 @@ const OTHERS = [
     ...YOUR_GROUPS.flatMap((g: any) => [g.name, g.lastMessage?.text, g.lastMessage?.authorCallsign]),
     ...FRIENDS.map((f) => f.callsign), ...MEMBERS.map((m) => m.callsign), ...ADDED_YOU.map((a) => a.callsign),
     ...INVITES.flatMap((i) => [i.code, i.intendedFor]), ...KNOCKS.flatMap((k) => [k.callsign, k.message, k.fromNode]),
+    ...ASKED.map((a) => a.name), CLOSED_WORDS,
     NODE, ME.callsign,
 ].filter((s): s is string => typeof s === 'string' && /\p{L}/u.test(s)).sort((a, b) => b.length - a.length);
 
@@ -260,6 +275,7 @@ beforeEach(() => {
     globalDoor.entry = 'checking';
     globalDoor.here = false;
     store.map.clear();
+    knockReads.answers.clear();
     store.map.set('beanpool_anchor_url', NODE);
     store.map.set(`bp_offline_invites_${ME.publicKey}`, JSON.stringify(INVITES));
     rememberProfile('local', LOCAL);
@@ -411,6 +427,32 @@ describe('Talk in the pseudo-locale: every word on it came through t() (words S3
         await pane('People');
         await click(Array.from(host.querySelectorAll('button')).find((b) => b.textContent?.startsWith(pseudoLocalise('🎟️ Invites').slice(0, 6))) ?? null, 'Invites');
         expect(host.textContent).toContain(pseudoLocalise("Couldn't reach your community. Check your connection and try again."));
+        expect(bypassing()).toEqual([]);
+    });
+
+    it('the worldwide community\'s People, the communities this phone asked to join: the phone\'s notes in the member\'s language in every state; a community\'s own refusal as it sent it', async () => {
+        store.map.set('beanpool_knocks', JSON.stringify({ pubkey: ME.publicKey, knocks: ASKED.map((a, i) => ({ url: a.url, name: a.name, key: null, sentAt: iso(now - i * DAY) })) }));
+        for (const a of ASKED) {
+            knockReads.answers.set(a.url, async () => {
+                if (a.answer === 'unreachable') throw new Error('offline');
+                return new Response(JSON.stringify(a.answer.body), { status: a.answer.status });
+            });
+        }
+        const notes = [KNOCK_MESSAGES.waiting, KNOCK_MESSAGES.invited, KNOCK_MESSAGES.none, KNOCK_MESSAGES.unreachable, KNOCK_MESSAGES.unreadable];
+
+        await renderIn('en', createElement(MyJoinRequests, { identity: ME as any }));
+        for (const a of ASKED) expect(host.textContent).toContain(a.name);
+        for (const note of notes) expect(host.textContent, note).toContain(note);
+        expect(host.textContent).toContain(CLOSED_WORDS);
+
+        act(() => root.unmount());
+        root = createRoot(host);
+        await renderIn('xx', createElement(MyJoinRequests, { identity: ME as any }));
+        for (const note of notes) {
+            expect(host.textContent, note).toContain(pseudoLocalise(note));
+            expect(host.textContent, note).not.toContain(note);
+        }
+        expect(host.textContent).toContain(CLOSED_WORDS);
         expect(bypassing()).toEqual([]);
     });
 

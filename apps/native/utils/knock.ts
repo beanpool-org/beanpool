@@ -29,7 +29,7 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { t } from '@beanpool/core';
+import { t, word } from '@beanpool/core';
 import { signedGet, signedPost } from './node-post';
 import { communityOrigin } from './community-directory';
 import { GLOBAL_NODE_URL } from './node-profile';
@@ -48,13 +48,17 @@ const STORE_KEY = KNOCKS_STORE_KEY;
 /** The host a knock says it came from: shown to the community's members, not checked. */
 export const KNOCK_FROM_NODE = GLOBAL_NODE_URL.replace(/^https:\/\//, '');
 
+/**
+ * What the phone says about a knock: word() keys (the English, unchanged), so a screen shows them through t(). A
+ * community's own words come back in the same `message` / `note`, and are shown as it sent them.
+ */
 export const KNOCK_MESSAGES = {
-    noAddress: "This community hasn't published an address, so it can't be asked from here yet.",
-    unreachable: "Couldn't reach this community. Check your connection and try again.",
-    unreadable: "This community sent an answer the app couldn't read. Please try again later.",
-    waiting: 'You asked to join. No answer yet: communities usually answer within a few days.',
-    none: 'No answer came. You can ask again.',
-    invited: 'A member invited you. Join now to become a member.',
+    noAddress: word("This community hasn't published an address, so it can't be asked from here yet."),
+    unreachable: word("Couldn't reach this community. Check your connection and try again."),
+    unreadable: word("This community sent an answer the app couldn't read. Please try again later."),
+    waiting: word('You asked to join. No answer yet: communities usually answer within a few days.'),
+    none: word('No answer came. You can ask again.'),
+    invited: word('A member invited you. Join now to become a member.'),
 } as const;
 
 export type KnockSendResult =

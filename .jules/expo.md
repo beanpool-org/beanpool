@@ -34,6 +34,7 @@ Expo's domain is `apps/native/` ONLY. Do NOT touch `apps/server`, `apps/manager`
 - Navigation types should be declared in a central params file
 
 ## ✅ Resolved — do NOT re-file
+- 2026-10-19 #2174: repeated search params on claim/find-community: refused on purpose, fourth filing (#1753, #2073, #2118).
 - 2026-10-18 #2118: never take [0] of a repeated claim param (#1753, #2073).
 
 ### 2026-10-16 — "ErrorBoundary in project-detail.tsx" (#2012) — merged in error; redundant with _layout.tsx. No more per-screen ErrorBoundary exports.

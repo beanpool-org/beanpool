@@ -909,3 +909,33 @@ Note (#1819, Scout): closed because its exemption checks were vacuous: with the 
 - **Category:** DELIBERATE DECISION
 - **Claim:** `useLocalSearchParams` in `claim-community.tsx` can return `string[]`, so take `[0]`.
 - **Why not to re-file:** third filing of #1753 (and #2073). A claim link that repeats a param is ambiguous and refused on purpose; `+native-intent` rewrites claim links through `parseClaimLink`/`claimRouteFor`, which emit one checked value each. Silently taking the first server address on the ownership-claim screen is wrong. Expo: re-file only with a real link that produces the array and Marty's decision.
+
+### 2026-10-19 — Scout: withheld-notes suite again (#2168) — CLOSED, EXEMPTIONS STILL VACUOUS (#1819)
+- **Category:** CLAIM FALSE (see #1819)
+- **Claim:** `test-withheld-notes.ts` covers the note exemptions (blank memo, self, synthetic accounts, treasury as sender or recipient).
+- **Why not to re-file:** each exemption is checked where no `member_blocks` row would withhold the note (the suite's only block is bob blocks alice), so every check passes with the exemption deleted. Scout: assert each exemption under a block that would otherwise withhold the note, and show the suite failing with that exemption removed.
+
+### 2026-10-19 — Palette: focus ring on ProposeDecisionModal inputs, again (#2170) — CLOSED, CLAIM FALSE (#1676)
+- **Category:** CLAIM FALSE (see #1676)
+- **Claim:** the inputs and choice buttons in `ProposeDecisionModal.tsx` need focus-visible classes.
+- **Why not to re-file:** the global `:focus-visible` outline in `index.css` applies to them. A missing focus-visible class is a defect only where the outline is removed with no replacement; show that first.
+
+### 2026-10-19 — Bolt: Map lookup in getAllProjects, again (#2171) — CLOSED, NO BENEFIT (#1723)
+- **Category:** DELIBERATE DECISION (see #1723)
+- **Claim:** `getAllProjects` in `state-engine.ts` should index projects in a Map for O(1) lookups.
+- **Why not to re-file:** a node holds a handful of enterprises; the change adds code in the server state engine for no measured gain. Bolt: measure a real cost at realistic sizes first, and put the numbers in the PR.
+
+### 2026-10-19 — Pixel: dynamic accessibilityLabel on the group invite landing action, third filing (#2172) — CLOSED (#2117, #1036)
+- **Category:** CLAIM FALSE (see #2117)
+- **Claim:** the primary button in `apps/native/app/group/[id].tsx` should speak "Joining group..." while busy.
+- **Why not to re-file:** it already has an explicit label and `accessibilityState={{ busy }}` (#1036), and the proposed string was English outside `t()` in a 24-language app. Pixel: stop re-filing this button.
+
+### 2026-10-19 — Forge: 400 on failed post removal (#2173) — CLOSED, PHANTOM
+- **Category:** CLAIM FALSE
+- **Claim:** `POST /api/marketplace/posts/remove` should answer 400 when `removePost` returns false.
+- **Why not to re-file:** the route already answers 400 (missing fields), 401 (no actor), 404 (missing or out of sight) and 403 (not entitled) before `removePost` runs; a `false` after those checks means the post was already gone (or a race), and `{ success: false }` with 200 is the answer callers read. Forge: no 400 for `success: false` here without auditing every caller.
+
+### 2026-10-19 — Expo: first of repeated search params in claim-community.tsx and find-community.tsx, fourth filing (#2174) — CLOSED, DECIDED (#1753, #2073, #2118)
+- **Category:** DELIBERATE DECISION
+- **Claim:** `useLocalSearchParams` can return `string[]`, so take `[0]` in `claim-community.tsx` and `find-community.tsx`.
+- **Why not to re-file:** a link that repeats node/code/id is ambiguous and refused on purpose (see #2118). Re-file only with a real link that produces the array AND Marty's decision.

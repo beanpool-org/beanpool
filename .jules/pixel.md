@@ -54,6 +54,7 @@ Pixel's domain is `apps/native/` ONLY. Do NOT touch `apps/server`, `apps/manager
 ```
 
 ## ✅ Resolved — do NOT re-file
+- 2026-10-19 #2172: group invite action already labelled + busy, third filing (#2117, #1036). Stop re-filing.
 - 2026-10-18 #2117: group invite action already labelled + busy (#1036); new spoken strings go through t().
 
 ### 2026-10-16 — "accessibilityLabel on Save Profile" (#2009) — CLOSED: English outside t() plus a words-lint raise. Labels go through t(); never add a `raises` entry. See POLICY.md.

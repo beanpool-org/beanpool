@@ -15,6 +15,7 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { t } from '@beanpool/core';
 import type { BeanPoolIdentity } from './identity';
 import { assertPlainNodeAddress, isPlainNodeAddress } from './node-url';
 import { signInCopiesAt } from './vault-config';
@@ -137,18 +138,18 @@ export interface JoinedNudge {
  *   so there is nothing to add here, and no community is ever asked to keep one: one answer, Next.
  */
 export function joinedNudge(name: string): JoinedNudge {
-    const came = 'Your key and your 12 words came with you, and so does your name. Your posts, chats and trades stay in each community.\n\n';
+    // Each body whole, both paragraphs in one sentence key: what came with them, then where the sign-in copy is.
     if (signInCopiesAt() === 'community') {
         return {
-            title: `You're in ${name}`,
-            body: came + `A sign-in that protects your account is kept by each community, so protect your account in ${name} too.`,
-            later: 'Later',
-            protect: 'Protect it',
+            title: t("You're in {name}", { name }),
+            body: t('Your key and your 12 words came with you, and so does your name. Your posts, chats and trades stay in each community.\n\nA sign-in that protects your account is kept by each community, so protect your account in {name} too.', { name }),
+            later: t('Later'),
+            protect: t('Protect it'),
         };
     }
     return {
-        title: `You're in ${name}`,
-        body: came + 'A sign-in you linked to get back into your account works here too: BeanPool keeps one copy for all your communities.',
-        later: 'Next',
+        title: t("You're in {name}", { name }),
+        body: t('Your key and your 12 words came with you, and so does your name. Your posts, chats and trades stay in each community.\n\nA sign-in you linked to get back into your account works here too: BeanPool keeps one copy for all your communities.'),
+        later: t('Next'),
     };
 }

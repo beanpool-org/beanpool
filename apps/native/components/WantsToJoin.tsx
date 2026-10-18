@@ -4,9 +4,10 @@ import { useTheme, useStyles } from '../app/ThemeContext';
 import { MemberAvatar } from './MemberAvatar';
 import type { BeanPoolIdentity } from '../utils/identity';
 import {
-    fetchJoinRequests, approveJoinRequest, declineJoinRequest, wantsToJoinTitle, joinRequestMeta, WANTS_TO_JOIN_HELP,
+    fetchJoinRequests, approveJoinRequest, declineJoinRequest, wantsToJoinTitle, joinRequestMeta, KNOCK_INBOX_WORDS,
     type JoinRequest,
 } from '../utils/knock-inbox';
+import { t } from '@beanpool/core';
 
 /**
  * "Wants to join (n)" (design §3.3): people asking to join this (local) community, for any member to answer. Hidden
@@ -69,9 +70,9 @@ export function WantsToJoin({ anchorUrl, identity, onCount }: {
         setBusy(null);
         if (r.ok) {
             setRequests(list => (list ?? []).filter(k => k.id !== req.id));
-            setTotal(t => { const n = Math.max(0, t - 1); onCount?.(n); return n; });
+            setTotal(prev => { const n = Math.max(0, prev - 1); onCount?.(n); return n; });
             setNotes(n => ({ ...n, [req.id]: '' }));
-            setDone(verb === 'approve' ? `You invited ${req.callsign}. Their app will find the invite by itself.` : null);
+            setDone(verb === 'approve' ? t('You invited {name}. Their app will find the invite by itself.', { name: req.callsign }) : null);
             return;
         }
         // Another member got there first, or it lapsed: the community's words, then the list as it is now.
@@ -84,7 +85,7 @@ export function WantsToJoin({ anchorUrl, identity, onCount }: {
     return (
         <View>
             <Text style={styles.header} accessibilityRole="header">🚪 {wantsToJoinTitle(total)}</Text>
-            <Text style={styles.help}>{WANTS_TO_JOIN_HELP}</Text>
+            <Text style={styles.help}>{t(KNOCK_INBOX_WORDS.help)}</Text>
             {!!error && <Text style={styles.error} accessibilityLiveRegion="polite">{error}</Text>}
             {!!done && <Text style={styles.note} accessibilityLiveRegion="polite">{done}</Text>}
             {requests === null ? (
@@ -106,22 +107,22 @@ export function WantsToJoin({ anchorUrl, identity, onCount }: {
                             onPress={() => answer(req, 'approve')}
                             disabled={!!busy}
                             accessibilityRole="button"
-                            accessibilityLabel={busy === req.id ? `Inviting ${req.callsign}...` : `Invite ${req.callsign}`}
-                            accessibilityHint={`Approves join request from ${req.callsign}`}
+                            accessibilityLabel={busy === req.id ? t('Inviting {name}...', { name: req.callsign }) : t('Invite {name}', { name: req.callsign })}
+                            accessibilityHint={t('Approves join request from {name}', { name: req.callsign })}
                             accessibilityState={{ disabled: !!busy, busy: busy === req.id }}
                         >
-                            <Text style={styles.inviteText}>Invite</Text>
+                            <Text style={styles.inviteText}>{t('Invite', undefined, 'button: let them in')}</Text>
                         </Pressable>
                         <Pressable
                             style={[styles.notNow, busy === req.id && { opacity: 0.6 }]}
                             onPress={() => answer(req, 'decline')}
                             disabled={!!busy}
                             accessibilityRole="button"
-                            accessibilityLabel={busy === req.id ? `Declining ${req.callsign}...` : `Not now, ${req.callsign}`}
-                            accessibilityHint={`Declines join request from ${req.callsign}`}
+                            accessibilityLabel={busy === req.id ? t('Declining {name}...', { name: req.callsign }) : t('Not now, {name}', { name: req.callsign })}
+                            accessibilityHint={t('Declines join request from {name}', { name: req.callsign })}
                             accessibilityState={{ disabled: !!busy, busy: busy === req.id }}
                         >
-                            <Text style={styles.notNowText}>Not now</Text>
+                            <Text style={styles.notNowText}>{t('Not now')}</Text>
                         </Pressable>
                     </View>
                 </View>

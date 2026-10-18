@@ -13,6 +13,8 @@ import { MemberAvatar } from './MemberAvatar';
 import { useStyles } from '../app/ThemeContext';
 import { addFriendLocal, fetchAddedYou, type AddedYou } from '../utils/db';
 import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../utils/blocklist';
+import { t, tn } from '@beanpool/core';
+import { Sentence } from './Sentence';
 
 export function AddedYouLines({ myKey, onAddedBack }: { myKey: string; onAddedBack: () => void }) {
     const styles = useStyles(({ colors }) => ({
@@ -54,16 +56,16 @@ export function AddedYouLines({ myKey, onAddedBack }: { myKey: string; onAddedBa
                 <View key={l.publicKey} style={styles.row}>
                     <Pressable
                         accessibilityRole="button"
-                        accessibilityLabel={`${l.callsign} added you. Open their profile`}
+                        accessibilityLabel={t('{name} added you. Open their profile', { name: l.callsign })}
                         style={styles.who}
-                        onPress={() => router.push({ pathname: '/public-profile', params: { publicKey: l.publicKey, callsign: l.callsign || 'Unknown' } })}
+                        onPress={() => router.push({ pathname: '/public-profile', params: { publicKey: l.publicKey, callsign: l.callsign || t('Unknown') } })}
                     >
                         <MemberAvatar avatarUrl={l.avatarUrl} pubkey={l.publicKey} callsign={l.callsign || '?'} size={32} />
-                        <Text style={styles.line}><Text style={styles.name}>{l.callsign}</Text> added you</Text>
+                        <Text style={styles.line}><Sentence text={t('{name} added you')} parts={{ name: <Text style={styles.name}>{l.callsign}</Text> }} /></Text>
                     </Pressable>
                     <Pressable
                         accessibilityRole="button"
-                        accessibilityLabel={`Add ${l.callsign} back`}
+                        accessibilityLabel={t('Add {name} back', { name: l.callsign })}
                         disabled={busy !== null}
                         style={styles.addBack}
                         onPress={async () => {
@@ -73,17 +75,17 @@ export function AddedYouLines({ myKey, onAddedBack }: { myKey: string; onAddedBa
                                 setLines(prev => prev.filter(x => x.publicKey !== l.publicKey));
                                 onAddedBack();
                             } catch (e: any) {
-                                Alert.alert('Not added', e?.message || 'Your community did not add them.');
+                                Alert.alert(t('Not added'), e?.message || t('Your community did not add them.'));
                             } finally {
                                 setBusy(null);
                             }
                         }}
                     >
-                        <Text style={styles.addBackText}>Add back</Text>
+                        <Text style={styles.addBackText}>{t('Add back')}</Text>
                     </Pressable>
                 </View>
             ))}
-            {more > 0 && <Text style={styles.more}>and {more} more</Text>}
+            {more > 0 && <Text style={styles.more}>{tn(more, 'and {n} more', 'and {n} more')}</Text>}
         </View>
     );
 }

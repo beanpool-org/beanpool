@@ -15,6 +15,7 @@ import { YourGroupRow } from './YourGroupRow';
 import { CreateGroupModal } from './CreateGroupModal';
 import { chatHref, type YourChat } from '../utils/your-groups';
 import { yourGroupsStore } from './useYourGroups';
+import { t } from '@beanpool/core';
 
 export function NewGroupButton({ onPress, compact }: { onPress: () => void; compact?: boolean }) {
     const { colors } = useTheme();
@@ -26,9 +27,9 @@ export function NewGroupButton({ onPress, compact }: { onPress: () => void; comp
         text: { color: colors.text.inverse, fontSize: 15, fontWeight: '800' },
     }));
     return (
-        <Pressable style={[styles.btn, compact && { alignSelf: 'flex-start' }]} onPress={onPress} accessibilityRole="button" accessibilityLabel="New group">
+        <Pressable style={[styles.btn, compact && { alignSelf: 'flex-start' }]} onPress={onPress} accessibilityRole="button" accessibilityLabel={t('New group')}>
             <MaterialCommunityIcons name="account-multiple-plus" size={20} color={colors.text.inverse} />
-            <Text style={styles.text} numberOfLines={1}>New group</Text>
+            <Text style={styles.text} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('New group')}</Text>
         </Pressable>
     );
 }
@@ -47,10 +48,10 @@ export function FindGroupsButton({ onPress }: { onPress: () => void }) {
         text: { color: colors.brand.primary, fontSize: 15, fontWeight: '800' },
     }));
     return (
-        <Pressable style={styles.btn} onPress={onPress} accessibilityRole="button" accessibilityLabel="Find groups"
-            accessibilityHint="Opens the groups you could join" testID="talk-find-groups">
+        <Pressable style={styles.btn} onPress={onPress} accessibilityRole="button" accessibilityLabel={t('Find groups')}
+            accessibilityHint={t('Opens the groups you could join')} testID="talk-find-groups">
             <MaterialCommunityIcons name="account-search" size={20} color={colors.brand.primary} />
-            <Text style={styles.text} numberOfLines={1}>Find groups</Text>
+            <Text style={styles.text} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Find groups')}</Text>
         </Pressable>
     );
 }
@@ -107,16 +108,15 @@ export function YourGroupsEmpty({ onNew, onFindGroups }: { onNew: () => void; on
     return (
         <View style={styles.wrap}>
             <Text style={styles.emoji} allowFontScaling={false}>🌻</Text>
-            <Text style={styles.title}>No groups yet</Text>
+            <Text style={styles.title}>{t('No groups yet')}</Text>
             <Text style={styles.body}>
-                A group is a chat for some people rather than everyone — your street, a garden crew, a choir.
-                Enterprises you keep and events you're going to show up here too.
+                {t("A group is a chat for some people rather than everyone — your street, a garden crew, a choir. Enterprises you keep and events you're going to show up here too.")}
             </Text>
             <View style={{ height: 16 }} />
             <NewGroupButton onPress={onNew} />
             {onFindGroups && (
                 <Pressable style={styles.find} onPress={onFindGroups} accessibilityRole="button">
-                    <Text style={styles.findText}>Find a group to join →</Text>
+                    <Text style={styles.findText}>{t('Find a group to join →')}</Text>
                 </Pressable>
             )}
         </View>
@@ -136,7 +136,7 @@ export function YourGroupsLoading({ flush }: { flush?: boolean }) {
         line: { height: 12, borderRadius: 6, backgroundColor: colors.surface.subtle },
     }));
     return (
-        <View accessibilityRole="progressbar" accessibilityLabel="Loading your groups">
+        <View accessibilityRole="progressbar" accessibilityLabel={t('Loading your groups')}>
             {[0.55, 0.7, 0.45].map((w, i) => (
                 <View key={i} style={[styles.row, flush && { marginHorizontal: 0 }]}>
                     <View style={styles.icon} />
@@ -163,7 +163,7 @@ export function YourGroupsError({ message, onRetry }: { message: string; onRetry
             <Text style={styles.text} accessibilityRole="alert">{message}</Text>
             {onRetry && (
                 <Pressable style={styles.retry} onPress={onRetry} accessibilityRole="button">
-                    <Text style={styles.retryText}>Try again</Text>
+                    <Text style={styles.retryText}>{t('Try again')}</Text>
                 </Pressable>
             )}
         </View>

@@ -25,10 +25,11 @@ import { useNodeProfile } from '../../utils/use-node-profile';
 import { useShowcaseModeOnceKnown } from '../../utils/use-reader-features';
 import { LocalCommunityMark, ExampleHeader } from '../../components/showcase/LocalCommunityMark';
 import { sampleInvites, sampleInviteTree } from '../../components/showcase/sample-screens';
-import { LOCAL_COMMUNITY_LINES, t, tn } from '@beanpool/core';
+import { LOCAL_COMMUNITY_LINES, formatDate, formatNumber, t, tn, word, type WordKey } from '@beanpool/core';
+import { Sentence } from '../../components/Sentence';
 import { invitesOn, membersByKey } from '../../utils/node-profile';
 import {
-    guestDoorButton, guestDoorText, joinWays, guestNoInvitesText, communityLinkMessage, invitesOffRefusal, bringSomeoneHereText, onlyAdminsInvite, mayInviteHere,
+    guestDoorButton, guestDoorText, guestDoorLabel, guestNoInvitesText, communityLinkMessage, invitesOffRefusal, bringSomeoneHereText, onlyAdminsInvite, mayInviteHere,
     mayMakeOfflineTicket, adminsOnlyText, adminsOnlyRefusal, offlineTicketRefusal, type InviteRole,
 } from '../../utils/invite-entries';
 import { isGlobalCommunity } from '../../utils/global-join-existing';
@@ -41,29 +42,33 @@ import { MyJoinRequests } from '../../components/MyJoinRequests';
 import { communitySwitched } from '../../utils/community-switch';
 import { lookUpMembers, lookUpSpentKind, nearPath, searchPath } from '../../utils/members-lookup';
 import { readNearbyAreaCopy } from '../../utils/nearby-area';
-import { communityListEmpty, communityListNote, type CommunityListNote } from '../../utils/community-list-note';
+import { communityListEmpty, communityListNote, joinedWords, type CommunityListNote } from '../../utils/community-list-note';
 
 type SubView = PeopleView;
 type SortOption = 'newest' | 'name' | 'friends' | 'trusted' | 'active';
 
 const MEMBER_ROW_HEIGHT = 66;
 
-/** Cache-busting avatar URI keyed to profile timestamp */
-
-function formatJoinDate(dateStr: string | null) {
-    if (!dateStr) return 'Member';
-    try {
-        const d = new Date(dateStr);
-        const now = new Date();
-        const diffDays = Math.floor((now.getTime() - d.getTime()) / (1000 * 60 * 60 * 24));
-        if (diffDays < 1) return 'Joined today';
-        if (diffDays < 7) return `Joined ${diffDays}d ago`;
-        if (diffDays < 30) return `Joined ${Math.floor(diffDays / 7)}w ago`;
-        return `Joined ${d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`;
-    } catch {
-        return 'Member';
-    }
+/** People's three panes on its sub-nav: word() keys, shown through t(). */
+const PANE_WORDS: Readonly<Record<'friends' | 'community', WordKey>> = {
+    friends: word('👫 Friends'),
+    community: word('🏘️ Community'),
 };
+
+/** The community list's sorts: word() keys, shown through t(). */
+const SORT_OPTIONS: ReadonlyArray<{ key: SortOption; icon: string; label: WordKey }> = [
+    { key: 'newest', icon: 'clock-outline', label: word('Newest', 'member sort') },
+    { key: 'name', icon: 'sort-alphabetical-ascending', label: word('Name', 'member sort') },
+    { key: 'friends', icon: 'account-heart-outline', label: word('Friends', 'member sort') },
+    { key: 'trusted', icon: 'shield-star-outline', label: word('Trusted', 'member sort') },
+    { key: 'active', icon: 'lightning-bolt', label: word('Active', 'member sort') },
+];
+
+/** A date in the member's language, as core writes dates ("3 Oct 2026"); nothing for one it can't read. */
+function dateWords(iso: string | null | undefined, pattern: 'day-month' | 'day-month-year'): string {
+    const d = iso ? new Date(iso) : null;
+    return d && Number.isFinite(d.getTime()) ? formatDate(d, pattern) : '';
+}
 
 export default function PeopleScreen() {
     const { theme, colors } = useTheme();
@@ -103,7 +108,8 @@ export default function PeopleScreen() {
 
         searchWrap: { paddingHorizontal: 16, paddingTop: 16, backgroundColor: colors.surface.app },
         searchInput: { backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.default, borderRadius: 12, padding: 12, fontSize: 15, color: colors.text.heading, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 },
-        sortRow: { flexDirection: 'row', paddingHorizontal: 16, paddingTop: 10, paddingBottom: 4, backgroundColor: colors.surface.app, gap: 6 },
+        // Wraps: five sorts with their icons in a longer language need more than 320dp at 1.3x text.
+        sortRow: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 16, paddingTop: 10, paddingBottom: 4, backgroundColor: colors.surface.app, gap: 6 },
         sortPill: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 16, backgroundColor: colors.surface.subtle, borderWidth: 1, borderColor: colors.border.default },
         sortPillActive: { backgroundColor: colors.brand.fill, borderColor: colors.brand.dark },
         sortPillText: { fontSize: 11, fontWeight: '600', color: colors.text.secondary },
@@ -492,7 +498,7 @@ export default function PeopleScreen() {
                     const body = await res.json().catch(() => null);
                     const refusal = invitesOffRefusal(res.status, body, nodeProfile?.features);
                     if (refusal) {
-                        Alert.alert('No invites here', refusal);
+                        Alert.alert(t('No invites here'), refusal);
                         return;
                     }
                     // Only admins invite here (this phone hadn't heard it yet, or the member's role changed): the node's
@@ -501,7 +507,7 @@ export default function PeopleScreen() {
                     if (adminsOnly) {
                         setInviteRole(null);
                         if (identity) void persistNodeRole(anchorUrl, identity.publicKey, null);
-                        Alert.alert('Only admins invite here', adminsOnly);
+                        Alert.alert(t('Only admins invite here'), adminsOnly);
                         return;
                     }
                 }
@@ -518,9 +524,9 @@ export default function PeopleScreen() {
 
             // Offline Fallback
             Alert.alert(
-                'Offline Mode',
-                'You are currently offline. A temporary cryptographic offline invite ticket (valid for 30 days) will be generated instead.',
-                [{ text: 'OK' }]
+                t('Offline Mode'),
+                t('You are currently offline. A temporary cryptographic offline invite ticket (valid for 30 days) will be generated instead.'),
+                [{ text: t('OK') }]
             );
 
             // Request binding: the ticket names this community's host and joins only here (member-statements.ts);
@@ -541,7 +547,7 @@ export default function PeopleScreen() {
             setInvites(updated);
             await AsyncStorage.setItem(`bp_offline_invites_${identity.publicKey}`, JSON.stringify(updated));
         } catch (e: any) {
-            Alert.alert('Error', e.message || 'Failed to generate ticket');
+            Alert.alert(t('Error'), e.message || t('Failed to generate ticket'));
         } finally {
             setGenerating(false);
         }
@@ -551,10 +557,8 @@ export default function PeopleScreen() {
         if (invitesPreview) return;
         const magicLink = `${anchorUrl}/?invite=${codeToShare}`;
         
-        let message = `Join my private BeanPool Node! ✨\n\n`;
-        message += `Click this secure link to join automatically:\n${magicLink}\n\n`;
-        message += `Or if you prefer, you can download the BeanPool App at https://beanpool.org and enter this Invite Code manually:\n${codeToShare}\n\n`;
-        message += `Node URL: ${anchorUrl}`;
+        // One message, whole, in the member's language: the person they invite most likely reads it too.
+        const message = t('Join my private BeanPool Node! ✨\n\nClick this secure link to join automatically:\n{link}\n\nOr if you prefer, you can download the BeanPool App at https://beanpool.org and enter this Invite Code manually:\n{code}\n\nNode URL: {url}', { link: magicLink, code: codeToShare, url: anchorUrl });
 
         await Share.share({ message });
     };
@@ -586,7 +590,7 @@ export default function PeopleScreen() {
                 }
 
                 if (isMember) {
-                    Alert.alert('Already a Member', 'You are already a member of this community node.');
+                    Alert.alert(t('Already a Member'), t('You are already a member of this community node.'));
                     setRedeeming(false);
                     return;
                 }
@@ -607,7 +611,7 @@ export default function PeopleScreen() {
                 const { requestSync } = await import('../../services/pillar-sync');
                 requestSync().catch(console.error);
 
-                Alert.alert('Success', 'Invite redeemed! You have successfully registered as a member on this community.');
+                Alert.alert(t('Success'), t('Invite redeemed! You have successfully registered as a member on this community.'));
                 setIsGuest(false);
                 setRedeemCode('');
                 setRedeemNodeUrl('');
@@ -617,7 +621,7 @@ export default function PeopleScreen() {
             }
 
             const parsedCode = normaliseInviteCode(rawInvite);
-            if (!identity) throw new Error('No identity to register');
+            if (!identity) throw new Error(t('No identity to register'));
 
             // The same path an approved request to join takes (utils/join-another-community.ts): switch to the
             // community, redeem there, and go back to this one if the redeem fails.
@@ -637,7 +641,7 @@ export default function PeopleScreen() {
                     : []),
             ], { cancelable: false });
         } catch (e: any) {
-            Alert.alert('Redemption Failed', e.message);
+            Alert.alert(t('Redemption Failed'), e.message);
         } finally {
             setRedeeming(false);
         }
@@ -645,12 +649,12 @@ export default function PeopleScreen() {
 
     const handleTroubleWipe = () => {
         Alert.alert(
-            'Wipe Connection?',
-            'This will permanently delete the local database and transaction cache for this community. Your key will be preserved, and you will be routed back to the welcome screen to register with a new invite link.',
+            t('Wipe Connection?'),
+            t('This will permanently delete the local database and transaction cache for this community. Your key will be preserved, and you will be routed back to the welcome screen to register with a new invite link.'),
             [
-                { text: 'Cancel', style: 'cancel' },
+                { text: t('Cancel'), style: 'cancel' },
                 {
-                    text: 'Wipe & Restart',
+                    text: t('Wipe & Restart'),
                     style: 'destructive',
                     onPress: async () => {
                         try {
@@ -673,7 +677,7 @@ export default function PeopleScreen() {
                             setIsGuest(false);
                             router.replace('/welcome');
                         } catch (err: any) {
-                            Alert.alert('Wipe Failed', err.message);
+                            Alert.alert(t('Wipe Failed'), err.message);
                         }
                     }
                 }
@@ -814,10 +818,11 @@ export default function PeopleScreen() {
                             style={[styles.pill, isActive && styles.pillActive]}
                             onPress={() => { setView(v); router.setParams({ view: v }); }}
                         >
-                            <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={[styles.pillText, isActive && styles.pillTextActive]}>
-                                {v === 'friends' && '👫 Friends'}
-                                {v === 'community' && '🏘️ Community'}
-                                {v === 'invites' && (isGuest ? '🎟️ Register' : knockCount > 0 ? `🎟️ Invites (${knockCount})` : '🎟️ Invites')}
+                            {/* A third of the row each: a longer name in another language takes a second line and shrinks, never cut. */}
+                            <Text numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.6} style={[styles.pillText, isActive && styles.pillTextActive, { textAlign: 'center' }]}>
+                                {v === 'invites'
+                                    ? (isGuest ? t('🎟️ Register') : knockCount > 0 ? tn(knockCount, '🎟️ Invites ({n})', '🎟️ Invites ({n})') : t('🎟️ Invites'))
+                                    : t(PANE_WORDS[v])}
                             </Text>
                         </Pressable>
                     );
@@ -842,8 +847,8 @@ export default function PeopleScreen() {
                     <View style={styles.emptyContainer}>
                         {identity?.publicKey ? <View style={{ alignSelf: 'stretch' }}><AddedYouLines myKey={identity.publicKey} onAddedBack={() => loadFriends(true)} /></View> : null}
                         <Text style={styles.emptyEmoji}>👫</Text>
-                        <Text style={styles.emptyTitle}>No friends yet</Text>
-                        <Text style={styles.emptyDesc}>Go to Community to browse members and add friends.</Text>
+                        <Text style={styles.emptyTitle}>{t('No friends yet')}</Text>
+                        <Text style={styles.emptyDesc}>{t('Go to Community to browse members and add friends.')}</Text>
                     </View>
                 ) : (
                     <FlatList
@@ -865,7 +870,7 @@ export default function PeopleScreen() {
                                 <Pressable
                                     accessibilityRole="button"
                                     style={styles.cardHeader}
-                                    onPress={() => router.push({ pathname: '/public-profile', params: { publicKey: item.publicKey, callsign: item.callsign || 'Unknown' } })}
+                                    onPress={() => router.push({ pathname: '/public-profile', params: { publicKey: item.publicKey, callsign: item.callsign || t('Unknown') } })}
                                 >
                                     <View style={styles.avatar}>
                                         <MemberAvatar avatarUrl={item.avatar_url} pubkey={item.publicKey} callsign={item.callsign || '?'} size={44} />
@@ -873,14 +878,14 @@ export default function PeopleScreen() {
                                     <View style={styles.textStack}>
                                         <Text style={styles.callsign} numberOfLines={1}>{item.callsign}</Text>
                                         <Text style={styles.dateText}>
-                                            Added {item.addedAt ? new Date(item.addedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'recently'}
+                                            {dateWords(item.addedAt, 'day-month') ? t('Added {date}', { date: dateWords(item.addedAt, 'day-month') }) : t('Added recently')}
                                         </Text>
                                     </View>
                                 </Pressable>
                                 <View style={styles.friendActions}>
                                     <Pressable
                                         accessibilityRole="button"
-                                        accessibilityLabel="Message"
+                                        accessibilityLabel={t('Message', undefined, 'button: write to')}
                                         style={styles.msgBtn}
                                         onPress={async () => {
                                             if (!identity?.publicKey) return;
@@ -888,7 +893,7 @@ export default function PeopleScreen() {
                                                 const conv = await createConversationApi('dm', [identity.publicKey, item.publicKey], identity.publicKey);
                                                 router.push(`/chat/${conv.id}`);
                                             } catch (e: any) {
-                                                Alert.alert('Error', e.message);
+                                                Alert.alert(t('Error'), e.message);
                                             }
                                         }}
                                     >
@@ -896,13 +901,13 @@ export default function PeopleScreen() {
                                     </Pressable>
                                     <Pressable
                                         accessibilityRole="button"
-                                        accessibilityLabel="Remove friend"
-                                        accessibilityHint="Removes this person from your friends"
+                                        accessibilityLabel={t('Remove friend')}
+                                        accessibilityHint={t('Removes this person from your friends')}
                                         style={styles.removeFriendBtn}
                                         onPress={() => {
-                                            Alert.alert('Remove Friend', `Remove ${item.callsign} from your friends?`, [
-                                                { text: 'Cancel', style: 'cancel' },
-                                                { text: 'Remove', style: 'destructive', onPress: async () => {
+                                            Alert.alert(t('Remove Friend'), t('Remove {name} from your friends?', { name: item.callsign }), [
+                                                { text: t('Cancel'), style: 'cancel' },
+                                                { text: t('Remove'), style: 'destructive', onPress: async () => {
                                                     if (!identity?.publicKey) return;
                                                     await removeFriendLocal(identity.publicKey, item.publicKey);
                                                     loadFriends();
@@ -923,9 +928,9 @@ export default function PeopleScreen() {
                 <>
                     <View style={styles.searchWrap}>
                         <TextInput
-                            accessibilityLabel="Search callsign or public key"
+                            accessibilityLabel={t('Search callsign or public key')}
                             style={styles.searchInput}
-                            placeholder="🔍 Search callsign or public key..."
+                            placeholder={t('🔍 Search callsign or public key...')}
                             value={searchQuery}
                             onChangeText={setSearchQuery}
                             placeholderTextColor={colors.text.muted}
@@ -934,16 +939,16 @@ export default function PeopleScreen() {
                         />
                     </View>
                     {!membersOnDemand && <View style={styles.sortRow}>
-                        {([['newest', 'clock-outline', 'Newest'], ['name', 'sort-alphabetical-ascending', 'Name'], ['friends', 'account-heart-outline', 'Friends'], ['trusted', 'shield-star-outline', 'Trusted'], ['active', 'lightning-bolt', 'Active']] as [SortOption, string, string][]).map(([key, icon, label]) => (
+                        {SORT_OPTIONS.map(opt => (
                             <Pressable
-                                key={key}
+                                key={opt.key}
                                 accessibilityRole="button"
-                                accessibilityState={{ selected: sortOption === key }}
-                                style={[styles.sortPill, sortOption === key && styles.sortPillActive]}
-                                onPress={() => setSortOption(key)}
+                                accessibilityState={{ selected: sortOption === opt.key }}
+                                style={[styles.sortPill, sortOption === opt.key && styles.sortPillActive]}
+                                onPress={() => setSortOption(opt.key)}
                             >
-                                <MaterialCommunityIcons name={icon as any} size={14} color={sortOption === key ? colors.text.inverse : colors.text.secondary} />
-                                <Text style={[styles.sortPillText, sortOption === key && styles.sortPillTextActive]}>{label}</Text>
+                                <MaterialCommunityIcons name={opt.icon as any} size={14} color={sortOption === opt.key ? colors.text.inverse : colors.text.secondary} />
+                                <Text style={[styles.sortPillText, sortOption === opt.key && styles.sortPillTextActive]} numberOfLines={1}>{t(opt.label)}</Text>
                             </Pressable>
                         ))}
                     </View>}
@@ -969,14 +974,15 @@ export default function PeopleScreen() {
                                     <Text style={styles.infoText}>{communityListNote(listNote, searchQuery)}</Text>
                                 ) : profileKnown && !membersOnDemand && listedFor === '' && searchQuery.trim() === '' ? (
                                 <Text style={styles.infoText}>
-                                    {members.length} members on this node. Tap <Text style={styles.boldGreen}>+ Add</Text> to follow as a friend.
+                                    {/* English writes one form for both; a language with more forms has them. */}
+                                    <Sentence text={tn(members.length, '{n} members on this node. Tap {add} to follow as a friend.', '{n} members on this node. Tap {add} to follow as a friend.')} parts={{ add: <Text style={styles.boldGreen}>{t('+ Add')}</Text> }} />
                                 </Text>
                                 ) : (
                                 // The node's profile not known yet, or its list not read yet on a community that says
                                 // `membersOnDemand`: the cards held are not the node's members, so no count (review of #1859, NB-1).
                                 // Nor before the whole list has been read, nor over a search's matches (review of #1899, NB-A).
                                 <Text style={styles.infoText}>
-                                    Tap <Text style={styles.boldGreen}>+ Add</Text> to follow as a friend.
+                                    <Sentence text={t('Tap {add} to follow as a friend.')} parts={{ add: <Text style={styles.boldGreen}>{t('+ Add')}</Text> }} />
                                 </Text>
                                 )}
                             </View>
@@ -991,7 +997,7 @@ export default function PeopleScreen() {
                         renderItem={({ item, index }) => {
                         const isFriend = friendPubkeys.has(item.public_key);
                         const isSelf = item.public_key === identity?.publicKey;
-                        const joinDateText = formatJoinDate(item.joined_at);
+                        const joinDateText = joinedWords(item.joined_at);
                         const isFirst = index === 0;
                         const isLast = index === members.length - 1;
                         return (
@@ -1004,7 +1010,7 @@ export default function PeopleScreen() {
                             <Pressable
                                 accessibilityRole="button"
                                 style={styles.cardHeader}
-                                onPress={() => router.push({ pathname: '/public-profile', params: { publicKey: item.public_key, callsign: item.callsign || 'Unknown' } })}
+                                onPress={() => router.push({ pathname: '/public-profile', params: { publicKey: item.public_key, callsign: item.callsign || t('Unknown') } })}
                             >
                                 <View style={styles.avatar}>
                                     <MemberAvatar avatarUrl={item.avatar_url} pubkey={item.public_key} callsign={item.callsign || '?'} size={44} />
@@ -1017,10 +1023,10 @@ export default function PeopleScreen() {
                                 <View style={styles.textStack}>
                                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                                         <Text style={styles.callsign} numberOfLines={1}>{item.callsign}</Text>
-                                        {isFriend && <Text style={styles.friendChip}>Friend</Text>}
+                                        {isFriend && <Text style={styles.friendChip} numberOfLines={1}>{t('Friend')}</Text>}
                                     </View>
                                     <Text style={styles.dateText} numberOfLines={1}>
-                                        {joinDateText}{typeof item.distance_km === 'number' ? <Text style={styles.distanceText}>{` · about ${item.distance_km} km`}</Text> : null}
+                                        {joinDateText}{typeof item.distance_km === 'number' ? <Text style={styles.distanceText}>{' · '}<Text>{t('about {km} km', { km: formatNumber(item.distance_km) })}</Text></Text> : null}
                                     </Text>
                                 </View>
                             </Pressable>
@@ -1038,14 +1044,14 @@ export default function PeopleScreen() {
                                             try {
                                                 await addFriendLocal(identity.publicKey, item.public_key);
                                             } catch (e: any) {
-                                                Alert.alert('Not added', e?.message || 'Your community did not add them.');
+                                                Alert.alert(t('Not added'), e?.message || t('Your community did not add them.'));
                                             }
                                         }
                                         loadFriends();
                                     }}
                                 >
                                     <Text style={[styles.addBtnText, isFriend && styles.addBtnTextFriended]}>
-                                        {isFriend ? '✓ Added' : '+ Add'}
+                                        {isFriend ? t('✓ Added') : t('+ Add')}
                                     </Text>
                                 </Pressable>
                             )}
@@ -1063,19 +1069,19 @@ export default function PeopleScreen() {
                     {isGuest ? (
                         <View style={{ backgroundColor: theme === 'dark' ? colors.feedback.warning.bg : palette.amber50, borderRadius: 12, padding: 16, marginBottom: 24, borderWidth: 1, borderColor: theme === 'dark' ? colors.feedback.warning.border : palette.amber200 }}>
                             <Text style={{ color: colors.feedback.warning.fg, fontSize: 15, fontWeight: '700', marginBottom: 4 }}>
-                                ⚠️ Guest Connection Mode
+                                {t('⚠️ Guest Connection Mode')}
                             </Text>
                             <Text style={{ color: theme === 'dark' ? colors.text.body : palette.amber700, fontSize: 13, lineHeight: 18 }}>
                                 {guestDoor
                                     ? guestDoorText(nodeProfile?.features)
                                     : guestNoInvites
                                     ? guestNoInvitesText(guestAtGlobalWaiting)
-                                    : 'You are currently connected to this node in **Guest Mode**. You cannot generate invites or participate in community trade until you register your identity.'}
+                                    : t('You are currently connected to this node in **Guest Mode**. You cannot generate invites or participate in community trade until you register your identity.')}
                             </Text>
                             {guestDoor && (
                                 <Pressable
                                     accessibilityRole="button"
-                                    accessibilityLabel={`Join the global community with ${joinWays(nodeProfile?.features)}`}
+                                    accessibilityLabel={guestDoorLabel(nodeProfile?.features)}
                                     style={[styles.btnGenerate, { marginTop: 12, marginBottom: 0 }]}
                                     onPress={() => router.push('/join-global')}
                                 >
@@ -1099,34 +1105,34 @@ export default function PeopleScreen() {
                             {!makesInvites ? (
                                 // No invites here: anyone joins without one (the helper's words say how), so the community's link is all there is to share.
                                 <>
-                                    <Text style={styles.sectionHeader}>📤 Bring someone here</Text>
+                                    <Text style={styles.sectionHeader}>{t('📤 Bring someone here')}</Text>
                                     <Text style={styles.sectionDesc}>{bringSomeoneHereText(nodeProfile?.features)}</Text>
                                     {invitesPreview && <LocalCommunityMark variant="line" feature="invites" text={LOCAL_COMMUNITY_LINES.invites} />}
                                     <Pressable
                                         accessibilityRole="button"
-                                        accessibilityLabel="Share this community's link"
+                                        accessibilityLabel={t("Share this community's link")}
                                         style={[styles.btnGenerate, !anchorUrl && { opacity: 0.6 }]}
                                         onPress={shareCommunityLink}
                                         disabled={!anchorUrl}
                                     >
-                                        <Text style={styles.btnGenerateText}>📤 Share the link</Text>
+                                        <Text style={styles.btnGenerateText}>{t('📤 Share the link')}</Text>
                                     </Pressable>
                                 </>
                             ) : !mayInvite ? (
                                 // Only its admins invite here, and this member is no owner or admin: no code, QR or offline
                                 // ticket. Where the community takes requests to join, its link lets someone ask, for an admin to answer.
                                 <>
-                                    <Text style={styles.sectionHeader}>📤 Bring someone here</Text>
+                                    <Text style={styles.sectionHeader}>{t('📤 Bring someone here')}</Text>
                                     <Text style={styles.sectionDesc}>{adminsOnlyText(takesKnocks)}</Text>
                                     {takesKnocks && (
                                         <Pressable
                                             accessibilityRole="button"
-                                            accessibilityLabel="Share this community's link"
+                                            accessibilityLabel={t("Share this community's link")}
                                             style={[styles.btnGenerate, !anchorUrl && { opacity: 0.6 }]}
                                             onPress={shareCommunityLink}
                                             disabled={!anchorUrl}
                                         >
-                                            <Text style={styles.btnGenerateText}>📤 Share the link</Text>
+                                            <Text style={styles.btnGenerateText}>{t('📤 Share the link')}</Text>
                                         </Pressable>
                                     )}
                                 </>
@@ -1135,11 +1141,11 @@ export default function PeopleScreen() {
                             {(invitesPreview || (makesInvites && mayInvite)) && (
                             <>
                             {/* GENERATE INVITE SECTION */}
-                            <Text style={styles.sectionHeader}>📤 Invite Someone</Text>
-                            <Text style={styles.sectionDesc}>Invite links are single-use and valid for 30 days. If you are offline, a cryptographic voucher ticket will be generated instead.</Text>
+                            <Text style={styles.sectionHeader}>{t('📤 Invite Someone')}</Text>
+                            <Text style={styles.sectionDesc}>{t('Invite links are single-use and valid for 30 days. If you are offline, a cryptographic voucher ticket will be generated instead.')}</Text>
 
                             <TextInput
-                                placeholder="Who is this invite for? (For your records)"
+                                placeholder={t('Who is this invite for? (For your records)')}
                                 value={intendedFor}
                                 onChangeText={setIntendedFor}
                                 style={styles.input}
@@ -1155,13 +1161,13 @@ export default function PeopleScreen() {
                                     onPress={handleGenerate}
                                     disabled={generating}
                                 >
-                                    <Text style={styles.btnGenerateText}>{generating ? 'Generating...' : isOnline ? '✨ Generate Ticket' : '✨ Generate Offline Ticket'}</Text>
+                                    <Text style={styles.btnGenerateText}>{generating ? t('Generating...') : isOnline ? t('✨ Generate Ticket') : t('✨ Generate Offline Ticket')}</Text>
                                 </Pressable>
                             )}
 
                             {newCode ? (
                                 <View style={styles.qrCard}>
-                                    <Text style={styles.qrTitle}>Share this cryptographic code</Text>
+                                    <Text style={styles.qrTitle}>{t('Share this cryptographic code')}</Text>
                                     <View style={styles.qrBox}>
                                         <QRCode
                                             value={invitesPreview ? newCode : `${anchorUrl}/?invite=${newCode}`}
@@ -1184,7 +1190,7 @@ export default function PeopleScreen() {
 
                             {pendingInvites.length > 0 && (
                                 <View style={{ marginTop: 24 }}>
-                                    <Text style={styles.pendingHeader}>⏳ PENDING ({pendingInvites.length})</Text>
+                                    <Text style={styles.pendingHeader}>{tn(pendingInvites.length, '⏳ PENDING ({n})', '⏳ PENDING ({n})')}</Text>
                                     {pendingInvites.map((inv) => (
                                         <View key={inv.code} style={[styles.pendingCard, invitesPreview && { flexDirection: 'column', alignItems: 'stretch' }]}>
                                             <View style={{ flexGrow: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -1242,7 +1248,7 @@ export default function PeopleScreen() {
                                                 </Text>
                                                 {inv.usedAt ? (
                                                     <Text style={{ fontSize: 11, color: colors.text.muted, marginTop: 4 }}>
-                                                        {t('Used {date}', { date: new Date(inv.usedAt).toLocaleDateString() })}
+                                                        {t('Used {date}', { date: dateWords(inv.usedAt, 'day-month-year') })}
                                                     </Text>
                                                 ) : null}
                                             </View>
@@ -1272,18 +1278,18 @@ export default function PeopleScreen() {
                     <View style={{ height: 1, backgroundColor: colors.border.default, marginVertical: 32 }} />
 
                     {/* REDEEM INVITE SECTION */}
-                    <Text style={styles.sectionHeader}>{isGuest ? '🎟️ Complete Registration' : '🎟️ Join Another Community'}</Text>
+                    <Text style={styles.sectionHeader}>{isGuest ? t('🎟️ Complete Registration') : t('🎟️ Join Another Community')}</Text>
                     <Text style={styles.sectionDesc}>
                         {isGuest 
-                            ? `You are currently connected to this node (${anchorUrl}) in Guest Mode. Enter a valid invite code to register your identity and unlock full membership features.`
-                            : 'Enter an invite code to join a different node. Once registered, you can switch between your accounts by tapping the title in the top banner.'
+                            ? t('You are currently connected to this node ({url}) in Guest Mode. Enter a valid invite code to register your identity and unlock full membership features.', { url: anchorUrl })
+                            : t('Enter an invite code to join a different node. Once registered, you can switch between your accounts by tapping the title in the top banner.')
                         }
                     </Text>
                     
                     <View style={{ flexDirection: 'column', gap: 8, marginBottom: 32 }}>
                         <TextInput 
                             style={[styles.input, { marginBottom: 0 }]}
-                            placeholder="Invite URL or token"
+                            placeholder={t('Invite URL or token')}
                             placeholderTextColor={colors.text.muted}
                             value={redeemCode}
                             onChangeText={setRedeemCode}
@@ -1293,7 +1299,7 @@ export default function PeopleScreen() {
                         {redeemCode && !redeemCode.startsWith('http') && (
                             <TextInput
                                 style={[styles.input, { marginBottom: 0 }]}
-                                placeholder="Community Node URL (Optional)"
+                                placeholder={t('Community Node URL (Optional)')}
                                 placeholderTextColor={colors.text.muted}
                                 value={redeemNodeUrl}
                                 onChangeText={setRedeemNodeUrl}
@@ -1310,8 +1316,8 @@ export default function PeopleScreen() {
                         >
                             <Text style={{ color: colors.text.inverse, fontWeight: 'bold', fontSize: 16 }}>
                                 {redeeming 
-                                    ? (isGuest ? 'Registering...' : 'Joining...') 
-                                    : (isGuest ? 'Complete Registration' : 'Join Community')
+                                    ? (isGuest ? t('Registering...') : t('Joining...')) 
+                                    : (isGuest ? t('Complete Registration') : t('Join Community'))
                                 }
                             </Text>
                         </Pressable>
@@ -1322,19 +1328,19 @@ export default function PeopleScreen() {
                     {isGuest && (
                         <View style={{ marginTop: 8, backgroundColor: theme === 'dark' ? colors.feedback.danger.bg : palette.red50, borderRadius: 12, padding: 16, borderWidth: 1, borderColor: theme === 'dark' ? colors.feedback.danger.border : palette.red300, marginBottom: 32 }}>
                             <Text style={{ color: colors.feedback.danger.fg, fontSize: 15, fontWeight: '700', marginBottom: 4 }}>
-                                🛠️ Connection Troubleshooting
+                                {t('🛠️ Connection Troubleshooting')}
                             </Text>
                             <Text style={{ color: theme === 'dark' ? colors.text.body : palette.red800, fontSize: 13, lineHeight: 18, marginBottom: 12 }}>
-                                If your local profile data is mismatched or out of sync with the node's server (e.g. if the node was completely wiped or reinstalled), you can wipe this community's local database cache and start fresh. Your master key and other saved communities are safe.
+                                {t("If your local profile data is mismatched or out of sync with the node's server (e.g. if the node was completely wiped or reinstalled), you can wipe this community's local database cache and start fresh. Your master key and other saved communities are safe.")}
                             </Text>
                             <Pressable
                                 accessibilityRole="button"
-                                accessibilityHint="Permanently deletes this community's local data"
+                                accessibilityHint={t("Permanently deletes this community's local data")}
                                 style={{ backgroundColor: colors.feedback.danger.solid, paddingVertical: 12, borderRadius: 8, alignItems: 'center' }}
                                 onPress={handleTroubleWipe}
                             >
                                 <Text style={{ color: colors.text.inverse, fontWeight: 'bold', fontSize: 14 }}>
-                                    Wipe Local Node Data & Start Fresh
+                                    {t('Wipe Local Node Data & Start Fresh')}
                                 </Text>
                             </Pressable>
                         </View>
@@ -1351,7 +1357,7 @@ export default function PeopleScreen() {
 function TreeMemberView({ node, depth, myKey, colors }: { node: any; depth: number; myKey?: string; colors: any }) {
     const isMe = node.publicKey === myKey;
     const hasChildren = node.children && node.children.length > 0;
-    const joinDate = new Date(node.joinedAt).toLocaleDateString();
+    const joinDate = dateWords(node.joinedAt, 'day-month-year');
     return (
         <View style={{ marginLeft: depth > 0 ? 16 : 0, marginTop: depth > 0 ? 8 : 0 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 4 }}>

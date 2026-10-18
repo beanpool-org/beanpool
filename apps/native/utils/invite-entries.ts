@@ -8,11 +8,12 @@
  * admin there makes none either, and is told so in plain words. Their role is the node's answer, never a tier.
  */
 
+import { t, word } from '@beanpool/core';
 import { invitesOn, wordsDoorOn, type NodeFeatures } from './node-profile';
 
 /** What the share sheet sends: the community's plain address, which opens its front door. */
 export function communityLinkMessage(nodeUrl: string): string {
-    return `Join me on BeanPool: ${nodeUrl.trim().replace(/\/+$/, '')}`;
+    return t('Join me on BeanPool: {url}', { url: nodeUrl.trim().replace(/\/+$/, '') });
 }
 
 /**
@@ -21,19 +22,26 @@ export function communityLinkMessage(nodeUrl: string): string {
  * preview, or one from before the 12-words door says nothing of 12 words (review of #1852, finding 7).
  */
 export function joinWays(features: NodeFeatures | null | undefined): string {
-    return wordsDoorOn(features) ? '12 words or a sign-in' : 'a sign-in';
+    return wordsDoorOn(features) ? t('12 words or a sign-in') : t('a sign-in');
 }
+
+// Each sentence below is written whole for both ways in (12 words or a sign-in, or a sign-in alone), never with the ways
+// glued in: a language may need the phrase to change with the sentence around it.
 
 /** Said where the node's own words are missing. */
 export function invitesOffFallback(features: NodeFeatures | null | undefined): string {
-    return `This community doesn’t use invites: anyone joins it with ${joinWays(features)} in the BeanPool app. To bring someone here, share its link.`;
+    return wordsDoorOn(features)
+        ? t('This community doesn’t use invites: anyone joins it with 12 words or a sign-in in the BeanPool app. To bring someone here, share its link.')
+        : t('This community doesn’t use invites: anyone joins it with a sign-in in the BeanPool app. To bring someone here, share its link.');
 }
-/** The same, for a node that hasn't said its door offers 12 words. */
-export const INVITES_OFF_FALLBACK = invitesOffFallback(null);
+/** The same, for a node that hasn't said its door offers 12 words . */
+export const INVITES_OFF_FALLBACK = word('This community doesn’t use invites: anyone joins it with a sign-in in the BeanPool app. To bring someone here, share its link.');
 
 /** People → Invites on a node that takes no invites, over its Share the link button. */
 export function bringSomeoneHereText(features: NodeFeatures | null | undefined): string {
-    return `This community doesn’t use invites. Anyone can join it with ${joinWays(features)} in the BeanPool app, so just share its link.`;
+    return wordsDoorOn(features)
+        ? t('This community doesn’t use invites. Anyone can join it with 12 words or a sign-in in the BeanPool app, so just share its link.')
+        : t('This community doesn’t use invites. Anyone can join it with a sign-in in the BeanPool app, so just share its link.');
 }
 
 /**
@@ -53,11 +61,16 @@ export function invitesOffRefusal(status: number, body: unknown, features?: Node
  * The ways it names are the door's own (joinWays): 12 words or a sign-in where it offers both, else a sign-in.
  */
 export function guestDoorText(features: NodeFeatures | null | undefined): string {
-    const how = wordsDoorOn(features) ? 'use its 12 words or sign in once' : 'sign in once';
-    return `You are visiting as a guest. Join as the account on this phone: ${how}, and choose your name. Your key and your 12 words stay the same, and nothing changes in your other communities.`;
+    return wordsDoorOn(features)
+        ? t('You are visiting as a guest. Join as the account on this phone: use its 12 words or sign in once, and choose your name. Your key and your 12 words stay the same, and nothing changes in your other communities.')
+        : t('You are visiting as a guest. Join as the account on this phone: sign in once, and choose your name. Your key and your 12 words stay the same, and nothing changes in your other communities.');
 }
 export function guestDoorButton(features: NodeFeatures | null | undefined): string {
-    return `🌍 Join with ${joinWays(features)}`;
+    return wordsDoorOn(features) ? t('🌍 Join with 12 words or a sign-in') : t('🌍 Join with a sign-in');
+}
+/** What a screen reader says for that button. */
+export function guestDoorLabel(features: NodeFeatures | null | undefined): string {
+    return wordsDoorOn(features) ? t('Join the global community with 12 words or a sign-in') : t('Join the global community with a sign-in');
 }
 
 /**
@@ -65,12 +78,13 @@ export function guestDoorButton(features: NodeFeatures | null | undefined): stri
  * door is the global community's alone), or the global community before it has said, this app start, that its door is
  * open. There is no code to enter here, so no form, and no promise of a way in that isn't there.
  */
-export const GUEST_NO_INVITES_TEXT = 'This community doesn’t use invite codes, and it isn’t taking new members from the app.';
+export const GUEST_NO_INVITES_TEXT = word('This community doesn’t use invite codes, and it isn’t taking new members from the app.');
 /** The same at the global community before it has answered, where a connection fault is a real cause. */
 export function guestNoInvitesText(guestAtGlobalWaiting: boolean): string {
-    return guestAtGlobalWaiting ? GUEST_AT_GLOBAL_WAITING_TEXT : GUEST_NO_INVITES_TEXT;
+    return guestAtGlobalWaiting ? t(GUEST_NO_INVITES_WORDS.waiting) : t(GUEST_NO_INVITES_WORDS.closed);
 }
-export const GUEST_AT_GLOBAL_WAITING_TEXT = 'This community doesn’t use invite codes, and it isn’t open to new members from the app right now. Check your connection and try again later.';
+export const GUEST_AT_GLOBAL_WAITING_TEXT = word('This community doesn’t use invite codes, and it isn’t open to new members from the app right now. Check your connection and try again later.');
+const GUEST_NO_INVITES_WORDS = { closed: GUEST_NO_INVITES_TEXT, waiting: GUEST_AT_GLOBAL_WAITING_TEXT };
 
 // ── Who may invite (the door) ────────────────────────────────────────────────────────────────────
 
@@ -97,13 +111,14 @@ export function mayInviteHere(features: NodeFeatures | null | undefined, role: I
 }
 
 /** Said where the node's own words are missing. */
-export const ADMINS_ONLY_FALLBACK = 'In this community only its admins invite people. Ask an admin to bring them in.';
+export const ADMINS_ONLY_FALLBACK = word('In this community only its admins invite people. Ask an admin to bring them in.');
+const ADMINS_ONLY_WORDS = { fallback: ADMINS_ONLY_FALLBACK };
 
 /** What a member who may not invite sees in place of "Invite Someone". `knocks`: the community takes requests to join. */
 export function adminsOnlyText(knocks: boolean): string {
     return knocks
-        ? 'In this community only its admins invite people. Share its link: in the BeanPool app they can ask to join, and an admin will answer. Or ask an admin to invite them.'
-        : 'In this community only its admins invite people. Ask an admin to invite them.';
+        ? t('In this community only its admins invite people. Share its link: in the BeanPool app they can ask to join, and an admin will answer. Or ask an admin to invite them.')
+        : t('In this community only its admins invite people. Ask an admin to invite them.');
 }
 
 /**
@@ -113,7 +128,7 @@ export function adminsOnlyText(knocks: boolean): string {
 export function adminsOnlyRefusal(status: number, body: unknown): string | null {
     const b = body as { code?: unknown; error?: unknown } | null | undefined;
     if (status !== 403 || !b || typeof b !== 'object' || b.code !== 'admins_only') return null;
-    return typeof b.error === 'string' && b.error.trim() ? b.error : ADMINS_ONLY_FALLBACK;
+    return typeof b.error === 'string' && b.error.trim() ? b.error : t(ADMINS_ONLY_WORDS.fallback);
 }
 
 /**
@@ -139,6 +154,6 @@ export const MEMBER_TICKET_REFUSED_TEXT = 'This invite was made by a member, and
  */
 export function offlineTicketRefusal(role: InviteRole | undefined): { title: string; text: string } {
     return role === undefined
-        ? { title: 'You’re offline', text: 'You’re offline. Try again when you’re back online.' }
-        : { title: 'Only admins invite here', text: 'In this community only its admins invite people.' };
+        ? { title: t('You’re offline'), text: t('You’re offline. Try again when you’re back online.') }
+        : { title: t('Only admins invite here'), text: t('In this community only its admins invite people.') };
 }

@@ -12,6 +12,7 @@
  * Pure apart from the injected fetcher, so it is unit tested.
  */
 
+import { t } from '@beanpool/core';
 import { markChatRead, setChatMute, type YourChat, type YourChatMute, type YourChatsResponse } from './your-groups';
 
 export interface YourGroupsState {
@@ -53,7 +54,7 @@ export function createYourGroupsStore(fetcher: () => Promise<YourChatsResponse>,
             const same = state.items && JSON.stringify(state.items) === JSON.stringify(items);
             set({ items: same ? state.items : items, error: null, loading: false });
         } catch (e: any) {
-            set({ error: e?.message || 'Could not load your groups.', loading: false });
+            set({ error: e?.message || t('Could not load your groups.'), loading: false });
         }
     };
 

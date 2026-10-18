@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import { useStyles } from '../app/ThemeContext';
 import type { BeanPoolIdentity } from '../utils/identity';
 import { rememberedKnocks, readKnockStatus, knockCardState, type KnockStatusResult, type RememberedKnock } from '../utils/knock';
+import { t } from '@beanpool/core';
 
 /**
  * On the worldwide community's People: the communities this phone asked to join, and what each has said, read from
@@ -40,11 +41,11 @@ export function MyJoinRequests({ identity }: { identity: BeanPoolIdentity }) {
 
     return (
         <View>
-            <Text style={styles.header} accessibilityRole="header">🏘️ Join a local community</Text>
-            <Text style={styles.help}>Communities near you are where neighbours trade. Ask to join one, and any member there can let you in.</Text>
+            <Text style={styles.header} accessibilityRole="header">{t('🏘️ Join a local community')}</Text>
+            <Text style={styles.help}>{t('Communities near you are where neighbours trade. Ask to join one, and any member there can let you in.')}</Text>
             {asked.map(k => {
                 const state = knockCardState(true, true, statuses[k.url]);
-                const note = state.kind === 'checking' ? 'Checking…' : 'note' in state && state.note ? state.note : 'No answer yet.';
+                const note = state.kind === 'checking' ? t('Checking…') : 'note' in state && state.note ? state.note : t('No answer yet.');
                 return (
                     <View key={k.url} style={styles.row}>
                         <Text style={styles.name} numberOfLines={2}>{k.name ?? k.url.replace(/^https:\/\//, '')}</Text>
@@ -53,7 +54,7 @@ export function MyJoinRequests({ identity }: { identity: BeanPoolIdentity }) {
                 );
             })}
             <Pressable style={styles.button} onPress={() => router.push('/find-community')} accessibilityRole="button">
-                <Text style={styles.buttonText}>Find a community</Text>
+                <Text style={styles.buttonText}>{t('Find a community')}</Text>
             </Pressable>
             <View style={styles.divider} />
         </View>

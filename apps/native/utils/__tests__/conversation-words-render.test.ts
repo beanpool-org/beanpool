@@ -329,7 +329,7 @@ describe('a direct message in the pseudo-locale: every word came through t() (wo
         expect(host.textContent).toContain('5 Beans / hr');
         expect(host.textContent).toContain('! not delivered');
         expect(byLabel('Release credits for Borrow a long ladder')).toBeNull(); // in the release bar, not the strip
-        expect(byLabel('Leave a review for this deal')).not.toBeNull();
+        expect(byLabel('Leave a review for deal')).not.toBeNull();
         // Read by value: the selector engine trips on an emoji inside an attribute selector.
         expect(Array.from(host.querySelectorAll('[aria-label]')).map((e) => e.getAttribute('aria-label'))).toContain('1 reaction: 👍');
     });
@@ -415,7 +415,7 @@ describe('a conversation at 320 dp with 1.3× text, in the pseudo-locale', () =>
 
     it('a deal\'s buttons in the strip: one line each that shrinks, in a row that wraps', async () => {
         await renderIn('xx');
-        const review = byLabel(pseudoLocalise('Leave a review for this deal'))!;
+        const review = byLabel(pseudoLocalise('Leave a review for deal'))!;
         expect(review).not.toBeNull();
         const label = review.querySelector('span[data-shrinks]')!;
         expect(label.getAttribute('data-lines')).toBe('1');

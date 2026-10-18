@@ -76,7 +76,11 @@ const FIXED: Readonly<Record<string, WordKey>> = {
     '(key changed)': word('(key changed)'),
 };
 
-/** "<label>: <words>" (db.ts: the admins' message, the node's notice in a DM's preview). */
+/**
+ * "<label>: <words>" (db.ts: the admins' message, the node's notice in a DM's preview). Translated only when the words
+ * after the label are themselves a line this table knows: a member who types "Notice: bring gloves" is shown exactly
+ * that, never a translated label over their words (and the node's own words after a label stay its words, slice S4).
+ */
 const PREFIXED: ReadonlyArray<[string, (text: string) => string]> = [
     ["From your community's admins: ", (text) => t("From your community's admins: {text}", { text })],
     ['Notice: ', (text) => t('Notice: {text}', { text })],
@@ -102,15 +106,9 @@ const FILLED: ReadonlyArray<[RegExp, (m: RegExpExecArray) => string]> = [
     [/^The node answered (\d+)\.$/, (m) => t('The node answered {status}.', { status: m[1] })],
 ];
 
-/** A line a lower layer wrote, in the member's language; anything it doesn't know, exactly as given. */
-export function chatLineWords(text: string): string;
-export function chatLineWords(text: string | null | undefined): string | null | undefined;
-export function chatLineWords(text: string | null | undefined): string | null | undefined {
-    if (!text) return text;
+/** A whole line this table knows, in the member's language, or null. */
+function knownLine(text: string): string | null {
     if (Object.prototype.hasOwnProperty.call(FIXED, text)) return t(FIXED[text]);
-    for (const [prefix, say] of PREFIXED) {
-        if (text.startsWith(prefix)) return say(chatLineWords(text.slice(prefix.length)));
-    }
     for (const [pattern, say] of COUNTED) {
         const m = pattern.exec(text);
         if (m) return say(Number(m[1]));
@@ -118,6 +116,21 @@ export function chatLineWords(text: string | null | undefined): string | null | 
     for (const [pattern, say] of FILLED) {
         const m = pattern.exec(text);
         if (m) return say(m);
+    }
+    return null;
+}
+
+/** A line a lower layer wrote, in the member's language; anything it doesn't know, exactly as given. */
+export function chatLineWords(text: string): string;
+export function chatLineWords(text: string | null | undefined): string | null | undefined;
+export function chatLineWords(text: string | null | undefined): string | null | undefined {
+    if (!text) return text;
+    const known = knownLine(text);
+    if (known !== null) return known;
+    for (const [prefix, say] of PREFIXED) {
+        if (!text.startsWith(prefix)) continue;
+        const rest = knownLine(text.slice(prefix.length));
+        if (rest !== null) return say(rest);
     }
     return text;
 }

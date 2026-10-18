@@ -152,7 +152,7 @@ export function EventChatView({ eventId }: Props) {
                         await removeEventChatMessage(eventId, item.id);
                         await load();
                     } catch (e: any) {
-                        Alert.alert(t('Not removed'), e?.message || (author ? t("Could not remove {name}'s message.", { name: author }) : t("Could not remove this member's message.")));
+                        Alert.alert(t('Not removed'), e?.message || (author ? t("Could not remove {name}'s message.", { name: author }) : t("Could not remove Member's message.")));
                     }
                 },
             },

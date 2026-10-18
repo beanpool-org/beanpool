@@ -104,8 +104,12 @@ describe('what it gives back', () => {
         expect(chatLineWords(earlierKeyDetails('Ana', '2026-10-03T00:00:00Z'))).toContain('Ana');
         // A notice holding a stand-in: both in the member's language.
         expect(chatLineWords('Notice: 🔒 Encrypted message')).toBe(pseudoLocalise('Notice: {text}').replace('{text}', pseudoLocalise('🔒 Encrypted message')));
-        // The admins' message: their words as written, inside the translated label.
-        expect(chatLineWords("From your community's admins: bring a chair")).toBe(pseudoLocalise("From your community's admins: {text}").replace('{text}', 'bring a chair'));
+        // A label over words this table doesn't know (a member's, the admins', the node's): the whole line exactly as given,
+        // never a translated label over someone's words.
+        expect(chatLineWords("From your community's admins: bring a chair")).toBe("From your community's admins: bring a chair");
+        expect(chatLineWords('Notice: bring gloves')).toBe('Notice: bring gloves');
+        // A label over a known line: both in the member's language.
+        expect(chatLineWords('Notice: 5 Beans held in trust.')).toBe(pseudoLocalise('Notice: {text}').replace('{text}', pseudoLocalise('{n} Beans held in trust.').replace('{n}', '5')));
     });
 
     it('a member\'s own words, and anything it doesn\'t know, exactly as given', () => {

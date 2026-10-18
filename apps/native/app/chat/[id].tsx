@@ -1317,7 +1317,7 @@ function ChatScreen({ id }: { id: string }) {
                                 <View style={styles.dealCardActions}>
                                     {d.status === 'pending' && d.iAmBuyer && (
                                         <>
-                                            <Pressable accessibilityRole="button" accessibilityLabel={d.postTitle ? t('Release credits for {title}', { title: d.postTitle }) : t('Release credits for this deal')} style={[styles.dealBtn, styles.dealBtnRelease]} disabled={actionLoading} onPress={() => handleReleaseDeal(d.txId, d.credits)}>
+                                            <Pressable accessibilityRole="button" accessibilityLabel={d.postTitle ? t('Release credits for {title}', { title: d.postTitle }) : t('Release credits for deal')} style={[styles.dealBtn, styles.dealBtnRelease]} disabled={actionLoading} onPress={() => handleReleaseDeal(d.txId, d.credits)}>
                                                 <Text style={styles.dealBtnReleaseText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{actionLoading ? '…' : t('Release')}</Text>
                                             </Pressable>
                                             <Pressable accessibilityRole="button" accessibilityLabel={t('Cancel deal')} style={[styles.dealBtn, styles.dealBtnCancel]} disabled={actionLoading} onPress={() => handleCancelDeal(d.txId)}>
@@ -1329,7 +1329,7 @@ function ChatScreen({ id }: { id: string }) {
                                         <Text style={styles.dealAwaiting}>{t('⏳ Awaiting release')}</Text>
                                     )}
                                     {d.status === 'completed' && !d.iRated && (
-                                        <Pressable accessibilityRole="button" accessibilityLabel={d.postTitle ? t('Leave a review for {title}', { title: d.postTitle }) : t('Leave a review for this deal')} style={[styles.dealBtn, styles.dealBtnReview]} onPress={() => handleReviewDeal(d)}>
+                                        <Pressable accessibilityRole="button" accessibilityLabel={d.postTitle ? t('Leave a review for {title}', { title: d.postTitle }) : t('Leave a review for deal')} style={[styles.dealBtn, styles.dealBtnReview]} onPress={() => handleReviewDeal(d)}>
                                             <Text style={styles.dealBtnReviewText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('⭐ Review')}</Text>
                                         </Pressable>
                                     )}

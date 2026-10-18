@@ -121,7 +121,7 @@ export function AddressNotices({ notices }: { notices: AddressNotice[] }) {
                             {n.link ? (
                                 <>
                                     {' · '}
-                                    <a href={n.link} target="_blank" rel="noopener noreferrer" className="text-blue-400 underline">Reply</a>
+                                    <a href={n.link} target="_blank" rel="noopener noreferrer" className="inline-flex items-center min-h-[48px] lg:min-h-0 text-blue-400 underline">Reply</a>
                                 </>
                             ) : n.replyOwnerOnly === true ? (
                                 <span data-testid="address-notice-reply-owner-only">{' · '}only an owner can reply</span>

@@ -19,6 +19,7 @@ PostAuthorTrust, 2 on the FAQ — all the same fix). Before opening a PR:
 5. **Record outcomes below** so the next run sees what's already done.
 
 ## ✅ Resolved — do NOT re-file (2026-06-14, landed in #112 / #113)
+- 2026-10-19 #2170: ProposeDecisionModal focus ring: the global :focus-visible outline applies (#1676).
 
 ### 2026-10-01 — "focus rings on VisitorListing's Back and Join buttons" (#1369) — CLOSED, CLAIM FALSE.
 `apps/pwa/src/index.css` gives every element a keyboard focus outline (`:focus-visible { outline: 2px solid

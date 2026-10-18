@@ -5,8 +5,9 @@
  * communityName, password }` while the one-time claim code waits (apps/server/src/routes/node-claim.ts). `password` says
  * whether the server has an admin password at all, and `passwordRetired: true` comes with it when an owner retired it. It
  * never answers the code itself, and this page never shows it: the page is public, the code is read on the server.
- * A standby answers `{ unclaimed: false, standby: true, password }`: it has no owner of its own and no claim code, and an
- * owner of the community gets in with `beanpool recover --key` on its shell (STANDBY_RECOVER_COMMAND).
+ * A standby with no owner of its own answers `{ unclaimed: false, standby: true, password }`: it has no claim code, and an
+ * owner of the community gets in with `beanpool recover --key` on its shell (STANDBY_RECOVER_COMMAND). Once one has, it
+ * answers as any server with an owner, with no standby flag.
  *
  * A failed or unreadable answer is `unknown`, and the sign-in card treats it as "show the sign-in": the check must
  * never stand between an operator and the password.

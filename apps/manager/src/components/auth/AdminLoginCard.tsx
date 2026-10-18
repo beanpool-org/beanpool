@@ -35,7 +35,7 @@ export function AdminLoginCard({ nodeUrl, onPasswordSession, onKeySession }: Adm
     // install never had one (node sign-in step 8), or an owner retired it (design step 10; the answer says which).
     const noPassword = claim.kind === 'claimed' && claim.password === false;
     const passwordRetired = claim.kind === 'claimed' && claim.password === false && claim.retired === true;
-    // A standby has no owner of its own (the claim check answers standby: true): nobody signs in here until an owner of the
+    // A standby with no owner of its own (the claim check answers standby: true): nobody signs in here until an owner of the
     // community makes themselves one on its shell, so the card says how, above the usual sign-in.
     const standby = claim.kind === 'claimed' && claim.standby === true;
     // If the operator has entered a password or submitted (an error shown, 2FA open, or in flight)

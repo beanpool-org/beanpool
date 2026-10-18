@@ -17,7 +17,8 @@
  *   C. `beanpool claim` on that standby: refused (exit 1), saying it is a standby and naming `beanpool recover --key`,
  *      never "Restart the node to make one".
  *   R. The way in the log names works: with a member in its copy, `beanpool recover --key` makes them the standby's
- *      owner (exit 0, an owner row); its next start says nothing of a claim, and GET still says standby.
+ *      owner (exit 0, an owner row). From then on it is a server with an owner: its next start says nothing of a claim,
+ *      and GET answers as any server with an owner (no standby flag, so no sign-in says it has none).
  *   P. The control: a main server's first start on a fresh dir still makes a code and says "no owner yet".
  *
  * On origin/main S, O and C fail: the standby made a code like any server and said "no owner yet", GET offered it,
@@ -250,7 +251,8 @@ async function main(): Promise<void> {
     info = await request(o, 'GET', '/api/local/claim');
     await o.stop();
     assert(!o.output().includes(STANDBY_SAYS) && !o.output().includes(NO_OWNER_YET), 'R3. its next start says nothing of a claim: it has an owner');
-    assert(info.json?.unclaimed === false && info.json?.standby === true, `R4. and GET still says standby (${JSON.stringify(info.json)})`);
+    assert(info.status === 200 && JSON.stringify(info.json) === JSON.stringify({ unclaimed: false, password: false }),
+        `R4. and GET answers as a server with an owner: unclaimed false, no standby flag (${info.status} ${JSON.stringify(info.json)})`);
 
     console.log('\nP. The control: a main server');
     const dirP = path.join(root, 'p');

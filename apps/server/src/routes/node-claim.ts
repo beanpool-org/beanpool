@@ -23,9 +23,10 @@
  * same key retrying the claim that made it owner (a lost answer; K is gone, so only the signature is checked): that is
  * answered as the claim was, and changes nothing.
  *
- * A standby is never unclaimed (claim-code.ts): it has no owner of its own and no claim code. GET answers
- * `unclaimed: false, standby: true`, so no sign-in offers a claim and one can say what the server is; every POST is
- * refused first, 409 `claim_standby`, with a sentence naming the way in (`beanpool recover --key` on its shell).
+ * A standby is never unclaimed (claim-code.ts): it has no owner of its own and no claim code. While it has none, GET
+ * answers `unclaimed: false, standby: true`, so no sign-in offers a claim and one can say what the server is; once an
+ * owner of the community has made themselves its owner (`beanpool recover --key` on its shell), GET answers as any
+ * server with an owner does. Every POST is refused first, 409 `claim_standby`, with a sentence naming that way in.
  *
  * Under /api/local/, so the signed-request middleware never sees these (https-server.ts isSignatureBypassed): the
  * statement's own signature is the proof.
@@ -64,7 +65,7 @@ export function createNodeClaimRoutes(deps: RouteDeps): Router {
         // says why (design step 10), so the sign-in can say an owner retired it.
         const password = !config.passwordRetired && hasAdminPassword(config);
         const retired = config.passwordRetired ? { passwordRetired: true } : {};
-        if (getNodeRole() === 'backup') {
+        if (getNodeRole() === 'backup' && !nodeHasOwner()) {
             ctx.body = { unclaimed: false, standby: true, password, ...retired };
             return;
         }

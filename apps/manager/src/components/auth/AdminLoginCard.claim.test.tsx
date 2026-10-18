@@ -283,6 +283,15 @@ describe('AdminLoginCard: the unclaimed card', () => {
         expect(screen.queryByTestId('standby-signin-note')).toBeNull();
     });
 
+    it('says nothing of a standby once the standby has an owner of its own, and keeps its password sign-in', async () => {
+        // After beanpool recover --key the server answers as any server with an owner: no standby flag (routes/node-claim.ts).
+        stubNode([{ status: 200, body: { unclaimed: false, password: true } }]);
+        renderCard();
+        await screen.findByTestId('admin-password-field');
+        expect(screen.queryByTestId('standby-signin-note')).toBeNull();
+        expect(screen.queryByTestId('claim-card')).toBeNull();
+    });
+
     it('says an owner retired the password only when the claim answer says so', async () => {
         stubNode([{ status: 200, body: { unclaimed: false, password: false, passwordRetired: true } }]);
         renderCard();

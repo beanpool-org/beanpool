@@ -520,7 +520,8 @@ export default function ChatsScreen() {
                 
                 <View style={styles.chatDetails}>
                     <View style={styles.chatHeader}>
-                        <Text style={[styles.peerName, item.unread > 0 && styles.peerNameUnread]}>{item.peer}</Text>
+                        {/* Gives way (one line) so a longer language's "key changed" tag and the time keep their room. */}
+                        <Text style={[styles.peerName, item.unread > 0 && styles.peerNameUnread, { flexShrink: 1 }]} numberOfLines={1}>{item.peer}</Text>
                         {item.keyChanged && (
                             <View style={styles.keyChangedTag} accessibilityLabel={t('The key behind this chat changed')}>
                                 <Text style={styles.keyChangedTagText}>{t('key changed')}</Text>

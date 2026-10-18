@@ -103,7 +103,8 @@ export function ChatMenuSheet({ styles, menuOpen, muteOpen, title, items, muteHi
                     ) : items.filter(m => !m.hidden).map(m => (
                         <Pressable key={m.label} style={styles.menuRow} onPress={m.onPress} accessibilityRole="button">
                             <MaterialCommunityIcons name={m.icon as any} size={22} color={colors.text.body} />
-                            <Text style={styles.menuLabel} numberOfLines={1}>{m.label}</Text>
+                            {/* Two lines, not one: a longer language's label wraps at 320dp with 1.3× text instead of being cut. */}
+                            <Text style={styles.menuLabel} numberOfLines={2}>{m.label}</Text>
                         </Pressable>
                     ))}
                 </View>

@@ -269,7 +269,8 @@ function ChatScreen({ id }: { id: string }) {
         dealCard: { backgroundColor: colors.surface.card, borderRadius: 12, padding: 10, borderWidth: 1, borderColor: theme === 'dark' ? colors.border.default : palette.emerald100, width: 200 },
         dealCardTitle: { fontSize: 14, fontWeight: '800', color: colors.text.body },
         dealCardMeta: { fontSize: 12, color: colors.text.secondary, marginTop: 2, marginBottom: 8 },
-        dealCardActions: { flexDirection: 'row', gap: 6, alignItems: 'center' },
+        // Wraps: in a longer language Cancel goes under Release rather than squeezing it in the 200dp card.
+        dealCardActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, alignItems: 'center' },
         dealBtn: { paddingVertical: 7, paddingHorizontal: 12, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
         dealBtnRelease: { backgroundColor: colors.brand.fill, flex: 1 },
         dealBtnReleaseText: { color: colors.text.inverse, fontWeight: '800', fontSize: 13 },

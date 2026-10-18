@@ -211,6 +211,7 @@ function node(over: Answers = {}): (name: string, args: unknown[]) => Promise<un
         getGroupChat: GROUP_CHAT, fetchGroupDetails: GROUP_DETAILS, markThreadReadOnNode: undefined,
         groupScreenKeyringFor: { seenLocked: async () => false, sync: async () => null, noteShownRoster: () => {}, serveMissing: async () => {} },
         noteLockedHistoryRow: undefined, getEventChat: EVENT_CHAT, fetchYourGroups: { items: [], totalUnread: 0 },
+        getInvitablePeople: [{ publicKey: 'kofi-key', callsign: 'Kofi', avatarUrl: null }, { publicKey: 'mia-key', callsign: 'Mia', avatarUrl: null }],
         ...over,
     };
     return (name) => (name in answers ? Promise.resolve(answers[name]) : undefined);
@@ -352,6 +353,19 @@ describe('a group\'s chat and an event\'s chat in the pseudo-locale', () => {
         expect(bypassing(), 'the search').toEqual([]);
     });
 
+    it('a new group\'s next step: Invite people, its list and its button with a count', async () => {
+        route.now = { view: 'group', screenId: 'g1' };
+        params.now = { id: 'g1', group: '1', created: '1' };
+        await renderIn('xx');
+        await click(byLabel(pseudoLocalise('Invite people')), 'Invite people');
+        expect(host.textContent).toContain(pseudoLocalise('to {name}').replace('{name}', 'Garden club'));
+        expect(byLabel(pseudoLocalise('Pick people to invite'))).not.toBeNull();
+        expect(bypassing(), 'the sheet').toEqual([]);
+        await click(byLabel('Kofi'), 'Kofi');
+        expect(byLabel(pseudoLocalise('Invite {n} person').replace('{n}', '1'))).not.toBeNull();
+        expect(bypassing(), 'one picked').toEqual([]);
+    });
+
     it('an event\'s chat: the note for people going, the host\'s remove, the composer', async () => {
         route.now = { view: 'event', screenId: 'ev1' };
         params.now = { id: 'ev1', event: '1' };
@@ -374,5 +388,39 @@ describe('a group\'s chat and an event\'s chat in the pseudo-locale', () => {
         expect(host.textContent).toContain(pseudoLocalise('🔒 {n} messages from before you changed phones. Unlock →').replace('{n}', '3'));
         expect(host.textContent).toContain(pseudoLocalise('Keep them locked'));
         expect(bypassing()).toEqual([]);
+    });
+});
+
+// ── 320 dp with text at 1.3×: longer languages never cut or push words past an edge (checked with the pseudo-locale) ──
+const SCALE = 1.3;
+const glyphEm = (c: string) => (/\p{M}/u.test(c) || /[\uFE0F\u200B\u200C\u200D]/.test(c) ? 0 : /\p{Extended_Pictographic}/u.test(c) ? 1.25 : 0.62);
+const widthOf = (text: string, px: number) => Array.from(text).reduce((w, c) => w + glyphEm(c) * px, 0);
+const longestWord = (text: string) => text.split(/[\s\u200B]+/).reduce((a, b) => (widthOf(b, 1) > widthOf(a, 1) ? b : a), '');
+
+describe('a conversation at 320 dp with 1.3× text, in the pseudo-locale', () => {
+    it('the ⋮ sheet\'s rows take two lines rather than cutting a label, and no word is wider than the row', async () => {
+        route.now = { view: 'group', screenId: 'g1' };
+        params.now = { id: 'g1', group: '1' };
+        await renderIn('xx');
+        await click(byLabel(pseudoLocalise('Chat menu')), 'Chat menu');
+        const labels = Array.from(host.querySelectorAll('[data-modal] button > span'));
+        expect(labels.length).toBeGreaterThanOrEqual(4);
+        // 20 dp sides, the 22 dp icon and a 14 dp gap.
+        const row = 320 - 40 - 22 - 14;
+        for (const label of labels) {
+            expect(label.getAttribute('data-lines'), label.textContent!).toBe('2');
+            expect(widthOf(longestWord(label.textContent!), 16 * SCALE), label.textContent!).toBeLessThanOrEqual(row);
+        }
+    });
+
+    it('a deal\'s buttons in the strip: one line each that shrinks, in a row that wraps', async () => {
+        await renderIn('xx');
+        const review = byLabel(pseudoLocalise('Leave a review for this deal'))!;
+        expect(review).not.toBeNull();
+        const label = review.querySelector('span[data-shrinks]')!;
+        expect(label.getAttribute('data-lines')).toBe('1');
+        expect(review.parentElement!.getAttribute('data-wrap')).toBe('wrap');
+        // The card is 200 dp with 10 dp padding; the button pads 12 dp a side.
+        expect(widthOf(label.textContent!, 13 * SCALE) * Number(label.getAttribute('data-min-scale'))).toBeLessThanOrEqual(200 - 20 - 24);
     });
 });

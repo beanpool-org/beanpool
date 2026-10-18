@@ -50,7 +50,7 @@ A confirmed address travels with the take-over keys, so a standby that takes ove
 
 ![Node Identity and directory settings in Settings](images/appliance-identity.webp)
 
-By default your server tells the BeanPool directory about itself every 12 hours, and at once when an owner names or renames the community: the community's name and web address, the area it serves and how many members it has. That is how new people find you, and how the global community passes on requests to join. The directory is public: anyone can read it, and the map on beanpool.org shows it.
+By default your server tells the BeanPool directory about itself every 12 hours, and at once when an owner names or renames the community: the community's name and web address, the area it serves and how many members it has. It also says whether people can ask to join from the directory (requests to join are on, and inviting isn't for admins only), the day the community closes if an owner has set one, and the listing promise if the community keeps it (below). That is how new people find you, and how the global community passes on requests to join. The directory is public: anyone can read it, and the map on beanpool.org shows it.
 
 The contact email and phone are not sent unless you turn each on here: **Share Email in Directory** and **Share Phone in Directory**. Both are off until you do, even on a server that published them before, and until then your server's own public pages don't show them either. The area, the member count and the health report can each be switched off here. The name and web address are always sent. Setting **Update Schedule** to **Never (Disabled)** stops your server sending anything, but the directory keeps the last entry it received, as it was then, until BeanPool removes it: let one update go out first, so that entry holds no contacts. Your members' names and posts are never sent.
 
@@ -64,6 +64,12 @@ Your server sends the directory nothing while either of these is true. **Node Id
 While either is true, **Publish Now** says **Not listed**, and why. An entry the directory already holds is not removed: it stays as it was until your server sends a new one.
 
 To check the name your server sends, from anywhere, open https://YOUR-ADDRESS/api/directory/info. Its communityName must be your community's name: null means it has none yet.
+
+### The listing promise
+
+A listed community can promise four things to the people the directory sends it: it has two owners; its backups are locked with a recovery code and running (scheduled snapshots on, or an off-box destination set); reports are looked at within a week; and members get thirty days' notice before it closes. An owner makes the last two. Your server checks the first two itself every time it tells the directory, and leaves the promise out when either stops being true: when one owner is left, say, or snapshots are turned off and nothing goes off the box. The owners' diagnostics say why it was left out. What the directory gets is counts and yes-or-no only: how many owners, never who.
+
+Among communities at about the same distance from the person looking (in steps of 25 km), those that keep the promise and take requests to join are listed first, the rest after, each in a different order every time. The member count never decides the order. The promise never decides whether a community is listed or can run. In https://YOUR-ADDRESS/api/directory/info, promise is null until your community keeps it.
 
 ## Gateway
 

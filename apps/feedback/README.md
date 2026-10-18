@@ -15,6 +15,7 @@ file as GitHub Discussions, and a person decides.
 | `POST /api/feedback` | anyone, no account | Store a suggestion. Rate-limited. CORS open (no credentials). |
 | `GET /api/feedback/admin/items?status=new&limit=200` | `Authorization: Bearer $FEEDBACK_ADMIN_TOKEN` | List items with that status, oldest first (limit ≤ 500), plus `total`. |
 | `POST /api/feedback/admin/items/:id` | same bearer | `{ "status": "new"\|"spam"\|"triaged"\|"filed", "github_url"?, "note"? }` |
+| `GET/POST /reply/<token>` | anyone holding a reply link | The reply page for a notice from the address service (below). Plain HTML, no script. |
 
 Nothing else is readable. Admin routes send no CORS headers.
 
@@ -40,7 +41,25 @@ and counts nothing. Bodies over 16 KB are refused (`413`) before they are parsed
 Responses: `201 {ok:true}` · `400 {ok:false,error}` with a human-readable reason · `429` with a friendly
 message and `Retry-After` · `413`. The apps keep the member's text on any failure.
 
-## What is stored
+## Reply links (notices from the address service)
+
+The address service (apps/registrar) can send a community's server a notice — its name is set up, it was
+blocked by mistake, maintenance is coming — which the server shows its owners in Settings under Public
+address. A notice may carry a one-use link, `https://beanpool.org/reply/<token>`, so the operator can answer
+without giving an address (scratch/global-node/DESIGN-registrar-trust-fable.md §3.2).
+
+- `GET /reply/<token>` shows a form while the link works, and says only that it does not otherwise (used,
+  past its 14 days, or the name no longer that community's). The page names nothing: not the name, not the key.
+- `POST /reply/<token>` (the form: `text`, 10–2000 characters, and the hidden `website`) takes the link's one use
+  and files the reply as a feedback item: `source` `address-reply`, `kind` `other`, `community` the name the link
+  was made for, `note` `reply to notice #<id>`. Same per-connection limit as a suggestion, counted before the link
+  is used; the honeypot looks like success and uses nothing.
+- The link belongs to the registrar. This Worker checks it and takes its use through the registrar's
+  `ReplyTokens` entrypoint (a service binding, `REGISTRAR` in wrangler.toml; apps/registrar/src/worker.js), and
+  never reads the registrar's database. Without the binding the page says replies are not set up here.
+- The registrar tells Marty's phone a reply came (the name and the notice's number, never the words); the weekly
+  digest lists every reply under "Worth a look".
+
 
 In `feedback_items`, one row per suggestion: the text, kind, source, app version, platform, language,
 the community name **only if the member typed one** (the field starts empty), the time received, and a
@@ -86,13 +105,19 @@ npx wrangler d1 execute beanpool-feedback --remote --file schema.sql
 security add-generic-password -a "$USER" -s beanpool-feedback-admin -w "$(openssl rand -hex 32)"
 security find-generic-password -s beanpool-feedback-admin -w | npx wrangler secret put FEEDBACK_ADMIN_TOKEN
 
-# 3. Uncomment the [[routes]] block in wrangler.toml, then
+# 3. Deploy the registrar first (its ReplyTokens entrypoint: the [[services]] binding here needs it). Uncomment
+#    both [[routes]] blocks in wrangler.toml (/api/feedback* and /reply/*), then
 npx wrangler deploy
 
 # 4. Smoke test (expect 201, then 400 for the short one)
 curl -si https://beanpool.org/api/feedback -H 'content-type: application/json' \
   -d '{"text":"Smoke test from the deploy runbook — please mark spam","kind":"other","source":"web"}'
 curl -si https://beanpool.org/api/feedback -H 'content-type: application/json' -d '{"text":"short","source":"web"}'
+# A made-up reply link: expect 410 "This reply link does not work" (503 means the REGISTRAR binding is missing).
+curl -si https://beanpool.org/reply/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA | head -1
+
+# 5. Then, in apps/registrar/wrangler.toml, uncomment REPLY_URL = "https://beanpool.org/reply/" and deploy the
+#    registrar again: /admin offers reply links from then on.
 ```
 
 The route pattern is `beanpool.org/api/feedback*` (no slash before `*`) so it matches the public

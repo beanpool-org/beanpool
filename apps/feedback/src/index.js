@@ -2,6 +2,7 @@
 //   POST /api/feedback                     public, no account: "Suggest a change to BeanPool"
 //   GET  /api/feedback/admin/items          bearer FEEDBACK_ADMIN_TOKEN: list by status
 //   POST /api/feedback/admin/items/:id      bearer FEEDBACK_ADMIN_TOKEN: set status / github_url / note
+//   GET/POST /reply/<token>                public: an operator's reply to a notice from the address service (src/reply.js)
 //   scheduled (daily): delete yesterday's rate-limit salt and counters
 //
 // Every BeanPool app — including those on self-hosted nodes we never talk to — posts here, so the
@@ -10,6 +11,7 @@
 
 import { validateSubmission, validateStatusUpdate, STATUSES } from './validate.js';
 import { checkAndCount, purgeBefore, utcDay } from './ratelimit.js';
+import { handleReply, REPLY_PREFIX } from './reply.js';
 
 export const MAX_BODY_BYTES = 16 * 1024; // 2000 characters of 4-byte script is 8 KB; room for the rest
 const PUBLIC_PATH = '/api/feedback';
@@ -170,6 +172,7 @@ export default {
                 return json({ error: 'method not allowed' }, 405, { allow: 'POST, OPTIONS', ...corsHeaders(request, env) });
             }
             if (url.pathname.startsWith(ADMIN_PREFIX)) return await handleAdmin(request, env, url);
+            if (url.pathname.startsWith(REPLY_PREFIX)) return await handleReply(request, env, url.pathname, nowS());
             return json({ error: 'not found' }, 404);
         } catch {
             // Deliberately no detail and no logging: an exception message could carry request data.

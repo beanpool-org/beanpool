@@ -20,6 +20,7 @@
 
 import * as alerts from './alerts.js';
 import * as db from './db.js';
+import * as settings from './settings.js';
 import { verifyEd25519 } from './sign.js';
 
 // The watch's own cron entry (wrangler.toml [triggers]; the sweep keeps '*/5 * * * *'): 2 minutes after each sweep, in an
@@ -329,6 +330,11 @@ export async function dailyLine(env, targets, now) {
     const live = await db.countLive(env);
     const waiting = await db.countAwaitingApproval(env);
     lines.push(`${live} ${live === 1 ? 'name' : 'names'} live${waiting ? `, ${waiting} waiting for your approval` : ''}.`);
+    // "Hold all new names" (index.js claimGate) is said every day it is on: it lets go by itself after 24 h.
+    // A read that fails (D1 busy) says so, and the rest of the line still goes.
+    const s = await settings.read(env).catch((e) => { console.error('[DAILY_SETTINGS]', e.message || e); return null; });
+    if (!s) lines.push('Hold all new names: its setting could not be read just now; see /admin.');
+    else if (settings.holding(s, now)) lines.push(`Hold all new names is on, until ${when(s.hold_until)}: every new name waits for your approval.`);
     const raised = (await env.DB.prepare('SELECT key, detail FROM alert_state ORDER BY since').all()).results || [];
     lines.push(raised.length ? `Raised now (${raised.length}): ${raised.map((r) => r.detail).join(' | ')}` : 'Nothing raised.');
     // A message of its own; the held events it carries are those before its row, marked sent only once it is sent.

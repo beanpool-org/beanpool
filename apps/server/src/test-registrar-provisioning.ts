@@ -16,6 +16,9 @@
  *     it still busy (503). Another address held here, or the name already live: said, as before.
  *  5. The quiet tick: live with its token and nothing pending asks every 15 min, not every 5; anything else every tick.
  *  6. Settings says "Setting up" for 'provisioning', "Awaiting approval" only for a claim that awaits it.
+ *  7. Probation (registrar slice S3): a live answer with `probation: true` is stored and the directory push waits; the
+ *     first live answer without it lists the community at once (one push to a local registry fixture), not at the next
+ *     timed push 12 hours on.
  *
  * On origin/main 583a6cb0 sections 1–5 fail (the claim throws at 5 s; a provisioning answer is stored and the agent stops;
  * /holder's pending is only said; tickDue does not exist) and 6 shows "Awaiting approval".
@@ -312,6 +315,43 @@ async function main(): Promise<void> {
             const gated = shown({ status: 'pending', reason: 'awaiting-approval', name: 'sydney' });
             assert(/Awaiting approval/.test(gated) && !/Setting up/.test(gated), `awaiting-approval: "Awaiting approval" (${gated})`);
             assert(/Awaiting approval/.test(shown({ status: 'pending', name: 'old' })), 'a pending answer with no reason (an older registrar): as before');
+        });
+
+        await section('7. probation: the directory push waits while the registrar says probation, and goes once it ends', async () => {
+            await reset();
+            // A local directory registry: nothing here reaches the real one.
+            const pushes: any[] = [];
+            const dir = http.createServer((req, res) => {
+                let text = '';
+                req.on('data', (c) => { text += c; });
+                req.on('end', () => { pushes.push(JSON.parse(text)); res.writeHead(200, { 'Content-Type': 'application/json' }); res.end('{"status":"ok"}'); });
+            });
+            await new Promise<void>((r) => dir.listen(0, '127.0.0.1', () => r()));
+            process.env.DIRECTORY_REGISTRY_URL = `http://127.0.0.1:${(dir.address() as any).port}/v1/directory-register`;
+            try {
+                updateLocalConfig({ communityName: 'Probation Town' });
+                const { initDirectoryPublisher, directoryHeldBack } = await import('./services/directory-publisher.js');
+                const onProbation = { ...live('newtown', 'T-new'), probation: true };
+                updateNodeConfig({ publicAddress: onProbation } as any);
+                reg.status = () => onProbation;
+                assert(initDirectoryPublisher() === true, 'the publisher runs');
+                await reconcile();
+                assert(pa()?.probation === true && directoryHeldBack() === 'probation', `stored with probation: the directory waits (${JSON.stringify(pa())})`);
+                assert(pushes.length === 0, 'nothing pushed while on probation');
+                // The registrar verifies the name: its next answer says nothing of probation.
+                reg.status = () => live('newtown', 'T-new');
+                await reconcile();
+                assert(pa()?.status === 'live' && pa()?.probation === undefined && directoryHeldBack() === null, 'stored without probation: nothing holds it back');
+                assert(await until(() => pushes.length === 1), `listed at once (${pushes.length} pushes)`);
+                assert(pushes[0]?.callsign === 'Probation Town', 'the community, by its name');
+                // Later answers without it push nothing more (the timer's own pushes are 12 hours apart).
+                await reconcile();
+                await sleep(300);
+                assert(pushes.length === 1, 'pushed once');
+            } finally {
+                dir.close();
+                delete process.env.DIRECTORY_REGISTRY_URL;
+            }
         });
     } catch (e: any) {
         assert(false, `the suite ran to the end (${e?.stack || e})`);

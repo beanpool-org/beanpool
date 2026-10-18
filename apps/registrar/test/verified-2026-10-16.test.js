@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { ReadableStream } from 'node:stream/web';
 import { world, makeKey, liveName, nowS, toHex } from './harness.js';
-import worker from '../src/index.js';
+import worker, { attestSweep } from '../src/index.js';
 
 const sign = async (key, message) => toHex(await crypto.subtle.sign('Ed25519', key.keyPair.privateKey, new TextEncoder().encode(message)));
 async function signedPost(w, path, key, body) {
@@ -111,30 +111,49 @@ test('REG-03: a POST body over 64 KB is a 413, read no further; a normal one sti
     } finally { w.restore(); }
 });
 
-const budgetAlerts = (w) => w.sqlite.prepare("SELECT title, body, name FROM alert_outbox WHERE title LIKE 'New-name budget%' ORDER BY id").all();
+const budgetAlerts = (w) => w.sqlite.prepare("SELECT title, body, name FROM alert_outbox WHERE title LIKE 'New names held%' ORDER BY id").all();
+const heldRow = (w, n) => w.sqlite.prepare('SELECT status, held_reason, tunnel_id, dns_record_id FROM name_allocations WHERE name=?').get(n);
 
-test('REG-05: new auto names are budgeted per hour across all keys (20 by default), then 429 and one alert in counts', async () => {
+// Until S3 (scratch/global-node/DESIGN-registrar-trust-fable.md, D6 decided by Marty 2026-10-18: "bots creating lots could
+// lock out legit users") a claim past the budget was refused 429. Now no limit refuses: past it a new name is held for the
+// admin's approval, pending, and nothing is made at Cloudflare for it.
+test('REG-05: new auto names are budgeted per hour across all keys (20 by default), then held for approval with one alert in counts', async () => {
     const w = await world();
     try {
-        let live = 0, refused = 0;
+        let live = 0, held = 0;
+        const keys = [];
         for (let i = 0; i < 25; i++) {
-            const r = await w.claim(await makeKey(), { name: `spam-${i}` });
+            keys.push(await makeKey());
+            const r = await w.claim(keys[i], { name: `spam-${i}` });
+            assert.equal(r.status, 200, JSON.stringify(r.body));
             if (r.body.status === 'live') live++;
-            if (r.status === 429) { refused++; assert.ok(r.body.retry_after > 0); }
+            if (r.body.status === 'pending') { held++; assert.equal(r.body.note, 'awaiting approval'); }
         }
         assert.equal(live, 20);
-        assert.equal(refused, 5);
-        assert.equal([...w.cf.tunnels.values()].filter((t) => !t.deleted_at).length, 20);
-        assert.equal(await w.row('spam-24'), null);
+        assert.equal(held, 5);
+        assert.equal([...w.cf.tunnels.values()].filter((t) => !t.deleted_at).length, 20, 'nothing made for a held name');
+        assert.deepEqual({ ...heldRow(w, 'spam-24') }, { status: 'pending', held_reason: 'budget', tunnel_id: null, dns_record_id: null });
+        // Its node waits for an approval, as a gated claim's does.
+        const st = (await w.status(keys[24])).body;
+        assert.deepEqual([st.status, st.reason], ['pending', 'awaiting-approval']);
         // Told once for the hour, in counts: no name, no key.
         const told = budgetAlerts(w);
         assert.equal(told.length, 1, JSON.stringify(told));
         assert.equal(told[0].name, null);
-        assert.match(told[0].body, /20 new names in the last hour/);
+        assert.match(told[0].body, /20 new names across all nodes in the last hour/);
         assert.doesNotMatch(told[0].body, /spam-/);
-        // A gated claim makes nothing at Cloudflare: not budgeted.
+        // The sweep never finishes a held name as an orphan.
+        w.sqlite.prepare("UPDATE name_allocations SET requested_at = requested_at - 600 WHERE name = 'spam-24'").run();
+        await attestSweep(w.env);
+        assert.equal(heldRow(w, 'spam-24').status, 'pending');
+        // Nor one whose settings read fails (D1 overloaded): that is not a database without held_reason (review of #2132).
+        w.failSettingsRead();
+        await attestSweep(w.env);
+        assert.equal(heldRow(w, 'spam-24').status, 'pending');
+        // A gated claim makes nothing at Cloudflare: not budgeted, and waits as it always did.
         const g = await w.claim(await makeKey(), { name: 'sydney' });
         assert.equal(g.body.status, 'pending');
+        assert.equal(heldRow(w, 'sydney').held_reason, null);
         // A key's own name still heals over the budget.
         const own = await makeKey();
         w.sqlite.prepare('UPDATE name_allocations SET decided_at = decided_at - 7200').run();
@@ -142,6 +161,11 @@ test('REG-05: new auto names are budgeted per hour across all keys (20 by defaul
         w.sqlite.prepare("UPDATE name_allocations SET decided_at = strftime('%s','now')").run();
         assert.equal((await w.claim(own, { name: 'ownname' })).body.status, 'live');
         assert.equal((await w.heal(own, { name: 'ownname' })).body.status, 'live');
+        // The admin approves a held one: live, decided by the admin, held no more.
+        const ok = await w.admin('spam-24', 'approve');
+        assert.equal(ok.body.status, 'live', JSON.stringify(ok.body));
+        const row = await w.row('spam-24');
+        assert.deepEqual([row.held_reason, row.decided_by], [null, 'admin']);
     } finally { w.restore(); }
 });
 
@@ -150,20 +174,20 @@ test('REG-05: the daily ceiling holds when the hour has room; both are env-tunab
     try {
         const claim = async (n) => w.claim(await makeKey(), { name: n });
         for (const n of ['day-a', 'day-b', 'day-c']) assert.equal((await claim(n)).body.status, 'live');
-        assert.equal((await claim('day-d')).status, 429);   // the hour's 3
+        assert.equal((await claim('day-d')).body.status, 'pending');   // the hour's 3: held
+        assert.equal(heldRow(w, 'day-d').held_reason, 'budget');
         // Two hours on: the hour has room again, and the day has 2 left.
         w.sqlite.prepare('UPDATE name_allocations SET decided_at = decided_at - 7200').run();
-        assert.equal((await claim('day-d')).body.status, 'live');
         assert.equal((await claim('day-e')).body.status, 'live');
-        const r = await claim('day-f');
-        assert.equal(r.status, 429);
-        assert.match(r.body.error, /in the last 24 hours/);
+        assert.equal((await claim('day-f')).body.status, 'live');
+        assert.equal((await claim('day-g')).body.status, 'pending');
+        assert.equal(heldRow(w, 'day-g').held_reason, 'budget');
         const told = budgetAlerts(w);
         assert.equal(told.length, 2, JSON.stringify(told));
-        assert.match(told[1].body, /5 new names in the last 24 hours/);
+        assert.match(told[1].body, /5 new names across all nodes in the last 24 hours/);
         // A day on, all of it is free again.
         w.sqlite.prepare('UPDATE name_allocations SET decided_at = decided_at - 86400').run();
-        assert.equal((await claim('day-f')).body.status, 'live');
+        assert.equal((await claim('day-h')).body.status, 'live');
     } finally { w.restore(); }
 });
 

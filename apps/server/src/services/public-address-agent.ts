@@ -45,6 +45,7 @@ import { isIpLiteral, normalizeAddress, ownAddressProblem } from '../engine/host
 import { runAcmeTickSoon } from './acme/schedule.js';
 import { logger } from '../logger.js';
 import { persistAddressIfUnchanged, answersAboutAnotherName, healPausedAddress, noteUnansweredClaim, LOOPBACK_ORIGIN, withKeptTunnelToken, withLiveToken } from './tunnel-connector.js';
+import { addressVerified } from './directory-publisher.js';
 
 // Where it always lived; the take-over suites import it from here.
 export { withKeptTunnelToken };
@@ -251,11 +252,18 @@ export async function reconcile(): Promise<void> {
         if (st.status === 'pending') console.log(`[PublicAddr] ⏳ "${st.name || desiredName()}" ${provisioning ? 'is still being set up by the address service' : 'awaiting approval'}`);
         // Not stored: another write came meanwhile (it stands; the next tick asks again), or the answer names another
         // name than the one stored (an older registrar answers about the key's first name): never moved onto it.
+        // A new name the registrar routes but does not vouch for yet answers `probation: true` (the directory push waits:
+        // directory-publisher.ts holdBack); the first live answer without it, after one with it, lists the community.
+        const wasOnProbation = held?.status === 'live' && held.probation === true && held.name === st.name;
         const stored = persistAddressIfUnchanged(st, 'stored', since, nameAskedFor());
         if (!stored) return;
         await stored;
         if (provisioning) { await finishProvisioning(st); return; }
         if (st.name) requestDone(st.name);
+        if (wasOnProbation && st.status === 'live' && st.probation !== true) {
+            console.log(`[PublicAddr] ✅ "${st.name}" is verified by the address service: listed in the directory now`);
+            addressVerified();
+        }
         return;
     }
 

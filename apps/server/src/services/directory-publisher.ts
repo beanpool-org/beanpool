@@ -23,6 +23,8 @@ export const DEFAULT_COMMUNITY_NAME = 'BeanPool Community';
 export const HELD_BACK_NAME_MESSAGE = `Not listed in the directory yet: this community has no name of its own ("${DEFAULT_COMMUNITY_NAME}" is the default). Name it in Settings and it is listed at once.`;
 /** Why a server with DIRECTORY_UNLISTED set is held back. */
 export const HELD_BACK_UNLISTED_MESSAGE = 'Not listed in the directory: DIRECTORY_UNLISTED is set in this server\'s .env (our test and review nodes set it). Remove it and restart to be listed.';
+/** Why a community whose new beanpool.org address is still on the address service's probation is held back. */
+export const HELD_BACK_PROBATION_MESSAGE = 'Not listed in the directory yet: this server\'s beanpool.org address is new, and the address service checks a new address for a while before it is listed. It is listed by itself once that is done.';
 
 /**
  * Why a community that would otherwise publish is held back, or null:
@@ -30,10 +32,21 @@ export const HELD_BACK_UNLISTED_MESSAGE = 'Not listed in the directory: DIRECTOR
  *     admin's handle ("admin", "node-genesis" from the first-start wizard), never a community's name on a map.
  *   - `unlisted`: DIRECTORY_UNLISTED=1 (or true/yes/on) in the server's env. Our own test and review nodes set it in
  *     their .env on their servers (deploy.sh keeps each node's .env across deploys), so they are never a pin on the
- *     public map. Nothing else: a community is never held back for its address, hostname or callsign.
+ *     public map.
+ *   - `probation`: the address service (the beanpool.org registrar) answered this server's live name with
+ *     `probation: true` — a new name it routes but does not vouch for yet, until it has answered as this node for a while
+ *     (apps/registrar README, "New names"). It ends by itself, and the push goes at once (addressVerified). A server
+ *     with no registrar name, or its own domain, is never held back for it: a node never needs the registrar.
+ *   Nothing else: a community is never held back for its address, hostname or callsign.
  * Never silent: the owners' diagnostics carry it (directoryHeldBack) and their screens say what to change.
  */
-export type DirectoryHoldBack = 'unnamed' | 'unlisted';
+export type DirectoryHoldBack = 'unnamed' | 'unlisted' | 'probation';
+
+/** Is this server's registrar name live but still on the registrar's probation (its last answer said so)? */
+function onRegistrarProbation(): boolean {
+    const pa = (getNodeConfig() as any).publicAddress;
+    return pa?.status === 'live' && pa.probation === true;
+}
 
 export function isDefaultOrEmptyCommunityName(name: string | null | undefined): boolean {
     const clean = (name ?? '').trim();
@@ -57,10 +70,11 @@ function unrecognisedUnlistedValue(): string | null {
 function holdBack(): DirectoryHoldBack | null {
     if (directoryUnlistedByEnv()) return 'unlisted';
     if (isDefaultOrEmptyCommunityName(getLocalConfig().communityName)) return 'unnamed';
+    if (onRegistrarProbation()) return 'probation';
     return null;
 }
 
-const HELD_BACK_MESSAGES: Record<DirectoryHoldBack, string> = { unnamed: HELD_BACK_NAME_MESSAGE, unlisted: HELD_BACK_UNLISTED_MESSAGE };
+const HELD_BACK_MESSAGES: Record<DirectoryHoldBack, string> = { unnamed: HELD_BACK_NAME_MESSAGE, unlisted: HELD_BACK_UNLISTED_MESSAGE, probation: HELD_BACK_PROBATION_MESSAGE };
 
 /**
  * For the owners' screens (GET /api/local/admin/diagnostics `directoryHeldBack`: the manager's Directory Publishing and
@@ -138,6 +152,16 @@ export function initDirectoryPublisher(): boolean {
  * with the switch off, or with the interval at Never; nothing while it is held back.
  */
 export function communityNameSaved(): void {
+    if (!pushTimer || holdBack()) return;
+    safePush();
+}
+
+/**
+ * The registrar's probation of this server's name ended: its answer stored now says nothing of it (public-address-agent.ts
+ * reconcile). Listed at once, as a name saved is, rather than at the next timed push (12 hours by default). Only while the
+ * publisher runs, and nothing while anything else holds it back.
+ */
+export function addressVerified(): void {
     if (!pushTimer || holdBack()) return;
     safePush();
 }

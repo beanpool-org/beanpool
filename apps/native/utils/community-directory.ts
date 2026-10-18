@@ -21,7 +21,9 @@ import { communityOrigin } from './community-origin';
 import { signedDelete, signedPost } from './node-post';
 import { GLOBAL_NODE_URL } from './node-profile';
 import type { BeanPoolIdentity } from './identity';
-import { FIND_COMMUNITY_WORDS, PLACE_WATCH_LIMIT_CODE, communitiesNear, findCommunityState, knownCommunityCount, placeWatchLimitLine } from '@beanpool/core';
+import {
+    FIND_COMMUNITY_WORDS, PLACE_WATCH_LIMIT_CODE, communitiesNear, findCommunityState, formatCount, formatNumber, knownCommunityCount, placeWatchLimitLine, t, tn,
+} from '@beanpool/core';
 
 /** A community's address as the phone will use it (utils/community-origin.ts): kept there so Home's pure rules share it. */
 export { communityOrigin };
@@ -247,16 +249,17 @@ export async function unwatchPlace(identity: BeanPoolIdentity, id: string, base:
 // ── Showing it ──────────────────────────────────────────────────────────────────────────────────────────────
 
 export function communityLabel(c: Pick<DirectoryCommunity, 'name'>): string {
-    return c.name ?? 'A community';
+    return c.name ?? t('A community');
 }
+
+/** A distance of 1 km or more as the lines write it: "3.4", "12", "12,000" (one decimal under 10 km). */
+const kmText = (km: number) => (km < 10 ? formatNumber(km, 1) : formatCount(Math.round(km)));
 
 /** "12 km away · 40 members", whatever of that is known. */
 export function communityFacts(c: Pick<DirectoryCommunity, 'distanceKm' | 'memberCount'>): string {
     const parts: string[] = [];
-    if (c.distanceKm !== null) {
-        parts.push(c.distanceKm < 1 ? 'Less than 1 km away' : `${c.distanceKm < 10 ? c.distanceKm.toFixed(1) : Math.round(c.distanceKm).toLocaleString('en')} km away`);
-    }
-    if (c.memberCount !== null) parts.push(c.memberCount === 1 ? '1 member' : `${c.memberCount.toLocaleString('en')} members`);
+    if (c.distanceKm !== null) parts.push(c.distanceKm < 1 ? t('Less than 1 km away') : t('{distance} km away', { distance: kmText(c.distanceKm) }));
+    if (c.memberCount !== null) parts.push(tn(c.memberCount, '{n} member', '{n} members', { n: formatCount(c.memberCount) }));
     return parts.join(' · ');
 }
 
@@ -264,7 +267,8 @@ export function communityFacts(c: Pick<DirectoryCommunity, 'distanceKm' | 'membe
 export function nearbyPostsLine(home: Pick<GlobalHome, 'nearbyPosts'>): string | null {
     if (!home.nearbyPosts) return null;
     const { count, more, radiusKm } = home.nearbyPosts;
-    return `${count.toLocaleString('en')}${more ? '+' : ''} ${count === 1 && !more ? 'listing' : 'listings'} within ${radiusKm} km of you`;
+    const values = { n: formatCount(count), km: radiusKm };
+    return more ? t('{n}+ listings within {km} km of you', values) : tn(count, '{n} listing within {km} km of you', '{n} listings within {km} km of you', values);
 }
 
 /**
@@ -274,32 +278,50 @@ export function nearbyPostsLine(home: Pick<GlobalHome, 'nearbyPosts'>): string |
  * one starts here) carry the actions, so the sentence names none.
  */
 export function findCommunityCardCopy(home: Fetched<GlobalHome> | null, hasPoint: boolean): { title: string; body: string } {
-    const title = FIND_COMMUNITY_WORDS.title;
-    if (!home) return { title, body: 'Looking for communities near you…' };
+    const title = t(FIND_COMMUNITY_WORDS.title);
+    if (!home) return { title, body: t('Looking for communities near you…') };
     if (!home.ok) return { title, body: home.message };
     const { communities } = home.value;
     switch (findCommunityState(home.value)) {
         case 'near': {
             const nearest = communities[0];
-            const where = communityFacts({ distanceKm: nearest.distanceKm, memberCount: null }).toLowerCase() || 'near you';
+            const name = communityLabel(nearest);
+            const km = nearest.distanceKm;
             // "More nearby" counts only those within 250 km: never one 12,000 km away.
-            const near = communitiesNear(communities);
-            const more = near.length > 1 ? `, and ${near.length - 1} more nearby` : '';
-            return { title, body: `${communityLabel(nearest)} is ${where}${more}. Ask to join, and trade with your neighbours there.` };
+            const more = communitiesNear(communities).length - 1;
+            return { title, body: nearSentence(name, km, more) };
         }
         case 'far': {
             const nearest = communities.find(c => c.distanceKm !== null) ?? communities[0];
             const where = communityFacts({ distanceKm: nearest.distanceKm, memberCount: null });
-            return { title, body: `${FIND_COMMUNITY_WORDS.noneNear} The nearest listed is ${communityLabel(nearest)}, ${where}.` };
+            return { title, body: t('{none} The nearest listed is {name}, {where}.', { none: t(FIND_COMMUNITY_WORDS.noneNear), name: communityLabel(nearest), where }) };
         }
         case 'none':
-            return { title, body: FIND_COMMUNITY_WORDS.noneNear };
+            return { title, body: t(FIND_COMMUNITY_WORDS.noneNear) };
         case 'not_loaded':
-            return { title, body: FIND_COMMUNITY_WORDS.notLoaded };
+            return { title, body: t(FIND_COMMUNITY_WORDS.notLoaded) };
         case 'no_point': {
             const n = home.value.communityCount;
-            const see = hasPoint ? 'Tap Communities near you to see the nearest.' : 'Use your location, or type your town, to see the nearest.';
-            return { title, body: n === null ? see : `${n.toLocaleString('en')} communit${n === 1 ? 'y is' : 'ies are'} listed. ${see}` };
+            const see = hasPoint ? t('Tap Communities near you to see the nearest.') : t('Use your location, or type your town, to see the nearest.');
+            return { title, body: n === null ? see : tn(n, '{n} community is listed. {see}', '{n} communities are listed. {see}', { n: formatCount(n), see }) };
         }
     }
+}
+
+/** The near card's sentence: where the nearest is (its distance, or near you), and how many more are near. */
+function nearSentence(name: string, km: number | null, more: number): string {
+    if (km === null) {
+        return more > 0
+            ? tn(more, '{name} is near you, and {n} more nearby. Ask to join, and trade with your neighbours there.', '{name} is near you, and {n} more nearby. Ask to join, and trade with your neighbours there.', { name })
+            : t('{name} is near you. Ask to join, and trade with your neighbours there.', { name });
+    }
+    if (km < 1) {
+        return more > 0
+            ? tn(more, '{name} is less than 1 km away, and {n} more nearby. Ask to join, and trade with your neighbours there.', '{name} is less than 1 km away, and {n} more nearby. Ask to join, and trade with your neighbours there.', { name })
+            : t('{name} is less than 1 km away. Ask to join, and trade with your neighbours there.', { name });
+    }
+    const distance = kmText(km);
+    return more > 0
+        ? tn(more, '{name} is {distance} km away, and {n} more nearby. Ask to join, and trade with your neighbours there.', '{name} is {distance} km away, and {n} more nearby. Ask to join, and trade with your neighbours there.', { name, distance })
+        : t('{name} is {distance} km away. Ask to join, and trade with your neighbours there.', { name, distance });
 }

@@ -704,7 +704,7 @@ describe('the screens are wired to what is tested above (the screens can\'t rend
         // community's included since H4 moved that card from the Market to Home). The Market draws neither card now, so
         // its button has nothing to step aside for.
         const home = src('app/(tabs)/index.tsx');
-        expect(home).toMatch(/\{!fabAside && \(\s*<Pressable accessibilityRole="button" accessibilityLabel="Add a post" style=\{\[st\.fab/);
+        expect(home).toMatch(/\{!fabAside && \(\s*<Pressable accessibilityRole="button" accessibilityLabel=\{t\('Add a post'\)\} style=\{\[st\.fab/);
         expect(home).toMatch(/onActionsAt=\{at => band\.report\('safety:actions', at\)\}/);
         expect(src('components/home/FindCommunityBody.tsx')).toMatch(/<FabAware id="find:actions"/);
         const market = src('app/(tabs)/market.tsx');

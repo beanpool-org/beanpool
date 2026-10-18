@@ -17,6 +17,7 @@
  */
 import { PRICING_CATEGORIES } from './pricing-catalog.js';
 import { readSkySettings } from './sky.js';
+import { word, type WordKey } from './words.js';
 
 // ── The shape ─────────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -93,20 +94,20 @@ export type HomeReaderRole = 'owner' | 'admin' | 'moderator' | null | undefined;
 
 /** The picker's groups, in their order: For you · Around you · Getting started. */
 export type HomeCardGroup = 'you' | 'around' | 'start';
-export const HOME_CARD_GROUPS: readonly { id: HomeCardGroup; name: string }[] = [
-    { id: 'you', name: 'For you' },
-    { id: 'around', name: 'Around you' },
-    { id: 'start', name: 'Getting started' },
+export const HOME_CARD_GROUPS: readonly { id: HomeCardGroup; name: WordKey }[] = [
+    { id: 'you', name: word('For you') },
+    { id: 'around', name: word('Around you') },
+    { id: 'start', name: word('Getting started') },
 ];
 
 export interface HomeCardType {
     id: string;
-    /** Its caption, its row in the picker and Edit home. Fixed words, never member text. */
-    name: string;
+    /** Its caption, its row in the picker and Edit home. Fixed words, never member text: shown through t(). */
+    name: WordKey;
     /** On the worldwide community, where it says something else ("Near you"). */
-    globalName?: string;
+    globalName?: WordKey;
     /** One line of what it shows, in the picker. */
-    line: string;
+    line: WordKey;
     group: HomeCardGroup;
     /** Absent: one of a kind (its id is its type). Present: up to `max` instances. */
     multiple?: { max: number };
@@ -162,44 +163,44 @@ const notGlobal = (a: HomeNodeFacts) => a.profile !== 'global';
  * apps read a node's features; the worldwide community has no Beans, deals, enterprise, Decide or invites (§1.2).
  */
 export const HOME_CARD_TYPES: readonly HomeCardType[] = [
-    { id: 'needs', name: 'Needs you', line: 'Things waiting on you, first.', group: 'you', fixed: true, asks: 'node', onNode: everywhere },
+    { id: 'needs', name: word('Needs you'), line: word('Things waiting on you, first.'), group: 'you', fixed: true, asks: 'node', onNode: everywhere },
     {
-        id: 'safety', name: 'Your way back in', line: 'A reminder to keep your 12 words safe.', group: 'start', asks: 'node',
+        id: 'safety', name: word('Your way back in'), line: word('A reminder to keep your 12 words safe.'), group: 'start', asks: 'node',
         onNode: (a) => a.features.wordsDoor !== false || !!a.cards?.safety,
     },
-    { id: 'find', name: 'Find your community', line: 'Communities near you, to join.', group: 'start', asks: 'node', onNode: (a) => a.profile === 'global' },
+    { id: 'find', name: word('Find your community'), line: word('Communities near you, to join.'), group: 'start', asks: 'node', onNode: (a) => a.profile === 'global' },
     // A newcomer's Home until the tour ends (tour.ts): drawn by the apps while the account's `tour` says neither done nor skipped.
-    { id: 'start', name: 'Getting started', line: 'A one-minute look at the other tabs.', group: 'start', asks: 'none', onNode: everywhere },
-    { id: 'steps', name: 'First steps', line: 'Things to do in your first weeks.', group: 'start', asks: 'node', onNode: everywhere },
-    { id: 'tips', name: 'Tips', line: 'One tip at a time on how things work.', group: 'start', asks: 'none', onNode: everywhere },
-    { id: 'interests', name: 'What are you into?', line: 'Star what you like to see it first.', group: 'start', asks: 'none', onNode: everywhere },
-    { id: 'deals', name: 'Your deals', line: 'Open deals and ones waiting on you.', group: 'you', asks: 'node', onNode: (a) => notGlobal(a) && a.features.escrow !== false },
+    { id: 'start', name: word('Getting started'), line: word('A one-minute look at the other tabs.'), group: 'start', asks: 'none', onNode: everywhere },
+    { id: 'steps', name: word('First steps'), line: word('Things to do in your first weeks.'), group: 'start', asks: 'node', onNode: everywhere },
+    { id: 'tips', name: word('Tips'), line: word('One tip at a time on how things work.'), group: 'start', asks: 'none', onNode: everywhere },
+    { id: 'interests', name: word('What are you into?'), line: word('Star what you like to see it first.'), group: 'start', asks: 'none', onNode: everywhere },
+    { id: 'deals', name: word('Your deals'), line: word('Open deals and ones waiting on you.'), group: 'you', asks: 'node', onNode: (a) => notGlobal(a) && a.features.escrow !== false },
     {
-        id: 'enterprise', name: 'Your enterprise', line: 'Requests for the enterprise you keep.', group: 'you', asks: 'node',
+        id: 'enterprise', name: word('Your enterprise'), line: word('Requests for the enterprise you keep.'), group: 'you', asks: 'node',
         onNode: (a) => notGlobal(a) && a.features.enterprises !== false,
     },
-    { id: 'events', name: 'Coming up', line: 'Events coming up soon.', group: 'around', asks: 'node', onNode: everywhere },
-    { id: 'market', name: 'New in the Market', globalName: 'Near you', line: 'The newest listings near you.', group: 'around', asks: 'node', onNode: everywhere },
+    { id: 'events', name: word('Coming up'), line: word('Events coming up soon.'), group: 'around', asks: 'node', onNode: everywhere },
+    { id: 'market', name: word('New in the Market'), globalName: word('Near you'), line: word('The newest listings near you.'), group: 'around', asks: 'node', onNode: everywhere },
     {
-        id: 'search', name: 'A saved search', line: 'Listings that match words you choose, near you.', group: 'around',
+        id: 'search', name: word('A saved search'), line: word('Listings that match words you choose, near you.'), group: 'around',
         multiple: { max: 5 }, asks: 'node', onNode: everywhere, readSettings: readSearchSettings,
     },
-    { id: 'decide', name: 'Decide', line: 'Open Decisions and polls.', group: 'you', asks: 'node', onNode: (a) => notGlobal(a) && a.features.decisions !== false },
-    { id: 'groups', name: 'Your groups', line: "What's new in your groups.", group: 'you', asks: 'node', onNode: everywhere },
-    { id: 'joined', name: 'Who joined', line: 'People who joined this week.', group: 'around', asks: 'node', onNode: everywhere },
-    { id: 'pulse', name: 'The Pulse', line: 'Links your neighbours shared.', group: 'around', asks: 'node', onNode: everywhere },
+    { id: 'decide', name: word('Decide'), line: word('Open Decisions and polls.'), group: 'you', asks: 'node', onNode: (a) => notGlobal(a) && a.features.decisions !== false },
+    { id: 'groups', name: word('Your groups'), line: word("What's new in your groups."), group: 'you', asks: 'node', onNode: everywhere },
+    { id: 'joined', name: word('Who joined'), line: word('People who joined this week.'), group: 'around', asks: 'node', onNode: everywhere },
+    { id: 'pulse', name: word('The Pulse'), line: word('Links your neighbours shared.'), group: 'around', asks: 'node', onNode: everywhere },
     // Worked out on the device (sky.ts) from the community's place or the member's, which every node can have: never asked.
     {
-        id: 'sky', name: 'Sun and moon', line: 'Sunrise, sunset and the moon tonight.', group: 'around', asks: 'none', onNode: everywhere,
+        id: 'sky', name: word('Sun and moon'), line: word('Sunrise, sunset and the moon tonight.'), group: 'around', asks: 'none', onNode: everywhere,
         readSettings: readSkySettings,
     },
-    { id: 'beans', name: 'Your Beans', line: 'Your balance and room to spend.', group: 'you', asks: 'node', onNode: (a) => notGlobal(a) && a.features.beans !== false },
-    { id: 'notices', name: 'From your community', line: "Notices from your community's admins.", group: 'you', asks: 'node', onNode: everywhere },
+    { id: 'beans', name: word('Your Beans'), line: word('Your balance and room to spend.'), group: 'you', asks: 'node', onNode: (a) => notGlobal(a) && a.features.beans !== false },
+    { id: 'notices', name: word('From your community'), line: word("Notices from your community's admins."), group: 'you', asks: 'node', onNode: everywhere },
     {
-        id: 'invite', name: 'Grow your community', line: 'Ways to invite people you know.', group: 'start', asks: 'none',
+        id: 'invite', name: word('Grow your community'), line: word('Ways to invite people you know.'), group: 'start', asks: 'none',
         onNode: (a, role) => notGlobal(a) && homeInvitesForReader(a.features, role),
     },
-    { id: 'community', name: 'Your community', line: 'Your community at a glance.', group: 'you', fixed: true, asks: 'node', onNode: everywhere },
+    { id: 'community', name: word('Your community'), line: word('Your community at a glance.'), group: 'you', fixed: true, asks: 'node', onNode: everywhere },
 ];
 
 const TYPES: ReadonlyMap<string, HomeCardType> = new Map(HOME_CARD_TYPES.map((t) => [t.id, t]));

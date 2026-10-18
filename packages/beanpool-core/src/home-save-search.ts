@@ -12,6 +12,7 @@ import {
     HOME_FRAME_LIMITS, HOME_SEARCH_KMS, homeCardType, readSearchSettings,
     type HomeLayoutV2, type HomeSearchKind, type HomeSearchSettings,
 } from './home-frame.js';
+import { t, tn, word } from './words.js';
 
 /** The Market's search as each app holds it: the words typed, the Offers/Needs tab, a category chip, a distance. */
 export interface MarketSearchNow {
@@ -78,15 +79,17 @@ export const saveSearchLabel = (q: string): string => `Save the search "${q.trim
  * Home's line when it can't keep a search yet: the community hasn't answered (offline with nothing kept, a server older
  * than Home), so there is no list of the member's to add it to. Nothing is lost: the Market still has the search.
  */
-export const SAVE_SEARCH_NOT_NOW = "Home can't keep this search until your community answers. Try again from the Market in a moment.";
+export const SAVE_SEARCH_NOT_NOW = word("Home can't keep this search until your community answers. Try again from the Market in a moment.");
 
 /** Home's plain line when the search can't be added, said where the member lands. Null for `add`. */
 export function saveSearchLine(state: SaveSearchState, q: string): string | null {
-    const words = `"${q.trim()}"`;
+    const words = q.trim();
     switch (state) {
-        case 'on-home': return `${words} is on your Home already.`;
-        case 'type-full': return `Home holds ${homeCardType('search')?.multiple?.max ?? 5} saved searches. Remove one, then save ${words} again.`;
-        case 'home-full': return `Home holds ${HOME_FRAME_LIMITS.cards} cards. Remove one, then save ${words} again.`;
+        case 'on-home': return t('"{words}" is on your Home already.', { words });
+        case 'type-full': return tn(homeCardType('search')?.multiple?.max ?? 5,
+            'Home holds {n} saved search. Remove it, then save "{words}" again.', 'Home holds {n} saved searches. Remove one, then save "{words}" again.', { words });
+        case 'home-full': return tn(HOME_FRAME_LIMITS.cards,
+            'Home holds {n} card. Remove it, then save "{words}" again.', 'Home holds {n} cards. Remove one, then save "{words}" again.', { words });
         default: return null;
     }
 }

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { TIPS_ALL_SEEN } from '@beanpool/core';
+import { TIPS_ALL_SEEN, t, word } from '@beanpool/core';
 import { View, Text, Pressable, Modal, ScrollView, StyleSheet } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -13,7 +13,10 @@ import { HOME_TARGET_DP } from './HomeParts';
 import { HomeCardMenu } from './HomeCardMenu';
 
 /** Edit home's note (CARD-FRAME §1.3). */
-export const EDIT_HOME_NOTE = "Needs you stays at the top, and your community's card at the bottom.";
+export const EDIT_HOME_NOTE = word("Needs you stays at the top, and your community's card at the bottom.");
+
+/** Lines kept as word() here, in utils/home-cards.ts and in core, shown in the member's language. */
+const LINES = { note: EDIT_HOME_NOTE, notOnAccount: NOT_ON_ACCOUNT_LINE, skyNoPlace: SKY_NO_PLACE_LINE, tipsAllSeen: TIPS_ALL_SEEN };
 
 /**
  * Edit home (CARD-FRAME §1.3): ＋ Add a card first, then the cards on Home in the member's order, each with ↑ ↓ and the
@@ -72,14 +75,14 @@ export function EditHomeSheet({
             <View key={c.id} style={[editHomeStyles.row, { borderBottomColor: colors.border.default }]} testID={`edit-home-${c.id}`}>
                 <View style={editHomeStyles.rowText}>
                     <Text style={[editHomeStyles.name, { color: colors.text.heading }]} numberOfLines={2}>{name(c)}</Text>
-                    {idle && <Text style={[editHomeStyles.sub, { color: colors.text.secondary }]}>{c.type === 'tips' && tipsAllSeen ? TIPS_ALL_SEEN : c.type === 'sky' ? SKY_NO_PLACE_LINE : 'Nothing to show now'}</Text>}
+                    {idle && <Text style={[editHomeStyles.sub, { color: colors.text.secondary }]}>{c.type === 'tips' && tipsAllSeen ? t(LINES.tipsAllSeen) : c.type === 'sky' ? t(LINES.skyNoPlace) : t('Nothing to show now')}</Text>}
                 </View>
                 <Pressable
                     disabled={!canUp}
                     onPress={() => move(c, 'up')}
                     style={editHomeStyles.arrow}
                     accessibilityRole="button"
-                    accessibilityLabel={`Move ${said(c)} up`}
+                    accessibilityLabel={t('Move {card} up', { card: said(c) })}
                     accessibilityState={{ disabled: !canUp }}
                     testID={`edit-home-${c.id}-up`}
                 >
@@ -90,7 +93,7 @@ export function EditHomeSheet({
                     onPress={() => move(c, 'down')}
                     style={editHomeStyles.arrow}
                     accessibilityRole="button"
-                    accessibilityLabel={`Move ${said(c)} down`}
+                    accessibilityLabel={t('Move {card} down', { card: said(c) })}
                     accessibilityState={{ disabled: !canDown }}
                     testID={`edit-home-${c.id}-down`}
                 >
@@ -100,7 +103,7 @@ export function EditHomeSheet({
                     onPress={() => setMenuFor(c)}
                     style={editHomeStyles.arrow}
                     accessibilityRole="button"
-                    accessibilityLabel={`Card options for ${said(c)}`}
+                    accessibilityLabel={t('Card options for {card}', { card: said(c) })}
                     testID={`edit-home-${c.id}-menu`}
                 >
                     <MaterialCommunityIcons name="dots-horizontal" size={24} color={colors.text.body} />
@@ -115,37 +118,38 @@ export function EditHomeSheet({
             <View style={editHomeStyles.backdrop}>
                 <View style={[editHomeStyles.sheet, { backgroundColor: colors.surface.card, paddingBottom: 12 + insets.bottom, marginTop: insets.top + 24 }]}>
                     <View style={editHomeStyles.head}>
-                        <Text style={[editHomeStyles.title, { color: colors.text.heading }]} accessibilityRole="header">Edit home</Text>
-                        <Pressable onPress={onClose} style={editHomeStyles.done} accessibilityRole="button" accessibilityLabel="Done editing Home" testID="edit-home-done">
-                            <Text style={[editHomeStyles.doneText, { color: colors.text.link }]}>Done</Text>
+                        <Text style={[editHomeStyles.title, { color: colors.text.heading }]} accessibilityRole="header">{t('Edit home')}</Text>
+                        <Pressable onPress={onClose} style={editHomeStyles.done} accessibilityRole="button" accessibilityLabel={t('Done editing Home')} testID="edit-home-done">
+                            <Text style={[editHomeStyles.doneText, { color: colors.text.link }]}>{t('Done')}</Text>
                         </Pressable>
                     </View>
                     <ScrollView contentContainerStyle={editHomeStyles.list}>
                         <Text style={[editHomeStyles.note, { color: colors.text.secondary }]}>
-                            {EDIT_HOME_NOTE}
-                            {findPinnedHere ? ' Find your community stays near the top for your first 30 days.' : ''}
+                            {findPinnedHere
+                                ? t("Needs you stays at the top, and your community's card at the bottom. Find your community stays near the top for your first 30 days.")
+                                : t(LINES.note)}
                         </Text>
                         {notOnAccount && (
-                            <Text style={[editHomeStyles.note, { color: colors.text.body }]} testID="edit-home-not-on-account">{NOT_ON_ACCOUNT_LINE}</Text>
+                            <Text style={[editHomeStyles.note, { color: colors.text.body }]} testID="edit-home-not-on-account">{t(LINES.notOnAccount)}</Text>
                         )}
                         <Pressable
                             onPress={onAdd}
                             style={[editHomeStyles.addRow, { backgroundColor: colors.brand.fill }]}
                             accessibilityRole="button"
-                            accessibilityLabel="Add a card to Home"
+                            accessibilityLabel={t('Add a card to Home')}
                             testID="edit-home-add"
                         >
-                            <Text style={[editHomeStyles.addText, { color: colors.text.inverse }]}>＋ Add a card</Text>
+                            <Text style={[editHomeStyles.addText, { color: colors.text.inverse }]}>{t('＋ Add a card')}</Text>
                         </Pressable>
                         {listed.map(row)}
                         <Pressable
                             onPress={() => { onReset?.(); onChange(resetLayout(layout, Date.now())); }}
                             style={[editHomeStyles.reset, { borderColor: colors.border.strong }]}
                             accessibilityRole="button"
-                            accessibilityLabel="Reset Home to its default cards and order"
+                            accessibilityLabel={t('Reset Home to its default cards and order')}
                             testID="edit-home-reset"
                         >
-                            <Text style={[editHomeStyles.resetText, { color: colors.text.body }]}>Reset to defaults</Text>
+                            <Text style={[editHomeStyles.resetText, { color: colors.text.body }]}>{t('Reset to defaults')}</Text>
                         </Pressable>
                     </ScrollView>
                 </View>

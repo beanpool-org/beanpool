@@ -15,7 +15,7 @@
  *   real control: the Start a community screen), and "Tell me when one starts here" (a place watch) on both.
  */
 
-import { tn } from './words.js';
+import { tn, word } from './words.js';
 
 /** "Near you", in km: see the header. */
 export const NEAR_COMMUNITY_KM = 250;
@@ -73,17 +73,17 @@ export function findCommunityState(f: FindCommunityFacts): FindCommunityState {
     return 'none';
 }
 
-/** The words both apps share. */
+/** The words both apps share: each is a word() key, shown through t() (farLead translates itself). */
 export const FIND_COMMUNITY_WORDS = {
-    title: 'Find your community',
+    title: word('Find your community'),
     /** `not_loaded` (M3): what is true, and nothing about none. */
-    notLoaded: "The list of communities isn't available right now. Try again soon.",
+    notLoaded: word("The list of communities isn't available right now. Try again soon."),
     /** `none`, and the start of `far`: the one "none" sentence. */
-    noneNear: 'No community near you yet.',
+    noneNear: word('No community near you yet.'),
     /** `far`, after noneNear, over the list (each line says its distance). */
-    farLead: (n: number) => (n === 1 ? 'The nearest listed is far from here:' : 'The nearest listed are far from here:'),
+    farLead: (n: number) => tn(n, 'The nearest listed is far from here:', 'The nearest listed are far from here:'),
     /** The control beside `none` and `far`: it opens the Start a community screen. */
-    start: 'Start a community',
+    start: word('Start a community'),
 } as const;
 
 /** The node's code when a member already watches as many places as it allows (409, with its `limit`). */

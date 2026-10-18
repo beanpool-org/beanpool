@@ -26,6 +26,7 @@ import {
     homeCardType, readHomeLayout as frameReadHomeLayout, readSearchSettings, readSkySettings, removeCard as frameRemoveCard, skyPlaceFor,
     skyToday, formatDate, type HomeAddRefusal, type HomeCardGroup, type HomeCardInstance, type HomeLayoutV2, type HomeSearchKind, type SkySettings,
     type SkyToday, featureModeFor, isNearKm, readTourRecord, starterCards, t, tourEnded, type TourRecord, repeatCaption, type RepeatPattern,
+    currentLanguage, formatCount, formatNumber, tn, word, type WordKey,
 } from '@beanpool/core';
 import { communityOrigin } from './community-origin';
 import { eventHomeWhen } from './events';
@@ -68,9 +69,9 @@ const DAY_MS = 86_400_000;
 
 /** A type's name: its caption, its row in the picker and Edit home, and the screen reader's words for its menu. */
 export function cardName(type: HomeCardId, profile?: string): string {
-    const t = homeCardType(type);
-    if (!t) return type;
-    return profile === 'global' && t.globalName ? t.globalName : t.name;
+    const entry = homeCardType(type);
+    if (!entry) return type;
+    return profile === 'global' && entry.globalName ? t(entry.globalName) : t(entry.name);
 }
 
 /** The most of a saved search's words its screen-reader name carries; longer ones end in "…". */
@@ -86,7 +87,7 @@ export function cardLabelName(c: Pick<HomeCardInstance, 'type' | 'settings'>, pr
     const words = searchWords(c);
     if (!words) return cardName(c.type, profile);
     const kind = searchKindWord(c);
-    return kind ? `"${words}" (${kind})` : `"${words}"`;
+    return kind ? t('"{words}" ({kind})', { words, kind }) : t('"{words}"', { words });
 }
 
 /** A saved search's words, bounded (CARD_WORDS_MAX, then "…"); null for any other card or a search with none. */
@@ -99,7 +100,7 @@ function searchWords(c: Pick<HomeCardInstance, 'type' | 'settings'>): string | n
 /** A saved search's kind as its names say it: "Offers" or "Needs" (the sheet's chips), nothing for Both. */
 function searchKindWord(c: Pick<HomeCardInstance, 'type' | 'settings'>): string | null {
     const kind = readSearchSettings(c.settings).kind;
-    return kind === 'offer' ? 'Offers' : kind === 'need' ? 'Needs' : null;
+    return kind === 'offer' ? t('Offers') : kind === 'need' ? t('Needs') : null;
 }
 
 /**
@@ -111,7 +112,7 @@ export function cardRowName(c: Pick<HomeCardInstance, 'type' | 'settings'>, prof
     if (!words) return cardName(c.type, profile);
     const kind = searchKindWord(c);
     // The kind leads, so a long search's row cut at two lines (320dp × 1.3) still shows it (#1716 confirmation, finding 4).
-    return kind ? `${kind} · ${words}` : words;
+    return kind ? t('{kind} · {words}', { kind, words }) : words;
 }
 
 // ── The answer, as GET /api/home sends it (apps/server routes/home-answer.ts HomeAnswer) ────────────────────────────
@@ -485,15 +486,16 @@ export function fewerCardsNews(account: HomeLayout | null, phone: HomeLayout | n
     return Number.isFinite(joined) && now - joined > 7 * DAY_MS;
 }
 
-export const FEWER_CARDS_LINE = 'Home now starts with fewer cards. Add a card brings the rest back.';
+// Lines kept here and shown through t() where they are drawn (app/(tabs)/index.tsx, components/home).
+export const FEWER_CARDS_LINE = word('Home now starts with fewer cards. Add a card brings the rest back.');
 /** The one-time hint (§1.3). */
-export const HOME_HINT_LINE = 'This is your Home. Add a card at the bottom, or tap … on a card to move or remove it.';
+export const HOME_HINT_LINE = word('This is your Home. Add a card at the bottom, or tap … on a card to move or remove it.');
 /** A saved search's kinds, as its settings sheet offers them (CARD-FRAME §4). */
-export const SEARCH_KIND_CHIPS: ReadonlyArray<{ kind: HomeSearchKind; label: string }> = [
-    { kind: 'any', label: 'Both' }, { kind: 'offer', label: 'Offers' }, { kind: 'need', label: 'Needs' },
+export const SEARCH_KIND_CHIPS: ReadonlyArray<{ kind: HomeSearchKind; label: WordKey }> = [
+    { kind: 'any', label: word('Both') }, { kind: 'offer', label: word('Offers') }, { kind: 'need', label: word('Needs') },
 ];
 /** A saved search's body before the node has answered for these words: added or changed offline (CARD-FRAME §2.4). */
-export const SEARCH_OFFLINE_LINE = 'Shows when your community answers';
+export const SEARCH_OFFLINE_LINE = word('Shows when your community answers');
 
 /** A saved search as the node builds it (apps/server routes/home-answer.ts `searchCard`), keyed by its instance id. */
 export interface HomeSearchCard { q: string; kind: 'offer' | 'need' | 'any'; category: string | null; km: number | null; items: HomeMarketItem[]; more: boolean }
@@ -514,28 +516,28 @@ export function searchCardFor(answer: HomeAnswer | null | undefined, inst: Pick<
     return card;
 }
 
-/** "within 5 km", or nothing where the node had no point (it ignored the distance). */
-const within = (km: number | null): string => (km ? `within ${km} km` : '');
-
 /** The card's first line: the words and the distance ("eggs · within 5 km"); just the words with no point. */
 export function searchFirstLine(q: string, km: number | null): string {
-    return [q.trim().replace(/\s+/g, ' ') || 'Every listing', within(km)].filter(Boolean).join(' · ');
+    const words = q.trim().replace(/\s+/g, ' ') || t('Every listing');
+    // "within 5 km", or nothing where the node had no point (it ignored the distance).
+    return km ? t('{words} · within {km} km', { words, km }) : words;
 }
 
 /** A search that finds nothing says so in its own words: "No eggs within 5 km right now". */
 export function searchEmptyLine(q: string, km: number | null): string {
     const words = q.trim().replace(/\s+/g, ' ');
-    return ['No', words || 'listings', within(km), 'right now'].filter(Boolean).join(' ');
+    if (words) return km ? t('No {words} within {km} km right now', { words, km }) : t('No {words} right now', { words });
+    return km ? t('No listings within {km} km right now', { km }) : t('No listings right now');
 }
 /** Edit home's line while a node before the frame can't keep the member's cards (§2.3). */
-export const NOT_ON_ACCOUNT_LINE = "Your community's server needs an update before your cards follow you to other devices.";
+export const NOT_ON_ACCOUNT_LINE = word("Your community's server needs an update before your cards follow you to other devices.");
 
 /** Whose place the sun and moon card shows, as its settings sheet offers it (CARD-FRAME §4). */
-export const SKY_PLACE_CHIPS: ReadonlyArray<{ place: SkySettings['place']; label: string }> = [
-    { place: 'community', label: 'Your community' }, { place: 'me', label: 'Your area' },
+export const SKY_PLACE_CHIPS: ReadonlyArray<{ place: SkySettings['place']; label: WordKey }> = [
+    { place: 'community', label: word('Your community') }, { place: 'me', label: word('Your area') },
 ];
 /** Edit home's line for a sun and moon card with no place to work from. */
-export const SKY_NO_PLACE_LINE = 'Nothing to show now: no place is known.';
+export const SKY_NO_PLACE_LINE = word('Nothing to show now: no place is known.');
 
 /**
  * The sun and moon card's words (@beanpool/core sky.ts), worked out on the phone with no request: from the community's
@@ -576,32 +578,32 @@ export interface PickerGroup { id: HomeCardGroup; name: string; rows: PickerRow[
  */
 export function pickerGroups(
     answer: Pick<HomeAnswer, 'profile' | 'features'> & { cards?: HomeCards }, layout: HomeLayout | null, role: HomeRole,
-    pinned: readonly HomeCardId[] = [], status: Partial<Record<HomeCardId, string>> = {},
+    pinned: readonly HomeCardId[] = [], status: Partial<Record<HomeCardId, WordKey>> = {},
 ): { groups: PickerGroup[]; full: boolean } {
     const list = listOf(layout);
     const full = list.length >= HOME_FRAME_LIMITS.cards;
-    const groups = HOME_CARD_GROUPS.map(g => ({ id: g.id, name: g.name, rows: [] as PickerRow[] }));
-    for (const t of HOME_CARD_TYPES) {
-        if (t.fixed || !HOME_DRAWN.has(t.id) || pinned.includes(t.id) || !cardOnNode(t.id, answer, role)) continue;
-        const n = list.filter(c => c.type === t.id).length;
-        const max = t.multiple?.max ?? 1;
-        const state: PickerRow['state'] = !t.multiple && n > 0 ? 'on-home' : n >= max ? 'full' : 'add';
-        groups.find(g => g.id === t.group)!.rows.push({
-            type: t.id,
-            name: cardName(t.id, answer.profile),
-            line: t.line,
+    const groups = HOME_CARD_GROUPS.map(g => ({ id: g.id, name: t(g.name), rows: [] as PickerRow[] }));
+    for (const entry of HOME_CARD_TYPES) {
+        if (entry.fixed || !HOME_DRAWN.has(entry.id) || pinned.includes(entry.id) || !cardOnNode(entry.id, answer, role)) continue;
+        const n = list.filter(c => c.type === entry.id).length;
+        const max = entry.multiple?.max ?? 1;
+        const state: PickerRow['state'] = !entry.multiple && n > 0 ? 'on-home' : n >= max ? 'full' : 'add';
+        groups.find(g => g.id === entry.group)!.rows.push({
+            type: entry.id,
+            name: cardName(entry.id, answer.profile),
+            line: t(entry.line),
             state: full && state === 'add' ? 'full' : state,
-            count: t.multiple && n > 0 ? `${Math.min(n, max)} of ${max} on Home` : null,
-            status: status[t.id] ?? null,
-            hasSettings: !!t.readSettings,
+            count: entry.multiple && n > 0 ? t('{n} of {max} on Home', { n: Math.min(n, max), max }) : null,
+            status: status[entry.id] ? t(status[entry.id]!) : null,
+            hasSettings: !!entry.readSettings,
         });
     }
     return { groups: groups.filter(g => g.rows.length > 0), full };
 }
 
 /** What the screen reader hears, and the live line says, when a card is added or removed (§1.3). */
-export const addedLine = (name: string) => `${name} added to Home`;
-export const removedLine = (name: string) => `${name} removed. Add a card brings it back.`;
+export const addedLine = (name: string) => t('{card} added to Home', { card: name });
+export const removedLine = (name: string) => t('{card} removed. Add a card brings it back.', { card: name });
 
 // ── What is asked, and what is drawn ───────────────────────────────────────────────────────────────────────────────
 
@@ -750,12 +752,12 @@ export interface StepLine { id: 'offer' | 'photo' | 'interests' | 'invite' | 'po
  */
 export function stepLines(steps: NonNullable<HomeCards['steps']>, interestsSet: boolean, canInvite: boolean = true): StepLine[] {
     const lines: StepLine[] = [
-        { id: 'offer', text: 'Post your first Offer', done: steps.firstOffer },
-        { id: 'photo', text: 'Add a photo to your profile', done: steps.photo },
-        { id: 'interests', text: 'Pick a few things you like', done: steps.interests || interestsSet },
+        { id: 'offer', text: t('Post your first Offer'), done: steps.firstOffer },
+        { id: 'photo', text: t('Add a photo to your profile'), done: steps.photo },
+        { id: 'interests', text: t('Pick a few things you like'), done: steps.interests || interestsSet },
     ];
     // After the first Offer, where invites are on (null: no such step here) and the reader can make one.
-    if (steps.invited !== null && steps.firstOffer && canInvite) lines.push({ id: 'invite', text: 'Invite someone', done: steps.invited });
+    if (steps.invited !== null && steps.firstOffer && canInvite) lines.push({ id: 'invite', text: t('Invite someone'), done: steps.invited });
     return lines;
 }
 
@@ -786,8 +788,8 @@ function communityToAsk(find: HomeFind | undefined): boolean {
  * out, as on the web: no screen on the phone sets the account's area yet, and every line opens a screen.
  */
 export function globalStepLines(steps: NonNullable<HomeCards['steps']>, find: HomeFind | undefined, knocked: boolean): StepLine[] {
-    const lines: StepLine[] = [{ id: 'post', text: 'Post something free or for swap', done: steps.firstPost }];
-    if (!knocked && communityToAsk(find)) lines.push({ id: 'ask', text: 'Ask a community to let you in', done: false, suggestion: true });
+    const lines: StepLine[] = [{ id: 'post', text: t('Post something free or for swap'), done: steps.firstPost }];
+    if (!knocked && communityToAsk(find)) lines.push({ id: 'ask', text: t('Ask a community to let you in'), done: false, suggestion: true });
     return lines;
 }
 
@@ -812,8 +814,11 @@ export function probationSentence(p: HomeProbation | null | undefined): string |
     const posts = whole(p.limits?.posts?.limit);
     const chats = whole(p.limits?.new_dm_recipients?.limit);
     if (!hours || posts === null || chats === null) return null;
-    const span = hours % 24 === 0 ? plural(hours / 24, 'day', 'days') : plural(hours, 'hour', 'hours');
-    return `For your first ${span}: ${plural(posts, 'post', 'posts')} and ${plural(chats, 'new chat', 'new chats')} a day.`;
+    // Three counts in one sentence: each is its own plural, then the sentence holds them.
+    const span = hours % 24 === 0 ? tn(hours / 24, '{n} day', '{n} days') : tn(hours, '{n} hour', '{n} hours');
+    return t('For your first {span}: {posts} and {chats} a day.', {
+        span, posts: tn(posts, '{n} post', '{n} posts'), chats: tn(chats, '{n} new chat', '{n} new chats'),
+    });
 }
 
 /**
@@ -928,6 +933,9 @@ const SERVER_CLOSES = /closes (?:within the hour|in \d+ (?:hours?|days?))/;
 /** The node words a vote's closing from hours and days only; the phone says it in the member's own time ("tonight"). */
 export function voteLabelHere(item: HomeNeedsItem, now: number): string {
     if (item.kind !== 'vote' || !item.closesAt || !Number.isFinite(Date.parse(item.closesAt))) return item.label;
+    // The node's sentence is English until the node speaks the member's language (translation slice S4): its closing is
+    // put in the phone's own time only in English, never a translated phrase inside an English sentence.
+    if (currentLanguage() !== 'en') return item.label;
     return item.label.replace(SERVER_CLOSES, closesInWords(item.closesAt, now));
 }
 
@@ -966,54 +974,70 @@ export function mergeNeeds(
  * doubled one ("kept it up.. Opens it.", measured on the emulator).
  */
 export function sentence(text: string): string {
-    const t = text.trim();
-    return /[.!?…]$/.test(t) ? t : `${t}.`;
+    const trimmed = text.trim();
+    return /[.!?…]$/.test(trimmed) ? trimmed : `${trimmed}.`;
 }
 
 /** A line of Needs you in words that say what waits, never by colour alone (§10): the accent has a ▲ too. */
 export function needsLineA11y(e: NeedsYouEntry): string {
-    return e.accent ? `${sentence(e.label)} Waiting on you.` : e.label;
+    return e.accent ? t('{line} Waiting on you.', { line: sentence(e.label) }) : e.label;
 }
 
 // ── Each card's words ─────────────────────────────────────────────────────────────────────────────────────────────
 
-const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 /** 2310 → "2,310"; never the phone's locale (Hermes builds differ). */
 export const groupThousands = (n: number) => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 
-/** −35, 12, 12.5: a true minus sign, at most two decimals, none when whole. */
+/**
+ * −35, 12, 12.5: a true minus sign, at most two decimals, none when whole; thousands grouped in English as always, the
+ * decimal separator the language's (core's formatCount and formatNumber).
+ */
 export function formatBeans(n: number): string {
     const r = Math.round(n * 100) / 100;
     const abs = Math.abs(r);
-    const text = Number.isInteger(abs) ? groupThousands(abs) : abs.toFixed(2).replace(/0$/, '');
+    const text = Number.isInteger(abs) ? formatCount(abs) : formatNumber(abs);
     return r < 0 ? `−${text}` : text;
+}
+
+/** "12 Beans", "1 Bean", "−35 Beans": an amount of Beans in words (the word is translated: design M2). */
+export function beansAmount(n: number): string {
+    return tn(n, '{n} Bean', '{n} Beans', { n: formatBeans(n) });
 }
 
 /** Your Beans (§3.1): own balance only. Tiers are merit badges: the word, nothing about what it opens. */
 export function beansLines(b: NonNullable<HomeCards['beans']>): { main: string; sub: string | null } {
     if (!b.activated && b.balance === 0) {
-        return { main: '0 Beans · nothing to repay', sub: 'Your credit opens with a first trade.' };
+        return { main: t('0 Beans · nothing to repay'), sub: t('Your credit opens with a first trade.') };
     }
     if (b.frozen) {
-        return { main: `${formatBeans(b.balance)} Beans`, sub: 'Spending is paused for now. You can still receive and sell.' };
+        return { main: beansAmount(b.balance), sub: t('Spending is paused for now. You can still receive and sell.') };
     }
-    if (!b.activated) return { main: `${formatBeans(b.balance)} Beans`, sub: 'Your credit opens with a first trade.' };
-    return { main: `${formatBeans(b.balance)} Beans · room to spend ${formatBeans(b.room)}`, sub: b.tier || null };
+    if (!b.activated) return { main: beansAmount(b.balance), sub: t('Your credit opens with a first trade.') };
+    return { main: t('{amount} · room to spend {room}', { amount: beansAmount(b.balance), room: formatBeans(b.room) }), sub: b.tier || null };
 }
 
 /** The community's card (§3.1): its name and totals, public by rule. */
 export function communityLines(card: HomeCards['community'] | undefined, profile: string, invitesOn: boolean): { title: string; line: string } {
     const global = profile === 'global';
-    const title = global ? 'The worldwide community' : (card?.name?.trim() || cardName('community'));
+    const title = global ? t('The worldwide community') : (card?.name?.trim() || cardName('community'));
     if (!card) return { title, line: '' };
     if (!global && card.members <= 1) {
-        return { title, line: invitesOn ? "1 member. You're first. Invite someone." : "1 member. You're first." };
+        return { title, line: invitesOn ? t("1 member. You're first. Invite someone.") : t("1 member. You're first.") };
     }
-    const parts = [plural(card.members, 'member', 'members').replace(String(card.members), groupThousands(card.members))];
-    if (card.tradesThisMonth !== undefined) parts.push(`${plural(card.tradesThisMonth, 'trade', 'trades')} this month`);
-    if (card.communities !== undefined) parts.push(`${groupThousands(card.communities)} ${card.communities === 1 ? 'community' : 'communities'} listed`);
-    return { title, line: `${parts.join(' · ')}.` };
+    const members = tn(card.members, '{n} member', '{n} members', { n: formatCount(card.members) });
+    if (card.tradesThisMonth !== undefined) {
+        const trades = tn(card.tradesThisMonth, '{n} trade this month', '{n} trades this month');
+        return { title, line: card.communities !== undefined
+            ? t('{members} · {trades} · {communities}.', { members, trades, communities: communitiesListed(card.communities) })
+            : t('{members} · {trades}.', { members, trades }) };
+    }
+    return { title, line: card.communities !== undefined
+        ? t('{members} · {communities}.', { members, communities: communitiesListed(card.communities) })
+        : t('{members}.', { members }) };
 }
+
+/** "38 communities listed": the worldwide community's count of the communities in its directory. */
+const communitiesListed = (n: number) => tn(n, '{n} community listed', '{n} communities listed', { n: formatCount(n) });
 
 /**
  * The faces and names Who joined may show: a local community's (the members list shows them to members already); on the
@@ -1028,23 +1052,29 @@ export function joinedLine(card: NonNullable<HomeCards['joined']>, profile: stri
     const names = joinedNames(card, profile).map(n => n.callsign).filter(Boolean);
     if (names.length) {
         const more = card.count7d - names.length;
-        if (more > 0) return `${names.join(', ')} and ${more} more joined this week.`;
-        if (names.length === 1) return `${names[0]} joined this week.`;
-        return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]} joined this week.`;
+        if (more > 0) return tn(more, '{names} and {n} more joined this week.', '{names} and {n} more joined this week.', { names: names.join(', ') });
+        if (names.length === 1) return t('{name} joined this week.', { name: names[0] });
+        return t('{names} and {last} joined this week.', { names: names.slice(0, -1).join(', '), last: names[names.length - 1] });
     }
-    const who = card.count7d === 1 ? '1 person' : `${groupThousands(card.count7d)} people`;
-    return `${who}${card.radiusKm ? ` within ${card.radiusKm} km` : ''} joined this week.`;
+    const n = formatCount(card.count7d);
+    return card.radiusKm
+        ? tn(card.count7d, '{n} person within {km} km joined this week.', '{n} people within {km} km joined this week.', { n, km: card.radiusKm })
+        : tn(card.count7d, '{n} person joined this week.', '{n} people joined this week.', { n });
 }
 
 export function dealsLine(card: NonNullable<HomeCards['deals']>): string {
-    const open = `${card.open} open`;
-    if (card.waitingOnMe) return `${open} · waiting on you: ${card.waitingOnMe.title}`;
-    return card.waiting > 0 ? `${open} · ${card.waiting} waiting on you` : open;
+    const open = tn(card.open, '{n} open', '{n} open');
+    if (card.waitingOnMe) return t('{open} · waiting on you: {title}', { open, title: card.waitingOnMe.title });
+    if (card.waiting === 0) return open;
+    const waiting = tn(card.waiting, '{n} waiting on you', '{n} waiting on you');
+    return `${open} · ${waiting}`;
 }
 
 export function enterpriseLine(card: NonNullable<HomeCards['enterprise']>): string {
-    const requests = card.requests > 0 ? `${plural(card.requests, 'request', 'requests')} to approve` : 'No requests waiting';
-    return card.others > 0 ? `${requests} · and ${card.others} more you keep` : requests;
+    const requests = card.requests > 0 ? tn(card.requests, '{n} request to approve', '{n} requests to approve') : t('No requests waiting');
+    if (card.others === 0) return requests;
+    const others = tn(card.others, 'and {n} more you keep', 'and {n} more you keep');
+    return `${requests} · ${others}`;
 }
 
 /** A screen a Home line opens, as `router.push` takes it. */
@@ -1074,20 +1104,23 @@ export function decideLines(card: NonNullable<HomeCards['decide']>, features: Ho
     const lines: DecideLine[] = [];
     if (card.open > 0 && decideOnNode(features)) {
         const closes = card.soonestClosesAt ? closesInWords(card.soonestClosesAt, now) : null;
-        const when = !closes ? '' : card.open === 1 ? `, ${closes}` : `, the first ${closes}`;
-        const text = `${plural(card.open, 'Decision', 'Decisions')} open${when}`;
-        lines.push({ id: 'decisions', text, a11y: `${sentence(text)} Opens Decide, in Commons.`, href: DECIDE_HREF });
+        const text = !closes
+            ? tn(card.open, '{n} Decision open', '{n} Decisions open')
+            : card.open === 1
+                ? t('1 Decision open, {closes}', { closes })
+                : tn(card.open, '{n} Decision open, the first {closes}', '{n} Decisions open, the first {closes}', { closes });
+        lines.push({ id: 'decisions', text, a11y: t('{line} Opens Decide, in Commons.', { line: sentence(text) }), href: DECIDE_HREF });
     }
     if (card.polls > 0) {
-        const text = `${card.polls}${card.pollsMore ? '+' : ''} ${card.polls === 1 && !card.pollsMore ? 'poll' : 'polls'} open`;
-        lines.push({ id: 'polls', text, a11y: `${sentence(text)} Opens the polls, in the Market.`, href: POLLS_HREF });
+        const text = card.pollsMore ? t('{n}+ polls open', { n: card.polls }) : tn(card.polls, '{n} poll open', '{n} polls open');
+        lines.push({ id: 'polls', text, a11y: t('{line} Opens the polls, in the Market.', { line: sentence(text) }), href: POLLS_HREF });
     }
     return lines;
 }
 
 export function groupLine(g: NonNullable<HomeCards['groups']>['items'][number]): string {
-    if (g.muted) return `${g.name} · muted`;
-    return `${g.name} · ${g.unread > 0 ? `${g.unread} new` : 'quiet'}`;
+    if (g.muted) return t('{name} · muted', { name: g.name });
+    return g.unread > 0 ? tn(g.unread, '{name} · {n} new', '{name} · {n} new', { name: g.name }) : t('{name} · quiet', { name: g.name });
 }
 
 /** "Sat 3 Oct", in the phone's own time. */
@@ -1108,10 +1141,12 @@ export function eventLine(e: HomeEventItem): string {
     return `${eventHomeWhen(e)}${repeats ? ` · ↻ ${repeats}` : ''} · ${e.title}${place ? `, ${place}` : ''}`;
 }
 
-export const RSVP_WORDS: Record<'going' | 'interested', string> = { going: 'Going', interested: 'Interested' };
+/** An event's answer, beside it on Home; and as the screen reader says it. Shown through t(). */
+export const RSVP_WORDS: Record<'going' | 'interested', WordKey> = { going: word('Going'), interested: word('Interested') };
+export const RSVP_SAID: Record<'going' | 'interested', WordKey> = { going: word("You're marked going."), interested: word("You're marked interested.") };
 
 export function pulseTitle(p: HomePulseItem): string {
-    return p.title?.trim() || 'A post from the Pulse';
+    return p.title?.trim() || t('A post from the Pulse');
 }
 
 /** The Market card's caption: "Near you" where listings come nearest first (the global node), else what's new. */
@@ -1123,7 +1158,7 @@ export function marketCaption(profile: string): string {
 export function cardCaption(type: HomeCardId, answer: Pick<HomeAnswer, 'profile' | 'cards'>): string {
     if (type === 'community') return communityLines(answer.cards.community, answer.profile, false).title;
     // The one you keep is a project: "Your project" (group decisions §3.1). A node too old to say: "Your enterprise".
-    if (type === 'enterprise' && answer.cards.enterprise?.lifecycle === 'bounded') return 'Your project';
+    if (type === 'enterprise' && answer.cards.enterprise?.lifecycle === 'bounded') return t('Your project');
     return cardName(type, answer.profile);
 }
 

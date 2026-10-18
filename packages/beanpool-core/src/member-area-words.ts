@@ -62,10 +62,10 @@ export const FIND_TOWN_SEARCH_WORDS: AddressSearchWords = {
 };
 
 /** The link that opens it, beside "Use my location". */
-export const TYPE_YOUR_TOWN = 'or type your town';
+export const TYPE_YOUR_TOWN = word('or type your town');
 
 /** The same, quieter, once the place came from the device or the account's area: the member may be looking elsewhere. */
-export const NOT_HERE_TYPE_YOUR_TOWN = 'Not here? Type your town';
+export const NOT_HERE_TYPE_YOUR_TOWN = word('Not here? Type your town');
 
 /** The why line, with the node's own numbers when it says them (`features.nearbyListings`), else the decided 500 / 250 km. */
 export function areaWhyLine(limits?: { radiusKm: number; max: number } | null): string {

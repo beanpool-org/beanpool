@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef } from 'react';
 import { View, Text, Pressable, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { t } from '@beanpool/core';
 import type { AppColors } from '../../constants/colors';
 
 /**
@@ -92,7 +93,7 @@ export function HomeCard({ id, caption, menuLabel, colors, onMenu, menuRef, righ
                                 onPress={onMenu}
                                 style={({ pressed }) => [s.menuButton, pressed && s.pressed]}
                                 accessibilityRole="button"
-                                accessibilityLabel={`Card options for ${menuLabel ?? caption}`}
+                                accessibilityLabel={t('Card options for {card}', { card: menuLabel ?? caption })}
                                 testID={testID ? `${testID}-menu` : undefined}
                             >
                                 <MaterialCommunityIcons name="dots-horizontal" size={22} color={colors.text.secondary} />

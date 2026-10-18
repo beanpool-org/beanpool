@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Text, Pressable, Modal, StyleSheet, AccessibilityInfo } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { t } from '@beanpool/core';
 import type { AppColors } from '../../constants/colors';
 import { HOME_TARGET_DP } from './HomeParts';
 
@@ -58,14 +59,14 @@ export function HomeCardMenu({ visible, name, label, colors, canRemove, canUp, c
 
     return (
         <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
-            <Pressable style={s.backdrop} onPress={onClose} accessibilityRole="button" accessibilityLabel="Close card options">
+            <Pressable style={s.backdrop} onPress={onClose} accessibilityRole="button" accessibilityLabel={t('Close card options')}>
                 <Pressable style={[s.sheet, { backgroundColor: colors.surface.card, paddingBottom: 16 + insets.bottom }]} onPress={() => {}} accessible={false}>
-                    <Text style={[s.title, { color: colors.text.secondary }]} accessibilityRole="header" accessibilityLabel={`Card options for ${said}`} numberOfLines={2}>{name}</Text>
-                    {onSettings && item('Settings…', `Settings for ${said}`, true, onSettings, 'home-menu-settings')}
-                    {item('Move up', `Move ${said} up`, canUp, onUp, 'home-menu-up')}
-                    {item('Move down', `Move ${said} down`, canDown, onDown, 'home-menu-down')}
-                    {item('Remove', `Remove ${said} from Home`, canRemove, onRemove, 'home-menu-remove')}
-                    {item('Cancel', 'Cancel', true, () => {}, 'home-menu-cancel')}
+                    <Text style={[s.title, { color: colors.text.secondary }]} accessibilityRole="header" accessibilityLabel={t('Card options for {card}', { card: said })} numberOfLines={2}>{name}</Text>
+                    {onSettings && item(t('Settings…'), t('Settings for {card}', { card: said }), true, onSettings, 'home-menu-settings')}
+                    {item(t('Move up'), t('Move {card} up', { card: said }), canUp, onUp, 'home-menu-up')}
+                    {item(t('Move down'), t('Move {card} down', { card: said }), canDown, onDown, 'home-menu-down')}
+                    {item(t('Remove'), t('Remove {card} from Home', { card: said }), canRemove, onRemove, 'home-menu-remove')}
+                    {item(t('Cancel'), t('Cancel'), true, () => {}, 'home-menu-cancel')}
                 </Pressable>
             </Pressable>
         </Modal>

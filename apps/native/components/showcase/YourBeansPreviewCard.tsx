@@ -12,7 +12,7 @@ import React, { useEffect, useState } from 'react';
 import { Text } from 'react-native';
 import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { LOCAL_COMMUNITY_LINES } from '@beanpool/core';
+import { LOCAL_COMMUNITY_LINES, t } from '@beanpool/core';
 import type { AppColors } from '../../constants/colors';
 import { HomeButton, HomeCard, HomeRow, homeStyles } from '../home/HomeParts';
 import { LocalCommunityMark } from './LocalCommunityMark';
@@ -45,12 +45,12 @@ export function YourBeansPreviewCard({ colors }: { colors: AppColors }) {
         if (key) AsyncStorage.setItem(key, '1').catch(() => {});
     };
     return (
-        <HomeCard id="beans-preview" caption="Your Beans" colors={colors} testID="home-card-beans-preview"
+        <HomeCard id="beans-preview" caption={t('Your Beans')} colors={colors} testID="home-card-beans-preview"
             right={<LocalCommunityMark variant="pill" feature="beans" />}>
-            <Text style={s.note}>{LOCAL_COMMUNITY_LINES.yourBeansCard}</Text>
-            <HomeRow colors={colors} text={LOCAL_COMMUNITY_LINES.yourBeansLink} a11y="See an example ledger"
+            <Text style={s.note}>{t(LOCAL_COMMUNITY_LINES.yourBeansCard)}</Text>
+            <HomeRow colors={colors} text={t(LOCAL_COMMUNITY_LINES.yourBeansLink)} a11y={t('See an example ledger')}
                 onPress={() => router.navigate('/(tabs)/ledger')} testID="home-beans-preview-ledger" />
-            <HomeButton colors={colors} text="Hide this card" a11y="Hide this card: Your Beans" onPress={hide} testID="home-beans-preview-hide" />
+            <HomeButton colors={colors} text={t('Hide this card')} a11y={t('Hide this card: Your Beans')} onPress={hide} testID="home-beans-preview-hide" />
         </HomeCard>
     );
 }

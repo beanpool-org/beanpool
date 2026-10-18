@@ -29,6 +29,7 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { t } from '@beanpool/core';
 import { signedGet, signedPost } from './node-post';
 import { communityOrigin } from './community-directory';
 import { GLOBAL_NODE_URL } from './node-profile';
@@ -310,8 +311,8 @@ export function cardKnockLines(
         const s = statuses[k.url];
         if (!s || !s.ok) continue;
         const name = k.name ?? k.url.replace(/^https:\/\//, '');
-        if (s.value.status === 'approved') lines.push({ url: k.url, text: `${name} said yes. Join now.`, invited: true });
-        else if (s.value.status === 'pending') lines.push({ url: k.url, text: `Waiting for ${name}: usually a few days.`, invited: false });
+        if (s.value.status === 'approved') lines.push({ url: k.url, text: t('{name} said yes. Join now.', { name }), invited: true });
+        else if (s.value.status === 'pending') lines.push({ url: k.url, text: t('Waiting for {name}: usually a few days.', { name }), invited: false });
     }
     return lines;
 }

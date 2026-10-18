@@ -9,7 +9,7 @@
 
 import {
     eventWhenParts, deviceLocalClock, zoneLabelFor, utcOffsetName, offsetMinutesOf, localClockMs, CURRENT_ZONE_IDS,
-    LOCAL_CLOCK_RE, formatDate, t, tn, word, type EventWhenParts,
+    LOCAL_CLOCK_RE, formatDate, formatNumber, t, tn, word, type EventWhenParts,
     repeatCaption, repeatChoiceKeyOf, repeatChoicesFor, repeatLengthProblem, repeatPatternFor, repeatUntilProblem, type RepeatChoiceKey, type RepeatPattern,
 } from '@beanpool/core';
 
@@ -496,9 +496,9 @@ export function formatRsvpCounts(going: number, interested: number): string {
 
 export function formatDistance(km: number | null | undefined): string | null {
     if (km == null || !Number.isFinite(km)) return null;
-    if (km < 1) return `${Math.max(10, Math.round(km * 1000 / 10) * 10)} m`;
-    if (km < 10) return `${km.toFixed(1)} km`;
-    return `${Math.round(km)} km`;
+    if (km < 1) return t('{distance} m', { distance: Math.max(10, Math.round(km * 1000 / 10) * 10) });
+    if (km < 10) return t('{distance} km', { distance: formatNumber(km, 1) });
+    return t('{distance} km', { distance: Math.round(km) });
 }
 
 export function distanceKm(lat1: number, lng1: number, lat2: number, lng2: number): number {

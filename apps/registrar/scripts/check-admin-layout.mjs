@@ -1,6 +1,6 @@
 // /admin in a real browser: the page served as the Worker serves it, its API answered with a list shaped like the live
 // one (2026-10-17: 51 names, 45 of them released; and a bot's burst of held names, S3), at 320, 768, 1000, 1001 and
-// 1280 px. Exit 1 if anything in the Pending, New names or Names card reaches past its card's edge, or the page scrolls
+// 1280 px. Exit 1 if anything in the Pending, New names, Notices or Names card reaches past its card's edge, or the page scrolls
 // sideways — with the Released section shut and open. Run by hand (CI's test job has no browser):
 //   pnpm --filter @beanpool/manager exec playwright install --only-shell chromium   # once
 //   node apps/registrar/scripts/check-admin-layout.mjs [<dir for screenshots>]
@@ -59,13 +59,23 @@ const sources = {
     settings: ['source_per_hour', 'source_per_day', 'asn_per_day', 'new_names_per_hour', 'new_names_per_day', 'claim_limit_per_key', 'probation_sweeps', 'probation_s', 'attest_fail_limit', 'swap_fail_limit', 'capacity', 'capacity_alert_at', 'capacity_hold_at']
         .map((key, i) => ({ key, value: 3 + i, default: 3, min: 1, max: 100000, words: 'New names from one source (one connecting address) in an hour; past it they are held for your approval', set: i % 2 ? { value: '9', at: now, by: 'admin@example.org' } : null })),
 };
+// Notices to operators (GET /notices, S2): a long one with lines, one to a group, one past its time; the form with reply
+// links on.
+const notices = {
+    reply_links: true, text_max: 500, days: { def: 14, max: 90 }, names_max: 50,
+    notices: [
+        { id: 3, at: now - 600, level: 'action', text: 'This name was blocked with others made from the same network on 18 Oct.\nIf this is a mistake, reply here: a-very-long-unbroken-word-that-must-wrap-rather-than-push-the-card-wider-than-its-edge', reply: 1, expires_at: now + 14 * DAY, audience: 'the names from source aaaaaaaa', by: 'admin@example.org', recipients: 17, delivered: 9, seen: 7, replies: 2 },
+        { id: 2, at: now - DAY, level: 'warning', text: 'Maintenance on Sunday: names keep working.', reply: 0, expires_at: now + 2 * DAY, audience: 'every name', by: null, recipients: 51, delivered: 51, seen: 51, replies: 0 },
+        { id: 1, at: now - 20 * DAY, level: 'info', text: 'Your name is set up.', reply: 0, expires_at: now - 6 * DAY, audience: 'a-name-of-the-longest-kind-32ch', by: 'admin@example.org', recipients: 1, delivered: 1, seen: 1, replies: 0 },
+    ],
+};
 for (let i = 3; i < 17; i++) rows.push({ name: `bot-made-name-number-${i}`, status: 'pending', mode: 'tunnel', node_pubkey: key(500 + i), requested_at: now - 600, holds: true, awaiting_approval: true, held_reason: 'source',
     source: { id: hash('a'), asn: 14061, as_org: 'DigitalOcean, LLC — a hosting network with a long name', country: 'US' } });
 
 // How far anything drawn in each card reaches past the card's inner edge (px), and how far the page scrolls sideways.
 const measure = () => {
     const out = { page: document.documentElement.scrollWidth - window.innerWidth };
-    for (const id of ['pendingTableContainer', 'sourcesContainer', 'activeTableContainer']) {
+    for (const id of ['pendingTableContainer', 'sourcesContainer', 'noticesContainer', 'activeTableContainer']) {
         const c = document.getElementById(id);
         const card = c.closest('.admin-card');
         const cs = getComputedStyle(card);
@@ -95,16 +105,19 @@ try {
             if (p === '/api/local/admin/registrar/alerts') return route.fulfill({ json: { channel: { set: false }, cap: {}, settings: {} } });
             if (p === '/api/local/admin/registrar/servers') return route.fulfill({ json: { targets: [] } });
             if (p === '/api/local/admin/registrar/sources') return route.fulfill({ json: sources });
+            if (p === '/api/local/admin/registrar/notices') return route.fulfill({ json: notices });
             return route.fulfill({ status: 404, body: '' });
         });
         await page.goto('https://beanpool.org/admin');
         await page.waitForSelector('#activeTableContainer details.released');
         await page.waitForSelector('#sourcesContainer details.released');
+        await page.waitForSelector('#noticesContainer textarea');
         await page.click('#sourcesContainer details.released > summary');   // the settings table, open
         const shut = await page.evaluate(measure);
         if (shots) {
             await page.screenshot({ path: `${shots}/admin-${width}.png` });
             await (await page.$('#sourcesContainer')).screenshot({ path: `${shots}/admin-${width}-sources.png` });
+            await (await page.$('#noticesContainer')).screenshot({ path: `${shots}/admin-${width}-notices.png` });
         }
         await page.click('#activeTableContainer details.released > summary');
         const open = await page.evaluate(measure);

@@ -211,7 +211,7 @@ test('the admin sends to a list, a source group or every name — one per key �
 
         // Refused: words a node can't show safely, too many, a bad level, reply links while REPLY_URL is unset, nobody.
         for (const [body, re] of [
-            [{ to: { names: ['eta'] }, text: 'a‮b' }, /control characters or characters that reorder text/],
+            [{ to: { names: ['eta'] }, text: 'a\u202Eb' }, /control characters or characters that reorder text/],
             [{ to: { names: ['eta'] }, text: 'x'.repeat(501) }, /at most 500 characters/],
             [{ to: { names: ['eta'] }, text: '   ' }, /text must be the words to send/],
             [{ to: { names: ['eta'] }, text: 'ok', level: 'urgent' }, /level must be one of info, warning, action/],

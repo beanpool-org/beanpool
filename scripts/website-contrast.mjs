@@ -60,7 +60,7 @@ const fakeStatus = () => {
         server('registrar', true, null),
     ] });
 };
-const BLANK_TILE =Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/58BAAQAAf8RTdbFAAAAAElFTkSuQmCC', 'base64');
+const BLANK_TILE = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/58BAAQAAf8RTdbFAAAAAElFTkSuQmCC', 'base64');
 
 async function offline(page) {
     await page.route('**/*', (r) => {

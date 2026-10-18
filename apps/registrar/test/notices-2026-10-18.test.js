@@ -14,7 +14,7 @@ const noticeWorld = (env = {}) => world({ env });
 // A node's /status, as registrar-client.ts sends it: the path signed in x-bp-signature, and the query (`?name=`,
 // `?seen=`) in x-bp-signature-query under the same timestamp.
 async function status(w, key, query = {}) {
-    const search = new URLSearchParams(query).toString();
+    const search = Object.entries(query).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&');
     const req = await w.signed('GET', '/api/registrar/status', key);
     if (search) {
         const ts = req.headers.get('x-bp-timestamp');

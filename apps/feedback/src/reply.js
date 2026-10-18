@@ -12,6 +12,7 @@
 // Like the rest of this Worker it logs nothing. The page is plain HTML (no script), and sends no Referer: the token is in
 // its address.
 
+/* global Response, URLSearchParams, TextDecoder */
 import { validateReply, TEXT_MIN, TEXT_MAX } from './validate.js';
 import { checkAndCount } from './ratelimit.js';
 

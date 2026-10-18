@@ -1782,8 +1782,6 @@ const NOTICE_NAMES_MAX = 50;              // D1 binds at most 100 values a query
 const NOTICE_KEEP_S = 30 * 86400;         // a notice past its time stays in /admin's list this long, then goes
 const REPLY_S = 14 * 86400;               // a reply link works this long after its notice reached the node
 const REPLY_TOKEN_RE = /^[A-Za-z0-9_-]{43}$/;   // 32 random bytes, base64url
-// Control characters and the ones that reorder text, as BAD_TEXT, but a notice may break lines.
-const BAD_NOTICE = /[\u0000-\u0009\u000B-\u001F\u007F-\u009F\u2028\u2029\u202A-\u202E\u2066-\u2069]/u;
 
 // Where a reply link points: REPLY_URL (a self-hoster's registrar with no reply page sets none, and its notices carry no
 // link), an https URL ending in '/', the token appended. Null when unset or not that.
@@ -1792,7 +1790,7 @@ export function replyBase(env) {
     if (!v.endsWith('/')) return null;
     try { return new URL(v).protocol === 'https:' ? v : null; } catch { return null; }
 }
-const base64url = (bytes) => btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const base64url = (bytes) => globalThis.btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 const sha256Hex = async (text) => hex(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)));
 
 // What `pubkey`'s /status carries, after taking its `seen` (the highest notice id it has): up to NOTICES_PER_STATUS
@@ -1872,7 +1870,8 @@ function noticeText(v) {
     if (typeof v !== 'string') return { problem: 'text must be the words to send' };
     const text = v.replace(/\r\n?/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
     if (!text) return { problem: 'text must be the words to send' };
-    if (BAD_NOTICE.test(text)) return { problem: 'text may not hold control characters or characters that reorder text' };
+    // As a label's (BAD_TEXT), but a notice may break lines.
+    if (BAD_TEXT.test(text.replace(/\n/g, ''))) return { problem: 'text may not hold control characters or characters that reorder text' };
     if ([...text].length > NOTICE_TEXT_MAX) return { problem: `text must be at most ${NOTICE_TEXT_MAX} characters` };
     return { text };
 }

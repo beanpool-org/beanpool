@@ -3,6 +3,7 @@
 // ReplyTokens entrypoint; here that binding runs the registrar's own functions (apps/registrar/src/index.js
 // checkReplyToken, redeemReplyToken) on a registrar database made from its migrations, so the contract between the two
 // Workers is what is tested. Fails on origin/main (a77b76d1): no /reply route.
+/* global URL, Buffer, crypto, TextEncoder, Request, URLSearchParams */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';

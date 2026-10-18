@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ml",
     "name": "Malayalam",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-19",
@@ -305,5 +305,25 @@
   "Sunset {time}.": "സൂര്യാസ്തമയം {time}.",
   "Look around ›": "ചുറ്റും നോക്കുക ›",
   "Pick up the tour at step {step} ›": "ഘട്ടം {step}-ൽ ടൂർ പുനരാരംഭിക്കുക ›",
-  "This is your Home. You choose what goes here. Before you start, take a one-minute look at the other tabs.": "ഇത് നിങ്ങളുടെ ഹോം ആണ്. ഇവിടെ എന്ത് വേണമെന്ന് നിങ്ങൾ തീരുമാനിക്കുക. ആരംഭിക്കുന്നതിന് മുമ്പ്, മറ്റ് ടാബുകൾ ഒന്ന് കാണുക."
+  "This is your Home. You choose what goes here. Before you start, take a one-minute look at the other tabs.": "ഇത് നിങ്ങളുടെ ഹോം ആണ്. ഇവിടെ എന്ത് വേണമെന്ന് നിങ്ങൾ തീരുമാനിക്കുക. ആരംഭിക്കുന്നതിന് മുമ്പ്, മറ്റ് ടാബുകൾ ഒന്ന് കാണുക.",
+  "Save this search to Home": "ഈ തിരയൽ ഹോമിൽ സേവ് ചെയ്യുക",
+  "Save the search \"{q}\" to Home": "\"{q}\" എന്ന തിരയൽ ഹോമിൽ സേവ് ചെയ്യുക",
+  "The 1 vote came from a new or 12-word account": "ഈ 1 വോട്ട് പുതിയതോ 12-വാക്ക് ഉള്ളതോ ആയ അക്കൗണ്ടിൽ നിന്നാണ് വന്നത്",
+  "All {n} votes came from new or 12-word accounts|All {n} votes came from new or 12-word accounts": {
+    "one": "എല്ലാ {n} വോട്ടും പുതിയതോ 12-വാക്ക് ഉള്ളതോ ആയ അക്കൗണ്ടുകളിൽ നിന്നാണ് വന്നത്",
+    "other": "എല്ലാ {n} വോട്ടുകളും പുതിയതോ 12-വാക്ക് ഉള്ളതോ ആയ അക്കൗണ്ടുകളിൽ നിന്നാണ് വന്നത്"
+  },
+  "{n} of {total} votes came from a new or 12-word account|{n} of {total} votes came from new or 12-word accounts": {
+    "one": "{total} വോട്ടുകളിൽ {n} എണ്ണം പുതിയതോ 12-വാക്ക് ഉള്ളതോ ആയ അക്കൗണ്ടിൽ നിന്നാണ് വന്നത്",
+    "other": "{total} വോട്ടുകളിൽ {n} എണ്ണം പുതിയതോ 12-വാക്ക് ഉള്ളതോ ആയ അക്കൗണ്ടുകളിൽ നിന്നാണ് വന്നത്"
+  },
+  "This 1 from a new or 12-word account": "ഇതിൽ 1 എണ്ണം പുതിയതോ 12-വാക്ക് ഉള്ളതോ ആയ അക്കൗണ്ടിൽ നിന്നാണ്",
+  "All {n} from new or 12-word accounts|All {n} from new or 12-word accounts": {
+    "one": "എല്ലാ {n} എണ്ണവും പുതിയതോ 12-വാക്ക് ഉള്ളതോ ആയ അക്കൗണ്ടുകളിൽ നിന്നാണ്",
+    "other": "എല്ലാ {n} എണ്ണവും പുതിയതോ 12-വാക്ക് ഉള്ളതോ ആയ അക്കൗണ്ടുകളിൽ നിന്നാണ്"
+  },
+  "{n} of these {count} from a new or 12-word account|{n} of these {count} from new or 12-word accounts": {
+    "one": "ഈ {count} എണ്ണത്തിൽ {n} എണ്ണം പുതിയതോ 12-വാക്ക് ഉള്ളതോ ആയ അക്കൗണ്ടിൽ നിന്നാണ്",
+    "other": "ഈ {count} എണ്ണത്തിൽ {n} എണ്ണം പുതിയതോ 12-വാക്ക് ഉള്ളതോ ആയ അക്കൗണ്ടുകളിൽ നിന്നാണ്"
+  }
 }

@@ -2,7 +2,8 @@
  * Choosing the language (translation design §1; director amendment 2): the same list behind the first screen's small
  * switch ("🌐 English ▾", never a step) and Settings → Language. Each language is written in its own name and script
  * (utils/language-choice.ts LANGUAGE_NAMES), so someone who can't read the current one still finds theirs. A pick is
- * live: every screen re-renders in it (components/LanguageProvider.tsx); nothing restarts and nothing typed is lost.
+ * live: nothing restarts, and every screen is drawn again in it (components/LanguageProvider.tsx DrawnInLanguage). What
+ * is kept in storage stays; a field typed on an open screen and not yet saved does not.
  *
  * 48dp rows that wrap rather than truncate (320dp at 1.3× text); colours from the theme's roles only.
  */

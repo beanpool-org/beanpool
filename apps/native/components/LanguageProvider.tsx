@@ -4,18 +4,20 @@
  * Holds the language the app writes in (utils/language-choice.ts: the member's choice on this phone, else the phone's
  * own language, else the community's default, else English), loads only that language's catalogs (utils/words-
  * catalogs.ts), and gives every screen under it `useWords()`: `const { t } = useWords()` re-renders the screen when the
- * member picks another language in Settings → Language or on the first screen's switch. No restart, nothing lost.
+ * member picks another language in Settings → Language or on the first screen's switch. The app doesn't restart, but a
+ * pick draws every screen again ({@link DrawnInLanguage}): what is kept in storage stays (the account, drafts), and a
+ * field typed on an open screen and not yet saved does not.
  *
  * Also sets core's device language (`setLanguage`), so a sentence written by a helper outside React (core's `t`, a
  * date from `formatDate`) reads the same language from the next render on. A screen that calls core's `t` is not
  * re-rendered by a change on its own: {@link DrawnInLanguage}, around the app's navigator (app/_layout.tsx), draws
  * every screen again from scratch in the new language.
  *
- * Never blocks: the first frame is drawn in the phone's language (or the community's, or English) until the stored
- * choice is read, as ThemeProvider draws light until its stored theme loads; a pick made before that read lands wins
- * over it. A store that can't be read leaves the phone's language, and a catalog that can't be built leaves English
- * (onboarding-no-hard-gates). The navigator waits for those two local reads (`settled`), at most SETTLE_MS, so a
- * launch in a chosen language is drawn once, in it, and not drawn in the phone's and then again.
+ * Never blocks what sits above the navigator: its first frame is drawn in the phone's language (or the community's, or
+ * English) until the stored choice is read, as ThemeProvider draws light until its stored theme loads; a pick made
+ * before that read lands wins over it. A store that can't be read leaves the phone's language, and a catalog that can't
+ * be built leaves English (onboarding-no-hard-gates). The navigator waits for those two local reads (`settled`), at
+ * most SETTLE_MS, so a launch in a chosen language is drawn once, in it, and not drawn in the phone's and then again.
  *
  * Right-to-left: off for now (`I18nManager.allowRTL(false)` at boot, app/_layout.tsx) until the RTL audit, so an
  * Arabic, Urdu or Persian phone sees a straight left-to-right app rather than a half-mirrored one (design §2.5 rule 3).

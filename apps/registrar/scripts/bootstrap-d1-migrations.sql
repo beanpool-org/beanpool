@@ -99,4 +99,10 @@ WHERE (SELECT COUNT(*) FROM sqlite_master WHERE (type = 'table' AND name IN ('cl
   AND (SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'name_allocations') LIKE '%verified_at INTEGER%'
   AND (SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'name_allocations') LIKE '%ok_sweeps INTEGER%';
 
+-- 0012: its three tables and three indexes.
+INSERT OR IGNORE INTO d1_migrations (name)
+SELECT '0012_notices.sql'
+WHERE (SELECT COUNT(*) FROM sqlite_master WHERE (type = 'table' AND name IN ('notices', 'notice_recipients', 'reply_tokens'))
+       OR (type = 'index' AND name IN ('idx_notice_recipients_key', 'idx_reply_tokens_recipient', 'idx_reply_tokens_expires'))) = 6;
+
 SELECT id, name, applied_at FROM d1_migrations ORDER BY id;

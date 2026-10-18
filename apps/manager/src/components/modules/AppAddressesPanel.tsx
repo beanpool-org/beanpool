@@ -29,6 +29,7 @@ import {
     type AddressSighting, type AppAddress, type AppAddressesReport, type HeldBackAddress,
 } from '../../lib/node-client';
 import { nodeCredential } from '../../lib/profiles';
+import { FreshProofBox, useFreshProof } from '../common/FreshProofBox';
 
 const SOURCE_TEXT: Record<AppAddress['source'], string> = {
     'public-address': "this community's web address",
@@ -151,6 +152,7 @@ export function AppAddressesPanel({ activeNode }: { activeNode: NodeProfile }) {
     const [actionError, setActionError] = useState<string | null>(null);
     // The addresses the owner ticked as this community's: only then can one other than this page's be confirmed.
     const [sure, setSure] = useState<Record<string, boolean>>({});
+    const proof = useFreshProof();
 
     const load = useCallback(async () => {
         try {
@@ -164,14 +166,18 @@ export function AppAddressesPanel({ activeNode }: { activeNode: NodeProfile }) {
 
     useEffect(() => { void load(); }, [load]);
 
-    const act = async (address: string, how: 'confirm' | 'remove') => {
+    // Removing asks an owner's fresh proof each time (server requireFreshProof): members' apps that use it are refused after.
+    const act = async (address: string, how: 'confirm' | 'remove', code?: string) => {
         setBusy(address);
         setActionError(null);
         try {
-            const call = how === 'confirm' ? confirmAppAddress : removeAppAddress;
-            const got = asReport(await call(activeNode.url, address, nodeCredential(activeNode), getTfaSessionToken(activeNode.id)));
+            const got = asReport(how === 'confirm'
+                ? await confirmAppAddress(activeNode.url, address, nodeCredential(activeNode), getTfaSessionToken(activeNode.id))
+                : await removeAppAddress(activeNode.url, address, nodeCredential(activeNode), getTfaSessionToken(activeNode.id), code));
+            if (how === 'remove') proof.close();
             if (got) setReport(got); else await load();
         } catch (e) {
+            if (how === 'remove' && proof.checkError(e, (c) => act(address, how, c), code)) return;
             setActionError(e instanceof Error ? e.message : String(e));
         } finally {
             setBusy(null);
@@ -328,6 +334,7 @@ export function AppAddressesPanel({ activeNode }: { activeNode: NodeProfile }) {
                 </div>
             ))}
 
+            <FreshProofBox proof={proof} testId="app-address-proof" />
             {actionError && <p className="text-sm text-red-300 m-0 break-words" role="alert">{actionError}</p>}
 
             <p className="text-sm text-nature-300 m-0 leading-relaxed" data-testid="old-apps">

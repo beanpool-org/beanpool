@@ -8,6 +8,7 @@ import { passwordField } from '../../lib/node-client';
 import { proofField } from '../../lib/fresh-proof';
 import { FreshProofBox, useFreshProof } from '../common/FreshProofBox';
 import type { RolesViewer } from './NodeRolesPanel';
+import { OwnAddressCard } from './OwnAddressCard';
 
 export interface ProbeLogEntry {
     timestamp: string;
@@ -854,6 +855,9 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag, viewer = { kind:
                     </div>
                 </div>
             </div>
+
+            {/* This server's own IP or domain, each with its own certificate (HTTPS S4): owner-only, drawn by the node's answer. */}
+            <OwnAddressCard key={activeNode.id} activeNode={activeNode} enabled={isOwnerViewer} />
 
             {/* Real-time Propagation Monitor Terminal */}
             <div className="p-5 sm:p-6 rounded-2xl bg-nature-900/80 border border-nature-800 shadow-xl space-y-3">

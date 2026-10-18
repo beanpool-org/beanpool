@@ -388,10 +388,12 @@ export function inviteLandingConvenor(
 /** "Garden Crew · 4 members": the facts line, from the node's answer or the tap's preview. */
 export function inviteLandingFacts(p: { category?: string | null; memberCount?: number | null; joinPolicy?: string | null }): string {
     const bits: string[] = [];
-    // Separate facts, each whole in the member's language, side by side.
-    if (p.category) bits.push(GROUP_CATEGORY_WORDS[p.category as GroupCategory] ? t(GROUP_CATEGORY_WORDS[p.category as GroupCategory]) : t(OWNER_KIND_NAME.group));
+    // Separate facts, each whole in the member's language, side by side. The tables' own names only: these come from the
+    // route's params too, and a "constructor" there is not one.
+    const own = (table: object, name: string) => Object.prototype.hasOwnProperty.call(table, name);
+    if (p.category) bits.push(own(GROUP_CATEGORY_WORDS, p.category) ? t(GROUP_CATEGORY_WORDS[p.category as GroupCategory]) : t(OWNER_KIND_NAME.group));
     if (typeof p.memberCount === 'number' && p.memberCount >= 0) bits.push(tn(p.memberCount, '{n} member', '{n} members'));
-    if (p.joinPolicy && JOIN_POLICY_WORDS[p.joinPolicy]) bits.push(t(JOIN_POLICY_WORDS[p.joinPolicy]));
+    if (p.joinPolicy && own(JOIN_POLICY_WORDS, p.joinPolicy)) bits.push(t(JOIN_POLICY_WORDS[p.joinPolicy]));
     return bits.join(' · ');
 }
 

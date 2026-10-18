@@ -15,9 +15,9 @@ const STATUS_WORDS: Readonly<Record<string, WordKey>> = {
     paused: word('PAUSED', 'listing status'),
 };
 
-/** The conversation row's pill: "HELD IN TRUST" for a deal in escrow. */
+/** The conversation row's pill: "HELD IN TRUST" for a deal in escrow. The table's own statuses only (a node's "constructor" is not one). */
 export function listingStatusWords(status: string): string {
-    return STATUS_WORDS[status] ? t(STATUS_WORDS[status]) : String(status).toUpperCase();
+    return Object.prototype.hasOwnProperty.call(STATUS_WORDS, status) ? t(STATUS_WORDS[status]) : String(status).toUpperCase();
 }
 
 /** The chat's listing header: its status as the node says it ("PENDING" for a deal in escrow), or UNKNOWN. */

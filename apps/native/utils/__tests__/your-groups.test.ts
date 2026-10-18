@@ -277,6 +277,13 @@ describe('invite landing states', () => {
         expect(inviteLandingFacts({ memberCount: 1 })).toBe('1 member');
         expect(inviteLandingFacts({})).toBe('');
     });
+
+    it('a category or join policy that is an Object.prototype name (the route\'s params carry them too): a group, no policy, never a crash', () => {
+        for (const name of ['constructor', 'toString', '__proto__', 'hasOwnProperty']) {
+            expect(inviteLandingFacts({ category: name, memberCount: 4 }), name).toBe('Group · 4 members');
+            expect(inviteLandingFacts({ joinPolicy: name, memberCount: 4 }), name).toBe('4 members');
+        }
+    });
 });
 
 describe('enterprise chat notice (PR #963 review round 1, B1)', () => {

@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 144,
-  "hash": "e7aeb9c9785a7d69cfd2e8cb777239dffdb7e6cafc9ed893640bad38921ef23f",
+  "version": 145,
+  "hash": "d263c7a1be2fd55826e490bcc22854786cda374b1c6a97402a4f28dfeb72f749",
   "sections": [
     {
       "id": "about",
@@ -17,12 +17,13 @@
     {
       "id": "getting-started",
       "title": "Getting started",
-      "summary": "Home, joining, finding a community near you, Beans and the global community, your 12 words, your profile, the top bar, this guide, and getting help.",
+      "summary": "Home, joining, finding a community near you, Beans and the global community, its limits, your 12 words, your profile, the top bar, this guide, and getting help.",
       "slugs": [
         "home",
         "joining",
         "finding-a-community",
         "beans-and-the-global-community",
+        "global-community-limits",
         "your-12-words",
         "your-profile",
         "the-top-bar",
@@ -783,6 +784,7 @@
         {
           "type": "ul",
           "items": [
+            "**Free, with limits.** On the global community, a listing is archived 90 days after it last changed, with its photos. Saving it again keeps it up. The limits are all on one page. See \"The global community's limits\".",
             "**The listings near you.** The global community has listings from everywhere. Your phone now keeps the nearest 500 within 250 km of your area, and your own and any listing you have a deal in progress or a conversation about, wherever they are. The Market's search still finds listings from everywhere. See \"More than one community\".",
             "**Your area.** In the web app, joining the global community has one more step after your photo: **Roughly where are you?** On the phone it is asked when you join with an account you already have; a new phone account sets it later in Settings, under **Your area**. In that step, tap **Use my location**, **Type a town or suburb**, or **Skip for now**. It is kept to about 10 km, never your exact spot. Change or clear it in Settings, under **Your area**. See \"Your area\".",
             "**No area, no problem.** Without one you see the newest listings from everywhere, and a line above the Market says so. On the phone, tap it to set your area.",
@@ -1729,6 +1731,74 @@
         {
           "type": "p",
           "text": "There is no 🏘️ marker there, and nothing from Example Valley comes with you."
+        }
+      ]
+    },
+    {
+      "slug": "global-community-limits",
+      "title": "The global community's limits",
+      "summary": "The global community is free, with a few limits that keep its cost flat. A listing is archived 90 days after it last changed. A listing has up to 5 photos, your phone keeps the nearest 500 listings, and you can watch 3 places.",
+      "section": "getting-started",
+      "related": [
+        "beans-and-the-global-community",
+        "posting",
+        "your-area",
+        "finding-a-community",
+        "reporting"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Free, with limits"
+        },
+        {
+          "type": "p",
+          "text": "The global community is free. Anyone, anywhere, can join it, so it could grow without end. A few limits keep what it costs to run flat, so it can stay free."
+        },
+        {
+          "type": "p",
+          "text": "They are the same for everyone, and they are all on this page."
+        },
+        {
+          "type": "p",
+          "text": "These are the global community's limits. A local community runs on its own server and sets its own."
+        },
+        {
+          "type": "h2",
+          "text": "The limits"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**A listing is archived 90 days after it last changed.** It comes off the Market and the Map, and its photos are deleted. Editing it, pausing it or putting it back up all count as a change: opening it with **Edit Post** and tapping **Save** keeps it for another 90 days. When one of yours is archived, you get a notification with your **Marketplace Activity** alerts. You can post it again any time.",
+            "**Up to 5 photos a listing.**",
+            "**Your phone keeps the nearest 500 listings**, within 250 km of your area. It also keeps your own, and any you have a deal or a conversation about. The Market's search still finds listings from everywhere. See \"Your area\".",
+            "**You can watch up to 3 places** with **Tell me when one starts here**. To watch another, stop watching one. See \"Finding a community near you\"."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "A new account also has a few daily limits for its first days. See \"Reporting a problem\"."
+        },
+        {
+          "type": "h2",
+          "text": "Why these"
+        },
+        {
+          "type": "p",
+          "text": "Photos are most of what the global community stores, so a listing nobody looks after doesn't keep its photos for good. A listing that is still wanted only needs a change every three months to stay up."
+        },
+        {
+          "type": "p",
+          "text": "The other limits keep what each phone and the server have to carry small, wherever you are."
+        },
+        {
+          "type": "h2",
+          "text": "What is not archived"
+        },
+        {
+          "type": "p",
+          "text": "Only Offers and Needs are archived this way. Your account is not: it goes only if you delete it. See \"Leaving or deleting your account\"."
         }
       ]
     },
@@ -3048,7 +3118,11 @@
         },
         {
           "type": "p",
-          "text": "Posts do not expire. Delete them when they are done."
+          "text": "In a local community, posts do not expire. Delete them when they are done."
+        },
+        {
+          "type": "p",
+          "text": "On the global community, a listing is archived 90 days after it last changed: it comes off the Market and its photos are deleted. Saving it with **Edit Post** keeps it for another 90 days. See \"The global community's limits\"."
         }
       ]
     },

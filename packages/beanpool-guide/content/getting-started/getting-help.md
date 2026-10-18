@@ -25,6 +25,7 @@ related: the-bean, reporting, faq, blocking, the-top-bar
 
 - If a post is a scam, offensive or misleading, report it. See "Reporting a problem".
 - If someone is bothering you, block them. See "Blocking someone".
+- If you haven't joined the global community and it can't be reached, the **Global community** row in the **BeanPool** sheet (tap the bean at the top left) says **Can't reach it right now**. While you are connected to another community you are a member of, a line under it says **Your own community isn't affected.** The global community is one community among many. Your own community runs on its own server and never needs it, so everything else works as before.
 
 ## Safety pages
 

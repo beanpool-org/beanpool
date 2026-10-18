@@ -19,7 +19,8 @@ import { hasBlocked } from './member-blocks.js';
 import { zoneOfPin } from './event-zone.js';
 import { seriesOnCreate, seriesOnEdit, moveOccurrence, stampUndatedRsvps, RSVP_IS_CURRENT, rollDueSeries } from './event-series-roll.js';
 import { readMemberArea } from './member-area.js';
-import { getProfileSwitches } from '../config/node-profile.js';
+import { getProfileSwitches, profileLimits } from '../config/node-profile.js';
+import { nudgeOrphanSweep } from './storage-health.js';
 import { deleteStoredObjects, photoDataOf, storeUploadedPhotoColumns, type PhotoColumns } from '../storage/image-columns.js';
 import { assertMayStorePhotoBytes, incomingPhotosBytes, recordStoredPhotoBytes } from './photo-upload-budget.js';
 import {
@@ -2126,4 +2127,137 @@ export function scrubEndedEvents(nowMs = Date.now()): number {
     }
     if (scrubbed > 0) bumpPostsVersion();
     return scrubbed;
+}
+
+// ===================== THE 90-DAY ARCHIVE =====================
+
+/** At most this many listings a run; the rest wait for the next hourly run (state-engine.ts runMarketplaceHygiene). */
+export const LISTING_ARCHIVE_BATCH = 200;
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+export interface ListingArchiveRun {
+    /** Listings taken off the Market. */
+    archived: number;
+    /** Photo rows deleted, from those and from listings already off. */
+    photosDropped: number;
+    /** More were due than one run takes. */
+    more: boolean;
+}
+
+type ArchiveRow = CancelledPostRow & { status: string | null };
+
+/**
+ * Retention (config/node-profile.ts `retention`, on for the global node; DESIGN-global-mothership-fable §4.2, decision 7):
+ * a listing, an Offer or a Need, that nothing has changed in `profileLimits().listingArchiveDays` days (90) is archived.
+ *
+ * - One still up (active, or paused) is taken off the Market as its author's own removal takes it (removePost): cancelled,
+ *   inactive, stamped, its audience told `post_removed`, and its author told once a run, however many went.
+ * - One already off (done, or taken down) that still holds photos loses them, and is stamped so a phone reads it again
+ *   without them.
+ *
+ * Changed means its row was: an edit (saving it unchanged counts), a pause, being put back up. A message about it doesn't.
+ *
+ * The photos go as a listing's photos always go: each row DELETEd with its `post_photos` tombstone, so a standby deletes
+ * its copy too, and a pricing guide picture taken from one forgotten. Their objects are then orphans, which the image
+ * store's sweep collects in its capped passes (engine/storage-health.ts), brought forward here, as Clean storage leaves
+ * them (cleanStorageAndCompressLogs step 1): on a bucket each delete is two blocking round trips, too many for one run
+ * to make in a row. Every serving path reads the row first, so a photo whose row has gone is never served again. The
+ * post row itself is UPDATEd without shrinking (its status, `active` and stamp): posts are never hard-deleted and carry
+ * no tombstone of their own (scrubEndedEvents), and an UPDATE that shrinks a wide row only leaves a sparse page.
+ *
+ * Left alone: a listing with a deal open on it (asked for, or Beans held: an unanswered request expires after a week and
+ * a later run takes it), one a report waits on (a moderator looks at it as it was), one hidden for the moderators
+ * (`hidden_by_reports_at`; a burst clean-up hides with no report row, and a restore stamps `updated_at`, so the clock
+ * starts again there), one a keeper's wage claim waits on
+ * (escrow.ts requestPost records it with no deal and no change to the listing, and processDeferredWageClaims pays it the
+ * day the enterprise can, and cancels it if the listing is cancelled first), and a copy of another community's listing
+ * (origin_node: that community keeps its own).
+ *
+ * Crash-safe and idempotent: each listing is its own transaction, and its end state (off, with no photo) is what keeps a
+ * second run from finding it again. Oldest first, at most `batch` a run. Main server only: a standby gets the result
+ * with its next copy, and archives nothing of its own. A no-op where `retention` is off.
+ */
+export function archiveStaleListings(broadcast: BroadcastFn, push?: PushFn, nowMs = Date.now(), batch = LISTING_ARCHIVE_BATCH): ListingArchiveRun {
+    const run: ListingArchiveRun = { archived: 0, photosDropped: 0, more: false };
+    if (getNodeRole() !== 'primary') return run;
+    const days = profileLimits().listingArchiveDays;
+    if (days === null) return run;
+    const cutoff = new Date(nowMs - days * DAY_MS).toISOString();
+    const due = db.prepare(`
+        SELECT p.id, p.type, p.title, p.author_pubkey, p.target_group_id, p.audience_scope, p.target_pubkey, p.assigned_to, p.status
+          FROM posts p
+         WHERE p.type IN ('offer', 'need')
+           AND p.origin_node IS NULL
+           AND p.hidden_by_reports_at IS NULL
+           AND COALESCE(p.updated_at, p.created_at) < ?
+           AND (COALESCE(p.status, 'active') IN ('active', 'paused')
+                OR (p.status IN ('completed', 'cancelled') AND EXISTS (SELECT 1 FROM post_photos ph WHERE ph.post_id = p.id)))
+           AND NOT EXISTS (SELECT 1 FROM marketplace_transactions t WHERE t.post_id = p.id AND t.status IN ('requested', 'pending'))
+           AND NOT EXISTS (SELECT 1 FROM abuse_reports r WHERE r.target_post_id = p.id AND r.status = 'pending')
+           AND NOT EXISTS (SELECT 1 FROM deferred_wage_claims w WHERE w.post_id = p.id AND w.status = 'pending')
+         ORDER BY COALESCE(p.updated_at, p.created_at), p.id
+         LIMIT ?`).all(cutoff, batch + 1) as ArchiveRow[];
+    run.more = due.length > batch;
+
+    const photosOf = db.prepare('SELECT order_num FROM post_photos WHERE post_id = ?');
+    const dropPhotos = db.prepare('DELETE FROM post_photos WHERE post_id = ?');
+    const archive = db.prepare(`UPDATE posts SET active = 0, status = 'cancelled', updated_at = ? WHERE id = ?`);
+    const stamp = db.prepare('UPDATE posts SET updated_at = ? WHERE id = ?');
+    const forgetPicture = db.prepare(`
+        UPDATE pricing_guide_items SET thumbnail_url = NULL, updated_at = ?
+         WHERE thumbnail_url IS NOT NULL AND instr(thumbnail_url, '/api/marketplace/posts/' || ? || '/photos/') > 0`);
+    const archived: ArchiveRow[] = [];
+    for (const row of due.slice(0, batch)) {
+        const live = row.status == null || row.status === 'active' || row.status === 'paused';
+        try {
+            const at = new Date().toISOString();
+            let dropped = 0;
+            db.transaction(() => {
+                if (live) {
+                    archive.run(at, row.id);
+                    cancelPostFollowOns(row.id);
+                } else {
+                    stamp.run(at, row.id);
+                }
+                const slots = photosOf.all(row.id) as { order_num: number }[];
+                if (slots.length > 0) {
+                    dropPhotos.run(row.id);
+                    for (const s of slots) writeTombstone('post_photos', `${row.id}|${s.order_num}`);
+                    forgetPicture.run(at, row.id);
+                    dropped = slots.length;
+                }
+            })();
+            run.photosDropped += dropped;
+            if (live) {
+                run.archived++;
+                archived.push(row);
+            }
+        } catch (e) {
+            // One bad row must not stop the rest, nor the hourly tick that runs this.
+            console.warn(`[Retention] could not archive listing ${row.id.slice(0, 8)}:`, e);
+        }
+    }
+    if (archived.length === 0 && run.photosDropped === 0) return run;
+    bumpPostsVersion();
+    if (run.photosDropped > 0) nudgeOrphanSweep();
+    for (const row of archived) announcePostCancelled(broadcast, row, [], undefined, 'SYSTEM');
+    if (push) tellArchivedAuthors(push, archived, days);
+    return run;
+}
+
+/** Each author whose listings a run archived hears it once, with the listing's title, or how many went. */
+function tellArchivedAuthors(push: PushFn, archived: ArchiveRow[], days: number): void {
+    const byAuthor = new Map<string, ArchiveRow[]>();
+    for (const row of archived) byAuthor.set(row.author_pubkey, [...(byAuthor.get(row.author_pubkey) ?? []), row]);
+    for (const [author, rows] of byAuthor) {
+        const body = rows.length === 1
+            ? `"${rows[0].title}" was taken off the Market: nothing had changed on it in ${days} days, so it was archived and its photos deleted. Post it again any time.`
+            : `${rows.length} of your listings were taken off the Market: nothing had changed on them in ${days} days, so they were archived and their photos deleted. Post them again any time.`;
+        try {
+            push([author], 'SYSTEM', 'Listing archived', body, { screen: 'post', postId: rows[0].id }, 'marketplace', 'market.listing');
+        } catch (e) {
+            console.warn('[Retention] archive notice not sent:', e);
+        }
+    }
 }

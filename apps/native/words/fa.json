@@ -2,7 +2,7 @@
   "_meta": {
     "language": "fa",
     "name": "Persian",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-18",
@@ -61,6 +61,7 @@
   "Can't reach it right now. Tap to try again.": "اکنون در دسترس نیست. برای تلاش دوباره ضربه بزنید.",
   "Can't reach it right now": "اکنون در دسترس نیست",
   "Your account there was closed.": "حساب شما در آنجا بسته شد.",
+  "Your own community isn't affected.": "جامعهٔ خود شما تحت تأثیر قرار نگرفته است.",
   "Global community, {state}": "جامعهٔ جهانی، {state}",
   "Switches to this community. Long press to remove it.": "به این جامعه می‌روید. برای حذف، طولانی فشار دهید.",
   "Guest": "مهمان",

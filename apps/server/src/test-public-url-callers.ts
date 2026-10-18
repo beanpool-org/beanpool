@@ -18,6 +18,9 @@
  *      scheme), and the row names both outputs
  *   2. own-addresses item 1 is the community output's host (no port), and a loopback name there names no community
  *   3. each caller calls the resolver with its own rules, and none keeps a copy
+ *   4. an own address as the node stores it (`beanpool claim --ip` / `--address`, services/public-address-agent.ts
+ *      storeOwnAddress): an IP in publicAddress is this node's own address and the directory's publicUrl; a domain given
+ *      later takes over as the publicUrl, and the IP stays this community's
  *
  * Other code that reads the address for another purpose, and is NOT this resolver's caller (left as it was):
  *   - routes/messaging.ts (a relayed message's `senderNodeUrl`): CF_RECORD_NAME, else the community's name squashed
@@ -35,8 +38,9 @@ import {
     initStateEngine, getNodeConfig, updateNodeConfig, getDirectoryInfo, lostRegistrarHosts, resolvePublicNodeUrl,
     PUBLIC_URL_RULES, type NodeConfig,
 } from './state-engine.js';
-import { configuredAddresses, forgetOwnAddresses, knowsItsNames } from './engine/own-addresses.js';
+import { audienceStanding, configuredAddresses, forgetOwnAddresses, knowsItsNames } from './engine/own-addresses.js';
 import { ownPublicEpochUrl, IDENTITY_EPOCH_PATH } from './services/identity-epoch.js';
+import { storeOwnAddress } from './services/public-address-agent.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -159,6 +163,13 @@ const TABLE: Row[] = [
         want: { community: 'https://localhost.beanpool.org', epoch: `https://localhost${EPOCH}`, buyer: null } },
     { name: 'PUBLIC_IP alone is no public address', publicAddress: null, env: { PUBLIC_IP: '203.0.113.7' }, want: all(null) },
     { name: 'PUBLIC_IP (IPv6) beside a registrar name changes nothing', publicAddress: tunnel, env: { PUBLIC_IP: '2001:db8::7' }, want: all(`https://${REG}`) },
+    // An own address (`beanpool claim --ip` / `--address`, services/public-address-agent.ts storeOwnAddress).
+    { name: 'this server\'s own IP address', publicAddress: { mode: 'ip', hostname: '203.0.113.5', status: 'live', since: '2026-10-18T00:00:00.000Z' },
+        want: all('https://203.0.113.5') },
+    { name: 'the owner\'s own domain', publicAddress: { mode: 'own', hostname: 'beans.example.org', status: 'live', since: '2026-10-18T00:00:00.000Z' },
+        want: all('https://beans.example.org') },
+    { name: 'an own IP address and the fleet name: the IP', publicAddress: { mode: 'ip', hostname: '203.0.113.5', status: 'live' }, env: { CF_RECORD_NAME: FLEET },
+        want: all('https://203.0.113.5') },
 
     // Stored hostnames no registrar writes (it answers a bare `<name>.beanpool.org`): the purchase's copy kept them as
     // they were, and the epoch check made a URL with no host of one that was only a scheme. Now every rule takes a
@@ -259,6 +270,22 @@ async function main(): Promise<void> {
         'services/identity-epoch.ts: the resolver with PUBLIC_URL_RULES.identityEpoch, no copy left');
     assert(read('engine/own-addresses.ts').includes('resolvePublicNodeUrl(PUBLIC_URL_RULES.community, config)'), 'engine/own-addresses.ts: the community rules');
     assert(read('state-engine.ts').includes('publicUrl: resolvePublicNodeUrl(PUBLIC_URL_RULES.community, config)'), "state-engine.ts getDirectoryInfo: the community rules");
+
+    console.log('\n--- 4. an own address as the node stores it (beanpool claim --ip / --address) ---');
+    apply({ name: 'nothing set', publicAddress: null, want: all(null) });
+    updateNodeConfig({ ownerAddresses: [] } as any);
+    forgetOwnAddresses();
+    const ip = storeOwnAddress('203.0.113.5', 'this suite');
+    const stored = (getNodeConfig() as any).publicAddress;
+    assert(ip.ok && stored?.mode === 'ip' && stored?.hostname === '203.0.113.5', `the IP is stored in publicAddress as { mode: 'ip', hostname } (${show(stored)})`);
+    assert(getDirectoryInfo().publicUrl === 'https://203.0.113.5', `the directory's publicUrl is https://203.0.113.5 (got ${show(getDirectoryInfo().publicUrl)})`);
+    assert(ownPublicEpochUrl() === `https://203.0.113.5${EPOCH}` && resolvePublicNodeUrl(PUBLIC_URL_RULES.buyerHomeNode) === 'https://203.0.113.5',
+        'the identity-epoch check and buyerHomeNode name it too');
+    assert(configuredAddresses().find((a) => a.source === 'public-address')?.address === '203.0.113.5' && audienceStanding('203.0.113.5') === 'own',
+        'it is this node\'s own address (item 1), and a signature for it is this community\'s');
+    const domain = storeOwnAddress('beans.example.org', 'this suite');
+    assert(domain.ok && getDirectoryInfo().publicUrl === 'https://beans.example.org' && audienceStanding('203.0.113.5') === 'own',
+        `a domain given later is the directory's publicUrl, and the IP stays this community's (${show(getDirectoryInfo().publicUrl)})`);
 
     console.log('\nThe table (for the PR):');
     console.log(table.join('\n'));

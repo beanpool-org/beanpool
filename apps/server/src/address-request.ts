@@ -1,13 +1,19 @@
 /**
- * A name asked for at install: `beanpool claim --name <label>` hands <label>.beanpool.org to the running node.
+ * An address handed to the running node at install, of one of three kinds:
+ *   - `name`: `beanpool claim --name <label>` asks for <label>.beanpool.org (the registrar's);
+ *   - `ip`: `beanpool claim --ip <IPv4>`, this server's public IP address;
+ *   - `domain`: `beanpool claim --address https://<name>`, the owner's own domain, pointed at this server.
+ * An `ip` or `domain` request never reaches the registrar: the node keeps the address as its own and gets its own
+ * certificate for it (services/public-address-agent.ts storeOwnAddress, services/acme; design
+ * scratch/global-node/DESIGN-https-anywhere-fable.md §4).
  *
  * The command is its own process beside the node (`docker compose exec`), and the node rewrites local-config.json whole
  * on every save (config/local-config.ts saveLocalConfig, read-modify-write), so the command never writes that file: it
  * leaves data/address-request.json, whole or not at all (a 0600 temp file renamed over it), as `beanpool recover` leaves
- * its notice. The node takes the file within a few seconds (services/public-address-agent.ts), keeps the request in its
- * own local config (`addressRequest`, per-server: never in a backup, a staging copy or a standby) and claims the name
- * with its own key through claimAddress → persistAddress, as it does for PUBLIC_ADDRESS_NAME. No route takes a request:
- * only the server's shell can leave the file.
+ * its notice. The node takes the file within a few seconds (services/public-address-agent.ts). A name it keeps as a
+ * request in its own local config (`addressRequest`, per-server: never in a backup, a staging copy or a standby) and
+ * claims with its own key through claimAddress → persistAddress, as it does for PUBLIC_ADDRESS_NAME; an IP or a domain it
+ * stores at once. No route takes a request file: only the server's shell can leave one.
  *
  * No database or config import here (clean-label.ts imports nothing): the command loads this.
  */
@@ -15,6 +21,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { cleanLabel, REGISTRAR_CONTACT_MAX } from './config/clean-label.js';
+import { isIpLiteral, normalizeAddress } from './engine/host-kinds.js';
 
 export const ADDRESS_REQUEST_FILE = 'address-request.json';
 /** The command's file is a few hundred bytes; anything bigger is not one. */
@@ -23,22 +30,26 @@ const MAX_REQUEST_BYTES = 4096;
 /** The registrar's names (apps/registrar NAME_RE): 3–32, a–z 0–9 and -, no hyphen at either end. */
 const LABEL_SHAPE = /^[a-z0-9](?:[a-z0-9-]{1,30}[a-z0-9])$/;
 
-export interface AddressRequestFile {
-    name: string;
-    contact?: string | null;
-    at: number;
-}
+/** As the command leaves it: a name request may leave its kind out. */
+export type AddressRequest =
+    | { kind?: 'name'; name: string; contact?: string | null; at: number }
+    | { kind: 'ip' | 'domain'; host: string; at: number };
+
+/** As the node takes it: the kind always said; an `ip` or `domain` host as signatures carry it (normalizeAddress). */
+export type AddressRequestFile =
+    | { kind: 'name'; name: string; contact?: string | null; at: number }
+    | { kind: 'ip' | 'domain'; host: string; at: number };
 
 export function isAddressLabel(name: unknown): name is string {
     return typeof name === 'string' && LABEL_SHAPE.test(name);
 }
 
 /** Left by the command. Throws naming the file. */
-export function writeAddressRequestFile(dir: string, req: AddressRequestFile): void {
+export function writeAddressRequestFile(dir: string, req: AddressRequest): void {
     const target = path.join(dir, ADDRESS_REQUEST_FILE);
     const tmp = path.join(dir, `.${ADDRESS_REQUEST_FILE}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`);
     try {
-        fs.writeFileSync(tmp, JSON.stringify(req), { mode: 0o600, flag: 'wx' });
+        fs.writeFileSync(tmp, JSON.stringify({ kind: 'name', ...req }), { mode: 0o600, flag: 'wx' });
         fs.renameSync(tmp, target);
     } catch (e) {
         try { fs.rmSync(tmp, { force: true }); } catch { /* never made */ }
@@ -91,9 +102,16 @@ export function takeAddressRequestFile(dir: string): AddressRequestFile | null {
     try { fs.unlinkSync(file); } catch { /* gone already */ }
     try {
         const req = JSON.parse(text);
-        if (!req || !isAddressLabel(req.name)) return null;
+        if (!req || typeof req !== 'object') return null;
+        const at = Number(req.at) || Date.now();
+        if (req.kind === 'ip' || req.kind === 'domain') {
+            // Its shape only; whether it can be this server's address the node says (storeOwnAddress), in words.
+            const host = normalizeAddress(req.host);
+            return host && (req.kind === 'ip') === isIpLiteral(host) ? { kind: req.kind, host, at } : null;
+        }
+        if ((req.kind !== undefined && req.kind !== 'name') || !isAddressLabel(req.name)) return null;
         // As the registrar takes it: the contact goes with the claim (public-address-agent.ts reconcile).
-        return { name: req.name, contact: cleanLabel(req.contact, REGISTRAR_CONTACT_MAX) ?? null, at: Number(req.at) || Date.now() };
+        return { kind: 'name', name: req.name, contact: cleanLabel(req.contact, REGISTRAR_CONTACT_MAX) ?? null, at };
     } catch {
         return null;
     }

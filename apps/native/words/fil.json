@@ -2,7 +2,7 @@
   "_meta": {
     "language": "fil",
     "name": "Filipino",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-18",
@@ -61,6 +61,7 @@
   "Can't reach it right now. Tap to try again.": "Hindi ito maabot ngayon. I-tap para subukan ulit.",
   "Can't reach it right now": "Hindi ito maabot ngayon",
   "Your account there was closed.": "Isinara ang account mo roon.",
+  "Your own community isn't affected.": "Hindi apektado ang sarili mong komunidad.",
   "Global community, {state}": "Pandaigdigang komunidad, {state}",
   "Switches to this community. Long press to remove it.": "Lilipat sa komunidad na ito. Pindutin nang matagal para alisin ito.",
   "Guest": "Bisita",

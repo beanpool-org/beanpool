@@ -89,14 +89,23 @@ test('a gated claim is one message: title, priority, tag, tap, token — the nam
         assert.equal(r.sent[1].headers.priority, '2');
         assert.equal(r.sent[1].body, 'You approved sydney.beanpool.org.');
 
-        // A new community on an auto name: one message, with the count of live names.
+        // A new community on an auto name: nothing at its claim — it is on probation (S3) — and one message when the sweep
+        // verifies it, with the count of live names. (sydney, approved above, is verified here so that the sweep's message
+        // is yarrabank's alone; probation takes one ok sweep and no time, so one sweep ends it.)
         const k2 = await makeKey();
         assert.equal((await r.w.claim(k2, { name: 'yarrabank', community_name: 'Yarra Bank LETS', contact: CONTACT })).body.status, 'live');
+        assert.equal(r.sent.length, 2, 'nothing at the claim');
+        await r.w.verify('sydney');
+        r.w.setting('probation_sweeps', 1);
+        r.w.setting('probation_s', 0);
+        r.w.nodes['sydney.beanpool.org'] = attestsAs(key);
+        r.w.nodes['yarrabank.beanpool.org'] = attestsAs(k2);
+        await attestSweep(r.w.env);
         assert.equal(r.sent.length, 3);
         assert.equal(r.sent[2].headers.title, 'New community: yarrabank');
         assert.equal(r.sent[2].headers.priority, '3');
         assert.equal(r.sent[2].headers.click, 'https://beanpool.org/admin#yarrabank');
-        assert.equal(r.sent[2].body, 'New community: yarrabank.beanpool.org — "Yarra Bank LETS" is live (tier auto). 2 names live.');
+        assert.equal(r.sent[2].body, 'New community: yarrabank.beanpool.org — "Yarra Bank LETS" is live and verified (its probation is over). 2 names live.');
 
         // The contact the claims carried is stored (the admin page shows it) but in no request.
         assert.equal((await r.w.row('yarrabank')).contact, CONTACT);
@@ -389,13 +398,23 @@ test('with ctx.waitUntil (the real runtime), the claim answers first and the mes
         const text = JSON.stringify({ name: 'sydney', mode: 'tunnel', community_name: 'Sydney Commons' });
         const sig = Buffer.from(await crypto.subtle.sign('Ed25519', key.keyPair.privateKey,
             new TextEncoder().encode(`beanpool-registrar-request/v1\nPOST\n/api/registrar/claim\n${ts}\n${text}`))).toString('hex');
+        // ntfy does not answer until the test lets it: the claim must answer anyway. The request itself may already be made
+        // (the claim's own work runs under waitUntil and starts at once; on Node 22 it reaches the send before the answer is
+        // read), so what is measured is that the answer never waits for ntfy, not the order of the two.
+        let answer;
+        r.ntfy.hold = new Promise((res) => { answer = res; });
         const res = await worker.fetch(new Request('https://beanpool.org/api/registrar/claim', {
             method: 'POST', body: text, headers: { 'content-type': 'application/json', 'x-bp-pubkey': key.pubHex, 'x-bp-timestamp': ts, 'x-bp-signature': sig },
         }), r.w.env, { waitUntil: (p) => later.push(p) });
-        assert.equal((await res.json()).status, 'pending');
+        const status = await Promise.race([res.json().then((b) => b.status), new Promise((ok) => setTimeout(() => ok('stalled'), 2000))]);
+        assert.equal(status, 'pending', 'the claim answered while ntfy had not');
         // Two: the claim's own work (index.js finishing, so a node that stops waiting never cuts it off) and the send.
         assert.equal(later.length, 2, 'the claim and the send were each handed to waitUntil');
-        assert.equal(r.sent.length, 0, 'the claim answered before the message was sent');
+        let settled = false;
+        Promise.all(later).then(() => { settled = true; });
+        await new Promise((ok) => setTimeout(ok, 50));
+        assert.equal(settled, false, 'the send is still out: ntfy has not answered it');
+        answer();
         await Promise.all(later);
         assert.equal(r.sent.length, 1);
         assert.equal(r.sent[0].headers.title, 'Name request: sydney');
@@ -430,6 +449,9 @@ test('no NTFY_URL: nothing is sent, the events wait, and /admin and the test but
         await r.w.admin('sydney', 'approve');
         r.w.nodes['sydney.beanpool.org'] = attestsAs(k1);
         r.w.nodes['yarrabank.beanpool.org'] = attestsAs(k2);
+        // Probation over in one ok sweep (S3): both verified by it, in one "New communities" event.
+        r.w.setting('probation_sweeps', 1);
+        r.w.setting('probation_s', 0);
         await attestSweep(r.w.env);   // applied: both answer as themselves
         assert.equal(r.sent.length, 0, 'not one request to ntfy');
         const st = (await r.admin('alerts')).body;

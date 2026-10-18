@@ -157,8 +157,11 @@ test('forget refuses a release its old key can still take back, past the hold to
         const back = await w.claim(a, { name: 'gatedrel' });
         assert.equal(back.status, 200, JSON.stringify(back.body));
         assert.equal(back.body.status, 'live');
+        // Past the budget another key's new name is held for the admin's approval, never refused (D6 = hold, Marty
+        // 2026-10-18: before S3 this asserted a 429).
         w.env.NEW_NAMES_PER_HOUR = '1';
-        assert.equal((await w.claim(await makeKey(), { name: 'someother' })).status, 429, 'the budget is spent');
+        assert.equal((await w.claim(await makeKey(), { name: 'someother' })).body.status, 'pending', 'the budget is spent: held');
+        assert.equal((await w.row('someother')).held_reason, 'budget');
         const auto = await w.claim(b, { name: 'autorel' });
         assert.equal(auto.status, 200, JSON.stringify(auto.body));
         assert.equal(auto.body.status, 'live');

@@ -39,6 +39,9 @@ test('M2: /i/<code>?n= refuses any host the registrar does not hold as a live na
         const [owner, other] = await Promise.all([makeKey(), makeKey()]);
         await liveName(w, 'riverbend', owner);
         await liveName(w, 'stillwater', other);
+        // Past their probation (S3): a name on it is on no switchboard (sources-2026-10-18.test.js).
+        await w.verify('riverbend');
+        await w.verify('stillwater');
         assert.equal((await w.admin('stillwater', 'pause')).status, 200);
         w.sqlite.prepare('INSERT INTO invites (code, node_name, created_at) VALUES (?, ?, ?)').run('INV-RIVER', 'riverbend', nowS());
 

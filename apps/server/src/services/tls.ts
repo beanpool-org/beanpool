@@ -25,7 +25,7 @@ import net from 'node:net';
 import tls from 'node:tls';
 import selfsigned from 'selfsigned';
 import { audienceOf } from '@beanpool/core';
-import { certCovers, certTimes, readPair, storedHosts, writePair, type CertPair } from './acme/store.js';
+import { certCovers, certTimes, readPair, readState, storedHosts, writePair, type CertPair } from './acme/store.js';
 
 const DATA_DIR = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
 const TLS_DIR = path.join(DATA_DIR, 'tls');
@@ -58,8 +58,8 @@ let preferredOrder: string[] = [];
 const listeners = new Set<tls.Server>();
 /** The pair a connection with no SNI gets now, and until when (a CA certificate's notAfter; the self-signed pair: no end). */
 let defaultServed: DefaultPair | null = null;
-/** The fleet's certificate has been looked at by a tick since this start (tlsFellBackToSelfSigned). */
-let fleetChecked = false;
+/** The identifiers a renewal tick has looked at since this start (checkedHosts): nothing is told of one before that. */
+const checked = new Set<string>();
 /** The time every certificate here is checked against. */
 let clock = () => Date.now();
 /** Tests only: check certificates against this clock (null puts it back). */
@@ -95,15 +95,39 @@ export function fleetIdentifier(): string | null {
     return audienceOf(name);
 }
 
-/** A public node (it asks Let's Encrypt through Cloudflare) that is serving its self-signed certificate after a renewal
- *  check: what services/alerts.ts tells the owners. */
-export function tlsFellBackToSelfSigned(): boolean {
+/**
+ * The identifiers a renewal check has looked at since this start that are left with the self-signed pair, where that is
+ * what apps and browsers get: one whose CA certificate expired before it was renewed (`expired`), or the fleet's dns-01
+ * name with none at all. An http-01 identifier never issued one is not here: a proxy in front of this server may hold
+ * its certificate, so nobody may see the self-signed pair, and why it has none yet is its order's (state.json lastError).
+ * What services/alerts.ts tells the owners (tls.fallback). Any identifier this server certifies, not only the fleet's.
+ */
+export function selfSignedHosts(now = clock()): Array<{ host: string; expired: boolean }> {
+    if (!serverCertPem) return [];
     const fleet = fleetIdentifier();
-    return !!fleet && fleetChecked && !served.has(fleet) && !!serverCertPem;
+    const out: Array<{ host: string; expired: boolean }> = [];
+    for (const host of checkedHosts()) {
+        if (servesCaCertificateFor(host, now)) continue;
+        const state = readState(DATA_DIR, host);
+        const expired = state.validUntil > 0 || state.lastSuccessAt > 0;
+        if (expired || host === fleet) out.push({ host, expired });
+    }
+    return out;
 }
 
-/** schedule.ts: a tick has looked at the fleet's certificate. */
-export function noteFleetChecked(): void { fleetChecked = true; }
+/** Whether any identifier is left with the self-signed pair (selfSignedHosts): tls.fallback, and the AI assistants' health read. */
+export function tlsFellBackToSelfSigned(now = clock()): boolean {
+    return selfSignedHosts(now).length > 0;
+}
+
+/** schedule.ts: a tick has looked at this identifier's certificate. */
+export function noteChecked(host: string): void { checked.add(host); }
+
+/** The identifiers the last renewal tick wanted (in configured order) that a tick has looked at since this start. A
+ *  standby's ticks look at nothing, so on a standby this is empty. */
+export function checkedHosts(): string[] {
+    return preferredOrder.filter((host) => checked.has(host));
+}
 
 /** The CA certificate served for `host`, or null. */
 export function servedCertificate(host: string): { cert: string; notBefore: number; notAfter: number } | null {
@@ -224,7 +248,7 @@ export async function initTls(): Promise<void> {
     generateSelfSigned();
 
     served.clear();
-    fleetChecked = false;
+    checked.clear();
     adoptLegacyFleetCertificate();
     const now = clock();
     for (const host of storedHosts(DATA_DIR)) {

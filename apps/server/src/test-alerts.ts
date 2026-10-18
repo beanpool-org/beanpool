@@ -30,6 +30,13 @@
  *     "Marketplace Activity" turned off.
  * 11. An end is told after 15 minutes, and not at all if the condition is back before that: a disk swinging 81 % ↔ 76 %
  *     every 5 minutes for a day is one message. While the end is held, the banner and the panel no longer count it.
+ * 12. The server's own certificates (HTTPS-anywhere S7; the real renewal tick, a stand-in order, no CA asked; the TLS and
+ *     renewal clocks are the alert book's): no ACME certificate, an address no renewal check has looked at yet, or one
+ *     never issued a certificate (a proxy may hold it) raises none of the three; a renewal due and not done for 24 hours
+ *     is `tls.renewal-late`, not before; under a day left is `tls.expiring` (urgent); renewed, both clear; expired,
+ *     `tls.fallback` names the address, and clears when renewed; late and under a day, then expired un-renewed, the two
+ *     are never told as resolved (only the fallback's end is, at the renewal); the fleet's Cloudflare name with none is
+ *     told as before.
  *
  * Run (as test-all does, through scripts/run-server-suites.mjs):
  *   BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-alerts.ts
@@ -47,6 +54,7 @@ import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { Worker } from 'node:worker_threads';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 
 let testsRun = 0;
 let testsPassed = 0;
@@ -611,6 +619,187 @@ async function main(): Promise<void> {
     await tick();
     hits = await ntfyHits();
     assert(/RESOLVED \(disk 80% full/.test(hits[hits.length - 1].body) && !alerts.getAlertsStatus().active.length, '11. once it stays down 15 minutes: resolved, told once');
+
+    // ── 12. The server's own certificates ────────────────────────────────────────────────────────────────────────────
+    // An IP address this server is configured with; its certificate comes from the real renewal tick, whose order is a
+    // stand-in that signs a ~160-hour certificate (Let's Encrypt's shortlived profile) or refuses. No CA is asked.
+    const tlsMod = await import('./services/tls.js');
+    const schedule = await import('./services/acme/schedule.js');
+    const { forgetOwnAddresses } = await import('./engine/own-addresses.js');
+    const require = createRequire(import.meta.url);
+    const forge = require(require.resolve('node-forge', { paths: [path.dirname(require.resolve('selfsigned'))] }));
+    const leafKeyPem = crypto.generateKeyPairSync('rsa', {
+        modulusLength: 2048, publicKeyEncoding: { type: 'spki', format: 'pem' }, privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+    }).privateKey;
+    const IP = '203.0.113.5';
+    const LIFE = 160 * HOUR;
+    const leafFor = (ip: string, notBefore: number) => {
+        const key = forge.pki.privateKeyFromPem(leafKeyPem);
+        const leaf = forge.pki.createCertificate();
+        leaf.publicKey = forge.pki.setRsaPublicKey(key.n, key.e);
+        leaf.serialNumber = '7' + crypto.randomBytes(8).toString('hex');
+        leaf.validity.notBefore = new Date(notBefore);
+        leaf.validity.notAfter = new Date(notBefore + LIFE);
+        leaf.setIssuer([{ name: 'commonName', value: 'Alert Test CA' }]);
+        leaf.setExtensions([{ name: 'subjectAltName', altNames: [{ type: 7, ip }] }]);
+        leaf.sign(key, forge.md.sha256.create());
+        return { cert: forge.pki.certificateToPem(leaf), key: leafKeyPem };
+    };
+    const clock12 = () => Date.now() + offset;
+    let caAnswers = true;
+    let orders = 0;
+    tlsMod._setTlsClockForTests(clock12);
+    schedule._setScheduleHooksForTests({
+        now: clock12,
+        order: async (target) => {
+            orders++;
+            if (!caAnswers) throw new Error('the stand-in CA refuses this order');
+            return leafFor(target.value, clock12() - MIN);
+        },
+    });
+    const at = (ms: number) => advance(ms - clock12());
+    const tlsKeys = () => alerts.getAlertsStatus().active.filter((a) => a.key.startsWith('tls.')).map((a) => a.key).sort();
+    const tlsLine = (key: string) => alerts.getAlertsStatus().active.find((a) => a.key === key);
+
+    pushes.length = 0;
+    const none12 = await schedule.runAcmeTick();
+    await tick();
+    assert(Object.keys(none12.outcomes).length === 0 && orders === 0 && tlsKeys().length === 0,
+        `12. no ACME certificate (no address to certify): no certificate alert (${tlsKeys()})`);
+    process.env.BEANPOOL_ADDRESSES = IP;
+    forgetOwnAddresses();
+    await tick();
+    assert(tlsKeys().length === 0, `12. an address no renewal check has looked at yet: nothing raised before it had its go (${tlsKeys()})`);
+    caAnswers = false;
+    const refused12 = await schedule.runAcmeTick();
+    await tick();
+    assert(refused12.outcomes[IP] === 'failed' && tlsKeys().length === 0 && !tlsMod.tlsFellBackToSelfSigned(),
+        `12. never issued one (its order refused): nothing raised, as a proxy in front may hold its certificate (${tlsKeys()})`);
+    caAnswers = true;
+    advance(HOUR + MIN);
+    const first12 = await schedule.runAcmeTick();
+    await tick();
+    const issued = tlsMod.servedCertificate(IP);
+    assert(first12.outcomes[IP] === 'renewed' && !!issued && tlsKeys().length === 0,
+        `12. its certificate ordered and served: no certificate alert (${JSON.stringify(first12.outcomes)}, ${tlsKeys()})`);
+    const dueAt = issued!.notAfter - LIFE / 3;
+
+    caAnswers = false;
+    at(dueAt + 23 * HOUR);
+    const late23 = await schedule.runAcmeTick();
+    await tick();
+    assert(late23.outcomes[IP] === 'failed' && tlsKeys().length === 0,
+        `12. renewal due and failing for 23 hours: not yet late (${JSON.stringify(late23.outcomes)}, ${tlsKeys()})`);
+    at(dueAt + 24 * HOUR + MIN);
+    await schedule.runAcmeTick();
+    await tick();
+    const late = tlsLine('tls.renewal-late');
+    assert(JSON.stringify(tlsKeys()) === JSON.stringify(['tls.renewal-late']) && late?.priority === 3,
+        `12. renewal due and not done for 24 hours: tls.renewal-late, default priority, nothing else (${tlsKeys()} ${late?.priority})`);
+    assert(new RegExp(`^The certificate for ${IP.replace(/\./g, '\\.')} could not be renewed since \\d{4}-\\d\\d-\\d\\d \\d\\d:\\d\\d UTC; it expires \\d{4}-\\d\\d-\\d\\d \\d\\d:\\d\\d UTC\\. It is tried again within a day`).test(late?.detail ?? ''),
+        `12. it names the address, since when, and when it expires (${late?.detail})`);
+    let told12 = await pushedKeys();
+    assert(told12.some((p) => p.alert === 'tls.renewal-late'), `12. the owners are pushed (${told12.map((p) => p.alert)})`);
+
+    at(issued!.notAfter - 23 * HOUR);
+    await schedule.runAcmeTick();
+    await tick();
+    const expiring = tlsLine('tls.expiring');
+    assert(JSON.stringify(tlsKeys()) === JSON.stringify(['tls.expiring', 'tls.renewal-late']) && expiring?.priority === 5,
+        `12. under a day left: tls.expiring, urgent, beside the late renewal (${tlsKeys()} ${expiring?.priority})`);
+    assert(new RegExp(`^The certificate for ${IP.replace(/\./g, '\\.')} expires \\d{4}-\\d\\d-\\d\\d \\d\\d:\\d\\d UTC, in less than a day, and has not been renewed\\.`).test(expiring?.detail ?? ''),
+        `12. it names the address and when it expires (${expiring?.detail})`);
+    told12 = await pushedKeys();
+    assert(told12.some((p) => p.alert === 'tls.expiring'), `12. the owners are pushed again for it (${told12.map((p) => p.alert)})`);
+    hits = await ntfyHits();
+    assert(/CERTIFICATE EXPIRES WITHIN A DAY/.test(hits[hits.length - 1].body) && hits[hits.length - 1].headers.priority === '5',
+        '12. and the channel is told, urgent');
+
+    caAnswers = true;
+    at(issued!.notAfter - 14 * HOUR);
+    const renewed12 = await schedule.runAcmeTick();
+    await tick();
+    assert(renewed12.outcomes[IP] === 'renewed' && tlsMod.servedCertificate(IP)!.notAfter > issued!.notAfter && tlsKeys().length === 0,
+        `12. renewed: both over at once in the panel (${JSON.stringify(renewed12.outcomes)}, ${tlsKeys()})`);
+    const renewedAt = clock12();
+    advance(15 * MIN);
+    await tick();
+    // (§6 raised a tls.fallback by hand, which a tick long before this one ended.)
+    const cleared12 = alerts.getAlertsStatus().history.filter((e) => e.kind === 'cleared' && e.key.startsWith('tls.') && e.at > renewedAt).map((e) => e.key).sort();
+    assert(JSON.stringify(cleared12) === JSON.stringify(['tls.expiring', 'tls.renewal-late']) && tlsKeys().length === 0,
+        `12. and told as resolved 15 minutes later (${cleared12})`);
+
+    // Expired before it was renewed: the self-signed pair is all that is left for the address (tls.fallback, generalised
+    // from the fleet's Cloudflare name to any address this server certifies).
+    caAnswers = false;
+    const second = tlsMod.servedCertificate(IP)!;
+    at(second.notAfter + MIN);
+    await schedule.runAcmeTick();
+    await tick();
+    const fallback = tlsLine('tls.fallback');
+    assert(tlsMod.servedCertificate(IP) === null && JSON.stringify(tlsKeys()) === JSON.stringify(['tls.fallback']),
+        `12. expired and not renewed: tls.fallback, and neither of the other two (${tlsKeys()})`);
+    assert(fallback?.detail === `The certificate for ${IP} expired before it could be renewed: browsers now see a self-signed one. It is tried again within a day.`,
+        `12. in words, naming the address (${fallback?.detail})`);
+    assert(tlsMod.tlsFellBackToSelfSigned(), "12. the assistants' health read says so too");
+    caAnswers = true;
+    advance(HOUR + MIN);
+    await schedule.runAcmeTick();
+    await tick();
+    advance(15 * MIN);
+    await tick();
+    assert(tlsKeys().length === 0 && !!tlsMod.servedCertificate(IP) && !tlsMod.tlsFellBackToSelfSigned(), `12. renewed: tls.fallback over (${tlsKeys()})`);
+    // Late, then under a day, then expired without a renewal: tls.fallback takes over, and the other two are never told as
+    // resolved, since nothing was renewed (the review of #2146 measured "RESOLVED" told 15 minutes after the expiry).
+    caAnswers = false;
+    const third = tlsMod.servedCertificate(IP)!;
+    at(third.notAfter - LIFE / 3 + 24 * HOUR + MIN);
+    await schedule.runAcmeTick();
+    await tick();
+    at(third.notAfter - 23 * HOUR);
+    await schedule.runAcmeTick();
+    await tick();
+    assert(JSON.stringify(tlsKeys()) === JSON.stringify(['tls.expiring', 'tls.renewal-late']),
+        `12. a third certificate late, then under a day left (${tlsKeys()})`);
+    const hitsBeforeExpiry = (await ntfyHits()).length;
+    at(third.notAfter + MIN);
+    const expiredAt = clock12();
+    await schedule.runAcmeTick();
+    await tick();
+    advance(15 * MIN);
+    await tick();
+    advance(HOUR);
+    await tick();
+    const endedAtExpiry = alerts.getAlertsStatus().history.filter((e) => e.kind === 'cleared' && e.key.startsWith('tls.') && e.at >= expiredAt).map((e) => e.key);
+    const toldAtExpiry = (await ntfyHits()).slice(hitsBeforeExpiry).map((h) => h.body).join('\n');
+    assert(endedAtExpiry.length === 0 && JSON.stringify(tlsKeys()) === JSON.stringify(['tls.fallback']),
+        `12. expired un-renewed, an hour on: only tls.fallback, and neither of the other two told as resolved (${endedAtExpiry}; ${tlsKeys()})`);
+    assert(!/RESOLVED \(certificate/.test(toldAtExpiry) && /CERTIFICATE FELL BACK TO SELF-SIGNED/.test(toldAtExpiry),
+        `12. the channel is told the fallback, and nothing resolved (${toldAtExpiry})`);
+    caAnswers = true;
+    at(third.notAfter + 24 * HOUR + 2 * MIN);
+    await schedule.runAcmeTick();
+    await tick();
+    advance(15 * MIN);
+    await tick();
+    const toldAtRenewal = (await ntfyHits()).slice(hitsBeforeExpiry).map((h) => h.body).join('\n');
+    assert(tlsKeys().length === 0 && /RESOLVED \(certificate fell back to self-signed/.test(toldAtRenewal)
+        && !/RESOLVED \(certificate (renewal late|expires within a day)/.test(toldAtRenewal),
+        `12. renewed a day later: the end is told once, as the fallback's (${tlsKeys()}; ${toldAtRenewal})`);
+    // The fleet's Cloudflare name (dns-01) with no certificate at all is still told, as it was before any other address was.
+    Object.assign(process.env, { CF_RECORD_NAME: 'fleet.example.org', CF_API_TOKEN: 'cf-suite-token', CF_ZONE_ID: 'cf-suite-zone' });
+    forgetOwnAddresses();
+    caAnswers = false;
+    const fleet12 = await schedule.runAcmeTick();
+    await tick();
+    assert(fleet12.outcomes['fleet.example.org'] === 'failed' && fleet12.outcomes[IP] === 'fresh'
+        && tlsLine('tls.fallback')?.detail === 'There is no certificate for fleet.example.org yet: browsers now see a self-signed one. It is tried again within a day.',
+        `12. the fleet's Cloudflare name with none: tls.fallback, as before (${JSON.stringify(fleet12.outcomes)}: ${tlsLine('tls.fallback')?.detail})`);
+    for (const k of ['CF_RECORD_NAME', 'CF_API_TOKEN', 'CF_ZONE_ID']) delete process.env[k];
+    delete process.env.BEANPOOL_ADDRESSES;
+    forgetOwnAddresses();
+    schedule._setScheduleHooksForTests({ now: null, order: null });
+    tlsMod._setTlsClockForTests(null);
 
     alerts.stopServerAlerts();
     await ntfy.close();

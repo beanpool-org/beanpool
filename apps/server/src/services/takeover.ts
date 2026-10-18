@@ -84,8 +84,9 @@ import fs from 'node:fs';
 import { writeFileAtomic } from '../write-file-atomic.js';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import net from 'node:net';
 import {
-    parseRecoveryCode, checkRecoveryCode, openEnvelope, RecoveryCodeError,
+    audienceOf, t, parseRecoveryCode, checkRecoveryCode, openEnvelope, RecoveryCodeError,
     type CodeStanza, type OwnerStanza, type SealedEnvelopeHeader, type SealedEnvelopeKey,
 } from '@beanpool/core';
 import { db, MEMBERS_SCHEMA_RULES } from '../db/db.js';
@@ -111,6 +112,7 @@ import { deletePreviousDatabase, previousDatabaseThere } from '../db/swap-at-boo
 import { copyCheckForPreview } from './standby-copy-record.js';
 import { startTunnelForTakeover } from './tunnel-connector.js';
 import { parseRegistrarNames } from '../engine/registrar-names.js';
+import { BEANPOOL_ZONE, isLoopbackHost } from '../engine/own-addresses.js';
 import {
     getReplacedInfo, forgetSyncEpochHeaderValue, newerTakeoverAnswering, type NewerTakeover, type ReplacedInfo,
 } from './identity-epoch.js';
@@ -526,6 +528,44 @@ function tunnelTokenOf(pa: any): string | null {
     return pa && typeof pa.tunnelToken === 'string' && pa.tunnelToken.trim() ? pa.tunnelToken : null;
 }
 
+/** An IPv4 literal or a bracketed IPv6 one, as signatures carry a host (audienceOf). */
+function isIpLiteral(host: string): boolean {
+    return net.isIP(host.startsWith('[') ? host.slice(1, -1) : host) !== 0;
+}
+
+/** The web address's host as signatures carry it (its hostname, else its registrar name), or null. */
+function webAddressHost(pa: unknown): string | null {
+    if (typeof pa === 'string') return audienceOf(pa.trim());
+    if (!pa || typeof pa !== 'object') return null;
+    const { hostname, name } = pa as { hostname?: unknown; name?: unknown };
+    if (typeof hostname === 'string' && hostname.trim()) return audienceOf(hostname.trim());
+    if (typeof name === 'string' && name.trim()) {
+        const n = name.trim();
+        return audienceOf(n.includes('.') ? n : `${n}.${BEANPOOL_ZONE}`);
+    }
+    return null;
+}
+
+/**
+ * The preview's line for a community members reached only by an IP address (design
+ * scratch/global-node/DESIGN-https-anywhere-fable.md §6, D8): every address the keys carry (the web address, those an
+ * owner confirmed, the registrar's current names) is a number. A standby is another server with another one, and a number
+ * cannot be pointed elsewhere as a name can, so members' apps cannot follow: each member has to be given the new address.
+ * Null when there is a name among them (members follow it once it points here) or no address at all. Never a gate.
+ */
+function ipOnlyAddressWarning(bundle: TakeoverBundle): string | null {
+    const hosts = new Set<string>();
+    const add = (host: string | null) => { if (host && !isLoopbackHost(host)) hosts.add(host); };
+    add(webAddressHost(bundle.publicAddress));
+    for (const a of Array.isArray(bundle.ownerAddresses) ? bundle.ownerAddresses : []) if (typeof a === 'string') add(audienceOf(a.trim()));
+    for (const r of Array.isArray(bundle.registrarNames) ? parseRegistrarNames(bundle.registrarNames) : []) {
+        if (r.role === 'current' && !r.lost) add(r.address);
+    }
+    const all = [...hosts];
+    if (!all.length || !all.every(isIpLiteral)) return null;
+    return t('Members reached this community at {addresses}, which this server does not have. They will need its new address.', { addresses: all.join(', ') });
+}
+
 /**
  * The web address to install, with a tunnel token from an older envelope if the chosen one lost it. `code` is null
  * after an owner's phone opened the chosen envelope: it re-wrapped that one data key, which opens no older copy.
@@ -533,7 +573,11 @@ function tunnelTokenOf(pa: any): string | null {
 async function resolvePublicAddress(chosen: Candidate, bundle: TakeoverBundle, code: string | null, all: Candidate[]): Promise<{ publicAddress: unknown; tunnel: TunnelOutcome }> {
     const pa: any = bundle.publicAddress && typeof bundle.publicAddress === 'object' ? { ...(bundle.publicAddress as any) } : null;
     if (!pa) return { publicAddress: null, tunnel: { source: 'none', message: 'The main server had no web address from the BeanPool registrar, so there is no tunnel to bring back.' } };
-    if (pa.mode === 'direct') return { publicAddress: pa, tunnel: { source: 'none', message: 'The web address points straight at a server (no tunnel), so there is no tunnel token to bring back.' } };
+    // An IP address is the server itself, never a tunnel (HTTPS anywhere, D8).
+    const host = webAddressHost(pa);
+    if (pa.mode === 'direct' || (host && isIpLiteral(host))) {
+        return { publicAddress: pa, tunnel: { source: 'none', message: 'The web address points straight at a server (no tunnel), so there is no tunnel token to bring back.' } };
+    }
     if (isOwnPublicAddress(pa)) return { publicAddress: pa, tunnel: { source: 'none', message: `The web address is the community's own (${pa.hostname}), not a tunnel, so there is no tunnel token to bring back.` } };
     if (tunnelTokenOf(pa)) return { publicAddress: pa, tunnel: { source: 'envelope', message: 'The tunnel token came with the keys.' } };
     // 967 follow-up #2: the newest lock may have been sealed while the registrar's answer lacked the token.
@@ -620,6 +664,11 @@ export interface TakeoverPreview {
     /** Whether the keys carry the key that opens members' sign-in recovery copies (recovery seal S2). A yes or no. */
     recoverySealKey: boolean;
     tunnel: TunnelOutcome;
+    /**
+     * Every address the keys carry is an IP address (ipOnlyAddressWarning): members' apps hold a number this server does
+     * not have, and cannot follow the community here. In words; null otherwise. It never stops the take-over.
+     */
+    addressWarning: string | null;
     mainServer: { url: string | null; answers: boolean | null; lastCopyAt: number | null; warning: string | null };
     /**
      * This standby's copy of the main server (services/standby-copy-record.ts copyCheckForPreview): "Last exact copy of the
@@ -701,6 +750,7 @@ async function startSession(
         profile: { community, thisServer: getNodeProfile() },
         recoverySealKey: carriesSealKey(bundle),
         tunnel,
+        addressWarning: ipOnlyAddressWarning(bundle),
         mainServer: {
             url: main.url,
             answers: main.answers,

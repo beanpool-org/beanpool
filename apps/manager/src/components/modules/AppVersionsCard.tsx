@@ -35,9 +35,12 @@ function dateLabel(iso: string | null): string {
 const members = (n: number) => `${n.toLocaleString()} ${n === 1 ? 'member' : 'members'}`;
 
 /** One sentence: what this platform's floor does right now. */
-function floorStatus(p: AppPlatformVersions, store: string): string {
+function floorStatus(p: AppPlatformVersions, store: string, storeCheckOff: boolean): string {
     if (p.fromInvalid) {
         return `Floor ${p.floor}. The grace date set on the server isn't a date, so no app is stopped until it is fixed.`;
+    }
+    if (!p.store && storeCheckOff) {
+        return `Floor ${p.floor}, not enforced: this server's app-store check is off (DISABLE_APP_STORE_CHECK), so it never reads ${store}'s version. Apps below the floor show a banner only.`;
     }
     if (!p.store) {
         return `Floor ${p.floor}, not enforced yet: this server hasn't read ${store}'s version. No app is stopped until it has.`;
@@ -51,13 +54,13 @@ function floorStatus(p: AppPlatformVersions, store: string): string {
     return `Floor ${p.floor}. Apps below it stop at their next start, or after five minutes away, until they update.`;
 }
 
-function PlatformBlock({ p, label, store }: { p: AppPlatformVersions; label: string; store: string }) {
+function PlatformBlock({ p, label, store, storeCheckOff }: { p: AppPlatformVersions; label: string; store: string; storeCheckOff: boolean }) {
     const total = p.versions.reduce((sum, v) => sum + v.members, 0);
     const below = p.versions.filter((v) => isVersionOlder(v.version, p.floor)).reduce((sum, v) => sum + v.members, 0);
     return (
         <div data-testid={`app-versions-${label.toLowerCase()}`} className="min-w-0">
             <h4 className="text-sm font-bold text-white m-0 mb-1">{label}</h4>
-            <p className="text-xs text-nature-300 m-0 mb-2">{floorStatus(p, store)}</p>
+            <p className="text-xs text-nature-300 m-0 mb-2">{floorStatus(p, store, storeCheckOff)}</p>
             {p.store && <p className="text-xs text-nature-400 m-0 mb-2">{store} has {p.store}.</p>}
             {total === 0 ? (
                 <p className="text-xs text-nature-400 m-0">No {label} app has said its version yet.</p>
@@ -140,7 +143,7 @@ export function AppVersionsCard({ node }: { node: NodeProfile }) {
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                     {PLATFORMS.filter((pl) => Array.isArray(data.platforms[pl.key]?.versions)).map((pl) => (
-                        <PlatformBlock key={pl.key} p={data.platforms[pl.key]} label={pl.label} store={pl.store} />
+                        <PlatformBlock key={pl.key} p={data.platforms[pl.key]} label={pl.label} store={pl.store} storeCheckOff={data.storeCheckOff === true} />
                     ))}
                 </div>
             )}

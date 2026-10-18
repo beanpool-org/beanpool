@@ -777,6 +777,8 @@ export interface AppVersionsResponse {
     minAppVersion: string;
     minAppVersionFrom: string | null;
     storeCheckedAt: string | null;
+    /** The server's store lookup is off (DISABLE_APP_STORE_CHECK): no store's build is ever read. Absent from older builds. */
+    storeCheckOff?: boolean;
     platforms: { android: AppPlatformVersions; ios: AppPlatformVersions };
 }
 

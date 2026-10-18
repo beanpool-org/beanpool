@@ -3,7 +3,8 @@
  * then shows the one-time claim code and a QR the phone scans, so the installer leaves the terminal with the address live
  * and the phone as owner.
  *
- *   1. Refused when the community already has an owner or has no claim code (claim-code.ts): `beanpool recover` then.
+ *   1. Refused when the community already has an owner or has no claim code, or the server is a standby (claim-code.ts):
+ *      `beanpool recover` then.
  *   2. The address, one of (design scratch/global-node/DESIGN-https-anywhere-fable.md §4):
  *      - `--ip <IPv4>`: this server's public IP address. The running node keeps it as its own and gets its own
  *        certificate for it over port 80 (address-request.ts kind `ip`, services/public-address-agent.ts
@@ -67,7 +68,7 @@ tap "Claim ‹name›": that phone becomes the owner.
   --contact <email>   a contact for the BeanPool project, if the name awaits approval.
   --key, --callsign   make that key the owner from here, without a phone claim (it joins with that callsign).
 
-Refused when the community already has an owner: use beanpool recover then.`;
+Refused when the community already has an owner, or on a standby: use beanpool recover then.`;
 
 interface NodeView {
     owner: boolean;
@@ -79,6 +80,8 @@ interface NodeView {
     ownAddresses: string[];
     request: { name: string; refused?: string | null } | null;
     communityName: string | null;
+    /** A standby (claim-code.ts): no owner of its own, no claim code. As config/node-role.ts roleFromSettings reads it. */
+    standby: boolean;
 }
 
 function readJson(file: string): any {
@@ -127,6 +130,8 @@ export function readNodeView(dir = dataDir()): NodeView | { missing: string } {
         owner, claim, address, own, ownAddresses,
         request: req && typeof req.name === 'string' ? { name: req.name, refused: req.refused ?? null } : null,
         communityName: config.communityName || config.callsign || null,
+        // local-config.json's `nodeRole` wins over NODE_ROLE (the container's environment, which `docker compose exec` keeps).
+        standby: config.nodeRole === 'backup' || (config.nodeRole !== 'primary' && process.env.NODE_ROLE === 'backup'),
     };
 }
 
@@ -348,7 +353,10 @@ export async function runClaim(args: string[], io: ClaimIo = terminalIo(), dir =
 
     const view = readNodeView(dir);
     if ('missing' in view) { io.err(`Nothing was changed. ${view.missing}`); return 1; }
+    // The owner first, as claim-code.ts initClaimCode orders them: a standby an owner of the community made theirs with
+    // beanpool recover has an owner of its own, and the standby's sentence would send them to do it again.
     if (view.owner) { io.err('Nothing was changed. This community already has an owner. To add one from the server: beanpool recover --key <member public key | @callsign>'); return 1; }
+    if (view.standby) { io.err('Nothing was changed. This server is a standby copy of its community: it has no claim code, and its owners are its main server\'s. To sign in to it, make an owner of the community an owner here too: beanpool recover --key <member public key | @callsign>'); return 1; }
     if (!view.claim) { io.err('Nothing was changed. This community has no claim code waiting. Restart the node to make one, or add an owner with: beanpool recover --key <member public key | @callsign>'); return 1; }
     const held = heldAddress(view);
     if (name !== undefined && held) { io.err(`Nothing was changed. This community already has an address (${held}). Change it in Settings → Address, signed in as an owner.`); return 1; }

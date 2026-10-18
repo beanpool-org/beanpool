@@ -807,8 +807,12 @@ router.post('/api/marketplace/posts/remove', async (ctx) => {
         const removed = removePost(id, actor);
         if (removed) {
             syncPulseMarketplaceGate();
+            ctx.body = { success: true };
+            return;
         }
-        ctx.body = { success: removed };
+        // Return 400 status on failed mutation instead of HTTP 200 with { success: false }
+        ctx.status = 400;
+        ctx.body = { success: false, error: 'Post not found, already removed, or not authorized' };
     } catch (e: any) {
         // A convenor whose account is suspended (engine/posts.ts removePost) is refused as a non-member is: 403.
         ctx.status = e?.code === NOT_A_MEMBER_CODE || e?.code === CONVENOR_PAUSED_CODE ? 403 : 400;

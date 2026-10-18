@@ -161,3 +161,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Issue:** [What was broken]\n**Learning:** [W
 **Issue:** `POST /api/commons/projects/delete` in `apps/server/src/routes/commons.ts` called `deleteProject` without a `try/catch` block.
 **Learning:** `deleteProject` checks non-zero ledger balances and throws errors (e.g. "Cannot delete project with non-zero balance: would violate ledger conservation"), which caused uncaught 500 exceptions instead of formatted 400 error responses.
 **Pattern:** Ensure deletion routes calling domain functions that enforce balance/ledger constraints wrap the deletion call in a `try/catch` block that catches errors and sets `ctx.status = 400`.
+
+## 2026-10-18 - [Missing 400 status code on failed post removal]
+**Issue:** `POST /api/marketplace/posts/remove` in `apps/server/src/routes/marketplace.ts` returned HTTP `200 OK` with `{ success: false }` when `removePost` returned `false`.
+**Learning:** Returning HTTP 200 OK on failed post removal mutations misleads API clients into treating failed post deletions as successful HTTP operations.
+**Pattern:** Ensure route handlers calling state removal/mutation functions check the boolean result and set `ctx.status = 400` when the operation fails.

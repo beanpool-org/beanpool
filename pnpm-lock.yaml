@@ -25,6 +25,9 @@ patchedDependencies:
   react-native-map-clustering@4.0.0:
     hash: lm3bob6x5ltqdsgmimn6j3ha2a
     path: patches/react-native-map-clustering@4.0.0.patch
+  vitest@3.2.7:
+    hash: yo5egcshjmvo4ng2hdugexw424
+    path: patches/vitest@3.2.7.patch
 
 importers:
 
@@ -50,7 +53,7 @@ importers:
         version: 8.59.4(eslint@10.4.0(jiti@1.21.7))(typescript@5.9.3)
       vitest:
         specifier: ^3.0.5
-        version: 3.2.7(@types/node@22.19.15)(jiti@1.21.7)(jsdom@30.0.1(@noble/hashes@2.0.1))(lightningcss@1.32.0)(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2)
+        version: 3.2.7(patch_hash=yo5egcshjmvo4ng2hdugexw424)(@types/node@22.19.15)(jiti@1.21.7)(jsdom@30.0.1(@noble/hashes@2.0.1))(lightningcss@1.32.0)(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2)
 
   apps/feedback:
     devDependencies:
@@ -129,7 +132,7 @@ importers:
         version: 6.4.1(@types/node@22.19.15)(jiti@1.21.7)(lightningcss@1.32.0)(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2)
       vitest:
         specifier: ^3.0.5
-        version: 3.2.7(@types/node@22.19.15)(jiti@1.21.7)(jsdom@30.0.1(@noble/hashes@2.0.1))(lightningcss@1.32.0)(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2)
+        version: 3.2.7(patch_hash=yo5egcshjmvo4ng2hdugexw424)(@types/node@22.19.15)(jiti@1.21.7)(jsdom@30.0.1(@noble/hashes@2.0.1))(lightningcss@1.32.0)(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2)
 
   apps/native:
     dependencies:
@@ -334,7 +337,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^3.0.5
-        version: 3.2.7(@types/node@22.19.15)(jiti@1.21.7)(jsdom@30.0.1(@noble/hashes@2.0.1))(lightningcss@1.32.0)(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2)
+        version: 3.2.7(patch_hash=yo5egcshjmvo4ng2hdugexw424)(@types/node@22.19.15)(jiti@1.21.7)(jsdom@30.0.1(@noble/hashes@2.0.1))(lightningcss@1.32.0)(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2)
 
   apps/pwa:
     dependencies:
@@ -428,7 +431,7 @@ importers:
         version: 0.21.2(vite@6.4.1(@types/node@22.19.15)(jiti@1.21.7)(lightningcss@1.32.0)(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2))(workbox-build@7.4.0(@types/babel__core@7.20.5))(workbox-window@7.4.0)
       vitest:
         specifier: ^3.0.5
-        version: 3.2.7(@types/node@22.19.15)(jiti@1.21.7)(jsdom@30.0.1(@noble/hashes@2.0.1))(lightningcss@1.32.0)(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2)
+        version: 3.2.7(patch_hash=yo5egcshjmvo4ng2hdugexw424)(@types/node@22.19.15)(jiti@1.21.7)(jsdom@30.0.1(@noble/hashes@2.0.1))(lightningcss@1.32.0)(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2)
 
   apps/registrar:
     devDependencies:
@@ -592,7 +595,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^3.0.5
-        version: 3.2.7(@types/node@22.19.15)(jiti@1.21.7)(jsdom@30.0.1(@noble/hashes@2.0.1))(lightningcss@1.32.0)(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2)
+        version: 3.2.7(patch_hash=yo5egcshjmvo4ng2hdugexw424)(@types/node@22.19.15)(jiti@1.21.7)(jsdom@30.0.1(@noble/hashes@2.0.1))(lightningcss@1.32.0)(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2)
 
   packages/beanpool-core:
     dependencies:
@@ -635,7 +638,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^3.0.5
-        version: 3.2.7(@types/node@20.19.37)(jiti@1.21.7)(jsdom@30.0.1(@noble/hashes@2.0.1))(lightningcss@1.32.0)(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2)
+        version: 3.2.7(patch_hash=yo5egcshjmvo4ng2hdugexw424)(@types/node@20.19.37)(jiti@1.21.7)(jsdom@30.0.1(@noble/hashes@2.0.1))(lightningcss@1.32.0)(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2)
 
   packages/beanpool-engine:
     dependencies:
@@ -657,7 +660,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^3.0.5
-        version: 3.2.7(@types/node@22.19.15)(jiti@1.21.7)(jsdom@30.0.1(@noble/hashes@2.0.1))(lightningcss@1.32.0)(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2)
+        version: 3.2.7(patch_hash=yo5egcshjmvo4ng2hdugexw424)(@types/node@22.19.15)(jiti@1.21.7)(jsdom@30.0.1(@noble/hashes@2.0.1))(lightningcss@1.32.0)(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2)
 
   packages/beanpool-guide: {}
 
@@ -671,7 +674,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^3.0.5
-        version: 3.2.7(@types/node@22.19.15)(jiti@1.21.7)(jsdom@30.0.1(@noble/hashes@2.0.1))(lightningcss@1.32.0)(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2)
+        version: 3.2.7(patch_hash=yo5egcshjmvo4ng2hdugexw424)(@types/node@22.19.15)(jiti@1.21.7)(jsdom@30.0.1(@noble/hashes@2.0.1))(lightningcss@1.32.0)(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2)
 
 packages:
 
@@ -16606,7 +16609,7 @@ snapshots:
       tsx: 4.21.0
       yaml: 2.8.2
 
-  vitest@3.2.7(@types/node@20.19.37)(jiti@1.21.7)(jsdom@30.0.1(@noble/hashes@2.0.1))(lightningcss@1.32.0)(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2):
+  vitest@3.2.7(patch_hash=yo5egcshjmvo4ng2hdugexw424)(@types/node@20.19.37)(jiti@1.21.7)(jsdom@30.0.1(@noble/hashes@2.0.1))(lightningcss@1.32.0)(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2):
     dependencies:
       '@types/chai': 5.2.3
       '@vitest/expect': 3.2.7
@@ -16648,7 +16651,7 @@ snapshots:
       - tsx
       - yaml
 
-  vitest@3.2.7(@types/node@22.19.15)(jiti@1.21.7)(jsdom@30.0.1(@noble/hashes@2.0.1))(lightningcss@1.32.0)(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2):
+  vitest@3.2.7(patch_hash=yo5egcshjmvo4ng2hdugexw424)(@types/node@22.19.15)(jiti@1.21.7)(jsdom@30.0.1(@noble/hashes@2.0.1))(lightningcss@1.32.0)(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2):
     dependencies:
       '@types/chai': 5.2.3
       '@vitest/expect': 3.2.7

@@ -298,6 +298,32 @@ test('a tick whose status write fails loses nothing: the next counts it; status.
     } finally { r.done(); }
 });
 
+test('an answer on a tick whose status write was refused still ends the incident when the next look fails; the next outage is its own', async () => {
+    const r = await room();
+    try {
+        await r.tick();
+        const t1 = r.nowS();
+        await r.tick();
+        r.servers['test.watch.test'].fail = 'timeout';
+        await r.tick(); await r.tick();
+        assert.deepEqual(r.server('test').incident, { began_at: t1 + 600, ended_at: null, why: 'timed-out' });
+        // It answers at +1200, the tick that clears the alert, and that tick's status write is refused.
+        r.servers['test.watch.test'].fail = null;
+        r.w.beforeRun(/INSERT INTO watch_days/, async () => { throw new Error('D1: too many queries in this invocation'); });
+        await r.tick();
+        assert.equal(r.doc().at, t1 + 900, 'not written this tick');
+        r.servers['test.watch.test'].fail = 503;
+        await r.tick();
+        assert.equal(r.server('test').up, false);
+        assert.deepEqual(r.server('test').incident, { began_at: t1 + 600, ended_at: t1 + 1200, why: 'timed-out' }, 'ended at the answer the log holds');
+        await r.tick();
+        assert.deepEqual(r.server('test').incident, { began_at: t1 + 1500, ended_at: null, why: 'http-503' }, 'a new one, begun at its first failed look');
+        r.servers['test.watch.test'].fail = null;
+        await r.tick();
+        assert.deepEqual(r.server('test').incident, { began_at: t1 + 1500, ended_at: t1 + 2100, why: 'http-503' });
+    } finally { r.done(); }
+});
+
 test('D1: a quiet tick spends 2 queries on the status, its first 3; with no STATUS binding none and nothing is written', async () => {
     const counts = async (kv) => {
         const r = await room({ kv });

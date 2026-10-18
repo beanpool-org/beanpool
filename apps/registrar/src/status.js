@@ -143,7 +143,8 @@ export async function writeStatus(env, { targets, recent, now, missedToRaise, ke
     }
 
     // A server shown: an incident begins when it is down (from its first failed look since it last answered) and ends
-    // at its first answer after.
+    // at its first answer after: either of its two newest looks, so an answer on a tick whose status write was refused
+    // still ends it when the next look fails.
     for (const t of shown) {
         const l = recent.get(t.name);
         if (!l) continue;
@@ -155,7 +156,7 @@ export async function writeStatus(env, { targets, recent, now, missedToRaise, ke
                 WHERE target = ? AND id > COALESCE((SELECT MAX(id) FROM watch_log WHERE target = ? AND ok = 1), 0) ORDER BY id LIMIT 1
                 ON CONFLICT (key) DO UPDATE SET since = excluded.since, value = excluded.value RETURNING since, value`)
                 .bind(`${INCIDENT}${t.name}`, t.name, t.name).first();
-        } else if (open && l.rows?.[0]?.ran_at === now && l.rows[0].ok) {
+        } else if (open && l.rows?.some((r) => r.ok)) {
             row = await env.DB.prepare(`UPDATE watch_marks SET value = json_object('ended',
                     COALESCE((SELECT MIN(ran_at) FROM watch_log WHERE target = ? AND ok = 1 AND ran_at > watch_marks.since), ?),
                     'status', json_extract(value, '$.status'))

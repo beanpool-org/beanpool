@@ -87,3 +87,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap found:** [What was untested]\n**Learning
 **Gap found:** `POST /api/node/owner/lock-open-check` in `apps/server/src/routes/owner-unlock.ts` had no corresponding test file.
 **Learning:** Testing lock open check endpoint requires validating signature auth middleware behavior (401 for unsigned/stale timestamp, 403 for non-owners) and verifying that valid owner requests record report data into `owner_lock_opens` database table.
 **Action:** Created `test-owner-lock-open-check.ts` and registered it in `scripts/server-suites.mjs`.
+
+## 2026-10-18 - [Withheld Notes Engine Coverage]
+**Gap found:** `apps/server/src/engine/withheld-notes.ts` had no dedicated unit/integration test file.
+**Learning:** `withholdsNote` logic depends on whether the recipient has blocked the sender in `member_blocks` (where keys must satisfy 64-char hex format checks) and excludes treasury/synthetic accounts.
+**Action:** Created `apps/server/src/test-withheld-notes.ts` to test `withholdsNote`, `keepWithheldNote`, `WITHHELD_NOTE_COLUMN`, `WITHHELD_NOTE_JOIN`, `noteAsReadBy`, and `dropWithheldNotesOf`. Registered in `scripts/server-suites.mjs`.

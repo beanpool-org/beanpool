@@ -432,6 +432,7 @@ export const SUITES = [
     'test-blocks-on-messaging',
     'test-messaging-idor',
     'test-withheld-lines',
+    'test-withheld-notes',
     'test-blocks-on-beans',
     'test-polls',
     'test-poll-voters-members-only',

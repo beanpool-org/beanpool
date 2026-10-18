@@ -38,7 +38,8 @@ Full design: [`docs/node-dns-registrar.md`](../../docs/node-dns-registrar.md).
   logged in `name_events`. Alerts (below):
   `GET /api/local/admin/registrar/alerts` · `POST …/alerts/settings {category, mode}` · `POST …/alerts/test` ·
   `GET …/servers` (the outside checks of our servers). New names (below, "New names: where they come from"):
-  `GET …/sources` · `POST …/sources {source, block?, run?, total?}` or `{asn}` (Reject all held / Block all) ·
+  `GET …/sources` · `POST …/sources {source, block?, run?, total?}` or `{asn}` (Reject all held / Block all;
+  `{asn}`: that network's names with no source, as the panel groups them when `SOURCE_KEY` is unset) ·
   `POST …/blocked {kind, value, days?, remove?}` · `POST …/settings {key, value}` or `{hold}`. Every pending row of
   `/pending` also says `held_reason` (held for approval although its name is auto) and its `source` (network,
   country, the source's keyed-hash id), and a live one `probation` while it is on it. The page's tables fit their card at every width: the

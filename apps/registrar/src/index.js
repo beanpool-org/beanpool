@@ -1616,8 +1616,9 @@ async function handleForgetMany(env, bodyText, who = null) {
 
 // --- New names, last 24 h (design §4.4, slice S3) ---
 // /admin's panel: the last day's new names (claim_sources, kept 24 h) grouped by their source — one connecting address,
-// as its keyed hash — and by network, each name with its row as it is now (held, live, on probation). Counts, names,
-// networks and countries: never an address, never a contact.
+// as its keyed hash; the names with none (SOURCE_KEY unset) by their network, so a group's Reject all held ({ asn })
+// acts on exactly its names — and by network, each name with its row as it is now (held, live, on probation). Counts,
+// names, networks and countries: never an address, never a contact.
 const groupOf = (rows, key) => {
     const m = new Map();
     for (const r of rows) {
@@ -1642,8 +1643,8 @@ async function sourcesPanel(env) {
         verified: list.filter((r) => r.status === 'live' && r.verified_at !== null).length,
         keys: new Set(list.map((r) => r.node_pubkey)).size, first: Math.min(...list.map((r) => r.at)), last: Math.max(...list.map((r) => r.at)),
     });
-    const groups = groupOf(rows, (r) => r.source_hash || '').map(([source, list]) => ({
-        source: source || null, asn: list[0].asn ?? null, as_org: list[0].as_org ?? null, country: list[0].country ?? null,
+    const groups = groupOf(rows, (r) => r.source_hash || `no-source:${r.asn ?? ''}`).map(([, list]) => ({
+        source: list[0].source_hash || null, asn: list[0].asn ?? null, as_org: list[0].as_org ?? null, country: list[0].country ?? null,
         ...summary(list), rows: list.map(nameOf),
     })).sort((a, b) => b.names - a.names || b.last - a.last);
     const networks = groupOf(rows.filter((r) => r.asn), (r) => r.asn).map(([asn, list]) => ({
@@ -1659,11 +1660,11 @@ async function sourcesPanel(env) {
     };
 }
 
-// "Block all" ({ source, block: true }) or "Reject all held" ({ source } or { asn }) on a group of the panel, in batches
-// of at most SOURCE_MAX names a request (each is about ten D1 queries, its decision taken as its own action would take
-// it: onFreshRow, adminAction): a held one is rejected (released, free at once, as Reject frees it), and with `block`
-// every pending one (a gated claim, a name being set up) is rejected too and a live or paused one is blocked, as Block
-// blocks it; and the source goes on blocked_sources for SOURCE_BLOCK_S,
+// "Block all" ({ source, block: true }) or "Reject all held" ({ source }, or { asn } for a network's names with no
+// source) on a group of the panel, in batches of at most SOURCE_MAX names a request (each is about ten D1 queries, its
+// decision taken as its own action would take it: onFreshRow, adminAction): a held one is rejected (released, free at
+// once, as Reject frees it), and with `block` every pending one (a gated claim, a name being set up) is rejected too
+// and a live or paused one is blocked, as Block blocks it; and the source goes on blocked_sources for SOURCE_BLOCK_S,
 // so its next claim of a new name is refused 403 before anything is written. Only names whose tenure that claim began.
 // Answers what was done, and `more` (the page asks again until it is false, or a batch did nothing). The admin's phone
 // hears of the click once (`run`, `total`, as Free all and remove).

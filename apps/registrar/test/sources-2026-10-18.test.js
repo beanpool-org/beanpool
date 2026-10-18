@@ -182,6 +182,36 @@ test('"Reject all held" frees only the held names: a gated claim and a name bein
     } finally { w.restore(); }
 });
 
+// Review of #2132: without SOURCE_KEY every name fell into one "no source" group, whose Reject all held sent the newest
+// row's network: it freed that network's held names only (and any keyed source's on it), not the group's.
+test('without SOURCE_KEY the names with no source group by network, and a group\'s "Reject all held" frees exactly its held names', async () => {
+    const w = await sourceWorld();
+    try {
+        const net = (ip, asn) => ({ ip, cf: { asn, asOrganization: `Example AS${asn}`, country: 'NL' } });
+        await admin(w, 'settings', { hold: true });
+        // A keyed source on AS64502, held, from before the key went.
+        assert.equal((await claimFrom(w, net('198.51.100.50', 64502), await makeKey(), { name: 'keyed-held' })).body.status, 'pending');
+        delete w.env.SOURCE_KEY;
+        for (const [i, from] of [net('198.51.100.60', 64500), net('198.51.100.61', 64502), net('198.51.100.62', 64500), net('198.51.100.63', 64502)].entries())
+            assert.equal((await claimFrom(w, from, await makeKey(), { name: `nh-${i}` })).body.status, 'pending', `nh-${i}`);
+        const panel = (await admin(w, 'sources')).body;
+        assert.equal(panel.source_key_set, false);
+        const groups = panel.groups.map((g) => [g.source === null ? 'no source' : 'keyed', g.asn, g.names, g.held]).sort((a, b) => `${a}`.localeCompare(`${b}`));
+        assert.deepEqual(groups, [['keyed', 64502, 1, 1], ['no source', 64500, 2, 2], ['no source', 64502, 2, 2]]);
+        // Each no-source group's button names its own network and counts its own held names.
+        const p = await adminPage(w);
+        p.ctx.renderSources(panel);
+        const card = p.els.sourcesContainer.innerHTML;
+        assert.match(card, /data-source-act="reject" data-asn="64500" data-total="2"[^>]*>Reject all held \(2\)</);
+        assert.match(card, /data-source-act="reject" data-asn="64502" data-total="2"[^>]*>Reject all held \(2\)</);
+        // Pressed for AS64502: its two, not AS64500's, nor the keyed source's on the same network.
+        const r = await admin(w, 'sources', { asn: 64502 });
+        assert.equal(r.status, 200, JSON.stringify(r.body));
+        assert.deepEqual([r.body.rejected.sort(), r.body.more], [['nh-1', 'nh-3'], false]);
+        assert.deepEqual(['nh-0', 'nh-2', 'keyed-held'].map((n) => row(w, n).status), ['pending', 'pending', 'pending']);
+    } finally { w.restore(); }
+});
+
 test('probation: a new name is live but "not found" on /i/ and the directory waits, until 3 ok sweeps and an hour', async () => {
     const w = await sourceWorld();
     try {

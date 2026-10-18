@@ -146,6 +146,10 @@ test('REG-05: new auto names are budgeted per hour across all keys (20 by defaul
         w.sqlite.prepare("UPDATE name_allocations SET requested_at = requested_at - 600 WHERE name = 'spam-24'").run();
         await attestSweep(w.env);
         assert.equal(heldRow(w, 'spam-24').status, 'pending');
+        // Nor one whose settings read fails (D1 overloaded): that is not a database without held_reason (review of #2132).
+        w.failSettingsRead();
+        await attestSweep(w.env);
+        assert.equal(heldRow(w, 'spam-24').status, 'pending');
         // A gated claim makes nothing at Cloudflare: not budgeted, and waits as it always did.
         const g = await w.claim(await makeKey(), { name: 'sydney' });
         assert.equal(g.body.status, 'pending');

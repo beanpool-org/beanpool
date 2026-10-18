@@ -2043,7 +2043,7 @@ export async function attestSweep(invocationEnv) {
     }
     await upkeep(env, results, BATCH);
     await alertConditions(env, j, s);
-    await finishOrphans(d1, s);
+    await finishOrphans(d1);
     await pruneSources(d1, s);
     // One send for the sweep, last: what alertConditions told, the New community alert of names it verified, and whatever still
     // waits from a failed send (a try every 5 minutes, with the cron). Under waitUntil: the sweep never waits for ntfy.
@@ -2139,13 +2139,13 @@ async function upkeep(env, results, batch) {
 const ORPHAN_AFTER_S = 120;
 const ORPHANS_PER_SWEEP = 3;
 const ORPHAN_D1 = 15;   // the most one takes (measured: 10; 12 with a leftover tunnel; 3 more with the outbox full)
-async function finishOrphans(d1, s) {
+async function finishOrphans(d1) {
     const env = d1.env;
     try {
         if (d1.left() < 1 + sendD1(env)) return;   // not even the list's read
         const now = nowS();
-        // A name held for the admin's approval is never an orphan (s.schema: the database has held_reason).
-        for (const a of await db.listOrphans(env, now - ORPHAN_AFTER_S, now - releaseCooloffS(env), ORPHANS_PER_SWEEP, s?.schema !== false)) {
+        // A name held for the admin's approval is never an orphan (db.listOrphans asks the row, whatever the settings read).
+        for (const a of await db.listOrphans(env, now - ORPHAN_AFTER_S, now - releaseCooloffS(env), ORPHANS_PER_SWEEP)) {
             if (d1.left() < ORPHAN_D1 + sendD1(env)) {
                 console.warn('[ORPHAN_WAIT]', a.name, `pending: ${d1.left()} of D1's ${D1_QUERIES} queries left this sweep; finishing it takes up to ${ORPHAN_D1}, and the sweep's send ${sendD1(env)}`);
                 break;

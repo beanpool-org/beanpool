@@ -579,3 +579,43 @@ test('the daily line says while "Hold all new names" is on', async () => {
         assert.doesNotMatch(next, /Hold all new names/);
     } finally { w.restore(); }
 });
+
+// Review of #2132: a settings read that fails (D1 overloaded, a connection lost) is not a database without migration
+// 0011. Read as one, the sweep finished held names as orphans.
+test('a sweep whose settings read fails never finishes a held name as an orphan, and still finishes a real one', async () => {
+    const w = await sourceWorld();
+    try {
+        await admin(w, 'settings', { hold: true });
+        assert.equal((await claimFrom(w, FROM.home, await makeKey(), { name: 'hold-c' })).body.status, 'pending');
+        w.sqlite.prepare("UPDATE name_allocations SET requested_at = requested_at - 600 WHERE name = 'hold-c'").run();
+        await attestSweep(w.env);
+        assert.equal(row(w, 'hold-c').status, 'pending');
+        w.failSettingsRead();
+        await attestSweep(w.env);
+        assert.deepEqual([row(w, 'hold-c').status, row(w, 'hold-c').held_reason, row(w, 'hold-c').tunnel_id], ['pending', 'hold-all', null]);
+        assert.equal(liveTunnels(w), 0, 'nothing made for it');
+        // A claim Cloudflare failed (held by nothing) is an orphan whatever the settings read: that sweep finishes it.
+        await admin(w, 'settings', { hold: false });
+        w.cf.fail.createTunnel = true;
+        assert.equal((await claimFrom(w, FROM.home, await makeKey(), { name: 'orphaned' })).status, 502);
+        w.cf.fail.createTunnel = false;
+        w.sqlite.prepare("UPDATE name_allocations SET requested_at = requested_at - 600 WHERE name = 'orphaned'").run();
+        await admin(w, 'settings', { hold: true });
+        w.failSettingsRead();
+        await attestSweep(w.env);
+        assert.equal(row(w, 'orphaned').status, 'live');
+        assert.equal(row(w, 'hold-c').status, 'pending');
+    } finally { w.restore(); }
+});
+
+test('on a database without migration 0011 (no held_reason) the sweep still finishes an orphan', async () => {
+    const w = await world({ migrations: ['0001_init.sql', '0002_states.sql', '0003_decision_seq.sql', '0004_teardown.sql', '0005_reserve_global.sql', '0006_request_nonces.sql', '0007_content_swap.sql', '0008_alerts.sql', '0009_watch.sql', '0010_reserve_our_hosts.sql'] });
+    try {
+        w.cf.fail.createTunnel = true;
+        assert.equal((await w.claim(await makeKey(), { name: 'oldorphan' })).status, 502);
+        w.cf.fail.createTunnel = false;
+        w.sqlite.prepare("UPDATE name_allocations SET requested_at = requested_at - 600 WHERE name = 'oldorphan'").run();
+        await attestSweep(w.env);
+        assert.equal(row(w, 'oldorphan').status, 'live');
+    } finally { w.restore(); }
+});

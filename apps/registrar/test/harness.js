@@ -253,6 +253,15 @@ export async function world({ migrations, env: extra } = {}) {
         verify: async (name) => db.updateAllocation(env, name, { verified_at: nowS() }),
         // A live setting, as /admin writes it (src/settings.js).
         setting: (key, value) => sqlite.prepare('INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, ?)').run(key, String(value), nowS()),
+        // The settings' one read (src/settings.js read) failing its next `times` times, as D1 fails a query when it is
+        // overloaded or loses its connection: the table is there (not a database without migration 0011).
+        failSettingsRead: (times = 1) => {
+            const DB = env.DB;
+            let left = times;
+            const fail = async () => { throw new Error('D1_ERROR: Network connection lost.'); };
+            const failing = { bind: () => failing, first: fail, all: fail, run: fail };
+            env.DB = { prepare: (sql) => (left > 0 && /^SELECT .* FROM settings$/.test(sql.trim()) ? (left--, failing) : DB.prepare(sql)) };
+        },
     };
     return w;
 }

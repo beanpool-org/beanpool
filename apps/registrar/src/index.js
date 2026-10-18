@@ -20,6 +20,7 @@ import { ADMIN_HTML } from './admin-html.js';
 import * as alerts from './alerts.js';
 import { accessMode, accessIdentity } from './access.js';
 import { watchOurServers, serversStatus, watchTargets, WATCH_CRON } from './watch.js';
+import { handleStatusJson } from './status.js';
 
 const NAME_RE = /^[a-z0-9](?:[a-z0-9-]{1,30}[a-z0-9])$/; // 3–32, no leading/trailing hyphen
 const json = (obj, status = 200) =>
@@ -1976,6 +1977,8 @@ export default {
             if (method === 'GET' && p === '/api/registrar/health')
                 return json({ status: 'ok', commit: env.GIT_SHA || null, accepted_proto: await acceptedProtos(env) });
             if (method === 'GET' && p === '/api/registrar/available') return await handleAvailable(url, env);
+            // The public status line of our servers (src/status.js), for beanpool.org/status: no names but ours.
+            if (method === 'GET' && p === '/api/registrar/status.json') return await handleStatusJson(env);
             if (method === 'POST' && p === '/api/registrar/claim') return await finishing(env, handleClaim(request, env, bodyText));
             if (method === 'POST' && p === '/api/registrar/heal') return await finishing(env, handleHeal(request, env, bodyText));
             if (method === 'POST' && p === '/api/registrar/rotate') return await finishing(env, handleRotate(request, env, bodyText));

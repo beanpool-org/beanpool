@@ -49,6 +49,11 @@ WATCH_TARGETS = '''[
   {"name": "castlemaine", "url": "https://castlemaine.beanpool.org"},
   {"name": "test", "url": "https://test.beanpool.org"}
 ]'''
+# The public status line (src/status.js, design scratch/global-node/DESIGN-global-mothership-fable.md §3.2 U4, slice A8):
+# the WATCH_TARGETS servers status.json shows at GET /api/registrar/status.json, which beanpool.org/status draws —
+# comma-separated, in order; the registrar itself is always shown, last. OUR servers only: never a community's node
+# (mullum, castlemaine) or name. Unset, only the registrar. Nothing is written without the STATUS binding below.
+STATUS_SERVERS = "global,test"
 # Who may use the control room (/admin and /api/local/admin/registrar/*, src/access.js): Cloudflare Access sits in
 # front of those paths (app "BeanPool control room (registrar admin)", its own MFA: email code + authenticator), and the
 # Worker believes only Access's signed token — this team's, for this app's AUD tag, naming an email listed here. With
@@ -70,6 +75,14 @@ database_name = "beanpool-registrar"
 database_id = "165d8b11-fee8-4788-8ece-c632851e47d9"
 # `wrangler d1 migrations` keeps what it applied in the table d1_migrations (its default).
 migrations_dir = "migrations"
+
+# KV binding for the public status line (src/status.js): one key, status.json, written at each watch tick (288 writes a
+# day; Workers Free allows 1,000) and read by GET /api/registrar/status.json. Unbound, nothing is written and the GET
+# answers 404 — the watch and the sweep are untouched. To turn it on (by hand, on the live account):
+# `npx wrangler kv namespace create beanpool-status`, then uncomment these three lines with the id it prints.
+# [[kv_namespaces]]
+# binding = "STATUS"
+# id = "<the id wrangler prints>"
 
 # Routes on the beanpool.org zone. The Worker intercepts these paths; the Pages static
 # site continues to serve everything else. Uncomment + set zone_id at deploy time.

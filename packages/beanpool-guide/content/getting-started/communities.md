@@ -1,7 +1,7 @@
 ---
 slug: communities
 title: More than one community
-summary: Belong to several communities with one account, switch between them, and see what the global community shows you.
+summary: Belong to several communities with one account, switch between them, follow your community to a new address, and see what the global community shows you.
 related: joining, finding-a-community, your-area, leaving-or-deleting, your-12-words, faq, the-top-bar
 ---
 
@@ -64,6 +64,15 @@ Your other communities work as before.
 - Tap the one you want.
 
 You can also switch in **Settings**, under **System**, then **Advanced / Subsystem**. Your communities are listed there. The one you are using is marked as active. Tap **Switch to Town** on another one to move to it.
+
+## When your community moves to a new address
+
+A community can move to a new address: for example, from its server's number (such as 203.0.113.5) to a name. On the phone, Home then shows a card at the top: **This community is also at beans.example.org. Use that address from now on?** It shows only after your phone has checked with the community's server that the new address is the same community.
+
+- Tap **Use the new address**. Your phone moves there with what it keeps for that community, your messages included, and opens the community again, as when you switch.
+- Tap **Not now**, and the card asks again in 7 days. Your phone never moves by itself.
+- If the new address answers as a different community, the app says **This phone stays where it is**, and keeps the address it has. If the check can't be made, it says **Nothing has changed. Try again in a little while.**
+- If the old address stopped answering before your phone heard of the new one, nothing can tell your phone where the community went. Ask its owners for the new address, then tap the bean, then **Add a community**, and type it there.
 
 ## Forgetting a community on this phone
 

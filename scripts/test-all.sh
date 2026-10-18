@@ -321,6 +321,15 @@ run_website_colours() {
 }
 run_check "website_colours" run_website_colours
 run_check "website_contrast" bash -c 'pnpm --filter @beanpool/pwa exec playwright install --only-shell ${CI:+--with-deps} chromium && node scripts/website-contrast.mjs'
+# beanpool.org/status, the public status line of our servers (mothership slice A8): drawn from a stubbed status.json at
+# 320 px, light and dark, each state in words and its token colour, nothing wider than the screen; a late, missing or
+# unknown status said in words; nothing from the status drawn as markup. Its Chromium is the one website_contrast
+# installs, so it starts once that has finished. Seconds.
+run_website_status() {
+  while [ ! -f "$LOGDIR/website_contrast.rc" ]; do sleep 1; done
+  node --test scripts/website-status.test.mjs
+}
+run_check "website_status" run_website_status
 # beanpool.org/global, the link to the global community: every link on it is https and ours, the Play referrer reads
 # global=1, its script sends each kind of visitor where the global-entry design says, and the iPhone app claims it. Instant.
 run_check "website_global_link" node --test scripts/website-global-link.test.mjs

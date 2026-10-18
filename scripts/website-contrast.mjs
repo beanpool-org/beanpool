@@ -48,11 +48,24 @@ const FAKE_SUPABASE = `window.supabase = { createClient: () => ({
     { community_name: 'Riverbend Commons', service_radius: { lat: -28.55, lng: 153.5, radiusKm: 40 }, member_count: 42, contact_email: 'hello@example.org', contact_phone: '+61 400 000 000', node_url: 'riverbend.example.org' },
     { community_name: 'Hilltop', service_radius: { lat: 40.7, lng: -74, radiusKm: 15 }, member_count: 7 } ], error: null }) }),
   auth: { signInWithOtp: async () => ({ error: null }) } }) };`;
-const BLANK_TILE = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/58BAAQAAf8RTdbFAAAAAElFTkSuQmCC', 'base64');
+// status.html's status.json (the registrar's, apps/registrar/src/status.js), one server in each state it draws: answering,
+// down, missed its last check; so each state's words are judged.
+const fakeStatus = () => {
+    const now = Math.floor(Date.now() / 1000);
+    const server = (name, up, incident) => ({ name, up, checked_at: now - 60, looks: 5749, answered: 5742, percent: 99.87, since: '2026-09-20', incident });
+    return JSON.stringify({ v: 1, at: now - 60, every_s: 300, window_days: 90, servers: [
+        server('global', true, { began_at: now - 86400, ended_at: now - 86400 + 2100, why: 'timed-out' }),
+        server('test', false, { began_at: now - 600, ended_at: null, why: 'http-502' }),
+        server('vault', false, null),
+        server('registrar', true, null),
+    ] });
+};
+const BLANK_TILE =Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/58BAAQAAf8RTdbFAAAAAElFTkSuQmCC', 'base64');
 
 async function offline(page) {
     await page.route('**/*', (r) => {
         const u = new URL(r.request().url());
+        if (u.hostname === '127.0.0.1' && u.pathname === '/api/registrar/status.json') return r.fulfill({ body: fakeStatus(), contentType: 'application/json' });
         if (u.hostname === '127.0.0.1') return r.continue();
         if (u.hostname === 'unpkg.com' && u.pathname.endsWith('leaflet.js')) return r.fulfill({ path: path.join(LEAFLET, 'leaflet.js'), contentType: 'text/javascript' });
         if (u.hostname === 'unpkg.com' && u.pathname.endsWith('leaflet.css')) return r.fulfill({ path: path.join(LEAFLET, 'leaflet.css'), contentType: 'text/css' });
@@ -177,6 +190,11 @@ try {
                 // fail if it never opens, so the popup can't drop out of the check unseen.
                 const open = await page.waitForFunction(() => { const p = document.querySelector('.leaflet-popup'); return p && getComputedStyle(p).opacity === '1'; }, null, { timeout: 5000 }).then(() => true, () => false);
                 if (!open) failures.push({ line: `${theme} ${width}px index.html: the directory map's popup did not open, so it was not judged` });
+            }
+            if (pg === 'status.html') {
+                // Its rows are drawn once the stubbed status.json is read: judge them, and fail if they never come.
+                const drawn = await page.waitForFunction(() => document.querySelectorAll('.status-row').length === 4, null, { timeout: 5000 }).then(() => true, () => false);
+                if (!drawn) failures.push({ line: `${theme} ${width}px status.html: the status rows were not drawn, so they were not judged` });
             }
             if (pg === 'help.html' && width === 320) {
                 await page.evaluate(() => { const p = document.createElement('p'); p.textContent = 'contrast canary'; p.style.color = 'var(--pattern-bg)'; document.querySelector('main, .container, body').prepend(p); });

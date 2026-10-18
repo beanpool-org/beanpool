@@ -4,9 +4,10 @@
  *   GET    /api/global/communities?lat&lng&q=&limit&offset&order   public. The mirrored directory (services/directory-mirror.ts):
  *          from a point, nearest first in 25 km bands, and within a band the communities keeping the listing promise and
  *          taking requests to join first, each group shuffled (engine/directory-cache.ts listCommunities); else by name.
- *          `q` searches names. `order` is the shuffle an earlier answer gave: send it back for its next page, which then
- *          walks the same order; left out, every read shuffles afresh. Each community carries `promise`,
- *          `acceptingKnocks` and `closingOn` (mothership A2). → { communities, total, limit, offset, order, fetchedAt }
+ *          `q` searches names. `order` (up to 8 hex digits, the reader's own pick) fixes the shuffle: a reader paging
+ *          sends the same one with every page, which then walk one order; left out, every read shuffles afresh. Each
+ *          community carries `promise`, `acceptingKnocks` and `closingOn` (mothership A2).
+ *          → { communities, total, limit, offset, fetchedAt }
  *   GET    /api/global/home?lat&lng                           public, better signed. Everything the "Find your community"
  *          card needs in one request (session-cost-baselines). → { point, communities, communityCount, nearbyPosts,
  *          watches, knock, directoryFetchedAt }
@@ -69,15 +70,13 @@ function nameQuery(query: Record<string, unknown>): Parsed<string | null> {
     return { ok: true, value: q || null };
 }
 
-/** The shuffle an earlier answer gave (8 hex digits), or null for a new one. */
+/** The reader's shuffle (up to 8 hex digits), or null for a new one on this read. */
 function orderQuery(query: Record<string, unknown>): Parsed<number | null> {
     const raw = query.order;
     if (raw === undefined) return { ok: true, value: null };
-    if (typeof raw !== 'string' || !/^[0-9a-f]{1,8}$/.test(raw)) return { ok: false, error: 'order must be the order an earlier answer gave (up to 8 hex digits).' };
+    if (typeof raw !== 'string' || !/^[0-9a-f]{1,8}$/.test(raw)) return { ok: false, error: 'order must be up to 8 hex digits, the same on every page.' };
     return { ok: true, value: parseInt(raw, 16) };
 }
-
-const orderToken = (n: number) => n.toString(16).padStart(8, '0');
 
 function badRequest(ctx: any, error: string): void {
     ctx.status = 400;
@@ -197,7 +196,7 @@ export function createGlobalDirectoryRoutes(_deps: RouteDeps): Router {
         // the answer is fixed by the query and fetchedAt: the ETag is made of those two, and a repeat read is a 304
         // before anything is read. Up to the shuffle: a read with no `order` shuffles the communities at the same
         // distance afresh, and the tag (a weak one) stands for any of those answers, which hold the same communities in
-        // the same bands. A reader revalidating keeps the order it was given, and its next page sends that order.
+        // the same bands: a reader revalidating keeps the order it was given. One that pages sends its own `order`.
         const status = readMirrorStatus();
         const tag = crypto.createHash('sha256').update(`${status.fetchedAt ?? 'never'}|${ctx.querystring}`).digest('hex').slice(0, 16);
         const etag = `W/"communities-${tag}"`;
@@ -209,11 +208,8 @@ export function createGlobalDirectoryRoutes(_deps: RouteDeps): Router {
             ctx.status = 304;
             return;
         }
-        const listedNow = listCommunities({ point: point.value, q: q.value, limit: limit.value, offset: offset.value, order: order.value });
-        ctx.body = {
-            communities: listedNow.communities, total: listedNow.total, limit: limit.value, offset: offset.value,
-            order: orderToken(listedNow.order), fetchedAt: status.fetchedAt,
-        };
+        const { communities, total } = listCommunities({ point: point.value, q: q.value, limit: limit.value, offset: offset.value, order: order.value });
+        ctx.body = { communities, total, limit: limit.value, offset: offset.value, fetchedAt: status.fetchedAt };
     });
 
     router.get('/api/global/home', async (ctx) => {

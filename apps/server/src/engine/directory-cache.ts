@@ -483,8 +483,8 @@ export interface CommunityQuery {
     limit: number;
     offset: number;
     /**
-     * The shuffle among communities at the same distance (a whole number from 0 to 2^32 - 1): the `order` an earlier answer
-     * gave, so its next page walks the same order. Left out, a new one for this read.
+     * The shuffle among communities at the same distance (a whole number from 0 to 2^32 - 1), the reader's own: the same
+     * one on every page walks one order. Left out, a new one for this read.
      */
     order?: number | null;
 }
@@ -519,9 +519,9 @@ function tieRank(order: number, key: string): number {
  * to join come first, then the rest, each group in the order of this read's shuffle (`order`, new on every read unless
  * the caller sends one), so no community is always the first a stranger sees; those with no place after them, by name.
  * The member count never orders anything. Without a point, by name, ties by key. Within a band, an equal rank goes by
- * key, so paging with the same `order` never skips or repeats. `total` is how many match; `order` is the shuffle this read used.
+ * key, so paging with the same `order` never skips or repeats. `total` is how many match.
  */
-export function listCommunities(query: CommunityQuery): { communities: Community[]; total: number; order: number } {
+export function listCommunities(query: CommunityQuery): { communities: Community[]; total: number } {
     const needle = query.q ? foldForSearch(query.q.trim()) : '';
     const order = query.order ?? newDirectoryOrder();
     const rows = listed()
@@ -558,7 +558,7 @@ export function listCommunities(query: CommunityQuery): { communities: Community
     });
     const page = rows.slice(query.offset, query.offset + query.limit)
         .map(x => toCommunity(x.r, x.d === null ? null : Math.round(x.d * 10) / 10));
-    return { communities: page, total: rows.length, order };
+    return { communities: page, total: rows.length };
 }
 
 /** How many communities are listed. */

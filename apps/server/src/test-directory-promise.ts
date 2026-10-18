@@ -24,7 +24,7 @@
  *      accepting_knocks or closing_on is none
  *   8. the order (global profile): two communities at the same distance without the promise come in both orders over 50
  *      reads, and the one keeping the promise and taking requests is always first; a promise without knocks, and a
- *      forged promise, are not first; member count never sorts; the next band comes after; paging with the answer's
+ *      forged promise, are not first; member count never sorts; the next band comes after; paging with the reader's own
  *      `order` walks one order; the card's answer carries promise, acceptingKnocks and closingOn
  *   9. the ticks travel to a standby with the community's settings, rewritten to their three fields
  *
@@ -367,16 +367,19 @@ async function main() {
         `the card's answer carries promise, acceptingKnocks and closingOn (${JSON.stringify(keeps && { promise: keeps.promise, acceptingKnocks: keeps.acceptingKnocks, closingOn: keeps.closingOn })})`);
     assert(same(shut?.promise, KEPT) && shut?.acceptingKnocks === false && forged?.promise === null && forged?.acceptingKnocks === true,
         'a promise without knocks is shown as it is; a forged one as none');
-    assert(typeof firstAnswer?.order === 'string' && /^[0-9a-f]{8}$/.test(firstAnswer.order), `the answer says its order (${firstAnswer?.order})`);
-    const order = firstAnswer?.order;
+    // A reader that pages picks its own shuffle and sends it with every page.
+    const order = '5eed0a2b';
     const whole = (await call('GET', `/api/global/communities?lat=${HERE.lat}&lng=${HERE.lng}&order=${order}`, undefined, {})).json;
+    const again = (await call('GET', `/api/global/communities?lat=${HERE.lat}&lng=${HERE.lng}&order=${order}`, undefined, {})).json;
     const page1 = (await call('GET', `/api/global/communities?lat=${HERE.lat}&lng=${HERE.lng}&order=${order}&limit=3`, undefined, {})).json;
     const page2 = (await call('GET', `/api/global/communities?lat=${HERE.lat}&lng=${HERE.lng}&order=${order}&limit=3&offset=3`, undefined, {})).json;
     const page3 = (await call('GET', `/api/global/communities?lat=${HERE.lat}&lng=${HERE.lng}&order=${order}&limit=3&offset=6`, undefined, {})).json;
     const keysOf = (b: any): string[] => (b?.communities ?? []).map((c: any) => c.key);
-    assert(same(keysOf(whole), keysOf(firstAnswer)) && same([...keysOf(page1), ...keysOf(page2), ...keysOf(page3)], keysOf(firstAnswer))
-        && whole?.order === order,
-        `the same order again gives the same answer, and its pages walk it with nothing skipped or repeated (${JSON.stringify([keysOf(page1), keysOf(page2), keysOf(page3)])})`);
+    assert(keysOf(whole).length === 7 && keysOf(whole)[0] === 'peer-keeps' && same(keysOf(again), keysOf(whole))
+        && same([...keysOf(page1), ...keysOf(page2), ...keysOf(page3)], keysOf(whole)),
+        `the same order gives the same answer, and its pages walk it with nothing skipped or repeated (${JSON.stringify([keysOf(page1), keysOf(page2), keysOf(page3)])})`);
+    assert(!('order' in (firstAnswer ?? {})) && same(Object.keys(firstAnswer ?? {}).sort(), ['communities', 'fetchedAt', 'limit', 'offset', 'total']),
+        `the answer's own fields are as before (${JSON.stringify(Object.keys(firstAnswer ?? {}))})`);
     const badOrder = await call('GET', `/api/global/communities?lat=${HERE.lat}&lng=${HERE.lng}&order=zz`, undefined, {});
     assert(badOrder.status === 400, `an order that isn't one → 400 (${badOrder.status})`);
     let homeWrong = 0;

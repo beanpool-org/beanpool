@@ -2,7 +2,9 @@
  * Joining the global community from an account this phone already has (Marty, on the board, 2026-10-01: "Yes, before
  * launch"). The door's client half is utils/global-join.ts, written for a new phone's first screen; this is the same
  * door for a member who is past it: a guest of the global community (People → Invites), or a member of a local
- * community adding the global one (the BeanPool sheet, Settings → Advanced). The screen is app/join-global.tsx.
+ * community adding the global one (the BeanPool sheet, Settings → Advanced). The screen is app/join-open-door.tsx,
+ * opened as `/join-global` for the global community; since slice P5 it is also the door of any other community whose
+ * door is open (`?node=`, utils/open-door.ts), with the same calls at that community's address.
  *
  * ## The same door, with the key already on the phone
  *
@@ -44,6 +46,7 @@ import { SSO_PROVIDER_NAMES } from './sso-providers';
 import type { KeeperEnrolmentResult } from './keeper-enrolment';
 import type { JoinDeps } from './join-another-community';
 import { communitySwitched } from './community-switch';
+import { assertPlainNodeAddress } from './node-url';
 
 /**
  * The key the door's sign-in and join are signed by: the account this phone holds, as it is. Null when the phone
@@ -143,12 +146,22 @@ async function defaultEnterDeps(): Promise<EnterDeps> {
  * list. No longer a guest there, if it was. The account and every other community in the list are left as they were.
  */
 export async function enterGlobalCommunity(injected?: EnterDeps): Promise<void> {
+    await enterOpenDoorCommunity(GLOBAL_NODE_URL, 'Global community', injected);
+}
+
+/**
+ * The same for any community whose door let this account in (app/join-open-door.tsx, slice P5): `url` is the door's own
+ * address, `name` the community's own name (none yet: the BeanPool sheet writes it when the community answers). Only a
+ * plain address becomes the phone's community (utils/node-url.ts), refused before anything moves.
+ */
+export async function enterOpenDoorCommunity(url: string, name: string | undefined, injected?: EnterDeps): Promise<void> {
+    assertPlainNodeAddress(url);
     const deps = injected ?? await defaultEnterDeps();
     // In the list and no guest's first, so a switch that fails below still leaves it one tap away in the BeanPool sheet.
-    await deps.clearGuestNode(GLOBAL_NODE_URL).catch(() => {});
-    await deps.addSavedNode(GLOBAL_NODE_URL, 'Global community').catch(() => {});
+    await deps.clearGuestNode(url).catch(() => {});
+    await deps.addSavedNode(url, name).catch(() => {});
     await deps.closeDB();
-    await AsyncStorage.setItem('beanpool_anchor_url', GLOBAL_NODE_URL);
+    await AsyncStorage.setItem('beanpool_anchor_url', url);
     await deps.initDB();
     // The update screen asks the community now in use (utils/community-switch.ts).
     communitySwitched();
@@ -169,14 +182,19 @@ export interface JoinedGlobal {
  *
  * `stillWanted` is asked once the name is in, just before the phone switches: a screen the member has left by then
  * switches nothing (null). They are in all the same, and the door says so (`already_member`) the next time.
+ *
+ * `at`: another community's door (app/join-open-door.tsx `?node=`), its address and its own name when known: the name is
+ * asked there and the phone switches there. The global community's when absent.
  */
 export async function finishJoinFromAccount(
     answer: Extract<DoorAnswer, { kind: 'joined' }>, key: JoinKey, typed: string,
-    options: { stillWanted?: () => boolean; deps?: EnterDeps } = {},
+    options: { stillWanted?: () => boolean; deps?: EnterDeps; at?: { url: string; name?: string } } = {},
 ): Promise<JoinedGlobal | null> {
-    const kept = await joinedUnderNodeName(GLOBAL_NODE_URL, answer, { ...key.identity, callsign: typed.trim() || key.identity.callsign });
+    const url = options.at?.url ?? GLOBAL_NODE_URL;
+    const kept = await joinedUnderNodeName(url, answer, { ...key.identity, callsign: typed.trim() || key.identity.callsign });
     if (options.stillWanted && !options.stillWanted()) return null;
-    await enterGlobalCommunity(options.deps);
+    if (options.at) await enterOpenDoorCommunity(options.at.url, options.at.name, options.deps);
+    else await enterGlobalCommunity(options.deps);
     return { name: kept.callsign, ...joinedGlobalNotice(answer.enrolment) };
 }
 

@@ -648,15 +648,15 @@ describe('the screens are wired to what is tested above (the screens can\'t rend
 
     it('a node without the 12-words door: the door looks exactly as before, the sign-in alone (both door screens)', () => {
         expect(src('app/welcome.tsx')).toMatch(/const words = wordsDoorOn\(check\.profile\.features\);\s*setWordsDoor\(words\);\s*setGlobalPhase\(words \? 'choose' : 'signIn'\);/);
-        expect(src('app/join-global.tsx')).toMatch(/const words = wordsDoorOn\(check\.profile\.features\);\s*setWordsDoor\(words\);\s*setPhase\(words \? 'choose' : 'signIn'\);/);
+        expect(src('app/join-open-door.tsx')).toMatch(/const words = wordsDoorOn\(check\.profile\.features\);\s*setWordsDoor\(words\);\s*setPhase\(words \? 'choose' : 'signIn'\);/);
     });
 
     it('the work starts as the door opens (the two choices), with the key the join is signed by', () => {
         const welcome = src('app/welcome.tsx');
         expect(between(welcome, "if (mode !== 'globalJoin' || globalPhase !== 'choose') return;", '}, [mode, globalPhase]);'))
             .toMatch(/joinKeyForThisPhone\(globalKey\)[\s\S]*doorWork\.start\(GLOBAL_NODE_URL, key\.identity, 'words'\)/);
-        expect(between(src('app/join-global.tsx'), "if (phase !== 'choose') return;", '}, [phase, startWork]);'))
-            .toMatch(/accountKeyForDoor\(\)[\s\S]*startWork\(GLOBAL_NODE_URL, account\.identity, 'words'\)/);
+        expect(between(src('app/join-open-door.tsx'), "if (phase !== 'choose') return;", '}, [phase, startWork]);'))
+            .toMatch(/accountKeyForDoor\(\)[\s\S]*startWork\(doorUrl, account\.identity, 'words'\)/);
     });
 
     it('the 12-words join: the name check, then the work (Back still works), then the key onto the phone, then the join', () => {
@@ -672,7 +672,7 @@ describe('the screens are wired to what is tested above (the screens can\'t rend
         const welcome = src('app/welcome.tsx');
         expect(between(welcome, 'async function handleWordsJoin()', 'async function afterDoorAnswer(')).not.toContain('await run.solution()');
         expect(between(welcome, 'function signInAgainAtDoor()', 'function chooseWordsAtDoor()')).toMatch(/nameCheckRef\.current\?\.abort\(\);\s*setLoading\(false\);/);
-        const account = src('app/join-global.tsx');
+        const account = src('app/join-open-door.tsx');
         const words = between(account, 'async function handleWordsJoin()', 'async function afterAnswer(');
         expect(words).toContain('await solutionUnlessLeft(run, stop.signal)');
         expect(words).not.toContain('await run.solution()');
@@ -680,9 +680,9 @@ describe('the screens are wired to what is tested above (the screens can\'t rend
     });
 
     it('the existing-account join by words asks no lock and writes no key: no sign-in, so no copy', () => {
-        const join = between(src('app/join-global.tsx'), 'async function handleWordsJoin()', 'async function afterAnswer(');
+        const join = between(src('app/join-open-door.tsx'), 'async function handleWordsJoin()', 'async function afterAnswer(');
         expect(join).not.toMatch(/authenticateUser|commitJoinKey|importIdentity|keepJoinedIdentity/);
-        expect(join).toMatch(/submitWordsJoin\(GLOBAL_NODE_URL, account\.identity, typed, run\)/);
+        expect(join).toMatch(/submitWordsJoin\(doorUrl, account\.identity, typed, run\)/);
     });
 
     it('Safety Backup for a 12-words member: the words note first, the tickbox, then "Add a sign-in as a second way back"', () => {

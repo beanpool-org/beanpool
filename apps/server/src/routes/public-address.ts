@@ -307,6 +307,7 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
             recordRegistrarAnswer({ name, hostname: result.hostname, status: result.status, reason: result.reason }, 'claim');
             updateNodeConfig({ publicAddress: {
                 name, mode, hostname: result.hostname, status: result.status, tunnelToken: result.tunnelToken, communityName, contact: b.contact,
+                ...(result.reason ? { reason: result.reason } : {}),   // pending: awaiting approval, or still being made ('provisioning')
                 ...(mode === 'tunnel' ? { origin: LOOPBACK_ORIGIN } : {}),
             } } as any);
             dropAddressRequest(`the owner claimed "${name}" in Settings`);   // the owner's choice ends what `beanpool claim` asked for at install

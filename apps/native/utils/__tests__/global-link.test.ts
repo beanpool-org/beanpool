@@ -296,15 +296,20 @@ describe('other links are not the global link, and are routed as before', () => 
     });
 });
 
-describe('a door a link opened holds its signed work until the member taps (app/join-global.tsx, app/welcome.tsx)', () => {
+describe('a door a link opened holds its signed work until the member taps (app/join-open-door.tsx, app/welcome.tsx)', () => {
     // The 12-words door's work (utils/door-work.ts) is a POST signed by the joining key. Opened by a tap it starts with the
     // door; opened by a link or the install referrer it waits: the link only opens the screen.
     const read = (file: string) => fs.readFileSync(path.join(appDir, file), 'utf8');
 
-    it('join-global: from=link holds the work; the door\'s opening starts it only when not held; either way in releases it', () => {
-        const src = read('join-global.tsx');
+    it('join-global is the door screen by its old name (slice P5): the same screen, the same params', () => {
+        expect(read('join-global.tsx')).toMatch(/^export \{ default, ErrorBoundary \} from '\.\/join-open-door';$/m);
+    });
+
+    it('join-open-door: from=link holds the work; the door\'s opening starts it only when not held; either way in releases it', () => {
+        const src = read('join-open-door.tsx');
         expect(src).toContain('useState(fromParam === FROM_LINK)');
-        expect(src).toContain("if (!heldForTap) startWork(GLOBAL_NODE_URL, account.identity, 'words');");
+        // The door's own address: the global community's with no `node` (utils/open-door.ts doorNodeFromParam).
+        expect(src).toContain("if (!heldForTap) startWork(doorUrl, account.identity, 'words');");
         expect(src).toMatch(/function chooseWords\(\) \{[\s\S]{0,300}setHeldForTap\(false\);/);
         expect(src).toMatch(/async function handleSignIn\(provider: SsoProvider\) \{\s*setHeldForTap\(false\);/);
     });

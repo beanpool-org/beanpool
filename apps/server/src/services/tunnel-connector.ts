@@ -32,7 +32,7 @@ import path from 'node:path';
 import readline from 'node:readline';
 import { getNodeRole, getNodeConfig, updateNodeConfig, publicAddressGeneration } from '../state-engine.js';
 import { recordRegistrarAnswer, registrarNames, registrarHostOf } from '../engine/registrar-names.js';
-import { turnedAwayList } from '../config/turned-away-names.js';
+import { settleUnansweredClaims, turnedAwayList } from '../config/turned-away-names.js';
 import { addressStatus, askNameHolder, claimAddress, healAddress } from './registrar-client.js';
 import { takeoverHoldsTunnel } from './takeover.js';
 import { logger } from '../logger.js';
@@ -78,6 +78,8 @@ interface Options {
     collapseMs: number;
     dockerSocket: string;
     containerMarkers: string[];
+    /** How long an unanswered claim's ask-again waits before its one retry (reclaimUnanswered). */
+    reclaimRetryMs: number;
 }
 
 const DEFAULTS: Options = {
@@ -95,6 +97,8 @@ const DEFAULTS: Options = {
     collapseMs: 10 * 60_000,
     dockerSocket: '/var/run/docker.sock',
     containerMarkers: ['/.dockerenv', '/run/.containerenv'],
+    // The registrar keeps working on a claim up to 30 s after its node stops waiting (waitUntil): past that, it is done.
+    reclaimRetryMs: 35_000,
 };
 
 let opts: Options = { ...DEFAULTS };
@@ -493,16 +497,19 @@ export function answersAboutAnotherName(answer: any, stored: any, asked: string 
 }
 
 /**
- * A claim of `name` that got no answer in time (registrar-client gives up after 5 s) can still complete at the registrar:
- * then this key holds the name, and nothing here says so. Asks who holds it and says it when it is this key's; an older
- * registrar (no /holder) or none answering: said as a maybe. `err`: the claim's error; anything but a timeout is no
- * concern here.
+ * A claim of `name` that got no answer in time (registrar-client gives up after 25 s) can still complete at the registrar:
+ * then this key holds the name, and nothing here says so. Asks who holds it. Held by this key and still pending — the
+ * registrar still making it, or a gated claim waiting for approval — while this server holds no other address: asked for
+ * again at once (reclaimUnanswered), never left for the owner to. Held by this key otherwise: said. An older registrar (no
+ * /holder) or none answering: said as a maybe. `err`: the claim's error; anything but a timeout is no concern here.
  */
 export async function noteUnansweredClaim(name: string, err: any): Promise<void> {
     if (!/timed out/.test(String(err?.message || ''))) return;
+    const since = publicAddressGeneration();
     try {
         const r = await askNameHolder(name);
         if (r.json && r.data?.held === 'you') {
+            if (r.data.state === 'pending' && holdsNoOtherAddress(name) && await reclaimUnanswered(name, since)) return;
             say('warn', `the claim of "${name}" got no answer in time, but the address service gives it to this server's key `
                 + `(${r.data.state || 'held'}); it is not used here: claim "${name}" in Settings to use it`);
             return;
@@ -510,6 +517,60 @@ export async function noteUnansweredClaim(name: string, err: any): Promise<void>
         if (r.ok && r.json && typeof r.data?.held === 'string') return;   // not this key's: nothing is held
     } catch { /* nothing answered */ }
     say('warn', `the claim of "${name}" got no answer in time; the address service may still give it to this server's key`);
+}
+
+/**
+ * A heal's live answer for tunnel name `name`, with the tunnel's token: a heal answers one only for a tunnel it made, and
+ * one its claim made meanwhile (the registrar finishes a claim its node stopped waiting for) is in /status. As it came
+ * when /status can't say: the agent's next check asks again.
+ */
+export async function withLiveToken(answer: any, name: string): Promise<any> {
+    if (answer?.status !== 'live' || answer.mode === 'direct' || answer.tunnelToken) return answer;
+    try {
+        const st = await addressStatus(name);
+        if (st?.status === 'live' && st.name === name && typeof st.tunnelToken === 'string' && st.tunnelToken) return { ...answer, tunnelToken: st.tunnelToken };
+    } catch { /* nothing answered */ }
+    return answer;
+}
+
+/** No address is stored here that this community uses (live, pending or paused) but `name` itself. */
+function holdsNoOtherAddress(name: string): boolean {
+    const pa = (getNodeConfig() as any).publicAddress;
+    return !pa?.name || pa.name === name || !['live', 'pending', 'paused'].includes(pa.status);
+}
+
+/**
+ * The unanswered claim's name, asked for again: a heal of this key's own name (never a claim: a heal can't take a new
+ * name or take back a release), which finishes one the registrar is still making, or answers a gated one as waiting for
+ * approval. While the claim itself is still being made at the registrar (it goes on after its node stops waiting), the
+ * heal finds its tunnel in the way (503) or waits as long: asked once more when that work has had its time
+ * (opts.reclaimRetryMs). Stored as the claim's answer would have been, only if nothing wrote the address since the claim's
+ * answer was given up on (`since`). True when the registrar answered it, or the address was written meanwhile; false
+ * when it did not answer, and the caller says what it would have said.
+ */
+async function reclaimUnanswered(name: string, since: number): Promise<boolean> {
+    say('info', `the claim of "${name}" got no answer in time, and the address service holds it for this server's key, not finished: asking for it again`);
+    let res: any;
+    for (let tries = 2; ; tries--) {
+        try { res = await healAddress(name, LOOPBACK_ORIGIN); break; }
+        catch (e: any) {
+            const busy = Number(e?.status) === 503 || /timed out/.test(String(e?.message || ''));
+            if (!busy || tries === 1) { say('warn', `asking for "${name}" again failed: ${e?.message || e}`); return false; }
+            await new Promise((r) => setTimeout(r, opts.reclaimRetryMs));
+            if (publicAddressGeneration() !== since) return true;   // the owner (or the agent) wrote the address meanwhile: that stands
+        }
+    }
+    if (res?.status !== 'live' && res?.status !== 'pending') return false;
+    const { changed: _changed, attest: _attest, ...healed } = res;
+    const answer = await withLiveToken(healed, name);
+    const stored = persistAddressIfUnchanged({ ...answer, name, ...(answer.mode === 'direct' ? {} : { origin: LOOPBACK_ORIGIN }) }, 'claim', since);
+    if (!stored) { addressChangedMeanwhile({ name, hostname: answer.hostname }); return true; }
+    await stored;
+    settleUnansweredClaims(name);   // as the claim's own answer would: this name is the owner's pick, stored
+    say('info', res.status === 'live'
+        ? `${answer.hostname || name} is live`
+        : `"${name}" is ${res.reason === 'provisioning' ? 'still being set up by the address service' : 'awaiting approval'}; Settings shows it`);
+    return true;
 }
 
 /** A heal's answer that came after the address was written another way: the newer write stands, the next tick looks again. */

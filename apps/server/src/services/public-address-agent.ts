@@ -7,10 +7,12 @@
 //   PUBLIC_ADDRESS_IP=<IPv4>           (direct only: the address its A record points at; direct claims nothing without it)
 //   REGISTRAR_URL=https://beanpool.org
 //
-// Every 5 min on a main server it asks the registrar about this server's name and saves a live answer; the tunnel inside
+// Every 5 min on a main server (every 15 while its name is live and nothing is pending: tickDue) it asks the registrar
+// about this server's name and saves a live answer; the tunnel inside
 // this server (services/tunnel-connector.ts) runs whatever token that holds. That refresh runs on any main server holding a
 // tunnel address (live, or waiting for approval), however it was claimed, and never claims a name. Only with the env above does it also claim: the
-// name it is given, when the registrar has none live for this key. A 'pending' (gated) name flips to live once approved.
+// name it is given, when the registrar has none live for this key. A 'pending' (gated) name flips to live once approved;
+// a pending name the registrar is still making ('provisioning': no approval is coming) is asked for again with a heal.
 // A name the registrar's sweep paused (another node's key, or something that is no BeanPool node, answered at it) is asked
 // back with a heal, never a claim, however it was claimed (services/tunnel-connector.ts healPausedAddress).
 // See docs/node-dns-registrar.md.
@@ -35,14 +37,14 @@ import { getLocalConfig, updateLocalConfig } from '../config/local-config.js';
 import { noteTurnedAway } from '../config/turned-away-names.js';
 import { dataDir } from '../recover-command.js';
 import { isAddressLabel, takeAddressRequestFile } from '../address-request.js';
-import { claimAddress, addressStatus, isPublicIpv4 } from './registrar-client.js';
+import { claimAddress, addressStatus, healAddress, isPublicIpv4 } from './registrar-client.js';
 import { cleanLabel, REGISTRAR_COMMUNITY_NAME_MAX, REGISTRAR_CONTACT_MAX } from '../config/clean-label.js';
 import { recordRegistrarAnswer } from '../engine/registrar-names.js';
 import { forgetOwnAddresses, ownerConfirmedAddresses, MAX_OWNER_ADDRESSES } from '../engine/own-addresses.js';
 import { isIpLiteral, normalizeAddress, ownAddressProblem } from '../engine/host-kinds.js';
 import { runAcmeTickSoon } from './acme/schedule.js';
 import { logger } from '../logger.js';
-import { persistAddressIfUnchanged, answersAboutAnotherName, healPausedAddress, noteUnansweredClaim, LOOPBACK_ORIGIN, withKeptTunnelToken } from './tunnel-connector.js';
+import { persistAddressIfUnchanged, answersAboutAnotherName, healPausedAddress, noteUnansweredClaim, LOOPBACK_ORIGIN, withKeptTunnelToken, withLiveToken } from './tunnel-connector.js';
 
 // Where it always lived; the take-over suites import it from here.
 export { withKeptTunnelToken };
@@ -81,10 +83,14 @@ const holdsTunnelAddress = (): boolean => {
     return !!pa && (pa.status === 'live' || pa.status === 'pending') && pa.mode !== 'direct' && !isOwnPublicAddress(pa);
 };
 
-/** Any BeanPool address saved here, live or waiting, tunnel or direct; an own address (an IP, a domain) is none. */
+/**
+ * Any BeanPool address saved here, live or waiting for approval, tunnel or direct; an own address (an IP, a domain) is none.
+ * Not one the registrar is still making (isProvisioning): until it is live, a request from `beanpool claim` for it stands,
+ * and is asked again as one.
+ */
 const holdsAddress = (): boolean => {
     const pa = (getNodeConfig() as any).publicAddress;
-    return !!pa && (pa.status === 'live' || pa.status === 'pending') && !isOwnPublicAddress(pa);
+    return !!pa && (pa.status === 'live' || (pa.status === 'pending' && !isProvisioning(pa))) && !isOwnPublicAddress(pa);
 };
 
 /** What storeOwnAddress did with an address, or why it did nothing. */
@@ -171,11 +177,45 @@ export function storeOwnAddress(input: string, by: string): OwnAddressResult {
  */
 const REFUSED = new Set([400, 403, 409]);
 
-/** The registrar holds the requested name for this key now (live or waiting): the request is done. */
+/** The registrar holds the requested name for this key now (live, or waiting for approval): the request is done. */
 const requestDone = (name: string): void => {
     const r = getLocalConfig().addressRequest;
     if (r && r.name === name) updateLocalConfig({ addressRequest: null });
 };
+
+/**
+ * A pending answer that waits for nobody: an auto name the registrar has not finished making (the claim's answer never
+ * reached this server, or Cloudflare failed). Not yet live, and no approval is coming: this server asks again. An older
+ * registrar says 'awaiting-approval' for it too, as for a gated claim, and is waited on as before.
+ */
+const isProvisioning = (st: any): boolean => st?.status === 'pending' && st.reason === 'provisioning';
+
+/**
+ * The registrar answers this server's name `provisioning`: asked for again at once with a heal of this key's own name (a
+ * claim of it would be a heal at the registrar too; a heal can never take a new name or take back a release), which
+ * makes it. A live answer is stored and run, and ends the request from `beanpool claim`; anything else leaves the name
+ * pending as stored, for the next check to ask again. Never throws.
+ */
+async function finishProvisioning(st: any): Promise<void> {
+    const since = publicAddressGeneration();
+    try {
+        const res = await healAddress(st.name, st.mode === 'direct' ? undefined : LOOPBACK_ORIGIN);
+        if (res?.status !== 'live') {
+            console.log(`[PublicAddr] ⏳ "${st.name}" is not finished yet (${res?.status ?? 'no answer'}${res?.reason ? `, ${res.reason}` : ''}): asked again on the next check`);
+            return;
+        }
+        const { reason: _reason, since: _since, ...was } = st;
+        const { changed: _changed, attest: _attest, ...healed } = res;
+        const answer = await withLiveToken({ mode: st.mode, ...healed }, st.name);
+        const stored = persistAddressIfUnchanged({ ...was, ...answer, name: st.name, ...(st.mode === 'direct' ? {} : { origin: LOOPBACK_ORIGIN }) }, 'stored', since, nameAskedFor());
+        if (!stored) return;
+        await stored;
+        requestDone(st.name);
+        console.log(`[PublicAddr] 🟢 live at ${answer.hostname || st.hostname}`);
+    } catch (e: any) {
+        console.warn(`[PublicAddr] "${st.name}" is still being set up, and asking again failed: ${e.message}; asked again on the next check`);
+    }
+}
 
 /**
  * Ends a request from `beanpool claim`: this server holds an address (or its owner released one) however it got it. Left
@@ -207,12 +247,14 @@ export async function reconcile(): Promise<void> {
     // install's late claim) is never stored: the answer counts as none, and the name asked for is claimed below.
     const turnedAway = (st.status === 'live' || st.status === 'pending') && !held?.name && answersAboutAnotherName(st, null, nameAskedFor());
     if (!turnedAway && (st.status === 'live' || st.status === 'pending')) {
-        if (st.status === 'pending') console.log(`[PublicAddr] ⏳ "${st.name || desiredName()}" awaiting approval`);
+        const provisioning = isProvisioning(st);
+        if (st.status === 'pending') console.log(`[PublicAddr] ⏳ "${st.name || desiredName()}" ${provisioning ? 'is still being set up by the address service' : 'awaiting approval'}`);
         // Not stored: another write came meanwhile (it stands; the next tick asks again), or the answer names another
         // name than the one stored (an older registrar answers about the key's first name): never moved onto it.
         const stored = persistAddressIfUnchanged(st, 'stored', since, nameAskedFor());
         if (!stored) return;
         await stored;
+        if (provisioning) { await finishProvisioning(st); return; }
         if (st.name) requestDone(st.name);
         return;
     }
@@ -245,8 +287,9 @@ export async function reconcile(): Promise<void> {
         const stored = persistAddressIfUnchanged({ name, mode, communityName, contact, ...res, ...(mode === 'tunnel' ? { origin: LOOPBACK_ORIGIN } : {}) }, 'claim', since);
         if (!stored) { lateClaim(name, res); return; }
         await stored;
-        if (res.status === 'live' || res.status === 'pending') requestDone(name);
+        if (res.status === 'live' || (res.status === 'pending' && !isProvisioning(res))) requestDone(name);
         if (res.status === 'live') console.log(`[PublicAddr] 🟢 live at ${res.hostname}`);
+        else if (isProvisioning(res)) console.log(`[PublicAddr] ⏳ "${name}" claimed — still being set up by the address service; asked again on the next check`);
         else console.log(`[PublicAddr] ⏳ "${name}" claimed — awaiting approval`);
     } catch (e: any) {
         console.warn('[PublicAddr] claim failed:', e.message);
@@ -332,13 +375,41 @@ export async function checkAddressRequest(now = Date.now()): Promise<void> {
     }
 }
 
+/**
+ * The agent ticks every TICK_MS (pick up an approval, a pause, a new token). A quiet server — its name live, nothing
+ * pending, no request from `beanpool claim` standing — asks only every QUIET_TICK_MS: every node asking every 5 min
+ * would spend the registrar's free plan (100,000 requests a day) at about 300 nodes, every 15 min at about 900
+ * (scratch/global-node/DESIGN-registrar-trust-fable.md §4.6). A live name losing its tunnel is not waited on: the
+ * tunnel's own Unauthorized asks the registrar at once (tunnel-connector.ts healDeadTunnel).
+ */
+export const TICK_MS = 5 * 60_000;
+export const QUIET_TICK_MS = 15 * 60_000;
+let lastAskedAt = 0;
+
+/**
+ * Is the agent's tick at `now` due to ask the registrar? Always, unless quiet (a live name, with its token if a tunnel,
+ * and no request standing) and asked within QUIET_TICK_MS (half a tick's slack).
+ */
+export function tickDue(now = Date.now()): boolean {
+    const pa = (getNodeConfig() as any).publicAddress;
+    const quiet = pa?.status === 'live' && (pa.mode === 'direct' || !!pa.tunnelToken) && !getLocalConfig().addressRequest;
+    return !quiet || now - lastAskedAt >= QUIET_TICK_MS - TICK_MS / 2;
+}
+
+/** The interval's tick: reconcile when due. */
+export async function tick(now = Date.now()): Promise<void> {
+    if (!tickDue(now)) return;
+    lastAskedAt = now;
+    await reconcile();
+}
+
 let timer: ReturnType<typeof setInterval> | null = null;
 
 export function initPublicAddress(): void {
     if (getNodeRole() !== 'primary') { console.log('[PublicAddr] 🔒 skipping — backup replica.'); return; }
     if (isEnabled()) console.log(`[PublicAddr] 📡 auto public-address enabled (name: ${desiredName() || '—'}, mode: ${process.env.PUBLIC_ADDRESS_MODE || 'tunnel'})`);
-    setTimeout(() => reconcile().catch(() => {}), 20_000);      // after identity/p2p ready
+    setTimeout(() => tick().catch(() => {}), 20_000);      // after identity/p2p ready
     setInterval(() => checkAddressRequest().catch(() => {}), 2_000).unref();
     if (timer) clearInterval(timer);
-    timer = setInterval(() => reconcile().catch(() => {}), 5 * 60_000); // pick up approvals + keep the token fresh
+    timer = setInterval(() => tick().catch(() => {}), TICK_MS);
 }

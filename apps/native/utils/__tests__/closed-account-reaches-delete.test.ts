@@ -46,7 +46,8 @@ describe('the root guard: where a refused key may stay (notRecognisedStays)', ()
 
     it('neither is diverted off the not-recognised screen or the screens it leads to', () => {
         for (const answer of ['stranger', 'closed'] as const) {
-            for (const root of ['node-mismatch', 'welcome', 'recover-identity', 'join-global']) {
+            // join-open-door: another open-door community's door, which the not-recognised screen's Join opens (slice P5).
+            for (const root of ['node-mismatch', 'welcome', 'recover-identity', 'join-global', 'join-open-door']) {
                 expect(notRecognisedStays(answer, [root]), `${answer} on ${root}`).toBe(true);
             }
         }

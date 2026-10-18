@@ -170,10 +170,17 @@ export const ADMIN_HTML = `<!DOCTYPE html>
 
         <div class="admin-card">
             <div class="card-head">
-                <h2 style="font-size: 1.1rem; font-family: var(--font-header); color: #fbbf24;">⏳ Pending Name Claims (Awaiting Your Approval)</h2>
+                <h2 style="font-size: 1.1rem; font-family: var(--font-header); color: #fbbf24;">⏳ Awaiting your approval</h2>
                 <button id="refreshBtn" class="btn" style="padding: 0.35rem 0.8rem; font-size: 0.8rem; background: rgba(255,255,255,0.05); color: #fff; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; cursor: pointer;">🔄 Refresh</button>
             </div>
+            <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1rem;">Claims of names held back for approval (big cities). Nothing is made at Cloudflare until you approve one.</p>
             <div id="pendingTableContainer"><p style="color: var(--text-muted); font-size: 0.85rem;">Loading claims...</p></div>
+        </div>
+
+        <div class="admin-card">
+            <h2 style="font-size: 1.1rem; font-family: var(--font-header); color: #38bdf8; margin-bottom: 0.5rem;">⚙️ Setting up</h2>
+            <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1rem;">New names that need nobody's approval, whose making at Cloudflare has not finished yet (Cloudflare was slow or failed, or the claim was cut off). Their node asks again, and the sweep finishes any older than two minutes, a few each time. Finish now makes it at once; Reject frees the name.</p>
+            <div id="setupTableContainer"><p style="color: var(--text-muted); font-size: 0.85rem;">Loading claims...</p></div>
         </div>
 
         <div class="admin-card">
@@ -224,7 +231,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         }
 
         function notSignedIn(why) {
-            ['pendingTableContainer', 'activeTableContainer', 'alertsContainer', 'serversContainer'].forEach(function(id) {
+            ['pendingTableContainer', 'setupTableContainer', 'activeTableContainer', 'alertsContainer', 'serversContainer'].forEach(function(id) {
                 document.getElementById(id).innerHTML = '<p style="color: #f87171; font-size: 0.85rem;">' + esc(why) + '</p>';
             });
         }
@@ -288,6 +295,8 @@ export const ADMIN_HTML = `<!DOCTYPE html>
 
         const CONFIRM = {
             approve: function(n) { return 'Approve ' + n + '.beanpool.org?'; },
+            // Finish now: an approve under the hood, of a name that needs no approval — its making at Cloudflare is done now.
+            finish: function(n) { return 'Finish setting up ' + n + '.beanpool.org now?\\n\\nIt needs no approval: its tunnel and DNS record are made at Cloudflare now, and its node picks the tunnel up on its next check.'; },
             pause: function(n) { return 'Pause ' + n + '.beanpool.org?\\n\\nRouting stops (DNS removed); the name and tunnel stay with its owner. Only Resume lifts it — the node cannot.'; },
             resume: function(n) { return 'Resume ' + n + '.beanpool.org?\\n\\nRouting comes back only when nobody but its owner can be answering: at once on a fresh tunnel, otherwise after an edge re-attest signed by its key. A tunnel kept by a block, or by a pause you did not make, is deleted first. If the re-attest fails, your hold is lifted and the name stays paused until its node heals it.'; },
             block: function(n) { return '⚠️ BLOCK ' + n + '.beanpool.org?\\n\\nTunnel and DNS are deleted. The name stays held by this key and is NEVER free; its node cannot heal or release it. Undo with Resume. Release holds it 30 days from every key, this one included, then frees it (at once with "free now").'; },
@@ -346,22 +355,31 @@ export const ADMIN_HTML = `<!DOCTYPE html>
             }
         }
 
+        // Pending rows, in two lists by the Worker's word (awaiting_approval): a gated claim waits for you; an auto name
+        // whose making did not finish waits for nobody ("Setting up"). A row that doesn't say is shown as awaiting you.
         function renderPending(pending) {
-            const container = document.getElementById('pendingTableContainer');
-            if (pending.length === 0) {
-                container.innerHTML = '<p style="color: var(--text-muted); font-size: 0.85rem;">No pending name claims awaiting approval.</p>';
+            renderClaims('pendingTableContainer', pending.filter(function(a) { return a.awaiting_approval !== false; }),
+                'No name claims awaiting your approval.', '#fbbf24', ['approve', 'Approve']);
+            renderClaims('setupTableContainer', pending.filter(function(a) { return a.awaiting_approval === false; }),
+                'No names being set up.', '#38bdf8', ['finish', 'Finish now']);
+        }
+
+        function renderClaims(id, claims, none, colour, act) {
+            const container = document.getElementById(id);
+            if (claims.length === 0) {
+                container.innerHTML = '<p style="color: var(--text-muted); font-size: 0.85rem;">' + none + '</p>';
                 return;
             }
 
             let html = namesHead('Requested');
 
-            pending.forEach(function(claim) {
+            claims.forEach(function(claim) {
                 const date = claim.requested_at ? new Date(claim.requested_at * 1000).toLocaleString() : '—';
                 html += '<tr id="row-' + esc(claim.name) + '">' +
-                    nameCell(claim, '#fbbf24') + communityCell(claim) + keyCell(claim) +
+                    nameCell(claim, colour) + communityCell(claim) + keyCell(claim) +
                     '<td data-label="Requested" class="mono" style="font-size: 0.75rem;">' + date + '</td>' +
                     '<td><div class="acts">' +
-                        '<button data-name="' + esc(claim.name) + '" data-action="approve" class="btn-approve">Approve</button>' +
+                        '<button data-name="' + esc(claim.name) + '" data-action="' + act[0] + '" class="btn-approve">' + act[1] + '</button>' +
                         '<button data-name="' + esc(claim.name) + '" data-action="release" data-free-now="1" class="btn-revoke" title="Rejects the claim; the name is free again">Reject</button>' +
                     '</div></td>' +
                 '</tr>';
@@ -577,7 +595,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
                     init.headers['content-type'] = 'application/json';
                     init.body = JSON.stringify({ free_now: freeNow });
                 }
-                const res = await fetch('/api/local/admin/registrar/' + encodeURIComponent(name) + '/' + action, init);
+                const res = await fetch('/api/local/admin/registrar/' + encodeURIComponent(name) + '/' + (action === 'finish' ? 'approve' : action), init);
                 const data = await res.json();
                 if (res.ok && action === 'forget') {
                     loadRegistrarData();

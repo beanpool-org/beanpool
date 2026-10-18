@@ -10,6 +10,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import './harness.js';   // its fetch trap: no test here reaches the network
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import worker, { attestOne, attestSweep } from '../src/index.js';

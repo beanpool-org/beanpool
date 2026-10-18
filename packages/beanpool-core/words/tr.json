@@ -2,7 +2,7 @@
   "_meta": {
     "language": "tr",
     "name": "Turkish",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-19",
@@ -305,5 +305,25 @@
   "Sunset {time}.": "Gün batımı {time}.",
   "Look around ›": "Etrafına bak ›",
   "Pick up the tour at step {step} ›": "Tura {step}. adımdan devam et ›",
-  "This is your Home. You choose what goes here. Before you start, take a one-minute look at the other tabs.": "Burası senin Ana Sayfan. Buraya neyin geleceğini sen seçersin. Başlamadan önce diğer sekmelere bir dakikalık göz at."
+  "This is your Home. You choose what goes here. Before you start, take a one-minute look at the other tabs.": "Burası senin Ana Sayfan. Buraya neyin geleceğini sen seçersin. Başlamadan önce diğer sekmelere bir dakikalık göz at.",
+  "Save this search to Home": "Bu aramayı Ana Sayfa'ya kaydet",
+  "Save the search \"{q}\" to Home": "\"{q}\" aramasını Ana Sayfa'ya kaydet",
+  "The 1 vote came from a new or 12-word account": "1 oy yeni veya 12 kelimelik bir hesaptan geldi",
+  "All {n} votes came from new or 12-word accounts|All {n} votes came from new or 12-word accounts": {
+    "one": "Tüm {n} oy yeni veya 12 kelimelik hesaplardan geldi",
+    "other": "Tüm {n} oy yeni veya 12 kelimelik hesaplardan geldi"
+  },
+  "{n} of {total} votes came from a new or 12-word account|{n} of {total} votes came from new or 12-word accounts": {
+    "one": "{total} oyun {n} tanesi yeni veya 12 kelimelik bir hesaptan geldi",
+    "other": "{total} oyun {n} tanesi yeni veya 12 kelimelik hesaplardan geldi"
+  },
+  "This 1 from a new or 12-word account": "Bu 1 oy yeni veya 12 kelimelik bir hesaptan",
+  "All {n} from new or 12-word accounts|All {n} from new or 12-word accounts": {
+    "one": "Tüm {n} tanesi yeni veya 12 kelimelik hesaplardan",
+    "other": "Tüm {n} tanesi yeni veya 12 kelimelik hesaplardan"
+  },
+  "{n} of these {count} from a new or 12-word account|{n} of these {count} from new or 12-word accounts": {
+    "one": "Bu {count} tanenin {n} tanesi yeni veya 12 kelimelik bir hesaptan",
+    "other": "Bu {count} tanenin {n} tanesi yeni veya 12 kelimelik hesaplardan"
+  }
 }

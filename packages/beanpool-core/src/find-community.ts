@@ -15,6 +15,8 @@
  *   real control: the Start a community screen), and "Tell me when one starts here" (a place watch) on both.
  */
 
+import { tn } from './words.js';
+
 /** "Near you", in km: see the header. */
 export const NEAR_COMMUNITY_KM = 250;
 
@@ -83,3 +85,14 @@ export const FIND_COMMUNITY_WORDS = {
     /** The control beside `none` and `far`: it opens the Start a community screen. */
     start: 'Start a community',
 } as const;
+
+/** The node's code when a member already watches as many places as it allows (409, with its `limit`). */
+export const PLACE_WATCH_LIMIT_CODE = 'watch_limit';
+
+/**
+ * "Tell me when one starts here" refused because the member already watches `limit` places (the node's PLACE_WATCHES_MAX,
+ * 3 unless its operator set another): what both apps say, in the member's language.
+ */
+export function placeWatchLimitLine(limit: number): string {
+    return tn(limit, 'You can watch up to {n} place. Remove it to watch another.', 'You can watch up to {n} places. Remove one to watch another.');
+}

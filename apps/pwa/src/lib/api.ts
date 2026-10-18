@@ -217,6 +217,8 @@ async function refusalError(res: Response): Promise<Error> {
     // So does the node's own code (a new account's limit, a moderation pause): a form shows those in place,
     // in the node's words (lib/node-refusal.ts).
     if (typeof err.code === 'string') (error as Error & { code?: string }).code = err.code;
+    // And the number a limit refusal names (a place watch's `watch_limit`), for the screen's own sentence.
+    if (typeof err.limit === 'number' && Number.isInteger(err.limit) && err.limit > 0) (error as Error & { limit?: number }).limit = err.limit;
     return error;
 }
 

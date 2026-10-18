@@ -31,7 +31,7 @@ import { viewerTier } from './viewer.js';
 import { isPoint, readMemberArea } from '../engine/member-area.js';
 import { listCommunities, listedCommunityCount, readMirrorStatus } from '../engine/directory-cache.js';
 import {
-    listPlaceWatches, setPlaceWatch, removePlaceWatch, PlaceWatchLimitError, PLACE_WATCH_LIMIT, PLACE_WATCH_RADIUS_KM,
+    listPlaceWatches, setPlaceWatch, removePlaceWatch, PlaceWatchLimitError, placeWatchLimit, PLACE_WATCH_RADIUS_KM,
 } from '../engine/place-watches.js';
 import type { RouteDeps } from './types.js';
 
@@ -205,7 +205,7 @@ export function createGlobalDirectoryRoutes(_deps: RouteDeps): Router {
         const actor = watcher(ctx);
         if (!actor) return;
         ctx.set('Cache-Control', 'private, no-store');
-        ctx.body = { watches: listPlaceWatches(actor), limit: PLACE_WATCH_LIMIT };
+        ctx.body = { watches: listPlaceWatches(actor), limit: placeWatchLimit() };
     });
 
     router.post('/api/global/watches', async (ctx) => {
@@ -228,7 +228,7 @@ export function createGlobalDirectoryRoutes(_deps: RouteDeps): Router {
         } catch (e) {
             if (e instanceof PlaceWatchLimitError) {
                 ctx.status = e.status;
-                ctx.body = { error: e.message, code: e.code, limit: PLACE_WATCH_LIMIT };
+                ctx.body = { error: e.message, code: e.code, limit: e.limit };
                 return;
             }
             throw e;

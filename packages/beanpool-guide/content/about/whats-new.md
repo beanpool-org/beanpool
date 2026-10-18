@@ -9,6 +9,7 @@ related: home, the-bean, how-it-works, rules, faq, communities
 
 You get these when the global community's server is updated. On the phone they need an up-to-date app.
 
+- **Free, with limits.** On the global community, a listing is archived 90 days after it last changed, with its photos. Saving it again keeps it up. The limits are all on one page. See "The global community's limits".
 - **The listings near you.** The global community has listings from everywhere. Your phone now keeps the nearest 500 within 250 km of your area, and your own and any listing you have a deal in progress or a conversation about, wherever they are. The Market's search still finds listings from everywhere. See "More than one community".
 - **Your area.** In the web app, joining the global community has one more step after your photo: **Roughly where are you?** On the phone it is asked when you join with an account you already have; a new phone account sets it later in Settings, under **Your area**. In that step, tap **Use my location**, **Type a town or suburb**, or **Skip for now**. It is kept to about 10 km, never your exact spot. Change or clear it in Settings, under **Your area**. See "Your area".
 - **No area, no problem.** Without one you see the newest listings from everywhere, and a line above the Market says so. On the phone, tap it to set your area.

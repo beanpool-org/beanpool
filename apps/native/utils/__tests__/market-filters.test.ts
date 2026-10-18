@@ -6,6 +6,7 @@
 import { describe, it, expect } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { word } from '@beanpool/core';
 import {
     MARKET_TYPE_PILLS, marketSecondRow, feedPostVisible, marketFiltersActive, marketFeedQuery, DEFAULT_MARKET_FILTERS,
     distanceChipLabel, trustChipLabel, beansChipLabel,
@@ -167,8 +168,9 @@ describe('chip labels and the empty state', () => {
         expect(distanceChipLabel(5)).toBe('📍 5km ▾');
         expect(distanceChipLabel(0.5)).toBe('📍 500m ▾');
         expect(trustChipLabel(undefined)).toBe('🤝 Trust ▾');
-        expect(trustChipLabel({ id: 'all', emoji: '👥', label: 'All Users' })).toBe('🤝 Trust ▾');
-        expect(trustChipLabel({ id: 'elder', emoji: '⛰️', label: 'Elders' })).toBe('⛰️ Elders ▾');
+        // The trust filter's label is a word() key since words S3b (TRUST_FILTERS), as the sheet gives it.
+        expect(trustChipLabel({ id: 'all', emoji: '👥', label: word('All Users') })).toBe('🤝 Trust ▾');
+        expect(trustChipLabel({ id: 'elder', emoji: '⛰️', label: word('Elders') })).toBe('⛰️ Elders ▾');
         expect(beansChipLabel(false)).toBe('🫘 Beans only');
         expect(beansChipLabel(true)).toBe('🫘 Beans only ✓');
     });

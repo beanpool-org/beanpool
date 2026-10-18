@@ -13,7 +13,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ActivityIndicator, Alert } from 'react-native';
 import { Image } from 'expo-image';
-import { listPhotoUrl } from '@beanpool/core';
+import { listPhotoUrl, t } from '@beanpool/core';
 import { router } from 'expo-router';
 import { useStyles, useTheme, type ThemeContextType } from '../app/ThemeContext';
 import { rsvpEvent } from '../utils/db';
@@ -73,7 +73,7 @@ export function EventCard({ post, currentPubkey, myLocation, onRsvpChanged }: Ev
         const next = nextRsvp(counts.mine, tapped);
         if (pending || (closed && next !== null)) return;
         if (!currentPubkey) {
-            Alert.alert('Sign in to RSVP', 'Set up your member identity to tell the host you are coming.');
+            Alert.alert(t('Sign in to RSVP'), t('Set up your member identity to tell the host you are coming.'));
             return;
         }
         const before = counts;
@@ -90,7 +90,7 @@ export function EventCard({ post, currentPubkey, myLocation, onRsvpChanged }: Ev
             onRsvpChanged?.();
         } catch (err: any) {
             setCounts(before);
-            Alert.alert('RSVP not saved', err?.message || 'Could not reach the node. Try again when you have signal.');
+            Alert.alert(t('RSVP not saved'), err?.message || t('Could not reach the node. Try again when you have signal.'));
         } finally {
             setPending(null);
         }
@@ -105,7 +105,7 @@ export function EventCard({ post, currentPubkey, myLocation, onRsvpChanged }: Ev
                 disabled={disabled}
                 style={[styles.rsvpBtn, selected && styles.rsvpBtnSelected, disabled && styles.rsvpBtnDisabled]}
                 accessibilityRole="button"
-                accessibilityLabel={selected ? `${label}, selected. Tap to clear` : label}
+                accessibilityLabel={selected ? t('{label}, selected. Tap to clear', { label }) : label}
                 accessibilityState={{ selected, disabled, busy: pending === status }}
             >
                 {/*
@@ -119,7 +119,7 @@ export function EventCard({ post, currentPubkey, myLocation, onRsvpChanged }: Ev
                     numberOfLines={1}
                     maxFontSizeMultiplier={1.3}
                 >
-                    {selected ? `${label} ✓` : label}
+                    {selected ? t('{label} ✓', { label }) : label}
                 </Text>
                 {pending === status && (
                     <View style={styles.rsvpSpinner} pointerEvents="none">
@@ -135,7 +135,9 @@ export function EventCard({ post, currentPubkey, myLocation, onRsvpChanged }: Ev
             style={styles.card}
             onPress={() => router.push(`/post/${post.id}`)}
             accessibilityRole="button"
-            accessibilityLabel={`Event: ${post.title}, ${when}${badge ? `, ${badge.toLowerCase()}` : ''}`}
+            accessibilityLabel={badge === 'CANCELLED' ? t('Event: {title}, {when}, cancelled', { title: post.title, when })
+                : badge === 'UPDATED' ? t('Event: {title}, {when}, updated', { title: post.title, when })
+                : t('Event: {title}, {when}', { title: post.title, when })}
         >
             {/*
               * The host's photo, the same size, crop and cache policy the offer card beside it uses in the list
@@ -158,7 +160,7 @@ export function EventCard({ post, currentPubkey, myLocation, onRsvpChanged }: Ev
                     <View style={styles.whenRow}>
                         {badge && (
                             <View style={[styles.badge, badge === 'CANCELLED' ? { backgroundColor: colors.feedback.danger.bg, borderColor: colors.feedback.danger.border } : styles.badgeUpdated]}>
-                                <Text style={[styles.badgeText, { color: badge === 'CANCELLED' ? colors.feedback.danger.fg : EVENT_ACCENT }]} numberOfLines={1}>{badge}</Text>
+                                <Text style={[styles.badgeText, { color: badge === 'CANCELLED' ? colors.feedback.danger.fg : EVENT_ACCENT }]} numberOfLines={1}>{badge === 'CANCELLED' ? t('CANCELLED', undefined, 'event') : t('UPDATED', undefined, 'event')}</Text>
                             </View>
                         )}
                         <Text style={[styles.when, badge === 'CANCELLED' && styles.whenCancelled]} numberOfLines={2}>{when}</Text>
@@ -172,11 +174,11 @@ export function EventCard({ post, currentPubkey, myLocation, onRsvpChanged }: Ev
             </View>
             {/* The host is running it: no Going / Interested on their own event (round 2, B4). */}
             {isOwnEvent(post, currentPubkey) ? (
-                <Text style={styles.hosting} numberOfLines={1}>You're hosting this event</Text>
+                <Text style={styles.hosting} numberOfLines={1}>{t("You're hosting this event")}</Text>
             ) : (
                 <View style={styles.rsvpRow}>
-                    {rsvpButton('going', 'Going')}
-                    {rsvpButton('interested', 'Interested')}
+                    {rsvpButton('going', t('Going'))}
+                    {rsvpButton('interested', t('Interested'))}
                 </View>
             )}
         </Pressable>

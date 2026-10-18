@@ -11,6 +11,7 @@
  * has the same words and rule (apps/pwa/src/lib/example-listings.ts).
  */
 
+import { t, word, type WordKey } from '@beanpool/core';
 import type { NodeFeatures } from './node-profile';
 
 /**
@@ -20,12 +21,13 @@ import type { NodeFeatures } from './node-profile';
  */
 export const EXAMPLES_UNTIL = 6;
 
+/** The words are word() keys: the cards and their screen-reader line show them through t(), in the member's language. */
 export interface ExampleListing {
     key: string;
     type: 'offer' | 'need';
     emoji: string;
-    title: string;
-    description: string;
+    title: WordKey;
+    description: WordKey;
 }
 
 /**
@@ -33,15 +35,15 @@ export interface ExampleListing {
  * for Android 8 (API 26), so none draws as an empty box.
  */
 export const EXAMPLE_LISTINGS: readonly ExampleListing[] = [
-    { key: 'seedlings', type: 'offer', emoji: '🌱', title: 'Vegetable seedlings to give away', description: 'More than I can plant. Free to anyone who will grow them.' },
-    { key: 'couch', type: 'need', emoji: '🛋️', title: 'Help moving a couch', description: 'Two people for half an hour, to carry it down the stairs.' },
-    { key: 'mending', type: 'offer', emoji: '✂️', title: 'I can mend clothes', description: 'Buttons, hems and small holes. Happy to show you how, too.' },
-    { key: 'drill', type: 'need', emoji: '🔧', title: 'Borrow a drill for an afternoon', description: 'To put up two shelves. I will bring it back the same day.' },
+    { key: 'seedlings', type: 'offer', emoji: '🌱', title: word('Vegetable seedlings to give away'), description: word('More than I can plant. Free to anyone who will grow them.') },
+    { key: 'couch', type: 'need', emoji: '🛋️', title: word('Help moving a couch'), description: word('Two people for half an hour, to carry it down the stairs.') },
+    { key: 'mending', type: 'offer', emoji: '✂️', title: word('I can mend clothes'), description: word('Buttons, hems and small holes. Happy to show you how, too.') },
+    { key: 'drill', type: 'need', emoji: '🔧', title: word('Borrow a drill for an afternoon'), description: word('To put up two shelves. I will bring it back the same day.') },
 ];
 
-export const EXAMPLE_BADGE = 'Example';
-export const EXAMPLES_HEADING = 'Examples of what people post';
-export const EXAMPLES_NOTE = 'Made up to show how it works: these are not real listings. They go once there are enough real ones.';
+export const EXAMPLE_BADGE = word('Example');
+export const EXAMPLES_HEADING = word('Examples of what people post');
+export const EXAMPLES_NOTE = word('Made up to show how it works: these are not real listings. They go once there are enough real ones.');
 
 /** Whether this node asks for the example cards. Only a node that says so outright: unknown is off. */
 export function exampleListingsOn(features: NodeFeatures | null | undefined): boolean {
@@ -57,9 +59,12 @@ export function showExampleListings(state: { on: boolean; narrowed: boolean; loa
     return state.on && !state.narrowed && state.loaded && state.realInView < EXAMPLES_UNTIL;
 }
 
-/** What a screen reader says for a card: that it is an example before anything else. */
+/** What a screen reader says for a card, in the member's language: that it is an example before anything else. */
 export function exampleLabel(example: ExampleListing): string {
-    return `Example, not a real listing. ${example.type === 'offer' ? 'Offer' : 'Need'}: ${example.title}. ${example.description}`;
+    const values = { title: t(example.title), description: t(example.description) };
+    return example.type === 'offer'
+        ? t('Example, not a real listing. Offer: {title}. {description}', values)
+        : t('Example, not a real listing. Need: {title}. {description}', values);
 }
 
 /**

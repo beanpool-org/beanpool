@@ -7,6 +7,8 @@
  * here, free of React Native imports, so vitest can hold both screens to the same four options.
  */
 
+import { t, word, type WordKey } from '@beanpool/core';
+
 export type ComposePostType = 'offer' | 'need' | 'poll' | 'event';
 
 /**
@@ -17,11 +19,12 @@ export type ComposePostType = 'offer' | 'need' | 'poll' | 'event';
  */
 export type ComposeTarget = 'offer-need-form' | 'poll-modal' | 'event-modal';
 
+/** The words are word() keys: the chooser shows them through t(), in the member's language. */
 export interface ComposeOption {
     id: ComposePostType;
     emoji: string;
-    title: string;
-    description: string;
+    title: WordKey;
+    description: WordKey;
 }
 
 /**
@@ -32,33 +35,33 @@ export const NEW_POST_TYPES: readonly ComposeOption[] = [
     {
         id: 'offer',
         emoji: '📦',
-        title: 'Offer',
-        description: 'List goods, skills, food, or tools on the map',
+        title: word('Offer'),
+        description: word('List goods, skills, food, or tools on the map'),
     },
     {
         id: 'need',
         emoji: '❤️',
-        title: 'Need',
-        description: 'Ask your neighbours for something you need',
+        title: word('Need'),
+        description: word('Ask your neighbours for something you need'),
     },
     {
         id: 'poll',
         emoji: '🗳️',
-        title: 'Community Poll',
-        description: 'Ask a question with 2–4 options in the feed',
+        title: word('Community Poll'),
+        description: word('Ask a question with 2–4 options in the feed'),
     },
     {
         id: 'event',
         // Not 📅: Android draws that emoji with a date printed on it ("JUL 17"), which reads as the event's.
         emoji: '👥',
-        title: 'Event',
-        description: 'A gathering with a time and a place',
+        title: word('Event'),
+        description: word('A gathering with a time and a place'),
     },
 ] as const;
 
 /** "Offer: List goods, skills, food, or tools on the map" — the row's screen-reader label. */
 export function composeOptionA11yLabel(option: ComposeOption): string {
-    return `${option.title}: ${option.description}`;
+    return t('{title}: {description}', { title: t(option.title), description: t(option.description) });
 }
 
 export function composeTargetFor(type: ComposePostType): ComposeTarget {

@@ -6,24 +6,29 @@
  */
 import React from 'react';
 import { Pressable, StyleSheet, Text } from 'react-native';
+import { t } from '@beanpool/core';
 import { colors as defaultColors, type AppColors } from '../constants/colors';
 import { NO_AREA_LINE } from '../utils/nearby-area';
 import { readableOn } from '../utils/readable-color';
+import { Sentence } from './Sentence';
 
 export function NoAreaLine({ onPress, colors = defaultColors }: { onPress: () => void; colors?: AppColors }): React.JSX.Element {
     const tone = colors.feedback.info;
     // The action is 13 px bold at 1.3x, not large text: 4.5:1 on the box in either theme, whatever the info tone becomes.
     const actionColor = readableOn(tone.fg, tone.bg);
+    // One line in the member's language: the way on is a styled part of it, wherever the language puts it.
+    const seeing = t(NO_AREA_LINE.seeing);
+    const action = t(NO_AREA_LINE.action);
     return (
         <Pressable
             style={[styles.box, { backgroundColor: tone.bg, borderColor: tone.border }]}
             onPress={onPress}
             accessibilityRole="link"
-            accessibilityLabel={`${NO_AREA_LINE.seeing} ${NO_AREA_LINE.action}`}
+            accessibilityLabel={t('{seeing} {action}', { seeing, action })}
             testID="market-no-area-line"
         >
             <Text style={[styles.line, { color: colors.text.body }]}>
-                📍 {NO_AREA_LINE.seeing} <Text style={[styles.action, { color: actionColor }]}>{NO_AREA_LINE.action}</Text>
+                <Sentence text={t('📍 {seeing} {action}', { seeing })} parts={{ action: <Text style={[styles.action, { color: actionColor }]}>{action}</Text> }} />
             </Text>
         </Pressable>
     );

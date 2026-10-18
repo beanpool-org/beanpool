@@ -11,6 +11,7 @@
 import React, { useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { useFocusEffect, router } from 'expo-router';
+import { t } from '@beanpool/core';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useIdentity } from '../app/IdentityContext';
 import { useStyles } from '../app/ThemeContext';
@@ -58,14 +59,14 @@ export function OwnerWordsPrompt() {
 
     return (
         <View style={styles.promptCard} accessibilityRole="summary">
-            <Text style={styles.promptTitle}>{status.wordsCheckedAt ? COPY.promptTitleRenew : COPY.promptTitleNever}</Text>
-            <Text style={styles.promptBody}>{status.wordsCheckedAt ? COPY.promptBodyRenew : COPY.promptBodyNever}</Text>
+            <Text style={styles.promptTitle}>{status.wordsCheckedAt ? t(COPY.promptTitleRenew) : t(COPY.promptTitleNever)}</Text>
+            <Text style={styles.promptBody}>{status.wordsCheckedAt ? t(COPY.promptBodyRenew) : t(COPY.promptBodyNever)}</Text>
             <View style={styles.buttonRow}>
                 <Pressable style={styles.primaryBtn} onPress={() => router.push('/owner-words-check')} accessibilityRole="button">
-                    <Text style={styles.primaryBtnText}>{COPY.checkNow}</Text>
+                    <Text style={styles.primaryBtnText}>{t(COPY.checkNow)}</Text>
                 </Pressable>
-                <Pressable style={styles.secondaryBtn} onPress={onLater} accessibilityRole="button" accessibilityHint="Hides this until your next check is due. Settings still has it.">
-                    <Text style={styles.secondaryBtnText}>{COPY.later}</Text>
+                <Pressable style={styles.secondaryBtn} onPress={onLater} accessibilityRole="button" accessibilityHint={t('Hides this until your next check is due. Settings still has it.')}>
+                    <Text style={styles.secondaryBtnText}>{t(COPY.later)}</Text>
                 </Pressable>
             </View>
         </View>

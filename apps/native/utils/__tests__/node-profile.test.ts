@@ -278,6 +278,8 @@ describe('polls on the worldwide community are informal', () => {
 
     it('the card shows the note when it is told to', () => {
         const src = source('../../components/PollCard.tsx');
-        expect(src).toMatch(/\{informal && \(\s*<Text style=\{styles\.informalNote\} testID="poll-informal-note">\s*💬 \{INFORMAL_POLL_NOTE\}/);
+        // In the member's language since words S3b: the same note, through t().
+        expect(src).toMatch(/const LINES = \{ informal: INFORMAL_POLL_NOTE \};/);
+        expect(src).toMatch(/\{informal && \(\s*<Text style=\{styles\.informalNote\} testID="poll-informal-note">\s*\{t\('💬 \{note\}', \{ note: t\(LINES\.informal\) \}\)\}/);
     });
 });

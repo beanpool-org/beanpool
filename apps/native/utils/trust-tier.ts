@@ -5,13 +5,21 @@
  * (vouch + earned + granted = CREDIT_BASE_FLOOR − floor), so the tier here is the one the author's own
  * Ledger shows. The thresholds are @beanpool/core's — never a copy. Pure, so vitest can hold it to core.
  */
-import { tierForCredit, type TierLevel, type TierName } from '@beanpool/core';
+import { tierForCredit, word, type TierLevel, type TierName, type WordKey } from '@beanpool/core';
 
 /** Names the shared trust colours (constants/colors.ts `trust.*`), resolved from the active theme at render. */
 export type TierToken = 'newcomer' | 'resident' | 'steward' | 'elder';
 
 const TIER_TOKEN: Record<TierName, TierToken> = {
     Newcomer: 'newcomer', Resident: 'resident', Steward: 'steward', Elder: 'elder',
+};
+
+/** Each tier's name as a member reads it: word() keys, shown through t() (core's TierName stays the English id). */
+export const TIER_WORDS: Readonly<Record<TierName, WordKey>> = {
+    Newcomer: word('Newcomer', 'trust tier'),
+    Resident: word('Resident', 'trust tier'),
+    Steward: word('Steward', 'trust tier'),
+    Elder: word('Elder', 'trust tier'),
 };
 
 export function getTrustTier(energyCycled: number = 0): TierLevel & { label: TierName; token: TierToken } {

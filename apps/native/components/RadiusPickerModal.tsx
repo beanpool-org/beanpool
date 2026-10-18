@@ -9,6 +9,8 @@ import { palette } from '../constants/colors';
 import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { HAS_MAPS_KEY } from '../utils/maps';
 import { pageSheetTopInset } from '../utils/modal-safe-area';
+import { radiusWords } from '../utils/market-filters';
+import { t, tn } from '@beanpool/core';
 
 const HEADER_PAD_TOP = 18;
 
@@ -77,11 +79,11 @@ export function RadiusPickerModal({ visible, initialRadius, initialLat, initialL
                     status = res.status;
                 } else {
                     Alert.alert(
-                        "Permission Denied", 
-                        "Location permission was denied. Please enable it in settings to center the map.", 
+                        t('Permission Denied'),
+                        t('Location permission was denied. Please enable it in settings to center the map.'),
                         [
-                            { text: "Cancel", style: "cancel" },
-                            { text: "Open Settings", onPress: () => Linking.openSettings() }
+                            { text: t('Cancel'), style: "cancel" },
+                            { text: t('Open Settings'), onPress: () => Linking.openSettings() }
                         ]
                     );
                     return;
@@ -103,7 +105,7 @@ export function RadiusPickerModal({ visible, initialRadius, initialLat, initialL
             }, 1000);
         } catch (err) {
             console.log("Failed to fetch user location", err);
-            Alert.alert("Error", "Could not fetch your current location. Make sure GPS is enabled.");
+            Alert.alert(t('Error'), t('Could not fetch your current location. Make sure GPS is enabled.'));
         }
     };
 
@@ -111,12 +113,12 @@ export function RadiusPickerModal({ visible, initialRadius, initialLat, initialL
         <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onCancel}>
             <View style={styles.container}>
                 <View style={[styles.header, { paddingTop: HEADER_PAD_TOP + topInset }]}>
-                    <Pressable onPress={onCancel} accessibilityRole="button" accessibilityLabel="Cancel location picker" style={styles.headerBtn}>
-                        <Text style={styles.cancelText} numberOfLines={1}>Cancel</Text>
+                    <Pressable onPress={onCancel} accessibilityRole="button" accessibilityLabel={t('Cancel location picker')} style={styles.headerBtn}>
+                        <Text style={styles.cancelText} numberOfLines={1}>{t('Cancel')}</Text>
                     </Pressable>
-                    <Text style={styles.title} numberOfLines={1}>📍 Location & Radius</Text>
-                    <Pressable onPress={onReset} accessibilityRole="button" accessibilityLabel="Reset location and radius" style={styles.headerBtn}>
-                        <Text style={styles.resetText} numberOfLines={1}>Reset</Text>
+                    <Text style={styles.title} numberOfLines={1}>{t('📍 Location & Radius')}</Text>
+                    <Pressable onPress={onReset} accessibilityRole="button" accessibilityLabel={t('Reset location and radius')} style={styles.headerBtn}>
+                        <Text style={styles.resetText} numberOfLines={1}>{t('Reset')}</Text>
                     </Pressable>
                 </View>
 
@@ -148,8 +150,8 @@ export function RadiusPickerModal({ visible, initialRadius, initialLat, initialL
                     ) : (
                         <View style={[styles.map, { justifyContent: 'center', alignItems: 'center', backgroundColor: colors.surface.subtle, padding: 24 }]}>
                             <MaterialCommunityIcons name="map-marker-off" size={48} color={colors.text.muted} />
-                            <Text style={{ marginTop: 12, color: colors.text.body, fontWeight: '700', textAlign: 'center' }}>Google Maps is not configured</Text>
-                            <Text style={{ marginTop: 4, color: colors.text.secondary, fontSize: 12, textAlign: 'center' }}>API key is missing in build config.</Text>
+                            <Text style={{ marginTop: 12, color: colors.text.body, fontWeight: '700', textAlign: 'center' }}>{t('Google Maps is not configured')}</Text>
+                            <Text style={{ marginTop: 4, color: colors.text.secondary, fontSize: 12, textAlign: 'center' }}>{t('API key is missing in build config.')}</Text>
                         </View>
                     )}
 
@@ -157,7 +159,7 @@ export function RadiusPickerModal({ visible, initialRadius, initialLat, initialL
                     <Pressable
                         style={styles.gpsBtn}
                         accessibilityRole="button"
-                        accessibilityLabel="Center on my location"
+                        accessibilityLabel={t('Center on my location')}
                         onPress={handleLocateUser}
                     >
                         <MaterialCommunityIcons name="crosshairs-gps" size={22} color={theme === 'dark' ? colors.text.body : palette.gray700} />
@@ -166,8 +168,8 @@ export function RadiusPickerModal({ visible, initialRadius, initialLat, initialL
 
                 <View style={styles.bottomPanel}>
                     <View style={styles.radiusHeaderRow}>
-                        <Text style={styles.radiusLabel}>Search radius</Text>
-                        <Text style={styles.radiusValue}>{radius < 1 ? `${Math.round(radius * 1000)}m` : `${radius}km`}</Text>
+                        <Text style={styles.radiusLabel}>{t('Search radius')}</Text>
+                        <Text style={styles.radiusValue}>{radiusWords(radius)}</Text>
                     </View>
                     
                     <Slider
@@ -183,27 +185,29 @@ export function RadiusPickerModal({ visible, initialRadius, initialLat, initialL
                         minimumTrackTintColor={theme === 'dark' ? palette.amber400 : palette.amber600}
                         maximumTrackTintColor={theme === 'dark' ? colors.text.muted : palette.gray600}
                         thumbTintColor={theme === 'dark' ? palette.amber400 : colors.surface.subtle}
-                        accessibilityLabel="Search radius"
-                        accessibilityHint="Adjusts search distance radius"
+                        accessibilityLabel={t('Search radius')}
+                        accessibilityHint={t('Adjusts search distance radius')}
                     />
                     
                     <View style={styles.sliderLabels}>
-                        <Text style={styles.sliderLabel}>100m</Text>
-                        <Text style={styles.sliderLabel}>1km</Text>
-                        <Text style={styles.sliderLabel}>10km</Text>
-                        <Text style={styles.sliderLabel}>50km</Text>
+                        <Text style={styles.sliderLabel}>{radiusWords(0.1)}</Text>
+                        <Text style={styles.sliderLabel}>{radiusWords(1)}</Text>
+                        <Text style={styles.sliderLabel}>{radiusWords(10)}</Text>
+                        <Text style={styles.sliderLabel}>{radiusWords(50)}</Text>
                     </View>
 
-                    <Text style={styles.hintText}>Tap the map or drag the pin to move the center point</Text>
+                    <Text style={styles.hintText}>{t('Tap the map or drag the pin to move the center point')}</Text>
 
                     <Pressable
                         style={styles.applyBtn}
                         accessibilityRole="button"
-                        accessibilityLabel={`Apply ${radius < 1 ? `${Math.round(radius * 1000)} metre` : `${radius} kilometre`} radius`}
-                        accessibilityHint="Applies the selected location and search radius"
+                        accessibilityLabel={radius < 1
+                            ? tn(Math.round(radius * 1000), 'Apply {n} metre radius', 'Apply {n} metre radius')
+                            : tn(radius, 'Apply {n} kilometre radius', 'Apply {n} kilometre radius')}
+                        accessibilityHint={t('Applies the selected location and search radius')}
                         onPress={() => onApply(radius, center.latitude, center.longitude)}
                     >
-                        <Text style={styles.applyBtnText}>Apply — {radius < 1 ? `${Math.round(radius * 1000)}m` : `${radius}km`} radius</Text>
+                        <Text style={styles.applyBtnText}>{t('Apply — {distance} radius', { distance: radiusWords(radius) })}</Text>
                     </Pressable>
                 </View>
             </View>

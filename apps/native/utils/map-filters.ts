@@ -15,6 +15,7 @@
  * pins — that is the rule that makes the remembering safe. "All Categories" clears the category.
  */
 
+import { t } from '@beanpool/core';
 import { CATEGORY_META, normalizeCategory } from '../constants/categories';
 import { EVENT_WINDOWS, eventInWindow, type EventWindow } from './events';
 import type { FilterChip } from './filter-chips';
@@ -89,7 +90,8 @@ export function visibleEventPins<T = any>(posts: T[], state: MapFilterState, now
 /** The collapsed chip's text: the current category, and whether tapping it opens or closes the panel. */
 export function categoryChipLabel(category: string, open: boolean): string {
     const m = CATEGORY_META[category] ?? CATEGORY_META.all;
-    return `${m.emoji} ${m.label} ${open ? '▴' : '▾'}`;
+    const values = { emoji: m.emoji, label: t(m.label) };
+    return open ? t('{emoji} {label} ▴', values) : t('{emoji} {label} ▾', values);
 }
 
 export interface CategoryPanelState {

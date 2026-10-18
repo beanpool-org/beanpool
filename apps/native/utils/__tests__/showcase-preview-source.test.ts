@@ -102,7 +102,8 @@ describe('the preview sources', () => {
         expect(post).toMatch(/<View style=\{styles\.priceCard\} testID="no-beans-terms">\s*<View [^>]*accessible accessibilityLabel=\{`\$\{NO_BEANS_TERMS\.value\}\. \$\{noBeansTermsNote\(beansPreview\)\}`\}>(?:(?!<View)[\s\S])*?<\/View>\s*\{beansPreview && <View style=\{\{ paddingHorizontal: 16 \}\}><LocalCommunityMark variant="line"/);
         expect(post).not.toMatch(/\{NO_BEANS_TERMS\.note\}/);
         expect(post).toMatch(/escrowPreview && \(\s*<View style=\{styles\.otherPostActions\}>\s*<LocalCommunityMark variant="action" feature="escrow" label=\{LOCAL_COMMUNITY_LINES\.dealAction/);
-        expect(read('components/PollCard.tsx')).toMatch(/\{informal && decisionsPreview && <LocalCommunityMark variant="line" feature="decisions" text=\{LOCAL_COMMUNITY_LINES\.poll\} \/>\}/);
+        // The line in the member's language since words S3b: the same line, through t().
+        expect(read('components/PollCard.tsx')).toMatch(/\{informal && decisionsPreview && <LocalCommunityMark variant="line" feature="decisions" text=\{t\(LOCAL_COMMUNITY_LINES\.poll\)\} \/>\}/);
         expect(read('app/(tabs)/market.tsx')).toMatch(/decisionsPreview=\{decisionsPreview\}/);
         const people = read('app/(tabs)/people.tsx');
         // Its words say 12 words only where the door offers them (invite-entries.ts bringSomeoneHereText: finding 7).

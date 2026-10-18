@@ -3,6 +3,7 @@ import {
     AccessibilityInfo, Animated, Easing, Pressable, Text, View, StyleSheet,
     type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, type StyleProp, type ViewStyle,
 } from 'react-native';
+import { t } from '@beanpool/core';
 import { useTheme } from '../app/ThemeContext';
 import {
     ACTIVE_FILTER_CHIP, INITIAL_QUICK_RETURN, quickReturnControlsHidden, quickReturnListInset, quickReturnStep,
@@ -213,8 +214,8 @@ export function ActiveFilterChip({ label, onPress, onClear }: { label: string; o
                     onPress={onPress}
                     style={styles.chipMain}
                     accessibilityRole="button"
-                    accessibilityLabel={`Filtered: ${label}`}
-                    accessibilityHint="Shows the search and filters"
+                    accessibilityLabel={t('Filtered: {filters}', { filters: label })}
+                    accessibilityHint={t('Shows the search and filters')}
                 >
                     <View style={[pill, styles.pillLabel]}>
                         <Text style={[styles.chipText, { color: colors.text.body }]} numberOfLines={1} maxFontSizeMultiplier={1.3}>{label}</Text>
@@ -224,7 +225,7 @@ export function ActiveFilterChip({ label, onPress, onClear }: { label: string; o
                     onPress={onClear}
                     style={styles.chipClear}
                     accessibilityRole="button"
-                    accessibilityLabel="Clear search and filters"
+                    accessibilityLabel={t('Clear search and filters')}
                 >
                     <View style={[pill, styles.pillClear]}>
                         <Text style={[styles.chipClearText, { color: colors.text.secondary }]} maxFontSizeMultiplier={1.3}>✕</Text>

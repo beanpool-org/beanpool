@@ -281,7 +281,8 @@ describe('dark mode: themed screens draw with the theme', () => {
         expect(contrast(dark('statusTextCompleted', 'color'), dark('statusCompleted', 'backgroundColor'))).toBeGreaterThanOrEqual(4.5);
         expect(contrast(dark('reviewBtnText', 'color'), dark('reviewBtn', 'backgroundColor'))).toBeGreaterThanOrEqual(4.5);
         expect(contrast(dark('historyChipTextActive', 'color'), dark('historyChipActive', 'backgroundColor'))).toBeGreaterThanOrEqual(4.5); // the selected filter
-        const edit = darkValues(file, src, 'color').find(v => />Edit<\/Text>/.test(src.split('\n')[Number(v.at.split(':').pop()) - 1]))!;
+        // The Edit label, written through t() since words S3b.
+        const edit = darkValues(file, src, 'color').find(v => />\{t\('Edit'[^}]*\)\}<\/Text>/.test(src.split('\n')[Number(v.at.split(':').pop()) - 1]))!;
         const editGround = darkValues(file, src, 'backgroundColor').find(v => /borderColor: colors\.border\.strong/.test(src.split('\n')[Number(v.at.split(':').pop()) - 1]))!;
         expect(contrast(resolve(edit.value)!.hex, resolve(editGround.value)!.hex)).toBeGreaterThanOrEqual(4.5);
         // Light keeps the colours it had.

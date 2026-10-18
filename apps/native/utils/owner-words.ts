@@ -20,7 +20,7 @@
 
 import { buildSignedHeaders } from './crypto';
 import {
-    OWNER_WORDS_CHECK_PATH, isOwnerWordsCheckDue, ownerWordsPromptRound, splitTypedWords,
+    OWNER_WORDS_CHECK_PATH, isOwnerWordsCheckDue, ownerWordsPromptRound, splitTypedWords, word,
     type OwnerWordsCheckResult,
 } from '@beanpool/core';
 import {
@@ -160,10 +160,11 @@ export const OWNER_WORDS_COPY = {
     title: 'Check your 12 words',
     why: "You're an owner of this community. Its take-over keys and backups are locked to your account. If you lose this phone, your 12 words are what get you back in — so check you still have the right ones.",
     notChecked: "Your 12 words aren't checked. If you lose this phone you couldn't take over the server or open a backup.",
-    promptTitleNever: "Your 12 words aren't checked",
-    promptBodyNever: "If you lose this phone you couldn't take over the server or open a backup.",
-    promptTitleRenew: 'Time to check your 12 words',
-    promptBodyRenew: "It's a year since you last checked them. If you lose this phone, they're how you'd take over the server or open a backup.",
+    // The Market's prompt (components/OwnerWordsPrompt): word() keys, shown there through t().
+    promptTitleNever: word("Your 12 words aren't checked"),
+    promptBodyNever: word("If you lose this phone you couldn't take over the server or open a backup."),
+    promptTitleRenew: word('Time to check your 12 words'),
+    promptBodyRenew: word("It's a year since you last checked them. If you lose this phone, they're how you'd take over the server or open a backup."),
     checked: (ms: number) => `12 words checked ${formatCheckedDate(ms)}`,
     unlockTitle: 'Take over or restore with this phone',
     unlockSub: "If your main server is gone: scan the code on the standby's Settings, or on a server restoring a backup.",
@@ -181,8 +182,8 @@ export const OWNER_WORDS_COPY = {
     saving: 'Saving…',
     saved: 'Saved. Settings → View Recovery Phrase shows your 12 words on this phone now.',
     saveFailed: "They couldn't be saved on this phone. Nothing has changed. Settings → View Recovery Phrase lets you add them.",
-    checkNow: 'Check now',
-    later: 'Later',
+    checkNow: word('Check now'),
+    later: word('Later'),
 } as const;
 
 /** "Can't find them?", true on either phone. */

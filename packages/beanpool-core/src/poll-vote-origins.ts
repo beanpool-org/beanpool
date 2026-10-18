@@ -11,7 +11,12 @@
  * Every vote still counts: these lines say where the votes came from, never whose they are, and never leave a vote out.
  * Nothing here is shown where the node says nothing (a local community, a group's poll, an open vote), nor on a poll
  * still open (pollOriginsShown).
+ *
+ * In the reader's language (t/tn): English exactly as before. A count that a noun follows goes through tn() even where
+ * English writes one form for both, so a language with more forms has them.
  */
+
+import { t, tn } from './words.js';
 
 /**
  * Whether a poll card may show where its votes came from: only once the poll has closed, and never on an open vote. The
@@ -26,8 +31,12 @@ export function pollVoteOriginsLine(totalVotes: number | null | undefined, fromN
     const total = typeof totalVotes === 'number' && Number.isFinite(totalVotes) ? Math.max(0, Math.floor(totalVotes)) : 0;
     const n = typeof fromNew === 'number' && Number.isFinite(fromNew) ? Math.min(total, Math.floor(fromNew)) : 0;
     if (n <= 0) return null;
-    if (n === total) return total === 1 ? 'The 1 vote came from a new or 12-word account' : `All ${total} votes came from new or 12-word accounts`;
-    return `${n} of ${total} votes came from ${n === 1 ? 'a new or 12-word account' : 'new or 12-word accounts'}`;
+    if (n === total) {
+        return total === 1
+            ? t('The 1 vote came from a new or 12-word account')
+            : tn(total, 'All {n} votes came from new or 12-word accounts', 'All {n} votes came from new or 12-word accounts');
+    }
+    return tn(n, '{n} of {total} votes came from a new or 12-word account', '{n} of {total} votes came from new or 12-word accounts', { total });
 }
 
 /** An option's line: "4 of these 7 from new or 12-word accounts". Null when none, or the node gives no split. */
@@ -35,6 +44,10 @@ export function pollOptionOriginsLine(votes: number | null | undefined, fromNew:
     const count = typeof votes === 'number' && Number.isFinite(votes) ? Math.max(0, Math.floor(votes)) : 0;
     const n = typeof fromNew === 'number' && Number.isFinite(fromNew) ? Math.min(count, Math.floor(fromNew)) : 0;
     if (n <= 0) return null;
-    if (n === count) return count === 1 ? 'This 1 from a new or 12-word account' : `All ${count} from new or 12-word accounts`;
-    return `${n} of these ${count} from ${n === 1 ? 'a new or 12-word account' : 'new or 12-word accounts'}`;
+    if (n === count) {
+        return count === 1
+            ? t('This 1 from a new or 12-word account')
+            : tn(count, 'All {n} from new or 12-word accounts', 'All {n} from new or 12-word accounts');
+    }
+    return tn(n, '{n} of these {count} from a new or 12-word account', '{n} of these {count} from new or 12-word accounts', { count });
 }

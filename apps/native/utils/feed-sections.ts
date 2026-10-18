@@ -8,13 +8,17 @@
  *
  * The buckets were also rolling 24-hour blocks rather than days, which mislabelled every post type: at 9 am
  * a listing from 11 pm last night was under TODAY. They are local calendar days now.
+ *
+ * Each heading is a word() key: the screen shows it through t(), in the member's language.
  */
 
-export const UPCOMING_EVENTS_HEADING = 'Upcoming events';
+import { word, type WordKey } from '@beanpool/core';
+
+export const UPCOMING_EVENTS_HEADING = word('Upcoming events');
 
 export interface FeedSection<T> {
     id: string;
-    title: string;
+    title: WordKey;
     posts: T[];
 }
 
@@ -63,10 +67,10 @@ export function feedSections<T extends Record<string, any>>(posts: T[], nowMs: n
     events.sort((a, b) => startMs(a) - startMs(b));
     const sections: FeedSection<T>[] = [
         { id: 'header-events', title: UPCOMING_EVENTS_HEADING, posts: events },
-        { id: 'header-today', title: 'Today', posts: today },
-        { id: 'header-yesterday', title: 'Yesterday', posts: yesterday },
-        { id: 'header-thisweek', title: 'This Week', posts: thisWeek },
-        { id: 'header-older', title: 'Older Listings', posts: older },
+        { id: 'header-today', title: word('Today'), posts: today },
+        { id: 'header-yesterday', title: word('Yesterday'), posts: yesterday },
+        { id: 'header-thisweek', title: word('This Week'), posts: thisWeek },
+        { id: 'header-older', title: word('Older Listings'), posts: older },
     ];
     return sections.filter(s => s.posts.length > 0);
 }

@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { View, ScrollView, Pressable, Text, StyleSheet, useWindowDimensions, type LayoutChangeEvent, type StyleProp, type ViewStyle } from 'react-native';
+import { t } from '@beanpool/core';
 import { useStyles } from '../app/ThemeContext';
-import { tilePanelColumns, TILE_GAP, TILE_PANEL_PADDING, type FilterChip } from '../utils/filter-chips';
+import { longestWordLength, tilePanelColumns, TILE_GAP, TILE_PANEL_PADDING, type FilterChip } from '../utils/filter-chips';
 
 interface FilterChipButtonProps {
     label: string;
@@ -75,7 +76,7 @@ interface FilterChipPanelProps<Id extends string> {
 /**
  * Every option as tiles, wrapping onto as many rows as it takes so all of them are visible at once. Tiles
  * are emoji above label, at least 48dp tall. Four per row at normal width, fewer when four would squeeze a
- * label at a large text size (`tilePanelColumns`).
+ * label at a large text size or a language's longest word (`tilePanelColumns`). Labels in the member's language.
  */
 export function FilterChipPanel<Id extends string>({ chips, selected, onSelect, activeColor, panelMaxHeight, style }: FilterChipPanelProps<Id>) {
     const { fontScale } = useWindowDimensions();
@@ -99,7 +100,8 @@ export function FilterChipPanel<Id extends string>({ chips, selected, onSelect, 
         tileTextActive: { color: '#ffffff', fontWeight: '800' },
     }));
 
-    const cols = innerWidth ? tilePanelColumns(innerWidth, fontScale) : 4;
+    const labels = chips.map(c => t(c.label));
+    const cols = innerWidth ? tilePanelColumns(innerWidth, fontScale, longestWordLength(labels)) : 4;
     const tileWidth = innerWidth ? Math.floor((innerWidth - TILE_GAP * (cols - 1)) / cols) : 0;
 
     return (
@@ -107,20 +109,20 @@ export function FilterChipPanel<Id extends string>({ chips, selected, onSelect, 
             <ScrollView style={panelMaxHeight ? { maxHeight: panelMaxHeight } : undefined} bounces={false}>
                 {/* Measured, then the tiles lay out at the computed width. */}
                 <View style={styles.grid} onLayout={e => setInnerWidth(e.nativeEvent.layout.width - 2 * TILE_PANEL_PADDING)}>
-                    {tileWidth > 0 && chips.map(c => {
+                    {tileWidth > 0 && chips.map((c, i) => {
                         const on = c.id === selected;
                         return (
                             <Pressable
                                 key={c.id}
                                 accessibilityRole="button"
                                 accessibilityState={{ selected: on }}
-                                accessibilityLabel={c.label}
+                                accessibilityLabel={labels[i]}
                                 style={[styles.tile, { width: tileWidth }, on && { backgroundColor: activeColor }]}
                                 onPress={() => onSelect(c.id)}
                             >
                                 {/* The emoji is a picture, not text: it keeps its size at large text so the label gets the room. */}
                                 {c.emoji ? <Text style={styles.tileEmoji} allowFontScaling={false}>{c.emoji}</Text> : null}
-                                <Text style={[styles.tileText, on && styles.tileTextActive]} numberOfLines={2}>{c.label}</Text>
+                                <Text style={[styles.tileText, on && styles.tileTextActive]} numberOfLines={2}>{labels[i]}</Text>
                             </Pressable>
                         );
                     })}

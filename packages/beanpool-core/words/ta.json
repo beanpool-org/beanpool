@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ta",
     "name": "Tamil",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-19",
@@ -305,5 +305,25 @@
   "Sunset {time}.": "சூரிய அஸ்தமனம் {time}.",
   "Look around ›": "சுற்றிப் பாருங்கள் ›",
   "Pick up the tour at step {step} ›": "படி {step} இல் வழிகாட்டலைத் தொடரவும் ›",
-  "This is your Home. You choose what goes here. Before you start, take a one-minute look at the other tabs.": "இது உங்கள் முகப்பு. இங்கு என்ன இருக்க வேண்டும் என்பதை நீங்களே தேர்வு செய்யலாம். தொடங்குவதற்கு முன், மற்ற தாவல்களை ஒரு நிமிடம் பாருங்கள்."
+  "This is your Home. You choose what goes here. Before you start, take a one-minute look at the other tabs.": "இது உங்கள் முகப்பு. இங்கு என்ன இருக்க வேண்டும் என்பதை நீங்களே தேர்வு செய்யலாம். தொடங்குவதற்கு முன், மற்ற தாவல்களை ஒரு நிமிடம் பாருங்கள்.",
+  "Save this search to Home": "இந்தத் தேடலை முகப்புப் பக்கத்தில் சேமி",
+  "Save the search \"{q}\" to Home": "\"{q}\" தேடலை முகப்புப் பக்கத்தில் சேமி",
+  "The 1 vote came from a new or 12-word account": "1 வாக்கு புதிய அல்லது 12 சொற்கள் கணக்கிலிருந்து வந்தது",
+  "All {n} votes came from new or 12-word accounts|All {n} votes came from new or 12-word accounts": {
+    "one": "அனைத்து {n} வாக்கும் புதிய அல்லது 12 சொற்கள் கணக்குகளிலிருந்து வந்தன",
+    "other": "அனைத்து {n} வாக்குகளும் புதிய அல்லது 12 சொற்கள் கணக்குகளிலிருந்து வந்தன"
+  },
+  "{n} of {total} votes came from a new or 12-word account|{n} of {total} votes came from new or 12-word accounts": {
+    "one": "{total} வாக்குகளில் {n} வாக்கு புதிய அல்லது 12 சொற்கள் கணக்கிலிருந்து வந்தது",
+    "other": "{total} வாக்குகளில் {n} வாக்குகள் புதிய அல்லது 12 சொற்கள் கணக்குகளிலிருந்து வந்தன"
+  },
+  "This 1 from a new or 12-word account": "இந்த 1 வாக்கு புதிய அல்லது 12 சொற்கள் கணக்கிலிருந்து வந்தது",
+  "All {n} from new or 12-word accounts|All {n} from new or 12-word accounts": {
+    "one": "அனைத்து {n} புதிய அல்லது 12 சொற்கள் கணக்குகளிலிருந்து",
+    "other": "அனைத்து {n} புதிய அல்லது 12 சொற்கள் கணக்குகளிலிருந்து"
+  },
+  "{n} of these {count} from a new or 12-word account|{n} of these {count} from new or 12-word accounts": {
+    "one": "இந்த {count}-இல் {n} புதிய அல்லது 12 சொற்கள் கணக்கிலிருந்து",
+    "other": "இந்த {count}-இல் {n} புதிய அல்லது 12 சொற்கள் கணக்குகளிலிருந்து"
+  }
 }

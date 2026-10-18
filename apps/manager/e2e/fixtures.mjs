@@ -578,6 +578,35 @@ const PUBLIC_ADDRESS_STATUS = {
     dockerSocket: false,
 };
 
+// "Your own address" (HTTPS S4, apps/server services/acme/status.ts): a long own domain with its certificate, the IP whose
+// last try failed with the scheduler's longest words, and a name set on the server with under a day left, for 320px.
+const OWN_DOMAIN = 'community-garden-and-tool-library.example.org';
+const TLS_STATUS = {
+    success: true,
+    ca: "Let's Encrypt",
+    testCa: false,
+    orders: true,
+    identifiers: [
+        {
+            identifier: OWN_DOMAIN, kind: 'name', challenge: 'http-01', source: 'public-address', ownerAdded: true, communityAddress: true,
+            certificate: { issuedAt: '2026-09-28T10:00:00.000Z', expiresAt: '2026-12-27T10:00:00.000Z' }, nextRenewalAt: '2026-11-27T10:00:00.000Z',
+            lastAttemptAt: '2026-09-28T09:58:00.000Z', lastSuccessAt: '2026-09-28T10:00:00.000Z', failures: 0, lastError: null,
+        },
+        {
+            identifier: '203.0.113.5', kind: 'ip', challenge: 'http-01', source: 'owner', ownerAdded: true, communityAddress: false,
+            certificate: null, nextRenewalAt: '2026-09-28T14:00:00.000Z', lastAttemptAt: '2026-09-28T10:00:00.000Z', lastSuccessAt: null, failures: 2,
+            lastError: "could not confirm from inside your network; trying with Let's Encrypt anyway, once a day. Let's Encrypt said: "
+                + 'Fetching http://203.0.113.5/.well-known/acme-challenge/kE7rXb3YwQ0f9tZuVnM2pLs8HdCjAaGi: Timeout during connect (likely firewall problem). '
+                + 'The check from here: port 80 is not reachable from the internet',
+        },
+        {
+            identifier: 'nas.example.net', kind: 'name', challenge: 'http-01', source: 'env', ownerAdded: false, communityAddress: false,
+            certificate: { issuedAt: '2026-07-01T10:00:00.000Z', expiresAt: '2026-09-29T08:00:00.000Z' }, nextRenewalAt: null,
+            lastAttemptAt: null, lastSuccessAt: null, failures: 0, lastError: null,
+        },
+    ],
+};
+
 const PUBLIC_ADDRESS_LOGS = [
     { timestamp: '2026-09-19T00:00:00.000Z', step: 'probe', message: 'Checking DNS resolution for ' + NODE_HOSTNAME, type: 'info' },
     { timestamp: '2026-09-19T00:00:05.000Z', step: 'tunnel', message: 'Cloudflare tunnel connector established, 4 edge locations', type: 'success' },
@@ -1146,6 +1175,9 @@ export function mockResponse(method, pathname, searchParams, bodyText) {
     if (pathname === '/api/local/admin/public-address/claim') return ok({ success: true, status: 'pending' });
     if (pathname === '/api/local/admin/public-address/restart-tunnel') return ok({ success: true, tunnel: PUBLIC_ADDRESS_STATUS.tunnel });
     if (pathname === '/api/local/admin/public-address/offline') return ok({ success: true });
+    if (pathname === '/api/local/admin/tls/status') return ok(TLS_STATUS);
+    if (pathname === '/api/local/admin/public-address/own') return ok({ success: true, address: '203.0.113.5', kind: 'ip', communityAddress: false, primaryAddress: OWN_DOMAIN });
+    if (pathname === '/api/local/admin/app-addresses/remove') return ok({ addresses: [], unconfirmed: [], heldBack: [], oldApps: { today: 0, busiestDay: 0 }, unboundSignaturesUntil: null, unboundSignaturesAccepted: false });
 
     // ---- connectors ----
     if (pathname === '/api/local/connectors') return m === 'GET' ? ok({ connectors: CONNECTORS }) : ok({ success: true });

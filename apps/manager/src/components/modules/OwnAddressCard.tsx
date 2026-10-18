@@ -214,7 +214,7 @@ export function OwnAddressCard({ activeNode, enabled }: { activeNode: NodeProfil
                                     >
                                         {id.nextRenewalAt
                                             ? t('Certificate valid until {until}. Renews about {renews}.', { until: formatMoment(cert.expiresAt), renews: formatMoment(id.nextRenewalAt) })
-                                            : t('Certificate valid until {until}. Renewing it now.', { until: formatMoment(cert.expiresAt) })}
+                                            : t('Certificate valid until {until}. Renewing it within the hour.', { until: formatMoment(cert.expiresAt) })}
                                     </p>
                                 ) : !id.lastError ? (
                                     <p className="text-sm text-nature-300 m-0 break-words" data-testid="own-address-certificate">

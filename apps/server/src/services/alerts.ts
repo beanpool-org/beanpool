@@ -70,8 +70,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-// The words layer's t(), named apart from the `t` every function here uses for the time.
-import { t as tr } from '@beanpool/core';
+// The words layer in English, named apart from the `t` every function here uses for the time. A node never writes in the
+// device language (core words.test N11): it names the language it writes in.
+import { wordsFor } from '@beanpool/core';
+const { t: tr } = wordsFor('en');
 import { db } from '../db/db.js';
 import { writeFileAtomic } from '../write-file-atomic.js';
 import { logger, onSecurityLogLine, type LogCategory } from '../logger.js';

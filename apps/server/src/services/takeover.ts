@@ -86,7 +86,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import net from 'node:net';
 import {
-    audienceOf, t, parseRecoveryCode, checkRecoveryCode, openEnvelope, RecoveryCodeError,
+    audienceOf, wordsFor, parseRecoveryCode, checkRecoveryCode, openEnvelope, RecoveryCodeError,
     type CodeStanza, type OwnerStanza, type SealedEnvelopeHeader, type SealedEnvelopeKey,
 } from '@beanpool/core';
 import { db, MEMBERS_SCHEMA_RULES } from '../db/db.js';
@@ -563,7 +563,7 @@ function ipOnlyAddressWarning(bundle: TakeoverBundle): string | null {
     }
     const all = [...hosts];
     if (!all.length || !all.every(isIpLiteral)) return null;
-    return t('Members reached this community at {addresses}, which this server does not have. They will need its new address.', { addresses: all.join(', ') });
+    return wordsFor('en').t('Members reached this community at {addresses}, which this server does not have. They will need its new address.', { addresses: all.join(', ') });
 }
 
 /**

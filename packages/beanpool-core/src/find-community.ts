@@ -15,7 +15,7 @@
  *   real control: the Start a community screen), and "Tell me when one starts here" (a place watch) on both.
  */
 
-import { tn, word } from './words.js';
+import { t, tn, word } from './words.js';
 
 /** "Near you", in km: see the header. */
 export const NEAR_COMMUNITY_KM = 250;
@@ -73,7 +73,7 @@ export function findCommunityState(f: FindCommunityFacts): FindCommunityState {
     return 'none';
 }
 
-/** The words both apps share: each is a word() key, shown through t() (farLead translates itself). */
+/** The words both apps share: each is a word() key, shown through t() (farLead and farLine translate themselves). */
 export const FIND_COMMUNITY_WORDS = {
     title: word('Find your community'),
     /** `not_loaded` (M3): what is true, and nothing about none. */
@@ -82,6 +82,12 @@ export const FIND_COMMUNITY_WORDS = {
     noneNear: word('No community near you yet.'),
     /** `far`, after noneNear, over the list (each line says its distance). */
     farLead: (n: number) => tn(n, 'The nearest listed is far from here:', 'The nearest listed are far from here:'),
+    /**
+     * `far`, the whole line over the list: noneNear then farLead, both in the member's language (deciding review of
+     * #2152: an English noneNear before a translated lead). The joiner is a sentence of its own: zh and ja put no space
+     * between sentences.
+     */
+    farLine: (n: number): string => t('{none} {lead}', { none: t(FIND_COMMUNITY_WORDS.noneNear), lead: FIND_COMMUNITY_WORDS.farLead(n) }),
     /** The control beside `none` and `far`: it opens the Start a community screen. */
     start: word('Start a community'),
 } as const;

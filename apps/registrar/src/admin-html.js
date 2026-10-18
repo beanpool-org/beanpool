@@ -947,7 +947,8 @@ export const ADMIN_HTML = `<!DOCTYPE html>
                 const key = (save || reset).getAttribute(save ? 'data-setting-save' : 'data-setting-default');
                 const value = save ? String(document.getElementById('set-' + key).value || '').trim() : null;
                 if (save && !value) return;
-                const r = await postAdmin('settings', { key: key, value: value === null ? null : Number(value) });
+                if (save && !/^\\d+$/.test(value)) { alert('Not saved: type a whole number, digits only (no commas, spaces or letters).'); return; }
+                const r = await postAdmin('settings', save ? { key: key, value: Number(value) } : { key: key, reset: true });
                 if (r.ok) renderSources(r.data); else alert('Not saved: ' + (r.data.error || r.status));
             }
         }

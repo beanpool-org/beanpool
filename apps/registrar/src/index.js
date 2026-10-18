@@ -1731,7 +1731,9 @@ async function handleBlocked(env, bodyText, who = null) {
     return json({ blocked: await db.listBlocked(env, now) });
 }
 
-// A live setting ({ key, value }; value null = back to its default), or the hold switch ({ hold: true | false }).
+// A live setting ({ key, value }: a whole number in its range; { key, reset: true }: back to its default), or the hold
+// switch ({ hold: true | false }). A missing or null value is refused, never read as a reset: a page's bad number (NaN,
+// which JSON writes as null) must not put a limit back to its default.
 async function handleSettings(env, bodyText, who = null) {
     let b; try { b = JSON.parse(bodyText || '{}'); } catch { return json({ error: 'bad json' }, 400); }
     const now = nowS();
@@ -1742,9 +1744,12 @@ async function handleSettings(env, bodyText, who = null) {
             : 'turned Hold all new names off' }));
         return json(await sourcesPanel(env));
     }
-    const problem = await settings.write(env, b?.key, b?.value ?? null, who?.email, now);
+    const reset = b?.reset === true;
+    if (!reset && (b?.value === null || b?.value === undefined || b?.value === ''))
+        return json({ error: 'value must be a whole number (reset: true puts the setting back to its default)' }, 400);
+    const problem = await settings.write(env, b?.key, reset ? null : b.value, who?.email, now);
     if (problem) return json({ error: problem }, 400);
-    await tell(env, () => alerts.adminSetting(env, { who: who?.email, what: b.value === null || b.value === '' ? `put ${b.key} back to its default` : `set ${b.key} to ${b.value}` }));
+    await tell(env, () => alerts.adminSetting(env, { who: who?.email, what: reset ? `put ${b.key} back to its default` : `set ${b.key} to ${b.value}` }));
     return json(await sourcesPanel(env));
 }
 

@@ -367,14 +367,16 @@ test('the live limits are settings in D1: a row there beats the env and the defa
         await w.setting('new_names_per_hour', 100);
         assert.equal((await claimFrom(w, FROM.home, one, { name: 'firstone' })).body.status, 'live');
         assert.equal((await claimFrom(w, FROM.home, one, { name: 'secondone' })).status, 403, 'one name a key');
-        // Nonsense is refused, and nothing changes.
-        for (const bad of [{ key: 'source_per_hour', value: 0 }, { key: 'source_per_hour', value: 'lots' }, { key: 'source_per_hour', value: 1.5 }, { key: 'no_such', value: 3 }]) {
+        // Nonsense is refused, and nothing changes: a missing or null value too (review of #2132: the page's NaN, which JSON
+        // writes as null, put the limit back to its default), never read as a reset.
+        for (const bad of [{ key: 'source_per_hour', value: 0 }, { key: 'source_per_hour', value: 'lots' }, { key: 'source_per_hour', value: 1.5 }, { key: 'no_such', value: 3 },
+            { key: 'source_per_hour', value: null }, { key: 'source_per_hour' }, { key: 'source_per_hour', value: '' }]) {
             const r = await admin(w, 'settings', bad);
             assert.equal(r.status, 400, JSON.stringify(bad));
         }
         assert.equal(get((await admin(w, 'sources')).body, 'source_per_hour').value, 5);
-        // Back to the default.
-        assert.equal(get((await admin(w, 'settings', { key: 'source_per_hour', value: null })).body, 'source_per_hour').value, 3);
+        // Back to the default: said so (reset), never a null value.
+        assert.equal(get((await admin(w, 'settings', { key: 'source_per_hour', reset: true })).body, 'source_per_hour').value, 3);
         // Every change is told.
         assert.ok(told(w, '%changed the registrar\'s settings').length >= 4);
         // The admin's routes answer only the admin.
@@ -472,6 +474,7 @@ async function adminPage(w, answers = {}) {
     const els = {};
     const sent = [];
     const confirms = [];
+    const alerts = [];
     const clicks = [];
     const el = (id) => (els[id] ??= { id, innerHTML: '', value: '', textContent: '', style: {}, addEventListener() {}, querySelector: () => null });
     const ctx = {
@@ -479,7 +482,7 @@ async function adminPage(w, answers = {}) {
         document: { getElementById: el, addEventListener: (type, fn) => { if (type === 'click') clicks.push(fn); }, querySelector: () => null },
         sessionStorage: { getItem: () => null, setItem() {}, removeItem() {} },
         confirm: (text) => { confirms.push(text); return true; },
-        alert() {},
+        alert: (text) => { alerts.push(text); },
         fetch: async (url, init = {}) => {
             sent.push({ url, init });
             const body = (answers[url] || (() => ({ allocations: [], events: [] })))(init);
@@ -493,7 +496,7 @@ async function adminPage(w, answers = {}) {
         for (const fn of clicks) await fn({ target });
         for (let i = 0; i < 5; i++) await new Promise((r) => setImmediate(r));
     };
-    return { html, ctx, els, sent, confirms, click };
+    return { html, ctx, els, sent, confirms, alerts, click };
 }
 
 test('/admin: the New names card shows the switch, the groups and their one-click actions; held names say why and from where', async () => {
@@ -533,6 +536,30 @@ test('/admin: the New names card shows the switch, the groups and their one-clic
         const awaiting = p.els.pendingTableContainer.innerHTML;
         assert.match(awaiting, /held: many from one source · AS64500 Example Hosting \(NL\) · source [0-9a-f]{8}/);
         assert.ok(!awaiting.includes(FROM.bot.ip));
+    } finally { w.restore(); }
+});
+
+// Review of #2132: Number('1,000') is NaN, which JSON writes as null, which the Worker read as "back to the default".
+test('/admin: a Limits box saves digits only, refusing anything else on the page; Default asks for the default by name', async () => {
+    const w = await sourceWorld();
+    try {
+        w.setting('source_per_hour', 7);
+        const panel = (await admin(w, 'sources')).body;
+        const p = await adminPage(w, { '/api/local/admin/registrar/settings': () => panel });
+        p.ctx.renderSources(panel);
+        const settingPosts = () => p.sent.filter((x) => x.url === '/api/local/admin/registrar/settings').map((x) => JSON.parse(x.init.body));
+        const box = p.ctx.document.getElementById('set-source_per_hour');
+        for (const typed of ['1,000', '5h', '1e3', '-2', '1.5', '7 0']) {
+            box.value = typed;
+            await p.click({ 'data-setting-save': 'source_per_hour' });
+            assert.match(p.alerts.at(-1), /^Not saved: type a whole number/, typed);
+        }
+        assert.deepEqual(settingPosts(), [], 'nothing sent for any of them');
+        box.value = ' 12 ';
+        await p.click({ 'data-setting-save': 'source_per_hour' });
+        await p.click({ 'data-setting-default': 'source_per_hour' });
+        assert.deepEqual(settingPosts(), [{ key: 'source_per_hour', value: 12 }, { key: 'source_per_hour', reset: true }]);
+        assert.equal(w.sqlite.prepare("SELECT value FROM settings WHERE key = 'source_per_hour'").get().value, '7', 'the stub answered; the row is as it was');
     } finally { w.restore(); }
 });
 

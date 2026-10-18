@@ -40,9 +40,10 @@ Full design: [`docs/node-dns-registrar.md`](../../docs/node-dns-registrar.md).
   `GET …/servers` (the outside checks of our servers). New names (below, "New names: where they come from"):
   `GET …/sources` · `POST …/sources {source, block?, run?, total?}` or `{asn}` (Reject all held / Block all;
   `{asn}`: that network's names with no source, as the panel groups them when `SOURCE_KEY` is unset) ·
-  `POST …/blocked {kind, value, days?, remove?}` · `POST …/settings {key, value}` or `{hold}`. Every pending row of
-  `/pending` also says `held_reason` (held for approval although its name is auto) and its `source` (network,
-  country, the source's keyed-hash id), and a live one `probation` while it is on it. The page's tables fit their card at every width: the
+  `POST …/blocked {kind, value, days?, remove?}` · `POST …/settings {key, value}`, `{key, reset: true}` or `{hold}`
+  (a missing or null value is refused, never read as a reset). Every pending row of `/pending` also says
+  `held_reason` (held for approval although its name is auto) and its `source` (network, country, the source's
+  keyed-hash id), and a live one `probation` while it is on it. The page's tables fit their card at every width: the
   registrar tests pin its CSS, and `node apps/registrar/scripts/check-admin-layout.mjs [<shots dir>]` measures it in a
   browser at 320–1280 px (by hand: CI's test job has no browser)
 - **Switchboard:** `GET /i/:code` (trampoline) — resolves `live` and `paused` names only, and never one still on

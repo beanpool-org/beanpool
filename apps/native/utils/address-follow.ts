@@ -36,7 +36,7 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ed25519 } from '@noble/curves/ed25519.js';
-import { audienceOf, ed25519KeyOfPeerId } from '@beanpool/core';
+import { audienceOf, ed25519KeyOfPeerId, t } from '@beanpool/core';
 import { communityOrigin } from './community-origin';
 import { GLOBAL_NODE_URL } from './global-node-url';
 import { isPlainNodeAddress, plainOriginOf } from './node-url';
@@ -132,7 +132,7 @@ export function readIdentityStatement(body: unknown): CommunityIdentity | null {
     const bytes = new TextEncoder().encode(STATEMENT_DOMAIN + JSON.stringify({
         v: s.v, peerId: s.peerId, communityId: s.communityId, epoch: s.epoch, since: s.since,
     }));
-    let valid = false;
+    let valid: boolean;
     try {
         valid = ed25519.verify(base64Bytes(b.sig), bytes, key, { zip215: false });
     } catch {
@@ -337,7 +337,15 @@ export async function acceptAddressFollow(offer: AddressFollowOffer, injected?: 
 }
 
 /**
- * The owner's nudge (design §3, D3): the server's public number when that is how members reach this community, else null.
+ * The owner's nudge, the same sentence wherever it shows (the claim screen's last step, Settings → Manage; design §3, D3):
+ * never a gate, never a deadline. "Settings → Public Address" is the community's own Settings, which Manage opens.
+ */
+export function numberNudge(ip: string): string {
+    return t("Members reach this community by its server's number, {ip}. If the server or its number changes, each member will have to type the new one. A name follows the community: Settings → Public Address.", { ip });
+}
+
+/**
+ * The server's public number when that is how members reach this community, else null (numberNudge says it).
  * `origin` is the community's address on this phone (or the one just claimed at); `addresses` its own, as its info names
  * them (absent: not known). A number only when none of the community's own addresses is a name.
  */

@@ -83,7 +83,7 @@ vi.mock('../membership-probe', () => ({ fetchMembership: vi.fn(async () => new R
 vi.mock('../node-admin', () => ({ requireDeviceUnlock: vi.fn(async () => 'ok'), NO_DEVICE_LOCK_MESSAGE: 'no lock' }));
 // The server's answer to GET /api/local/claim: no owner yet, named Beans Town.
 const CODE_ID = '0a1b2c3d';
-const server = vi.hoisted(() => ({ asked: [] as string[] }));
+const server = vi.hoisted(() => ({ asked: [] as string[], addresses: ['beans.example.org'] as string[] | null }));
 vi.mock('../node-claim', async (importOriginal) => {
     const real = await importOriginal<typeof import('../node-claim')>();
     return {
@@ -93,6 +93,10 @@ vi.mock('../node-claim', async (importOriginal) => {
             return { kind: 'unclaimed', codeId: '0a1b2c3d', salt: '00'.repeat(32), communityName: 'Beans Town' };
         }),
         readNodeHasAddress: vi.fn(async () => true),
+        // The node's own addresses, as its info names them (the success screen reads them).
+        readNodeAddresses: vi.fn(async () => server.addresses),
+        // The claim itself is node-claim.test.ts's: here the node takes it.
+        claimCommunity: vi.fn(async () => ({ kind: 'owner' })),
     };
 });
 
@@ -144,6 +148,7 @@ beforeEach(() => {
     nav.params = {};
     look.theme = 'light';
     server.asked = [];
+    server.addresses = ['beans.example.org'];
     camera.onScanned = null;
     camera.granted = true;
     vi.mocked(Alert.alert).mockClear();
@@ -338,5 +343,50 @@ describe('with no server yet, Scan the code reads the server\'s claim QR', () =>
             expect(q(host, '[data-testid="camera"]'), data).not.toBeNull();
         }
         expect(server.asked).toEqual([]);
+    });
+});
+
+/**
+ * HTTPS S3 (DESIGN-https-anywhere-fable.md §3, D3): a server claimed at its public number, with no name yet. The last
+ * step says what that means for members, in the sentence Settings → Manage says too: never a gate, never a deadline.
+ */
+describe('claimed at the server\'s number, the owner is told a name follows the community', () => {
+    const NUMBER = 'https://203.0.113.5';
+    const NUDGE = "Members reach this community by its server's number, 203.0.113.5. If the server or its number changes, each member will have to type the new one. A name follows the community: Settings → Public Address.";
+
+    async function claimAt(origin: string): Promise<HTMLElement> {
+        nav.params = { node: origin, code: CODE };
+        const host = await render();
+        await act(async () => { button(host, 'Claim and become owner')!.click(); });
+        await act(async () => {});
+        expect(host.textContent).toContain('You own Beans Town');
+        return host;
+    }
+
+    it('the link\'s https number opens the claim (nodeRefused: false), and the last step says the sentence', async () => {
+        server.addresses = ['203.0.113.5'];
+        const host = await claimAt(NUMBER);
+        expect(server.asked).toEqual([NUMBER]);
+        const nudge = q(host, '[data-testid="claim-number-nudge"]');
+        expect(nudge?.textContent).toBe(NUDGE);
+        // It wraps: nothing in it is fixed-width or cut to a line count.
+        expect(style(nudge).width).toBeUndefined();
+        expect(nudge?.getAttribute('data-lines')).toBeNull();
+        // And the claim goes on as before: no gate.
+        expect(button(host, 'Make Beans Town my community')).toBeDefined();
+    });
+
+    it('a node that says nothing of its addresses, at its number, gets the sentence too', async () => {
+        server.addresses = null;
+        const host = await claimAt(NUMBER);
+        expect(q(host, '[data-testid="claim-number-nudge"]')?.textContent).toBe(NUDGE);
+    });
+
+    it('no sentence once the community has a name, or when claimed at a name', async () => {
+        server.addresses = ['203.0.113.5', 'beans.example.org'];
+        expect(q(await claimAt(NUMBER), '[data-testid="claim-number-nudge"]')).toBeNull();
+        document.body.innerHTML = '';
+        server.addresses = ['beans.example.org'];
+        expect(q(await claimAt(ORIGIN), '[data-testid="claim-number-nudge"]')).toBeNull();
     });
 });

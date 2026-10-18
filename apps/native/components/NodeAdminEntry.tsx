@@ -16,6 +16,10 @@
  *
  * Beside it, "Manage this community from a computer" ("Moderate …" for a moderator; app/settings-signin.tsx): scan the
  * QR on /settings in a computer's browser. Older apps call it "Sign in on a computer".
+ *
+ * For an owner of a community its members reach by its server's public number, with no name yet, the nudge under Manage
+ * (utils/address-follow.ts numberNudge; DESIGN-https-anywhere-fable.md §3, D3): a name follows the community, a number
+ * doesn't. Words only: never a gate, never a deadline.
  */
 import React, { useRef, useState } from 'react';
 import { View, Text, Pressable, ActivityIndicator, Alert } from 'react-native';
@@ -30,6 +34,7 @@ import { offersNamesList } from '../utils/names-list';
 import { issueBreakGlassCodeOnce, forgetBreakGlassCode } from '../utils/break-glass';
 import { signOutEverywhereOnce, signOutEverywhereWarning, signOutEverywhereDone } from '../utils/sign-out-everywhere';
 import { turnAppLockOnForRole, APP_LOCK_ON_FOR_ROLE } from '../utils/LocalAuth';
+import { numberNudge, numberOnlyAddress } from '../utils/address-follow';
 
 /** The Settings screen's own menu styles, so the entry looks like every other row. */
 interface MenuStyles {
@@ -47,6 +52,8 @@ export function NodeAdminEntry({ styles, fallbackCommunityName, onAppLockTurnedO
     const { colors } = useTheme();
     const [role, setRole] = useState<ManageRole | null>(null);
     const [communityName, setCommunityName] = useState<string | null>(null);
+    // The community's address on this phone, for the owner's nudge when it is the server's number.
+    const [anchor, setAnchor] = useState<string | null>(null);
     const { busy, start, dialog } = useManageNode();
     const profile = useNodeProfile();
     // While a break-glass code is being made (the unlock prompt, then the node): its row is disabled and shows so. The
@@ -71,6 +78,7 @@ export function NodeAdminEntry({ styles, fallbackCommunityName, onAppLockTurnedO
                 if (cancelled) return;
                 setRole(mine.role);
                 setCommunityName(mine.communityName);
+                setAnchor(url);
                 if (canManageNode(mine.role) && (await turnAppLockOnForRole()) === 'turned-on' && !cancelled) {
                     onAppLockTurnedOn?.();
                     Alert.alert('App Lock is on', APP_LOCK_ON_FOR_ROLE(mine.communityName || fallbackCommunityName || 'your community'));
@@ -137,6 +145,8 @@ export function NodeAdminEntry({ styles, fallbackCommunityName, onAppLockTurnedO
     const name = communityName || fallbackCommunityName || 'this community';
     const label = manageLabel(role, name);
     const computerLabel = computerSigninLabel(role);
+    // Public Address is the owners' (the node's Settings), so the nudge is theirs. The addresses are the profile's copy.
+    const numberOnly = role === 'owner' ? numberOnlyAddress(anchor, profile?.addresses) : null;
 
     return (
         <>
@@ -160,6 +170,11 @@ export function NodeAdminEntry({ styles, fallbackCommunityName, onAppLockTurnedO
                     </View>
                     {busy ? <ActivityIndicator size="small" color={colors.brand.primary} /> : <Text style={styles.menuChevron}>›</Text>}
                 </Pressable>
+                {numberOnly ? (
+                    <View style={{ paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.surface.subtle }} testID="owner-number-nudge">
+                        <Text style={{ fontSize: 14, lineHeight: 20, color: colors.text.body }}>{numberNudge(numberOnly)}</Text>
+                    </View>
+                ) : null}
                 {offersNamesList(role, profile?.profile) ? (
                     <Pressable
                         style={[styles.menuBtn, { minHeight: 48 }]}

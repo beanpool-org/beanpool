@@ -39,7 +39,17 @@ export { ErrorBoundary };
 type Phase = 'form' | 'unlocking' | 'checking' | 'done';
 
 export default function ClaimCommunityScreen() {
-    const params = useLocalSearchParams<{ node?: string; refused?: string; id?: string; code?: string }>();
+    const params = useLocalSearchParams<{ node?: string | string[]; refused?: string | string[]; id?: string | string[]; code?: string | string[] }>();
+    const rawNode = params.node;
+    const rawRefused = params.refused;
+    const rawId = params.id;
+    const rawCode = params.code;
+
+    const nodeParam = Array.isArray(rawNode) ? rawNode[0] : rawNode;
+    const refusedParam = Array.isArray(rawRefused) ? rawRefused[0] : rawRefused;
+    const idParam = Array.isArray(rawId) ? rawId[0] : rawId;
+    const codeParam = Array.isArray(rawCode) ? rawCode[0] : rawCode;
+
     const { identity } = useIdentity();
     const manage = useManageNode();
 
@@ -79,11 +89,11 @@ export default function ClaimCommunityScreen() {
     const placeholder = colors.text.muted;
 
     // ── Which node ──────────────────────────────────────────────────────────────────────────────────────
-    const linkNode = typeof params.node === 'string' ? claimNodeOrigin(params.node) : null;
+    const linkNode = typeof nodeParam === 'string' ? claimNodeOrigin(nodeParam) : null;
     const [origin, setOrigin] = useState<string | null>(linkNode);
     const [addressInput, setAddressInput] = useState('');
     const [addressError, setAddressError] = useState<string | null>(
-        params.refused === '1' ? "The link named an address BeanPool won't use. Type the server's address instead." : null,
+        refusedParam === '1' ? "The link named an address BeanPool won't use. Type the server's address instead." : null,
     );
     const [status, setStatus] = useState<ClaimStatus | null>(null);
     const [isMember, setIsMember] = useState<boolean | null>(null);
@@ -115,8 +125,8 @@ export default function ClaimCommunityScreen() {
 
     // ── The code and the callsign ───────────────────────────────────────────────────────────────────────
     const [link, setLink] = useState(() => ({
-        code: typeof params.code === 'string' ? params.code : '',
-        id: typeof params.id === 'string' ? params.id : '',
+        code: typeof codeParam === 'string' ? codeParam : '',
+        id: typeof idParam === 'string' ? idParam : '',
     }));
     const { code: linkCode, id: linkId } = link;
     // A QR with the code but no address (the server had none yet): the code is kept for the server typed next.

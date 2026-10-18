@@ -48,7 +48,9 @@ export default function FindCommunityScreen() {
     const insets = useSafeAreaInsets();
     const { identity } = useIdentity();
     const pubkey = identity?.publicKey ?? null;
-    const params = useLocalSearchParams<{ town?: string }>();
+    const params = useLocalSearchParams<{ town?: string | string[] }>();
+    const rawTown = params.town;
+    const townParam = Array.isArray(rawTown) ? rawTown[0] : rawTown;
 
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
         container: { flex: 1, backgroundColor: colors.surface.page },
@@ -96,7 +98,7 @@ export default function FindCommunityScreen() {
     const [locationNote, setLocationNote] = useState<string | null>(null);
     // A town the member typed instead (utils/typed-place.ts): it wins over the phone's place until "Use my location".
     const [typed, setTyped] = useState<TypedPlace | null>(null);
-    const [townOpen, setTownOpen] = useState(params.town === '1');
+    const [townOpen, setTownOpen] = useState(townParam === '1');
 
     useEffect(() => {
         let alive = true;

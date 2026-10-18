@@ -492,6 +492,8 @@ async function main(): Promise<void> {
             assert(ipServed.status === 200 && ipServed.body.preview.addressWarning
                 === 'Members reached this community at 203.0.113.5, [2001:db8::5], which this server does not have. They will need its new address.',
                 `its web address an IP too, with an IPv6 one beside it: both named (${ipServed.body.preview?.addressWarning ?? ipServed.body.error})`);
+            assert(ipServed.status === 200 && ipServed.body.preview.tunnel.source === 'none',
+                `an IP web address is the server itself: no tunnel to bring back, not one to re-claim (${ipServed.body.preview?.tunnel?.source}: ${ipServed.body.preview?.tunnel?.message ?? ipServed.body.error})`);
             const named = await addressed({ publicAddress: null, ownerAddresses: ['203.0.113.5', 'beans.example.org'] });
             assert(named.status === 200 && named.body.preview.addressWarning === null,
                 `an IP with a name beside it: no address warning (${named.body.preview?.addressWarning ?? named.body.error})`);

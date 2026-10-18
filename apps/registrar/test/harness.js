@@ -52,7 +52,7 @@ export const migration = (m) => readFileSync(new URL(`../migrations/${m}`, impor
 // once, just before the first run() whose SQL matches `re` writes, `run` runs to completion — a request landing
 // between another request's last Cloudflare call and its write. `atWrite(n, run)`: the same, just before the n-th run()
 // from now; `writes()` counts the run() calls so far.
-export function sqliteD1(migrations = ['0001_init.sql', '0002_states.sql', '0003_decision_seq.sql', '0004_teardown.sql', '0005_reserve_global.sql', '0006_request_nonces.sql', '0007_content_swap.sql', '0008_alerts.sql', '0009_watch.sql', '0010_reserve_our_hosts.sql']) {
+export function sqliteD1(migrations = ['0001_init.sql', '0002_states.sql', '0003_decision_seq.sql', '0004_teardown.sql', '0005_reserve_global.sql', '0006_request_nonces.sql', '0007_content_swap.sql', '0008_alerts.sql', '0009_watch.sql', '0010_reserve_our_hosts.sql', '0011_sources.sql']) {
     const sqlite = new DatabaseSync(':memory:');
     for (const m of migrations) sqlite.exec(migration(m));
     const readHooks = [];
@@ -288,6 +288,19 @@ export async function world({ migrations, env: extra, serve = {} } = {}) {
         admin: async (name, action, body) => call(adminRequest(name, action, body)),
         invite: async (code) => (await worker.fetch(new Request(`https://beanpool.org/i/${code}`), env)).status,
         backdate: async (name, fields) => db.updateAllocation(env, name, fields),
+        // A live name's probation over (migration 0011), as enough ok sweeps would end it: for a test about something else.
+        verify: async (name) => db.updateAllocation(env, name, { verified_at: nowS() }),
+        // A live setting, as /admin writes it (src/settings.js).
+        setting: (key, value) => sqlite.prepare('INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, ?)').run(key, String(value), nowS()),
+        // The settings' one read (src/settings.js read) failing its next `times` times, as D1 fails a query when it is
+        // overloaded or loses its connection: the table is there (not a database without migration 0011).
+        failSettingsRead: (times = 1) => {
+            const DB = env.DB;
+            let left = times;
+            const fail = async () => { throw new Error('D1_ERROR: Network connection lost.'); };
+            const failing = { bind: () => failing, first: fail, all: fail, run: fail };
+            env.DB = { prepare: (sql) => (left > 0 && /^SELECT .* FROM settings$/.test(sql.trim()) ? (left--, failing) : DB.prepare(sql)) };
+        },
     };
     return w;
 }

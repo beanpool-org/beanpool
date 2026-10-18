@@ -5,15 +5,23 @@
  *     cron calls it with a nonce; we return a reply signed by the node's Ed25519 key. Public by design.
  *   - Admin routes drive the node's public address for the manager "Public Address" tab (claim/status/offline, and
  *     rotate: a new tunnel key).
+ *   - POST /api/local/admin/public-address/own { ip } or { domain } (owner-only, main server only): an address of this
+ *     server's own, its public IPv4 address or the owner's domain pointed at it, as `beanpool claim --ip/--address`
+ *     gives one (services/public-address-agent.ts storeOwnAddress; design scratch/global-node/DESIGN-https-anywhere-fable.md
+ *     §4). Nothing is asked of the registrar; the server gets its own certificate for it. Moving the community's live own
+ *     address to another of its kind asks for the owner's fresh proof, as a claim over a live name does. The registrar's
+ *     routes below leave an own address alone: it has no BeanPool name to release, rotate or ask about.
  */
 
 import Router from '@koa/router';
 import http from 'node:http';
 import { buildAttestation, claimAddress, updateAddressMetadata, addressStatus, releaseAddress, rotateAddress, nodePubkeyHex, askNameHolder, isPublicIpv4 } from '../services/registrar-client.js';
 import { syncTunnel, restartTunnel, persistAddress, persistAddressIfUnchanged, answersAboutAnotherName, noteUnansweredClaim, getTunnelStatus, dockerSocketMounted, LOOPBACK_ORIGIN, type TunnelStatus } from '../services/tunnel-connector.js';
-import { getNodeConfig, getNodeRole, updateNodeConfig, publicAddressGeneration, adminBroadcastAnnouncement } from '../state-engine.js';
+import { getNodeConfig, getNodeRole, updateNodeConfig, publicAddressGeneration, adminBroadcastAnnouncement, isOwnPublicAddress } from '../state-engine.js';
 import { recordRegistrarAnswer, registrarNames, REGISTRAR_ZONE } from '../engine/registrar-names.js';
-import { dropAddressRequest, nameAskedFor } from '../services/public-address-agent.js';
+import { dropAddressRequest, nameAskedFor, replacesLiveOwnAddress, storeOwnAddress } from '../services/public-address-agent.js';
+import { isPublicIpv4Host, normalizeAddress, ownAddressProblem } from '../engine/host-kinds.js';
+import { primaryAddress, publishedAddresses } from '../engine/own-addresses.js';
 import { noteTurnedAway, settleUnansweredClaims, turnedAwayList } from '../config/turned-away-names.js';
 import { isAddressLabel } from '../address-request.js';
 import { requireAdminRole, requireFreshProof } from '../admin-auth.js';
@@ -330,6 +338,45 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
         }
     });
 
+    // An own address: this server's public IPv4 address, or the owner's own domain pointed at it. Owner-only, as every
+    // address change is; on the main server only (a standby orders no certificate, and takes the address over with the keys).
+    router.post('/api/local/admin/public-address/own', async (ctx) => {
+        if (!(await checkAdminAuth(ctx))) return;
+        if (!requireAdminRole(ctx, ['owner'], ADDRESS_OWNER_ONLY)) return;
+        const b = (ctx.request as any).body || (ctx as any).requestBody || {};
+        const ip = typeof b.ip === 'string' ? b.ip.trim() : undefined;
+        const domain = typeof b.domain === 'string' ? b.domain.trim() : undefined;
+        if ((ip === undefined) === (domain === undefined)) {
+            ctx.status = 400;
+            ctx.body = { error: 'Send { "ip": "203.0.113.5" } (this server\'s public IPv4 address) or { "domain": "beans.example.org" }.' };
+            return;
+        }
+        if (getNodeRole() !== 'primary') {
+            ctx.status = 409;
+            ctx.body = { error: 'This is a standby: set the address on the main server. A standby takes it over with the keys.' };
+            return;
+        }
+        if (ip !== undefined && !isPublicIpv4Host(ip)) {
+            ctx.status = 400;
+            const shaped = /^[\d.]+$/.test(ip) ? ownAddressProblem(normalizeAddress(ip) ?? ip) : null;
+            ctx.body = { error: shaped ?? `"${ip.slice(0, 80)}" is not an IPv4 address: send it as four numbers, e.g. 203.0.113.5.` };
+            return;
+        }
+        if (domain !== undefined && /^[\d.]+$|^\[|:/.test(domain)) {
+            ctx.status = 400;
+            ctx.body = { error: `${domain} is not a name: send an IP address as { "ip": … }.` };
+            return;
+        }
+        const given = (ip ?? domain)!;
+        // Moving the community's live own address to another IP, or another domain, changes where newcomers and the directory
+        // are sent: the fresh proof, as the claim route asks over a live name (design case 18, B3; S2 review 4305409734).
+        if (replacesLiveOwnAddress(given) && !(await requireFreshProof(ctx, b.code, 'replace this community\'s live address'))) return;
+        const got = storeOwnAddress(given, `Settings (${(ctx.state as any)?.actor || 'the admin password'})`);
+        if (!got.ok) { ctx.status = 400; ctx.body = { error: got.error }; return; }
+        ctx.set('Cache-Control', 'no-store');
+        ctx.body = { success: true, address: got.host, kind: got.kind, communityAddress: got.communityAddress, addresses: publishedAddresses(), primaryAddress: primaryAddress() };
+    });
+
     // The names this key holds besides the stored address (the install's late claim, a name moved off or taken offline
     // that the registrar still lists for this key): Settings offers to release each by name. Owner-only, as releasing is.
     router.get('/api/local/admin/public-address/extra-names', async (ctx) => {
@@ -478,7 +525,10 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
             }
             if (result.status === 'live') {
                 recordRegistrarAnswer(result, 'stored');
-                const prev = (getNodeConfig() as any).publicAddress || {};
+                // An own address stored until now (an IP, a domain) is no part of the registrar's record: the name replaces
+                // it as the community's address, and it stays accepted from the owner-confirmed list (storeOwnAddress).
+                const before = (getNodeConfig() as any).publicAddress;
+                const prev = before && !isOwnPublicAddress(before) ? before : {};
                 // Where the tunnel leads is recorded for the name it was set for (tunnel-connector.ts moves an old one).
                 const origin = prev.origin && (!result.name || !prev.name || result.name === prev.name) ? { origin: prev.origin } : {};
                 const { origin: _dropped, ...kept } = prev;
@@ -603,6 +653,14 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
         if (!requireAdminRole(ctx, ['owner'], ADDRESS_OWNER_ONLY)) return;
         // Every member's app loses the address: the fresh proof (design case 18, B1).
         const offlineBody = (ctx.request as any).body || (ctx as any).requestBody || {};
+        // An own address is no BeanPool name: released unnamed, the registrar would release this key's first name, which
+        // can be one it still holds. Removing an own address is Settings → Network's (routes/app-addresses.ts remove).
+        const own = (getNodeConfig() as any).publicAddress;
+        if (isOwnPublicAddress(own)) {
+            ctx.status = 409;
+            ctx.body = { error: `${own.hostname} is this server's own address, not a BeanPool name: there is nothing to take offline at the address service. Remove it under Settings → Network, "Addresses members' apps use".` };
+            return;
+        }
         if (!(await requireFreshProof(ctx, offlineBody.code, 'take this community offline'))) return;
         try {
             probeLogs.length = 0;

@@ -17,6 +17,9 @@
  *  4. `pushDirectoryNow()` error handling when directory registry returns non-2xx status code.
  *  2b. Held back: a community with no name of its own (blank, or the default "BeanPool Community") or a server with
  *     DIRECTORY_UNLISTED=1 sends nothing, and the answer says which (the rest: test-directory-hold-back.ts).
+ *  2c. Held back while the registrar's last answer about this server's live name said `probation: true` (registrar
+ *     slice S3): nothing sent, the answer and the owners' diagnostics say `probation`; a name with no probation, a
+ *     pending one, or none at all is not held back for it (a node never needs the registrar).
  *  5. `initDirectoryPublisher()` behavior when disabled or on backup node.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-directory-publisher.ts
@@ -65,7 +68,7 @@ const { initStateEngine, setNodeRole, getNodeConfig, updateNodeConfig, getDirect
 const { getVersion } = await import('./version.js');
 const { updateLocalConfig } = await import('./config/local-config.js');
 const { startP2P } = await import('./p2p.js');
-const { initDirectoryPublisher, pushDirectoryNow, HELD_BACK_NAME_MESSAGE, HELD_BACK_UNLISTED_MESSAGE } = await import('./services/directory-publisher.js');
+const { initDirectoryPublisher, pushDirectoryNow, directoryHeldBack, HELD_BACK_NAME_MESSAGE, HELD_BACK_UNLISTED_MESSAGE, HELD_BACK_PROBATION_MESSAGE } = await import('./services/directory-publisher.js');
 const { db } = await import('./db/db.js');
 
 let run = 0;
@@ -130,6 +133,20 @@ async function main() {
     assert(initDirectoryPublisher() === false,
         'initDirectoryPublisher sets no timer under DIRECTORY_UNLISTED (only a restart changes the env)');
     delete process.env.DIRECTORY_UNLISTED;
+
+    // ── 2c. Held back while the registrar's name is on probation (S3): the push waits until its answer drops it.
+    const probation = { name: 'newtown', hostname: 'newtown.beanpool.org', mode: 'tunnel', status: 'live', probation: true };
+    updateNodeConfig({ publicAddress: probation } as any);
+    const probationRes = await pushDirectoryNow();
+    assert(probationRes.success === false && probationRes.error === HELD_BACK_PROBATION_MESSAGE && probationRes.heldBack === 'probation',
+        'pushDirectoryNow holds back a community whose new registrar name is on probation, saying why');
+    assert(directoryHeldBack() === 'probation', "the owners' diagnostics say probation");
+    // Not for a pending name (nothing routed yet), a name the registrar no longer says it of, or no name at all.
+    for (const pa of [{ ...probation, status: 'pending' }, { ...probation, probation: undefined }, null]) {
+        updateNodeConfig({ publicAddress: pa } as any);
+        assert(directoryHeldBack() === null, `nothing holds back ${pa ? `a ${pa.status} name${pa.probation ? ' on probation' : ''}` : 'a server with no registrar name'}`);
+    }
+    updateNodeConfig({ publicAddress: null } as any);
 
     assert(receivedRequests.length === requestsBefore,
         'no request was sent to directory registry when node was held back');

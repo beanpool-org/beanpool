@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ur",
     "name": "Urdu",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-18",
@@ -61,6 +61,7 @@
   "Can't reach it right now. Tap to try again.": "ابھی رسائی نہیں ہو رہی۔ دوبارہ کوشش کے لیے ٹیپ کریں۔",
   "Can't reach it right now": "ابھی رسائی نہیں ہو رہی",
   "Your account there was closed.": "وہاں آپ کا اکاؤنٹ بند کر دیا گیا۔",
+  "Your own community isn't affected.": "آپ کی اپنی کمیونٹی اس سے متاثر نہیں ہوتی۔",
   "Global community, {state}": "عالمی کمیونٹی، {state}",
   "Switches to this community. Long press to remove it.": "اس کمیونٹی پر لے جاتا ہے۔ ہٹانے کے لیے دیر تک دبائیں۔",
   "Guest": "مہمان",

@@ -49,7 +49,10 @@ export interface PublicAddressStatus {
      * shown beside what the server holds. Absent when it answered, or when the server had nothing to ask it (#2143 item 1).
      */
     nameServiceNote?: string;
-    /** With an own address (mode `ip` or `own`): its certificate's state, as GET /tls/status reads it; null for none looked after. */
+    /**
+     * With an own address (mode `ip` or `own`): its certificate's state, as GET /tls/status reads it; null for none looked
+     * after. An owner's only, as that route is: absent for an admin.
+     */
     tls?: { certificate?: { issuedAt?: string; expiresAt?: string } | null; nextRenewalAt?: string | null; lastError?: string | null } | null;
 }
 

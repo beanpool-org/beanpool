@@ -284,6 +284,15 @@ try {
         && ownOnly.body?.hostname === DOMAIN && ownOnly.body?.mode === 'own' && ownOnly.body?.nameServiceNote === undefined, show(ownOnly.body));
     check('…with its certificate\'s state as GET /tls/status reads it', !!tlsFacts && show(ownOnly.body?.tls)
         === show({ certificate: tlsFacts.certificate, nextRenewalAt: tlsFacts.nextRenewalAt, lastError: tlsFacts.lastError }), show({ tls: ownOnly.body?.tls, tlsFacts }));
+    // That state is an owner's, as GET /tls/status is: an admin who is not an owner is shown the address without it (PR #2158
+    // review 4307110204).
+    role = 'admin';
+    const adminRead = await fetch(`${base}/api/local/admin/public-address/status`).then(async (r) => ({ status: r.status, body: await r.json() as any }));
+    const adminTls = await fetch(`${base}/api/local/admin/tls/status`).then((r) => r.status);
+    role = 'owner';
+    check('…an admin who is not an owner: the own address, and nothing of its certificate (GET /tls/status: 403)', adminRead.status === 200
+        && adminRead.body?.hostname === DOMAIN && adminRead.body?.mode === 'own' && !('tls' in (adminRead.body ?? {})) && adminTls === 403
+        && registrar.calls.length === asked, show({ body: adminRead.body, tlsStatus: adminTls }));
     check('…and the BeanPool name this key holds is not stored', pa()?.mode === 'own' && pa()?.hostname === DOMAIN, show(pa()));
     // A name asked for (`beanpool claim --name riverbend` stands, as the agent would claim it): the read asks, and stores it.
     updateLocalConfig({ addressRequest: { name: 'riverbend', mode: 'tunnel', contact: null, requestedAt: Date.now(), refused: null } });

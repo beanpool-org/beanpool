@@ -277,12 +277,13 @@ function ownAddressTls(host: string): { certificate: { issuedAt: string; expires
 
 /**
  * What this server holds as its address, from itself alone: its own address (an IP, a domain) with that certificate's
- * state, or none. A registrar name is never shown from here: one stored is asked about (hasNameToAsk).
+ * state, or none. A registrar name is never shown from here: one stored is asked about (hasNameToAsk). The certificate's
+ * state is an owner's, as GET /tls/status is: an admin is shown the address without it.
  */
 function ownAddressAnswer(ctx: any): Record<string, unknown> {
     const stored = (getNodeConfig() as any).publicAddress;
     if (!isOwnPublicAddress(stored)) return { status: 'none' };
-    return { ...addressFields(ctx, stored), tls: ownAddressTls(stored.hostname) };
+    return { ...addressFields(ctx, stored), ...(ctx.state?.adminRole === 'owner' ? { tls: ownAddressTls(stored.hostname) } : {}) };
 }
 
 /**

@@ -9,21 +9,24 @@
 import { defaultDatabaseDirectory } from 'expo-sqlite';
 import * as FileSystem from 'expo-file-system/legacy';
 import { closeDB } from './db';
+import { COPY_LANDING_SUFFIX } from './cache-file-migration';
 import { getDatabaseFilenameForNode, legacyDatabaseFilenameForNode } from './nodes';
 import { resetSyncFingerprints } from '../services/pillar-sync';
 
 /**
  * SQLite's own files beside each database: the write-ahead log (db.ts opens every copy in WAL mode), its index, a
  * rollback journal. They go before the database file: one left behind by an interrupted removal would be replayed
- * into the next copy opened under that name, the next account's, with this account's rows in it.
+ * into the next copy opened under that name, the next account's, with this account's rows in it. And a copy a stop left
+ * on its way to that name (cache-file-migration.ts COPY_LANDING_SUFFIX: a community followed to its new address), which
+ * holds this account's rows too.
  */
-const DATABASE_FILE_SUFFIXES = ['-wal', '-shm', '-journal', ''] as const;
+const DATABASE_FILE_SUFFIXES = ['-wal', '-shm', '-journal', COPY_LANDING_SUFFIX, ''] as const;
 
 /**
  * A community copy's file, under any name nodes.ts has given one (getDatabaseFilenameForNode, legacyDatabaseFilenameForNode,
  * the no-community file), or one of its side files. Group 1 is the database's own name.
  */
-const COMMUNITY_COPY_FILE = /^(community_[a-z0-9._-]{0,40}_[0-9a-f]{32}\.db|beanpool_[A-Za-z0-9_]+\.db|beanpool\.db)(?:-wal|-shm|-journal)?$/;
+const COMMUNITY_COPY_FILE = /^(community_[a-z0-9._-]{0,40}_[0-9a-f]{32}\.db|beanpool_[A-Za-z0-9_]+\.db|beanpool\.db)(?:-wal|-shm|-journal|-carry)?$/;
 
 /**
  * Take each community's cached copy off this phone. The copy that is open is closed first: left open, it would go on

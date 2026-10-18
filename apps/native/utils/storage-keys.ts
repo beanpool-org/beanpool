@@ -90,8 +90,9 @@ export function dmLinesAtUpdateStoreKey(publicKey: string, file: string): string
 
 /**
  * Every key above kept per (account, community file): what goes with a community's copy when it moves to its new address
- * (utils/community-copy-carry.ts). A new key per account and file belongs here too, or following a community leaves it
- * behind (community-copy-carry.test.ts reads this file for one missing). The sync cursors (`pillar_sync_<file>_*`,
+ * (utils/community-copy-carry.ts). A new key per account and file belongs here too, with its add-only way into a value
+ * the new address already has (community-copy-carry.ts MERGES), or following a community leaves it behind
+ * (community-copy-carry.test.ts reads this file for one missing). The sync cursors (`pillar_sync_<file>_*`,
  * services/pillar-sync.ts) are per file and not per account: the carry moves those by their prefix.
  */
 export const PER_FILE_STORE_KEYS: readonly ((publicKey: string, file: string) => string)[] = [

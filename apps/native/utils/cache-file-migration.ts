@@ -35,6 +35,12 @@ export const CACHE_NAMES_DONE_KEY = 'beanpool_cache_names_v2';
 /** SQLite's own files beside a database (db.ts opens every copy in WAL mode). */
 const SIDE_FILES = ['-wal', '-shm', '-journal'] as const;
 
+/**
+ * A copy on its way to a name (copyCopyFile): written here beside it, then renamed into place, never opened. Sign Out takes
+ * one a stop left behind with the copies (community-cache.ts), and the next copy to that name removes it first.
+ */
+export const COPY_LANDING_SUFFIX = '-carry';
+
 /** expo-sqlite's directory, without the scheme or a trailing slash; '' where there is none (community-cache.ts). */
 export function databaseDirectory(): string {
     try {
@@ -79,30 +85,66 @@ async function moveCopy(directory: string, from: string, to: string, keys: reado
 
 /**
  * Rename the copy `from` to `to` (steps 2 and 3 above): its log folded into it first, then one rename of one self-contained
- * file, the old name's leftover log files gone. `from` must exist, open nowhere else, and `to` must not exist. Also how a
- * community's copy goes with it to its new address (utils/community-copy-carry.ts). Throws when a step fails.
+ * file, the old name's leftover log files gone. `from` must exist, open nowhere else, and `to` must not exist. Throws when
+ * a step fails.
  */
 export async function renameCopyFile(directory: string, from: string, to: string): Promise<void> {
-    // Fold the log into the file. Opened under its old name, which nothing else opens any more, and closed again.
+    await foldLog(directory, from);
+    await clearSideFiles(directory, to);
+    await FileSystem.moveAsync({ from: fileUri(directory, from), to: fileUri(directory, to) });
+    await clearSideFiles(directory, from);
+}
+
+/**
+ * Copy the copy `from` to `to`, `from` left as it was: how a community's copy goes with it to its new address
+ * (utils/community-copy-carry.ts), whose old address keeps its copy until the new one is written. Its log is folded into
+ * it first, so one self-contained file is copied; the copy is written beside `to` (COPY_LANDING_SUFFIX) and renamed into
+ * place, so `to` is never half a file. Neither may be open, and `to` must not exist. Throws when a step fails, with
+ * nothing left under `to`'s name.
+ */
+export async function copyCopyFile(directory: string, from: string, to: string): Promise<void> {
+    await foldLog(directory, from);
+    const landing = fileUri(directory, `${to}${COPY_LANDING_SUFFIX}`);
+    await FileSystem.deleteAsync(landing, { idempotent: true });
+    await clearSideFiles(directory, to);
+    try {
+        await FileSystem.copyAsync({ from: fileUri(directory, from), to: landing });
+        await FileSystem.moveAsync({ from: landing, to: fileUri(directory, to) });
+    } catch (e) {
+        await FileSystem.deleteAsync(landing, { idempotent: true }).catch(() => {});
+        throw e;
+    }
+}
+
+/**
+ * Take the copy `name` off the phone, its log files first and the database last, so a stop part way leaves a whole
+ * self-contained file or nothing (its log folded in before: copyCopyFile). Throws when a step fails.
+ */
+export async function deleteCopyFile(directory: string, name: string): Promise<void> {
+    await clearSideFiles(directory, name);
+    await FileSystem.deleteAsync(fileUri(directory, name), { idempotent: true });
+}
+
+/** Fold the copy's log into its file. Opened under its own name, which nothing else opens now, and closed again. */
+async function foldLog(directory: string, name: string): Promise<void> {
     let unfolded = false;
     for (const side of SIDE_FILES) {
-        if (await exists(fileUri(directory, `${from}${side}`))) unfolded = true;
+        if (await exists(fileUri(directory, `${name}${side}`))) unfolded = true;
     }
     if (unfolded) {
-        const old = await SQLite.openDatabaseAsync(from, { useNewConnection: true });
+        const copy = await SQLite.openDatabaseAsync(name, { useNewConnection: true });
         try {
-            await old.execAsync('PRAGMA wal_checkpoint(TRUNCATE);');
+            await copy.execAsync('PRAGMA wal_checkpoint(TRUNCATE);');
         } finally {
-            await old.closeAsync();
+            await copy.closeAsync();
         }
     }
-    // Nothing of another copy's may be read into this one as its log.
+}
+
+/** Remove the side files under `name`: nothing of another copy's may be read into a copy put there as its log. */
+async function clearSideFiles(directory: string, name: string): Promise<void> {
     for (const side of SIDE_FILES) {
-        await FileSystem.deleteAsync(fileUri(directory, `${to}${side}`), { idempotent: true });
-    }
-    await FileSystem.moveAsync({ from: fileUri(directory, from), to: fileUri(directory, to) });
-    for (const side of SIDE_FILES) {
-        await FileSystem.deleteAsync(fileUri(directory, `${from}${side}`), { idempotent: true });
+        await FileSystem.deleteAsync(fileUri(directory, `${name}${side}`), { idempotent: true });
     }
 }
 

@@ -48,7 +48,7 @@ import {
 } from './group-history-unlock';
 import { oldKeySignedHere, rekeysToMe } from './key-succession';
 import { isKeyReplacedAnswer, noteKeyAnswered, noteKeyReplaced, watchForReplacedKey } from './key-replaced';
-import { sqliteGroupKeyStore } from './group-chat-store';
+import { sqliteGroupKeyStore, GROUP_KEY_TABLES_SQL } from './group-chat-store';
 import { sendSealedGroupLine, editSealedGroupLine, chatIsLocked, GROUP_CHAT_LOCK_LOST_TEXT, GROUP_CHAT_NOT_MEMBER_TEXT, GROUP_KEYS_FOR_DM_TEXT, GROUP_EDIT_LINE_GONE_TEXT } from './group-chat-lines';
 import { sealLine, GROUP_NONCE_PREFIX } from './group-chat-crypto';
 import { languageHeader } from './language-choice';
@@ -118,8 +118,11 @@ function releaseSyncLock() {
 
 let currentDbName: string | null = null;
 let getDbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
-/** A community's copy moving to another name (whileCopyMoves): getDb opens nothing until it is done. */
-let copyMoving: Promise<unknown> | null = null;
+/**
+ * A community's copy moving to another name (whileCopyMoves): getDb opens nothing until it is done. Set only while the
+ * move holds the sync lock, so a writer holding the lock never finds it set.
+ */
+let copyMoving: Promise<void> | null = null;
 
 /**
  * Resolves once this phone's community copies have the names that give every community its own file
@@ -130,8 +133,13 @@ export { communityCachesRenamed };
 export async function getDb(): Promise<SQLite.SQLiteDatabase> {
     await communityCachesRenamed();
     // Nor while a copy moves to another name (whileCopyMoves): it opens once the copy and the address are where they go.
-    while (copyMoving) await copyMoving.catch(() => {});
-    const url = await AsyncStorage.getItem('beanpool_anchor_url');
+    // Asked again after the address is read, the last wait before an open is on its way (getDbPromise), which a move
+    // lets finish before it starts.
+    let url: string | null;
+    do {
+        while (copyMoving) await copyMoving;
+        url = await AsyncStorage.getItem('beanpool_anchor_url');
+    } while (copyMoving);
     const expectedDbName = getDatabaseFilenameForNode(url);
 
     if (db && currentDbName === expectedDbName) {
@@ -197,20 +205,25 @@ export async function getDb(): Promise<SQLite.SQLiteDatabase> {
 export async function closeDB() {
     await acquireSyncLock({ urgent: true });
     try {
-        if (db) {
-            const oldDb = db;
-            db = null;
-            currentDbName = null;
-            dbInitialized = false;
-            dbInitPromise = null;
-            try {
-                await oldDb.closeAsync();
-            } catch (e) {
-                console.warn('[DB] closeDB warning:', e);
-            }
-        }
+        await closeOpenCopy();
     } finally {
         releaseSyncLock();
+    }
+}
+
+/** Close the copy open, if one is. The caller holds the sync lock (closeDB, whileCopyMoves). */
+async function closeOpenCopy() {
+    if (db) {
+        const oldDb = db;
+        db = null;
+        currentDbName = null;
+        dbInitialized = false;
+        dbInitPromise = null;
+        try {
+            await oldDb.closeAsync();
+        } catch (e) {
+            console.warn('[DB] closeDB warning:', e);
+        }
     }
 }
 
@@ -220,28 +233,41 @@ export async function closeDB() {
  * `move`). First the copy open is closed, every sync cycle in flight stores nothing more (a new copy generation), and every
  * DM pin and guard-list write already on its way lands, so nothing is written under the old name once `move` has read it.
  * Then what this run holds in memory of `to`'s file (its DM pins, the lines the update held there, the group keys opened)
- * is dropped, so the carried copy's own is read at the next ask. `move` must not open a copy through getDb.
+ * is dropped, so the carried copy's own is read at the next ask. `move` must not open a copy through getDb, nor take the
+ * sync lock.
+ *
+ * One lock order, the writers' own (applyDelta and every other writer take the sync lock, then getDb): the move takes the
+ * lock first and publishes copyMoving only while holding it, and clears it before letting go. A writer that took the lock
+ * first finishes, its getDb with it, before the move starts; one waiting for the lock gets it after the move, with
+ * copyMoving clear. (Published before the lock was taken, each waited for the other for good: confirmation 2 of #2138.)
+ * Moves wait for each other on the lock. An open already on its way finishes first, outside the lock, since a hot swap
+ * in getDb takes the lock itself.
  */
 export async function whileCopyMoves<T>(to: string, move: () => Promise<T>): Promise<T> {
-    while (copyMoving) await copyMoving.catch(() => {});
     const toFile = getDatabaseFilenameForNode(to);
-    const run = (async () => {
-        await closeDB();
+    // Never while the copies still move to their own names (cache-file-migration.ts): that opens and renames them too.
+    await communityCachesRenamed();
+    await acquireSyncLock({ urgent: true });
+    while (getDbPromise) {
+        const opening = getDbPromise;
+        releaseSyncLock();
+        await opening.catch(() => {});
+        await acquireSyncLock({ urgent: true });
+    }
+    let moved!: () => void;
+    copyMoving = new Promise<void>((resolve) => { moved = resolve; });
+    try {
+        await closeOpenCopy();
         newCopyGeneration();
         await Promise.all([dmPins.idle(), dmSeen.idle()]);
-        try {
-            return await move();
-        } finally {
-            dmPins.forgetFile(toFile);
-            for (const key of [...dmLinesHeldAtUpdate.keys()]) if (key.endsWith(`\n${toFile}`)) dmLinesHeldAtUpdate.delete(key);
-            forgetGroupKeys();
-        }
-    })();
-    copyMoving = run;
-    try {
-        return await run;
+        return await move();
     } finally {
-        if (copyMoving === run) copyMoving = null;
+        dmPins.forgetFile(toFile);
+        for (const key of [...dmLinesHeldAtUpdate.keys()]) if (key.endsWith(`\n${toFile}`)) dmLinesHeldAtUpdate.delete(key);
+        forgetGroupKeys();
+        copyMoving = null;
+        moved();
+        releaseSyncLock();
     }
 }
 
@@ -506,33 +532,8 @@ ${NEARBY_TAG_FORGOTTEN_ON_POSTS_WRITE}
         );
         CREATE INDEX IF NOT EXISTS idx_messages_conversation_time ON messages(conversation_id, timestamp ASC);
 
-        -- Group chat keys (slice 3, utils/group-chat-store.ts): each epoch's record as the node served it and MY wrap,
-        -- exactly as sent (ciphertext, nothing secret); the highest epoch verified or made (never falls); verified line
-        -- signatures (hashes) and the first signer seen per line. Opened keys are never written anywhere.
-        CREATE TABLE IF NOT EXISTS group_chat_epochs (
-            group_id TEXT NOT NULL,
-            epoch INTEGER NOT NULL,
-            record TEXT NOT NULL,
-            wrap TEXT,
-            PRIMARY KEY (group_id, epoch)
-        );
-        CREATE TABLE IF NOT EXISTS group_chat_key_state (
-            group_id TEXT PRIMARY KEY,
-            highest INTEGER NOT NULL DEFAULT 0,
-            after INTEGER NOT NULL DEFAULT 0
-        );
-        CREATE TABLE IF NOT EXISTS group_line_verdicts (
-            group_id TEXT NOT NULL,
-            k TEXT NOT NULL,
-            PRIMARY KEY (group_id, k)
-        );
-        CREATE TABLE IF NOT EXISTS group_line_signers (
-            group_id TEXT NOT NULL,
-            message_id TEXT NOT NULL,
-            signer TEXT NOT NULL,
-            PRIMARY KEY (group_id, message_id)
-        );
-
+        -- Group chat keys (slice 3, utils/group-chat-store.ts GROUP_KEY_TABLES_SQL).
+${GROUP_KEY_TABLES_SQL}
         -- 6. Relations (Friends, Ratings, Abuse)
         CREATE TABLE IF NOT EXISTS ratings (
             id TEXT PRIMARY KEY,
@@ -4769,7 +4770,11 @@ const HELD_LINES_MAX_BYTES = 1024 * 1024;
 
 /** True when `value`, as UTF-8, is over {@link HELD_LINES_MAX_BYTES}. */
 function overHeldLinesCap(value: string): boolean {
-    if (value.length > HELD_LINES_MAX_BYTES) return true;
+    return value.length > HELD_LINES_MAX_BYTES || utf8Length(value) > HELD_LINES_MAX_BYTES;
+}
+
+/** UTF-8 bytes of a string, without building it. */
+function utf8Length(value: string): number {
     let bytes = 0;
     for (let i = 0; i < value.length; i++) {
         const c = value.charCodeAt(i);
@@ -4778,7 +4783,36 @@ function overHeldLinesCap(value: string): boolean {
         else if (c >= 0xd800 && c <= 0xdbff) { bytes += 4; i++; }
         else bytes += 3;
     }
-    return bytes > HELD_LINES_MAX_BYTES;
+    return bytes;
+}
+
+/**
+ * The held lines one community file takes when the same community's copy at another address comes to it (a community
+ * followed to its new address: utils/community-copy-carry.ts), add-only: the lines of each DM `here` holds none of are
+ * added, while the value stays within {@link HELD_LINES_MAX_BYTES}; nothing here is replaced, and nothing is written over
+ * a value that isn't held lines. Nothing here: the carried value as stored. Null: nothing to write.
+ */
+export function linesHeldWithCarried(here: string | null, carried: string): string | null {
+    if (here == null) return carried;
+    const mine = parseLinesHeldAtUpdate(here);
+    const theirs = parseLinesHeldAtUpdate(carried);
+    if (!mine || !theirs) {
+        if (!mine) console.warn('[DM pins] A carried community\'s held lines were not added: the ones here can\'t be read, and nothing is written over them');
+        return null;
+    }
+    let bytes = utf8Length(JSON.stringify(Object.fromEntries(mine)));
+    let added = 0;
+    let refused = 0;
+    for (const [id, lines] of theirs) {
+        if (mine.has(id)) continue;
+        const more = utf8Length(JSON.stringify(id)) + 1 + utf8Length(JSON.stringify(lines)) + (mine.size ? 1 : 0);
+        if (bytes + more > HELD_LINES_MAX_BYTES) { refused++; continue; }
+        mine.set(id, lines);
+        bytes += more;
+        added++;
+    }
+    if (refused) console.warn(`[DM pins] ${refused} of a carried community's held chats couldn't be added here: over the cap; they stay under its old address`);
+    return added ? JSON.stringify(Object.fromEntries(mine)) : null;
 }
 
 /**

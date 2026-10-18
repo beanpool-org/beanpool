@@ -8,37 +8,71 @@
  * with their highest epoch and sticky lock (in the file itself: utils/group-chat-store.ts), and the sync cursors with the
  * server's take-over count (`pillar_sync_<file>_*`). A switch to the new address alone opens an empty file there: the pins
  * seeded again from whatever the node lists then (#1863 T5), every group chat back at epoch 0, and the whole community
- * synced again over mobile data (review of #2138). So they move with it, as utils/cache-file-migration.ts moves a copy to
- * a new name:
- *   1. A copy already under the new address's name (the phone had been there): nothing is carried over it. Both stay, the
- *      phone uses the one it has there, and the old one stays under the old name ('kept-both', said in the log).
- *   2. The per-account keys are copied first, the new name's made exactly the old name's (one the old name has none of is
- *      removed under the new name: with no file there, it describes no copy). The old name's stay where they are: a pin
- *      is only ever removed by the member's reset (utils/dm-peer-pins.ts).
- *   3. The cursors leave the old name, the file is folded (a checkpoint) and renamed, and the cursors are written under the
- *      new name. A file without its cursors costs one whole sync; cursors without their file would make the next sync skip
- *      everything older than them into an empty copy, so neither name ever has cursors without the file.
- *   4. The caller writes the new address only once this resolves (utils/reconnect.ts switchPhoneTo).
- * A crash anywhere leaves the phone at the old address with its pins and guard list where they were. Before the rename
- * nothing of the old name's has changed but its cursors (one whole sync). After it, the old address opens an empty file
- * with its pins still stored (so no seed runs there), and a second "Use the new address" finds the carried copy under the
- * new name (1) with its keys (2). The phone is never at the new address with them empty.
+ * synced again over mobile data (review of #2138). So they go with it, in this order:
+ *   1. Each per-account key the old name holds goes to the new name add-only ({@link MERGES}): nothing the new name holds
+ *      is replaced or removed, and an account the old name holds nothing for is not touched (an account's pins stay on the
+ *      phone when it leaves: storage-keys.ts). A DM both names pin to different keys keeps the new name's pin, and the old
+ *      key is offered there: the member decides, as when a node lists another key. The old name's keys stay where they
+ *      are: a pin is only ever removed by the member's reset (utils/dm-peer-pins.ts).
+ *   2. A copy already under the new name (the phone had been there): its rows stay, and the old copy's group chat keys
+ *      are added to it the same way (group-chat-store.ts addGroupKeyState: the higher highest epoch, the sticky lock when
+ *      either held it). The old copy stays under the old name with its cursors ('kept-both', said in the log).
+ *      Otherwise the new name's cursors go (they describe no copy there), the old copy is copied under the new name
+ *      (cache-file-migration.ts copyCopyFile: folded, written beside it and renamed into place), and its cursors are
+ *      written under the new name after it.
+ *   3. The address is written (`writeAddress`: utils/reconnect.ts switchPhoneTo).
+ *   4. Only then, unless a copy was already under the new name, the old name's cursors go, and then its file.
+ * So a stop at any write leaves the phone at the old address with everything there, or at the new address with everything
+ * there: never at either with an empty copy and its group chats' highest epoch gone (confirmation 2 of #2138). A copy a
+ * stop leaves under the new name before the address is written is the phone's own, whole, with its cursors or with none
+ * (one whole sync), and the next tap takes it as in 2.
  *
- * Runs with no copy open and none opened meanwhile (utils/db.ts whileCopyMoves). Throws when a step up to the rename fails;
- * the phone then stays where it is.
+ * A step up to 3 that fails throws "Nothing has changed", which is so: the phone stays where it is with everything, and a
+ * copy this run put under the new name is taken off again. One in 4 is logged: the move stands, and what is left of the
+ * old copy is what a stop there leaves (its file, with its cursors or with none).
+ *
+ * Runs with no copy open and none opened meanwhile (utils/db.ts whileCopyMoves).
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SQLite from 'expo-sqlite';
 import { t } from '@beanpool/core';
-import { databaseDirectory, exists, fileUri, renameCopyFile } from './cache-file-migration';
+import { copyCopyFile, databaseDirectory, deleteCopyFile, exists, fileUri } from './cache-file-migration';
 import { getDatabaseFilenameForNode } from './nodes';
-import { PER_FILE_STORE_KEYS } from './storage-keys';
+import {
+    PER_FILE_STORE_KEYS, dmConversationsSeenSetAsideStoreKey, dmConversationsSeenStoreKey, dmLinesAtUpdateStoreKey,
+    dmPeerPinsSetAsideStoreKey, dmPeerPinsStoreKey,
+} from './storage-keys';
+import { pinsWithCarried } from './dm-peer-pins';
+import { seenWithCarried } from './dm-guard-list';
+import { addGroupKeyState, type SqliteLike } from './group-chat-store';
+import { linesHeldWithCarried } from './db';
 
-/** What a carry did: 'carried', or 'kept-both' (a copy was already under the new address's name: nothing carried over it). */
+/** What a carry did: 'carried', or 'kept-both' (a copy was already under the new address's name: its rows stay). */
 export type CopyCarry = 'carried' | 'kept-both';
 
-/** One per-account key of a file: its key now, and the same key under another file's name. */
-interface FileKey { key: string; under(file: string): string }
+type KeyOf = (publicKey: string, file: string) => string;
+
+/**
+ * How one per-account key takes the old name's value under the new name: `here`, the new name's value now (null: none);
+ * `carried`, the old name's. Answers the value to write, or null for nothing.
+ */
+type Merge = (here: string | null, carried: string, at: { copyHere: boolean; now: string }) => string | null;
+
+/** A set-aside, kept for the record and never read: the new name's own stays, and the old name's goes only where there is none. */
+const keepHere: Merge = (here, carried) => (here == null ? carried : null);
+
+/** How each PER_FILE_STORE_KEYS key goes, add-only (community-copy-carry.test.ts checks none is missing). */
+export const MERGES: ReadonlyMap<KeyOf, Merge> = new Map<KeyOf, Merge>([
+    [dmPeerPinsStoreKey, (here, carried, { now }) => pinsWithCarried(here, carried, now)],
+    [dmPeerPinsSetAsideStoreKey, keepHere],
+    [dmConversationsSeenStoreKey, (here, carried, { copyHere, now }) => seenWithCarried(here, carried, copyHere, now)],
+    [dmConversationsSeenSetAsideStoreKey, keepHere],
+    [dmLinesAtUpdateStoreKey, (here, carried) => linesHeldWithCarried(here, carried)],
+]);
+
+/** One per-account key of a file: its key now, how it goes, and the same key under another file's name. */
+interface FileKey { key: string; merge: Merge; under(file: string): string }
 
 /** Every PER_FILE_STORE_KEYS key of `file` among `keys`, whichever account it is for. */
 function perAccountKeysOf(keys: readonly string[], file: string): FileKey[] {
@@ -46,10 +80,11 @@ function perAccountKeysOf(keys: readonly string[], file: string): FileKey[] {
     for (const keyOf of PER_FILE_STORE_KEYS) {
         // The key's shape around the account: `<head><account><tail>`. No account or file name has a ':' in it.
         const [head, tail] = keyOf('\u0001', file).split('\u0001');
+        const merge = MERGES.get(keyOf) ?? keepHere;
         for (const key of keys) {
             if (!key.startsWith(head) || !key.endsWith(tail) || key.length <= head.length + tail.length) continue;
             const account = key.slice(head.length, key.length - tail.length);
-            if (!account.includes(':')) found.push({ key, under: (other) => keyOf(account, other) });
+            if (!account.includes(':')) found.push({ key, merge, under: (other) => keyOf(account, other) });
         }
     }
     return found;
@@ -63,58 +98,96 @@ function cursorIdsOf(keys: readonly string[], file: string): string[] {
 
 const cursorKey = (file: string, id: string) => `pillar_sync_${file}_${id}`;
 
-/** Carry the copy of the community at `from` to `to`'s name (the file's comment). Throws, the phone to stay where it is, when it can't. */
-export async function carryCommunityCopy(from: string, to: string): Promise<CopyCarry> {
+/** 1: each per-account key the old name holds, into the new name's add-only. Throws when a read or write fails. */
+async function carryKeys(keys: readonly string[], fromFile: string, toFile: string, copyHere: boolean): Promise<void> {
+    const now = new Date().toISOString();
+    for (const k of perAccountKeysOf(keys, fromFile)) {
+        const carried = await AsyncStorage.getItem(k.key);
+        if (carried === null) continue;
+        const target = k.under(toFile);
+        const value = k.merge(await AsyncStorage.getItem(target), carried, { copyHere, now });
+        if (value !== null) await AsyncStorage.setItem(target, value);
+    }
+}
+
+/** 2, with a copy under the new name: the old copy's group chat keys added to it. */
+async function addGroupKeysOfCopy(fromFile: string, toFile: string): Promise<void> {
+    const old = await SQLite.openDatabaseAsync(fromFile, { useNewConnection: true });
+    try {
+        const into = await SQLite.openDatabaseAsync(toFile, { useNewConnection: true });
+        try {
+            // expo-sqlite's handles, as db.ts hands its own to the store (groupKeyStore).
+            await addGroupKeyState(old as unknown as SqliteLike, into as unknown as SqliteLike & { execAsync(source: string): Promise<void> });
+        } finally {
+            await into.closeAsync();
+        }
+    } finally {
+        await old.closeAsync();
+    }
+}
+
+/**
+ * Carry the copy of the community at `from` to `to`'s name and write the address with `writeAddress` (the file's
+ * comment). Throws "Nothing has changed", the phone to stay where it is, when a step up to the address fails.
+ */
+export async function carryCommunityCopy(from: string, to: string, writeAddress: () => Promise<void>): Promise<CopyCarry> {
     const fromFile = getDatabaseFilenameForNode(from);
     const toFile = getDatabaseFilenameForNode(to);
     const directory = databaseDirectory();
-    const cursors: [string, string][] = [];
+    let result: CopyCarry = 'carried';
+    let copied = false;
+    const landedCursors: string[] = [];
     try {
         if (!directory) throw new Error('No folder for community copies on this phone');
-        if (fromFile === toFile) return 'carried';
-        if (await exists(fileUri(directory, toFile))) {
-            console.warn(`[DB] Following ${from} to ${to}: this phone already has a copy for ${to} (${toFile}), so that copy is used there and ${fromFile} stays on the phone, carried over nothing`);
-            return 'kept-both';
+        if (fromFile !== toFile) {
+            const copyHere = await exists(fileUri(directory, toFile));
+            const copyThere = await exists(fileUri(directory, fromFile));
+            const keys = await AsyncStorage.getAllKeys();
+            await carryKeys(keys, fromFile, toFile, copyHere);
+            if (copyHere) {
+                if (copyThere) await addGroupKeysOfCopy(fromFile, toFile);
+                console.warn(copyThere
+                    ? `[DB] Following ${from} to ${to}: this phone already has a copy for ${to} (${toFile}), so that copy is used there, with what guards the chats added to it; ${fromFile} stays on the phone`
+                    : `[DB] Following ${from} to ${to}: this phone already has a copy for ${to} (${toFile}), so that copy is used there, with what guards the chats added to it; no copy of ${from} is left on the phone`);
+                result = 'kept-both';
+            } else {
+                // Cursors under the new name describe no copy there: never left for the copy to land beside.
+                await AsyncStorage.multiRemove(cursorIdsOf(keys, toFile).map((id) => cursorKey(toFile, id)));
+                if (copyThere) {
+                    await copyCopyFile(directory, fromFile, toFile);
+                    copied = true;
+                    for (const id of cursorIdsOf(keys, fromFile)) {
+                        const value = await AsyncStorage.getItem(cursorKey(fromFile, id));
+                        if (value === null) continue;
+                        landedCursors.push(cursorKey(toFile, id));
+                        await AsyncStorage.setItem(cursorKey(toFile, id), value);
+                    }
+                }
+            }
         }
-        const keys = await AsyncStorage.getAllKeys();
-
-        // 2. The per-account keys: the new name's become the old name's, the old name's stay.
-        const written = new Set<string>();
-        for (const k of perAccountKeysOf(keys, fromFile)) {
-            const value = await AsyncStorage.getItem(k.key);
-            if (value === null) continue;
-            await AsyncStorage.setItem(k.under(toFile), value);
-            written.add(k.under(toFile));
-        }
-        for (const k of perAccountKeysOf(keys, toFile)) {
-            if (!written.has(k.key)) await AsyncStorage.removeItem(k.key);
-        }
-
-        // 3. The cursors leave the old name before the file does. Any under the new name describe no file there.
-        for (const id of cursorIdsOf(keys, fromFile)) {
-            const value = await AsyncStorage.getItem(cursorKey(fromFile, id));
-            if (value !== null) cursors.push([id, value]);
-        }
-        await AsyncStorage.multiRemove([
-            ...cursorIdsOf(keys, toFile).map((id) => cursorKey(toFile, id)),
-            ...cursorIdsOf(keys, fromFile).map((id) => cursorKey(fromFile, id)),
-        ]);
-        if (!(await exists(fileUri(directory, fromFile)))) {
-            // No copy under the old name (none written yet): the keys alone go, and cursors with no file go nowhere.
-            return 'carried';
-        }
-        await renameCopyFile(directory, fromFile, toFile);
+        await writeAddress();
     } catch (e) {
-        console.warn(`[DB] Could not carry the copy of ${from} to ${to}; the phone stays at ${from}`, e);
-        // The rename didn't happen: the cursors go back to the file they describe (else it costs one whole sync).
-        if (cursors.length && directory && (await exists(fileUri(directory, fromFile)).catch(() => false))) {
-            for (const [id, value] of cursors) await AsyncStorage.setItem(cursorKey(fromFile, id), value).catch(() => {});
+        console.warn(`[DB] Could not carry the copy of ${from} to ${to}; the phone stays at ${from} with its copy`, e);
+        if (copied && directory) {
+            // The copy this run put under the new name goes again, its cursors first: the next tap copies it afresh.
+            try {
+                await AsyncStorage.multiRemove(landedCursors);
+                await deleteCopyFile(directory, toFile);
+            } catch (left) {
+                console.warn(`[DB] The copy put under ${to}'s name stays there; the next tap uses it`, left);
+            }
         }
         throw new Error(t('Nothing has changed. Try again in a little while.'));
     }
-    // After the rename the carry stands: a cursor that can't be written costs one whole sync, never the move.
-    for (const [id, value] of cursors) {
-        await AsyncStorage.setItem(cursorKey(toFile, id), value).catch((e) => console.warn(`[DB] A sync cursor of ${to} could not be kept; its next sync reads it whole`, e));
+    if (result === 'carried' && fromFile !== toFile) {
+        // 4. The old copy goes, its cursors first: a file without its cursors costs one whole sync if the phone comes back
+        // to that address; cursors without their file would skip everything older into an empty copy there.
+        try {
+            await AsyncStorage.multiRemove(cursorIdsOf(await AsyncStorage.getAllKeys(), fromFile).map((id) => cursorKey(fromFile, id)));
+            if (copied) await deleteCopyFile(directory, fromFile);
+        } catch (e) {
+            console.warn(`[DB] The old copy of ${from} (${fromFile}) stays on the phone; the phone is at ${to} with its copy`, e);
+        }
     }
-    return 'carried';
+    return result;
 }

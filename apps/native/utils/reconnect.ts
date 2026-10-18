@@ -47,9 +47,9 @@ export interface ReconnectDeps {
 /**
  * The phone's community becomes `url`, as Settings and the BeanPool sheet switch: each community has its own database.
  * `carryFrom`, following the community from that address to its new one (utils/address-follow.ts): its copy and what
- * guards its chats go to `url`'s name first (utils/community-copy-carry.ts), with no copy open and none opened until the
- * address is written, so the phone is at `url` only once they are there. Resolves what the carry did (null with none).
- * A carry that fails throws, the address unchanged.
+ * guards its chats go to `url`'s name first, and the carry writes the address once they are there and before the old
+ * copy goes (utils/community-copy-carry.ts), with no copy open and none opened until it is done. Resolves what the carry
+ * did (null with none). A carry that fails throws, the address unchanged.
  */
 export async function switchPhoneTo(url: string, carryFrom?: string): Promise<CopyCarry | null> {
     assertPlainNodeAddress(url);
@@ -57,11 +57,7 @@ export async function switchPhoneTo(url: string, carryFrom?: string): Promise<Co
     let carried: CopyCarry | null = null;
     if (carryFrom) {
         const { carryCommunityCopy } = await import('./community-copy-carry');
-        carried = await whileCopyMoves(url, async () => {
-            const done = await carryCommunityCopy(carryFrom, url);
-            await AsyncStorage.setItem('beanpool_anchor_url', url);
-            return done;
-        });
+        carried = await whileCopyMoves(url, () => carryCommunityCopy(carryFrom, url, () => AsyncStorage.setItem('beanpool_anchor_url', url)));
     } else {
         await closeDB();
         await AsyncStorage.setItem('beanpool_anchor_url', url);

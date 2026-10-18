@@ -317,6 +317,57 @@ function storedPinsOf(raw: string | null): StoredPins {
 }
 
 /**
+ * The pins value one community file takes when the same community's copy at another address comes to it (a community
+ * followed to its new address: utils/community-copy-carry.ts), add-only: nothing `here` holds is replaced or dropped.
+ * `here`: this file's value now; `carried`: the other file's, as stored. Null: nothing to write.
+ *  - Nothing here: the carried value as stored (with it, the record that its seed ran).
+ *  - Here unreadable, or the member's reset's marker (its re-seed judges this file's rows): left as it is.
+ *  - Carried unreadable, or a marker: nothing to add.
+ *  - Both pins: each DM here keeps nothing for takes the carried entry, while the value stays within
+ *    {@link DM_PINS_MAX_BYTES} (at the cap a DM is refused, never one dropped). A DM both pin to different keys keeps
+ *    this file's pin, and the carried key is offered there ({@link DmPeerOffer}): nothing is sealed to it, and sends stop
+ *    until the member decides, as when a node lists another key. One that already offers a key, or isn't a pin here (an
+ *    unplaced sight), stays as it is.
+ */
+export function pinsWithCarried(here: string | null, carried: string, now: string): string | null {
+    if (here == null) return carried;
+    let mine: StoredPins;
+    let theirs: StoredPins;
+    try {
+        mine = storedPinsOf(here);
+    } catch {
+        console.warn('[DM pins] A carried community\'s pins were not added: the pins here can\'t be read, and nothing is written over them');
+        return null;
+    }
+    try {
+        theirs = storedPinsOf(carried);
+    } catch {
+        console.warn('[DM pins] A carried community\'s pins can\'t be read, so none were added; they stay under its old address');
+        return null;
+    }
+    if (!mine.pins || !theirs.pins) return null;
+    const pins = measured(mine.pins);
+    let changed = false;
+    let refused = 0;
+    for (const id of Object.keys(theirs.pins)) {
+        const entry = theirs.pins[id];
+        const held = ownPin(pins, id);
+        if (!held) {
+            if (roomFor(pins, id, entry)) changed = resized(pins, id, () => setPin(pins, id, entry)) || changed;
+            else refused++;
+            continue;
+        }
+        if (isUnplacedSight(held) || isUnplacedSight(entry) || held.peer === entry.peer || held.offered) continue;
+        const offered: DmPeerPin = { ...held, offered: { peer: entry.peer, at: now } };
+        const size = sizes.get(pins)!;
+        if (valueBytes(size) - (size.byId.get(id) ?? 0) + entryBytes(id, offered) > DM_PINS_MAX_BYTES) { refused++; continue; }
+        changed = resized(pins, id, () => setPin(pins, id, offered)) || changed;
+    }
+    if (refused) console.warn(`[DM pins] ${refused} of a carried community's chats couldn't be added here: this community's pins are full; they stay under its old address`);
+    return changed ? JSON.stringify({ pins }) : null;
+}
+
+/**
  * The stored value's own member names: object keys that are never a conversation's id ({@link salvagePinIds} skips them).
  * The four the case 14 rule names (`pins`, `offered`, `heard`, `nodeSays`), and the rest of the format's (a pin's, an
  * offer's, a first sight's, what the listing said, the reset's marker), which would otherwise come back as inert ids.

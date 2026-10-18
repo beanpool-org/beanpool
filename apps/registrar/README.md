@@ -272,7 +272,7 @@ At the end of each watch tick the Worker writes `status.json` to the `STATUS` KV
 `scratch/global-node/DESIGN-global-mothership-fable.md` §3.2 U4, accepted by Marty 2026-10-18), and
 `GET /api/registrar/status.json` serves it to anyone (`cache-control: public, max-age=60`, any origin): the page
 beanpool.org/status (`apps/website/status.html`) reads it from the visitor's browser. It shows the servers
-`STATUS_SERVERS` names (`wrangler.toml`: `global,test`, in that order) and the registrar itself, last — **our servers
+`STATUS_SERVERS` names (`wrangler.toml`: `global`; Marty, 19 Oct 2026: test is not shown to strangers) and the registrar itself, last — **our servers
 only: never a community's node or name** (mullum and castlemaine are watched, never shown); unset, only the registrar.
 Per server: `up` (its last look answered; `null` if it has none this tick), `checked_at`, `looks`, `answered` and
 `percent` over the last 90 days (floored to two places: a server that missed a look never reads 100), `since` (the

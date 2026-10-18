@@ -46,7 +46,8 @@ WATCH_TARGETS = '''[
 # the WATCH_TARGETS servers status.json shows at GET /api/registrar/status.json, which beanpool.org/status draws —
 # comma-separated, in order; the registrar itself is always shown, last. OUR servers only: never a community's node
 # (mullum, castlemaine) or name. Unset, only the registrar. Nothing is written without the STATUS binding below.
-STATUS_SERVERS = "global,test"
+# Marty, 19 Oct 2026: the public page shows global and the registrar only (test is restarted too often to show strangers).
+STATUS_SERVERS = "global"
 # Who may use the control room (/admin and /api/local/admin/registrar/*, src/access.js): Cloudflare Access sits in
 # front of those paths (app "BeanPool control room (registrar admin)", its own MFA: email code + authenticator), and the
 # Worker believes only Access's signed token — this team's, for this app's AUD tag, naming an email listed here. With

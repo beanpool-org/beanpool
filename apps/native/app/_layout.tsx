@@ -53,6 +53,7 @@ import { attestOwnRekeys, declineRekey, keySuccessionPromptText, operatorContact
 import { isUnlockLink } from '../utils/takeover-unlock';
 import { isPairLink } from '../utils/pair-link';
 import { isGlobalLink } from '../utils/global-link';
+import { doorLinkFromSystemPath } from '../utils/open-door';
 import * as WebBrowser from 'expo-web-browser';
 
 // Complete any pending browser-based auth sessions (e.g. OAuth redirects)
@@ -315,6 +316,11 @@ function RootLayoutNav() {
         // The global community's link (utils/global-link.ts): routed to a door by +native-intent.ts. Not an invite. One that
         // carries an invite is not this, and goes on below as an invite.
         if (isGlobalLink(currentUrl)) return;
+        // A link to the door screen, `beanpool://join-open-door[?node=…]` (utils/open-door.ts): routed by +native-intent.ts,
+        // which drops every param but the address. Not an invite: with an address in it, extractInviteToken would read the
+        // route's name as one ("JOIN-OPEN-DOOR"), offer "Switch Nodes?" to the link's address, or put a welcome with that
+        // "invite" over the first screen (PR #2131 review).
+        if (doorLinkFromSystemPath(currentUrl)) return;
 
         // A re-key code's link (the dashboard's QR, `https://<node>/?rekey=RK-…`): its own screen, never an invite
         // (app/rekey-code.tsx; utils/rekey-redeem.ts parseRekeyLink refuses an address that isn't plain host[:port]).
@@ -661,8 +667,8 @@ function RootLayoutNav() {
         // network, and never waived for a guest mark: a closed account isn't a visit. The same guards as 'stranger' below,
         // and one more: Settings stays, because its Delete account is the one request the community still takes from a
         // closed key, the only way left to erase the profile a removal keeps (utils/mismatch-plan.ts notRecognisedStays).
-        // Nor is anyone diverted off the global community's door (join-global): the not-recognised screen's own Join with
-        // this account opens it, for a key that is a stranger, or closed, where the phone is now (§C.1).
+        // Nor is anyone diverted off a community's open door (join-global, join-open-door): the not-recognised screen's own
+        // Join with this account opens it, for a key that is a stranger, or closed, where the phone is now (§C.1).
         if (recognition === 'closed') {
             if (!notRecognisedStays('closed', segments as string[])) {
                 router.replace('/node-mismatch');
@@ -849,6 +855,7 @@ function RootLayoutNav() {
                 <Stack.Screen name="claim-community" options={{ animation: 'slide_from_right' }} />
                 <Stack.Screen name="rekey-code" options={{ animation: 'slide_from_right' }} />
                 <Stack.Screen name="join-global" options={{ animation: 'slide_from_right' }} />
+                <Stack.Screen name="join-open-door" options={{ animation: 'slide_from_right' }} />
                 <Stack.Screen name="start-community" options={{ animation: 'slide_from_right' }} />
                 <Stack.Screen name="guide/[slug]" options={{ animation: 'slide_from_right' }} />
                 <Stack.Screen name="guide/section/[id]" options={{ animation: 'slide_from_right' }} />

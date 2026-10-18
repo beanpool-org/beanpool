@@ -12,7 +12,7 @@
  *
  * Nothing is contacted: fetch answers the global community's info and membership probe only, from the scene below.
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import Module from 'node:module';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -162,6 +162,12 @@ function membership(): Promise<Response> {
         default: return Promise.resolve(json({ error: 'Internal' }, 500));
     }
 }
+
+// The probe's modules, loaded before any test: the probe's first ask imports them (global-entry.ts defaultAskDeps), and
+// the first test to probe is the offline one's tap, mid-assertion. Loaded cold on a busy machine (PR #2131's test-all,
+// 18 Oct) that outlasted settle() below, and the row read Checking…, the right word while the probe is out (§B.3), where
+// a moment later it read Join.
+beforeAll(async () => { await import('../membership-probe'); await import('../global-join-existing'); });
 
 let host: HTMLDivElement;
 let root: Root;

@@ -146,14 +146,24 @@ export function retryProto<P extends string>(sent: string, accepted: unknown, sp
     return both.sort((a, b) => protoVersion(b) - protoVersion(a))[0] ?? null;
 }
 
+/**
+ * How long this node waits for the registrar. A claim, heal or rotate makes the name at Cloudflare (a tunnel, its ingress,
+ * its record, its token: about seven calls in a row, each as slow as Cloudflare is that day), so it waits MAKE_BUDGET_MS;
+ * 5 s for that lost claims on a slow day (temp, 17 Oct: scratch/global-node/DESIGN-registrar-trust-fable.md §5). A release
+ * deletes the name's record and tunnel there, so it waits as long (review of #2125). Every other call (status, holder,
+ * update) only reads or writes the registrar's own table: CALL_BUDGET_MS.
+ */
+export const MAKE_BUDGET_MS = 25_000;
+export const CALL_BUDGET_MS = 5_000;
+
 // `path` may carry a query; x-bp-signature covers the path without it, as every registrar verifies it, and
 // x-bp-signature-query the path with it (apps/registrar sign.js).
-async function sendSigned(method: 'GET' | 'POST', path: string, bodyText: string, proto: Proto): Promise<{ ok: boolean; status: number; data: any; json: boolean }> {
+async function sendSigned(method: 'GET' | 'POST', path: string, bodyText: string, proto: Proto, budgetMs: number): Promise<{ ok: boolean; status: number; data: any; json: boolean }> {
     const q = path.indexOf('?');
     const headers = await signRequest(method, q < 0 ? path : path.slice(0, q), bodyText, proto, q < 0 ? '' : path.slice(q));
     if (bodyText) headers['content-type'] = 'application/json';
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 5000);
+    const timer = setTimeout(() => controller.abort(), budgetMs);
     try {
         const baseUrl = getRegistrarUrl();
         const res = await fetch(`${baseUrl}${path}`, { method, headers, body: bodyText || undefined, signal: controller.signal });
@@ -164,27 +174,27 @@ async function sendSigned(method: 'GET' | 'POST', path: string, bodyText: string
         return { ok: res.ok, status: res.status, data: json ? parsed : {}, json };
     } catch (err: any) {
         clearTimeout(timer);
-        if (err.name === 'AbortError') throw new Error('Registrar request timed out after 5s');
+        if (err.name === 'AbortError') throw new Error(`Registrar request timed out after ${Math.round(budgetMs / 1000)}s`);
         throw err;
     }
 }
 
 // A signed request, retried once under a protocol both sides speak after a 401 that lists them. Its answer as it came,
 // whatever its status; throws only when nothing answered (a timeout, a network error).
-async function signedAnswer(method: 'GET' | 'POST', path: string, body?: any): Promise<{ ok: boolean; status: number; data: any; json: boolean }> {
+async function signedAnswer(method: 'GET' | 'POST', path: string, body?: any, budgetMs = CALL_BUDGET_MS): Promise<{ ok: boolean; status: number; data: any; json: boolean }> {
     const bodyText = body ? JSON.stringify(body) : '';
-    let res = await sendSigned(method, path, bodyText, SEND_PROTO);
+    let res = await sendSigned(method, path, bodyText, SEND_PROTO, budgetMs);
     const retry = res.status === 401 ? retryProto(SEND_PROTO, res.data?.accepted_proto, Object.keys(PROTOCOLS) as Proto[]) : null;
     if (retry) {
         const who = protoVersion(retry) < protoVersion(SEND_PROTO) ? 'the address service is behind this node' : 'this node is behind the address service';
         console.warn(`[registrar] ${who} (it accepts ${res.data.accepted_proto.join(', ')}, not ${SEND_PROTO}); still working on ${retry}`);
-        res = await sendSigned(method, path, bodyText, retry);
+        res = await sendSigned(method, path, bodyText, retry, budgetMs);
     }
     return res;
 }
 
-async function signedFetch(method: 'GET' | 'POST', path: string, body?: any): Promise<any> {
-    const res = await signedAnswer(method, path, body);
+async function signedFetch(method: 'GET' | 'POST', path: string, body?: any, budgetMs = CALL_BUDGET_MS): Promise<any> {
+    const res = await signedAnswer(method, path, body, budgetMs);
     const data = res.data;
     if (!res.ok) {
         const why = data.detail ? `${data.error}: ${data.detail}` : (data.error || `Registrar returned ${res.status}`);
@@ -205,7 +215,7 @@ export const claimAddress = (name: string, mode: 'tunnel' | 'direct', origin?: s
     signedFetch('POST', '/api/registrar/claim', {
         name, mode, origin, contact: cleanLabel(contact, REGISTRAR_CONTACT_MAX), community_name: cleanLabel(communityName, REGISTRAR_COMMUNITY_NAME_MAX),
         ...(mode === 'direct' && publicIp ? { public_ip: publicIp } : {}),
-    });
+    }, MAKE_BUDGET_MS);
 /**
  * The labels of `name`, the name this server stores (SEC-REG-02): a key can hold more than one, and without it the
  * registrar changes its newest. An older registrar ignores `name`, as it always did.
@@ -229,21 +239,21 @@ export const addressStatus = (name?: string | null) =>
  * Release `name` (Take offline). Named whenever a name is stored: with no name the registrar releases the key's first name,
  * which with two names held can be the other one, leaving this one live with nothing running it.
  */
-export const releaseAddress = (name?: string | null) => signedFetch('POST', '/api/registrar/offline', name ? { name } : {});
+export const releaseAddress = (name?: string | null) => signedFetch('POST', '/api/registrar/offline', name ? { name } : {}, MAKE_BUDGET_MS);
 /**
  * Bring this server's own held name back (a pause its heal lifts): never a claim, so it can't take back a release or
  * claim a name. The registrar routes it again only once this server proves its key: on a fresh tunnel only this signed
  * request gets the token of, or through an attestation at the name signed by this key. Answers `paused` when it couldn't.
  */
 export const healAddress = (name: string, origin?: string) =>
-    signedFetch('POST', '/api/registrar/heal', { name, ...(origin ? { origin } : {}) });
+    signedFetch('POST', '/api/registrar/heal', { name, ...(origin ? { origin } : {}) }, MAKE_BUDGET_MS);
 /**
  * Move this server's tunnel name onto a fresh tunnel: a new token, and the old tunnel deleted, so a copy of its token
  * (a standby given away, a token seen on a screen) stops working. A copied data folder or backup is not cut off: it holds
  * the node key, which /status gives the new token. `origin` re-points the tunnel at the same time.
  */
 export const rotateAddress = (name: string, origin?: string) =>
-    signedFetch('POST', '/api/registrar/rotate', { name, ...(origin ? { origin } : {}) });
+    signedFetch('POST', '/api/registrar/rotate', { name, ...(origin ? { origin } : {}) }, MAKE_BUDGET_MS);
 
 /**
  * Who holds `name` (a bare label: `bname`, not `bname.beanpool.org`)? The registrar's answer (design

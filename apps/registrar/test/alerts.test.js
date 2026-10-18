@@ -393,7 +393,9 @@ test('with ctx.waitUntil (the real runtime), the claim answers first and the mes
             method: 'POST', body: text, headers: { 'content-type': 'application/json', 'x-bp-pubkey': key.pubHex, 'x-bp-timestamp': ts, 'x-bp-signature': sig },
         }), r.w.env, { waitUntil: (p) => later.push(p) });
         assert.equal((await res.json()).status, 'pending');
-        assert.equal(later.length, 1, 'the send was handed to waitUntil');
+        // Two: the claim's own work (index.js finishing, so a node that stops waiting never cuts it off) and the send.
+        assert.equal(later.length, 2, 'the claim and the send were each handed to waitUntil');
+        assert.equal(r.sent.length, 0, 'the claim answered before the message was sent');
         await Promise.all(later);
         assert.equal(r.sent.length, 1);
         assert.equal(r.sent[0].headers.title, 'Name request: sydney');

@@ -348,9 +348,13 @@ describe('the welcome screen', () => {
     });
 
     it('the door screen for an account remembers its fresh answer too, so the sheet\'s row reads it on the way back', () => {
-        const s = read('app/join-global.tsx');
+        const s = read('app/join-open-door.tsx');
         const door = s.slice(s.indexOf("if (phase !== 'checking') return;"), s.indexOf('// The 12-words door'));
-        expect(door).toMatch(/\.then\(check => \{\s*\/\/[^\n]*\n\s*rememberGlobalDoor\(check\);/);
-        expect(door).toMatch(/\.catch\(\(\) => \{\s*rememberGlobalDoor\(null\);/);
+        // The global community's answer only (slice P5: the screen is any open-door community's): another community's
+        // answer is never what the sheet's global row reads.
+        expect(door).toMatch(/\.then\(check => \{\s*(\/\/[^\n]*\n\s*)+if \(door\.global\) rememberGlobalDoor\(check\);/);
+        expect(door).toMatch(/\.catch\(\(\) => \{\s*if \(door\.global\) rememberGlobalDoor\(null\);/);
+        expect(door.match(/rememberGlobalDoor\(/g)).toHaveLength(2);
+        expect(door).toContain('checkGlobalDoor(doorUrl)');
     });
 });

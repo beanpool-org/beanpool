@@ -134,6 +134,7 @@ vi.mock('../../components/WordsOnScreen', () => ({ NoScreenCapture: ({ children 
 import NodeMismatchScreen from '../../app/node-mismatch';
 import { getSavedNodes } from '../nodes';
 import { SAVED_NODES_STORE_KEY } from '../storage-keys';
+import { takeDoorTap } from '../open-door';
 
 const LOCAL = 'https://riverside.example';
 const GLOBAL = 'https://global.beanpool.org';
@@ -386,5 +387,88 @@ describe("the not-recognised screen's pages (§C.1, §C.3)", () => {
         expect(text()).toContain('Your phone is still on Riverside. Nothing was changed.');
         expect(buttons().some(b => /Delete my account at/.test(b.textContent ?? ''))).toBe(false);
         expect(store.map.get('beanpool_anchor_url')).toBe(LOCAL);
+    });
+});
+
+// Slice P5 (decision 6): a self-hoster's community with the global profile and its door open, on its own domain. Before P5
+// the screen sent its strangers to the invite page (the door screen took only global.beanpool.org's address); now its Join
+// with this account opens THAT community's door, under its own name, and never the global community's.
+const SELF = 'https://open.riverbend.example';
+const SELF_NAME = 'Riverbend Open';
+
+/** The self-hoster's open community: its profile, its own name, and "a stranger" for this key. Global as before. */
+function selfHosterOpen() {
+    return vi.fn(async (input: unknown) => {
+        const u = String(input);
+        asked.push(u);
+        if (u === `${SELF}/api/community/info`) {
+            return new Response(JSON.stringify({
+                profile: 'global', features: { openJoin: true, wordsDoor: true, door: 'open', invites: false, beans: false },
+            }), { status: 200 });
+        }
+        if (u === `${SELF}/api/community/health`) return new Response(JSON.stringify({ nodeName: SELF_NAME }), { status: 200 });
+        if (u === `${SELF}/api/community/membership/${KEY}`) return new Response(JSON.stringify({ isMember: false }), { status: 200 });
+        if (u === `${LOCAL}/api/community/info`) {
+            return new Response(JSON.stringify({ profile: 'local', features: { invites: true } }), { status: 200 });
+        }
+        return (globalSaysStranger() as any)(input);
+    }) as typeof fetch;
+}
+
+describe("a self-hoster's open community (P5): Join with this account opens ITS door, by its own name", () => {
+    it('the phone on it as a stranger: the open page, "Join Riverbend Open with this account" → /join-open-door?node=<its address>', async () => {
+        recognition.nodeUrl = SELF;
+        store.map.set('beanpool_anchor_url', SELF);
+        globalThis.fetch = selfHosterOpen();
+        await render();
+        expect(text()).toContain("You're not a member here yet");
+        expect(text()).toContain(`${SELF_NAME} lets anyone join. Your account is fine: join with it, or go back to one of your communities.`);
+        expect(text()).not.toContain("This community doesn't recognise you");
+        const join = button(`Join ${SELF_NAME} with this account`);
+        expect(join).toBeTruthy();
+        // First, before the saved communities and the delete, as on the global community's open page.
+        const all = buttons().map(b => (b.getAttribute('aria-label') || b.textContent || '').trim());
+        expect(all.indexOf(`Join ${SELF_NAME} with this account`)).toBeLessThan(all.findIndex(l => /Delete this account/.test(l)));
+        takeDoorTap('');
+        await act(async () => { join!.click(); });
+        expect(nav.pushed).toEqual([{ pathname: '/join-open-door', params: { node: SELF } }]);
+        // The door it opens is told it was the member's tap, so its work starts as it opens (a link's waits: PR #2131 review).
+        expect(takeDoorTap(SELF)).toBe(true);
+        // A tap opens a screen and nothing else: no community switched, no database swapped.
+        expect(store.map.get('beanpool_anchor_url')).toBe(SELF);
+        expect(dbCalls.closed).toBe(0);
+        expect(nav.replaced).toEqual([]);
+    });
+
+    it('Reconnect asked it from Riverside: the open page for THAT community, the phone still on Riverside; Join opens its door', async () => {
+        globalThis.fetch = selfHosterOpen();
+        await render();
+        expect(text()).toContain("This community doesn't recognise you");
+        await act(async () => { type(await addressField(), 'open.riverbend.example'); });
+        await settle();
+        await act(async () => { button('Reconnect')!.click(); });
+        await settle();
+        expect(text()).toContain("You're not a member here yet");
+        expect(text()).toContain('Your phone is still on Riverside. Nothing was changed.');
+        await act(async () => { button(`Join ${SELF_NAME} with this account`)!.click(); });
+        expect(nav.pushed).toEqual([{ pathname: '/join-open-door', params: { node: SELF } }]);
+        expect(nav.pushed).not.toContain('/join-global');
+        // Nothing moved: Riverside in use, its list as it was.
+        expect(store.map.get('beanpool_anchor_url')).toBe(LOCAL);
+        expect((await getSavedNodes()).map(n => n.url)).toEqual([LOCAL]);
+        expect(dbCalls.closed).toBe(0);
+    });
+
+    it('its name not answered: Join names it by its host, and still opens ITS door', async () => {
+        recognition.nodeUrl = SELF;
+        store.map.set('beanpool_anchor_url', SELF);
+        const open = selfHosterOpen();
+        globalThis.fetch = vi.fn(async (input: unknown) => {
+            if (String(input) === `${SELF}/api/community/health`) throw new TypeError('Network request failed');
+            return (open as any)(input);
+        }) as typeof fetch;
+        await render();
+        await act(async () => { button('Join open.riverbend.example with this account')!.click(); });
+        expect(nav.pushed).toEqual([{ pathname: '/join-open-door', params: { node: SELF } }]);
     });
 });

@@ -3,7 +3,7 @@
 //              release + switchboard
 //   scheduled: attestation sweep — pauses a live name's routing only on proof that something other than its own node
 //              answers at it (ANOTHER node key, or for about an hour a page that is no attest at all), never on anything
-//              the registrar merely can't verify, and never when the sweep as a whole looks wrong; then upkeep: a live name nothing answers at whose routing Cloudflare lost is repaired, and deletions
+//              the registrar merely can't verify, and never when the sweep as a whole looks wrong; then upkeep: a live name nothing answers at whose routing Cloudflare lost is repaired, a claim whose provisioning never finished is finished, and deletions
 //              Cloudflare refused earlier (migrations/0004_teardown.sql) are retried. Beside it, the outside checks of
 //              our own servers (src/watch.js: WATCH_TARGETS) and the daily line to the admin's phone.
 // A name belongs to the node key that claimed it; the registrar can stop routing it but never hands it to another
@@ -114,10 +114,15 @@ export const isOwnRow = (row, pubkey) =>
     !!row && row.node_pubkey === pubkey && row.status !== 'abandoned' && !freedAtOnce(row) && !heldFromAll(row);
 
 // A claim still waiting for the admin: pending, on a name that is not auto-approved. (A pending auto name is one
-// whose provisioning failed; its next claim finishes it.)
+// whose provisioning has not finished — Cloudflare failed, or its Worker was cut off — and nobody's approval is awaited:
+// its next claim or heal finishes it, and so does the sweep, finishOrphans.)
 const awaitingApproval = async (env, a) => a.status === 'pending' && (await db.policyTier(env, a.name)) !== 'auto';
 
-const reasonOf = (a) => a.pause_reason || (a.status === 'pending' ? 'awaiting-approval' : null);
+// Why a row is in its state, as its node is told: a pause's or release's reason, and for a pending row whether it waits
+// for the admin ('awaiting-approval') or is an auto name still being made ('provisioning': the node asks again, never
+// waits for an approval nobody will give — scratch/global-node/DESIGN-registrar-trust-fable.md §5).
+const reasonOf = async (env, a) => a.pause_reason
+    || (a.status === 'pending' ? ((await awaitingApproval(env, a)) ? 'awaiting-approval' : 'provisioning') : null);
 const sinceOf = (a) => ({ paused: a.paused_at, blocked: a.paused_at, released: a.released_at, pending: a.requested_at })[a.status] ?? null;
 
 // The audit trail must not undo what it records: a failed write is logged, never thrown.
@@ -211,9 +216,12 @@ const STALE_TUNNEL_S = 600;
 // A new bp-<name> tunnel for `a`. Cloudflare refuses a second live tunnel of one name (1013), so one left behind — by
 // an earlier holder, or a delete Cloudflare refused — would fail every tunnel for the name, for good. On that refusal
 // the ones provably nobody's go, and the tunnel is made again (once): not the row's, and owed (teardown), or made
-// before this tenure began, or made over STALE_TUNNEL_S ago. One that may still be a request's in flight is left:
-// `cleaningUp` (the caller answers 503, try again shortly). If the row changed meanwhile, the tunnel may be the request
-// that changed it: `raced`.
+// before this tenure began, or made over STALE_TUNNEL_S ago — over ORPHAN_AFTER_S ago for a pending tenure: a claim
+// whose Worker was cut off after making its tunnel leaves one no row records, and every request that could still be
+// making a pending name's tunnel (its claim, its node's heal, an approve, a sweep) has had its node's 25 s and
+// waitUntil's 30 s by then, so the sweep and its node's heal finish the name in minutes, not 10 (review of #2125). One
+// that may still be a request's in flight is left: `cleaningUp` (the caller answers 503, try again shortly). If the
+// row changed meanwhile, the tunnel may be the request that changed it: `raced`.
 async function createTunnelFor(env, a, expected) {
     const tunnelName = `bp-${a.name}`;
     try { return await cf.createTunnel(env, tunnelName); }
@@ -221,7 +229,7 @@ async function createTunnelFor(env, a, expected) {
     if (!(await db.isUnchanged(env, a.name, expected, { withIds: true }))) throw raced();
     const owedRows = await db.listTeardown(env, a.name).catch((e) => { console.error('[TEARDOWN_READ]', a.name, e.message || e); return []; });
     const owed = new Set(owedRows.filter((t) => t.kind === 'tunnel').map((t) => t.cf_id));
-    const before = Math.max(a.requested_at || 0, nowS() - STALE_TUNNEL_S);
+    const before = Math.max(a.requested_at || 0, nowS() - (expected.status === 'pending' ? ORPHAN_AFTER_S : STALE_TUNNEL_S));
     const stale = (await cf.listTunnelsNamed(env, tunnelName)).filter((t) => t.id !== a.tunnel_id && t.id !== expected.tunnel_id
         && (owed.has(t.id) || Date.parse(t.created_at) / 1000 < before));
     if (!stale.length) throw cleaningUp(a.name);
@@ -515,12 +523,12 @@ async function stopRouting(env, a, to, { keepTunnel = false, byHostname = false 
 }
 
 // The answer to the owner's heal or claim whose write missed: nothing done, and the row as it now is.
-function asNow(now, pubkey) {
+async function asNow(env, now, pubkey) {
     if (!isOwnRow(now, pubkey)) return json({ error: 'name changed meanwhile', status: now?.status ?? 'none' }, 409);
     if (now.status === 'blocked') return json({ error: 'name blocked' }, 403);
     return {
         name: now.name, hostname: now.hostname, mode: now.mode, community_name: now.community_name, contact: now.contact,
-        status: now.status, reason: reasonOf(now), since: sinceOf(now), changed: [], newTunnel: false, tunnel_id: now.tunnel_id,
+        status: now.status, reason: await reasonOf(env, now), since: sinceOf(now), changed: [], newTunnel: false, tunnel_id: now.tunnel_id,
     };
 }
 
@@ -675,7 +683,7 @@ async function heal(env, cur, b, now, tries = 3) {
             const again = await db.getAllocation(env, cur.name);
             if (again?.status === 'live' && isOwnRow(again, cur.node_pubkey)) return heal(env, again, b, now, tries - 1);
         }
-        return asNow(row, cur.node_pubkey);
+        return asNow(env, row, cur.node_pubkey);
     };
 
     // Not routed by a heal: only where its node now is is recorded, and only over the row as read. Written over an
@@ -734,7 +742,7 @@ async function heal(env, cur, b, now, tries = 3) {
     if (!(await db.updateIfUnchanged(env, cur.name, res, { dns_record_id: g.dns_record_id }, { withIds: true }))) return missed();
     await logEvent(env, cur.name, 'heal-refused', `stays ${was}: edge re-attest ${g.verdict} (${g.why})`);
     await tell(env, () => alerts.healRefused(env, cur.name, g.verdict, cur.paused_at));
-    return reply({ status: cur.status, reason: reasonOf(cur), since: sinceOf(cur), changed: ids.changed, attest: g.verdict, why: g.why });
+    return reply({ status: cur.status, reason: await reasonOf(env, cur), since: sinceOf(cur), changed: ids.changed, attest: g.verdict, why: g.why });
 }
 
 // A name nobody else holds, or the claimant's own released one taken back: a new tenure. A gated name waits for
@@ -836,7 +844,7 @@ async function takeName(env, existing, pubkey, b, now) {
     // ids and all; if it changed, the claim is undone. A failure leaves the row held by this key ('pending', or a
     // take-back's 'paused'); its next claim retries.
     let ids = NOTHING;
-    const missed = async () => claimReply(env, asNow(await undo(env, name, ids), pubkey));
+    const missed = async () => claimReply(env, await asNow(env, await undo(env, name, ids), pubkey));
     try { ids = await ensure(env, a, a); } catch (e) { return e.raced ? missed() : provisionFailed(e); }
     const made = recorded(ids, a);
     const out = { status: 'live', hostname: a.hostname, community_name: a.community_name, contact: a.contact };
@@ -1069,7 +1077,7 @@ async function handleStatus(request, env) {
     if (!a) return json({ status: 'none' });
     const out = {
         status: a.status, name: a.name, hostname: a.hostname, mode: a.mode, community_name: a.community_name, contact: a.contact,
-        reason: reasonOf(a), since: sinceOf(a),
+        reason: await reasonOf(env, a), since: sinceOf(a),
     };
     // Until when this key may take its release back: never one the admin holds from it too ('admin-held-all').
     if (a.status === 'released' && !freedAtOnce(a) && !heldFromAll(a)) out.held_until = (a.released_at || 0) + releaseCooloffS(env);
@@ -1345,6 +1353,10 @@ async function adminAction(env, a, action, now, { freeNow = false, who = null } 
                 catch (e) { return provisionFailed(e, { admin: true }); }
                 if (found) return refuseOutside(env, name, a.node_pubkey, found, `approve by ${actor}`);
             }
+            // An auto name pending is one still being made ("Setting up", "Finish now"): nobody's approval was needed, and
+            // it stays auto (it counts in the new-name budget as the claim that made it would have).
+            if (!(await awaitingApproval(env, a)))
+                return adminGoLive(env, a, 'healed', `finished by ${actor} (an auto name: its claim's provisioning had not finished)`, { decided_at: now, decided_by: 'auto' });
             return adminGoLive(env, a, 'approved', `approved by ${actor}`, { decided_at: now, decided_by: 'admin' });
         case 'pause': {
             // Routing off, name and tunnel kept; its owner can neither heal nor release it — only `resume` (or `release`,
@@ -1715,8 +1727,11 @@ async function applyVerdict(env, r, limits, verified) {
 }
 
 // Two phases: classify every live name while writing nothing, judge the sweep as a whole, and only then act.
-// A suspended sweep resets nothing and increments nothing. Returns the judgement (also logged).
-export async function attestSweep(env) {
+// A suspended sweep resets nothing and increments nothing. Returns the judgement (also logged). Every D1 query it runs is
+// counted (d1Meter), and finishing orphans comes last, with what is left.
+export async function attestSweep(invocationEnv) {
+    const d1 = d1Meter(invocationEnv);
+    const env = d1.env;
     const limits = {
         impostor: parseInt(env.ATTEST_FAIL_LIMIT || '2', 10),   // consecutive IMPOSTOR verdicts before a pause
         swap: swapFailLimit(env),                               // consecutive sweeps of foreign answers before a pause
@@ -1743,13 +1758,46 @@ export async function attestSweep(env) {
     }
     await upkeep(env, results, BATCH);
     await alertConditions(env, s);
+    await finishOrphans(d1);
+    // One send for the sweep, last: what alertConditions told, the orphans' New community alerts, and whatever still
+    // waits from a failed send (a try every 5 minutes, with the cron). Under waitUntil: the sweep never waits for ntfy.
+    await alerts.sendWaiting(env);
     return s;
+}
+
+// D1 runs at most D1_QUERIES queries an invocation on Workers Free (1000 on Paid); past them every one fails ("Exceeded
+// the maximum number of queries per invocation"). The sweep spends about 11, and 2 a live name, before finishing
+// orphans; three orphans and four live names went over it, and what failed was the alert conditions after them (review
+// of #2125). So the sweep counts its own: `env.DB` counts every statement run (all the sweep's are prepare()d), and
+// `left()` keeps alerts.SEND_D1 for every send still running beside it (`env.waitUntil`: a pause's alert, say), which
+// may not have run its queries yet. The sweep never waits for one.
+const D1_QUERIES = 50;
+const sendD1 = (env) => (alerts.channelSet(env) ? alerts.SEND_D1 : 0);
+function d1Meter(env) {
+    let used = 0;
+    const running = new Set();
+    const counted = (stmt) => ({
+        bind: (...a) => counted(stmt.bind(...a)),
+        first: (...a) => { used++; return stmt.first(...a); },
+        all: (...a) => { used++; return stmt.all(...a); },
+        run: (...a) => { used++; return stmt.run(...a); },
+        raw: (...a) => { used++; return stmt.raw(...a); },
+    });
+    const metered = Object.assign(Object.create(env), { DB: { prepare: (sql) => counted(env.DB.prepare(sql)) } });
+    if (typeof env.waitUntil === 'function') {
+        metered.waitUntil = (p) => {
+            const t = Promise.resolve(p).catch(() => {}).finally(() => running.delete(t));
+            running.add(t);
+            env.waitUntil(t);
+        };
+    }
+    return { env: metered, left: () => D1_QUERIES - used - running.size * sendD1(env) };
 }
 
 // What the sweep sees of the registrar itself reaches the admin's phone (src/alerts.js; A4, A7): a suspended sweep
 // (urgent: the registrar distrusts itself), deletions Cloudflare has refused for over a day, the nonce table missing.
-// Each is told when it starts, every 24 h while it lasts, and when it ends; this run also sends whatever still waits
-// from a failed send (a try every 5 minutes, with the cron).
+// Each is told when it starts, every 24 h while it lasts, and when it ends, by the sweep's send after its orphans
+// (attestSweep): what is told here is in the outbox before them, so they never starve it.
 async function alertConditions(env, s) {
     try {
         const now = nowS();
@@ -1758,7 +1806,7 @@ async function alertConditions(env, s) {
             const owed = await db.owedSince(env, now - 86400);
             conditions.push(alerts.teardownCondition(owed.n, owed.oldest, now));
         } catch (e) { console.error('[ALERT_CONDITION]', 'teardown-owed', e.message || e); }
-        await alerts.updateConditions(env, conditions);
+        await alerts.updateConditions(env, conditions, { send: false });
     } catch (e) { console.error('[ALERT_CONDITION]', e.message || e); }
 }
 
@@ -1773,6 +1821,7 @@ async function alertConditions(env, s) {
 //     read or two; one that answered anything (even a reply this verifier can't check) costs nothing.
 //   - Owed deletions (teardown) are retried.
 //   - Request nonces whose timestamp can no longer verify (twice the clock window, sign.js) are dropped.
+// Then the alert conditions, and last, with the D1 queries left, claims whose provisioning never finished (finishOrphans).
 const dark = (r) => r.verdict === 'unverifiable' && (r.why === 'unreachable' || /^http 5(2\d|30)$/.test(r.why));
 
 async function upkeep(env, results, batch) {
@@ -1786,6 +1835,56 @@ async function upkeep(env, results, batch) {
         }
     } catch (e) { console.error('[TEARDOWN_RETRY]', e.message || e); }
     try { await db.pruneNonces(env, nowS() - 2 * CLOCK_SKEW_S); } catch (e) { console.error('[NONCE_PRUNE]', e.message || e); }
+}
+
+// A claim of an auto name whose provisioning never finished — Cloudflare failed, or the Worker was cut off before
+// waitUntil kept it alive — while its node does not ask again (a node from before 2026-10-18 reads a pending answer as
+// "awaiting approval" and waits) is finished by the sweep (F3 of scratch/global-node/DESIGN-registrar-trust-fable.md
+// §5.2), as its next claim would finish it (heal's pending branch): it takes over nothing the registrar did not make, and
+// its node gets the tunnel's token from /status, as it does a repaired tunnel's. Only ORPHAN_AFTER_S after its claim (a
+// request still making it has had its 30 s); at most ORPHANS_PER_SWEEP a sweep (each is about six Cloudflare calls,
+// inside the cron's subrequest budget), and each only while the sweep's D1 queries left (d1Meter) hold ORPHAN_D1 and
+// the sweep's send after it (review of #2125). It comes after the upkeep and the alert conditions, so it never starves
+// them, and its New community alerts go with that one send. One past the budget, or one Cloudflare refuses again, stays
+// pending for the next sweep (or its node, or the admin's "Finish now"); one something else routes is left for its
+// node's claim or the admin's, which refuse it out loud.
+const ORPHAN_AFTER_S = 120;
+const ORPHANS_PER_SWEEP = 3;
+const ORPHAN_D1 = 15;   // the most one takes (measured: 10; 12 with a leftover tunnel; 3 more with the outbox full)
+async function finishOrphans(d1) {
+    const env = d1.env;
+    try {
+        if (d1.left() < 1 + sendD1(env)) return;   // not even the list's read
+        const now = nowS();
+        for (const a of await db.listOrphans(env, now - ORPHAN_AFTER_S, now - releaseCooloffS(env), ORPHANS_PER_SWEEP)) {
+            if (d1.left() < ORPHAN_D1 + sendD1(env)) {
+                console.warn('[ORPHAN_WAIT]', a.name, `pending: ${d1.left()} of D1's ${D1_QUERIES} queries left this sweep; finishing it takes up to ${ORPHAN_D1}, and the sweep's send ${sendD1(env)}`);
+                break;
+            }
+            try { await finishOrphan(env, a, now); } catch (e) { console.error('[ORPHAN]', a.name, e.message || e); }
+        }
+    } catch (e) { console.error('[ORPHAN]', e.message || e); }
+}
+
+async function finishOrphan(env, a, now) {
+    if (await outsidePending(env, a)) {
+        console.warn('[ORPHAN_LEFT]', a.name, 'pending: something the registrar did not make routes the name at Cloudflare; left for its claim or the admin');
+        return;
+    }
+    let ids;
+    try { ids = await ensure(env, a, a); }
+    catch (e) {
+        if (!e.raced) console.warn('[ORPHAN_LEFT]', a.name, `pending: ${e.cleaningUp ? e.message : `Cloudflare failed again (${e.message || e})`}; the next sweep tries again`);
+        return;
+    }
+    if (!(await db.updateIfUnchanged(env, a.name, a, { ...recorded(ids, a), ...LIVE, decided_at: now, decided_by: 'auto' }, { withIds: true }))) {
+        await undo(env, a.name, ids);   // its node's claim, the admin, or a release decided first
+        return;
+    }
+    console.warn('[ORPHAN_FINISHED]', a.name, `pending → live: ${ids.changed.join(', ') || 'nothing'} made by the sweep`);
+    await logEvent(env, a.name, 'healed', `finished by the sweep (its claim's answer never reached its node): pending → live, ${ids.changed.join(', ') || 'nothing'} made`);
+    try { await alerts.queue(env, alerts.newCommunity(env, a, await db.countLive(env))); }   // sent with the sweep's send
+    catch (e) { console.error('[ALERT]', e.message || e); }
 }
 
 // Does Cloudflare route the live `row` as it says: the record it records, pointing at its target, and its tunnel?
@@ -1817,6 +1916,21 @@ async function routedOrRepaired(env, name) {
 const withWaitUntil = (workerEnv, ctx) => (typeof ctx?.waitUntil === 'function'
     ? Object.assign(Object.create(workerEnv), { waitUntil: (p) => ctx.waitUntil(p) })
     : workerEnv);
+
+// A claim, heal or approve makes a name at Cloudflare in several calls (a tunnel, its ingress, its record, its token), each
+// as slow as Cloudflare is that day. Its node may stop waiting first (its budget ran out, its connection dropped), and the
+// runtime keeps only work under waitUntil alive past that (up to 30 s): anything else can be cancelled half way, leaving
+// a pending row with nothing made. Under waitUntil the work lands whoever is still listening (F2 of
+// scratch/global-node/DESIGN-registrar-trust-fable.md §5.2); the sweep finishes what even that missed (finishOrphans).
+// A rotate and a release are Cloudflare work too, written to the row first (review of #2125): a rotate cut off there
+// leaves a live row on no tunnel, its old one deleted and its fresh one recorded nowhere; a release, a released name
+// still routed by a record nothing owes. So is every admin action, its page closed or its connection lost part way: a
+// block or release cut off left the row still recording a tunnel Cloudflare kept, its token working, nothing owed; a
+// pause, its record; a resume and Remove from the list are the same shape.
+const finishing = (env, p) => {
+    if (typeof env.waitUntil === 'function') env.waitUntil(p.catch(() => {}));
+    return p;
+};
 
 // /admin's alerts panel: the alert book, and whether a daily summary is sent at all (it goes with the outside checks of
 // our servers, src/watch.js, so not while WATCH_TARGETS is unset).
@@ -1862,15 +1976,15 @@ export default {
             if (method === 'GET' && p === '/api/registrar/health')
                 return json({ status: 'ok', commit: env.GIT_SHA || null, accepted_proto: await acceptedProtos(env) });
             if (method === 'GET' && p === '/api/registrar/available') return await handleAvailable(url, env);
-            if (method === 'POST' && p === '/api/registrar/claim') return await handleClaim(request, env, bodyText);
-            if (method === 'POST' && p === '/api/registrar/heal') return await handleHeal(request, env, bodyText);
-            if (method === 'POST' && p === '/api/registrar/rotate') return await handleRotate(request, env, bodyText);
+            if (method === 'POST' && p === '/api/registrar/claim') return await finishing(env, handleClaim(request, env, bodyText));
+            if (method === 'POST' && p === '/api/registrar/heal') return await finishing(env, handleHeal(request, env, bodyText));
+            if (method === 'POST' && p === '/api/registrar/rotate') return await finishing(env, handleRotate(request, env, bodyText));
             if (method === 'GET' && p === '/api/registrar/status') return await handleStatus(request, env);
             if (method === 'POST' && p === '/api/registrar/holder') return await handleHolder(request, env, bodyText);
             if (method === 'POST' && p === '/api/registrar/update') return await handleUpdate(request, env, bodyText);
             // `/offline` is release's old name; today's nodes still call it (keep it for at least one release).
             if (method === 'POST' && (p === '/api/registrar/release' || p === '/api/registrar/offline'))
-                return await handleRelease(request, env, bodyText);
+                return await finishing(env, handleRelease(request, env, bodyText));
 
             // The control room's API. Every route here answers only its admin (adminIdentity): Cloudflare Access's signed
             // token, or — with no ACCESS_* var set — the ADMIN_SECRET header. Unknown paths too: a 401 before a 404.
@@ -1884,17 +1998,22 @@ export default {
                 // Each row says whether it holds its name now (holdsName) and, for a release still held, until when; a release
                 // says too whether its old key can still take it back (isOwnRow, past the hold too). What the admin's list
                 // offers ("Free now" while either is so, "Remove from the list" once neither is) is the Worker's rule (forgetRow).
+                // `awaiting_approval`: a pending row waits for the admin (a gated name); a pending auto name is still being
+                // made ("Setting up": its claim's Cloudflare work did not finish), and nobody needs to approve it.
                 if (method === 'GET' && p === '/api/local/admin/registrar/pending') {
                     const now = nowS();
+                    // As awaitingApproval decides it (a name with no policy row, or an empty tier, is auto), in one read.
+                    const tiers = await db.pendingTiers(env);
                     return json({ allocations: (await db.listActive(env)).map((a) => {
                         const holds = holdsName(env, a, now);
-                        if (a.status !== 'released') return { ...a, holds };
-                        return { ...a, holds, takes_back: isOwnRow(a, a.node_pubkey), ...(holds ? { held_until: (a.released_at || 0) + releaseCooloffS(env) } : {}) };
+                        const awaiting_approval = a.status === 'pending' && (tiers.get(a.name) || 'auto') !== 'auto';
+                        if (a.status !== 'released') return { ...a, holds, awaiting_approval };
+                        return { ...a, holds, awaiting_approval, takes_back: isOwnRow(a, a.node_pubkey), ...(holds ? { held_until: (a.released_at || 0) + releaseCooloffS(env) } : {}) };
                     }) });
                 }
                 // Remove from the list, in bulk: { "names": [...] } (handleForgetMany), and "Free all and remove" with
                 // "free_now": true. One name's is /:name/forget below.
-                if (method === 'POST' && p === '/api/local/admin/registrar/forget') return await handleForgetMany(env, bodyText, who);
+                if (method === 'POST' && p === '/api/local/admin/registrar/forget') return await finishing(env, handleForgetMany(env, bodyText, who));
                 if (method === 'GET' && p === '/api/local/admin/registrar/events') {
                     const name = (url.searchParams.get('name') || '').toLowerCase();
                     const limit = Math.min(Math.max(parseInt(url.searchParams.get('limit') || '200', 10) || 200, 1), 1000);
@@ -1919,7 +2038,7 @@ export default {
                         let b; try { b = JSON.parse(bodyText || '{}'); } catch { return json({ error: 'bad json' }, 400); }
                         freeNow = b?.free_now === true;
                     }
-                    return await handleAdmin(env, m[1], m[2], { freeNow, who });
+                    return await finishing(env, handleAdmin(env, m[1], m[2], { freeNow, who }));
                 }
                 return json({ error: 'not found' }, 404);
             }

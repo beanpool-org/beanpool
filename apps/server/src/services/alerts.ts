@@ -10,7 +10,9 @@
  * owners only, once a week), scheduled snapshots failing twice in a row, a crash
  * loop (three starts after unclean stops in 15 minutes, told at the third start so it gets out before the next crash), an unclean stop (a
  * failed integrity check is urgent), the host watchdog restarting a frozen server or going quiet, the standby needing its
- * owners (services/standby-health.ts), and a public server whose Let's Encrypt certificate fell back to self-signed.
+ * owners (services/standby-health.ts), and the certificates this server holds for its own addresses (services/acme,
+ * design scratch/global-node/DESIGN-https-anywhere-fable.md §2): a renewal a day past due, a certificate with less than
+ * a day left (urgent), and an address left with the self-signed one (expired before it was renewed, or never issued).
  *
  * And who gains power on it (slice S4, services/security-signal.ts): an owner, admin or moderator role granted or taken
  * away, and how (by an owner, by the password, break-glass, with the claim code); the community claimed; a break-glass
@@ -60,12 +62,16 @@
  * ## What an alert says
  *
  * The community's name, the condition in plain words, since when, and counts. Never a member's name or key, an address,
- * anything a member wrote, a destination's key or the channel's URL.
+ * anything a member wrote, a destination's key or the channel's URL. The one exception is the certificate rows: they name
+ * this server's own address the certificate is for (an IP or a name it publishes in /api/community/info), because an
+ * owner with two must know which one to fix. Never a visitor's or a member's.
  */
 
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+// The words layer's t(), named apart from the `t` every function here uses for the time.
+import { t as tr } from '@beanpool/core';
 import { db } from '../db/db.js';
 import { writeFileAtomic } from '../write-file-atomic.js';
 import { logger, onSecurityLogLine, type LogCategory } from '../logger.js';
@@ -84,7 +90,7 @@ import { readStandbyMain } from './standby-main.js';
 import { readCopyRecord } from './standby-copy-record.js';
 import { timeInWords } from './standby-report.js';
 import { snapshotFailuresInARow } from './snapshot-scheduler.js';
-import { tlsFellBackToSelfSigned } from './tls.js';
+import { certificateStandings, type CertificateStanding } from './acme/schedule.js';
 import { getReplacedInfo } from './identity-epoch.js';
 import { reportKind, type ReportKind } from './report-kind.js';
 import { setSecurityAlertHandler, SECURITY_PUSHES_PER_HOUR, NAME_ALERT_WORDS, OWNER_ALERT_WORDS, type SecurityNote } from './security-signal.js';
@@ -141,7 +147,7 @@ export type AlertKey =
     | 'freeze.recovered' | 'freeze.nowatchdog'
     | 'standby.incident'
     | 'standby.unpaired' | 'standby.source-not-main'
-    | 'tls.fallback'
+    | 'tls.fallback' | 'tls.renewal-late' | 'tls.expiring'
     | 'sec.role' | 'sec.password-burst' | 'sec.claim' | 'sec.claim-guess' | 'sec.keys' | 'sec.replaced' | 'sec.name' | 'sec.more' | 'sec.seen'
     | 'sec.agent'
     | 'sec.restore' | 'sec.backups' | 'sec.members' | 'sec.settings' | 'sec.address'
@@ -179,6 +185,10 @@ const ROWS: Record<AlertKey, Row> = {
     'standby.unpaired': { title: 'standby not paired', priority: 3, webhook: true, pushEveryMs: DAY, banner: true },
     'standby.source-not-main': { title: 'standby copies from the wrong server', priority: 3, webhook: true, pushEveryMs: DAY, banner: true },
     'tls.fallback': { title: 'certificate fell back to self-signed', priority: 4, webhook: true, pushEveryMs: DAY, banner: true },
+    /** A renewal TLS_RENEWAL_LATE_MS past due and not done (an attempt should have succeeded by now). */
+    'tls.renewal-late': { title: 'certificate renewal late', priority: 3, webhook: true, pushEveryMs: DAY, banner: true },
+    /** Less than TLS_EXPIRING_MS left on a certificate this server serves: after it, apps and browsers refuse the address. */
+    'tls.expiring': { title: 'certificate expires within a day', priority: 5, webhook: true, pushEveryMs: EACH, banner: true },
     'sec.role': { title: 'a role changed', priority: 4, webhook: true, pushEveryMs: EACH, banner: true },
     'sec.password-burst': { title: 'wrong admin passwords', priority: 3, webhook: true, pushEveryMs: DAY, banner: true },
     'sec.claim': { title: 'claimed with its claim code', priority: 4, webhook: true, pushEveryMs: EACH, banner: true },
@@ -1530,10 +1540,63 @@ export function standbyPinConditions(): Condition[] {
     return [paired, fromMain];
 }
 
-function tlsCondition(): Condition {
-    return tlsFellBackToSelfSigned()
-        ? { key: 'tls.fallback', active: true, detail: "The Let's Encrypt certificate could not be renewed: browsers now see a self-signed one. It is tried again within a day." }
-        : { key: 'tls.fallback', active: false, detail: "Let's Encrypt certificate in use again." };
+/** A renewal this long past due (a third of the certificate's life left) and not done is told: one should have worked. */
+export const TLS_RENEWAL_LATE_MS = DAY;
+/** A certificate with less than this left is told, urgent. */
+export const TLS_EXPIRING_MS = DAY;
+
+/**
+ * The certificates this server holds for its own addresses (services/acme/schedule.ts certificateStandings, design
+ * scratch/global-node/DESIGN-https-anywhere-fable.md §2): only identifiers a renewal tick has looked at since this start,
+ * so nothing on a standby (it orders none) and nothing before the scheduler has had its go.
+ *   - tls.renewal-late: one served whose renewal fell due TLS_RENEWAL_LATE_MS ago or more, not renewed since;
+ *   - tls.expiring: one served with less than TLS_EXPIRING_MS left, beside the late renewal (a renewal also ends both);
+ *   - tls.fallback: one with no CA certificate at all (expired before it was renewed, or never issued), so apps and
+ *     browsers see the self-signed pair there. Was the fleet's Cloudflare name only; now any address this server certifies.
+ * Each names the address (the soonest to expire first) and when; several are one line. The retries they promise are the
+ * scheduler's: never more than a day apart, and at most a third of what is left (so within 8 hours under the last day).
+ */
+function tlsConditions(at: number): Condition[] {
+    let standings: CertificateStanding[];
+    try { standings = certificateStandings(at); } catch { return []; }
+    const bySoonest = (a: CertificateStanding, b: CertificateStanding) => (a.notAfter ?? 0) - (b.notAfter ?? 0);
+    const late = standings.filter((s) => s.renewDueAt !== null && at - s.renewDueAt >= TLS_RENEWAL_LATE_MS).sort(bySoonest);
+    const expiring = standings.filter((s) => s.notAfter !== null && s.notAfter - at < TLS_EXPIRING_MS).sort(bySoonest);
+    const fallen = standings.filter((s) => s.notAfter === null);
+    const hosts = (list: CertificateStanding[]) => list.map((s) => s.host).join(', ');
+    const lateDue = late.length ? when(Math.min(...late.map((s) => s.renewDueAt!))) : '';
+    return [
+        fallen.length === 0
+            ? { key: 'tls.fallback', active: false, detail: tr('No address of this server is left with the self-signed certificate now.') }
+            : {
+                key: 'tls.fallback', active: true,
+                detail: fallen.length > 1
+                    ? tr('The certificates for {hosts} have expired or were never issued: browsers now see a self-signed one. They are tried again within a day.', { hosts: hosts(fallen) })
+                    : fallen[0].hadOne
+                    ? tr("The certificate for {host} expired before it could be renewed: browsers now see a self-signed one. It is tried again within a day.", { host: fallen[0].host })
+                    : tr('There is no certificate for {host} yet: browsers now see a self-signed one. It is tried again within a day.', { host: fallen[0].host }),
+            },
+        late.length === 0
+            ? { key: 'tls.renewal-late', active: false, detail: tr('No certificate this server serves is late for renewal now.') }
+            : {
+                key: 'tls.renewal-late', active: true,
+                detail: late.length > 1
+                    ? tr('The certificates for {hosts} could not be renewed since {due}; the first expires {expires}. They are tried again within a day, and more often as that nears.',
+                        { hosts: hosts(late), due: lateDue, expires: when(late[0].notAfter!) })
+                    : tr('The certificate for {host} could not be renewed since {due}; it expires {expires}. It is tried again within a day, and more often as that nears.',
+                        { host: late[0].host, due: lateDue, expires: when(late[0].notAfter!) }),
+            },
+        expiring.length === 0
+            ? { key: 'tls.expiring', active: false, detail: tr('No certificate this server serves expires within a day now.') }
+            : {
+                key: 'tls.expiring', active: true,
+                detail: expiring.length > 1
+                    ? tr('The certificates for {hosts} expire in less than a day, the first {expires}, and have not been renewed. After that, apps and browsers refuse this server at those addresses until new ones come. They are tried again within a few hours.',
+                        { hosts: hosts(expiring), expires: when(expiring[0].notAfter!) })
+                    : tr('The certificate for {host} expires {expires}, in less than a day, and has not been renewed. After that, apps and browsers refuse this server at that address until a new one comes. It is tried again within a few hours.',
+                        { host: expiring[0].host, expires: when(expiring[0].notAfter!) }),
+            },
+    ];
 }
 
 /** One tick: every row looked at, the book updated, what waits sent. */
@@ -1549,7 +1612,7 @@ export async function checkServerAlerts(): Promise<AlertEvent[]> {
             ...watchdogConditions(s, t),
             standbyCondition(),
             ...standbyPinConditions(),
-            tlsCondition(),
+            ...tlsConditions(t),
             ...replacedCondition(s),
             ...securityQuietConditions(s, t),
             ...nameConditions(),

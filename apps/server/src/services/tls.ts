@@ -58,8 +58,8 @@ let preferredOrder: string[] = [];
 const listeners = new Set<tls.Server>();
 /** The pair a connection with no SNI gets now, and until when (a CA certificate's notAfter; the self-signed pair: no end). */
 let defaultServed: DefaultPair | null = null;
-/** The fleet's certificate has been looked at by a tick since this start (tlsFellBackToSelfSigned). */
-let fleetChecked = false;
+/** The identifiers a renewal tick has looked at since this start (checkedHosts): nothing is told of one before that. */
+const checked = new Set<string>();
 /** The time every certificate here is checked against. */
 let clock = () => Date.now();
 /** Tests only: check certificates against this clock (null puts it back). */
@@ -95,15 +95,23 @@ export function fleetIdentifier(): string | null {
     return audienceOf(name);
 }
 
-/** A public node (it asks Let's Encrypt through Cloudflare) that is serving its self-signed certificate after a renewal
- *  check: what services/alerts.ts tells the owners. */
-export function tlsFellBackToSelfSigned(): boolean {
-    const fleet = fleetIdentifier();
-    return !!fleet && fleetChecked && !served.has(fleet) && !!serverCertPem;
+/**
+ * A public node serving its self-signed certificate for one of its identifiers after a renewal check looked at it (none
+ * valid from the CA, expired or never issued): what services/alerts.ts tells the owners (tls.fallback), and the AI
+ * assistants' health read. Any identifier this server certifies, not only the fleet's Cloudflare name.
+ */
+export function tlsFellBackToSelfSigned(now = clock()): boolean {
+    return !!serverCertPem && checkedHosts().some((host) => !servesCaCertificateFor(host, now));
 }
 
-/** schedule.ts: a tick has looked at the fleet's certificate. */
-export function noteFleetChecked(): void { fleetChecked = true; }
+/** schedule.ts: a tick has looked at this identifier's certificate. */
+export function noteChecked(host: string): void { checked.add(host); }
+
+/** The identifiers the last renewal tick wanted (in configured order) that a tick has looked at since this start. A
+ *  standby's ticks look at nothing, so on a standby this is empty. */
+export function checkedHosts(): string[] {
+    return preferredOrder.filter((host) => checked.has(host));
+}
 
 /** The CA certificate served for `host`, or null. */
 export function servedCertificate(host: string): { cert: string; notBefore: number; notAfter: number } | null {
@@ -224,7 +232,7 @@ export async function initTls(): Promise<void> {
     generateSelfSigned();
 
     served.clear();
-    fleetChecked = false;
+    checked.clear();
     adoptLegacyFleetCertificate();
     const now = clock();
     for (const host of storedHosts(DATA_DIR)) {

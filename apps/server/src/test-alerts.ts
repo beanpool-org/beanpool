@@ -711,9 +711,11 @@ async function main(): Promise<void> {
     await tick();
     assert(renewed12.outcomes[IP] === 'renewed' && tlsMod.servedCertificate(IP)!.notAfter > issued!.notAfter && tlsKeys().length === 0,
         `12. renewed: both over at once in the panel (${JSON.stringify(renewed12.outcomes)}, ${tlsKeys()})`);
+    const renewedAt = clock12();
     advance(15 * MIN);
     await tick();
-    const cleared12 = alerts.getAlertsStatus().history.filter((e) => e.kind === 'cleared' && e.key.startsWith('tls.')).map((e) => e.key).sort();
+    // (§6 raised a tls.fallback by hand, which a tick long before this one ended.)
+    const cleared12 = alerts.getAlertsStatus().history.filter((e) => e.kind === 'cleared' && e.key.startsWith('tls.') && e.at > renewedAt).map((e) => e.key).sort();
     assert(JSON.stringify(cleared12) === JSON.stringify(['tls.expiring', 'tls.renewal-late']) && tlsKeys().length === 0,
         `12. and told as resolved 15 minutes later (${cleared12})`);
 

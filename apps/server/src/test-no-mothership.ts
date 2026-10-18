@@ -251,7 +251,8 @@ async function startNode(root: string, name: string, extraEnv: Record<string, st
                 const portTaken = /UnsupportedListenAddressesError|listen EADDRINUSE/.test(mine);
                 bootFailures.push(portTaken ? 'a port was taken' : `exit ${run.exit}`);
                 if (++failedBeforeLive >= 3) gaveUp = true;
-                else if (portTaken) void freePorts().then((p) => { ports = p; base.url = `https://127.0.0.1:${p.https}`; launch(); });
+                // Stopped while the new ports were picked: no start that nothing would stop (review 4305779746).
+                else if (portTaken) void freePorts().then((p) => { ports = p; base.url = `https://127.0.0.1:${p.https}`; if (!stopped) launch(); });
                 else launch();
                 return;
             }

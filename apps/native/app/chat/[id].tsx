@@ -1480,7 +1480,7 @@ function ChatScreen({ id }: { id: string }) {
                         onSend={handleSend}
                         canSend={canSendNow}
                         disabled={keyChangePending}
-                        notice={unplaced ? t(DM_LOCK_WORDS.unplaced) : keyChangePending ? dmKeyChangedLine(keyChange?.name) : lockNotice}
+                        notice={unplaced ? t(DM_LOCK_WORDS.unplaced) : keyChangePending ? dmKeyChangedLine(keyChange?.name) : lockNotice ? chatLineWords(lockNotice) : null}
                         placeholder={t('Message...')}
                         accessibilityLabel={t('Message', undefined, 'message box')}
                         bottomPadding={keyboardVisible ? 8 : Math.max(insets.bottom, 12)}

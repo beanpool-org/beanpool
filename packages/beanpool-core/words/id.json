@@ -2,7 +2,7 @@
   "_meta": {
     "language": "id",
     "name": "Indonesian",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-19",
@@ -288,5 +288,21 @@
   "Sunset {time}.": "Matahari terbenam {time}.",
   "Look around ›": "Lihat sekeliling ›",
   "Pick up the tour at step {step} ›": "Lanjutkan tur di langkah {step} ›",
-  "This is your Home. You choose what goes here. Before you start, take a one-minute look at the other tabs.": "Ini adalah Beranda Anda. Anda yang menentukan apa yang muncul di sini. Sebelum mulai, lihat tab lain sekilas."
+  "This is your Home. You choose what goes here. Before you start, take a one-minute look at the other tabs.": "Ini adalah Beranda Anda. Anda yang menentukan apa yang muncul di sini. Sebelum mulai, lihat tab lain sekilas.",
+  "Save this search to Home": "Simpan pencarian ini ke Beranda",
+  "Save the search \"{q}\" to Home": "Simpan pencarian \"{q}\" ke Beranda",
+  "The 1 vote came from a new or 12-word account": "1 suara berasal dari akun baru atau 12 kata",
+  "All {n} votes came from new or 12-word accounts|All {n} votes came from new or 12-word accounts": {
+    "other": "Semua {n} suara berasal dari akun baru atau 12 kata"
+  },
+  "{n} of {total} votes came from a new or 12-word account|{n} of {total} votes came from new or 12-word accounts": {
+    "other": "{n} dari {total} suara berasal dari akun baru atau 12 kata"
+  },
+  "This 1 from a new or 12-word account": "1 ini berasal dari akun baru atau 12 kata",
+  "All {n} from new or 12-word accounts|All {n} from new or 12-word accounts": {
+    "other": "Semua {n} berasal dari akun baru atau 12 kata"
+  },
+  "{n} of these {count} from a new or 12-word account|{n} of these {count} from new or 12-word accounts": {
+    "other": "{n} dari {count} ini berasal dari akun baru atau 12 kata"
+  }
 }

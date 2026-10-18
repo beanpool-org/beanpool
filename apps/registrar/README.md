@@ -269,9 +269,10 @@ refuse; "open code, private settings"; the DNS cap). Migration 0011.
 Design: `scratch/global-node/DESIGN-registrar-trust-fable.md` §3.2 (D4, decided by Marty 2026-10-18). Migration 0012.
 
 - **Reaching a living node without collecting anything:** the admin writes a notice in /admin ("Notices to operators")
-  to one or more names, a group from "New names, last 24 h" (its Notice button: a source, or a network) or every name
-  held. One recipient row per key, the key's live name first. Each node hears it on its own signed `/status` (every 5 or
-  15 minutes): up to 5 not yet seen, oldest first, as `notices: [{id, at, level, text, name, link?}]`. The node sends back
+  to one or more names, a group from "New names, last 24 h" (its Notice button: a source, or a network's names with no
+  source, never a keyed source's) or every name held. One recipient row per key, the key's live name first. Each node
+  hears it on its own signed `/status` (every 5 or 15 minutes): up to 5 not yet seen, oldest first, as
+  `notices: [{id, at, level, text, name, link?}]`. The node sends back
   `?seen=<the highest id it has>`, signed with the query (`x-bp-signature-query`); every notice carried to it up to that
   id is marked seen and never carried again. A notice is carried only while its name is still held by that key
   (pending, live, paused or **blocked**: a blocked operator hears why); it stops at release. An older node ignores the

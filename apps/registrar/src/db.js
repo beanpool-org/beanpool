@@ -394,8 +394,9 @@ export const insertNotice = async (env, n) => (await env.DB.prepare(
 export const deleteNotice = (env, id) => env.DB.prepare('DELETE FROM notices WHERE id = ?').bind(id).run();
 
 // Who a notice goes to, in one statement: every key holding one of `to`'s names now — { names } those names, { source }
-// the names one source claimed since `since` (the last day) or still held for approval, { asn } the same from one
-// network, { all } every name held — one row per key. How many.
+// the names one source claimed since `since` (the last day) or still held for approval, { asn } the same of one
+// network's names with no source (the panel's group, as groupNames reads it: never a keyed source's, another group and
+// often another operator on a shared host), { all } every name held — one row per key. How many.
 export async function addRecipients(env, noticeId, to, since) {
     let from;
     let args;
@@ -404,7 +405,7 @@ export async function addRecipients(env, noticeId, to, since) {
         args = to.names;
     } else if (to.source || to.asn) {
         from = `FROM claim_sources s JOIN name_allocations a ON ${TENURE}
-                WHERE ${to.source ? 's.source_hash = ?' : 's.asn = ?'} AND (s.at > ? OR (${STILL_HELD})) AND a.status IN ${HOLDS}`;
+                WHERE ${to.source ? 's.source_hash = ?' : 's.source_hash IS NULL AND s.asn = ?'} AND (s.at > ? OR (${STILL_HELD})) AND a.status IN ${HOLDS}`;
         args = [to.source || to.asn, since];
     } else {
         from = `FROM name_allocations a WHERE a.status IN ${HOLDS}`;

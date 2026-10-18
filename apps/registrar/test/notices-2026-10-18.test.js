@@ -6,6 +6,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import worker, { attestSweep, checkReplyToken, redeemReplyToken, releaseCooloffS } from '../src/index.js';
+import * as db from '../src/db.js';
 import { world, liveName, makeKey, nowS, toHex } from './harness.js';
 
 const REPLY_URL = 'https://beanpool.org/reply/';
@@ -197,7 +198,19 @@ test('the admin sends to a list, a source group or every name â€” one per key â€
         const bySource = await send(w, { to: { source }, text: 'About your new names.' });
         assert.equal(bySource.body.recipients, 1);
         assert.deepEqual(w.sqlite.prepare('SELECT name FROM notice_recipients WHERE notice_id=?').all(bySource.body.id).map((r) => r.name), ['from-src']);
-        assert.equal((await send(w, { to: { asn: 64500 }, text: 'About your network.' })).body.recipients, 1);
+        // A network group (the panel's, its Notice button's { asn }) is that network's names with no source, as Reject
+        // all and Block all read it: a keyed source's names on it are other groups, often other operators on a shared
+        // host, and { asn } never reaches them (#2151 review 4306272063). from-src is keyed; from-net, a claim with no
+        // address, is not.
+        const keyless = await w.signed('POST', '/api/registrar/claim', await makeKey(), { mode: 'tunnel', name: 'from-net' });
+        Object.defineProperty(keyless, 'cf', { value: { asn: 64500, asOrganization: 'Example Hosting', country: 'NL' } });
+        assert.equal((await worker.fetch(keyless, w.env)).status, 200);
+        assert.equal(w.sqlite.prepare("SELECT source_hash FROM claim_sources WHERE name='from-net'").get().source_hash, null);
+        const byNet = await send(w, { to: { asn: 64500 }, text: 'About your network.' });
+        assert.equal(byNet.body.recipients, 1);
+        assert.deepEqual(w.sqlite.prepare('SELECT name FROM notice_recipients WHERE notice_id=?').all(byNet.body.id).map((r) => r.name), ['from-net'],
+            'the network group\'s keyless name, never the keyed source\'s from-src');
+        assert.deepEqual((await db.groupNames(w.env, { asn: 64500 }, nowS() - 86400, 100)).map((r) => r.name), ['from-net'], 'the names Block all acts on');
 
         // The list: counts of who it reached; one notice's recipients.
         await status(w, k1);

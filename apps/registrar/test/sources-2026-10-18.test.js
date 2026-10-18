@@ -146,6 +146,42 @@ test('"Reject all held" frees a source\'s held names and leaves its live ones; a
     } finally { w.restore(); }
 });
 
+// Review of #2132: "Reject all held" took every pending name of the group, a gated claim and a name still being set up
+// with the held ones, while its button counted and promised the held ones only.
+test('"Reject all held" frees only the held names: a gated claim and a name being set up from the same source stay; Block all takes them', async () => {
+    const w = await sourceWorld();
+    try {
+        w.cf.fail.createTunnel = true;
+        assert.equal((await claimFrom(w, FROM.bot, await makeKey(), { name: 'inflight' })).status, 502);
+        w.cf.fail.createTunnel = false;
+        assert.equal((await claimFrom(w, FROM.bot, await makeKey(), { name: 'sydney' })).body.status, 'pending', 'gated in the 0001 seed');
+        assert.equal((await claimFrom(w, FROM.bot, await makeKey(), { name: 'rjg-live' })).body.status, 'live');
+        assert.equal((await claimFrom(w, FROM.bot, await makeKey(), { name: 'bot-held' })).body.status, 'pending');
+        assert.deepEqual(['inflight', 'sydney', 'bot-held'].map((n) => [row(w, n).status, row(w, n).held_reason]),
+            [['pending', null], ['pending', null], ['pending', 'source']]);
+        const farm = (await admin(w, 'sources')).body.groups[0];
+        assert.deepEqual([farm.names, farm.pending, farm.held], [4, 3, 1]);
+        const r = await admin(w, 'sources', { source: farm.source });
+        assert.equal(r.status, 200, JSON.stringify(r.body));
+        assert.deepEqual([r.body.rejected, r.body.blocked, r.body.refused, r.body.more], [['bot-held'], [], [], false]);
+        assert.equal(row(w, 'bot-held').status, 'released');
+        assert.deepEqual(['inflight', 'sydney', 'rjg-live'].map((n) => row(w, n).status), ['pending', 'pending', 'live'], 'only the held name freed');
+        // Asked again: nothing held is left, so nothing is done.
+        const again = await admin(w, 'sources', { source: farm.source });
+        assert.deepEqual([again.body.rejected, again.body.more], [[], false]);
+        assert.deepEqual(['inflight', 'sydney'].map((n) => row(w, n).status), ['pending', 'pending']);
+        // Block all takes every pending name of the source (its confirm says so), and blocks its live one.
+        const rejected = [], blocked = [];
+        let b, rounds = 0;
+        do {
+            b = await admin(w, 'sources', { source: farm.source, block: true });
+            assert.equal(b.status, 200, JSON.stringify(b.body));
+            rejected.push(...b.body.rejected); blocked.push(...b.body.blocked);
+        } while (b.body.more && ++rounds < 10);
+        assert.deepEqual([rejected.sort(), blocked], [['inflight', 'sydney'], ['rjg-live']]);
+    } finally { w.restore(); }
+});
+
 test('probation: a new name is live but "not found" on /i/ and the directory waits, until 3 ok sweeps and an hour', async () => {
     const w = await sourceWorld();
     try {

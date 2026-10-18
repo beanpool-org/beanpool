@@ -1661,8 +1661,9 @@ async function sourcesPanel(env) {
 
 // "Block all" ({ source, block: true }) or "Reject all held" ({ source } or { asn }) on a group of the panel, in batches
 // of at most SOURCE_MAX names a request (each is about ten D1 queries, its decision taken as its own action would take
-// it: onFreshRow, adminAction): a pending one is rejected (released, free at once, as Reject frees it), and with
-// `block` a live or paused one is blocked, as Block blocks it; and the source goes on blocked_sources for SOURCE_BLOCK_S,
+// it: onFreshRow, adminAction): a held one is rejected (released, free at once, as Reject frees it), and with `block`
+// every pending one (a gated claim, a name being set up) is rejected too and a live or paused one is blocked, as Block
+// blocks it; and the source goes on blocked_sources for SOURCE_BLOCK_S,
 // so its next claim of a new name is refused 403 before anything is written. Only names whose tenure that claim began.
 // Answers what was done, and `more` (the page asks again until it is false, or a batch did nothing). The admin's phone
 // hears of the click once (`run`, `total`, as Free all and remove).
@@ -1686,19 +1687,19 @@ async function handleSourceAction(env, bodyText, who = null) {
     }
     if (block) await db.blockSource(env, 'source', source, now + SOURCE_BLOCK_S, now, who?.email, label);
     const done = { rejected: [], blocked: [], refused: [] };
-    for (const row of await db.groupNames(env, { source, asn, pendingOnly: !block }, since, SOURCE_MAX)) {
+    for (const row of await db.groupNames(env, { source, asn, heldOnly: !block }, since, SOURCE_MAX)) {
         const res = await onFreshRow(() => db.getAllocation(env, row.name), async (a) => {
             if (!a || a.node_pubkey !== row.node_pubkey || a.requested_at !== row.requested_at) return json({ error: 'another tenure now' }, 409);
-            if (a.status === 'pending') return adminAction(env, a, 'release', nowS(), { freeNow: true, who });
+            if (a.status === 'pending' && (block || a.held_reason)) return adminAction(env, a, 'release', nowS(), { freeNow: true, who });
             if (block && (a.status === 'live' || a.status === 'paused')) return adminAction(env, a, 'block', nowS(), { who });
-            return json({ error: `${a.status} now` }, 409);
+            return json({ error: a.status === 'pending' ? 'not held now' : `${a.status} now` }, 409);
         });
         const out = await res.json();
         if (res.status !== 200) done.refused.push({ name: row.name, ...out });
         else (out.status === 'blocked' ? done.blocked : done.rejected).push(row.name);
     }
     const acted = done.rejected.length + done.blocked.length;
-    const more = acted > 0 && (await db.groupNames(env, { source, asn, pendingOnly: !block }, since, 1)).length > 0;
+    const more = acted > 0 && (await db.groupNames(env, { source, asn, heldOnly: !block }, since, 1)).length > 0;
     if (block || acted) {
         const tag = source ? `source ${source.slice(0, 8)}` : `AS${asn}`;
         console.warn('[SOURCE_ACTION]', `${actorOf(who)}: ${block ? 'Block all' : 'Reject all held'} for ${tag}: ${done.rejected.length} rejected, ${done.blocked.length} blocked, ${done.refused.length} refused`);

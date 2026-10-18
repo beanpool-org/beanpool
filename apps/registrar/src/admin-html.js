@@ -830,7 +830,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
                     }).join(', ') + ((g.rows || []).length > 12 ? ', …' : '');
                     let acts = '';
                     if (g.held && (g.source || g.asn)) acts += '<button data-source-act="reject"' + (g.source ? ' data-source="' + esc(g.source) + '"' : ' data-asn="' + esc(g.asn) + '"') + ' data-total="' + esc(g.held) + '" class="btn-approve" title="Each held name from it is rejected: free again">Reject all held (' + esc(g.held) + ')</button>';
-                    if (g.source) acts += '<button data-source-act="block" data-source="' + esc(g.source) + '" data-total="' + esc(g.names) + '" class="btn-revoke" title="Held ones rejected, live ones blocked, its new claims refused for 7 days">Block all (' + esc(g.names) + ')</button>';
+                    if (g.source) acts += '<button data-source-act="block" data-source="' + esc(g.source) + '" data-total="' + esc(g.names) + '" class="btn-revoke" title="Pending ones rejected (held, awaiting approval or being set up), live ones blocked, its new claims refused for 7 days">Block all (' + esc(g.names) + ')</button>';
                     html += '<tr>' +
                         '<td data-label="Source"><span class="mono" style="color: #fff;">' + (g.source ? esc(shortId(g.source)) : 'no source') + '</span><span class="sub">' + names + '</span></td>' +
                         '<td data-label="Network" style="font-size: 0.8rem;"><span>' + networkWords(g) + '</span></td>' +
@@ -888,8 +888,8 @@ export const ADMIN_HTML = `<!DOCTYPE html>
             const block = act === 'block';
             const n = total + ' name' + (total === 1 ? '' : 's');
             const text = block
-                ? '⛔ BLOCK ALL from this source (' + n + ')?\\n\\nEach held name is rejected (free again), each live one is blocked (tunnel and DNS deleted, the name kept from every key; Resume undoes one), and its new claims are refused for 7 days.'
-                : 'Reject all held names from this group (' + n + ')?\\n\\nEach is freed again; its live names are left as they are.';
+                ? '⛔ BLOCK ALL from this source (' + n + ')?\\n\\nEach pending name (held, awaiting approval or being set up) is rejected (free again), each live one is blocked (tunnel and DNS deleted, the name kept from every key; Resume undoes one), and its new claims are refused for 7 days.'
+                : 'Reject all held names from this group (' + n + ')?\\n\\nEach is freed again; its live names, its claims awaiting approval and its names being set up are left as they are.';
             if (!confirm(text)) return;
             const run = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'run-' + Date.now() + '-' + Math.random().toString(36).slice(2, 10);
             const body = { run: run, total: total };

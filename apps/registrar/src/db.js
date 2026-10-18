@@ -291,11 +291,13 @@ export const recentSources = async (env, since) => ((await env.DB.prepare(
 ).bind(since).all()).results || []);
 
 // A group's names (claimed since `since` from one source, or from one network) still held by the tenure its claim made,
-// that /admin's "Block all" acts on — pending (rejected), live and paused (blocked) — or, `pendingOnly`, "Reject all
-// held": the pending ones. At most `limit`, oldest first.
-export const groupNames = async (env, { source = null, asn = null, pendingOnly = false }, since, limit) => ((await env.DB.prepare(
+// that /admin's "Block all" acts on — every pending one (rejected: held, gated or being set up), live and paused
+// (blocked) — or, `heldOnly`, "Reject all held": the pending ones held for approval (held_reason set), never a gated
+// claim or a name still being set up. At most `limit`, oldest first.
+export const groupNames = async (env, { source = null, asn = null, heldOnly = false }, since, limit) => ((await env.DB.prepare(
     `SELECT DISTINCT a.* FROM claim_sources s JOIN name_allocations a ON a.name = s.name AND a.node_pubkey = s.node_pubkey AND a.requested_at = s.at
-     WHERE ${source ? 's.source_hash = ?' : 's.asn = ?'} AND s.at > ? AND a.status IN (${pendingOnly ? "'pending'" : "'pending', 'live', 'paused'"})
+     WHERE ${source ? 's.source_hash = ?' : 's.asn = ?'} AND s.at > ?
+       AND ${heldOnly ? "a.status = 'pending' AND a.held_reason IS NOT NULL" : "a.status IN ('pending', 'live', 'paused')"}
      ORDER BY a.requested_at LIMIT ?`
 ).bind(source || asn, since, limit).all()).results || []);
 

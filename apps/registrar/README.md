@@ -220,12 +220,13 @@ refuse; "open code, private settings"; the DNS cap). Migration 0011.
   hears of it once an hour per reason, in counts and the network's name, never an address or a name. A network past its
   daily count is told once a day and nothing is held for that alone (a hosting network carries many honest nodes). The
   sweep never finishes a held name. Approve makes it live (decided by the admin, outside the auto budget).
-- **Blocked sources.** "Block all" on a source's group in /admin rejects its held names (free again), blocks its live
-  and paused ones (as Block does, one event each) and puts the source on `blocked_sources` for 7 days: its next claim of
-  a new name is refused **403** before anything is written. A network (ASN) can be blocked by hand, honest nodes on it
-  included; any block can be lifted. "Reject all held" frees a group's held names and blocks nothing. Both run in
-  batches of 3 names a request (measured: at most 37 of D1's 50 queries, alerts on and Cloudflare refusing every
-  delete), the page asking again until the Worker says no more; the phone hears of the click once.
+- **Blocked sources.** "Block all" on a source's group in /admin rejects its pending names (held, gated or being set
+  up: free again), blocks its live and paused ones (as Block does, one event each) and puts the source on
+  `blocked_sources` for 7 days: its next claim of a new name is refused **403** before anything is written. A network
+  (ASN) can be blocked by hand, honest nodes on it included; any block can be lifted. "Reject all held" frees a
+  group's held names only (never a gated claim or a name being set up) and blocks nothing. Both run in batches of 3
+  names a request (measured: at most 37 of D1's 50 queries, alerts on and Cloudflare refusing every delete), the page
+  asking again until the Worker says no more; the phone hears of the click once.
 - **"Hold all new names".** One switch on /admin (the `settings` row `hold_new_names_until`): every new name waits for
   approval for 24 hours, then it lets go by itself unless pressed again. Names already held are untouched. Pressing it
   is told; the daily line says while it is on.

@@ -10,7 +10,7 @@
  * 6. PWA + Settings host (HTTPS :443)
  * 7. libp2p P2P transport (TCP :4001, WS :4002)
  * 8. Connector manager (dial trusted peers)
- * 9. Cert renewal scheduler
+ * 9. Cert renewal scheduler (ACME orders run here, never before the listeners)
  */
 // FIRST IMPORT, AND IT MUST STAY FIRST. ES modules evaluate every import below before the first statement
 // of this file runs, and those imports are the whole application — db/db.ts opens SQLite at import. A crash
@@ -59,7 +59,8 @@ scrubReportEnvironment();
 import { ensureGenesis } from './genesis.js';
 import { initAdminPassword, localConfigRestoredNotice } from './config/local-config.js';
 import { burnClaimFromShell, initClaimCode } from './claim-code.js';
-import { initTls, startRenewalScheduler } from './services/tls.js';
+import { initTls } from './services/tls.js';
+import { startAcmeScheduler } from './services/acme/schedule.js';
 import { startDnsShim } from './dns-shim.js';
 import { startHttpServer } from './http-server.js';
 import { startHttpsServer } from './https-server.js';
@@ -215,7 +216,8 @@ async function main() {
     // silent fall back to disk. After the role is settled (2.6), before anything serves.
     console.log(`🖼️  Image store: ${await checkImageStoreAtBoot({ role: getNodeRole() })}`);
 
-    // Step 3: TLS certificates (LE or self-signed)
+    // Step 3: TLS certificates, from disk only (each identifier's ACME certificate, else self-signed). Never waits on the
+    // network: http-01 needs the plain listener up, so the first orders run at step 9 (services/acme/schedule.ts).
     await initTls();
 
     // Step 4: DNS shim for .local resolution
@@ -362,8 +364,9 @@ async function main() {
     // Store listing page over their own metered connections to find out.
     initAppStoreVersionChecks();
 
-    // Step 9: Start cert renewal scheduler (checks every 24h)
-    startRenewalScheduler();
+    // Step 9: the certificate scheduler (services/acme/schedule.ts): its first tick now that both listeners are up, then
+    // hourly. On the main server only (each tick reads the role); not awaited, so the boot never waits on an order.
+    startAcmeScheduler();
 
     // Step 10: Start directory publisher (primary only — a backup replica has no
     // public listing of its own; it mirrors the primary, it isn't a joinable node).

@@ -12,7 +12,7 @@ import vm from 'node:vm';
 import { readFileSync } from 'node:fs';
 import worker, { holdsName, isOwnRow } from '../src/index.js';
 import { ACCESS_VARS, accessMode } from '../src/access.js';
-import { world, makeKey, liveName, nowS, routing } from './harness.js';
+import { world, makeKey, liveName, nowS, routing, unreachable } from './harness.js';
 
 const DAY = 86400;
 const AUD = 'aud-test-0123456789abcdef0123456789abcdef';
@@ -257,12 +257,23 @@ test('the team\'s keys unreachable or unusable: fail closed (401), never the sec
             'a short key': () => Response.json({ keys: [{ ...certOf(w.key), n: certOf(w.key).n.slice(0, 170) }] }),
             'a modulus atob refuses, beside nothing usable': () => Response.json({ keys: [{ ...certOf(w.key), n: 'A'.repeat(345) }] }),
         };
-        for (const [what, answer] of Object.entries(answers)) {
-            w.certs.answer = answer;
-            const r = await whoami(SECRET);
-            assert.equal(r.status, 401, `${what}: ${JSON.stringify(r.body)}`);
-            assert.deepEqual(r.body, { error: 'unauthorized', sign_in: 'cloudflare-access' });
-        }
+        // Each failed fetch is logged once for the Worker's log: [ACCESS_CERTS], the team, and why â€” never the token.
+        const logged = [];
+        const realError = console.error;
+        console.error = (...a) => { logged.push(a.map(String).join(' ')); };
+        try {
+            for (const [what, answer] of Object.entries(answers)) {
+                w.certs.answer = answer;
+                const r = await whoami(SECRET);
+                assert.equal(r.status, 401, `${what}: ${JSON.stringify(r.body)}`);
+                assert.deepEqual(r.body, { error: 'unauthorized', sign_in: 'cloudflare-access' });
+            }
+        } finally { console.error = realError; }
+        const why = logged.map((l) => { const m = /^\[ACCESS_CERTS\] (\S+) (.*)$/.exec(l); return m && m[1] === w.team ? m[2] : l; });
+        assert.deepEqual(why.map((x) => (/ is not valid JSON$/.test(x) ? 'not JSON' : x)), [
+            'certs answered 500', 'certs answered 404', 'fetch failed', 'not JSON', ...Array(6).fill('certs hold no RS256 key'),
+        ]);
+        assert.ok(logged.every((l) => !l.includes(token.split('.')[2])), 'the token is in no log line');
         // One unusable key beside the team's never spoils it.
         w.certs.answer = () => Response.json({ keys: [{ ...certOf(w.key), kid: 'bad', n: 'A'.repeat(345) }, { kid: 'short', kty: 'RSA', n: 'AQAB', e: 'AQAB' }, certOf(w.key)] });
         assert.equal((await whoami()).status, 200, 'the keys answer again: signed in');
@@ -521,7 +532,8 @@ test('Free all and remove: a later batch refused (a name live again meanwhile) â
 });
 
 test('one Free all and remove request (2 names) stays inside D1\'s smallest per-invocation budget (50 queries), even when Cloudflare refuses every delete', async () => {
-    const w = await world({ env: { NTFY_URL: 'https://ntfy.example/beanpool-admin' } });
+    // The alert channel set and ntfy unreachable: its send fails too, the costliest path (admin-tidy's budget test).
+    const w = await world({ env: { NTFY_URL: 'https://ntfy.example/beanpool-admin' }, serve: { 'ntfy.example': unreachable } });
     try {
         for (const name of ['spent1', 'spent2']) {
             const k = await makeKey();

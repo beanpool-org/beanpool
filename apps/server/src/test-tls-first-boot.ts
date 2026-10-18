@@ -12,7 +12,12 @@
  *      NODE_EXTRA_CA_CERTS already trusts is kept, byte for byte (#2031 N1);
  *   4. a bad server certificate on disk is replaced, with a new CA beside it (selfsigned cannot sign with the old one);
  *   5. a certificate and key from two different runs on disk are replaced;
- *   6. a generator that only ever makes bad ones fails with a plain message after its tries, writing nothing.
+ *   6. a generator that only ever makes bad ones fails with a plain message after its tries, writing nothing;
+ *   7. the boot never waits on an ACME order (design scratch/global-node/DESIGN-https-anywhere-fable.md S1): with the
+ *      fleet's Cloudflare variables set (which made initTls order from Let's Encrypt, awaited, before the listeners) and
+ *      a CA that never answers, initTls returns at once and asks it nothing; it serves the ACME certificates on disk
+ *      that are still valid, copies the fleet's old le-cert.pem pair into data/tls/acme/ (the old files stay for one
+ *      release; a pair an older image renewed there is copied again), and serves self-signed when there are none.
  */
 import fs from 'node:fs';
 import os from 'node:os';
@@ -20,6 +25,8 @@ import path from 'node:path';
 import tls from 'node:tls';
 import crypto from 'node:crypto';
 import { createRequire } from 'node:module';
+import http from 'node:http';
+import type { AddressInfo } from 'node:net';
 
 const dataDir = fs.mkdtempSync(path.join(process.env.TMPDIR || os.tmpdir(), 'tls-first-boot-'));
 process.env.BEANPOOL_DATA_DIR = dataDir;
@@ -157,6 +164,94 @@ try {
     try { await tlsMod.initTls(); } catch (e) { err = (e as Error).message; }
     check('initTls throws after its tries', /5 self-signed certificates in a row did not parse: .*illegal padding/.test(err), err || 'no error');
     check('no certificate was written', !fs.existsSync(path.join(tlsDir, 'server.pem')));
+    tlsMod._setSelfSignedGenerateForTests(null);
+
+    console.log('\n7. The boot never waits on an ACME order');
+    // A CA that takes every connection and never answers: an order at boot would hang here.
+    const asked: string[] = [];
+    const silent = http.createServer((req) => { asked.push(`${req.method} ${req.url}`); });
+    await new Promise<void>((r) => silent.listen(0, '127.0.0.1', () => r()));
+    process.env.ACME_DIRECTORY_URL = `http://127.0.0.1:${(silent.address() as AddressInfo).port}/directory`;
+    Object.assign(process.env, { CF_RECORD_NAME: 'fleet.example.org', CF_API_TOKEN: 'never-used', CF_ZONE_ID: 'never-used' });
+    try {
+        clearTls();
+        let t0 = Date.now();
+        await tlsMod.initTls();
+        check('the fleet set up, no certificate: initTls returns at once and asks the CA nothing', Date.now() - t0 < 5000 && asked.length === 0,
+            `${Date.now() - t0} ms, ${asked.length} request(s)`);
+        check('…and serves the self-signed pair, not yet told as a fall-back (no renewal check has run)', !tlsMod.isUsingLetsEncrypt()
+            && pairParses(tlsMod.getServerCertPem(), tlsMod.getServerKeyPem()) === null && !tlsMod.tlsFellBackToSelfSigned());
+
+        // What earlier runs left: the fleet's pair where it used to live, and ACME folders, one of them expired.
+        const caKey = forge.pki.privateKeyFromPem(crypto.generateKeyPairSync('rsa', { modulusLength: 2048,
+            privateKeyEncoding: { type: 'pkcs8', format: 'pem' }, publicKeyEncoding: { type: 'spki', format: 'pem' } }).privateKey);
+        const leaf = (host: string, from: number, to: number) => {
+            const keyPem = crypto.generateKeyPairSync('rsa', { modulusLength: 2048, privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+                publicKeyEncoding: { type: 'spki', format: 'pem' } }).privateKey;
+            const k = forge.pki.privateKeyFromPem(keyPem);
+            const c = forge.pki.createCertificate();
+            c.publicKey = forge.pki.setRsaPublicKey(k.n, k.e);
+            c.serialNumber = '7' + crypto.randomBytes(8).toString('hex');
+            c.validity.notBefore = new Date(Date.now() + from);
+            c.validity.notAfter = new Date(Date.now() + to);
+            c.setSubject([{ name: 'commonName', value: host }]);
+            c.setIssuer([{ name: 'commonName', value: 'Earlier Run CA' }]);
+            c.setExtensions([{ name: 'subjectAltName', altNames: [{ type: 2, value: host }] }]);
+            c.sign(caKey, forge.md.sha256.create());
+            return { cert: forge.pki.certificateToPem(c), key: keyPem };
+        };
+        const DAY = 86_400_000;
+        const fleet = leaf('fleet.example.org', -DAY, 60 * DAY);
+        fs.writeFileSync(path.join(tlsDir, 'le-cert.pem'), fleet.cert);
+        fs.writeFileSync(path.join(tlsDir, 'le-key.pem'), fleet.key, { mode: 0o600 });
+        const put = (host: string, pair: { cert: string; key: string }) => {
+            const dir = path.join(tlsDir, 'acme', host);
+            fs.mkdirSync(dir, { recursive: true });
+            fs.writeFileSync(path.join(dir, 'cert.pem'), pair.cert);
+            fs.writeFileSync(path.join(dir, 'key.pem'), pair.key, { mode: 0o600 });
+        };
+        put('beans.example.org', leaf('beans.example.org', -DAY, 30 * DAY));
+        put('old.example.org', leaf('old.example.org', -90 * DAY, -DAY));
+        put('wrong.example.org', leaf('someone-else.example.org', -DAY, 30 * DAY));
+
+        t0 = Date.now();
+        await tlsMod.initTls();
+        check('with certificates on disk: at once, still not one request to the CA', Date.now() - t0 < 5000 && asked.length === 0,
+            `${Date.now() - t0} ms, ${asked.length} request(s)`);
+        const servedNow = tlsMod.servedHosts().sort();
+        check('the valid ones are served (the fleet\'s and beans.example.org), not the expired one or one for another name',
+            JSON.stringify(servedNow) === JSON.stringify(['beans.example.org', 'fleet.example.org']), JSON.stringify(servedNow));
+        const fleetDir = path.join(tlsDir, 'acme', 'fleet.example.org');
+        const legacyIs = (pair: { cert: string; key: string }) => ['le-cert.pem', 'le-key.pem'].every((f) => fs.existsSync(path.join(tlsDir, f)))
+            && fs.readFileSync(path.join(tlsDir, 'le-cert.pem'), 'utf-8') === pair.cert && fs.readFileSync(path.join(tlsDir, 'le-key.pem'), 'utf-8') === pair.key;
+        check('the fleet\'s old le-cert.pem pair is copied into data/tls/acme/fleet.example.org/ (key 0600)',
+            fs.readFileSync(path.join(fleetDir, 'cert.pem'), 'utf-8') === fleet.cert && fs.readFileSync(path.join(fleetDir, 'key.pem'), 'utf-8') === fleet.key
+            && (fs.statSync(path.join(fleetDir, 'key.pem')).mode & 0o777) === 0o600);
+        check('…and the old files stay, byte for byte (an older image, which reads only them, can still be rolled back to)', legacyIs(fleet));
+        check('a CA certificate is in use, and the self-signed pair is still there behind it', tlsMod.isUsingLetsEncrypt()
+            && pairParses(tlsMod.getServerCertPem(), tlsMod.getServerKeyPem()) === null && !tlsMod.tlsFellBackToSelfSigned());
+
+        // Rolled back: the older image renewed le-cert.pem. Rolled forward: the newer pair is the one copied and served.
+        const renewedByOld = leaf('fleet.example.org', -60_000, 89 * DAY);
+        fs.writeFileSync(path.join(tlsDir, 'le-cert.pem'), renewedByOld.cert);
+        fs.writeFileSync(path.join(tlsDir, 'le-key.pem'), renewedByOld.key, { mode: 0o600 });
+        await tlsMod.initTls();
+        check('le-cert.pem renewed by an older image (later notAfter): copied over the store\'s and served on the next boot',
+            fs.readFileSync(path.join(fleetDir, 'cert.pem'), 'utf-8') === renewedByOld.cert
+            && tlsMod.servedCertificate('fleet.example.org')?.cert === renewedByOld.cert && legacyIs(renewedByOld));
+        // Renewed by this image (the store's is the newer): the older le-cert.pem is never copied back over it.
+        const renewedByNew = leaf('fleet.example.org', 0, 90 * DAY);
+        fs.writeFileSync(path.join(fleetDir, 'cert.pem'), renewedByNew.cert);
+        fs.writeFileSync(path.join(fleetDir, 'key.pem'), renewedByNew.key, { mode: 0o600 });
+        await tlsMod.initTls();
+        check('the store\'s certificate the newer one: left as it is and served, le-cert.pem untouched',
+            fs.readFileSync(path.join(fleetDir, 'cert.pem'), 'utf-8') === renewedByNew.cert
+            && tlsMod.servedCertificate('fleet.example.org')?.cert === renewedByNew.cert && legacyIs(renewedByOld));
+    } finally {
+        for (const k of ['ACME_DIRECTORY_URL', 'CF_RECORD_NAME', 'CF_API_TOKEN', 'CF_ZONE_ID']) delete process.env[k];
+        silent.closeAllConnections();
+        silent.close();
+    }
 } finally {
     tlsMod._setSelfSignedGenerateForTests(null);
     fs.rmSync(dataDir, { recursive: true, force: true });

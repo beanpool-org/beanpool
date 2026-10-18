@@ -5,8 +5,9 @@
  * LAN nodes (self-signed): Shows QR trust bootstrap + CA cert download
  *
  * Endpoints:
+ *   GET /.well-known/acme-challenge/:token — the http-01 answer (services/acme/challenge.ts), before everything else
  *   GET /         — Redirect to HTTPS landing page (public) or trust bootstrap (LAN)
- *   GET /trust    — Downloads the Root CA certificate (.pem)  [LAN only]
+ *   GET /trust    — Downloads the Root CA certificate (.pem); a redirect to HTTPS for a host with a CA certificate here
  *   /ws, /ws/logs — WebSocket upgrades, handed to the HTTPS server's handler (same auth)
  */
 
@@ -14,9 +15,10 @@ import Koa from 'koa';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import Router from '@koa/router';
-import { getCaCertPem, isUsingLetsEncrypt } from './services/tls.js';
+import { getCaCertPem, servesCaCertificateFor } from './services/tls.js';
 import { getKoaApp, getUpgradeHandler } from './https-server.js';
 import { applyServerLimits, serverTimeoutOptions } from './server-limits.js';
+import { acmeChallengeMiddleware } from './services/acme/challenge.js';
 import QRCode from 'qrcode';
 
 /**
@@ -30,6 +32,10 @@ export async function startHttpServer(port: number): Promise<number> {
     // Cache compiled callback handler for delegating HTTP requests to HTTPS Koa app
     let cachedKoaCallback: ((req: any, res: any) => void) | null = null;
     let lastKoaAppRef: Koa | null = null;
+
+    // The ACME http-01 answer, first: never delegated to the HTTPS app (a tunnel request carries cf-connecting-ip), never
+    // redirected to CF_RECORD_NAME. Everything else goes on below unchanged.
+    app.use(acmeChallengeMiddleware());
 
     // Cloudflare Tunnel delegation & direct IP access for Settings/API/PWA
     app.use(async (ctx, next) => {
@@ -75,7 +81,8 @@ export async function startHttpServer(port: number): Promise<number> {
             return;
         }
 
-        const publicDomain = process.env.CF_RECORD_NAME;
+        // Set but empty (docker-compose.yml passes CF_RECORD_NAME=${CF_RECORD_NAME:-}) is unset: a LAN or self-hosted node.
+        const publicDomain = (process.env.CF_RECORD_NAME ?? '').trim();
 
         if (publicDomain) {
             // Non-tunnel browser requests — 301 redirect to HTTPS as before
@@ -181,10 +188,11 @@ export async function startHttpServer(port: number): Promise<number> {
 </html>`;
     });
 
-    // Trust endpoint — CA cert download (only useful for LAN/self-signed mode)
+    // Trust endpoint — CA cert download, decided per request: a host with a CA certificate here goes to HTTPS, which a
+    // browser trusts there; beanpool.local and a LAN address get the CA, also on a node that is public as well.
     router.get('/trust', async (ctx) => {
-        if (isUsingLetsEncrypt()) {
-            const hostname = process.env.CF_RECORD_NAME ?? ctx.hostname;
+        if (servesCaCertificateFor(ctx.hostname)) {
+            const hostname = (process.env.CF_RECORD_NAME ?? '').trim() || ctx.hostname;
             ctx.redirect(`https://${hostname}/`);
             return;
         }

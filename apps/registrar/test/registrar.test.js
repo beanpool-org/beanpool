@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import './harness.js';   // its fetch trap: no test here reaches the network
 import worker, { attestOne, attestSweep, timingSafeEqualStrings } from '../src/index.js';
 import * as db from '../src/db.js';
 

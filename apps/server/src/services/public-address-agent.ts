@@ -22,8 +22,14 @@
 // stands and no address is held it asks again after 10 s, 30 s and 2 min (the command waits 3), then on the 5-min tick. Taken only while this server holds no address:
 // changing a name it holds stays in Settings, owner-only. The request ends once this server holds any address, however it
 // got it (Settings, this agent, a take-over), and when Settings takes the address offline: it never claims later.
+//
+// An own address (`beanpool claim --ip <IPv4>` or `--address https://<domain>`, or Settings' /own) never reaches the
+// registrar: storeOwnAddress keeps it, and the certificate scheduler orders its certificate at once (services/acme). It is
+// no BeanPool name, so it neither ends a name request nor stops one: a name taken later is where new members are sent
+// (engine/own-addresses.ts primaryAddress), and the IP or domain stays accepted (design
+// scratch/global-node/DESIGN-https-anywhere-fable.md §3, D3).
 
-import { getNodeRole, getNodeConfig, publicAddressGeneration } from '../state-engine.js';
+import { getNodeRole, getNodeConfig, isOwnPublicAddress, publicAddressGeneration, updateNodeConfig } from '../state-engine.js';
 import { getLocalConfig, updateLocalConfig } from '../config/local-config.js';
 import { noteTurnedAway } from '../config/turned-away-names.js';
 import { dataDir } from '../recover-command.js';
@@ -31,6 +37,10 @@ import { isAddressLabel, takeAddressRequestFile } from '../address-request.js';
 import { claimAddress, addressStatus, isPublicIpv4 } from './registrar-client.js';
 import { cleanLabel, REGISTRAR_COMMUNITY_NAME_MAX, REGISTRAR_CONTACT_MAX } from '../config/clean-label.js';
 import { recordRegistrarAnswer } from '../engine/registrar-names.js';
+import { forgetOwnAddresses, ownerConfirmedAddresses, MAX_OWNER_ADDRESSES } from '../engine/own-addresses.js';
+import { isIpLiteral, normalizeAddress, ownAddressProblem } from '../engine/host-kinds.js';
+import { runAcmeTickSoon } from './acme/schedule.js';
+import { logger } from '../logger.js';
 import { persistAddressIfUnchanged, answersAboutAnotherName, healPausedAddress, noteUnansweredClaim, LOOPBACK_ORIGIN, withKeptTunnelToken } from './tunnel-connector.js';
 
 // Where it always lived; the take-over suites import it from here.
@@ -67,14 +77,54 @@ export const nameAskedFor = (): string | null => (isEnabled() ? desiredName() ||
  */
 const holdsTunnelAddress = (): boolean => {
     const pa = (getNodeConfig() as any).publicAddress;
-    return !!pa && (pa.status === 'live' || pa.status === 'pending') && pa.mode !== 'direct';
+    return !!pa && (pa.status === 'live' || pa.status === 'pending') && pa.mode !== 'direct' && !isOwnPublicAddress(pa);
 };
 
-/** Any address saved here, live or waiting, tunnel or direct. */
+/** Any BeanPool address saved here, live or waiting, tunnel or direct; an own address (an IP, a domain) is none. */
 const holdsAddress = (): boolean => {
     const pa = (getNodeConfig() as any).publicAddress;
-    return !!pa && (pa.status === 'live' || pa.status === 'pending');
+    return !!pa && (pa.status === 'live' || pa.status === 'pending') && !isOwnPublicAddress(pa);
 };
+
+/** What storeOwnAddress did with an address, or why it did nothing. */
+export type OwnAddressResult =
+    | { ok: true; host: string; kind: 'ip' | 'own'; changed: boolean; communityAddress: boolean }
+    | { ok: false; error: string };
+
+/**
+ * An own address given to this server: `beanpool claim --ip/--address` (the request file, below) or Settings
+ * (routes/public-address.ts /own, owner-only). Kept in the owner-confirmed list (`ownerAddresses`), which only an owner
+ * shortens (routes/app-addresses.ts remove), so members' apps holding it keep working whatever the community's address
+ * becomes later (D3); and, while this server holds no BeanPool name, also as the community's address, `publicAddress
+ * { mode: 'ip' | 'own', hostname, status: 'live', since }`: the directory's publicUrl and the identity-epoch check's
+ * host. A name is never replaced there by an IP, and the registrar's record (its tunnel token) never by either. Its
+ * certificate is looked at now, not at the next hourly tick (services/acme/schedule.ts runAcmeTickSoon). `by` ends the
+ * log line.
+ */
+export function storeOwnAddress(input: string, by: string): OwnAddressResult {
+    const host = normalizeAddress(input) ?? String(input ?? '').slice(0, 80);
+    const problem = ownAddressProblem(host);
+    if (problem) return { ok: false, error: problem };
+    const kind: 'ip' | 'own' = isIpLiteral(host) ? 'ip' : 'own';
+    const pa = (getNodeConfig() as any).publicAddress;
+    const owned = ownerConfirmedAddresses();
+    if (!owned.includes(host) && owned.length >= MAX_OWNER_ADDRESSES) {
+        return { ok: false, error: `This community already has ${MAX_OWNER_ADDRESSES} addresses of its own. Remove one it no longer uses first (Settings → Network).` };
+    }
+    const same = isOwnPublicAddress(pa) && normalizeAddress(pa.hostname) === host;
+    const replace = !same && (!pa || (isOwnPublicAddress(pa) && !(kind === 'ip' && pa.mode === 'own')));
+    const update: Record<string, unknown> = {};
+    if (!owned.includes(host)) update.ownerAddresses = [...owned, host];
+    if (replace) update.publicAddress = { mode: kind, hostname: host, status: 'live', since: new Date().toISOString() };
+    const changed = Object.keys(update).length > 0;
+    if (changed) {
+        updateNodeConfig(update as any);
+        forgetOwnAddresses();
+        logger.security('AUTH', `This server's own address set by ${by}: ${host}${replace ? ' (the community\'s address)' : ''}`);
+    }
+    runAcmeTickSoon();
+    return { ok: true, host, kind, changed, communityAddress: replace || same };
+}
 
 /**
  * The registrar's word that a name can't be had (apps/registrar handleClaim): invalid 400, blocked or reserved 403, taken
@@ -205,7 +255,13 @@ export async function checkAddressRequest(now = Date.now()): Promise<void> {
     if (checking || getNodeRole() !== 'primary') return;
     checking = true;
     try {
-        const req = takeAddressRequestFile(dataDir());
+        const taken = takeAddressRequestFile(dataDir());
+        if (taken && taken.kind !== 'name') {
+            const got = storeOwnAddress(taken.host, 'beanpool claim');
+            if (!got.ok) console.warn(`[PublicAddr] beanpool claim gave "${taken.host}" as this server's address; not taken: ${got.error}`);
+            else console.log(`[PublicAddr] 📡 beanpool claim gave this server's address: ${got.host}${got.communityAddress ? '' : ' (kept beside its BeanPool name)'}`);
+        }
+        const req = taken?.kind === 'name' ? taken : null;
         let fresh = false;
         if (req) {
             if (holdsAddress()) {

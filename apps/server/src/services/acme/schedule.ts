@@ -121,11 +121,14 @@ export interface TickReport {
 }
 
 let running = false;
+/** A tick asked for (runAcmeTickSoon) while one was under way: one more runs after it. */
+let again = false;
 
 /** One tick: every identifier looked at, at most one order each. Never throws. */
 export async function runAcmeTick(): Promise<TickReport> {
     if (running) return { skipped: 'running', outcomes: {} };
     running = true;
+    again = false;
     try {
         if (getNodeRole() !== 'primary') return { skipped: 'standby', outcomes: {} };
         const now = clock();
@@ -150,7 +153,19 @@ export async function runAcmeTick(): Promise<TickReport> {
         return { outcomes: {} };
     } finally {
         running = false;
+        if (again) void runAcmeTick();
     }
+}
+
+/**
+ * An address just given to this server (`beanpool claim --ip/--address`, Settings): looked at now rather than at the next
+ * hourly tick, so the command that gave it sees the certificate within its wait. Once the scheduler runs (index.ts starts
+ * it); a tick under way is followed by one more. Not awaited.
+ */
+export function runAcmeTickSoon(): void {
+    if (!interval) return;
+    if (running) { again = true; return; }
+    void runAcmeTick();
 }
 
 async function considerTarget(target: AcmeTarget, now: number): Promise<TargetOutcome> {

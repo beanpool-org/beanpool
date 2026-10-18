@@ -1,0 +1,235 @@
+/**
+ * An address of the server's own (design scratch/global-node/DESIGN-https-anywhere-fable.md §3, §4, S2): its public IP
+ * (`beanpool claim --ip`) or the owner's own domain (`--address`), as the node stores it (services/public-address-agent.ts
+ * storeOwnAddress) from the command's file or from Settings (POST /api/local/admin/public-address/own).
+ *
+ *   1. /own { ip }: the IP is the community's address (publicAddress { mode: 'ip', hostname }) and in the owner-confirmed
+ *      list; members' signatures for it are this community's (`own`), it is published, primary, the directory's
+ *      publicUrl, and a certificate identifier; the certificate scheduler looks at it at once, not in an hour; the
+ *      registrar is asked nothing, not by the route and not by the agent's tick.
+ *   2. Refused, nothing changed: an admin who is not an owner; no address, or both; a home-network, loopback or carrier-NAT
+ *      IP; an IPv6 address sent as `ip`; a beanpool.org name (the global node's among them), a `.local` one, an IP sent as
+ *      a domain; on a standby.
+ *   3. { domain } later: a name beats an IP. The domain becomes the community's address and primary; the IP stays this
+ *      community's and published. An IP given after it never displaces it.
+ *   4. The registrar's routes leave an own address alone: Take offline is refused (nothing is released unnamed), and a
+ *      BeanPool name the registrar says this key holds replaces it as the community's address with nothing of it mixed
+ *      in, while the IP and the domain stay accepted.
+ *   5. Removed in Settings → Network: an own address that was the community's address stops being that too.
+ *   6. The command's file (address-request.ts kinds ip and domain): taken within the node's tick and stored; one that
+ *      can't be this server's address is not, and the log says why.
+ *
+ * No real registrar, CA or BeanPool node: the registrar is a fake HTTP server here, and the certificate scheduler's order
+ * is a stand-in that records what it was asked for and fails.
+ *
+ * Run: BEANPOOL_SUITE_ENV_PASSWORD=1 BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx apps/server/src/test-own-address.ts
+ */
+import http from 'node:http';
+import fs from 'node:fs';
+import path from 'node:path';
+import Koa from 'koa';
+import type { AddressInfo } from 'node:net';
+
+for (const k of ['CF_RECORD_NAME', 'CF_API_TOKEN', 'CF_ZONE_ID', 'BEANPOOL_ADDRESSES', 'NODE_ROLE', 'PUBLIC_ADDRESS_NAME', 'PUBLIC_ADDRESS_AUTO']) delete process.env[k];
+process.env.ACME_DIRECTORY_URL = 'http://127.0.0.1:9/directory';   // never reached: the order is a stand-in below
+
+const { startP2P } = await import('./p2p.js');
+const se = await import('./state-engine.js');
+const { createPublicAddressRoutes } = await import('./routes/public-address.js');
+const { createAppAddressesRoutes } = await import('./routes/app-addresses.js');
+const own = await import('./engine/own-addresses.js');
+const agent = await import('./services/public-address-agent.js');
+const { writeAddressRequestFile, ADDRESS_REQUEST_FILE } = await import('./address-request.js');
+const schedule = await import('./services/acme/schedule.js');
+const { setNodeRole } = await import('./config/node-role.js');
+const { dataDir } = await import('./recover-command.js');
+
+let passed = 0, failed = 0;
+function check(name: string, ok: boolean, detail = '') {
+    if (ok) { passed++; console.log(`  ✅ ${name}`); } else { failed++; console.log(`  ❌ ${name}${detail ? ` — ${detail}` : ''}`); }
+}
+const show = (v: unknown) => JSON.stringify(v);
+const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// ── The fake registrar: counts every request; /status answers what `registrar` says ──
+const registrar = { calls: [] as string[], status: { status: 'none' } as Record<string, unknown> };
+const fakeRegistrar = http.createServer((req, res) => {
+    req.resume();
+    req.on('end', () => {
+        registrar.calls.push(`${req.method} ${req.url}`);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(req.url?.startsWith('/api/registrar/status') ? registrar.status : { status: 'released' }));
+    });
+});
+await new Promise<void>((r) => fakeRegistrar.listen(0, '127.0.0.1', () => r()));
+process.env.REGISTRAR_URL = `http://127.0.0.1:${(fakeRegistrar.address() as AddressInfo).port}`;
+
+se.initStateEngine();
+await startP2P(0, 0);   // the node's identity, which signs what it sends the registrar
+
+// The certificate scheduler, running as on a node, with an order that records its identifier and asks no CA.
+const ordered: string[] = [];
+schedule._setScheduleHooksForTests({ order: async (target) => { ordered.push(target.host); throw new Error('no CA in this suite'); } });
+schedule.startAcmeScheduler();
+
+let role: 'owner' | 'admin' = 'owner';
+const deps = {
+    checkAdminAuth: async (ctx: any) => {
+        ctx.state.adminRole = role;
+        ctx.state.actor = `the ${role} in this suite`;
+        ctx.state.secondFactorJustVerified = true;
+        return true;
+    },
+} as any;
+const app = new Koa();
+app.use(async (ctx: any, next) => {
+    if (ctx.method === 'POST') {
+        const text = await new Promise<string>((resolve) => { let d = ''; ctx.req.on('data', (c: Buffer) => { d += c; }); ctx.req.on('end', () => resolve(d)); });
+        try { ctx.requestBody = JSON.parse(text || '{}'); } catch { ctx.requestBody = {}; }
+    }
+    await next();
+});
+for (const router of [createPublicAddressRoutes(deps), createAppAddressesRoutes(deps)]) app.use(router.routes()).use(router.allowedMethods());
+const server = http.createServer(app.callback());
+await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
+const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+
+async function post(p: string, body: unknown): Promise<{ status: number; body: any }> {
+    const res = await fetch(`${base}${p}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    return { status: res.status, body: await res.json().catch(() => null) };
+}
+const pa = () => (se.getNodeConfig() as any).publicAddress;
+const owned = () => own.ownerConfirmedAddresses();
+const IP = '203.0.113.5';
+const DOMAIN = 'beans.example.org';
+
+try {
+    console.log('\n1. /own { ip }: the community\'s address, with nothing asked of the registrar');
+    check('precondition: a node that knows none of its names', !own.knowsItsNames() && own.primaryAddress() === null);
+    const r1 = await post('/api/local/admin/public-address/own', { ip: IP });
+    check('200, the address and its kind', r1.status === 200 && r1.body?.address === IP && r1.body?.kind === 'ip' && r1.body?.communityAddress === true, show(r1));
+    check('publicAddress is { mode: ip, hostname, status: live, since }', pa()?.mode === 'ip' && pa()?.hostname === IP && pa()?.status === 'live'
+        && Number.isFinite(Date.parse(pa()?.since)) && pa()?.tunnelToken === undefined && pa()?.name === undefined, show(pa()));
+    check('…and it is in the owner-confirmed list, which only an owner shortens', show(owned()) === show([IP]), show(owned()));
+    check('a member\'s signature for the IP is this community\'s', own.audienceStanding(IP) === 'own');
+    check('…and one for any other host is another community\'s (the node knows its name now)', own.audienceStanding('198.51.100.7') === 'foreign'
+        && own.audienceStanding('localhost') === 'foreign');
+    check('published, primary, and the directory\'s publicUrl', show(own.publishedAddresses()) === show([IP]) && own.primaryAddress() === IP
+        && se.getDirectoryInfo().publicUrl === `https://${IP}`, show({ published: own.publishedAddresses(), primary: own.primaryAddress(), url: se.getDirectoryInfo().publicUrl }));
+    check('a certificate identifier', own.tlsIdentifiers().includes(IP), show(own.tlsIdentifiers()));
+    for (let i = 0; i < 50 && !ordered.includes(IP); i++) await pause(100);
+    check('the certificate scheduler looked at it at once (an order, not the next hourly tick)', ordered.includes(IP), show(ordered));
+    await agent.reconcile();
+    check('the registrar was asked nothing: not by the route, not by the agent\'s tick', registrar.calls.length === 0, show(registrar.calls));
+    const again = await post('/api/local/admin/public-address/own', { ip: IP });
+    check('the same IP again: 200, nothing written', again.status === 200 && pa()?.hostname === IP && show(owned()) === show([IP]), show(again));
+
+    console.log('\n2. Refused, and nothing changed');
+    const before = show(se.getNodeConfig());
+    role = 'admin';
+    const asAdmin = await post('/api/local/admin/public-address/own', { ip: '198.51.100.7' });
+    check('an admin who is not an owner: 403', asAdmin.status === 403, show(asAdmin));
+    role = 'owner';
+    const refusals: [string, unknown, RegExp][] = [
+        ['no address', {}, /Send \{ "ip"/],
+        ['both', { ip: '198.51.100.7', domain: DOMAIN }, /Send \{ "ip"/],
+        ['a home-network IP', { ip: '192.168.1.20' }, /home network/],
+        ['this machine', { ip: '127.0.0.1' }, /home network or this machine/],
+        ['a carrier-NAT IP', { ip: '100.64.0.9' }, /not a public IP address/],
+        ['an IPv6 address as ip', { ip: '2001:db8::7' }, /not an IPv4 address/],
+        ['not an address at all', { ip: 'yes please' }, /not an IPv4 address/],
+        ['a beanpool.org name', { domain: 'riverbend.beanpool.org' }, /BeanPool name/],
+        ['the global node', { domain: 'global.beanpool.org' }, /BeanPool name/],
+        ['a .local name', { domain: 'beanpool.local' }, /home network/],
+        ['a name under a test domain', { domain: 'beans.test' }, /not a name a public certificate authority can check/],
+        ['an IP sent as a domain', { domain: '198.51.100.7' }, /not a name/],
+    ];
+    for (const [what, body, words] of refusals) {
+        const r = await post('/api/local/admin/public-address/own', body);
+        check(`${what}: 400, saying why`, r.status === 400 && words.test(r.body?.error ?? ''), show(r));
+    }
+    setNodeRole('backup');
+    const onStandby = await post('/api/local/admin/public-address/own', { ip: '198.51.100.7' });
+    setNodeRole('primary');
+    check('on a standby: 409, set it on the main server', onStandby.status === 409 && /main server/.test(onStandby.body?.error ?? ''), show(onStandby));
+    check('nothing changed by any of them', show(se.getNodeConfig()) === before);
+
+    console.log('\n3. A name beats an IP');
+    const r3 = await post('/api/local/admin/public-address/own', { domain: 'Beans.Example.org.' });
+    check('/own { domain }: 200, the domain as signatures carry it, the community\'s address', r3.status === 200 && r3.body?.address === DOMAIN
+        && r3.body?.kind === 'own' && r3.body?.communityAddress === true, show(r3));
+    check('publicAddress is { mode: own, hostname: the domain }', pa()?.mode === 'own' && pa()?.hostname === DOMAIN, show(pa()));
+    check('the domain is primary, and the directory\'s publicUrl', own.primaryAddress() === DOMAIN && se.getDirectoryInfo().publicUrl === `https://${DOMAIN}`
+        && r3.body?.primaryAddress === DOMAIN, show({ primary: own.primaryAddress(), url: se.getDirectoryInfo().publicUrl }));
+    check('the IP is still this community\'s, and still published', own.audienceStanding(IP) === 'own' && own.audienceStanding(DOMAIN) === 'own'
+        && own.publishedAddresses().includes(IP) && own.publishedAddresses().includes(DOMAIN), show(own.publishedAddresses()));
+    const ip2 = '198.51.100.20';
+    const r3b = await post('/api/local/admin/public-address/own', { ip: ip2 });
+    check('an IP given after the domain never displaces it', r3b.status === 200 && r3b.body?.communityAddress === false && pa()?.hostname === DOMAIN
+        && own.primaryAddress() === DOMAIN, show({ r3b, pa: pa() }));
+    check('…it is this community\'s too, and published', own.audienceStanding(ip2) === 'own' && owned().includes(ip2), show(owned()));
+    check('…and both IPs and the domain are certificate identifiers', [IP, DOMAIN, ip2].every((h) => own.tlsIdentifiers().includes(h)), show(own.tlsIdentifiers()));
+
+    console.log('\n4. The registrar\'s routes leave an own address alone');
+    const off = await post('/api/local/admin/public-address/offline', {});
+    check('Take offline: 409, nothing to release, saying where an own address is removed', off.status === 409
+        && /not a BeanPool name/.test(off.body?.error ?? '') && /Settings → Network/.test(off.body?.error ?? ''), show(off));
+    check('…the registrar was asked nothing, and the address stands', registrar.calls.length === 0 && pa()?.hostname === DOMAIN, show(registrar.calls));
+    registrar.status = { status: 'live', name: 'riverbend', hostname: 'riverbend.beanpool.org', mode: 'direct' };
+    const st = await fetch(`${base}/api/local/admin/public-address/status`).then((r) => r.json()) as any;
+    const after = pa();
+    check('Settings\' status read: the BeanPool name this key holds is stored as the community\'s address', st?.success === true
+        && after?.name === 'riverbend' && after?.hostname === 'riverbend.beanpool.org', show(after));
+    check('…with nothing of the own address mixed in (no mode own, no since)', after?.mode === 'direct' && after?.since === undefined, show(after));
+    check('…the BeanPool name is primary now', own.primaryAddress() === 'riverbend.beanpool.org', String(own.primaryAddress()));
+    check('…and the domain and both IPs stay this community\'s, published', [DOMAIN, IP, ip2].every((h) => own.audienceStanding(h) === 'own'
+        && own.publishedAddresses().includes(h)), show(own.publishedAddresses()));
+    const r4 = await post('/api/local/admin/public-address/own', { ip: '198.51.100.30' });
+    check('/own while a BeanPool name is held: kept beside it, the registrar\'s record untouched', r4.status === 200 && r4.body?.communityAddress === false
+        && show(pa()) === show(after) && owned().includes('198.51.100.30'), show({ r4, pa: pa() }));
+
+    console.log('\n5. Removed in Settings → Network');
+    // A node with no BeanPool name again, as a new install is: no stored address and no record of names.
+    se.updateNodeConfig({ publicAddress: null, registrarNames: [] } as any);
+    registrar.status = { status: 'none' };
+    await post('/api/local/admin/public-address/own', { domain: DOMAIN });
+    check('precondition: the domain is the community\'s address again', pa()?.mode === 'own' && pa()?.hostname === DOMAIN, show(pa()));
+    const rm = await post('/api/local/admin/app-addresses/remove', { address: DOMAIN });
+    check('removed: 200, off the list, and no longer the community\'s address', rm.status === 200 && !owned().includes(DOMAIN) && pa() === null, show({ status: rm.status, pa: pa() }));
+    check('…members\' apps signing for it are refused now; the IPs stay', own.audienceStanding(DOMAIN) === 'foreign' && own.audienceStanding(IP) === 'own');
+    const rmIp = await post('/api/local/admin/app-addresses/remove', { address: ip2 });
+    check('an own address that is not the community\'s address: off the list, publicAddress untouched', rmIp.status === 200 && !owned().includes(ip2) && pa() === null);
+
+    console.log('\n6. The command\'s file');
+    const dir = dataDir();
+    const fileGone = () => !fs.existsSync(path.join(dir, ADDRESS_REQUEST_FILE));
+    writeAddressRequestFile(dir, { kind: 'ip', host: '198.51.100.40', at: Date.now() });
+    await agent.checkAddressRequest();
+    check('an ip request: taken and stored as the community\'s address', fileGone() && pa()?.mode === 'ip' && pa()?.hostname === '198.51.100.40'
+        && own.audienceStanding('198.51.100.40') === 'own', show(pa()));
+    writeAddressRequestFile(dir, { kind: 'domain', host: 'coop.example.net', at: Date.now() });
+    await agent.checkAddressRequest();
+    check('a domain request: taken, stored, and it beats the IP', fileGone() && pa()?.mode === 'own' && pa()?.hostname === 'coop.example.net'
+        && own.primaryAddress() === 'coop.example.net', show(pa()));
+    const warns: string[] = [];
+    const realWarn = console.warn;
+    console.warn = (...a: unknown[]) => { warns.push(a.join(' ')); };
+    const beforeBad = show(se.getNodeConfig());
+    try {
+        writeAddressRequestFile(dir, { kind: 'ip', host: '10.0.0.5', at: Date.now() });
+        await agent.checkAddressRequest();
+    } finally { console.warn = realWarn; }
+    check('a home-network IP: taken, not stored, and the log says why', fileGone() && show(se.getNodeConfig()) === beforeBad
+        && warns.some((w) => w.includes('10.0.0.5') && /home network/.test(w)), show(warns));
+    check('the registrar was asked nothing about any own address', registrar.calls.every((c) => c.startsWith('GET /api/registrar/status')), show(registrar.calls));
+} catch (e) {
+    failed++;
+    console.log(`  ❌ the suite threw: ${(e as Error).stack}`);
+} finally {
+    schedule._setScheduleHooksForTests({ order: null });
+    server.close();
+    fakeRegistrar.close();
+}
+
+console.log(`\n${passed}/${passed + failed} passed`);
+process.exit(failed ? 1 : 0);

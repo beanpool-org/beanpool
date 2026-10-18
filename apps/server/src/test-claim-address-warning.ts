@@ -86,7 +86,7 @@ async function claim(args: string[], answers: string[] | null = null, dir = node
 function standInNode(dir: string, pending: boolean): () => void {
     const tick = setInterval(() => {
         const req = takeAddressRequestFile(dir);
-        if (!req) return;
+        if (req?.kind !== 'name') return;
         const file = path.join(dir, 'local-config.json');
         const config = JSON.parse(fs.readFileSync(file, 'utf8'));
         config.addressRequest = { name: req.name, mode: 'tunnel', contact: req.contact ?? null, requestedAt: req.at, refused: null };

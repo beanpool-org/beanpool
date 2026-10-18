@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 135,
-  "hash": "7b19626b2b73196f702c40b032719736d1fc8913b71eccc3b541c93a5931b84c",
+  "version": 136,
+  "hash": "ac9d19a97d9304e59aa0b13f22ab71e9f027328bd3753c6588660aaf0c123596",
   "sections": [
     {
       "id": "setup",
@@ -1350,6 +1350,10 @@
         {
           "type": "p",
           "text": "**The key vault at the global community's door.** An app built with BeanPool's key vault can tie its sign-in at the door to a ticket from the vault, so that one sign-in both joins and keeps the member's sign-in copy at the vault. The door checks the ticket itself, with the vault's public keys, which go in the server's .env as BEANPOOL_VAULT_TICKET_KEYS: the same value the app is built with, newest key first, two at most. The server never contacts the vault and keeps nothing of the ticket. Give a standby the same line in its own .env: it is not copied. Without the line, or with one that isn't one or two keys of 64 characters (0–9 and a–f), the door takes no tickets. The log says so when the server starts, the door tells every app that asks, and an app then joins with the door's own sign-in check, as before. **On any other server, leave it empty:** your door, if it is open, needs nothing of BeanPool's."
+        },
+        {
+          "type": "p",
+          "text": "**Your own open door, in the app.** A server you run with the global profile and its door open, at your own address, is joined in the BeanPool app through the same door screen as the global community's, under your community's name, with your address shown under it. Someone whose phone already holds a BeanPool account, and reaches your community without being a member, is told **You're not a member here yet** and offered **Join ‹your community› with this account**, with the ways in your door has (12 secret words, a sign-in). They join with the key already on their phone, and the app asks your server alone, never beanpool.org. To send people straight to it, the link **beanpool://join-open-door?node=https://your.address** (your own address after node=) opens that screen on a phone with an account: the app asks your server whether the door is open before it shows a way in, and sends nothing signed until the person taps. A phone with no account yet opens at the app's first screen: the app's door for a brand-new phone is the global community's, so a newcomer starts an account there, or with an invite to a local community, and then joins yours with it."
         },
         {
           "type": "h2",

@@ -30,6 +30,7 @@ import { t, tn } from '@beanpool/core';
 import { EVENT_ACCENT } from './EventCard';
 import { Sentence } from './Sentence';
 import { reminderBeforeWords } from './settings/settings-lines';
+import { eventLineWords } from './event-lines';
 
 /** One offset on its own ("1 week"), as utils/event-extras.ts reminderOffsetLabel writes it, in the member's language. */
 function offsetWords(minutes: number): string {
@@ -192,7 +193,7 @@ export function EventReminder({ post, myRsvp, viewerPublicKey }: ReminderProps) 
                 setSupported(false);
                 return;
             }
-            Alert.alert(t('Reminder not saved'), e?.message || t('Could not reach the node.'));
+            Alert.alert(t('Reminder not saved'), e?.message ? eventLineWords(e.message) : t('Could not reach the node.'));
         } finally {
             setSaving(false);
         }

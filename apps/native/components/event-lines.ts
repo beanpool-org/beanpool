@@ -1,9 +1,9 @@
 /**
  * The phone's own sentences an event's page shows from utils/db.ts, in the member's language (words S3l).
  *
- * utils/db.ts signs the RSVP, the cancel and the let-in with the member's key, so it never reaches the words layer: what
- * rsvpEvent, deletePost and letInToEvent (_signedRequest) throw as written is worded again here as word() keys and looked
- * up by the exact sentence where components/EventDetail.tsx shows it. db.ts is not touched. A node's own words (a
+ * utils/db.ts signs the RSVP, the cancel, the let-in and the reminder with the member's key, so it never reaches the words
+ * layer: what rsvpEvent, deletePost, letInToEvent (_signedRequest) and setEventReminder throw as written is worded again
+ * here as word() keys and looked up by the exact sentence where components/EventDetail.tsx and EventExtras.tsx show it. db.ts is not touched. A node's own words (a
  * refusal's reason) are shown exactly as given (slice S4). utils/__tests__/events-words-render.test.ts holds each to the
  * throw in db.ts it stands for.
  */
@@ -16,6 +16,8 @@ const FIXED: Readonly<Record<string, WordKey>> = {
     'You are currently offline.': word('You are currently offline.'),
     'No identity found.': word('No identity found.'),
     'Could not save your RSVP': word('Could not save your RSVP'),
+    // setEventReminder: the same two as rsvpEvent, and a refusal without the node's words.
+    'Could not save your reminder': word('Could not save your reminder'),
     // deletePost: no community set, no key, and a refusal without the node's words (inside "Offline or …", below).
     'Action requires internet connection.': word('Action requires internet connection.'),
     'Not logged in. Identity required.': word('Not logged in. Identity required.'),

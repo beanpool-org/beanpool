@@ -4,7 +4,7 @@
  * in Settings → Your area. Plain words, says why, says the limits honestly: 0.1° is 11 km north-south and narrower
  * east-west, so "about 10 km". No currency.
  */
-import { t, word } from './words.js';
+import { t, word, type WordKey } from './words.js';
 
 export const AREA_STEP_WORDS = {
     title: word('Roughly where are you?'),
@@ -86,7 +86,7 @@ export function describeArea(area: { lat: number; lng: number } | null | undefin
  * Q4): the node stores the area as the poll's lat/lng, and every reader of the poll gets it (apps/server
  * engine/member-area.ts). The form says so, before the member posts.
  */
-export const PLACELESS_AT_AREA_NOTE = 'This poll is shown at your area (about 10 km around it) to everyone who can read it.';
+export const PLACELESS_AT_AREA_NOTE = word('This poll is shown at your area (about 10 km around it) to everyone who can read it.');
 
 /**
  * An author with no area: the listing is still accepted with no place, so it is in no member's list of what is near
@@ -95,14 +95,14 @@ export const PLACELESS_AT_AREA_NOTE = 'This poll is shown at your area (about 10
  * true once phones (S3) and the web Market (S5) read listings by area; until then their plain reads still include it.
  */
 export const PLACELESS_NO_AREA_NOTE =
-    "You haven't set your area, so members nearby won't see this poll in their list; they can still find it by searching. Set it in Settings → Your area to show it near you.";
+    word("You haven't set your area, so members nearby won't see this poll in their list; they can still find it by searching. Set it in Settings → Your area to show it near you.");
 
 /**
  * The note for a placeless listing's form, only on a by-area community: where it is shown when the author has an area,
  * the no-area line when the area is known to be unset, and nothing when the node couldn't be asked (rather than
- * something false).
+ * something false). A word() key: the form shows it through t().
  */
-export function placelessListingNote(byArea: boolean, area: { lat: number; lng: number } | null | undefined): string | null {
+export function placelessListingNote(byArea: boolean, area: { lat: number; lng: number } | null | undefined): WordKey | null {
     if (!byArea || area === undefined) return null;
     return area === null ? PLACELESS_NO_AREA_NOTE : PLACELESS_AT_AREA_NOTE;
 }

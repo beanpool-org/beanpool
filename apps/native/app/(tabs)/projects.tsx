@@ -23,6 +23,36 @@ import { EnterpriseCard, commonsCardStyles } from '../../components/EnterpriseCa
 import { PageTitle, useTabRetapScrollTop } from '../../components/PageTitle';
 import { sampleDecisions, samplePoolVoting } from '../../components/showcase/sample-screens';
 import { LocalCommunitySheet } from '../../components/showcase/LocalCommunityMark';
+import { Sentence } from '../../components/Sentence';
+import { formatNumber, inCapitalsOf, t, tn, word, type WordKey } from '@beanpool/core';
+
+/** A group's own role, kind and join policy as the node names them: word() keys, shown through t(). Any other name is
+ *  shown as the node wrote it. The tables' own names only (a "constructor" is not one). */
+const ROLE_WORDS: Readonly<Record<string, WordKey>> = {
+    convenor: word('CONVENOR'), member: word('MEMBER'), observer: word('OBSERVER'),
+};
+const CATEGORY_WORDS: Readonly<Record<string, WordKey>> = {
+    social: word('social', 'group category'), general: word('general', 'group category'), working_group: word('working group', 'group category'),
+    project: word('project', 'group category'), guild: word('guild', 'group category'),
+};
+const JOIN_POLICY_WORDS: Readonly<Record<string, WordKey>> = {
+    open: word('open', 'join policy'), request_to_join: word('request to join', 'join policy'), invite_only: word('invite only', 'join policy'),
+};
+const own = (table: object, name: string) => Object.prototype.hasOwnProperty.call(table, name);
+const named = (table: Readonly<Record<string, WordKey>>, name: string, asWritten: string) => (own(table, name) ? t(table[name]) : asWritten);
+
+/** The question the + and Decide's button ask before a Decision can be proposed: whole, in the member's language. */
+function proposeRefusal(canPropose: boolean, hasOpenDecision: boolean): boolean {
+    if (!canPropose) {
+        Alert.alert(t('Complete a Trade First'), t('You can propose a Decision once you have completed a trade.'));
+        return true;
+    }
+    if (hasOpenDecision) {
+        Alert.alert(t('Limit Reached'), t('You already have an open decision (limit 1 open decision per author).'));
+        return true;
+    }
+    return false;
+}
 
 export default function ProjectsScreen() {
     const { theme, colors } = useTheme();
@@ -116,7 +146,8 @@ export default function ProjectsScreen() {
         headerInfo: { marginBottom: 16 },
         headerDesc: { fontSize: 14, color: colors.text.secondary, lineHeight: 20 },
         infoBtn: { padding: 4 },
-        treasuryPanelLabel: { fontSize: 11, color: colors.text.secondary, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 },
+        // Labels in capitals are written so by inCapitalsOf (the language's way), never a textTransform (the phone's).
+        treasuryPanelLabel: { fontSize: 11, color: colors.text.secondary, fontWeight: '700', letterSpacing: 0.5, marginBottom: 8 },
         treasuryCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface.card, borderRadius: 12, padding: 10, marginBottom: 8, borderWidth: 1, borderColor: colors.border.default },
         treasuryAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.surface.subtle },
         treasuryAvatarPlaceholder: { alignItems: 'center', justifyContent: 'center' },
@@ -130,7 +161,7 @@ export default function ProjectsScreen() {
 
         statCardRow: { flexDirection: 'row', gap: 10, marginBottom: 12 },
         statCard: { flex: 1, minWidth: 0, backgroundColor: colors.surface.card, borderRadius: 14, padding: 12, borderWidth: 1, borderColor: colors.border.default },
-        statCardLabel: { fontSize: 11, color: colors.text.secondary, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 },
+        statCardLabel: { fontSize: 11, color: colors.text.secondary, fontWeight: '700', letterSpacing: 0.5, marginBottom: 6 },
         statCardValueRow: { flexDirection: 'row', alignItems: 'center' },
         statCardAmount: { fontSize: 20, color: colors.text.heading, fontWeight: '800' },
         statCardHint: { fontSize: 11, color: colors.text.muted, marginTop: 4, lineHeight: 15 },
@@ -147,7 +178,7 @@ export default function ProjectsScreen() {
 
 
         filterRow: { flexDirection: 'row', gap: 8, marginTop: 4, marginBottom: 4 },
-        groupsHeading: { fontSize: 13, fontWeight: '800', color: colors.text.secondary, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 8 },
+        groupsHeading: { fontSize: 13, fontWeight: '800', color: colors.text.secondary, letterSpacing: 0.5, marginTop: 8 },
         groupsNone: { fontSize: 14, color: colors.text.secondary, lineHeight: 20 },
         filterBtn: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 16, backgroundColor: colors.surface.subtle, borderWidth: 1, borderColor: colors.border.default },
         filterBtnActive: { backgroundColor: colors.brand.fill, borderColor: colors.brand.dark },
@@ -307,9 +338,9 @@ export default function ProjectsScreen() {
     const openProposeProject = async () => {
         const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
         if (!anchorUrl) {
-            Alert.alert('Not Connected', 'Connect to a community first.', [
-                { text: 'Cancel', style: 'cancel' },
-                { text: 'Connect', onPress: () => router.push({ pathname: '/(tabs)/settings', params: { section: 'advanced' } }) }
+            Alert.alert(t('Not Connected'), t('Connect to a community first.'), [
+                { text: t('Cancel'), style: 'cancel' },
+                { text: t('Connect'), onPress: () => router.push({ pathname: '/(tabs)/settings', params: { section: 'advanced' } }) }
             ]);
             return;
         }
@@ -341,26 +372,29 @@ export default function ProjectsScreen() {
                         {isInvited ? (
                             <View style={styles.badgeRow}>
                                 <View style={[styles.badge, { backgroundColor: colors.brand.fill }]}>
-                                    <Text style={styles.badgeFundedText} numberOfLines={1}>INVITED</Text>
+                                    <Text style={styles.badgeFundedText} numberOfLines={1}>{t('INVITED')}</Text>
                                 </View>
                             </View>
                         ) : item.viewerRole ? (
                             <View style={styles.badgeRow}>
                                 <View style={[styles.badge, isConvenor ? styles.badgeFunded : styles.badgeOngoing]}>
                                     <Text style={[styles.badgeFundedText, !isConvenor && styles.badgeOngoingText]} numberOfLines={1}>
-                                        {item.viewerRole.toUpperCase()}
+                                        {named(ROLE_WORDS, item.viewerRole, item.viewerRole.toUpperCase())}
                                     </Text>
                                 </View>
                             </View>
                         ) : isPending ? (
                             <View style={styles.badgeRow}>
                                 <View style={[styles.badge, { backgroundColor: colors.feedback.warning.solid }]}>
-                                    <Text style={[styles.badgeFundedText, { color: colors.text.onGold }]} numberOfLines={1}>PENDING</Text>
+                                    <Text style={[styles.badgeFundedText, { color: colors.text.onGold }]} numberOfLines={1}>{t('PENDING')}</Text>
                                 </View>
                             </View>
                         ) : null}
                         <Text style={styles.cardMeta} numberOfLines={2}>
-                            🏷️ {item.category.replace(/_/g, ' ')} · {item.memberCount || 0} {item.memberCount === 1 ? 'member' : 'members'} · {item.joinPolicy.replace(/_/g, ' ')}
+                            {tn(item.memberCount || 0, '🏷️ {category} · {n} member · {policy}', '🏷️ {category} · {n} members · {policy}', {
+                                category: named(CATEGORY_WORDS, item.category, item.category.replace(/_/g, ' ')),
+                                policy: named(JOIN_POLICY_WORDS, item.joinPolicy, item.joinPolicy.replace(/_/g, ' ')),
+                            })}
                         </Text>
                     </View>
                 </View>
@@ -372,15 +406,15 @@ export default function ProjectsScreen() {
                         </Text>
                     ) : (
                         <Text style={[styles.purposeText, styles.purposeTextPlaceholder]}>
-                            No description provided.
+                            {t('No description provided.')}
                         </Text>
                     )}
 
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 8, borderTopWidth: 1, borderTopColor: colors.border.default }}>
                         <Text style={{ fontSize: 11, color: colors.text.muted, flex: 1, marginRight: 8 }} numberOfLines={1}>
-                            Join policy: {item.joinPolicy.replace(/_/g, ' ')}
+                            {t('Join policy: {policy}', { policy: named(JOIN_POLICY_WORDS, item.joinPolicy, item.joinPolicy.replace(/_/g, ' ')) })}
                         </Text>
-                        <Text style={{ fontSize: 12, fontWeight: '700', color: colors.brand.primary, flexShrink: 0 }} numberOfLines={1}>View Details →</Text>
+                        <Text style={{ fontSize: 12, fontWeight: '700', color: colors.brand.primary, flexShrink: 0 }} numberOfLines={1}>{t('View Details →')}</Text>
                     </View>
                 </View>
             </Pressable>
@@ -410,10 +444,10 @@ export default function ProjectsScreen() {
                         <View style={styles.headerInfo}>
                             {/* The page's one large title, first thing in the list, so it scrolls away with it.
                                 The list pads the sides, hence inset 0. */}
-                            <PageTitle title={heading.title} inset={0} testID="page-title-commons" right={showsBeans ? (
+                            <PageTitle title={t(heading.title)} inset={0} testID="page-title-commons" right={showsBeans ? (
                                 <Pressable
                                     accessibilityRole="button"
-                                    accessibilityLabel="About the Commons Pool"
+                                    accessibilityLabel={t('About the Commons Pool')}
                                     onPress={() => setShowCommonsInfo(true)}
                                     hitSlop={10}
                                     style={styles.infoBtn}
@@ -421,7 +455,7 @@ export default function ProjectsScreen() {
                                     <MaterialCommunityIcons name="information-outline" size={22} color={colors.text.secondary} />
                                 </Pressable>
                             ) : undefined} />
-                            <Text style={styles.headerDesc}>{heading.description}</Text>
+                            <Text style={styles.headerDesc}>{t(heading.description)}</Text>
                         </View>
 
                         {/* In preview, Example Valley's Commons first, its strip across the top, so a newcomer meets the
@@ -435,21 +469,21 @@ export default function ProjectsScreen() {
                         {showsBeans && (
                         <View style={styles.statCardRow}>
                             <View style={styles.statCard}>
-                                <Text style={styles.statCardLabel} numberOfLines={2}>Commons Pool</Text>
+                                <Text style={styles.statCardLabel} numberOfLines={2}>{inCapitalsOf(t('Commons Pool'))}</Text>
                                 <View style={styles.statCardValueRow}>
-                                    <CurrencyDisplay amount={(balanceState.commons || 0).toFixed(2)} style={styles.statCardAmount} />
+                                    <CurrencyDisplay amount={formatNumber(balanceState.commons || 0, 2)} style={styles.statCardAmount} />
                                 </View>
                             </View>
                             {showsDecide && !decisionsPreview && (
                             <View style={styles.statCard} testID="voice-credits-card">
                                 {/* Half-width card: at 320dp and 1.3x text the label has ~110dp, room for two short words.
                                     What the credits are for goes in the hint, which wraps freely. */}
-                                <Text style={styles.statCardLabel} numberOfLines={2}>Voice credits</Text>
-                                <Text style={styles.statCardAmount} numberOfLines={1}>{Math.floor(myPoolVoting?.voiceCredits ?? 0)}</Text>
+                                <Text style={styles.statCardLabel} numberOfLines={2}>{inCapitalsOf(t('Voice credits'))}</Text>
+                                <Text style={styles.statCardAmount} numberOfLines={1}>{formatNumber(Math.floor(myPoolVoting?.voiceCredits ?? 0))}</Text>
                                 <Text style={styles.statCardHint}>
                                     {myPoolVoting && !myPoolVoting.hasCompletedTrade
-                                        ? 'For money votes · opens after your first completed trade'
-                                        : 'For money votes · from completed trades · N votes cost N×N'}
+                                        ? t('For money votes · opens after your first completed trade')
+                                        : t('For money votes · from completed trades · N votes cost N×N')}
                                 </Text>
                             </View>
                             )}
@@ -462,7 +496,7 @@ export default function ProjectsScreen() {
                             {showsDecide && (
                             <Pressable
                                 accessibilityRole="button"
-                                accessibilityLabel="Decide Section"
+                                accessibilityLabel={t('Decide Section')}
                                 style={[styles.sectionTabBtn, activeSection === 'decide' && styles.sectionTabBtnActive]}
                                 onPress={() => {
                                     setActiveSection('decide');
@@ -482,11 +516,11 @@ export default function ProjectsScreen() {
                                     minimumFontScale={0.8}
                                     maxFontSizeMultiplier={1.1}
                                 >
-                                    Decide
+                                    {t('Decide')}
                                 </Text>
                                 {openDecisionsCount > 0 && (
                                     <View style={styles.sectionBadge}>
-                                        <Text style={styles.sectionBadgeText} maxFontSizeMultiplier={1}>{openDecisionsCount}</Text>
+                                        <Text style={styles.sectionBadgeText} maxFontSizeMultiplier={1}>{formatNumber(openDecisionsCount)}</Text>
                                     </View>
                                 )}
                             </Pressable>
@@ -494,7 +528,7 @@ export default function ProjectsScreen() {
 
                             <Pressable
                                 accessibilityRole="button"
-                                accessibilityLabel="Groups Section"
+                                accessibilityLabel={t('Groups Section')}
                                 style={[styles.sectionTabBtn, activeSection === 'groups' && styles.sectionTabBtnActive]}
                                 onPress={() => {
                                     setActiveSection('groups');
@@ -513,7 +547,7 @@ export default function ProjectsScreen() {
                                     minimumFontScale={0.8}
                                     maxFontSizeMultiplier={1.1}
                                 >
-                                    Groups
+                                    {t('Groups')}
                                 </Text>
                             </Pressable>
                         </View>
@@ -527,14 +561,7 @@ export default function ProjectsScreen() {
                                 balanceState={balanceState}
                                 onRefresh={loadData}
                                 onOpenPropose={() => {
-                                    if (!canProposeDecision) {
-                                        Alert.alert('Complete a Trade First', 'You can propose a Decision once you have completed a trade.');
-                                        return;
-                                    }
-                                    if (hasOpenDecision) {
-                                        Alert.alert('Limit Reached', 'You already have an open decision (limit 1 open decision per author).');
-                                        return;
-                                    }
+                                    if (proposeRefusal(canProposeDecision, hasOpenDecision)) return;
                                     setShowProposeDecision(true);
                                 }}
                                 canPropose={canProposeDecision}
@@ -547,16 +574,19 @@ export default function ProjectsScreen() {
                             <View style={{ gap: 12 }}>
                                 <View style={{ backgroundColor: colors.surface.subtle, borderRadius: 12, padding: 12, borderWidth: 1, borderColor: colors.border.default }}>
                                     <Text style={{ fontSize: 12, color: colors.text.secondary, lineHeight: 18 }}>
-                                        👥 <Text style={{ fontWeight: '700', color: colors.text.heading }}>Groups:</Text> {kindChips.length > 0
-                                            ? 'A group is a place for some people rather than everyone. Projects and enterprises hold Beans; chat groups hold none. Being in a group does not change your trust or your vote.'
-                                            : 'A group is a place for some people rather than everyone. Being in a group does not change your trust or your vote.'}
+                                        <Sentence
+                                            text={kindChips.length > 0
+                                                ? t('👥 {label} A group is a place for some people rather than everyone. Projects and enterprises hold Beans; chat groups hold none. Being in a group does not change your trust or your vote.')
+                                                : t('👥 {label} A group is a place for some people rather than everyone. Being in a group does not change your trust or your vote.')}
+                                            parts={{ label: <Text style={{ fontWeight: '700', color: colors.text.heading }}>{t('Groups:')}</Text> }}
+                                        />
                                     </Text>
                                 </View>
 
-                                <Text style={styles.groupsHeading}>Your groups</Text>
+                                <Text style={styles.groupsHeading}>{inCapitalsOf(t('Your groups'))}</Text>
                                 {yourGroupsState === 'loading' && <YourGroupsLoading flush />}
                                 {yourGroupsState === 'error' && (
-                                    <YourGroupsError message={yourGroupsLive.error || 'Could not load your groups.'} onRetry={yourGroupsLive.refresh} />
+                                    <YourGroupsError message={yourGroupsLive.error || t('Could not load your groups.')} onRetry={yourGroupsLive.refresh} />
                                 )}
                                 {yourGroupsState === 'list' && (
                                     <View style={{ marginHorizontal: 0 }}>
@@ -564,10 +594,10 @@ export default function ProjectsScreen() {
                                     </View>
                                 )}
                                 {yourGroupsState === 'empty' && (
-                                    <Text style={styles.groupsNone}>You're not in any groups yet. Join one below, or start one with +.</Text>
+                                    <Text style={styles.groupsNone}>{t("You're not in any groups yet. Join one below, or start one with +.")}</Text>
                                 )}
 
-                                <Text style={styles.groupsHeading}>Groups you could join</Text>
+                                <Text style={styles.groupsHeading}>{inCapitalsOf(t('Groups you could join'))}</Text>
                                 {/* The kind chips (pick 7): one list of projects, enterprises and chat groups. None where the
                                     node has no projects or enterprises: there every group is a chat group. */}
                                 {kindChips.length > 0 && (
@@ -581,7 +611,7 @@ export default function ProjectsScreen() {
                                             onPress={() => setGroupKind(option.key)}
                                         >
                                             <Text style={[styles.filterBtnText, groupKind === option.key && styles.filterBtnTextActive]}>
-                                                {option.label}
+                                                {t(option.label)}
                                             </Text>
                                         </Pressable>
                                     ))}
@@ -591,35 +621,35 @@ export default function ProjectsScreen() {
                                 {/* Community Treasuries — the Commons' trading accounts (eggs, etc.) */}
                                 {treasuries.length > 0 && kindChips.length > 0 && (groupKind === 'all' || groupKind === 'enterprises') && (
                                     <View style={{ marginBottom: 12 }}>
-                                        <Text style={styles.treasuryPanelLabel}>🏛️ The Commons' enterprises</Text>
-                                        {treasuries.map((t: any, index: number) => (
+                                        <Text style={styles.treasuryPanelLabel}>{inCapitalsOf(t("🏛️ The Commons' enterprises"))}</Text>
+                                        {treasuries.map((tr: any, index: number) => (
                                             <Pressable
-                                                key={t.publicKey || `treasury-${index}`}
+                                                key={tr.publicKey || `treasury-${index}`}
                                                 style={styles.treasuryCard}
                                                 accessibilityRole="button"
-                                                accessibilityLabel={`Open ${t.name}`}
+                                                accessibilityLabel={t('Open {name}', { name: tr.name })}
                                                 onPress={() => {
-                                                    if (!t.publicKey) return;
-                                                    router.push({ pathname: '/treasury-detail', params: { publicKey: t.publicKey, name: t.name, avatar: t.avatar } });
+                                                    if (!tr.publicKey) return;
+                                                    router.push({ pathname: '/treasury-detail', params: { publicKey: tr.publicKey, name: tr.name, avatar: tr.avatar } });
                                                 }}
                                             >
-                                                {t.avatar ? (
-                                                    <Image source={{ uri: t.avatar }} style={styles.treasuryAvatar} />
+                                                {tr.avatar ? (
+                                                    <Image source={{ uri: tr.avatar }} style={styles.treasuryAvatar} />
                                                 ) : (
                                                     <View style={[styles.treasuryAvatar, styles.treasuryAvatarPlaceholder]}><Text style={{ fontSize: 18 }}>🏛️</Text></View>
                                                 )}
                                                 <View style={{ flex: 1, marginLeft: 10, minWidth: 0 }}>
-                                                    <Text style={styles.treasuryName} numberOfLines={1}>{t.name}</Text>
-                                                    <Text style={styles.treasuryMeta}>{t.liveOffers} live offer{t.liveOffers === 1 ? '' : 's'}</Text>
+                                                    <Text style={styles.treasuryName} numberOfLines={1}>{tr.name}</Text>
+                                                    <Text style={styles.treasuryMeta}>{tn(tr.liveOffers ?? 0, '{n} live offer', '{n} live offers')}</Text>
                                                 </View>
-                                                <Text style={[styles.treasuryBalance, t.balance < 0 ? styles.treasuryBalanceNeg : styles.treasuryBalancePos]}>{t.balance} 🫘</Text>
+                                                <Text style={[styles.treasuryBalance, tr.balance < 0 ? styles.treasuryBalanceNeg : styles.treasuryBalancePos]}>{formatNumber(tr.balance)} 🫘</Text>
                                                 <MaterialCommunityIcons name="chevron-right" size={20} color={colors.text.muted} style={{ marginLeft: 4 }} />
                                             </Pressable>
                                         ))}
                                         {balanceState.canOperate && (
                                             <View style={styles.operatorBadge}>
                                                 <MaterialCommunityIcons name="shield-account" size={14} color={colors.brand.primary} />
-                                                <Text style={styles.operatorBadgeText}>You can act for these enterprises — post their offers & pay tenders</Text>
+                                                <Text style={styles.operatorBadgeText}>{t('You can act for these enterprises — post their offers & pay tenders')}</Text>
                                             </View>
                                         )}
                                     </View>
@@ -643,15 +673,15 @@ export default function ProjectsScreen() {
                     ) : (
                         <View style={styles.emptyState}>
                             <Text style={styles.emptyEmoji}>{groupsEmpty.action === 'project' ? '🌱' : '👥'}</Text>
-                            <Text style={styles.emptyTitle}>{groupsEmpty.title}</Text>
-                            <Text style={styles.emptyDesc}>{groupsEmpty.desc}</Text>
+                            <Text style={styles.emptyTitle}>{t(groupsEmpty.title)}</Text>
+                            <Text style={styles.emptyDesc}>{t(groupsEmpty.desc)}</Text>
                             <Pressable
                                 accessibilityRole="button"
                                 style={styles.emptyBtn}
                                 onPress={groupsEmpty.action === 'project' ? openProposeProject : createGroup.open}
                             >
                                 <Text style={styles.emptyBtnText}>
-                                    {groupsEmpty.action === 'project' ? (groupKind === 'enterprises' ? '+ Start an enterprise' : '+ Start a project') : '+ Create a Group'}
+                                    {groupsEmpty.action === 'project' ? (groupKind === 'enterprises' ? t('+ Start an enterprise') : t('+ Start a project')) : t('+ Create a Group')}
                                 </Text>
                             </Pressable>
                         </View>
@@ -660,7 +690,7 @@ export default function ProjectsScreen() {
             />
             <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={activeSection === 'decide' ? 'Propose a decision' : startsProject ? 'Start a project or an enterprise' : 'Create a group'}
+                accessibilityLabel={activeSection === 'decide' ? t('Propose a decision') : startsProject ? t('Start a project or an enterprise') : t('Create a group')}
                 style={styles.fab}
                 onPress={async () => {
                     if (startsProject) {
@@ -677,20 +707,13 @@ export default function ProjectsScreen() {
                     }
                     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
                     if (!anchorUrl) {
-                        Alert.alert('Not Connected', 'Connect to a community before proposing a decision.', [
-                            { text: 'Cancel', style: 'cancel' },
-                            { text: 'Connect', onPress: () => router.push({ pathname: '/(tabs)/settings', params: { section: 'advanced' } }) }
+                        Alert.alert(t('Not Connected'), t('Connect to a community before proposing a decision.'), [
+                            { text: t('Cancel'), style: 'cancel' },
+                            { text: t('Connect'), onPress: () => router.push({ pathname: '/(tabs)/settings', params: { section: 'advanced' } }) }
                         ]);
                         return;
                     }
-                    if (!canProposeDecision) {
-                        Alert.alert('Complete a Trade First', 'You can propose a Decision once you have completed a trade.');
-                        return;
-                    }
-                    if (hasOpenDecision) {
-                        Alert.alert('Limit Reached', 'You already have an open decision (limit 1 open decision per author).');
-                        return;
-                    }
+                    if (proposeRefusal(canProposeDecision, hasOpenDecision)) return;
                     setShowProposeDecision(true);
                 }}
             >

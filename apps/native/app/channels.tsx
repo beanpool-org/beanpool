@@ -160,7 +160,9 @@ export default function ChannelsScreen() {
             const conf = await fetchPulseOAuthConfig(url);
             setOAuthConfig(conf);
         } catch (e: any) {
-            setListError(e?.message || t('Could not load your channels.'));
+            // Signing refuses an address that isn't plain (utils/node-url.ts) in English: translated here, as connect
+            // does. A node's own message is shown as it came.
+            setListError(e?.message ? pulseLineWords(e.message) : t('Could not load your channels.'));
         } finally {
             setLoading(false);
         }
@@ -255,7 +257,7 @@ export default function ChannelsScreen() {
                 );
             }
         } catch (e: any) {
-            setFormError(e?.message || t('Could not add that channel.'));
+            setFormError(e?.message ? pulseLineWords(e.message) : t('Could not add that channel.'));
         } finally {
             setSaving(false);
         }
@@ -298,7 +300,7 @@ export default function ChannelsScreen() {
                     return restored;
                 }));
             }
-            setListError(e?.message || t('Could not save that change.'));
+            setListError(e?.message ? pulseLineWords(e.message) : t('Could not save that change.'));
             // The banner lives above the cards; a switch toggled near the bottom would otherwise
             // fail with no visible explanation.
             scrollRef.current?.scrollTo({ y: 0, animated: true });
@@ -433,7 +435,7 @@ export default function ChannelsScreen() {
                             }
                             await load();
                         } catch (e: any) {
-                            setListError(e?.message || t('Could not remove that channel.'));
+                            setListError(e?.message ? pulseLineWords(e.message) : t('Could not remove that channel.'));
                             scrollRef.current?.scrollTo({ y: 0, animated: true });
                         }
                     },

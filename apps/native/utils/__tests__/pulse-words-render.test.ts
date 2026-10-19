@@ -140,17 +140,23 @@ vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => ({ identity: ME
 // A member's picture: drawn from what they chose, never words.
 vi.mock('../../components/MemberAvatar', () => ({ MemberAvatar: () => createElement('span', { 'data-avatar': 'true' }) }));
 
-/** The node: what each signed read and write answers, by path. */
-const node = vi.hoisted(() => ({ answers: new Map<string, { status: number; body: unknown }>(), sent: [] as Array<{ path: string; body: unknown }> }));
-vi.mock('../node-post', () => ({
-    anchorUrl: async () => 'https://mullum.example',
-    getCachedAnchorUrl: () => 'https://mullum.example',
-    signedPost: async (_url: string, p: string, body: unknown) => {
-        node.sent.push({ path: p, body });
-        const a = node.answers.get(p) ?? { status: 200, body: {} };
-        return { ok: a.status < 400, status: a.status, json: async () => a.body, text: async () => JSON.stringify(a.body) };
-    },
-}));
+/** The node: what each signed read and write answers, by path. `unsafe`: the paths the phone won't sign for, as
+ *  utils/crypto.ts buildSignedHeaders refuses an address that isn't plain, before anything is sent (node-url.ts's
+ *  UnsafeNodeAddressError, in its English). */
+const node = vi.hoisted(() => ({ answers: new Map<string, { status: number; body: unknown }>(), sent: [] as Array<{ path: string; body: unknown }>, unsafe: new Set<string>() }));
+vi.mock('../node-post', async () => {
+    const { UnsafeNodeAddressError } = await import('../node-url');
+    return {
+        anchorUrl: async () => 'https://mullum.example',
+        getCachedAnchorUrl: () => 'https://mullum.example',
+        signedPost: async (_url: string, p: string, body: unknown) => {
+            if (node.unsafe.has(p)) throw new UnsafeNodeAddressError();
+            node.sent.push({ path: p, body });
+            const a = node.answers.get(p) ?? { status: 200, body: {} };
+            return { ok: a.status < 400, status: a.status, json: async () => a.body, text: async () => JSON.stringify(a.body) };
+        },
+    };
+});
 /** The platforms' sign-in, as utils/pulse-oauth.ts gives it: its refusals are English, as it writes them. */
 const oauth = vi.hoisted(() => ({ refusal: null as null | string }));
 vi.mock('../pulse-oauth', () => {
@@ -189,6 +195,7 @@ import { DrawnInLanguage, LanguageProvider } from '../../components/LanguageProv
 import { LanguageRow } from '../../components/LanguagePicker';
 import { resetPulseVideoPlayer } from '../pulse-video-player';
 import { youtubePlayerErrorMessage } from '../youtube-embed';
+import { UNSAFE_NODE_ADDRESS_MESSAGE } from '../node-url';
 import ChannelsScreen from '../../app/channels';
 import PulseScreen from '../../app/(tabs)/pulse';
 import PulseIntakeScreen from '../../app/pulse-intake';
@@ -236,6 +243,7 @@ beforeEach(() => {
     clip.text = '';
     oauth.refusal = null;
     node.sent.length = 0;
+    node.unsafe = new Set();
     node.answers = new Map([
         ['/api/channels/mine', { status: 200, body: { channels: CHANNELS } }],
         ['/api/member/pulse/nudges', { status: 200, body: { nudges: [] } }],
@@ -267,6 +275,12 @@ const click = async (el: Element | null | undefined, what: string) => {
     await settle(4);
 };
 const byLabel = (label: string) => host.querySelector(`[aria-label="${CSS.escape(label)}"]`);
+const type = async (el: Element | null | undefined, text: string, what: string) => {
+    expect(el, what).toBeTruthy();
+    const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+    await act(async () => { setValue.call(el, text); el!.dispatchEvent(new Event('input', { bubbles: true })); });
+    await settle(2);
+};
 const buttonWithText = (text: string) => Array.from(host.querySelectorAll('button')).find((b) => b.textContent === text) ?? null;
 const xx = pseudoLocalise;
 
@@ -353,6 +367,44 @@ describe('Channels & Showcase in the pseudo-locale: every word on it came throug
         expect(host.textContent).toContain(xx('Found a link to your {platform} channel. Would you like to share it to The Pulse?').replace('{platform}', 'TikTok'));
         expect(host.textContent).toContain(xx("You've posted {n} new things on {platform} since your last visit.").replace('{n}', '3').replace('{platform}', 'YouTube'));
         expect(bypassing()).toEqual([]);
+    });
+
+    it('an address the phone won\'t sign for (node-url.ts), in the member\'s language wherever the screen says so: the list, adding, a change, a removal', async () => {
+        const refused = xx(UNSAFE_NODE_ADDRESS_MESSAGE);
+        node.unsafe = new Set(['/api/channels/mine']);
+        await renderIn('xx', createElement(ChannelsScreen));
+        expect(host.textContent, 'the list').toContain(refused);
+        expect(bypassing(), 'the list').toEqual([]);
+
+        node.unsafe = new Set(['/api/member/channels']);
+        await again('xx', createElement(ChannelsScreen));
+        await click(byLabel(xx('Add a channel')), 'Add a channel');
+        await type(byLabel(xx('Your link or handle')), 'youtube.com/@kofi.sings', 'the link');
+        await click(byLabel(xx('Food & growing')), 'Food & growing');
+        expect(host.textContent).not.toContain(refused);
+        await click(byLabel(xx('Add channel')), 'Add channel');
+        expect(host.textContent, 'adding').toContain(refused);
+        expect(bypassing(), 'adding').toEqual([]);
+
+        node.unsafe = new Set(['/api/member/channels/ch-yt']);
+        await again('xx', createElement(ChannelsScreen));
+        await click(byLabel(xx('Change the category for {platform}').replace('{platform}', 'YouTube')), 'Change');
+        expect(host.textContent).not.toContain(refused);
+        await click(byLabel(xx('Art & music')), 'Art & music');
+        expect(host.textContent, 'a change').toContain(refused);
+        expect(bypassing(), 'a change').toEqual([]);
+
+        node.unsafe = new Set(['/api/member/channels/ch-web/delete']);
+        await again('xx', createElement(ChannelsScreen));
+        alerts.buttons.length = 0;
+        await click(byLabel(xx('Remove {platform}').replace('{platform}', xx('Website'))), 'Remove');
+        expect(host.textContent).not.toContain(refused);
+        const confirm = alerts.buttons.find((b) => b.text === xx('Remove'));
+        expect(confirm?.onPress, 'the alert\'s Remove').toBeTruthy();
+        await act(async () => { await confirm!.onPress!(); });
+        await settle(4);
+        expect(host.textContent, 'a removal').toContain(refused);
+        expect(bypassing(), 'a removal').toEqual([]);
     });
 
     it('no channels yet, and a list the node would not give', async () => {

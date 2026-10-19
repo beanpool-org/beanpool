@@ -6,10 +6,11 @@
  *
  * The rule is `beansOn`'s (node-profile.ts): only a node that says outright `features.beans === false` has no Beans,
  * and a node that says nothing trades in them, so every local community is unchanged. Screens call `beansOn` itself.
- * The helpers below restate it rather than import it, so this file loads nothing at runtime (node-profile.ts brings
- * the phone's storage with it); the test holds the two to the same answer.
+ * The helpers below restate it rather than import it, so this file loads nothing at runtime but core's word marker
+ * (node-profile.ts brings the phone's storage with it); the test holds the two to the same answer.
  */
 
+import { word } from '@beanpool/core';
 import type { NodeFeatures } from './node-profile';
 
 function beansShown(features: NodeFeatures | null | undefined): boolean {
@@ -54,10 +55,10 @@ export function talkSort<S extends string>(sortBy: S, features: NodeFeatures | n
  * With Beans off they are one card instead, the one the join wizard shows there (app/welcome.tsx).
  */
 
-/** The one card in place of the three about Beans. */
+/** The one card in place of the three about Beans: word() keys, shown with t(). */
 export const NO_BEANS_GUIDE_CARD = {
-    title: '🌍 A place to meet',
-    text: 'The global community is for meeting people and finding a community near you. There are no Beans here: credit, the Commons and trading in Beans live in local communities, which you join with an invite from a member.',
+    title: word('🌍 A place to meet'),
+    text: word('The global community is for meeting people and finding a community near you. There are no Beans here: credit, the Commons and trading in Beans live in local communities, which you join with an invite from a member.'),
 } as const;
 
 /** The line under the step's title. */

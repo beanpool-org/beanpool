@@ -2,11 +2,14 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { colors, palette } from '../constants/colors';
 import { NO_BEANS_GUIDE_CARD } from '../utils/beans-off';
+import { t } from '@beanpool/core';
+import { Sentence } from './Sentence';
 
 /**
  * The "how BeanPool works" guide cards. Shared so the first-run onboarding
  * wizard (welcome.tsx) and the re-runnable profile setup (profile-setup.tsx)
- * show identical content — edit the explanation once, in here.
+ * show identical content — edit the explanation once, in here. The same sentences as welcome's, so one catalog entry
+ * each serves both, in the member's language.
  *
  * `beansOn` false (a community with Beans off, the worldwide one): cards 1-3 are about Beans, so one card that says
  * there are none takes their place, and the Ledger tip goes, as in the join wizard (utils/beans-off.ts).
@@ -18,32 +21,38 @@ export function OnboardingGuide({ beansOn = true }: { beansOn?: boolean }) {
             <>
             {/* Card 1: Energy Exchange */}
             <View style={guideStyles.card}>
-                <Text style={guideStyles.cardTitle}>⚡ Energy Exchange Marketplace</Text>
+                <Text style={guideStyles.cardTitle}>{t('⚡ Energy Exchange Marketplace')}</Text>
                 <Text style={guideStyles.cardText}>
-                    BeanPool runs on cooperation, not accumulation. The goal is to keep energy flowing.
+                    {t('BeanPool runs on cooperation, not accumulation. The goal is to keep energy flowing.')}
                 </Text>
                 <View style={guideStyles.highlightBox}>
                     <Text style={guideStyles.highlightText}>
-                        🟢 <Text style={{ fontWeight: 'bold' }}>The best place to be is zero (0 Beans).</Text> This means you have given as much value to your community as you have received from it.
+                        <Sentence
+                            text={t('🟢 {zero} This means you have given as much value to your community as you have received from it.')}
+                            parts={{ zero: <Text style={{ fontWeight: 'bold' }}>{t('The best place to be is zero (0 Beans).')}</Text> }}
+                        />
                     </Text>
                 </View>
                 <View style={[guideStyles.highlightBox, { backgroundColor: 'rgba(245, 158, 11, 0.12)', borderColor: 'rgba(245, 158, 11, 0.35)' }]}>
                     <Text style={[guideStyles.highlightText, { color: palette.amber700 || '#b45309' }]}>
-                        🫘 <Text style={{ fontWeight: 'bold' }}>Contributions First.</Text> In a community with Beans, to keep the credit pool healthy, list at least one Offer of what you can give back before you can post Needs or accept Offers.
+                        <Sentence
+                            text={t('🫘 {first} In a community with Beans, to keep the credit pool healthy, list at least one Offer of what you can give back before you can post Needs or accept Offers.')}
+                            parts={{ first: <Text style={{ fontWeight: 'bold' }}>{t('Contributions First.')}</Text> }}
+                        />
                     </Text>
                 </View>
             </View>
 
             {/* Card 2: The Ledger Rules */}
             <View style={guideStyles.card}>
-                <Text style={guideStyles.cardTitle}>🪙 The Mutual Credit Ledger</Text>
+                <Text style={guideStyles.cardTitle}>{t('🪙 The Mutual Credit Ledger')}</Text>
 
                 <View style={guideStyles.bulletRow}>
                     <Text style={guideStyles.bulletEmoji}>🤝</Text>
                     <View style={guideStyles.bulletContent}>
-                        <Text style={guideStyles.bulletTitle}>Trust-Backed Credit</Text>
+                        <Text style={guideStyles.bulletTitle}>{t('Trust-Backed Credit')}</Text>
                         <Text style={guideStyles.bulletText}>
-                            Everyone starts with a 0 Bean limit. Complete your first real marketplace trade and your community credit line opens — then it deepens steadily with the value you trade and the people you trade with, up to -2000 Beans. No interest, no bank fees.
+                            {t('Everyone starts with a 0 Bean limit. Complete your first real marketplace trade and your community credit line opens — then it deepens steadily with the value you trade and the people you trade with, up to -2000 Beans. No interest, no bank fees.')}
                         </Text>
                     </View>
                 </View>
@@ -51,9 +60,9 @@ export function OnboardingGuide({ beansOn = true }: { beansOn?: boolean }) {
                 <View style={guideStyles.bulletRow}>
                     <Text style={guideStyles.bulletEmoji}>🌾</Text>
                     <View style={guideStyles.bulletContent}>
-                        <Text style={guideStyles.bulletTitle}>Community Commons Pool</Text>
+                        <Text style={guideStyles.bulletTitle}>{t('Community Commons Pool')}</Text>
                         <Text style={guideStyles.bulletText}>
-                            Positive balances above 200 Beans contribute 1.0% to 2.5% monthly across progressive brackets (the first 200 is fee-free). This prevents hoarding and circulates surplus to fund the Community Commons.
+                            {t('Positive balances above 200 Beans contribute 1.0% to 2.5% monthly across progressive brackets (the first 200 is fee-free). This prevents hoarding and circulates surplus to fund the Community Commons.')}
                         </Text>
                     </View>
                 </View>
@@ -61,9 +70,9 @@ export function OnboardingGuide({ beansOn = true }: { beansOn?: boolean }) {
                 <View style={guideStyles.bulletRow}>
                     <Text style={guideStyles.bulletEmoji}>⏱️</Text>
                     <View style={guideStyles.bulletContent}>
-                        <Text style={guideStyles.bulletTitle}>Reference Rate</Text>
+                        <Text style={guideStyles.bulletTitle}>{t('Reference Rate')}</Text>
                         <Text style={guideStyles.bulletText}>
-                            40 Beans represents roughly 1 hour of community service or time, helping you easily value what you offer or need.
+                            {t('40 Beans represents roughly 1 hour of community service or time, helping you easily value what you offer or need.')}
                         </Text>
                     </View>
                 </View>
@@ -71,27 +80,47 @@ export function OnboardingGuide({ beansOn = true }: { beansOn?: boolean }) {
 
             {/* Card 3: Safe Handshake Held in Trust */}
             <View style={guideStyles.card}>
-                <Text style={guideStyles.cardTitle}>🔒 Held in Trust</Text>
+                <Text style={guideStyles.cardTitle}>{t('🔒 Held in Trust')}</Text>
                 <Text style={guideStyles.cardText}>
-                    To ensure fairness, when you accept an offer or request a job, your credits are safely held in a temporary Trust Wallet. They are only released to the provider once you confirm delivery.
+                    {t('To ensure fairness, when you accept an offer or request a job, your credits are safely held in a temporary Trust Wallet. They are only released to the provider once you confirm delivery.')}
                 </Text>
             </View>
             </>
             ) : (
             <View style={guideStyles.card}>
-                <Text style={guideStyles.cardTitle}>{NO_BEANS_GUIDE_CARD.title}</Text>
-                <Text style={guideStyles.cardText}>{NO_BEANS_GUIDE_CARD.text}</Text>
+                <Text style={guideStyles.cardTitle}>{t(NO_BEANS_GUIDE_CARD.title)}</Text>
+                <Text style={guideStyles.cardText}>{t(NO_BEANS_GUIDE_CARD.text)}</Text>
             </View>
             )}
 
             {/* Card 4: Where to Start */}
             <View style={guideStyles.card}>
-                <Text style={guideStyles.cardTitle}>🚀 Where to Start?</Text>
-                <Text style={guideStyles.bulletItem}>📍 Explore the <Text style={{ fontWeight: 'bold' }}>Map</Text> to find offers (green) and needs (orange) near you.</Text>
-                <Text style={guideStyles.bulletItem}>💬 Tap <Text style={{ fontWeight: 'bold' }}>Message</Text> on any post to chat securely (E2E encrypted) with neighbors.</Text>
-                <Text style={guideStyles.bulletItem}>➕ Click <Text style={{ fontWeight: 'bold' }}>Post</Text> to list what you need or what you can offer to the community.</Text>
+                <Text style={guideStyles.cardTitle}>{t('🚀 Where to Start?')}</Text>
+                <Text style={guideStyles.bulletItem}>
+                    <Sentence
+                        text={t('📍 Explore the {map} to find offers (green) and needs (orange) near you.')}
+                        parts={{ map: <Text style={{ fontWeight: 'bold' }}>{t('Map', undefined, 'tab')}</Text> }}
+                    />
+                </Text>
+                <Text style={guideStyles.bulletItem}>
+                    <Sentence
+                        text={t('💬 Tap {message} on any post to chat securely (E2E encrypted) with neighbors.')}
+                        parts={{ message: <Text style={{ fontWeight: 'bold' }}>{t('Message', undefined, 'button: write to')}</Text> }}
+                    />
+                </Text>
+                <Text style={guideStyles.bulletItem}>
+                    <Sentence
+                        text={t('➕ Click {post} to list what you need or what you can offer to the community.')}
+                        parts={{ post: <Text style={{ fontWeight: 'bold' }}>{t('Post', undefined, 'button: publish')}</Text> }}
+                    />
+                </Text>
                 {beansOn && (
-                    <Text style={guideStyles.bulletItem}>💳 Use the <Text style={{ fontWeight: 'bold' }}>Ledger</Text> tab to send credits to neighbors instantly.</Text>
+                    <Text style={guideStyles.bulletItem}>
+                        <Sentence
+                            text={t('💳 Use the {ledger} tab to send credits to neighbors instantly.')}
+                            parts={{ ledger: <Text style={{ fontWeight: 'bold' }}>{t('Ledger', undefined, 'tab')}</Text> }}
+                        />
+                    </Text>
                 )}
             </View>
         </View>

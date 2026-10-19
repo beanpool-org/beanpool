@@ -31,7 +31,9 @@ import {
 import { yourGroupsStore } from '../../components/useYourGroups';
 import { MemberAvatar } from '../../components/MemberAvatar';
 import { hapticSuccess } from '../../utils/haptics';
-import { t } from '@beanpool/core';
+import { chatLineWords } from '../../utils/chat-line-words';
+import { t, tn } from '@beanpool/core';
+import { richWords } from '../../components/info-content/rich-words';
 
 export default function GroupInviteLanding() {
     const params = useLocalSearchParams<{
@@ -63,7 +65,7 @@ export default function GroupInviteLanding() {
         // Sent together; each fills its part of the page when it lands.
         getGroupForLanding(id)
             .then(g => { if (alive.current) setGroup(g); })
-            .catch((e: any) => { if (alive.current) setError(e?.message || 'Could not reach the node.'); });
+            .catch((e: any) => { if (alive.current) setError(e?.message || t('Could not reach the node.')); });
         setMembersFailed(false);
         getGroupActiveMembers(id)
             .then(m => { if (alive.current) setMembers(m); })
@@ -105,7 +107,9 @@ export default function GroupInviteLanding() {
                 router.replace(chatHref({ kind: 'group', conversationId: g.id, name: g.name }) as any);
             }
         } catch (e: any) {
-            Alert.alert('Could not join', e?.message || 'Could not reach the node. Try again when you have signal.');
+            // The node's own words as it sent them (slice S4); the group-key code's own (a refusal with no words, a roster or
+            // key store it couldn't read) in the member's language.
+            Alert.alert(t('Could not join'), e?.message ? chatLineWords(e.message) : t('Could not reach the node. Try again when you have signal.'));
         } finally {
             if (alive.current) setBusy(false);
         }
@@ -113,7 +117,7 @@ export default function GroupInviteLanding() {
 
     const topBar = (
         <View style={styles.topBar}>
-            <Pressable onPress={close} style={styles.closeBtn} accessibilityRole="button" accessibilityLabel="Close">
+            <Pressable onPress={close} style={styles.closeBtn} accessibilityRole="button" accessibilityLabel={t('Close')}>
                 <MaterialCommunityIcons name="close" size={26} color={colors.text.body} />
             </Pressable>
         </View>
@@ -126,24 +130,24 @@ export default function GroupInviteLanding() {
             <Text style={styles.body}>{body}</Text>
             {retry && (
                 <Pressable style={styles.primaryBtn} onPress={load} accessibilityRole="button">
-                    <Text style={styles.primaryText} numberOfLines={1}>Try again</Text>
+                    <Text style={styles.primaryText} numberOfLines={1}>{t('Try again')}</Text>
                 </Pressable>
             )}
             <Pressable style={styles.secondaryBtn} onPress={close} accessibilityRole="button">
-                <Text style={styles.secondaryText}>Close</Text>
+                <Text style={styles.secondaryText}>{t('Close')}</Text>
             </Pressable>
         </ScrollView>
     );
 
     let page: React.ReactNode;
     if (phase === 'error') {
-        page = message('📶', "Couldn't open this group", "The node didn't answer. Check your signal and try again.", true);
+        page = message('📶', t("Couldn't open this group"), t("The node didn't answer. Check your signal and try again."), true);
     } else if (phase === 'unavailable') {
-        page = message('🔒', "This group isn't available", 'It may be private, or it may have closed. If someone invited you, ask them to send the invitation again.');
+        page = message('🔒', t("This group isn't available"), t('It may be private, or it may have closed. If someone invited you, ask them to send the invitation again.'));
     } else if (phase === 'expired') {
-        page = message('✉️', 'This invitation is no longer open', g
-            ? `${g.name} is invite only, and your invitation was withdrawn. Ask whoever invited you to invite you again.`
-            : 'The group may have closed, or the invitation was withdrawn. Ask whoever invited you to invite you again.');
+        page = message('✉️', t('This invitation is no longer open'), g
+            ? t('{name} is invite only, and your invitation was withdrawn. Ask whoever invited you to invite you again.', { name: g.name })
+            : t('The group may have closed, or the invitation was withdrawn. Ask whoever invited you to invite you again.'));
     } else {
         // skeleton or ready: one page, filled in as answers land.
         const loadingGroup = phase === 'skeleton';
@@ -159,7 +163,10 @@ export default function GroupInviteLanding() {
                             ? <View style={[styles.ghostLine, { width: 150 }]} />
                             : (
                                 <Text style={styles.invitedText} numberOfLines={2}>
-                                    <Text style={styles.invitedName}>{inviter?.callsign || 'A convenor'}</Text> invited you to join
+                                    {/* One sentence with the name in bold inside it; with no name, its own words in bold. */}
+                                    {inviter?.callsign
+                                        ? richWords(t('**{name}** invited you to join'), styles.invitedName, { name: inviter.callsign })
+                                        : richWords(t('**A convenor** invited you to join'), styles.invitedName)}
                                 </Text>
                             )}
                     </View>
@@ -182,7 +189,7 @@ export default function GroupInviteLanding() {
                 )}
 
                 {members === null && !membersFailed && (
-                    <View style={styles.people} accessibilityLabel="Loading members">
+                    <View style={styles.people} accessibilityLabel={t('Loading members')}>
                         <View style={styles.faces}>
                             {[0, 1, 2].map(i => <View key={i} style={[styles.faceGhost, i > 0 && { marginLeft: -10 }]} />)}
                         </View>
@@ -199,9 +206,17 @@ export default function GroupInviteLanding() {
                             ))}
                         </View>
                         <Text style={styles.peopleText}>
-                            {active.slice(0, 3).map(m => m.callsign || m.memberPubkey.slice(0, 6)).join(', ')}
-                            {active.length > 3 ? ` and ${active.length - 3} more` : ''}
-                            {convenor ? `\nConvenor: ${convenor}` : ''}
+                            {(() => {
+                                // The first names as members wrote them; the rest and the convenor in one sentence with them.
+                                const names = active.slice(0, 3).map(m => m.callsign || m.memberPubkey.slice(0, 6)).join(', ');
+                                const more = active.length - 3;
+                                if (more > 0) {
+                                    return convenor
+                                        ? tn(more, '{names} and {n} more\nConvenor: {name}', '{names} and {n} more\nConvenor: {name}', { names, name: convenor })
+                                        : tn(more, '{names} and {n} more', '{names} and {n} more', { names });
+                                }
+                                return convenor ? t('{names}\nConvenor: {name}', { names, name: convenor }) : names;
+                            })()}
                         </Text>
                     </View>
                 )}
@@ -211,7 +226,7 @@ export default function GroupInviteLanding() {
                 <View style={styles.notice}>
                     <MaterialCommunityIcons name="eye-outline" size={18} color={colors.text.secondary} />
                     <Text style={styles.noticeText}>
-                        The group chat is visible to its members and this node's operator. Private things belong in a direct message.
+                        {t("The group chat is visible to its members and this node's operator. Private things belong in a direct message.")}
                     </Text>
                 </View>
 
@@ -220,8 +235,8 @@ export default function GroupInviteLanding() {
                     onPress={act}
                     disabled={!action?.enabled || busy}
                     accessibilityRole="button"
-                    accessibilityLabel={action ? action.label : 'Loading'}
-                    accessibilityHint={action?.note || (viewerStatus === 'active' ? 'Opens the group chat' : 'Joins the group and opens its chat')}
+                    accessibilityLabel={action ? action.label : t('Loading')}
+                    accessibilityHint={action?.note || (viewerStatus === 'active' ? t('Opens the group chat') : t('Joins the group and opens its chat'))}
                     accessibilityState={{ disabled: !action?.enabled || busy, busy: busy || loadingGroup }}
                 >
                     {busy || !action
@@ -230,7 +245,7 @@ export default function GroupInviteLanding() {
                 </Pressable>
                 {!!action?.note && <Text style={styles.note}>{action.note}</Text>}
                 <Pressable style={styles.secondaryBtn} onPress={close} accessibilityRole="button">
-                    <Text style={styles.secondaryText}>Not now</Text>
+                    <Text style={styles.secondaryText}>{t('Not now')}</Text>
                 </Pressable>
             </ScrollView>
         );

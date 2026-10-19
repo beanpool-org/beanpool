@@ -4,6 +4,8 @@ import { InfoModal, InfoModalTab } from '../InfoModal';
 import { CurrencyDisplay } from '../CurrencyDisplay';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useStyles, useTheme } from '../../app/ThemeContext';
+import { t } from '@beanpool/core';
+import { richWords } from './rich-words';
 
 interface Props {
     isOpen: boolean;
@@ -134,35 +136,35 @@ export function BalanceInfoModal({ isOpen, onClose }: Props) {
     const tabs: InfoModalTab[] = [
         {
             id: 'balance',
-            label: 'Your Balance',
+            label: t('Your Balance'),
             content: (
                 <View style={styles.tabContent}>
                     <Text style={styles.descriptionText}>
-                        Your balance represents your current available trading power within the BeanPool network.
+                        {t('Your balance represents your current available trading power within the BeanPool network.')}
                     </Text>
 
                     <View style={styles.cardContainer}>
-                        <Text style={styles.cardLabel}>HOW TO EARN</Text>
+                        <Text style={styles.cardLabel}>{t('HOW TO EARN')}</Text>
                         <View style={{ marginTop: 4 }}>
-                            <ListItem>Sell goods or services to the community</ListItem>
-                            <ListItem>Complete community bounties</ListItem>
-                            <ListItem>Receive peer-to-peer transfers</ListItem>
+                            <ListItem>{t('Sell goods or services to the community')}</ListItem>
+                            <ListItem>{t('Complete community bounties')}</ListItem>
+                            <ListItem>{t('Receive peer-to-peer transfers')}</ListItem>
                         </View>
                     </View>
 
                     <View style={styles.cardContainer}>
-                        <Text style={styles.cardLabel}>HOW TO SPEND</Text>
+                        <Text style={styles.cardLabel}>{t('HOW TO SPEND')}</Text>
                         <View style={{ marginTop: 4 }}>
-                            <ListItem>Purchase goods from the Market</ListItem>
-                            <ListItem>Pay for community services</ListItem>
-                            <ListItem>Transfer to other members</ListItem>
+                            <ListItem>{t('Purchase goods from the Market')}</ListItem>
+                            <ListItem>{t('Pay for community services')}</ListItem>
+                            <ListItem>{t('Transfer to other members')}</ListItem>
                         </View>
                     </View>
 
                     <View style={styles.infoBox}>
                         <MaterialCommunityIcons name="lightbulb-on" size={24} color={colors.feedback.warning.fg} style={styles.infoBoxIcon} />
                         <Text style={styles.infoBoxText}>
-                            Credits in BeanPool are backed by real community trust and exchange, not fiat currency.
+                            {t('Credits in BeanPool are backed by real community trust and exchange, not fiat currency.')}
                         </Text>
                     </View>
                 </View>
@@ -170,31 +172,31 @@ export function BalanceInfoModal({ isOpen, onClose }: Props) {
         },
         {
             id: 'floor',
-            label: 'Floor Balance',
+            label: t('Floor Balance'),
             content: (
                 <View style={styles.tabContent}>
                     <Text style={styles.descriptionText}>
-                        Every member has access to a <Text style={styles.boldWhiteText}>Floor Balance</Text> (credit line) earned through completed trades and community vouches. This allows you to trade even if you temporarily have zero credits.
+                        {richWords(t('Every member has access to a **Floor Balance** (credit line) earned through completed trades and community vouches. This allows you to trade even if you temporarily have zero credits.'), styles.boldWhiteText)}
                     </Text>
 
                     <View style={styles.limitContainer}>
-                        <Text style={styles.limitTitle}>Negative Balances</Text>
+                        <Text style={styles.limitTitle}>{t('Negative Balances')}</Text>
                         <Text style={styles.limitText}>
-                            If you spend past zero, your balance becomes <Text style={styles.boldWhiteText}>negative</Text> down to your <Text style={styles.boldWhiteText}>earned credit floor</Text>. When you earn credits again, they will first pay off this negative balance.
+                            {richWords(t('If you spend past zero, your balance becomes **negative** down to your **earned credit floor**. When you earn credits again, they will first pay off this negative balance.'), styles.boldWhiteText)}
                         </Text>
                     </View>
 
                     <View style={styles.cardContainer}>
-                        <Text style={styles.cardLabel}>WHY A FLOOR?</Text>
+                        <Text style={styles.cardLabel}>{t('WHY A FLOOR?')}</Text>
                         <Text style={styles.cardText}>
-                            Traditional systems stop you from trading when you're broke. A <Text style={styles.boldWhiteText}>mutual credit system</Text> like BeanPool allows the community to <Text style={styles.boldWhiteText}>extend trust</Text> so trade can continue flowing.
+                            {richWords(t("Traditional systems stop you from trading when you're broke. A **mutual credit system** like BeanPool allows the community to **extend trust** so trade can continue flowing."), styles.boldWhiteText)}
                         </Text>
                     </View>
 
                     <View style={styles.warningBox}>
                         <MaterialCommunityIcons name="alert" size={24} color={colors.feedback.warning.fg} style={styles.warningIcon} />
                         <Text style={styles.warningText}>
-                            When you reach your credit floor, <Text style={styles.boldWhiteText}>further spending is paused</Text> until you earn credits back by trading on the Marketplace.
+                            {richWords(t('When you reach your credit floor, **further spending is paused** until you earn credits back by trading on the Marketplace.'), styles.boldWhiteText)}
                         </Text>
                     </View>
                 </View>
@@ -206,7 +208,7 @@ export function BalanceInfoModal({ isOpen, onClose }: Props) {
         <InfoModal
             isOpen={isOpen}
             onClose={onClose}
-            title="Available Balance"
+            title={t('Available Balance')}
             icon={<MaterialCommunityIcons name="wallet" size={24} color={colors.brand.primary} />}
             tabs={tabs}
             testID="bean-sheet"

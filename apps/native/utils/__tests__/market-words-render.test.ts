@@ -486,6 +486,28 @@ describe('the Market at 320 dp with 1.3× text, in the pseudo-locale', () => {
     });
 });
 
+describe('words in capitals, the language\'s way (never toUpperCase on a translated word)', () => {
+    const catalog = (lang: string) => JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../words', `${lang}.json`), 'utf8')) as Record<string, string>;
+
+    it('Turkish: a feed heading\'s "i" is a dotted capital "İ"', async () => {
+        const events = catalog('tr')['Upcoming events'];
+        expect(events).toMatch(/i/);
+        await renderIn('tr');
+        expect(host.textContent).toContain('Repair café');
+        expect(host.textContent).toContain(events.toLocaleUpperCase('tr'));
+        expect(host.textContent).not.toContain(events.toUpperCase());
+    });
+
+    it('Greek: an example card\'s badge drops its accents in capitals', async () => {
+        const { ExampleListings } = await import('../../components/ExampleListings');
+        const example = catalog('el')['Example'];
+        expect(example.toUpperCase()).not.toBe(example.toLocaleUpperCase('el'));
+        await renderIn('el', createElement(ExampleListings));
+        expect(host.textContent).toContain(example.toLocaleUpperCase('el'));
+        expect(host.textContent).not.toContain(example.toUpperCase());
+    });
+});
+
 describe('the Market follows a language picked in Settings', () => {
     const NATIVE_WORDS = path.resolve(__dirname, '../../words');
     const fr = JSON.parse(fs.readFileSync(path.join(NATIVE_WORDS, 'fr.json'), 'utf8')) as Record<string, string>;

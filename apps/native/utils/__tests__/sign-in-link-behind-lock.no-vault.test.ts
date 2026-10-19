@@ -343,7 +343,8 @@ describe('join-open-door.tsx: the door for an account the phone already has (the
         expect(s).toContain("import { authenticateUser } from '../utils/LocalAuth';");
         const body = slice(s, 'async function handleSignIn(provider: SsoProvider) {', '\n    }\n');
         const key = body.indexOf('const account = await accountKeyForDoor();');
-        const asked = body.indexOf(`if (!(await authenticateUser('${REASON}'))) return;`);
+        // The lock's prompt is in the member's language (words S3e): the same English, through t().
+        const asked = body.indexOf(`if (!(await authenticateUser(t('${REASON}')))) return;`);
         const signIn = body.indexOf('await signInAtDoor(');
         expect(key).toBeGreaterThan(-1);
         expect(asked).toBeGreaterThan(key);

@@ -6,6 +6,7 @@ import { processProfileImage } from '../utils/image-processing';
 import { BUNDLED_AVATARS } from '../utils/bundled-avatars';
 import { colors as lightColors, palette, type AppColors } from '../constants/colors';
 import { bottomSheetLayout } from '../utils/bottom-sheet-layout';
+import { t } from '@beanpool/core';
 
 interface AvatarPickerSheetProps {
     visible: boolean;
@@ -54,7 +55,7 @@ export function AvatarPickerSheet({ visible, onClose, onSelectImage, colors }: A
         try {
             const perm = await ImagePicker.requestCameraPermissionsAsync();
             if (!perm.granted) {
-                Alert.alert('Permission required', 'Camera access is needed.');
+                Alert.alert(t('Permission required'), t('Camera access is needed.'));
                 return;
             }
             const result = await ImagePicker.launchCameraAsync({
@@ -67,11 +68,11 @@ export function AvatarPickerSheet({ visible, onClose, onSelectImage, colors }: A
                     onSelectImage(dataUri);
                     onClose();
                 } else {
-                    Alert.alert('Error', 'Could not process photo.');
+                    Alert.alert(t('Error'), t('Could not process photo.'));
                 }
             }
         } catch (e) {
-            Alert.alert('Error', 'Could not take photo.');
+            Alert.alert(t('Error'), t('Could not take photo.'));
         } finally {
             setLoading(false);
         }
@@ -89,11 +90,11 @@ export function AvatarPickerSheet({ visible, onClose, onSelectImage, colors }: A
                     onSelectImage(dataUri);
                     onClose();
                 } else {
-                    Alert.alert('Error', 'Could not process photo.');
+                    Alert.alert(t('Error'), t('Could not process photo.'));
                 }
             }
         } catch (e) {
-            Alert.alert('Error', 'Could not pick image.');
+            Alert.alert(t('Error'), t('Could not pick image.'));
         } finally {
             setLoading(false);
         }
@@ -113,12 +114,12 @@ export function AvatarPickerSheet({ visible, onClose, onSelectImage, colors }: A
             transparent={true}
             onRequestClose={onClose}
         >
-            <Pressable style={styles.backdrop} accessibilityRole="button" accessibilityLabel="Close" onPress={onClose}>
+            <Pressable style={styles.backdrop} accessibilityRole="button" accessibilityLabel={t('Close')} onPress={onClose}>
                 <Pressable style={[styles.sheet, { maxHeight: layout.maxHeight }]} accessibilityRole="button" onPress={(e) => e.stopPropagation()}>
                     {/* Header */}
                     <View style={styles.header}>
-                        <Text style={styles.title}>Profile Photo</Text>
-                        <Pressable onPress={onClose} accessibilityRole="button" accessibilityLabel="Close" style={styles.closeButton}>
+                        <Text style={styles.title}>{t('Profile Photo')}</Text>
+                        <Pressable onPress={onClose} accessibilityRole="button" accessibilityLabel={t('Close')} style={styles.closeButton}>
                             <Text style={styles.closeText}>✕</Text>
                         </Pressable>
                     </View>
@@ -133,22 +134,23 @@ export function AvatarPickerSheet({ visible, onClose, onSelectImage, colors }: A
                         {loading ? (
                             <View style={styles.loadingContainer}>
                                 <ActivityIndicator size="large" color={palette.blue600} />
-                                <Text style={styles.loadingText}>Processing image...</Text>
+                                <Text style={styles.loadingText}>{t('Processing image...')}</Text>
                             </View>
                         ) : (
                             <>
                                 <View style={styles.sourceButtonsRow}>
-                                    <Pressable style={styles.sourceButton} accessibilityRole="button" accessibilityLabel="Take photo with camera" onPress={handleTakePhotos}>
+                                    <Pressable style={styles.sourceButton} accessibilityRole="button" accessibilityLabel={t('Take photo with camera')} onPress={handleTakePhotos}>
                                         <Text style={styles.sourceEmoji}>📸</Text>
-                                        <Text style={styles.sourceLabel}>Camera</Text>
+                                        {/* A longer language's words take a second line in their half of the row, and shrink rather than break mid-word. */}
+                                        <Text style={styles.sourceLabel} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Camera')}</Text>
                                     </Pressable>
-                                    <Pressable style={styles.sourceButton} accessibilityRole="button" accessibilityLabel="Choose photo from gallery" onPress={handleGallery}>
+                                    <Pressable style={styles.sourceButton} accessibilityRole="button" accessibilityLabel={t('Choose photo from gallery')} onPress={handleGallery}>
                                         <Text style={styles.sourceEmoji}>🖼️</Text>
-                                        <Text style={styles.sourceLabel}>Gallery</Text>
+                                        <Text style={styles.sourceLabel} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Gallery')}</Text>
                                     </Pressable>
                                 </View>
 
-                                <Text style={styles.sectionTitle}>Or choose an avatar — swipe for more:</Text>
+                                <Text style={styles.sectionTitle}>{t('Or choose an avatar — swipe for more:')}</Text>
 
                                 <View style={styles.avatarScrollWrap}>
                                     <ScrollView
@@ -171,7 +173,7 @@ export function AvatarPickerSheet({ visible, onClose, onSelectImage, colors }: A
                                                         isSelected && styles.avatarItemSelected
                                                     ]}
                                                     accessibilityRole="button"
-                                                    accessibilityLabel={`Select ${avatar.label} avatar`}
+                                                    accessibilityLabel={t('Select {name} avatar', { name: t(avatar.label) })}
                                                     accessibilityState={{ selected: isSelected }}
                                                     onPress={() => setSelectedAvatarId(avatar.id)}
                                                 >
@@ -190,7 +192,7 @@ export function AvatarPickerSheet({ visible, onClose, onSelectImage, colors }: A
                                         <Pressable
                                             style={[styles.avatarChevron, styles.avatarChevronLeft]}
                                             accessibilityRole="button"
-                                            accessibilityLabel="Show earlier avatars"
+                                            accessibilityLabel={t('Show earlier avatars')}
                                             onPress={() => avatarScrollRef.current?.scrollTo({ x: Math.max(0, scrollXRef.current - 200), animated: true })}
                                         >
                                             <View style={styles.avatarChevronButton}>
@@ -202,7 +204,7 @@ export function AvatarPickerSheet({ visible, onClose, onSelectImage, colors }: A
                                         <Pressable
                                             style={[styles.avatarChevron, styles.avatarChevronRight]}
                                             accessibilityRole="button"
-                                            accessibilityLabel="Show more avatars"
+                                            accessibilityLabel={t('Show more avatars')}
                                             onPress={() => avatarScrollRef.current?.scrollTo({ x: scrollXRef.current + 200, animated: true })}
                                         >
                                             <View style={styles.avatarChevronButton}>
@@ -220,7 +222,7 @@ export function AvatarPickerSheet({ visible, onClose, onSelectImage, colors }: A
                     {!loading && selectedAvatarId ? (
                         <View style={[styles.footer, { paddingBottom: layout.footerPaddingBottom }]}>
                             <Pressable style={styles.confirmButton} accessibilityRole="button" onPress={handleSelectBundled}>
-                                <Text style={styles.confirmButtonText}>Use Selected Avatar</Text>
+                                <Text style={styles.confirmButtonText}>{t('Use Selected Avatar')}</Text>
                             </Pressable>
                         </View>
                     ) : (
@@ -267,14 +269,14 @@ function tonesFor(colors?: AppColors) {
     };
 }
 
-const makeStyles = (t: ReturnType<typeof tonesFor>) => StyleSheet.create({
+const makeStyles = (tone: ReturnType<typeof tonesFor>) => StyleSheet.create({
     backdrop: {
         flex: 1,
         backgroundColor: 'rgba(0,0,0,0.5)',
         justifyContent: 'flex-end',
     },
     sheet: {
-        backgroundColor: t.sheet,
+        backgroundColor: tone.sheet,
         borderTopLeftRadius: 24,
         borderTopRightRadius: 24,
     },
@@ -284,25 +286,27 @@ const makeStyles = (t: ReturnType<typeof tonesFor>) => StyleSheet.create({
         alignItems: 'center',
         padding: 20,
         borderBottomWidth: 1,
-        borderBottomColor: t.line,
+        borderBottomColor: tone.line,
     },
+    // Shrinks beside the close button: a longer language's title wraps rather than pushing ✕ off the sheet.
     title: {
         fontSize: 18,
         fontWeight: '700',
-        color: t.title,
+        color: tone.title,
+        flexShrink: 1,
     },
     closeButton: {
         width: 32,
         height: 32,
         borderRadius: 16,
-        backgroundColor: t.closeBg,
+        backgroundColor: tone.closeBg,
         alignItems: 'center',
         justifyContent: 'center',
     },
     closeText: {
         fontSize: 16,
         fontWeight: '700',
-        color: t.closeText,
+        color: tone.closeText,
     },
     // Shrinks to fit the sheet's cap and scrolls; never grows past its content.
     body: {
@@ -316,7 +320,7 @@ const makeStyles = (t: ReturnType<typeof tonesFor>) => StyleSheet.create({
         paddingHorizontal: 20,
         paddingTop: 12,
         borderTopWidth: 1,
-        borderTopColor: t.line,
+        borderTopColor: tone.line,
     },
     sourceButtonsRow: {
         flexDirection: 'row',
@@ -325,9 +329,9 @@ const makeStyles = (t: ReturnType<typeof tonesFor>) => StyleSheet.create({
     },
     sourceButton: {
         flex: 1,
-        backgroundColor: t.sourceBg,
+        backgroundColor: tone.sourceBg,
         borderWidth: 2,
-        borderColor: t.sourceBorder,
+        borderColor: tone.sourceBorder,
         borderRadius: 16,
         padding: 20,
         alignItems: 'center',
@@ -339,12 +343,13 @@ const makeStyles = (t: ReturnType<typeof tonesFor>) => StyleSheet.create({
     sourceLabel: {
         fontSize: 16,
         fontWeight: '600',
-        color: t.sourceLabel,
+        color: tone.sourceLabel,
+        textAlign: 'center',
     },
     sectionTitle: {
         fontSize: 16,
         fontWeight: '600',
-        color: t.section,
+        color: tone.section,
         marginBottom: 16,
     },
     avatarScrollWrap: {
@@ -377,7 +382,7 @@ const makeStyles = (t: ReturnType<typeof tonesFor>) => StyleSheet.create({
         width: 34,
         height: 34,
         borderRadius: 17,
-        backgroundColor: t.chevronBg,
+        backgroundColor: tone.chevronBg,
         justifyContent: 'center',
         alignItems: 'center',
         // subtle lift so the cue reads as a control floating over the strip
@@ -390,7 +395,7 @@ const makeStyles = (t: ReturnType<typeof tonesFor>) => StyleSheet.create({
     avatarChevronText: {
         fontSize: 24,
         fontWeight: '800',
-        color: t.chevronText,
+        color: tone.chevronText,
         textAlign: 'center',
         includeFontPadding: false,
     },
@@ -402,11 +407,11 @@ const makeStyles = (t: ReturnType<typeof tonesFor>) => StyleSheet.create({
         borderColor: 'transparent',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: t.itemBg,
+        backgroundColor: tone.itemBg,
     },
     avatarItemSelected: {
         borderColor: palette.blue500,
-        backgroundColor: t.selectedBg,
+        backgroundColor: tone.selectedBg,
         transform: [{ scale: 1.1 }],
     },
     avatarImage: {
@@ -438,7 +443,7 @@ const makeStyles = (t: ReturnType<typeof tonesFor>) => StyleSheet.create({
     },
     loadingText: {
         marginTop: 16,
-        color: t.loading,
+        color: tone.loading,
         fontWeight: '600',
     },
 });

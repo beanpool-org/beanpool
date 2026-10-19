@@ -180,10 +180,10 @@ describe('the screens draw Beans only behind beansOn (source check)', () => {
     it('Commons (a link still opens it): no pool balance, no voice credits, no pool info', () => {
         const src = read('app/(tabs)/projects.tsx');
         const row = block(src, '{showsBeans && (');
-        expect(row).toContain('<CurrencyDisplay amount={(balanceState.commons || 0).toFixed(2)}');
+        expect(row).toContain('<CurrencyDisplay amount={formatNumber(balanceState.commons || 0, 2)}');
         expect(row).toContain('testID="voice-credits-card"');
         const title = src.slice(src.indexOf('right={showsBeans ? ('), src.indexOf(') : undefined} />'));
-        expect(title).toContain('accessibilityLabel="About the Commons Pool"');
+        expect(title).toContain("accessibilityLabel={t('About the Commons Pool')}");
         expect(src.split('About the Commons Pool').length - 1).toBe(1);
     });
 
@@ -205,7 +205,7 @@ describe('the screens draw Beans only behind beansOn (source check)', () => {
             expect(at(figure)).toBeGreaterThan(open);
             expect(at(figure)).toBeLessThan(other);
         }
-        // In the member's language (words S3j): the card's word() keys, shown with t().
+        // Drawn in the member's language (words S3e): the card's words are word() keys, t()'d where shown.
         expect(at('{t(NO_BEANS_GUIDE_CARD.text)}')).toBeGreaterThan(other);
         expect(block(guide, '{beansOn && (')).toContain('tab to send credits');
         // The join wizard says the same thing on the same kind of community.

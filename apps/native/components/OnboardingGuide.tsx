@@ -1,18 +1,22 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import { t } from '@beanpool/core';
 import { colors, palette } from '../constants/colors';
 import { NO_BEANS_GUIDE_CARD } from '../utils/beans-off';
-import { t } from '@beanpool/core';
 import { Sentence } from './Sentence';
+
+const bold = { fontWeight: 'bold' } as const;
 
 /**
  * The "how BeanPool works" guide cards. Shared so the first-run onboarding
  * wizard (welcome.tsx) and the re-runnable profile setup (profile-setup.tsx)
- * show identical content — edit the explanation once, in here. The same sentences as welcome's, so one catalog entry
- * each serves both, in the member's language.
+ * show identical content — edit the explanation once, in here.
  *
  * `beansOn` false (a community with Beans off, the worldwide one): cards 1-3 are about Beans, so one card that says
  * there are none takes their place, and the Ledger tip goes, as in the join wizard (utils/beans-off.ts).
+ *
+ * In the member's language: a bold phrase sits inside its sentence ({map}, {zero}), never glued beside it, so a
+ * language can put it where its word order wants it (components/Sentence). The figures are written in the sentences.
  */
 export function OnboardingGuide({ beansOn = true }: { beansOn?: boolean }) {
     return (
@@ -29,7 +33,7 @@ export function OnboardingGuide({ beansOn = true }: { beansOn?: boolean }) {
                     <Text style={guideStyles.highlightText}>
                         <Sentence
                             text={t('🟢 {zero} This means you have given as much value to your community as you have received from it.')}
-                            parts={{ zero: <Text style={{ fontWeight: 'bold' }}>{t('The best place to be is zero (0 Beans).')}</Text> }}
+                            parts={{ zero: <Text style={bold}>{t('The best place to be is zero (0 Beans).')}</Text> }}
                         />
                     </Text>
                 </View>
@@ -37,7 +41,7 @@ export function OnboardingGuide({ beansOn = true }: { beansOn?: boolean }) {
                     <Text style={[guideStyles.highlightText, { color: palette.amber700 || '#b45309' }]}>
                         <Sentence
                             text={t('🫘 {first} In a community with Beans, to keep the credit pool healthy, list at least one Offer of what you can give back before you can post Needs or accept Offers.')}
-                            parts={{ first: <Text style={{ fontWeight: 'bold' }}>{t('Contributions First.')}</Text> }}
+                            parts={{ first: <Text style={bold}>{t('Contributions First.')}</Text> }}
                         />
                     </Text>
                 </View>
@@ -97,29 +101,17 @@ export function OnboardingGuide({ beansOn = true }: { beansOn?: boolean }) {
             <View style={guideStyles.card}>
                 <Text style={guideStyles.cardTitle}>{t('🚀 Where to Start?')}</Text>
                 <Text style={guideStyles.bulletItem}>
-                    <Sentence
-                        text={t('📍 Explore the {map} to find offers (green) and needs (orange) near you.')}
-                        parts={{ map: <Text style={{ fontWeight: 'bold' }}>{t('Map', undefined, 'tab')}</Text> }}
-                    />
+                    <Sentence text={t('📍 Explore the {map} to find offers (green) and needs (orange) near you.')} parts={{ map: <Text style={bold}>{t('Map', undefined, 'tab')}</Text> }} />
                 </Text>
                 <Text style={guideStyles.bulletItem}>
-                    <Sentence
-                        text={t('💬 Tap {message} on any post to chat securely (E2E encrypted) with neighbors.')}
-                        parts={{ message: <Text style={{ fontWeight: 'bold' }}>{t('Message', undefined, 'button: write to')}</Text> }}
-                    />
+                    <Sentence text={t('💬 Tap {message} on any post to chat securely (E2E encrypted) with neighbors.')} parts={{ message: <Text style={bold}>{t('Message', undefined, 'button: write to')}</Text> }} />
                 </Text>
                 <Text style={guideStyles.bulletItem}>
-                    <Sentence
-                        text={t('➕ Click {post} to list what you need or what you can offer to the community.')}
-                        parts={{ post: <Text style={{ fontWeight: 'bold' }}>{t('Post', undefined, 'button: publish')}</Text> }}
-                    />
+                    <Sentence text={t('➕ Click {post} to list what you need or what you can offer to the community.')} parts={{ post: <Text style={bold}>{t('Post', undefined, 'button: publish')}</Text> }} />
                 </Text>
                 {beansOn && (
                     <Text style={guideStyles.bulletItem}>
-                        <Sentence
-                            text={t('💳 Use the {ledger} tab to send credits to neighbors instantly.')}
-                            parts={{ ledger: <Text style={{ fontWeight: 'bold' }}>{t('Ledger', undefined, 'tab')}</Text> }}
-                        />
+                        <Sentence text={t('💳 Use the {ledger} tab to send credits to neighbors instantly.')} parts={{ ledger: <Text style={bold}>{t('Ledger', undefined, 'tab')}</Text> }} />
                     </Text>
                 )}
             </View>

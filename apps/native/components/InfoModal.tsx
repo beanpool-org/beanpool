@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Modal, View, Text, TouchableOpacity, ScrollView, StyleSheet, TouchableWithoutFeedback } from 'react-native';
 import { useStyles } from '../app/ThemeContext';
+import { t } from '@beanpool/core';
 
 export interface InfoModalTab {
     id: string;
@@ -49,10 +50,12 @@ export function InfoModal({ isOpen, onClose, title, icon, tabs, defaultTab, test
             borderBottomWidth: 1,
             borderBottomColor: colors.border.default,
         },
+        // A longer language's title wraps beside the close button, never pushing it off the sheet.
         headerTitleContainer: {
             flexDirection: 'row',
             alignItems: 'center',
             gap: 12,
+            flexShrink: 1,
         },
         headerIconContainer: {
             justifyContent: 'center',
@@ -62,6 +65,7 @@ export function InfoModal({ isOpen, onClose, title, icon, tabs, defaultTab, test
             fontSize: 20,
             fontWeight: 'bold',
             color: colors.text.heading,
+            flexShrink: 1,
         },
         closeButton: {
             padding: 8,
@@ -122,7 +126,7 @@ export function InfoModal({ isOpen, onClose, title, icon, tabs, defaultTab, test
             onRequestClose={onClose}
         >
             <View style={styles.overlay}>
-                <TouchableWithoutFeedback onPress={onClose} accessibilityRole="button" accessibilityLabel="Close">
+                <TouchableWithoutFeedback onPress={onClose} accessibilityRole="button" accessibilityLabel={t('Close')}>
                     <View style={styles.backdrop} />
                 </TouchableWithoutFeedback>
 
@@ -133,7 +137,7 @@ export function InfoModal({ isOpen, onClose, title, icon, tabs, defaultTab, test
                             <View style={styles.headerIconContainer}>{icon}</View>
                             <Text style={styles.headerTitle}>{title}</Text>
                         </View>
-                        <TouchableOpacity onPress={onClose} accessibilityRole="button" accessibilityLabel="Close" testID={testID ? `${testID}-close` : undefined} style={styles.closeButton}>
+                        <TouchableOpacity onPress={onClose} accessibilityRole="button" accessibilityLabel={t('Close')} testID={testID ? `${testID}-close` : undefined} style={styles.closeButton}>
                             <Text style={styles.closeButtonText}>✕</Text>
                         </TouchableOpacity>
                     </View>

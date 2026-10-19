@@ -13,6 +13,7 @@
  * was.
  */
 
+import { word, type WordKey } from '@beanpool/core';
 import { decisionsOn, hiddenTabsFor, type NodeFeatures } from './node-profile';
 import { groupsYouCouldJoin } from './your-groups';
 import type { GroupItem } from './db';
@@ -50,34 +51,35 @@ export function commonsSectionFor(
     return shown.includes(asked as CommonsSection) ? (asked as CommonsSection) : shown[0];
 }
 
-/** The screen's title and the line under it, for what this node shows. */
-export function commonsHeading(features: NodeFeatures | null | undefined): { title: string; description: string } {
+/** The screen's title and the line under it, for what this node shows: word() keys, shown through t(). */
+export function commonsHeading(features: NodeFeatures | null | undefined): { title: WordKey; description: WordKey } {
     const decide = decisionsOn(features);
     const enterprises = enterprisesOn(features);
+    const commons = word('Commons');
     if (decide && enterprises) {
-        return { title: 'Commons', description: 'Community decisions, the Commons, and your groups: projects, enterprises and more. Propose binding actions and vote on what matters.' };
+        return { title: commons, description: word('Community decisions, the Commons, and your groups: projects, enterprises and more. Propose binding actions and vote on what matters.') };
     }
-    if (decide) return { title: 'Commons', description: 'Community decisions and groups. Propose binding actions and vote on what matters.' };
-    if (enterprises) return { title: 'Commons', description: 'Projects, enterprises, and groups to join or start.' };
+    if (decide) return { title: commons, description: word('Community decisions and groups. Propose binding actions and vote on what matters.') };
+    if (enterprises) return { title: commons, description: word('Projects, enterprises, and groups to join or start.') };
     // A node that shows its switched-off features (the worldwide community's showcase) keeps the Commons heading over
     // Example Valley's pool, enterprise and Decision, drawn first, and the real groups under them (design §1 row 6).
     if (features?.showcase === true) {
-        return { title: 'Commons', description: "A local community's Commons, from an example: a shared pool, enterprises and binding decisions. Under it, groups to join here, or start your own with +." };
+        return { title: commons, description: word("A local community's Commons, from an example: a shared pool, enterprises and binding decisions. Under it, groups to join here, or start your own with +.") };
     }
-    return { title: 'Groups', description: 'Find a group to join, or start your own with +.' };
+    return { title: word('Groups'), description: word('Find a group to join, or start your own with +.') };
 }
 
 /** The kind chips over the Groups list. */
 export type GroupKind = 'all' | 'projects' | 'enterprises' | 'chat';
 
-/** The chips this node shows, in order. None where it lists no projects or enterprises: every group is a chat group. */
-export function groupKindChips(features: NodeFeatures | null | undefined): Array<{ key: GroupKind; label: string }> {
+/** The chips this node shows, in order (word() keys, shown through t()). None where it lists no projects or enterprises: every group is a chat group. */
+export function groupKindChips(features: NodeFeatures | null | undefined): Array<{ key: GroupKind; label: WordKey }> {
     if (!enterprisesOn(features)) return [];
     return [
-        { key: 'all', label: 'All' },
-        { key: 'projects', label: '🌱 Projects' },
-        { key: 'enterprises', label: '🏛️ Enterprises' },
-        { key: 'chat', label: '👥 Chat groups' },
+        { key: 'all', label: word('All') },
+        { key: 'projects', label: word('🌱 Projects') },
+        { key: 'enterprises', label: word('🏛️ Enterprises') },
+        { key: 'chat', label: word('👥 Chat groups') },
     ];
 }
 
@@ -126,14 +128,14 @@ export function commonsGroupRows<E extends CommonsEnterprise>(
     return rows;
 }
 
-/** What the empty list says for a chip. */
-export function commonsGroupsEmpty(kind: GroupKind, features: NodeFeatures | null | undefined): { title: string; desc: string; action: 'group' | 'project' } {
+/** What the empty list says for a chip: word() keys, shown through t(). */
+export function commonsGroupsEmpty(kind: GroupKind, features: NodeFeatures | null | undefined): { title: WordKey; desc: WordKey; action: 'group' | 'project' } {
     if (!enterprisesOn(features) || kind === 'chat') {
-        return { title: 'No other groups to join', desc: 'Start one: a social circle, a working group, a guild.', action: 'group' };
+        return { title: word('No other groups to join'), desc: word('Start one: a social circle, a working group, a guild.'), action: 'group' };
     }
-    if (kind === 'projects') return { title: 'No projects to back yet', desc: 'Got an idea that needs Beans? Start a project.', action: 'project' };
-    if (kind === 'enterprises') return { title: 'No enterprises to join yet', desc: 'Something that keeps going and trades? Start an enterprise.', action: 'project' };
-    return { title: 'No other groups yet', desc: 'Start one with +: a chat group, a project or an enterprise.', action: 'group' };
+    if (kind === 'projects') return { title: word('No projects to back yet'), desc: word('Got an idea that needs Beans? Start a project.'), action: 'project' };
+    if (kind === 'enterprises') return { title: word('No enterprises to join yet'), desc: word('Something that keeps going and trades? Start an enterprise.'), action: 'project' };
+    return { title: word('No other groups yet'), desc: word('Start one with +: a chat group, a project or an enterprise.'), action: 'group' };
 }
 
 /**

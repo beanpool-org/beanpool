@@ -1067,7 +1067,8 @@ function ChatScreen({ id }: { id: string }) {
             <View style={[chat.systemMessageBubble, { maxWidth: '90%', backgroundColor: colors.chatSystem.defaultBg, borderColor: colors.chatSystem.defaultBorder, borderWidth: 1 }]}>
                 <MaterialCommunityIcons name={item.integrityNote ? 'bullhorn-outline' : 'shield-alert-outline'} size={16} color={colors.text.secondary} style={{ marginRight: 6 }} />
                 <Text style={[chat.systemMessageText, { flexShrink: 1, color: theme === 'dark' ? colors.text.secondary : palette.gray700, fontSize: 13, fontWeight: '500' }]}>
-                    {chatLineWords(dmLineSlotText(item))}
+                    {/* The admins' message is their words, shown as written; any other line here is a stand-in BeanPool wrote. */}
+                    {item.quoteFrom === 'admins' ? dmLineSlotText(item) : chatLineWords(dmLineSlotText(item))}
                 </Text>
             </View>
             {item.integrityNote ? (

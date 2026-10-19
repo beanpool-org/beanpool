@@ -20,8 +20,10 @@ import { View, Text, StyleSheet, Pressable, Switch, Platform } from 'react-nativ
 import { Image } from 'expo-image';
 import {
     platformMeta,
+    platformName,
     categoryMeta,
     isWebUrl,
+    t,
     type ChannelPlatform,
     type ChannelCategory,
 } from '@beanpool/core';
@@ -66,7 +68,7 @@ export function PulsePreviewCard({
 
     const platform = platformMeta(preview.platform);
     const category = categoryMeta(preview.category);
-    const displayCallsign = preview.authorCallsign || callsign || 'You';
+    const displayCallsign = preview.authorCallsign || callsign || t('You');
     const hasValidThumbnail = Boolean(preview.thumbnailUrl && isWebUrl(preview.thumbnailUrl) && !imageError);
 
     return (
@@ -77,7 +79,7 @@ export function PulsePreviewCard({
                 !isOptedIn && styles.cardOptedOut,
             ]}
             accessibilityRole="summary"
-            accessibilityLabel={`Preview of ${platform.label} post: ${preview.title || 'Untitled'}`}
+            accessibilityLabel={t('Preview of {platform} post: {title}', { platform: platformName(preview.platform), title: preview.title || t('Untitled') })}
         >
             {/* Header: Author Callout & Badges */}
             <View style={styles.headerRow}>
@@ -89,7 +91,7 @@ export function PulsePreviewCard({
                         {displayCallsign}
                     </Text>
                     {preview.isVerified ? (
-                        <View style={styles.verifiedBadge} accessibilityLabel="Verified creator">
+                        <View style={styles.verifiedBadge} accessibilityLabel={t('Verified creator')}>
                             <Text style={styles.verifiedIcon} allowFontScaling={false}>✓</Text>
                         </View>
                     ) : null}
@@ -100,7 +102,7 @@ export function PulsePreviewCard({
                         {category.icon}
                     </Text>
                     <Text style={styles.categoryText} numberOfLines={1}>
-                        {category.label}
+                        {t(category.label)}
                     </Text>
                 </View>
             </View>
@@ -114,10 +116,10 @@ export function PulsePreviewCard({
                         contentFit="cover"
                         transition={200}
                         onError={() => setImageError(true)}
-                        accessibilityLabel="Post thumbnail"
+                        accessibilityLabel={t('Post thumbnail')}
                     />
                 ) : (
-                    <View style={styles.thumbnailPlaceholder} accessibilityLabel="No image preview">
+                    <View style={styles.thumbnailPlaceholder} accessibilityLabel={t('No image preview')}>
                         <Text style={styles.placeholderIcon} allowFontScaling={false}>
                             {platform.icon}
                         </Text>
@@ -130,7 +132,7 @@ export function PulsePreviewCard({
                         numberOfLines={3}
                         ellipsizeMode="tail"
                     >
-                        {preview.title || 'Untitled Post'}
+                        {preview.title || t('Untitled Post')}
                     </Text>
 
                     <Text style={styles.urlText} numberOfLines={1} ellipsizeMode="middle">
@@ -144,7 +146,7 @@ export function PulsePreviewCard({
                 <View style={styles.duplicateBanner} accessibilityRole="alert">
                     <Text style={styles.duplicateIcon} allowFontScaling={false}>ℹ️</Text>
                     <Text style={styles.duplicateText}>
-                        Already published to Pulse. Submitting will update the title or category.
+                        {t('Already published to Pulse. Submitting will update the title or category.')}
                     </Text>
                 </View>
             ) : null}
@@ -156,12 +158,12 @@ export function PulsePreviewCard({
                     onPress={() => onToggleOptIn(!isOptedIn)}
                     accessibilityRole="switch"
                     accessibilityState={{ checked: isOptedIn }}
-                    accessibilityLabel="Publish to Pulse"
+                    accessibilityLabel={t('Publish to Pulse')}
                 >
                     <View style={styles.reviewLabelGroup}>
-                        <Text style={styles.reviewTitle}>Publish to Pulse</Text>
+                        <Text style={styles.reviewTitle}>{t('Publish to Pulse')}</Text>
                         <Text style={styles.reviewSub}>
-                            {isOptedIn ? 'Will be shared with your local community' : 'Excluded from this publish'}
+                            {isOptedIn ? t('Will be shared with your local community') : t('Excluded from this publish')}
                         </Text>
                     </View>
                     <Switch
@@ -169,7 +171,7 @@ export function PulsePreviewCard({
                         onValueChange={onToggleOptIn}
                         trackColor={{ false: colors.border.default, true: colors.brand.primary }}
                         thumbColor={Platform.OS === 'android' ? (isOptedIn ? colors.brand.primary : colors.surface.card) : undefined}
-                        accessibilityLabel="Include this post in Pulse"
+                        accessibilityLabel={t('Include this post in Pulse')}
                     />
                 </Pressable>
             ) : null}

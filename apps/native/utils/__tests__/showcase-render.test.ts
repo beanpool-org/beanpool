@@ -288,7 +288,8 @@ for (const scheme of ['light', 'dark'] as const) {
 
             expect(text()).toContain('Example Valley');
             expect(text()).toContain(SAMPLE_COMMUNITY.decisions[0].question);
-            expect(text()).toContain('Touches: pool');
+            // Drawn in capitals, as it always showed (core's inCapitalsOf, where a textTransform was).
+            expect(text()).toContain('TOUCHES: POOL');
             expect(text()).toContain('Grant Enterprise');
             expect(text()).toContain('Quadratic');
             expect(text()).toContain('9 of 6 votes needed');

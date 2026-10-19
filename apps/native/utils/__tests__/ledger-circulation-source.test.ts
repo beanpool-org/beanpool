@@ -24,7 +24,7 @@ describe("the phone Wallet's Community Circulation box", () => {
     it('shows the amount and the next run only above the line, and a sentence through t() at or under it', () => {
         expect(box.length).toBeGreaterThan(0);
         expect(box).toMatch(/\{monthly > 0 && \(\s*\/\/[^\n]*\n\s*<CurrencyDisplay/);
-        expect(box).toMatch(/\{monthly > 0 \? \(\s*<View style=\{styles\.circRow\}>\s*<Text[^>]*>per month → commons pool/);
+        expect(box).toMatch(/\{monthly > 0 \? \(\s*<View style=\{styles\.circRow\}>\s*<Text[^>]*>\{t\('per month → commons pool'\)\}/);
         expect(box).toContain("t('Nothing goes to the Commons while you hold {free} Beans or less.', { free: String(CIRCULATION_FREE_BEANS) })");
     });
 

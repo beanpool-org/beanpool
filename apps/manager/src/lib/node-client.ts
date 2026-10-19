@@ -1017,31 +1017,31 @@ export const NODE_DATA_ALL_MS = 5 * 60_000;
 export async function fetchNodeData(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<NodeDataPayload> {
     const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/data');
     const ctl = new AbortController();
-    const timers: Array<ReturnType<typeof setTimeout>> = [];
-    // Rejects with `words` once `ms` pass, and stops the request: a fetch that ignored the abort still ends here.
-    const within = <T>(work: Promise<T>, ms: number, words: string): Promise<T> => Promise.race([work, new Promise<never>((_, reject) => {
-        timers.push(setTimeout(() => {
-            const e = new Error(words);
-            reject(e);
-            ctl.abort(e);
-        }, ms));
-    })]);
+    // Rejects with `words` once `ms` pass, and stops the request: a fetch that ignored the abort still ends here. Each
+    // limit's timer stops when its own work settles: the answer's, left running, aborted a body still arriving after 30 s
+    // (review r4309522009).
+    const within = <T>(work: Promise<T>, ms: number, words: string): Promise<T> => {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        return Promise.race([work, new Promise<never>((_, reject) => {
+            timer = setTimeout(() => {
+                const e = new Error(words);
+                reject(e);
+                ctl.abort(e);
+            }, ms);
+        })]).finally(() => clearTimeout(timer));
+    };
     const started = Date.now();
-    try {
-        const res = await within(fetch(endpoint, {
-            method: 'POST',
-            headers: buildAdminHeaders(adminPassword, tfaToken),
-            body: JSON.stringify({ ...passwordField(adminPassword) }),
-            signal: ctl.signal,
-        }), NODE_DATA_ANSWER_MS, "The node didn't answer within 30 seconds");
-        if (!res.ok) {
-            throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-        }
-        const json = await within(res.json(), NODE_DATA_ALL_MS - (Date.now() - started), "The node's data didn't all arrive within 5 minutes");
-        return normalizeNodeData(json);
-    } finally {
-        timers.forEach(clearTimeout);
+    const res = await within(fetch(endpoint, {
+        method: 'POST',
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+        body: JSON.stringify({ ...passwordField(adminPassword) }),
+        signal: ctl.signal,
+    }), NODE_DATA_ANSWER_MS, "The node didn't answer within 30 seconds");
+    if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
     }
+    const json = await within(res.json(), NODE_DATA_ALL_MS - (Date.now() - started), "The node's data didn't all arrive within 5 minutes");
+    return normalizeNodeData(json);
 }
 
 export async function fetchNodeLogs(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<any[]> {

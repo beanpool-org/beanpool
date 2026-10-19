@@ -48,10 +48,15 @@ describe('fetchNodeData has time limits', () => {
     });
 
     it('a slow but steady read inside the limits loads, and leaves no timer behind', async () => {
-        vi.stubGlobal('fetch', vi.fn(() => new Promise((resolve) => {
+        // Like a real fetch, the body read fails once the request's signal is aborted: the 30-second limit is on the
+        // answer, so it must not stop a body that is still arriving after it (review r4309522009).
+        vi.stubGlobal('fetch', vi.fn((_url: string, init?: RequestInit) => new Promise((resolve) => {
             setTimeout(() => resolve({
                 ok: true, status: 200, statusText: 'OK',
-                json: () => new Promise((done) => setTimeout(() => done({ members: [{ publicKey: 'ab'.repeat(32) }] }), 4 * 60_000)),
+                json: () => new Promise((done, fail) => {
+                    init?.signal?.addEventListener('abort', () => fail(init.signal?.reason));
+                    setTimeout(() => done({ members: [{ publicKey: 'ab'.repeat(32) }] }), 4 * 60_000);
+                }),
             }), NODE_DATA_ANSWER_MS - 1_000);
         })));
         const read = fetchNodeData(NODE);

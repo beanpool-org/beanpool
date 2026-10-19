@@ -522,7 +522,7 @@ describe('the screens at 320 dp with 1.3× text, in the pseudo-locale', () => {
 describe('profile setup follows a language picked while it is open', () => {
     const fr = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../words/fr.json'), 'utf8')) as Record<string, unknown>;
 
-    it('a pick redraws the step in the new language, with nothing by hand; the member\'s name stays as written', async () => {
+    it('a pick redraws the step in the new language, with nothing by hand; a name typed and not yet saved goes back to the account\'s', async () => {
         await act(async () => {
             root.render(createElement(LanguageProvider as any, { deviceTags: ['en-US'] },
                 createElement(DrawnInLanguage, null, createElement(ProfileSetupScreen)),
@@ -531,6 +531,9 @@ describe('profile setup follows a language picked while it is open', () => {
         await settle();
         expect(host.textContent).toContain('Next →');
         expect(host.textContent).toContain('Cancel');
+        expect((host.querySelector('input') as HTMLInputElement).value).toBe('Sally');
+        await type(host.querySelector('input'), 'Wren');
+        expect((host.querySelector('input') as HTMLInputElement).value).toBe('Wren');
         await click(host.querySelector('[data-testid="language-fr"]'), 'Français');
         await settle();
         for (const english of ['Next →', 'Cancel']) {
@@ -538,6 +541,8 @@ describe('profile setup follows a language picked while it is open', () => {
             expect(host.textContent).toContain(fr[english] as string);
         }
         expect(host.textContent).not.toContain('Next →');
+        // A pick draws the screen again from scratch (LanguageProvider's header): the typed "Wren" was never saved, so the
+        // field starts again from the account's name.
         expect((host.querySelector('input') as HTMLInputElement).value).toBe('Sally');
     });
 });

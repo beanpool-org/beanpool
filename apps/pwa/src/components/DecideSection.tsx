@@ -173,14 +173,15 @@ export function DecideSection({
                     aria-selected={activeView === 'open'}
                     aria-controls="panel-open-decisions"
                     onClick={() => onChangeView('open')}
-                    className={`flex-1 min-w-0 py-2.5 px-4 rounded-xl border text-sm font-bold flex items-center justify-center gap-2 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
+                    className={`flex-1 min-w-0 py-2.5 px-1.5 rounded-xl border text-sm font-bold flex flex-wrap items-center justify-center gap-1 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
                         activeView === 'open'
                             ? 'bg-emerald-50 dark:bg-emerald-500/20 border-emerald-500 text-emerald-800 dark:text-emerald-300 shadow-sm'
                             : 'bg-nature-900 border-nature-800 text-nature-400 hover:border-nature-700'
                     }`}
                 >
-                    {/* A longer language wraps inside the tab rather than pushing the other tab off a 320 px screen. */}
-                    <span className="min-w-0 break-words text-center"><span aria-hidden="true">🗳️ </span>{t('Open Decisions')}</span>
+                    {/* A longer language wraps inside the tab rather than pushing the other tab off a 320 px screen. The words start
+                        at their longest word's width, so where that and the count cannot sit side by side the count goes under them. */}
+                    <span className="min-w-0 basis-[min-content] grow break-words text-center"><span aria-hidden="true">🗳️ </span>{t('Open Decisions')}</span>
                     {openDecisions.length > 0 && (
                         <span className="bg-bp-commit-fill text-bp-commit-on text-xs px-2 py-0.5 rounded-full font-extrabold">
                             {openDecisions.length}
@@ -195,7 +196,7 @@ export function DecideSection({
                     aria-selected={activeView === 'history'}
                     aria-controls="panel-history-decisions"
                     onClick={() => onChangeView('history')}
-                    className={`flex-1 min-w-0 py-2.5 px-4 rounded-xl border text-sm font-bold flex items-center justify-center gap-2 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
+                    className={`flex-1 min-w-0 py-2.5 px-1.5 rounded-xl border text-sm font-bold flex items-center justify-center gap-1 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
                         activeView === 'history'
                             ? 'bg-emerald-50 dark:bg-emerald-500/20 border-emerald-500 text-emerald-800 dark:text-emerald-300 shadow-sm'
                             : 'bg-nature-900 border-nature-800 text-nature-400 hover:border-nature-700'

@@ -155,7 +155,7 @@ export function ArchetypeQuizModal({
                         <div className="w-11 h-11 min-w-[44px] min-h-[44px]" />
                     )}
 
-                    <h3 id="quiz-modal-title" className="text-base sm:text-lg font-bold text-nature-950 dark:text-white m-0 text-center flex-1 px-2 truncate">
+                    <h3 id="quiz-modal-title" className="text-base sm:text-lg font-bold text-nature-950 dark:text-white m-0 text-center flex-1 min-w-0 px-2 break-words">
                         {step === 'intro'
                             ? t('How you like to work')
                             : step === 'quiz'

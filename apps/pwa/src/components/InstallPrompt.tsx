@@ -153,7 +153,8 @@ export function InstallPrompt({ hidden = false }: { hidden?: boolean } = {}) {
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: showSteps ? '0.75rem' : 0 }}>
                 <span style={{ fontSize: '2rem' }} aria-hidden="true">📲</span>
-                <div style={{ flex: 1 }}>
+                {/* Both sides may wrap: a longer language's words break inside their own side, never under the other. */}
+                <div style={{ flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}>
                     <p style={{ fontWeight: 700, fontSize: '0.95rem', color: ON_BRAND, marginBottom: '0.2rem' }}>
                         {t('Install BeanPool')}
                     </p>
@@ -186,8 +187,9 @@ export function InstallPrompt({ hidden = false }: { hidden?: boolean } = {}) {
                             background: showSteps ? 'var(--bp-neutral-hover)' : 'var(--bp-info-fill)', color: ON_BRAND,
                             border: 'none', fontSize: '0.85rem', fontWeight: 600,
                             // No nowrap: at 320 px with 130 % text the row squeezes the button, and 'Hide steps' ran out past its fill.
+                            // At most 45 % of the row, its words wrapping inside it (the pseudo-locale's 'Hide steps' ran 120 px out).
                             cursor: 'pointer', fontFamily: 'inherit',
-                            minWidth: '44px', minHeight: '44px',
+                            minWidth: '44px', minHeight: '44px', maxWidth: '45%', overflowWrap: 'anywhere',
                         }}
                         className="focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
                     >

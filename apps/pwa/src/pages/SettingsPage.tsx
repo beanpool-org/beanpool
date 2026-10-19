@@ -736,12 +736,16 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
 
                 {/* Identity Card */}
                 <div className="bg-white dark:bg-nature-900 rounded-2xl p-6 mb-6 shadow-soft border border-nature-200 dark:border-nature-800 transition-colors relative">
-                    <button
-                        onClick={() => setMode('profile')}
-                        className="absolute top-4 right-4 text-xs font-bold text-terra-600 dark:text-terra-400 bg-terra-50 dark:bg-terra-900/30 px-3 py-1.5 rounded-full border border-terra-200 dark:border-terra-800/60 cursor-pointer hover:bg-terra-100 dark:hover:bg-terra-900/60 dark:hover:text-terra-300 transition-all"
-                    >
-                        {t('✏️ Edit Profile')}
-                    </button>
+                    {/* In the card's flow, above the photo: a longer language's words (ru "Редактировать профиль") ran over the
+                        photo when it sat in the corner (e2e/words-w3-screens-check.mjs). */}
+                    <div className="flex justify-end -mt-2 -mr-2 mb-1">
+                        <button
+                            onClick={() => setMode('profile')}
+                            className="max-w-full break-words text-xs font-bold text-terra-600 dark:text-terra-400 bg-terra-50 dark:bg-terra-900/30 px-3 py-1.5 rounded-full border border-terra-200 dark:border-terra-800/60 cursor-pointer hover:bg-terra-100 dark:hover:bg-terra-900/60 dark:hover:text-terra-300 transition-all"
+                        >
+                            {t('✏️ Edit Profile')}
+                        </button>
+                    </div>
                     <div className="flex justify-center mb-4">
                         <div className="w-20 h-20 rounded-full border-4 border-terra-300 dark:border-terra-600 flex items-center justify-center text-3xl bg-oat-50 dark:bg-nature-800 shadow-inner overflow-hidden transition-colors">
                             {profile?.avatar ? (
@@ -776,8 +780,8 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
 
                     {/* Two versions, named: the node you are talking to, and the app in this
                         browser. Collapsing them into one number hides a stale cached bundle. */}
-                    <div className="flex justify-between items-center gap-2 text-xs text-nature-500 dark:text-nature-400 pt-2 border-t border-nature-100 dark:border-nature-800">
-                        <span className="truncate"><Sentence text={t('Node: {address}')} parts={{ address: <code className="font-mono text-nature-700 dark:text-nature-300">{window.location.host}</code> }} />{nodeVersion && <span className="font-mono ml-1">{t('v{version}', { version: nodeVersion })}</span>}</span>
+                    <div className="flex flex-wrap justify-between items-center gap-x-2 gap-y-1 text-xs text-nature-500 dark:text-nature-400 pt-2 border-t border-nature-100 dark:border-nature-800">
+                        <span className="min-w-0 break-words"><Sentence text={t('Node: {address}')} parts={{ address: <code className="font-mono text-nature-700 dark:text-nature-300 break-all">{window.location.host}</code> }} />{nodeVersion && <span className="font-mono ml-1">{t('v{version}', { version: nodeVersion })}</span>}</span>
                         <span className="whitespace-nowrap" aria-label={t('App version {version}', { version: __APP_VERSION__ })}>{t('App v{version}', { version: __APP_VERSION__ })}</span>
                     </div>
                 </div>
@@ -817,14 +821,14 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                                 <span className="text-3xl select-none" aria-hidden="true">{primary.emoji}</span>
                                                 <div className="flex-1 min-w-0">
                                                     <div className="flex items-center justify-between gap-2">
-                                                        <span className="text-[15px] font-bold text-nature-950 dark:text-white truncate">
+                                                        <span className="min-w-0 text-[15px] font-bold text-nature-950 dark:text-white break-words">
                                                             {t(primary.name)}
                                                         </span>
                                                         <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-bp-chip-ok-tint text-bp-chip-ok-ink border border-transparent shrink-0">
                                                             {parsed.mode === 'deep' ? t('27 Qs') : t('9 Qs')}
                                                         </span>
                                                     </div>
-                                                    <div className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 truncate">
+                                                    <div className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 break-words">
                                                         {t(primary.tagline)}
                                                     </div>
                                                 </div>
@@ -863,7 +867,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                                             setQuizInitialMode('deep');
                                                             setShowQuizModal(true);
                                                         }}
-                                                        className="flex-1 min-w-0 py-2.5 px-3 rounded-xl text-xs font-bold bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on border-none cursor-pointer transition-colors shadow-sm truncate"
+                                                        className="flex-1 min-w-0 py-2.5 px-3 rounded-xl text-xs font-bold bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on border-none cursor-pointer transition-colors shadow-sm break-words"
                                                     >
                                                         {t('🧭 More accurate')}
                                                     </button>
@@ -875,7 +879,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                                         setQuizInitialMode('quick');
                                                         setShowQuizModal(true);
                                                     }}
-                                                    className={`min-w-0 py-2.5 px-3 rounded-xl text-xs font-bold border border-nature-200 dark:border-nature-700 bg-nature-50 dark:bg-nature-800 hover:bg-nature-100 dark:hover:bg-nature-700 text-nature-800 dark:text-nature-200 cursor-pointer transition-colors shadow-sm truncate ${
+                                                    className={`min-w-0 py-2.5 px-3 rounded-xl text-xs font-bold border border-nature-200 dark:border-nature-700 bg-nature-50 dark:bg-nature-800 hover:bg-nature-100 dark:hover:bg-nature-700 text-nature-800 dark:text-nature-200 cursor-pointer transition-colors shadow-sm break-words ${
                                                         parsed.mode === 'quick' ? 'flex-1' : 'w-full'
                                                     }`}
                                                 >
@@ -1002,7 +1006,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                                     role="radio"
                                                     aria-checked={selected}
                                                     onClick={() => onThemePreferenceChange(value)}
-                                                    className={`flex-1 min-h-[48px] px-1.5 py-1.5 rounded-lg text-[13px] text-center leading-tight cursor-pointer transition-colors ${selected
+                                                    className={`flex-1 min-w-0 min-h-[48px] px-1.5 py-1.5 rounded-lg text-[13px] text-center leading-tight break-words cursor-pointer transition-colors ${selected
                                                         ? 'bg-white dark:bg-nature-950 border border-nature-500 font-bold text-nature-900 dark:text-white'
                                                         : 'border border-transparent font-medium text-nature-600 dark:text-nature-300'}`}
                                                 >
@@ -1532,13 +1536,13 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
 
                                 {/* Storage info */}
                                 <div className="p-4 rounded-xl border border-nature-200 dark:border-nature-800 bg-oat-50/50 dark:bg-nature-950/50 mb-5 text-xs space-y-1.5">
-                                    <div className="flex justify-between">
+                                    <div className="flex flex-wrap justify-between gap-x-2">
                                         <span className="text-nature-500 dark:text-nature-400">{t('Storage Usage:')}</span>
                                         <span className="font-bold text-nature-900 dark:text-white">{storageEstimate}</span>
                                     </div>
-                                    <div className="flex justify-between">
+                                    <div className="flex flex-wrap justify-between gap-x-2">
                                         <span className="text-nature-500 dark:text-nature-400">{t('Active Node:')}</span>
-                                        <span className="font-mono text-nature-900 dark:text-white">{window.location.origin}</span>
+                                        <span className="min-w-0 font-mono text-nature-900 dark:text-white break-all">{window.location.origin}</span>
                                     </div>
                                 </div>
 

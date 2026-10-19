@@ -73,6 +73,48 @@ export function navTabWeight(label: string): number {
 // font and gets ~54px, so 3.3vw (10.6px there) keeps it whole; 0.6rem caps it on wider screens.
 export const NAV_LABEL_FONT_SIZE = 'min(0.6rem, 3.3vw)';
 
+/** The smallest a tab's name is drawn to fit its share of the row (see useFitNavLabels). */
+export const NAV_LABEL_MIN_SCALE = 0.8;
+
+/**
+ * A tab's name that doesn't fit its share of the row is drawn smaller until it does, down to NAV_LABEL_MIN_SCALE, as
+ * the phone's tab strip shrinks a word to fit (adjustsFontSizeToFit); a name that fits is never touched, so English
+ * reads as it always did. Measured at 320 px with 1.3x text and the phone's tab words (e2e/words-w3-screens-check.mjs):
+ * es "Mapa" and "Comunes", pt "Mapa", fr "Communs" and two of ml's were cut by 2 to 6 px. Fitted again whenever the
+ * row or a name changes size, and on a language change. Returns the ref for the row (a callback: it mounts after loading).
+ */
+function useFitNavLabels(lang: string): (nav: HTMLElement | null) => void {
+    const [nav, setNav] = useState<HTMLElement | null>(null);
+    useLayoutEffect(() => {
+        if (!nav || typeof ResizeObserver === 'undefined') return;
+        const fit = () => {
+            for (const label of nav.querySelectorAll<HTMLElement>('[data-nav-label]')) {
+                label.style.removeProperty('--nav-label-scale');
+                const need = label.scrollWidth;
+                const room = label.clientWidth;
+                if (room > 0 && need > room + 0.5) label.style.setProperty('--nav-label-scale', String(Math.max(NAV_LABEL_MIN_SCALE, room / need)));
+            }
+        };
+        fit();
+        // A frame later, not inside the observer: a label's own change of size would loop it.
+        let frame = 0;
+        const observer = new ResizeObserver(() => {
+            cancelAnimationFrame(frame);
+            frame = requestAnimationFrame(fit);
+        });
+        observer.observe(nav);
+        for (const label of nav.querySelectorAll('[data-nav-label]')) observer.observe(label);
+        let live = true;
+        document.fonts?.ready.then(() => live && fit());
+        return () => {
+            live = false;
+            observer.disconnect();
+            cancelAnimationFrame(frame);
+        };
+    }, [nav, lang]);
+    return setNav;
+}
+
 // What the header reads out of GET /api/community/health. `online` is ours, not the
 // node's: it records whether that call answered at all.
 interface NodeHealthState {
@@ -89,7 +131,8 @@ interface NodeHealthState {
 
 export function App() {
     // Every screen reads the new words the moment the language changes (lib/language.ts): App re-renders, and so does all of it.
-    useLanguage();
+    const [lang] = useLanguage();
+    const fitNavLabels = useFitNavLabels(lang);
     const [identity, setIdentity] = useState<BeanPoolIdentity | null>(null);
     const [loading, setLoading] = useState(true);
     /*
@@ -1107,6 +1150,7 @@ export function App() {
                     // desktop sidebar at every width instead of swapping at 768px.
                     className={`relative bottom-nav-bar ${isBottomNavVisible ? 'flex' : 'hidden'} md:hidden`}
                     data-testid="mobile-bottom-nav"
+                    ref={fitNavLabels}
                     style={{
                     position: 'fixed',
                     bottom: 0,
@@ -1218,7 +1262,7 @@ export function App() {
                                 {/* 0.6rem alone scales with the user's text size and cut "Market"/"Commons"
                                     to "Mar…"/"Co…" on a 320px phone at 1.3x. The vw cap keeps whole labels
                                     there; wider screens still get the full 0.6rem. */}
-                                <span data-nav-label className={`${isActive ? 'text-rainbow text-dark-aura font-extrabold' : 'text-dark-aura font-semibold'} truncate max-w-full text-center`} style={{ fontSize: NAV_LABEL_FONT_SIZE, lineHeight: 1.1 }}>
+                                <span data-nav-label className={`${isActive ? 'text-rainbow text-dark-aura font-extrabold' : 'text-dark-aura font-semibold'} truncate max-w-full text-center`} style={{ fontSize: `calc(${NAV_LABEL_FONT_SIZE} * var(--nav-label-scale, 1))`, lineHeight: 1.1 }}>
                                     {t(tab.label)}
                                 </span>
                             </div>

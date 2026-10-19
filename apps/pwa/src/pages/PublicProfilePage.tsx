@@ -403,7 +403,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                 <div className="flex items-center gap-3">
                                     <span className="text-3xl select-none" aria-hidden="true">{synergy.emoji}</span>
                                     <div className="flex-1 min-w-0">
-                                        <div className="text-base font-extrabold text-nature-950 dark:text-white truncate">
+                                        <div className="text-base font-extrabold text-nature-950 dark:text-white break-words">
                                             {t(synergy.title)}
                                         </div>
                                         <div className="text-xs font-bold text-emerald-600 dark:text-emerald-400 break-words">
@@ -599,10 +599,10 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                 <div className="flex items-center gap-3">
                                     <span className="text-3xl select-none" aria-hidden="true">{primary.emoji}</span>
                                     <div className="flex-1 min-w-0">
-                                        <div className="text-base font-extrabold text-nature-950 dark:text-white truncate">
+                                        <div className="text-base font-extrabold text-nature-950 dark:text-white break-words">
                                             {t(primary.name)}
                                         </div>
-                                        <div className="text-xs font-bold text-emerald-600 dark:text-emerald-400 truncate">
+                                        <div className="text-xs font-bold text-emerald-600 dark:text-emerald-400 break-words">
                                             {t(primary.tagline)}
                                         </div>
                                     </div>
@@ -640,7 +640,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                                 setQuizInitialMode('deep');
                                                 setShowQuizModal(true);
                                             }}
-                                            className="flex-1 py-2.5 px-3 rounded-xl text-xs font-bold bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on border-none cursor-pointer transition-colors shadow-sm truncate"
+                                            className="flex-1 py-2.5 px-3 rounded-xl text-xs font-bold bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on border-none cursor-pointer transition-colors min-w-0 shadow-sm break-words"
                                         >
                                             {t('🧭 More accurate')}
                                         </button>
@@ -652,7 +652,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                             setQuizInitialMode('quick');
                                             setShowQuizModal(true);
                                         }}
-                                        className={`py-2.5 px-3 rounded-xl text-xs font-bold border border-nature-200 dark:border-nature-700 bg-nature-50 dark:bg-nature-800 hover:bg-nature-100 dark:hover:bg-nature-700 text-nature-800 dark:text-nature-200 cursor-pointer transition-colors shadow-sm truncate ${
+                                        className={`py-2.5 px-3 rounded-xl text-xs font-bold border border-nature-200 dark:border-nature-700 bg-nature-50 dark:bg-nature-800 hover:bg-nature-100 dark:hover:bg-nature-700 text-nature-800 dark:text-nature-200 cursor-pointer transition-colors min-w-0 shadow-sm break-words ${
                                             mine.mode === 'quick' ? 'flex-1' : 'w-full'
                                         }`}
                                     >

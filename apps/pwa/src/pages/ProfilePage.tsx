@@ -153,7 +153,7 @@ export function ProfilePage({ identity, onBack, onIdentityUpdated }: Props) {
                 >
                     {t('← Back')}
                 </button>
-                <h2 className="text-xl font-bold text-nature-950 dark:text-white m-0 tracking-tight">{t('Your Profile')}</h2>
+                <h2 className="min-w-0 text-xl font-bold text-nature-950 dark:text-white m-0 tracking-tight break-words">{t('Your Profile')}</h2>
             </div>
 
             {/* Avatar */}
@@ -297,10 +297,10 @@ export function ProfilePage({ identity, onBack, onIdentityUpdated }: Props) {
                             <div className="flex items-center gap-3">
                                 <span className="text-3xl select-none" aria-hidden="true">{primary.emoji}</span>
                                 <div className="flex-1 min-w-0">
-                                    <div className="text-[15px] font-bold text-nature-950 dark:text-white truncate">
+                                    <div className="text-[15px] font-bold text-nature-950 dark:text-white break-words">
                                         {t(primary.name)}
                                     </div>
-                                    <div className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 truncate">
+                                    <div className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 break-words">
                                         {t(primary.tagline)}
                                     </div>
                                 </div>
@@ -338,7 +338,7 @@ export function ProfilePage({ identity, onBack, onIdentityUpdated }: Props) {
                                             setQuizInitialMode('deep');
                                             setShowQuizModal(true);
                                         }}
-                                        className="flex-1 min-w-0 py-2.5 px-3 rounded-xl text-xs font-bold bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on border-none cursor-pointer transition-colors shadow-sm truncate"
+                                        className="flex-1 min-w-0 py-2.5 px-3 rounded-xl text-xs font-bold bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on border-none cursor-pointer transition-colors shadow-sm break-words"
                                     >
                                         {t('🧭 More accurate')}
                                     </button>
@@ -350,7 +350,7 @@ export function ProfilePage({ identity, onBack, onIdentityUpdated }: Props) {
                                         setQuizInitialMode('quick');
                                         setShowQuizModal(true);
                                     }}
-                                    className={`min-w-0 py-2.5 px-3 rounded-xl text-xs font-bold border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-900 hover:bg-nature-50 dark:hover:bg-nature-800 text-nature-800 dark:text-nature-200 cursor-pointer transition-colors shadow-sm truncate ${
+                                    className={`min-w-0 py-2.5 px-3 rounded-xl text-xs font-bold border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-900 hover:bg-nature-50 dark:hover:bg-nature-800 text-nature-800 dark:text-nature-200 cursor-pointer transition-colors shadow-sm break-words ${
                                         mine.mode === 'quick' ? 'flex-1' : 'w-full'
                                     }`}
                                 >

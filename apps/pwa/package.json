@@ -21,7 +21,8 @@
     "dark-class-check": "node e2e/dark-class-check.mjs",
     "showcase-check": "node e2e/showcase-check.mjs",
     "words-chunks-check": "node e2e/words-chunks-check.mjs",
-    "words-screens-check": "node e2e/words-screens-check.mjs"
+    "words-screens-check": "node e2e/words-screens-check.mjs",
+    "words-w3-screens-check": "node e2e/words-w3-screens-check.mjs"
   },
   "dependencies": {
     "@beanpool/core": "workspace:*",

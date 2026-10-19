@@ -163,7 +163,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Issue:** [What was broken]\n**Learning:** [W
 **Learning:** `deleteProject` checks non-zero ledger balances and throws errors (e.g. "Cannot delete project with non-zero balance: would violate ledger conservation"), which caused uncaught 500 exceptions instead of formatted 400 error responses.
 **Pattern:** Ensure deletion routes calling domain functions that enforce balance/ledger constraints wrap the deletion call in a `try/catch` block that catches errors and sets `ctx.status = 400`.
 
-## 2026-10-21 - [Uncaught error and missing 400 status in POST /api/community/register]
+## 2026-10-19 - [Uncaught error and missing 400 status in POST /api/community/register]
 **Issue:** `POST /api/community/register` in `apps/server/src/routes/community.ts` called `registerMember` without `try/catch` or null checking on the returned member object.
 **Learning:** Registration domain functions can throw or return `null` on invalid callsigns or bad key inputs. Calling them without `try/catch` produces unhandled 500 server errors or returns `{ success: true, member: null }` on failure.
-**Pattern:** Ensure user registration routes wrap `registerMember` in `try/catch` blocks and set `ctx.status = 400` with JSON error messages when registration returns `null` or throws an error.
+**Pattern:** A domain function that returns `null` for a refusal gets a 400 with a plain sentence. Anything it THROWS is a server fault: answer 500 with `memberErrorText(e, SERVER_FAULT_TEXT)`, never 400 (see test-ticket-redeem-fault.ts, #1198). A test that pins the old answer (here test-visitors-cant-act) changes in the same PR.

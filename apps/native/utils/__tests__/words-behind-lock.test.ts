@@ -290,7 +290,7 @@ describe('"Replace this phone\'s account?" (welcome.tsx)', () => {
 describe('every other screen that draws an account\'s words', () => {
     it("Settings: View Recovery Phrase and Account Protection's Show ask the same check with the same words", () => {
         const s = source('(tabs)/settings.tsx');
-        expect(count(s, `await readWordsBehindLock(identity, '${SETTINGS_REASON}')`)).toBe(2);
+        expect(count(s, `await readWordsBehindLock(identity, t('${SETTINGS_REASON}'))`)).toBe(2);
         expect(slice(s, 'const handleRevealWords = async () => {', '\n    };\n')).toContain('await readWordsBehindLock(identity,');
         // Copy Words copies what was shown, not a fresh read.
         expect(slice(s, 'const handleCopySeed = async () => {', '\n    };\n')).toContain('const words = seedWords;');
@@ -423,7 +423,7 @@ describe("every way the account leaves this phone, or comes off it, asks the pho
             ['async function handleNodePurge() {', 'Confirm authentication to permanently purge your account from the node.', 'await finishLastDelete(identity, choice);'],
         ] as const) {
             const body = slice(s, start, '\n    }\n');
-            const asked = body.indexOf(`const success = await authenticateUser('${reason}');`);
+            const asked = body.indexOf(`const success = await authenticateUser(t('${reason}'));`);
             const refused = body.indexOf('if (!success) return;');
             expect(asked).toBeGreaterThan(-1);
             expect(refused).toBeGreaterThan(asked);

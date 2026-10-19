@@ -33,8 +33,8 @@ describe('Settings: Permanently Delete Account follows the plan', () => {
         expect(body).not.toContain('signOutOfThisPhone(');
         expect(body).not.toContain('purgeAccountOnNode(');
         // The phone's lock before the confirmation, as before.
-        expect(body.indexOf("await authenticateUser('Confirm authentication to permanently purge your account from the node.')"))
-            .toBeLessThan(body.indexOf('Alert.alert(\n            "Permanent Node Purge"'));
+        expect(body.indexOf("await authenticateUser(t('Confirm authentication to permanently purge your account from the node.'))"))
+            .toBeLessThan(body.indexOf('Alert.alert(\n            t("Permanent Node Purge")'));
     });
 
     it('the key goes from the screen only when the phone was wiped; leaving one community keeps it', () => {
@@ -45,15 +45,15 @@ describe('Settings: Permanently Delete Account follows the plan', () => {
         const left = slice(body, "case 'left':", 'return;');
         expect(left).toContain("router.replace('/welcome');");
         const failed = slice(body, "case 'not-deleted':", 'return;');
-        expect(failed).toContain('deleteFailedLine(');
+        expect(failed).toContain('deleteFailedWords(');
     });
 
     it('a vault copy not removed: the member is told and chooses, and only their answer wipes the phone', () => {
         const body = purge();
         const stays = slice(body, "case 'vault-copy-stays':", 'return;');
-        expect(stays).toContain('vaultCopyStaysLine(plan.hereName, outcome)');
-        expect(stays).toContain(`{ text: "Try Again", onPress: () => { void finishPurgeAtLast('try-again'); } }`);
-        expect(stays).toContain(`{ text: "Delete Anyway", style: "destructive", onPress: () => { void finishPurgeAtLast('delete-anyway'); } }`);
+        expect(stays).toContain('vaultCopyStaysWords(plan.hereName, outcome)');
+        expect(stays).toContain(`{ text: t("Try Again"), onPress: () => { void finishPurgeAtLast('try-again'); } }`);
+        expect(stays).toContain(`{ text: t("Delete Anyway"), style: "destructive", onPress: () => { void finishPurgeAtLast('delete-anyway'); } }`);
         // No third way out: closing it without an answer would leave a deleted account's key on the phone unexplained.
         expect(stays).toContain('{ cancelable: false }');
         expect(stays).not.toContain('setIdentity(null)');
@@ -65,8 +65,9 @@ describe('Settings: Permanently Delete Account follows the plan', () => {
 
     it('the confirmation says what stays, and the button waits for the other communities\' answers', () => {
         const s = settings();
-        expect(purge()).toContain('keepsKeyLine(plan, words)');
-        expect(purge()).toContain('lastCommunityLine(plan, words)');
+        // Its sentences are delete-here.ts's, built again in the member's language (settings-lines.test.ts holds the English).
+        expect(purge()).toContain('keepsKeyWords(plan, words)');
+        expect(purge()).toContain('lastCommunityWords(plan, words, hasVault())');
         expect(s).toContain('const purgeBlocked = advancedLoading || !isPurgeInputValid || !deletePlan;');
         expect(s).toContain('disabled={purgeBlocked}');
         // The plan is asked as the member opens the delete (its button; the closed page's way in opens it the same way,

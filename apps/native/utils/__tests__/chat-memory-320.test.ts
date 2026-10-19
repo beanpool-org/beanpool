@@ -94,7 +94,7 @@ describe('Settings → Chat memory at 320dp with 1.3× text (amendment 6 §3)', 
     it('the confirmation is the design\'s sentence, word for word; the row is in Settings\' Account group and opens the card with the reset', () => {
         expect(CHAT_MEMORY_COPY.confirm).toBe("A chat that was paused because its key changed may open with the new key. A private chat that had disappeared from Talk may come back as a group chat the community can read. Check the key code, or who's in a chat, before you send.");
         const src = fs.readFileSync(path.resolve(__dirname, '../../app/(tabs)/settings.tsx'), 'utf-8');
-        const group = src.indexOf('<Text style={styles.sectionHeader}>ACCOUNT & IDENTITY</Text>');
+        const group = src.indexOf('<Text style={styles.sectionHeader}>{t("ACCOUNT & IDENTITY")}</Text>');
         const row = src.indexOf('<Text style={styles.menuText}>{t(CHAT_MEMORY_COPY.row)}</Text>');
         const nextGroup = src.indexOf('<Text style={styles.sectionHeader}>', group + 1);
         expect(group).toBeGreaterThan(0);

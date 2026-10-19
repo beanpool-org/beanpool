@@ -230,7 +230,7 @@ describe('Settings: App Lock', () => {
     it('on a phone with no screen lock, turning it on says so and leaves it off, instead of "App Lock enabled" and nothing asked', () => {
         const body = toggle();
         const checked = body.indexOf("if (!appLockEnabled && (await getScreenLock()) === 'none') {");
-        const told = body.indexOf("Alert.alert('Set a screen lock first', APP_LOCK_NEEDS_SCREEN_LOCK);");
+        const told = body.indexOf("Alert.alert(t('Set a screen lock first'), settingsLineWords(APP_LOCK_NEEDS_SCREEN_LOCK));");
         const left = body.indexOf('return;', told);
         expect(checked).toBeGreaterThan(-1);
         expect(told).toBeGreaterThan(checked);
@@ -240,7 +240,7 @@ describe('Settings: App Lock', () => {
     });
 
     it('the row says what it asks for', () => {
-        expect(settings()).toContain("<Text style={styles.menuSub}>Asks for your phone's screen lock when BeanPool opens</Text>");
+        expect(settings()).toContain('<Text style={styles.menuSub}>{t("Asks for your phone\'s screen lock when BeanPool opens")}</Text>');
         expect(settings()).not.toContain('Require security passcode on app launch');
     });
 

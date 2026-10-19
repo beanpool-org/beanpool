@@ -320,11 +320,17 @@ export function withDigits(text: string, digits: string | null): string {
     return digits ? text.replace(/[0-9]/g, (c) => digits[Number(c)]) : text;
 }
 
+/** A Greek word in capitals without its accents; a lone "Ή" ("or") keeps its tonos, or it reads as "Η" ("the"). */
+const greekRunInCapitals = (run: string) => run.normalize('NFC') === '\u0389'
+    ? run
+    : run.normalize('NFD').replace(/[\u0300\u0301\u0342]/g, '').normalize('NFC');
+
 function inCapitals(text: string, caps: DateWords['caps']): string {
     if (caps === 'turkic') return text.replace(/i/g, 'İ').toUpperCase();
     // Greek capitals drop the accents (oxia/tonos, varia, perispomeni) and keep the dialytika: Μαΐ → ΜΑΪ, as ICU writes it;
-    // without it ΜΑΙ reads as the diphthong "αι". The tests compare every name with ICU's toLocaleUpperCase('el').
-    if (caps === 'greek') return text.toUpperCase().normalize('NFD').replace(/[\u0300\u0301\u0342]/g, '').normalize('NFC');
+    // without it ΜΑΙ reads as the diphthong "αι". Only inside runs of Greek letters, so "Café" in a Greek line keeps its
+    // accent. The tests compare every name and every shipped el string with ICU's toLocaleUpperCase('el').
+    if (caps === 'greek') return text.toUpperCase().replace(/[\u0370-\u03ff\u1f00-\u1fff][\u0300-\u036f\u0370-\u03ff\u1f00-\u1fff]*/g, greekRunInCapitals);
     return text.toUpperCase();
 }
 

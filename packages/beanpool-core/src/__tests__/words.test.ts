@@ -457,7 +457,10 @@ describe('dates and numbers from tables', () => {
         // Greek: capitals drop the accents and keep the dialytika.
         expect(upperCase('Προσφορά', 'el')).toBe('ΠΡΟΣΦΟΡΑ');
         expect(upperCase('Μαΐου', 'el')).toBe('ΜΑΪΟΥ');
-        for (const [lang, words] of [['tr', ['ilan', 'İstek', 'Çiftçi işi', 'ıhlamur']], ['el', ['Προσφορά', 'Ανάγκη', 'Τρόφιμα & ποτά', 'Μαΐου', 'ήταν']], ['de', ['Straße']], ['ru', ['Предложение']]] as const) {
+        // A lone "ή" ("or") keeps its tonos in capitals, or it reads as the article "Η" ("the"); a Latin word keeps its accent.
+        expect(upperCase('Προσφορές ή ανάγκες', 'el')).toBe('ΠΡΟΣΦΟΡΕΣ Ή ΑΝΑΓΚΕΣ');
+        expect(upperCase('Café ή τέχνη', 'el')).toBe('CAFÉ Ή ΤΕΧΝΗ');
+        for (const [lang, words] of [['tr', ['ilan', 'İstek', 'Çiftçi işi', 'ıhlamur']], ['el', ['Προσφορά', 'Ανάγκη', 'Τρόφιμα & ποτά', 'Μαΐου', 'ήταν', 'ή', '(ή)', 'ή,', 'Όνομα ή διεύθυνση', 'Café ή τέχνη', 'η\u0301', 'ΐ']], ['de', ['Straße']], ['ru', ['Предложение']]] as const) {
             for (const w of words) expect([lang, w, upperCase(w, lang)]).toEqual([lang, w, w.toLocaleUpperCase(lang)]);
         }
         // No lang: the current one.
@@ -467,6 +470,24 @@ describe('dates and numbers from tables', () => {
         expect(upperCase('Ανάγκη')).toBe('ΑΝΑΓΚΗ');
         setLanguage(PSEUDO_LANG);
         expect(upperCase('[ilan~]')).toBe('[ILAN~]');
+    });
+
+    it('every shipped Greek string in capitals reads as ICU writes it (a lone "ή" keeps its tonos)', () => {
+        const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../../..');
+        const differ: string[] = [];
+        let seen = 0;
+        for (const file of ['packages/beanpool-core/words/el.json', 'apps/native/words/el.json', 'apps/pwa/words/el.json']) {
+            const catalog = JSON.parse(readFileSync(join(root, file), 'utf8')) as Record<string, string | Record<string, string>>;
+            for (const [key, entry] of Object.entries(catalog)) {
+                if (key === '_meta') continue;
+                for (const s of typeof entry === 'string' ? [entry] : Object.values(entry)) {
+                    seen++;
+                    if (upperCase(s, 'el') !== s.toLocaleUpperCase('el')) differ.push(s);
+                }
+            }
+        }
+        expect(seen).toBeGreaterThan(2500);
+        expect(differ).toEqual([]);
     });
 
     it('a tag that is not one of LANGS reads English and never throws (N-a: a stale stored tag must not break every date)', () => {

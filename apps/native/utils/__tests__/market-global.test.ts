@@ -288,13 +288,15 @@ describe('the screens draw Beans only behind that rule (source check)', () => {
         expect(open).toBeGreaterThan(0);
         expect(close).toBeGreaterThan(open);
         const section = lines.slice(open, close).join('\n');
-        for (const part of ['accessibilityLabel="Price"', "{ fixed: 'Total', hourly: '/ Hr'", '>FREE</Text>', 'onPress={showPricingGuide}', '1.5% fee']) {
+        // Its words go through t() (words S3m): the same parts in their t() form, each once; the fee in each of its sentences.
+        for (const part of ["accessibilityLabel={t('Price')}", "{ fixed: t('Total', undefined, 'price unit'), hourly: t('/ Hr', undefined, 'price per hour')", ">{t('FREE')}</Text>", 'onPress={showPricingGuide}', '1.5% fee: You will receive', '1.5% fee: Fulfiller receives', '1.5% transaction fee']) {
             expect(section).toContain(part);
             expect(src.split(part).length).toBe(2);
         }
         // Where the section was, the note the edit form shows (post/[id].tsx).
         expect(lines.slice(open - 4, open).join('\n')).toContain('{!showsBeans && (');
-        expect(lines.slice(open - 4, open).join('\n')).toContain('{NO_BEANS_EDIT_NOTE}');
+        expect(lines.slice(open - 4, open).join('\n')).toContain('{t(LINES.noBeansEditNote)}');
+        expect(src).toContain('const LINES = { noBeansEditNote: NO_BEANS_EDIT_NOTE };');
         // What the form submits and when it lets a member post: the helpers above, not the field.
         expect(src).toContain("if (postFormPriceInvalid(postCredits, nodeFeatures)) errors.add('credits');");
         expect(src).toContain('credits: postFormCredits(postCredits, nodeFeatures),');

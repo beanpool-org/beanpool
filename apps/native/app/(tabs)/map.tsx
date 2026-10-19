@@ -8,6 +8,7 @@ import * as Crypto from 'expo-crypto';
 import { Picker } from '@react-native-picker/picker';
 import MapView, { Marker, Circle, PROVIDER_DEFAULT } from '../../components/Map';
 import { useFocusEffect, router, useLocalSearchParams } from 'expo-router';
+import { formatNumber, t, upperCase } from '@beanpool/core';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MemberAvatar } from '../../components/MemberAvatar';
 import { getPosts, createPost, getBalance, getMemberProfile, getReachablePeers } from '../../utils/db';
@@ -44,6 +45,8 @@ import {
 } from '../../utils/market-global';
 
 const CATEGORIES = POST_CATEGORIES;
+/** A line kept as word() in utils/market-global.ts, shown here in the member's language. */
+const LINES = { noBeansEditNote: NO_BEANS_EDIT_NOTE };
 // ⚡ Bolt: O(1) Map lookup for marketplace categories instead of repeated O(C) .find() scans
 const CATEGORIES_BY_ID = new Map(CATEGORIES.map(c => [c.id, c]));
 
@@ -768,9 +771,9 @@ export default function MapScreen() {
                 const res = await Location.requestForegroundPermissionsAsync();
                 status = res.status;
             } else {
-                Alert.alert("Permission Denied", "Location permission was denied. Please enable it in your device settings to center the map.", [
-                    { text: "Cancel", style: "cancel" },
-                    { text: "Open Settings", onPress: () => Linking.openSettings() }
+                Alert.alert(t("Permission Denied"), t("Location permission was denied. Please enable it in your device settings to center the map."), [
+                    { text: t("Cancel"), style: "cancel" },
+                    { text: t("Open Settings"), onPress: () => Linking.openSettings() }
                 ]);
                 return;
             }
@@ -857,13 +860,15 @@ export default function MapScreen() {
         const readCachedProfile = async () => getCachedNodeProfile(await AsyncStorage.getItem('beanpool_anchor_url'));
         const avatarOk = !(await composerNeedsProfilePhoto(nodeFeatures, readCachedProfile)) || await hasUsableAvatar();
         if (!nameOk || !avatarOk) {
-            const need = (!nameOk && !avatarOk) ? 'a name and a photo' : !nameOk ? 'a name' : 'a photo';
+            const need = (!nameOk && !avatarOk) ? t("Your community likes to know who they're dealing with, so you need a name and a photo before you can post. It only takes a moment.")
+                : !nameOk ? t("Your community likes to know who they're dealing with, so you need a name before you can post. It only takes a moment.")
+                : t("Your community likes to know who they're dealing with, so you need a photo before you can post. It only takes a moment.");
             Alert.alert(
-                'Finish your profile first',
-                `Your community likes to know who they're dealing with, so you need ${need} before you can post. It only takes a moment.`,
+                t('Finish your profile first'),
+                need,
                 [
-                    { text: 'Not now', style: 'cancel' },
-                    { text: 'Set up profile', onPress: () => router.push('/profile-setup') },
+                    { text: t('Not now'), style: 'cancel' },
+                    { text: t('Set up profile'), onPress: () => router.push('/profile-setup') },
                 ]
             );
             return;
@@ -875,11 +880,11 @@ export default function MapScreen() {
                 const d = JSON.parse(raw);
                 const restorable = d && d.anchorUrl === anchorUrl && (d.postTitle?.trim() || d.postDescription?.trim() || (d.postPhotos?.length));
                 if (restorable) {
-                    Alert.alert('Unfinished post', 'You started a post earlier. Continue it, or start fresh?', [
+                    Alert.alert(t('Unfinished post'), t('You started a post earlier. Continue it, or start fresh?'), [
                         // Start fresh honours the type just chosen in the chooser; Continue keeps the
                         // draft's own type, because that is the post the member asked to go back to.
-                        { text: 'Start fresh', style: 'destructive', onPress: () => { clearDraft(); resetNewPost(); if (type) setPostType(type); setShowNewPost(true); } },
-                        { text: 'Continue', onPress: () => { restoreDraft(d); setShowNewPost(true); } },
+                        { text: t('Start fresh'), style: 'destructive', onPress: () => { clearDraft(); resetNewPost(); if (type) setPostType(type); setShowNewPost(true); } },
+                        { text: t('Continue'), onPress: () => { restoreDraft(d); setShowNewPost(true); } },
                     ]);
                     return;
                 }
@@ -947,9 +952,9 @@ export default function MapScreen() {
                 const res = await Location.requestForegroundPermissionsAsync();
                 status = res.status;
             } else {
-                Alert.alert("Permission Denied", "Location permission was denied. Please enable it in your device settings to use your current location.", [
-                    { text: "Cancel", style: "cancel" },
-                    { text: "Open Settings", onPress: () => Linking.openSettings() }
+                Alert.alert(t("Permission Denied"), t("Location permission was denied. Please enable it in your device settings to use your current location."), [
+                    { text: t("Cancel"), style: "cancel" },
+                    { text: t("Open Settings"), onPress: () => Linking.openSettings() }
                 ]);
                 return;
             }
@@ -962,7 +967,7 @@ export default function MapScreen() {
             setPostLat(lat); setPostLng(lng); setPinDropMode(false);
             setValidationErrors(prev => { const n = new Set(prev); n.delete('location'); return n; });
             mapRef.current?.animateToRegion({ latitude: lat, longitude: lng, latitudeDelta: 0.02, longitudeDelta: 0.01 }, 500);
-        } catch { Alert.alert("Error", "Could not get your location. Try 'Drop a pin' instead."); }
+        } catch { Alert.alert(t("Error"), t("Could not get your location. Try 'Drop a pin' instead.")); }
     };
 
     const enterPinDrop = () => {
@@ -982,11 +987,11 @@ export default function MapScreen() {
 
     const pickPhoto = async () => {
         if (postPhotos.length >= 5) return;
-        Alert.alert('Add Photo', 'Choose a source', [
-            { text: 'Camera', onPress: async () => {
+        Alert.alert(t('Add Photo'), t('Choose a source'), [
+            { text: t('Camera'), onPress: async () => {
                 try {
                     const perm = await ImagePicker.requestCameraPermissionsAsync();
-                    if (!perm.granted) { Alert.alert('Permission needed'); return; }
+                    if (!perm.granted) { Alert.alert(t('Permission needed')); return; }
                     const result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 1, base64: false });
                     if (!result.canceled && result.assets[0]?.uri) {
                         try {
@@ -1001,10 +1006,10 @@ export default function MapScreen() {
                         } catch (e) { console.error("Failed to manipulate image:", e); }
                     }
                 } catch (e: any) {
-                    Alert.alert('Camera Unavailable', e?.message || 'Could not launch camera.');
+                    Alert.alert(t('Camera Unavailable'), e?.message || t('Could not launch camera.'));
                 }
             }},
-            { text: 'Gallery', onPress: async () => {
+            { text: t('Gallery'), onPress: async () => {
                 const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1, base64: false });
                 if (!result.canceled && result.assets[0]?.uri) {
                     try {
@@ -1019,7 +1024,7 @@ export default function MapScreen() {
                     } catch (e) { console.error("Failed to manipulate image:", e); }
                 }
             }},
-            { text: 'Cancel', style: 'cancel' },
+            { text: t('Cancel'), style: 'cancel' },
         ]);
     };
 
@@ -1045,12 +1050,12 @@ export default function MapScreen() {
         if (photoRequired && postPhotos.length < 1) errors.add('photos');
         setValidationErrors(errors);
         if (errors.size > 0) {
-            setValidationToast('⚠️ Please complete all required fields');
+            setValidationToast(t('⚠️ Please complete all required fields'));
             setTimeout(() => setValidationToast(''), 3000);
             return;
         }
 
-        if (!identity) { Alert.alert("Auth", "You must be authenticated."); return; }
+        if (!identity) { Alert.alert(t("Auth"), t("You must be authenticated.")); return; }
 
         setPosting(true);
         try {
@@ -1083,7 +1088,7 @@ export default function MapScreen() {
             }, 300);
         } catch (e: any) {
             console.error(e);
-            Alert.alert("Error", e.message || "Could not publish post.");
+            Alert.alert(t("Error"), e.message || t("Could not publish post."));
             setPosting(false);
         }
     };
@@ -1203,8 +1208,8 @@ export default function MapScreen() {
             ) : (
                 <View style={[styles.map, { justifyContent: 'center', alignItems: 'center', backgroundColor: colors.surface.subtle, padding: 24 }]}>
                     <MaterialCommunityIcons name="map-marker-off" size={48} color={colors.text.muted} />
-                    <Text style={{ marginTop: 12, color: colors.text.body, fontWeight: '700', textAlign: 'center' }}>Google Maps is not configured</Text>
-                    <Text style={{ marginTop: 4, color: colors.text.secondary, fontSize: 12, textAlign: 'center' }}>API key is missing in build config.</Text>
+                    <Text style={{ marginTop: 12, color: colors.text.body, fontWeight: '700', textAlign: 'center' }}>{t('Google Maps is not configured')}</Text>
+                    <Text style={{ marginTop: 4, color: colors.text.secondary, fontSize: 12, textAlign: 'center' }}>{t('API key is missing in build config.')}</Text>
                 </View>
             )}
 
@@ -1226,19 +1231,19 @@ export default function MapScreen() {
                         contentContainerStyle={styles.filterBar}
                     >
                         <Pressable accessibilityRole="button" accessibilityState={{ selected: mapTypeFilter === 'all' }} style={[styles.filterChip, mapTypeFilter === 'all' && styles.filterChipActive]} onPress={() => selectMapType('all')}>
-                            <Text style={[styles.filterChipText, mapTypeFilter === 'all' && styles.filterChipTextActive]}>All</Text>
+                            <Text style={[styles.filterChipText, mapTypeFilter === 'all' && styles.filterChipTextActive]}>{t('All')}</Text>
                         </Pressable>
                         <Pressable accessibilityRole="button" accessibilityState={{ selected: mapTypeFilter === 'offers' }} style={[styles.filterChip, mapTypeFilter === 'offers' && styles.filterChipActiveOffers]} onPress={() => selectMapType('offers')}>
-                            <Text style={[styles.filterChipText, mapTypeFilter === 'offers' && styles.filterChipTextOnGreen]}>Offers</Text>
+                            <Text style={[styles.filterChipText, mapTypeFilter === 'offers' && styles.filterChipTextOnGreen]}>{t('Offers')}</Text>
                         </Pressable>
                         <Pressable accessibilityRole="button" accessibilityState={{ selected: mapTypeFilter === 'needs' }} style={[styles.filterChip, mapTypeFilter === 'needs' && styles.filterChipActiveNeeds]} onPress={() => selectMapType('needs')}>
-                            <Text style={[styles.filterChipText, mapTypeFilter === 'needs' && styles.filterChipTextOnOrange]}>Needs</Text>
+                            <Text style={[styles.filterChipText, mapTypeFilter === 'needs' && styles.filterChipTextOnOrange]}>{t('Needs')}</Text>
                         </Pressable>
                         <Pressable accessibilityRole="button" accessibilityState={{ selected: mapTypeFilter === 'events' }} style={[styles.filterChip, mapTypeFilter === 'events' && styles.filterChipActiveEvents]} onPress={() => selectMapType('events')}>
-                            <Text style={[styles.filterChipText, mapTypeFilter === 'events' && styles.filterChipTextOnViolet]}>Events</Text>
+                            <Text style={[styles.filterChipText, mapTypeFilter === 'events' && styles.filterChipTextOnViolet]}>{t('Events')}</Text>
                         </Pressable>
                         {mapFiltersActive(mapFilterState) && (
-                            <Pressable accessibilityRole="button" accessibilityLabel="Clear filters" style={styles.filterClear} onPress={() => { setMapTypeFilter('all'); dispatchCategoryPanel({ kind: 'pick', category: 'all' }); setEventWindow('all'); }}>
+                            <Pressable accessibilityRole="button" accessibilityLabel={t('Clear filters')} style={styles.filterClear} onPress={() => { setMapTypeFilter('all'); dispatchCategoryPanel({ kind: 'pick', category: 'all' }); setEventWindow('all'); }}>
                                 <Text style={styles.filterClearText}>✕</Text>
                             </Pressable>
                         )}
@@ -1257,7 +1262,7 @@ export default function MapScreen() {
                             activeColor={mapTypeFilter === 'offers' ? colors.brand.fill : mapTypeFilter === 'needs' ? colors.action.fab : colors.brand.fill}
                             style={styles.filterCategoryPicker}
                             panelMaxHeight={mapAreaH && filterBottom ? Math.max(120, mapAreaH - filterBottom - 6 - 12) : undefined}
-                            accessibilityLabel="Filter by category"
+                            accessibilityLabel={t('Filter by category')}
                         />
                     ) : (
                         <FilterChipRow
@@ -1267,7 +1272,7 @@ export default function MapScreen() {
                             onSelect={(w) => { setEventWindow(w); fitEventPins(w); }}
                             activeColor={EVENT_ACCENT}
                             style={styles.filterSecondRow}
-                            accessibilityLabel="Filter events by date"
+                            accessibilityLabel={t('Filter events by date')}
                         />
                     )}
                 </View>
@@ -1276,19 +1281,19 @@ export default function MapScreen() {
             {/* Map Action FABs - Left Pill */}
             {!showNewPost && !selectedPostPreview && !categoryPanel.open && (
                 <View style={[styles.fabPill, { bottom: fabPillBottom, left: 16 }]} pointerEvents="box-none" onLayout={e => setFabPillH(e.nativeEvent.layout.height)}>
-                    <TouchableOpacity accessibilityRole="button" accessibilityLabel="Toggle dark mode" style={styles.pillBtn} onPress={() => setIsDarkMap(!isDarkMap)}>
+                    <TouchableOpacity accessibilityRole="button" accessibilityLabel={t('Toggle dark mode')} style={styles.pillBtn} onPress={() => setIsDarkMap(!isDarkMap)}>
                         <Text style={styles.pillBtnEmoji}>{isDarkMap ? '☀️' : '🌙'}</Text>
                     </TouchableOpacity>
                     <View style={styles.pillDivider} />
-                    <TouchableOpacity accessibilityRole="button" accessibilityLabel="Recenter map" style={styles.pillBtn} onPress={centerOnUser}>
+                    <TouchableOpacity accessibilityRole="button" accessibilityLabel={t('Recenter map')} style={styles.pillBtn} onPress={centerOnUser}>
                         <MaterialCommunityIcons name="crosshairs-gps" size={24} color={colors.text.body} />
                     </TouchableOpacity>
                     <View style={styles.pillDivider} />
-                    <TouchableOpacity accessibilityRole="button" accessibilityLabel="Zoom in" style={styles.pillBtn} onPress={() => mapRef.current?.animateToRegion({ ...currentRegion, latitudeDelta: currentRegion.latitudeDelta / 2, longitudeDelta: currentRegion.longitudeDelta / 2 }, 300)}>
+                    <TouchableOpacity accessibilityRole="button" accessibilityLabel={t('Zoom in')} style={styles.pillBtn} onPress={() => mapRef.current?.animateToRegion({ ...currentRegion, latitudeDelta: currentRegion.latitudeDelta / 2, longitudeDelta: currentRegion.longitudeDelta / 2 }, 300)}>
                         <Text style={styles.pillBtnIcon}>+</Text>
                     </TouchableOpacity>
                     <View style={styles.pillDivider} />
-                    <TouchableOpacity accessibilityRole="button" accessibilityLabel="Zoom out" style={styles.pillBtn} onPress={() => mapRef.current?.animateToRegion({ ...currentRegion, latitudeDelta: currentRegion.latitudeDelta * 2, longitudeDelta: currentRegion.longitudeDelta * 2 }, 300)}>
+                    <TouchableOpacity accessibilityRole="button" accessibilityLabel={t('Zoom out')} style={styles.pillBtn} onPress={() => mapRef.current?.animateToRegion({ ...currentRegion, latitudeDelta: currentRegion.latitudeDelta * 2, longitudeDelta: currentRegion.longitudeDelta * 2 }, 300)}>
                         <Text style={styles.pillBtnIcon}>−</Text>
                     </TouchableOpacity>
                 </View>
@@ -1300,12 +1305,12 @@ export default function MapScreen() {
                 const card = eventPinCard(selectedPostPreview);
                 return (
                     <SafeAreaView style={styles.previewCardWrapper} pointerEvents="box-none">
-                        <Pressable accessibilityRole="button" accessibilityLabel="Close preview" style={styles.previewCardOverlay} onPress={() => setSelectedPostPreview(null)} />
+                        <Pressable accessibilityRole="button" accessibilityLabel={t('Close preview')} style={styles.previewCardOverlay} onPress={() => setSelectedPostPreview(null)} />
                         <Animated.View style={[styles.previewCard, styles.eventPreviewCard]}>
                             <View style={styles.eventPreviewBody}>
                                 <View style={styles.eventPreviewWhenRow}>
                                     <Text style={styles.eventPreviewWhen} numberOfLines={2}>{card.when}</Text>
-                                    {card.badge && <Text style={styles.eventPreviewBadge} numberOfLines={1}>{card.badge}</Text>}
+                                    {card.badge && <Text style={styles.eventPreviewBadge} numberOfLines={1}>{card.badge === 'CANCELLED' ? t('CANCELLED', undefined, 'event') : t('UPDATED', undefined, 'event')}</Text>}
                                 </View>
                                 <Text style={styles.previewTitle} numberOfLines={2}>{card.title}</Text>
                                 {card.place && <Text style={styles.eventPreviewMeta} numberOfLines={1}>📍 {card.place}</Text>}
@@ -1318,10 +1323,10 @@ export default function MapScreen() {
                                         router.push(`/post/${selectedPostPreview.id}`);
                                     }}
                                 >
-                                    <Text style={styles.previewActionText}>View event</Text>
+                                    <Text style={styles.previewActionText}>{t('View event')}</Text>
                                 </Pressable>
                             </View>
-                            <Pressable accessibilityRole="button" accessibilityLabel="Close" style={styles.previewClose} onPress={() => setSelectedPostPreview(null)} hitSlop={15}>
+                            <Pressable accessibilityRole="button" accessibilityLabel={t('Close')} style={styles.previewClose} onPress={() => setSelectedPostPreview(null)} hitSlop={15}>
                                 <Text style={styles.previewCloseText}>✕</Text>
                             </Pressable>
                         </Animated.View>
@@ -1332,7 +1337,7 @@ export default function MapScreen() {
             {/* Map Preview Card (Bottom Sheet style) */}
             {selectedPostPreview && !showNewPost && selectedPostPreview.type !== 'event' && (
                 <SafeAreaView style={styles.previewCardWrapper} pointerEvents="box-none">
-                    <Pressable accessibilityRole="button" accessibilityLabel="Close preview" style={styles.previewCardOverlay} onPress={() => setSelectedPostPreview(null)} />
+                    <Pressable accessibilityRole="button" accessibilityLabel={t('Close preview')} style={styles.previewCardOverlay} onPress={() => setSelectedPostPreview(null)} />
                     <Animated.View style={styles.previewCard}>
                         {selectedPostPreview.photos && selectedPostPreview.photos.length > 0 && 
                          typeof selectedPostPreview.photos[0] === 'string' &&
@@ -1348,7 +1353,7 @@ export default function MapScreen() {
                         <View style={styles.previewInfo}>
                             <View style={styles.previewHeader}>
                                 <Text style={styles.previewCategory} numberOfLines={1}>
-                                    {categoryLabel(selectedPostPreview.category)}
+                                    {upperCase(categoryLabel(selectedPostPreview.category))}
                                 </Text>
                                 {showsBeans && (
                                 <CurrencyDisplay
@@ -1364,7 +1369,7 @@ export default function MapScreen() {
                             <Pressable
                                 accessibilityRole="button"
                                 style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 }}
-                                onPress={() => router.push({ pathname: '/public-profile', params: { publicKey: selectedPostPreview.author_pubkey, callsign: selectedPostPreview.author_callsign || 'Unknown' } })}
+                                onPress={() => router.push({ pathname: '/public-profile', params: { publicKey: selectedPostPreview.author_pubkey, callsign: selectedPostPreview.author_callsign || t('Unknown') } })}
                             >
                                 <MemberAvatar 
                                     avatarUrl={selectedPostPreview.author_avatar}
@@ -1373,8 +1378,9 @@ export default function MapScreen() {
                                     size={20}
                                 />
                                 <Text style={[styles.previewAuthor, { color: colors.brand.primary }]} numberOfLines={1}>
-                                    {selectedPostPreview.author_callsign || selectedPostPreview.author_pubkey?.slice(0, 6) || 'Unknown'}
-                                    {selectedPostPreview.author_energy_cycled && selectedPostPreview.author_energy_cycled >= 10000 ? ' ✨ Elder' : ''}
+                                    {selectedPostPreview.author_energy_cycled && selectedPostPreview.author_energy_cycled >= 10000
+                                        ? t('{name} ✨ Elder', { name: selectedPostPreview.author_callsign || selectedPostPreview.author_pubkey?.slice(0, 6) || t('Unknown') })
+                                        : selectedPostPreview.author_callsign || selectedPostPreview.author_pubkey?.slice(0, 6) || t('Unknown')}
                                 </Text>
                             </Pressable>
                             <Pressable
@@ -1385,10 +1391,10 @@ export default function MapScreen() {
                                     router.push(`/post/${selectedPostPreview.id}`);
                                 }}
                             >
-                                <Text style={styles.previewActionText}>View Details</Text>
+                                <Text style={styles.previewActionText}>{t('View Details')}</Text>
                             </Pressable>
                         </View>
-                        <Pressable accessibilityRole="button" accessibilityLabel="Close" style={styles.previewClose} onPress={() => setSelectedPostPreview(null)} hitSlop={15}>
+                        <Pressable accessibilityRole="button" accessibilityLabel={t('Close')} style={styles.previewClose} onPress={() => setSelectedPostPreview(null)} hitSlop={15}>
                             <Text style={styles.previewCloseText}>✕</Text>
                         </Pressable>
                     </Animated.View>
@@ -1406,11 +1412,11 @@ export default function MapScreen() {
                             const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
                             if (!anchorUrl) {
                                 Alert.alert(
-                                    'Not Connected',
-                                    'You need to connect to a BeanPool community before posting. Go to Settings → Advanced to add a node.',
+                                    t('Not Connected'),
+                                    t('You need to connect to a BeanPool community before posting. Go to Settings → Advanced to add a node.'),
                                     [
-                                        { text: 'Cancel', style: 'cancel' },
-                                        { text: 'Connect', onPress: () => router.push({ pathname: '/(tabs)/settings', params: { section: 'advanced' } }) }
+                                        { text: t('Cancel'), style: 'cancel' },
+                                        { text: t('Connect'), onPress: () => router.push({ pathname: '/(tabs)/settings', params: { section: 'advanced' } }) }
                                     ]
                                 );
                                 return;
@@ -1422,7 +1428,7 @@ export default function MapScreen() {
                     >
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                             <Text style={{ color: '#fff', fontSize: 20, fontWeight: '400', marginTop: -2 }}>+</Text>
-                            <Text style={{ color: '#fff', fontSize: 13, fontWeight: '800', letterSpacing: 0.5 }}>ADD POST</Text>
+                            <Text style={{ color: '#fff', fontSize: 13, fontWeight: '800', letterSpacing: 0.5 }}>{t('ADD POST')}</Text>
                         </View>
                     </TouchableOpacity>
                 </SafeAreaView>
@@ -1431,7 +1437,7 @@ export default function MapScreen() {
             {/* Pin drop mode instruction */}
             {pinDropMode && showNewPost && postLat == null && (
                 <View style={styles.pinDropBanner}>
-                    <Text style={styles.pinDropBannerText}>📌 Tap the map to place your pin</Text>
+                    <Text style={styles.pinDropBannerText}>{t('📌 Tap the map to place your pin')}</Text>
                 </View>
             )}
 
@@ -1444,7 +1450,7 @@ export default function MapScreen() {
                             style={{ flex: 1, padding: 14, backgroundColor: colors.surface.subtle, borderRadius: 12, marginRight: 8, alignItems: 'center' }}
                             onPress={() => { setPinDropMode(false); setPostLat(null); setPostLng(null); }}
                         >
-                            <Text style={{ color: colors.text.body, fontWeight: '700' }}>Cancel</Text>
+                            <Text style={{ color: colors.text.body, fontWeight: '700' }}>{t('Cancel')}</Text>
                         </Pressable>
                         <Pressable
                             accessibilityRole="button"
@@ -1452,7 +1458,7 @@ export default function MapScreen() {
                             disabled={postLat == null}
                             onPress={() => setPinDropMode(false)}
                         >
-                            <Text style={{ color: postLat != null ? '#fff' : colors.text.muted, fontWeight: '800' }}>Confirm Pin {postLat != null ? '✓' : ''}</Text>
+                            <Text style={{ color: postLat != null ? '#fff' : colors.text.muted, fontWeight: '800' }}>{postLat != null ? t('Confirm Pin ✓') : t('Confirm Pin')}</Text>
                         </Pressable>
                     </View>
                 </SafeAreaView>
@@ -1476,8 +1482,8 @@ export default function MapScreen() {
 
                         {/* Header */}
                         <View style={styles.sheetHeader}>
-                            <Text style={styles.sheetTitle}>New Post</Text>
-                            <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={() => { setShowNewPost(false); resetNewPost(); }} hitSlop={12}>
+                            <Text style={styles.sheetTitle}>{t('New Post')}</Text>
+                            <Pressable accessibilityRole="button" accessibilityLabel={t('Close')} onPress={() => { setShowNewPost(false); resetNewPost(); }} hitSlop={12}>
                                 <Text style={styles.sheetClose}>✕</Text>
                             </Pressable>
                         </View>
@@ -1488,28 +1494,28 @@ export default function MapScreen() {
                             {/* Type Toggle — colours match map pins */}
                             <View style={styles.typeRow}>
                                 <Pressable accessibilityRole="button" accessibilityState={{ selected: postType === 'offer' }} style={[styles.typeBtn, postType === 'offer' && styles.typeBtnOffer]} onPress={() => setPostType('offer')}>
-                                    <Text style={[styles.typeBtnText, postType === 'offer' && styles.typeBtnTextActive]}>🟢 Offer</Text>
+                                    <Text style={[styles.typeBtnText, postType === 'offer' && styles.typeBtnTextActive]}>{t('🟢 Offer')}</Text>
                                 </Pressable>
                                 <Pressable accessibilityRole="button" accessibilityState={{ selected: postType === 'need' }} style={[styles.typeBtn, postType === 'need' && styles.typeBtnNeed]} onPress={() => setPostType('need')}>
-                                    <Text style={[styles.typeBtnText, postType === 'need' && styles.typeBtnTextActive]}>🟠 Need</Text>
+                                    <Text style={[styles.typeBtnText, postType === 'need' && styles.typeBtnTextActive]}>{t('🟠 Need')}</Text>
                                 </Pressable>
                             </View>
 
                             {needBlocked && (
                                 <View style={{ marginBottom: 14, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(245, 158, 11, 0.35)', backgroundColor: 'rgba(245, 158, 11, 0.12)' }}>
-                                    <Text style={{ fontWeight: '800', color: palette.amber700 || '#b45309', marginBottom: 4 }}>💡 Contributions First</Text>
+                                    <Text style={{ fontWeight: '800', color: palette.amber700 || '#b45309', marginBottom: 4 }}>{t('💡 Contributions First')}</Text>
                                     <Text style={{ fontSize: 13, lineHeight: 18, color: palette.amber700 || '#b45309' }}>
-                                        New members must list at least one Offer before posting Needs. Let the community know what you can give back — switch to 🟢 Offer above.
+                                        {t('New members must list at least one Offer before posting Needs. Let the community know what you can give back — switch to 🟢 Offer above.')}
                                     </Text>
                                 </View>
                             )}
 
                             {/* Title */}
-                            <Text style={styles.sectionLabel}>Title <Text style={styles.requiredStar}>*</Text></Text>
+                            <Text style={styles.sectionLabel}>{upperCase(t('Title'))} <Text style={styles.requiredStar}>*</Text></Text>
                             <TextInput
-                                accessibilityLabel="Title"
+                                accessibilityLabel={t('Title')}
                                 style={[styles.titleInputFull, fieldBorder('title')]}
-                                placeholder="What do you need/offer?"
+                                placeholder={t('What do you need/offer?')}
                                 placeholderTextColor={colors.text.muted}
                                 value={postTitle}
                                 onChangeText={v => { setPostTitle(v); setValidationErrors(prev => { const n = new Set(prev); n.delete('title'); return n; }); }}
@@ -1517,18 +1523,18 @@ export default function MapScreen() {
                             />
 
                             {/* Category — unified modal picker, full-row tappable on both platforms */}
-                            <Text style={styles.sectionLabel}>Category <Text style={styles.requiredStar}>*</Text></Text>
+                            <Text style={styles.sectionLabel}>{upperCase(t('Category'))} <Text style={styles.requiredStar}>*</Text></Text>
                             <Pressable accessibilityRole="button" style={[styles.pickerWrap, fieldBorder('category')]} onPress={() => setShowCategoryModal(true)}>
                                 <Text style={[styles.pickerText, postCategory && styles.pickerTextActive]}>
-                                    {postCategory ? `${categoryEmoji(postCategory)} ${categoryLabel(postCategory)}` : 'Select a category...'}
+                                    {postCategory ? t('{emoji} {label}', { emoji: categoryEmoji(postCategory), label: categoryLabel(postCategory) }) : t('Select a category...')}
                                 </Text>
                                 <Text style={styles.pickerArrow}>▼</Text>
                             </Pressable>
                             <Modal visible={showCategoryModal} transparent animationType="slide">
-                                <Pressable accessibilityRole="button" accessibilityLabel="Close category picker" style={styles.categoryModalOverlay} onPress={() => setShowCategoryModal(false)}>
+                                <Pressable accessibilityRole="button" accessibilityLabel={t('Close category picker')} style={styles.categoryModalOverlay} onPress={() => setShowCategoryModal(false)}>
                                     <View style={styles.categorySheet}>
                                         <View style={styles.categorySheetHeader}>
-                                            <Text style={styles.categorySheetTitle}>Select Category</Text>
+                                            <Text style={styles.categorySheetTitle}>{t('Select Category')}</Text>
                                         </View>
                                         <FlatList
                                             data={CATEGORIES}
@@ -1541,7 +1547,7 @@ export default function MapScreen() {
                                                     onPress={() => { setPostCategory(c.id); setShowCategoryModal(false); setValidationErrors(prev => { const n = new Set(prev); n.delete('category'); return n; }); }}
                                                 >
                                                     <Text style={styles.categoryRowEmoji}>{c.emoji}</Text>
-                                                    <Text style={styles.categoryRowLabel}>{c.label}</Text>
+                                                    <Text style={styles.categoryRowLabel}>{t(c.label)}</Text>
                                                     {postCategory === c.id && <Text style={styles.categoryRowCheck}>✓</Text>}
                                                 </Pressable>
                                             )}
@@ -1551,11 +1557,11 @@ export default function MapScreen() {
                             </Modal>
 
                             {/* Description */}
-                            <Text style={styles.sectionLabel}>Description <Text style={styles.requiredStar}>*</Text></Text>
+                            <Text style={styles.sectionLabel}>{upperCase(t('Description'))} <Text style={styles.requiredStar}>*</Text></Text>
                             <TextInput
-                                accessibilityLabel="Description"
+                                accessibilityLabel={t('Description')}
                                 style={[styles.descriptionInput, fieldBorder('description')]}
-                                placeholder="Describe what you need/offer..."
+                                placeholder={t('Describe what you need/offer...')}
                                 placeholderTextColor={colors.text.muted}
                                 value={postDescription}
                                 onChangeText={v => { setPostDescription(v); setValidationErrors(prev => { const n = new Set(prev); n.delete('description'); return n; }); }}
@@ -1564,28 +1570,28 @@ export default function MapScreen() {
                             />
 
                             {/* Photos */}
-                            <Text style={styles.sectionLabel}>Photos{photoRequired ? <>{' '}<Text style={styles.requiredStar}>*</Text>{' '}<Text style={styles.sectionLabelHint}>(min 1)</Text></> : null}</Text>
+                            <Text style={styles.sectionLabel}>{upperCase(t('Photos'))}{photoRequired ? <>{' '}<Text style={styles.requiredStar}>*</Text>{' '}<Text style={styles.sectionLabelHint}>{t('(min 1)')}</Text></> : null}</Text>
                             <View style={[styles.photosRow, fieldBorder('photos')]}>
                                 {postPhotos.map((uri, i) => (
                                     uri && typeof uri === 'string' && uri.trim() !== '' && uri !== 'null' && uri !== 'undefined' ? (
                                         <View key={i} style={styles.photoThumb}>
                                             <RNImage source={{ uri }} style={styles.photoImg} />
-                                            <Pressable accessibilityRole="button" accessibilityLabel="Remove photo" accessibilityHint="Removes this photo" style={styles.photoRemove} onPress={() => setPostPhotos(prev => prev.filter((_, j) => j !== i))}>
+                                            <Pressable accessibilityRole="button" accessibilityLabel={t('Remove photo')} accessibilityHint={t('Removes this photo')} style={styles.photoRemove} onPress={() => setPostPhotos(prev => prev.filter((_, j) => j !== i))}>
                                                 <Text style={styles.photoRemoveText}>✕</Text>
                                             </Pressable>
                                         </View>
                                     ) : null
                                 ))}
                                 {postPhotos.length < 5 && (
-                                    <Pressable accessibilityRole="button" accessibilityLabel="Add photo" style={styles.photoAdd} onPress={() => { pickPhoto(); setValidationErrors(prev => { const n = new Set(prev); n.delete('photos'); return n; }); }}>
+                                    <Pressable accessibilityRole="button" accessibilityLabel={t('Add photo')} style={styles.photoAdd} onPress={() => { pickPhoto(); setValidationErrors(prev => { const n = new Set(prev); n.delete('photos'); return n; }); }}>
                                         <Text style={styles.photoAddIcon}>📷</Text>
                                     </Pressable>
                                 )}
                             </View>
-                            <Text style={styles.photoCount}>{postPhotos.length}/5 photos{photoRequired ? '' : ' (optional)'}</Text>
+                            <Text style={styles.photoCount}>{upperCase(photoRequired ? t('{n}/5 photos', { n: postPhotos.length }) : t('{n}/5 photos (optional)', { n: postPhotos.length }))}</Text>
 
                             {/* Location */}
-                            <Text style={styles.sectionLabel}>Location <Text style={styles.requiredStar}>*</Text></Text>
+                            <Text style={styles.sectionLabel}>{upperCase(t('Location'))} <Text style={styles.requiredStar}>*</Text></Text>
                             <View style={styles.locationRow}>
                                 <Pressable
                                     accessibilityRole="button"
@@ -1593,7 +1599,7 @@ export default function MapScreen() {
                                     onPress={useMyLocation}
                                 >
                                     <Text style={styles.locationChipIcon}>📍</Text>
-                                    <Text style={styles.locationChipLabel}>My location</Text>
+                                    <Text style={styles.locationChipLabel}>{t('My location')}</Text>
                                 </Pressable>
                                 <Pressable
                                     accessibilityRole="button"
@@ -1601,23 +1607,23 @@ export default function MapScreen() {
                                     onPress={enterPinDrop}
                                 >
                                     <Text style={styles.locationChipIcon}>📌</Text>
-                                    <Text style={styles.locationChipLabel}>Drop a pin</Text>
+                                    <Text style={styles.locationChipLabel}>{t('Drop a pin')}</Text>
                                 </Pressable>
                                 {postLat != null && postLng != null && (
-                                    <Text style={styles.locationConfirmInline}>✓ Set</Text>
+                                    <Text style={styles.locationConfirmInline}>{t('✓ Set')}</Text>
                                 )}
                             </View>
 
                             {/* Where there are no Beans, a note instead of the price section below. */}
                             {!showsBeans && (
-                                <Text style={{ color: colors.text.secondary, fontSize: 13, lineHeight: 18, marginTop: 2, marginBottom: 10 }}>{NO_BEANS_EDIT_NOTE}</Text>
+                                <Text style={{ color: colors.text.secondary, fontSize: 13, lineHeight: 18, marginTop: 2, marginBottom: 10 }}>{t(LINES.noBeansEditNote)}</Text>
                             )}
                             {showsBeans && (<>
                             {/* Price */}
-                            <Text style={styles.sectionLabel}>Price <Text style={styles.requiredStar}>*</Text></Text>
+                            <Text style={styles.sectionLabel}>{upperCase(t('Price'))} <Text style={styles.requiredStar}>*</Text></Text>
                             <View style={styles.priceInputRow}>
                                 <TextInput
-                                    accessibilityLabel="Price"
+                                    accessibilityLabel={t('Price')}
                                     style={[styles.creditsInputCompact, fieldBorder('credits')]}
                                     placeholder="0"
                                     placeholderTextColor={colors.text.muted}
@@ -1631,7 +1637,7 @@ export default function MapScreen() {
                                     setPostPriceType(types[(types.indexOf(postPriceType) + 1) % types.length]);
                                 }} style={styles.priceTypeBtn}>
                                     <Text style={styles.priceTypeBtnText}>{
-                                        { fixed: 'Total', hourly: '/ Hr', daily: '/ Dy', weekly: '/ Wk', monthly: '/ Mo' }[postPriceType] || 'Total'
+                                        { fixed: t('Total', undefined, 'price unit'), hourly: t('/ Hr', undefined, 'price per hour'), daily: t('/ Dy', undefined, 'price per day'), weekly: t('/ Wk', undefined, 'price per week'), monthly: t('/ Mo', undefined, 'price per month') }[postPriceType] || t('Total', undefined, 'price unit')
                                     }</Text>
                                 </Pressable>
                                 <Pressable
@@ -1640,13 +1646,13 @@ export default function MapScreen() {
                                     style={[styles.freeChip, postCredits === '0' && styles.freeChipActive]}
                                     onPress={() => { setPostCredits('0'); setValidationErrors(prev => { const n = new Set(prev); n.delete('credits'); return n; }); }}
                                 >
-                                    <Text style={[styles.freeChipText, postCredits === '0' && styles.freeChipTextActive]}>FREE</Text>
+                                    <Text style={[styles.freeChipText, postCredits === '0' && styles.freeChipTextActive]}>{t('FREE')}</Text>
                                 </Pressable>
                             </View>
 
                             <Pressable accessibilityRole="button" onPress={showPricingGuide} hitSlop={8} style={styles.pricingTipBanner}>
                                 <Text style={styles.pricingTipBannerEmoji}>❓</Text>
-                                <Text style={styles.pricingTipBannerText}>Not sure what to charge? View the Community Pricing Guide</Text>
+                                <Text style={styles.pricingTipBannerText}>{t('Not sure what to charge? View the Community Pricing Guide')}</Text>
                             </Pressable>
 
                             <Pressable
@@ -1659,11 +1665,11 @@ export default function MapScreen() {
                                         const parsed = parseFloat(postCredits);
                                         if (!isNaN(parsed) && parsed > 0) {
                                             const net = Math.round(parsed * 0.985 * 100) / 100;
-                                            return `1.5% fee: ${postType === 'offer' ? 'You will receive' : 'Fulfiller receives'} ${net.toFixed(2)} B. `;
+                                            return postType === 'offer' ? t('1.5% fee: You will receive {amount} B.', { amount: formatNumber(net, 2) }) : t('1.5% fee: Fulfiller receives {amount} B.', { amount: formatNumber(net, 2) });
                                         }
-                                        return '1.5% transaction fee funds community projects & solvency. ';
-                                    })()}<Text style={{ color: colors.feedback.warning.solid, fontWeight: 'bold' }}>Learn more ⓘ</Text>
-                                    <Text style={{ color: colors.brand.primary, fontWeight: 'bold' }}> (100% community owned)</Text>
+                                        return t('1.5% transaction fee funds community projects & solvency.');
+                                    })()}{' '}<Text style={{ color: colors.feedback.warning.solid, fontWeight: 'bold' }}>{t('Learn more ⓘ')}</Text>
+                                    <Text style={{ color: colors.brand.primary, fontWeight: 'bold' }}> {t('(100% community owned)')}</Text>
                                 </Text>
                             </Pressable>
                             </>)}
@@ -1673,7 +1679,7 @@ export default function MapScreen() {
                                 <View style={[styles.checkbox, postRepeatable && styles.checkboxActive]}>
                                     {postRepeatable && <Text style={styles.checkboxTick}>✓</Text>}
                                 </View>
-                                <Text style={styles.repeatableText}>🔁 Repeatable — keep listing active for ongoing bookings</Text>
+                                <Text style={styles.repeatableText}>{t('🔁 Repeatable — keep listing active for ongoing bookings')}</Text>
                             </Pressable>
 
                             {/* #108 Cash-also-needed toggle. The nudge appears on tick, where the
@@ -1683,11 +1689,11 @@ export default function MapScreen() {
                                 <View style={[styles.checkbox, postCashAlsoNeeded && styles.checkboxCash]}>
                                     {postCashAlsoNeeded && <Text style={styles.checkboxTick}>✓</Text>}
                                 </View>
-                                <Text style={styles.repeatableText}>💸 Cash also needed — for fuel or materials</Text>
+                                <Text style={styles.repeatableText}>{t('💸 Cash also needed — for fuel or materials')}</Text>
                             </Pressable>
                             {postCashAlsoNeeded && (
                                 <Text style={styles.cashNudge}>
-                                    Cash is for fuel and consumables you paid for — not your time, not your tools. At cost, no markup. Agree the details in chat; the app never handles the money.
+                                    {t('Cash is for fuel and consumables you paid for — not your time, not your tools. At cost, no markup. Agree the details in chat; the app never handles the money.')}
                                 </Text>
                             )}
 
@@ -1697,12 +1703,12 @@ export default function MapScreen() {
                                 agreed to their listing appearing somewhere else. */}
                             {reachablePeerList.length > 0 && (
                                 <View style={styles.reachSection}>
-                                    <Text style={styles.reachLabel}>Where does this travel?</Text>
+                                    <Text style={styles.reachLabel}>{t('Where does this travel?')}</Text>
                                     <View style={styles.reachButtonRow}>
                                         {([
-                                            { value: 'local' as const, label: '🏠 Stays here' },
-                                            { value: 'peers' as const, label: '🤝 Chosen' },
-                                            { value: 'everywhere' as const, label: '🌏 Everywhere' },
+                                            { value: 'local' as const, label: t('🏠 Stays here') },
+                                            { value: 'peers' as const, label: t('🤝 Chosen') },
+                                            { value: 'everywhere' as const, label: t('🌏 Everywhere') },
                                         ]).map(opt => (
                                             <Pressable
                                                 key={opt.value}
@@ -1725,12 +1731,12 @@ export default function MapScreen() {
                                         <View style={styles.reachPeerRow}>
                                             {reachablePeerList.map((p, index) => {
                                                 const on = postReachPeers.includes(p.peerId);
-                                                const peerLabel = p.callsign || (p.peerId ? `Peer ${p.peerId.slice(-8)}` : 'Peer');
+                                                const peerLabel = p.callsign || (p.peerId ? t('Peer {id}', { id: p.peerId.slice(-8) }) : t('Peer'));
                                                 return (
                                                     <Pressable
                                                         key={p.peerId || index}
                                                         accessibilityRole="button"
-                                                        accessibilityLabel={`Community ${peerLabel}`}
+                                                        accessibilityLabel={t('Community {name}', { name: peerLabel })}
                                                         accessibilityState={{ selected: on }}
                                                         style={[
                                                             styles.reachPeerChip,
@@ -1747,7 +1753,7 @@ export default function MapScreen() {
                                                 );
                                             })}
                                             {postReachPeers.length === 0 && (
-                                                <Text style={styles.reachPeerHint}>Tap a community to include it</Text>
+                                                <Text style={styles.reachPeerHint}>{t('Tap a community to include it')}</Text>
                                             )}
                                         </View>
                                     )}

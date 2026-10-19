@@ -921,9 +921,9 @@ export function eventPinCard(post: any): EventPinCard {
     return {
         when: `${formatEventWhenFor(post)}${zone ? ` · ${zone}` : ''}${repeats ? ` · ↻ ${repeats}` : ''}`,
         badge: eventBadge(post),
-        title: post?.title || 'Event',
+        title: post?.title || t('Event'),
         place: place || null,
-        going: `${going} going`,
+        going: tn(going, '{n} going', '{n} going'),
     };
 }
 

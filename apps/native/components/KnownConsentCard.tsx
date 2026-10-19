@@ -17,7 +17,7 @@ import { formatDate, t, word, type WordKey } from '@beanpool/core';
  * shown in the member's language where the card draws them. A community's own refusal is shown as it sent it.
  * utils/__tests__/settings-words-render.test.ts holds known-consent.ts's sentences to this table.
  */
-const CONSENT_LINES: Readonly<Record<string, WordKey>> = {
+export const CONSENT_LINES: Readonly<Record<string, WordKey>> = {
     'Your community changed what its admins can see': word('Your community changed what its admins can see'),
     "What this community's admins can see": word("What this community's admins can see"),
     'Not saved: the community could not be reached.': word('Not saved: the community could not be reached.'),

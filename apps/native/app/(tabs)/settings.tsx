@@ -213,7 +213,8 @@ export default function SettingsScreen() {
 
         // ─── Appearance (Same as phone / Light / Dark) ───
         // Three equal segments that wrap rather than truncate: "Same as phone" takes two lines at
-        // 320dp + 1.3x text, and every segment keeps a 48dp touch target.
+        // 320dp + 1.3x text, and every segment keeps a 48dp touch target. A longer language's words shrink (to 0.6) to
+        // stay whole on their two lines.
         appearanceBlock: {
             padding: 14,
             borderBottomWidth: 1, borderBottomColor: colors.surface.subtle,
@@ -225,7 +226,7 @@ export default function SettingsScreen() {
         },
         segment: {
             flex: 1, minHeight: 48, borderRadius: 9,
-            alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6, paddingVertical: 6,
+            alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4, paddingVertical: 6,
         },
         segmentSelected: {
             backgroundColor: colors.surface.card,
@@ -1827,7 +1828,7 @@ export default function SettingsScreen() {
                                         accessibilityState={{ checked: selected }}
                                         onPress={() => setThemePreference(value)}
                                     >
-                                        <Text style={[styles.segmentText, selected && styles.segmentTextSelected]}>{t(option.label)}</Text>
+                                        <Text style={[styles.segmentText, selected && styles.segmentTextSelected]} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.6}>{t(option.label)}</Text>
                                     </Pressable>
                                 );
                             })}

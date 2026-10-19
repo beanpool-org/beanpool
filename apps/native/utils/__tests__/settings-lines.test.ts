@@ -33,6 +33,7 @@ import {
     DELETE_CARD_LINE, DELETE_CHECKING_LINE, SIGN_OUT_INSTEAD_LINE, VAULT_COPY_GOES_LINE, deleteFailedLine, deletePlanFailedLine,
     deletedButLine, keepsKeyLine, lastCommunityLine, listNames, vaultCopyStaysLine, type DeletePlan, type KeptCommunity,
 } from '../delete-here';
+import { PURGE_NOT_CONFIRMED, PURGE_NO_ANSWER } from '../node-post';
 import { NAMES_COPY, namesSignOutWords } from '../names-list';
 import { VAULT_MESSAGES, hasVault } from '../vault';
 import { APP_LOCK_NEEDS_SCREEN_LOCK } from '../LocalAuth';
@@ -76,6 +77,15 @@ function vaultCopyFailures(): string[] {
     const body = src.slice(src.indexOf('function vaultCopyFailure('), src.indexOf('\n}\n', src.indexOf('function vaultCopyFailure(')));
     return [...body.matchAll(/return (['"])(.+?)\1;/g)].map((m) => m[2]);
 }
+/** delete-here.ts's own refusals: deleteAccountHere's when the phone changed community, planDelete's with none set. */
+function deleteHereRefusals(): string[] {
+    const src = joined('utils/delete-here.ts');
+    const body = (fn: string) => src.slice(src.indexOf(`function ${fn}(`), src.indexOf('\n}\n', src.indexOf(`function ${fn}(`)));
+    return [
+        ...[...body('deleteAccountHere').matchAll(/kind: 'not-deleted', reason: (['"])(.+?)\1/g)].map((m) => m[2]),
+        ...[...body('planDelete').matchAll(/throw new Error\((['"])(.+?)\1\)/g)].map((m) => m[2]),
+    ];
+}
 
 describe('the lower layers\' fixed sentences', () => {
     const SOURCES: Record<string, string[]> = {
@@ -84,7 +94,8 @@ describe('the lower layers\' fixed sentences', () => {
         'add-words.ts': [ADD_WORDS_COPY.done],
         'LocalAuth.ts': [APP_LOCK_NEEDS_SCREEN_LOCK],
         'node-url.ts': [UNSAFE_NODE_ADDRESS_MESSAGE],
-        'delete-here.ts': [DELETE_CARD_LINE, DELETE_CHECKING_LINE, SIGN_OUT_INSTEAD_LINE, ...vaultCopyFailures()],
+        'delete-here.ts': [DELETE_CARD_LINE, DELETE_CHECKING_LINE, SIGN_OUT_INSTEAD_LINE, ...vaultCopyFailures(), ...deleteHereRefusals()],
+        'node-post.ts': [PURGE_NO_ANSWER, PURGE_NOT_CONFIRMED],
         'names-list.ts': [NAMES_COPY.title, NAMES_COPY.tryAgain, NAMES_COPY.savePdf, NAMES_COPY.signOutAnyway, NAMES_COPY.signOutNotConfirmed],
         'vault.ts': Object.values(VAULT_MESSAGES),
         'pillar-sync.ts and Settings': [...syncStages(), 'Initializing Database Reset...', 'Clearing Local Database Cache...'],
@@ -92,6 +103,7 @@ describe('the lower layers\' fixed sentences', () => {
 
     it('reads every source it stands for (no empty list passes by itself)', () => {
         expect(vaultCopyFailures()).toHaveLength(5);
+        expect(deleteHereRefusals()).toHaveLength(2);
         expect(syncStages()).toHaveLength(6);
         for (const list of Object.values(SOURCES)) expect(list.length).toBeGreaterThan(0);
     });
@@ -205,6 +217,29 @@ describe('Account Deletion\'s sentences, built again from the same plan', () => 
         }
         expect(deletePlanFailedWords('disk full')).toBe(deletePlanFailedLine('disk full'));
         expect(outsideBrackets(inXx(() => deletePlanFailedWords('disk full')), NAMES)).toBe('');
+    });
+
+    it('the phone\'s own reasons are said in the member\'s language inside them; a node\'s own words as it sent them', () => {
+        const PHONE = [PURGE_NO_ANSWER, PURGE_NOT_CONFIRMED, ...deleteHereRefusals()];
+        for (const words of [true, false]) {
+            for (const reason of PHONE) {
+                expect(deleteFailedWords(reason, words)).toBe(deleteFailedLine(reason, words));
+                // A purge that timed out, wholly in the pseudo-locale: no name or node's word left out of the check.
+                expect(outsideBrackets(inXx(() => deleteFailedWords(reason, words))), reason).toBe('');
+                for (const keyStays of [true, false]) {
+                    expect(deletedButWords('Mullum', reason, keyStays, words)).toBe(deletedButLine('Mullum', reason, keyStays, words));
+                    expect(outsideBrackets(inXx(() => deletedButWords('Mullum', reason, keyStays, words)), ['Mullum']), reason).toBe('');
+                }
+            }
+        }
+        for (const reason of PHONE) {
+            expect(deletePlanFailedWords(reason)).toBe(deletePlanFailedLine(reason));
+            expect(outsideBrackets(inXx(() => deletePlanFailedWords(reason))), reason).toBe('');
+        }
+        const nodeSaid = 'Active escrow trades must be settled first';
+        expect(inXx(() => deleteFailedWords(nodeSaid, true))).toContain(nodeSaid);
+        expect(inXx(() => deletedButWords('Mullum', nodeSaid, true, true))).toContain(nodeSaid);
+        expect(inXx(() => deletePlanFailedWords(nodeSaid))).toContain(nodeSaid);
     });
 });
 

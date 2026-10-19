@@ -2,7 +2,7 @@
  * The sentences Settings shows that its lower layers write in English, shown in the member's language.
  *
  * Code that handles keys, signatures, the 12 words or the key vault never reaches the words layer: utils/delete-here.ts
- * (signs the delete, removes the vault's copies), utils/names-list.ts (the names list's keys), utils/vault.ts and
+ * (signs the delete, removes the vault's copies), utils/node-post.ts (sends it signed), utils/names-list.ts (the names list's keys), utils/vault.ts and
  * utils/add-words.ts (on the 12 words' key path), utils/no-words-copy.ts (what is said about the 12 words),
  * utils/LocalAuth.ts (App Lock), utils/node-url.ts (which addresses the key signs for), utils/member-area.ts (signs the
  * area read), utils/break-glass.ts and utils/sign-out-everywhere.ts (signed admin requests), utils/node-role.ts (re-exported
@@ -46,6 +46,13 @@ const FIXED: Readonly<Record<string, WordKey>> = {
     "it didn't answer: check your connection": word("it didn't answer: check your connection", 'why the key vault kept its copy'),
     'too many tries just now': word('too many tries just now', 'why the key vault kept its copy'),
     "it didn't confirm the delete": word("it didn't confirm the delete", 'why the key vault kept its copy'),
+    // utils/node-post.ts PURGE_NO_ANSWER and PURGE_NOT_CONFIRMED, and delete-here.ts's own refusals (deleteAccountHere's
+    // community changed, planDelete's no community): why nothing was deleted, said by deleteFailedWords and
+    // deletePlanFailedWords.
+    "The community didn't answer. You can try again: if it deleted your account meanwhile, trying again finishes the delete on this phone.": word("The community didn't answer. You can try again: if it deleted your account meanwhile, trying again finishes the delete on this phone."),
+    "The community's answer didn't confirm the delete. Try again.": word("The community's answer didn't confirm the delete. Try again."),
+    'This phone changed community. Open Delete account again.': word('This phone changed community. Open Delete account again.'),
+    'This phone is not set to a community.': word('This phone is not set to a community.'),
     // utils/names-list.ts NAMES_COPY: Sign Out with the names list's copy not confirmed.
     'Names list': word('Names list'),
     'Try again': word('Try again'),
@@ -185,23 +192,27 @@ export function vaultCopyStaysWords(hereName: string, outcome: Extract<DeleteOut
 
 /** delete-here.ts deletedButLine: the node deleted the account, the phone could not finish. */
 export function deletedButWords(hereName: string, reason: string, keyStays: boolean, hasWords: boolean): string {
-    const values = { here: hereName, reason };
+    const values = { here: hereName, reason: settingsLineWords(reason) };
     if (!keyStays) return t("Your account at {here} was deleted, but this phone couldn't be cleared ({reason}). Use Sign Out (Device Only) to finish.", values);
     return hasWords
         ? t("Your account at {here} was deleted, but this phone couldn't finish moving on ({reason}). This phone's key and 12 words are still on it.", values)
         : t("Your account at {here} was deleted, but this phone couldn't finish moving on ({reason}). This phone's key is still on it.", values);
 }
 
-/** delete-here.ts deleteFailedLine: the node did not delete the account; `reason` is its own words, or Settings'. */
+/**
+ * delete-here.ts deleteFailedLine: the node did not delete the account; `reason` is its own words, the phone's (one of
+ * the sentences above, translated), or Settings'.
+ */
 export function deleteFailedWords(reason: string, hasWords: boolean): string {
+    const values = { reason: settingsLineWords(reason) };
     return hasWords
-        ? t("{reason}\n\nThis phone's key and 12 words were not touched.", { reason })
-        : t("{reason}\n\nThis phone's key was not touched.", { reason });
+        ? t("{reason}\n\nThis phone's key and 12 words were not touched.", values)
+        : t("{reason}\n\nThis phone's key was not touched.", values);
 }
 
 /** delete-here.ts deletePlanFailedLine: the other communities couldn't be asked; nothing has been deleted. */
 export function deletePlanFailedWords(reason: string): string {
-    return t("Couldn't check your other communities on this phone ({reason}). Nothing has been deleted. Try again.", { reason });
+    return t("Couldn't check your other communities on this phone ({reason}). Nothing has been deleted. Try again.", { reason: settingsLineWords(reason) });
 }
 
 // ── Community admin: utils/node-role.ts's labels, LocalAuth.ts's and sign-out-everywhere.ts's sentences with a name ──

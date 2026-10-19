@@ -219,7 +219,8 @@ export default function ClaimCommunityScreen() {
         if (!canClaim || !origin || !identity || status?.kind !== 'unclaimed' || !code) return;
         setError(null);
         setPhase('unlocking');
-        const unlock = await requireDeviceUnlock(name);
+        // The phone's lock asks in the member's language, the same English node-admin.ts writes when given none.
+        const unlock = await requireDeviceUnlock(name, t("Confirm it's you to manage {name}", { name }));
         if (unlock === 'no-device-lock') {
             setPhase('form');
             Alert.alert(t('Set a screen lock first'), keyLineWords(NO_DEVICE_LOCK_MESSAGE));

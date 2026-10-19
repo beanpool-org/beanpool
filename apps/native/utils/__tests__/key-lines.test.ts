@@ -185,6 +185,8 @@ describe('key-lines.ts: sentences with a name, an address or a number, read back
         expect(writtenIn('utils/rekey-redeem.ts', "return hours <= 1 ? 'within the hour' : `in about {hours} hours`;")).toBe(true);
         expect(writtenIn('utils/node-claim.ts', 'The server did not answer ({status}).')).toBe(true);
         expect(writtenIn('utils/node-claim.ts', 'The server refused the claim ({status}).')).toBe(true);
+        // The phone's lock prompt the claim screen passes says what node-admin.ts says when it is given none.
+        expect(writtenIn('utils/node-admin.ts', "promptMessage: promptMessage ?? `Confirm it's you to manage {name}`")).toBe(true);
     });
 
     it('in English each reads as written; in the pseudo-locale each is translated, with its names as they are', () => {

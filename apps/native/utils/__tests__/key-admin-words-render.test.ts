@@ -158,7 +158,11 @@ vi.mock('../member-statements', () => ({ makeOfflineTicket: async () => 'ticket'
 const claim = vi.hoisted(() => ({ status: null as any, outcome: { kind: 'owner' } as any, member: true }));
 vi.mock('../membership-probe', () => ({ fetchMembership: async () => new Response(JSON.stringify({ isMember: claim.member }), { status: 200 }) }));
 vi.mock('../../components/useManageNode', () => ({ useManageNode: () => ({ start() {}, busy: false, dialog: null }) }));
-vi.mock('../node-admin', async (importOriginal) => ({ ...(await importOriginal<typeof import('../node-admin')>()), requireDeviceUnlock: async () => 'ok' }));
+const lock = vi.hoisted(() => ({ prompts: [] as Array<string | undefined> }));
+vi.mock('../node-admin', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../node-admin')>()),
+    requireDeviceUnlock: async (_name: string, prompt?: string) => { lock.prompts.push(prompt); return 'ok'; },
+}));
 vi.mock('../node-claim', async (importOriginal) => ({
     ...(await importOriginal<typeof import('../node-claim')>()),
     readClaimStatus: async () => claim.status,
@@ -209,6 +213,14 @@ const click = async (el: Element | null | undefined, what: string) => {
 /** A button whose words are exactly this English in the pseudo-locale (a sentence, or a FILLED one with its names). */
 const buttonSaying = (said: string) => Array.from(host.querySelectorAll('button')).find((b) => (b.textContent ?? '') === said) ?? null;
 const buttonWith = (english: string) => Array.from(host.querySelectorAll('button')).find((b) => (b.textContent ?? '').includes(pseudoLocalise(english))) ?? null;
+async function type(into: Element | null, value: string) {
+    expect(into, 'the field').toBeTruthy();
+    await act(async () => {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(into, value);
+        into!.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await settle();
+}
 const at = (english: string, values: Record<string, string>) => Object.entries(values).reduce((s, [k, v]) => s.split(`{${k}}`).join(v), pseudoLocalise(english));
 
 describe('the names list in the pseudo-locale', () => {
@@ -295,6 +307,14 @@ describe('claiming a community in the pseudo-locale', () => {
         expect(host.textContent).toContain(at('Claim {name}', { name: 'Beans Town' }));
         expect(bypassing(host, WRITTEN, alerts.said)).toEqual([]);
         expect(unfit(host, 320 - 32, WRITTEN)).toEqual([]);
+        await type(host.querySelector(`[aria-label="${pseudoLocalise('Claim code')}"]`), 'a1b2c3d4e5f67890');
+        await type(host.querySelector(`[aria-label="${pseudoLocalise('Your callsign')}"]`), 'Sally');
+        lock.prompts.length = 0;
+        await click(buttonWith('Claim and become owner'), 'Claim');
+        // The phone's lock asks in the member's language, by the community's name.
+        expect(lock.prompts).toEqual([at("Confirm it's you to manage {name}", { name: 'Beans Town' })]);
+        expect(host.textContent).toContain(pseudoLocalise('Too many tries from this network. Wait {n} seconds and try again.').replace('{n}', '30'));
+        expect(bypassing(host, WRITTEN, alerts.said)).toEqual([]);
     });
 
     it('owned already, busy, can\'t be reached, and claimed', async () => {

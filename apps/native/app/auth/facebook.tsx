@@ -4,6 +4,7 @@ import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
 import { useRouter } from 'expo-router';
 import { colors } from '../../constants/colors';
+import { t } from '@beanpool/core';
 
 export default function FacebookAuthCallbackScreen() {
     const router = useRouter();
@@ -34,12 +35,12 @@ export default function FacebookAuthCallbackScreen() {
         <View
             style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface.app }}
             accessibilityRole="progressbar"
-            accessibilityLabel="Completing Facebook sign-in..."
+            accessibilityLabel={t('Completing {provider} sign-in...', { provider: 'Facebook' })}
             accessibilityLiveRegion="polite"
         >
             <ActivityIndicator size="large" color={colors.brand.primary} />
             <Text style={{ marginTop: 16, color: colors.text.secondary, fontSize: 14 }}>
-                Completing Facebook sign-in...
+                {t('Completing {provider} sign-in...', { provider: 'Facebook' })}
             </Text>
         </View>
     );

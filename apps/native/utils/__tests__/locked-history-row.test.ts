@@ -128,13 +128,14 @@ describe('the end screens say what landed (review of #1844, finding 4)', () => {
         const words = read('app/old-words-unlock.tsx');
         expect(words).toMatch(/const locked = await lockedHistoryRows\(\)/);
         expect(words).toMatch(/locked: locked\[g\.id\.toLowerCase\(\)\] \?\? 0/);
-        expect(words).toMatch(/setOutcome\(oldWordsEnd\(r\)\);/);
+        // oldWordsEnd's ending in the member's language (components/key-lines.ts; key-lines.test.ts holds the two, shape by shape).
+        expect(words).toMatch(/setOutcome\(oldWordsEndWords\(r\)\);/);
         expect(words).not.toMatch(/OLD_WORDS_DONE/);
     });
 
     it('the confirming screen ends with newPhoneEnd, in the danger colour when the community refused some', () => {
         const confirm = read('app/confirm-new-phone.tsx');
-        expect(confirm).toMatch(/setStep\(\{ kind: 'done', \.\.\.newPhoneEnd\(check\.name, r\) \}\);/);
+        expect(confirm).toMatch(/setStep\(\{ kind: 'done', \.\.\.newPhoneEndWords\(check\.name, r\) \}\);/);
         expect(confirm).toMatch(/step\.ok \? colors\.text\.body : colors\.feedback\.danger\.fg/);
         expect(confirm).not.toMatch(/newPhoneDoneText/);
     });

@@ -740,6 +740,8 @@ describe('the enterprise page and groups at 320 dp with 1.3× text, in the pseud
 describe('the enterprise page follows a language picked in Settings', () => {
     const NATIVE_WORDS = path.resolve(__dirname, '../../words');
     const fr = JSON.parse(fs.readFileSync(path.join(NATIVE_WORDS, 'fr.json'), 'utf8')) as Record<string, string>;
+    // A sentence as a French member reads it: the draft once there is one, its English until then (a fallback, never a break).
+    const inFr = (en: string) => fr[en] ?? en;
     const MENU = { menuBtn: {}, menuIconWrap: {}, menuIcon: {}, menuText: {}, menuSub: {}, menuChevron: {} };
 
     it('a pick redraws it in the new language: the operator buttons, a keeper\'s chip and the back button\'s spoken name', async () => {
@@ -782,18 +784,19 @@ describe('the enterprise page follows a language picked in Settings', () => {
         const answers = community({ treasuryComplete: { ok: true } });
         net.answer = (name, args) => { if (name === 'treasuryComplete') paid.push(args); return answers(name, args); };
         await renderIn('fr');
-        await click(buttonWith('Release Payment (30 🫘)'), 'Release Payment');
+        await click(buttonWith(inFr('Release Payment ({amount} 🫘)').replace('{amount}', '30')), 'Release Payment');
         const hours = host.querySelector('[data-modal] input') as HTMLInputElement | null;
-        expect(fr['e.g. 2.5']).toBe('ex. 2,5');
-        expect(hours?.getAttribute('placeholder')).toBe(fr['e.g. 2.5']);
+        // The translator's words around the number, and the number in the language's way (formatNumber, #2202).
+        expect(fr['e.g. {amount}']).toBe('ex. {amount}');
+        expect(hours?.getAttribute('placeholder')).toBe('ex. 2,5');
         await act(async () => {
             Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(hours, '2,5');
             hours!.dispatchEvent(new Event('input', { bubbles: true }));
         });
         await settle(2);
-        await click(Array.from(host.querySelectorAll('[data-modal] button')).find((b) => b.textContent === 'Release Payment'), 'Release Payment (the box)');
-        expect(alerts.said).not.toContain('Invalid Hours');
+        await click(Array.from(host.querySelectorAll('[data-modal] button')).find((b) => b.textContent === inFr('Release Payment')), 'Release Payment (the box)');
+        expect(alerts.said).not.toContain(inFr('Invalid Hours'));
         expect(paid).toEqual([[ENT, 'd2', 2.5]]);
-        expect(alerts.said).toContain('Payment Released ✅');
+        expect(alerts.said).toContain(inFr('Payment Released ✅'));
     });
 });

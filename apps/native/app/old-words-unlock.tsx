@@ -12,7 +12,9 @@ import { useTheme } from './ThemeContext';
 import { lockedHistoryRows, unlockGroupHistoryWithWords } from '../utils/db';
 import { yourGroupsStore } from '../components/useYourGroups';
 import { RecoveryWordsEntry } from '../components/RecoveryWordsEntry';
-import { LOCKED_HISTORY_WORDS, oldWordsEnd, oldWordsProgressText } from '../utils/group-history-unlock';
+import { LOCKED_HISTORY_WORDS } from '../utils/group-history-unlock';
+import { keyLineWords, oldWordsEndWords, oldWordsProgressWords } from '../components/key-lines';
+import { t } from '@beanpool/core';
 
 export { ErrorBoundary };
 
@@ -37,10 +39,10 @@ export default function OldWordsUnlockScreen() {
             const locked = await lockedHistoryRows().catch(() => ({} as Record<string, number>));
             const groups = (yourGroupsStore.getState().items ?? []).filter((g) => g.kind === 'group')
                 .map((g) => ({ id: g.id, name: g.name, locked: locked[g.id.toLowerCase()] ?? 0 }));
-            const r = await unlockGroupHistoryWithWords(typed, groups, (d, t) => setProgress(oldWordsProgressText(d, t)));
-            setOutcome(oldWordsEnd(r));
+            const r = await unlockGroupHistoryWithWords(typed, groups, (d, total) => setProgress(oldWordsProgressWords(d, total)));
+            setOutcome(oldWordsEndWords(r));
         } catch (e: any) {
-            setOutcome({ text: e?.message || 'Something went wrong. Try again in a moment.', lines: [], ok: false });
+            setOutcome({ text: e?.message ? keyLineWords(e.message) : t('Something went wrong. Try again in a moment.'), lines: [], ok: false });
         } finally {
             setProgress(null);
             setBusy(false);
@@ -50,16 +52,16 @@ export default function OldWordsUnlockScreen() {
     return (
         <ScrollView style={{ flex: 1, backgroundColor: colors.surface.app }} contentContainerStyle={[styles.page, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 24 }]}
             keyboardShouldPersistTaps="handled">
-            <Text style={[styles.title, { color: colors.text.heading }]}>{LOCKED_HISTORY_WORDS}</Text>
+            <Text style={[styles.title, { color: colors.text.heading }]}>{keyLineWords(LOCKED_HISTORY_WORDS)}</Text>
             <Text style={[styles.body, { color: colors.text.secondary }]}>
-                Type the 12 words of the key this account used before you changed phones. They open your earlier messages on this phone and are never sent or kept.
+                {t('Type the 12 words of the key this account used before you changed phones. They open your earlier messages on this phone and are never sent or kept.')}
             </Text>
             <View>
-                <RecoveryWordsEntry words={words} onChange={setWords} editable={!busy} label="Your old 12 words." colors={colors} />
+                <RecoveryWordsEntry words={words} onChange={setWords} editable={!busy} label={t('Your old 12 words.')} colors={colors} />
             </View>
             <Pressable style={[styles.primaryBtn, { backgroundColor: colors.brand.fill, opacity: busy || !typedAny ? 0.6 : 1 }]}
                 onPress={run} disabled={busy || !typedAny} accessibilityRole="button">
-                {busy ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={[styles.primaryText, { color: colors.text.inverse }]}>Unlock earlier messages</Text>}
+                {busy ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={[styles.primaryText, { color: colors.text.inverse }]}>{t('Unlock earlier messages')}</Text>}
             </Pressable>
             {!!progress && <Text style={[styles.body, { color: colors.text.secondary }]} accessibilityLiveRegion="polite">{progress}</Text>}
             {!!outcome && (
@@ -69,7 +71,7 @@ export default function OldWordsUnlockScreen() {
                 </View>
             )}
             <Pressable style={styles.secondaryBtn} onPress={() => router.back()} accessibilityRole="button">
-                <Text style={[styles.secondaryText, { color: colors.text.secondary }]}>Back</Text>
+                <Text style={[styles.secondaryText, { color: colors.text.secondary }]}>{t('Back')}</Text>
             </Pressable>
         </ScrollView>
     );

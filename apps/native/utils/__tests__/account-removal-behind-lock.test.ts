@@ -40,10 +40,11 @@ describe('node-mismatch: Delete this account from this phone', () => {
         const body = start();
         expect(screen()).toContain("import { authenticateUser } from '../utils/LocalAuth';");
         // With words: the check before they are shown is this one.
-        const words = body.indexOf(`const w = await readWordsBehindLock(identity, '${DELETE_REASON}');`);
+        // The prompt is the member's sentence, through t() (words S3k): the same English.
+        const words = body.indexOf(`const w = await readWordsBehindLock(identity, t('${DELETE_REASON}'));`);
         const wordsRefused = body.indexOf('if (!w) return;');
         // Without: the same check, alone.
-        const bare = body.indexOf(`if (!(await authenticateUser('${DELETE_REASON}'))) return;`);
+        const bare = body.indexOf(`if (!(await authenticateUser(t('${DELETE_REASON}')))) return;`);
         const opened = body.indexOf('setShowWipe(true)');
         expect(words).toBeGreaterThan(-1);
         expect(wordsRefused).toBeGreaterThan(words);
@@ -82,7 +83,8 @@ describe('"Replace this phone\'s account?": Replace Account', () => {
         expect(screen()).toContain('onPress={handleReplaceAccount}');
         expect(screen()).not.toContain('answerReplace(true)');
         const body = handler();
-        const asked = body.indexOf('const passed = await authenticateUser(`Confirm authentication to remove ${outCallsign} from this phone.`);');
+        // The prompt in the member's language (words S3j): the same sentence, through the screen's t().
+        const asked = body.indexOf("const passed = await authenticateUser(t('Confirm authentication to remove {name} from this phone.', { name: outCallsign }));");
         const refused = body.indexOf('if (!passed || outgoingIdentityRef.current !== account || !replaceAnswerRef.current) return;');
         const replaced = body.indexOf('answerReplace(true);');
         expect(asked).toBeGreaterThan(-1);

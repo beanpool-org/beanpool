@@ -12,7 +12,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from './ThemeContext';
 import { checkScannedNewPhone, confirmScannedNewPhone } from '../utils/db';
 import { yourGroupsStore } from '../components/useYourGroups';
-import { NEW_PHONE_CONFIRM_ACTION, newPhoneConfirmText, newPhoneEnd, newPhoneProgressText, type NewPhoneCheck } from '../utils/group-history-unlock';
+import { NEW_PHONE_CONFIRM_ACTION, type NewPhoneCheck } from '../utils/group-history-unlock';
+import { keyLineWords, newPhoneConfirmWords, newPhoneEndWords, newPhoneProgressWords } from '../components/key-lines';
+import { t } from '@beanpool/core';
 
 export { ErrorBoundary };
 
@@ -32,9 +34,9 @@ export default function ConfirmNewPhoneScreen() {
         try {
             const groups = (yourGroupsStore.getState().items ?? []).filter((g) => g.kind === 'group').map((g) => ({ id: g.id, name: g.name }));
             const check = await checkScannedNewPhone(String(r.data ?? ''), groups);
-            setStep(check.ok ? { kind: 'confirm', check } : { kind: 'refused', text: check.text });
+            setStep(check.ok ? { kind: 'confirm', check } : { kind: 'refused', text: keyLineWords(check.text) });
         } catch (e: any) {
-            setStep({ kind: 'refused', text: e?.message || 'Something went wrong. Try again in a moment.' });
+            setStep({ kind: 'refused', text: e?.message ? keyLineWords(e.message) : t('Something went wrong. Try again in a moment.') });
         }
     };
 
@@ -42,9 +44,9 @@ export default function ConfirmNewPhoneScreen() {
         setStep({ kind: 'handing', check, handed: 0, planned: null });
         try {
             const r = await confirmScannedNewPhone(check, (n, m) => setStep({ kind: 'handing', check, handed: n, planned: m }));
-            setStep({ kind: 'done', ...newPhoneEnd(check.name, r) });
+            setStep({ kind: 'done', ...newPhoneEndWords(check.name, r) });
         } catch (e: any) {
-            setStep({ kind: 'refused', text: e?.message || 'Something went wrong. Try again in a moment.' });
+            setStep({ kind: 'refused', text: e?.message ? keyLineWords(e.message) : t('Something went wrong. Try again in a moment.') });
         }
     };
 
@@ -53,11 +55,11 @@ export default function ConfirmNewPhoneScreen() {
         if (!permission.granted) {
             return (
                 <View style={[styles.center, { backgroundColor: colors.surface.app, paddingTop: insets.top + 16 }]}>
-                    <Text style={[styles.title, { color: colors.text.heading }]}>{NEW_PHONE_CONFIRM_ACTION}</Text>
-                    <Text style={[styles.body, { color: colors.text.secondary }]}>BeanPool scans the code on the member's new phone.</Text>
+                    <Text style={[styles.title, { color: colors.text.heading }]}>{keyLineWords(NEW_PHONE_CONFIRM_ACTION)}</Text>
+                    <Text style={[styles.body, { color: colors.text.secondary }]}>{t("BeanPool scans the code on the member's new phone.")}</Text>
                     <Pressable style={[styles.primaryBtn, { backgroundColor: colors.brand.fill }]} accessibilityRole="button"
                         onPress={permission.canAskAgain ? requestPermission : () => Linking.openSettings()}>
-                        <Text style={[styles.primaryText, { color: colors.text.inverse }]}>{permission.canAskAgain ? 'Allow the camera' : 'Open phone settings'}</Text>
+                        <Text style={[styles.primaryText, { color: colors.text.inverse }]}>{permission.canAskAgain ? t('Allow the camera') : t('Open phone settings')}</Text>
                     </Pressable>
                 </View>
             );
@@ -68,9 +70,9 @@ export default function ConfirmNewPhoneScreen() {
                     onBarcodeScanned={step.kind === 'scan' ? onScanned : undefined} />
                 <View style={[styles.instructions, { bottom: insets.bottom + 24 }]}>
                     {step.kind === 'checking' ? <ActivityIndicator color="#fff" />
-                        : <Text style={styles.instructionText}>Point the camera at the code on the member's new phone. Do this only in person.</Text>}
+                        : <Text style={styles.instructionText}>{t("Point the camera at the code on the member's new phone. Do this only in person.")}</Text>}
                 </View>
-                <Pressable style={[styles.closeBtn, { top: insets.top + 8 }]} onPress={() => router.back()} accessibilityRole="button" accessibilityLabel="Close">
+                <Pressable style={[styles.closeBtn, { top: insets.top + 8 }]} onPress={() => router.back()} accessibilityRole="button" accessibilityLabel={t('Close')}>
                     <Text style={styles.closeText}>✕</Text>
                 </Pressable>
             </View>
@@ -79,29 +81,29 @@ export default function ConfirmNewPhoneScreen() {
 
     return (
         <ScrollView style={{ flex: 1, backgroundColor: colors.surface.app }} contentContainerStyle={[styles.page, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 24 }]}>
-            <Text style={[styles.title, { color: colors.text.heading }]}>{NEW_PHONE_CONFIRM_ACTION}</Text>
+            <Text style={[styles.title, { color: colors.text.heading }]}>{keyLineWords(NEW_PHONE_CONFIRM_ACTION)}</Text>
             {step.kind === 'refused' && (
                 <>
                     <Text style={[styles.body, { color: colors.feedback.danger.fg }]} accessibilityRole="alert">{step.text}</Text>
                     <Pressable style={[styles.primaryBtn, { backgroundColor: colors.brand.fill }]} onPress={() => setStep({ kind: 'scan' })} accessibilityRole="button">
-                        <Text style={[styles.primaryText, { color: colors.text.inverse }]}>Scan again</Text>
+                        <Text style={[styles.primaryText, { color: colors.text.inverse }]}>{t('Scan again')}</Text>
                     </Pressable>
                 </>
             )}
             {step.kind === 'confirm' && (
                 <>
-                    <Text style={[styles.body, { color: colors.text.body }]}>{newPhoneConfirmText(step.check.name, step.check.groups.map((g) => g.name))}</Text>
+                    <Text style={[styles.body, { color: colors.text.body }]}>{newPhoneConfirmWords(step.check.name, step.check.groups.map((g) => g.name))}</Text>
                     <Pressable style={[styles.primaryBtn, { backgroundColor: colors.brand.fill }]} onPress={() => confirm(step.check)} accessibilityRole="button">
-                        <Text style={[styles.primaryText, { color: colors.text.inverse }]}>Confirm</Text>
+                        <Text style={[styles.primaryText, { color: colors.text.inverse }]}>{t('Confirm')}</Text>
                     </Pressable>
                 </>
             )}
             {step.kind === 'handing' && (step.planned === null ? <ActivityIndicator /> : (
-                <Text style={[styles.body, { color: colors.text.secondary }]} accessibilityLiveRegion="polite">{newPhoneProgressText(step.handed, step.planned)}</Text>
+                <Text style={[styles.body, { color: colors.text.secondary }]} accessibilityLiveRegion="polite">{newPhoneProgressWords(step.handed, step.planned)}</Text>
             ))}
             {step.kind === 'done' && <Text style={[styles.body, { color: step.ok ? colors.text.body : colors.feedback.danger.fg }]} accessibilityLiveRegion="polite">{step.text}</Text>}
             <Pressable style={styles.secondaryBtn} onPress={() => router.back()} accessibilityRole="button">
-                <Text style={[styles.secondaryText, { color: colors.text.secondary }]}>{step.kind === 'done' ? 'Done' : 'Cancel'}</Text>
+                <Text style={[styles.secondaryText, { color: colors.text.secondary }]}>{step.kind === 'done' ? t('Done') : t('Cancel')}</Text>
             </Pressable>
         </ScrollView>
     );

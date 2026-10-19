@@ -15,7 +15,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { router, useLocalSearchParams, ErrorBoundary } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { t } from '@beanpool/core';
+import { t, tn, upperCase } from '@beanpool/core';
+import { claimOutcomeWords, keyLineWords } from '../components/key-lines';
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
 import * as Clipboard from 'expo-clipboard';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -28,7 +29,7 @@ import { fetchMembership } from '../utils/membership-probe';
 import { assertPlainNodeAddress, plainOriginOf } from '../utils/node-url';
 import { requireDeviceUnlock, NO_DEVICE_LOCK_MESSAGE } from '../utils/node-admin';
 import {
-    claimCodeDigits, claimCodeFromDigits, claimCodeFromScan, claimCommunity, claimNodeOrigin, claimOutcomeMessage,
+    claimCodeDigits, claimCodeFromDigits, claimCodeFromScan, claimCommunity, claimNodeOrigin,
     claimSuccessActions, ownerCheckViaRole, readClaimStatus, readNodeAddresses, type ClaimStatus,
 } from '../utils/node-claim';
 import { CLAIM_CODE_PLACEHOLDER, claimLinkFromScan, parseClaimLink } from '../utils/claim-link';
@@ -47,7 +48,8 @@ export default function ClaimCommunityScreen() {
         container: { flex: 1, backgroundColor: colors.surface.page },
         header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, minHeight: 56, borderBottomWidth: 1, borderBottomColor: colors.border.default, backgroundColor: theme === 'dark' ? colors.surface.card : colors.text.heading },
         backButton: { width: 48, height: 48, justifyContent: 'center', alignItems: 'center' },
-        headerTitle: { flex: 1, textAlign: 'center', fontSize: 16, fontWeight: 'bold', color: colors.brand.primary, letterSpacing: 0.5, textTransform: 'uppercase', paddingVertical: 4 },
+        // In capitals by the language's rule (upperCase below), never a textTransform.
+        headerTitle: { flex: 1, textAlign: 'center', fontSize: 16, fontWeight: 'bold', color: colors.brand.primary, letterSpacing: 0.5, paddingVertical: 4 },
         scroll: { padding: 16 },
         title: { fontSize: 22, fontWeight: '800', color: colors.text.heading, lineHeight: 28 },
         address: { fontSize: 15, color: colors.text.secondary, marginTop: 4, lineHeight: 21, fontFamily: 'monospace' },
@@ -83,7 +85,7 @@ export default function ClaimCommunityScreen() {
     const [origin, setOrigin] = useState<string | null>(linkNode);
     const [addressInput, setAddressInput] = useState('');
     const [addressError, setAddressError] = useState<string | null>(
-        params.refused === '1' ? "The link named an address BeanPool won't use. Type the server's address instead." : null,
+        params.refused === '1' ? t("The link named an address BeanPool won't use. Type the server's address instead.") : null,
     );
     const [status, setStatus] = useState<ClaimStatus | null>(null);
     const [isMember, setIsMember] = useState<boolean | null>(null);
@@ -108,7 +110,7 @@ export default function ClaimCommunityScreen() {
 
     const checkAddress = () => {
         const o = claimNodeOrigin(addressInput);
-        if (!o) { setAddressError("That doesn't look like a server address BeanPool can use. Check it on the server."); return; }
+        if (!o) { setAddressError(t("That doesn't look like a server address BeanPool can use. Check it on the server.")); return; }
         setAddressError(null);
         setOrigin(o);
     };
@@ -136,6 +138,8 @@ export default function ClaimCommunityScreen() {
 
     // The server's name, cleaned (node-claim.ts cleanClaimName), or the address's host when nothing was left of it.
     const name = (status && 'communityName' in status && status.communityName) || 'this community';
+    /** The server's name for the screen's words, or null where the server gave none (the claim keeps `name`). */
+    const named = (status && 'communityName' in status && status.communityName) || null;
 
     const paste = async () => {
         const text = (await Clipboard.getStringAsync().catch(() => '')) || '';
@@ -148,8 +152,8 @@ export default function ClaimCommunityScreen() {
             const p = await requestPermission();
             if (!p.granted) {
                 // With no server yet the step has no code box: the address is what can be typed instead.
-                Alert.alert('Camera is off', origin
-                    ? 'Allow the camera for BeanPool in your phone settings, or type the code.'
+                Alert.alert(t('Camera is off'), origin
+                    ? t('Allow the camera for BeanPool in your phone settings, or type the code.')
                     : t("Allow the camera for BeanPool in your phone settings, or type the server's address."));
                 return;
             }
@@ -215,10 +219,11 @@ export default function ClaimCommunityScreen() {
         if (!canClaim || !origin || !identity || status?.kind !== 'unclaimed' || !code) return;
         setError(null);
         setPhase('unlocking');
-        const unlock = await requireDeviceUnlock(name);
+        // The phone's lock asks in the member's language, the same English node-admin.ts writes when given none.
+        const unlock = await requireDeviceUnlock(name, t("Confirm it's you to manage {name}", { name }));
         if (unlock === 'no-device-lock') {
             setPhase('form');
-            Alert.alert('Set a screen lock first', NO_DEVICE_LOCK_MESSAGE);
+            Alert.alert(t('Set a screen lock first'), keyLineWords(NO_DEVICE_LOCK_MESSAGE));
             return;
         }
         if (unlock !== 'ok') { setPhase('form'); return; }
@@ -229,7 +234,7 @@ export default function ClaimCommunityScreen() {
         });
         if (out.kind === 'owner') { await afterOwner(origin); return; }
         setPhase('form');
-        setError(claimOutcomeMessage(out, name));
+        setError(claimOutcomeWords(out, name));
         if (out.kind === 'code-changed') { setDigits(''); loadStatus(origin); }
         if (out.kind === 'already-claimed') loadStatus(origin);
     };
@@ -247,7 +252,7 @@ export default function ClaimCommunityScreen() {
             communitySwitched();
             setIsAnchor(true);
         } catch (e: any) {
-            Alert.alert(`Couldn't switch to ${name}`, e?.message || 'Try again.');
+            Alert.alert(named ? t("Couldn't switch to {name}", { name: named }) : t("Couldn't switch to this community"), e?.message ? keyLineWords(e.message) : t('Try again.'));
         } finally {
             setSwitching(false);
         }
@@ -256,23 +261,23 @@ export default function ClaimCommunityScreen() {
     // ── Screens ─────────────────────────────────────────────────────────────────────────────────────────
     const header = (
         <View style={styles.header}>
-            <Pressable onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)'))} style={styles.backButton} accessibilityRole="button" accessibilityLabel="Back">
+            <Pressable onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)'))} style={styles.backButton} accessibilityRole="button" accessibilityLabel={t('Back')}>
                 <MaterialCommunityIcons name="arrow-left" size={24} color={placeholder} />
             </Pressable>
             {/* 208dp between the two 48dp slots; at 1.3× the words take two lines rather than an ellipsis. The community's
                 name is never here: it is the body's title, which wraps. */}
-            <Text style={styles.headerTitle} numberOfLines={2} accessibilityRole="header">Claim a community</Text>
+            <Text style={styles.headerTitle} numberOfLines={2} accessibilityRole="header">{upperCase(t('Claim a community'))}</Text>
             <View style={styles.backButton} />
         </View>
     );
 
     let body: React.ReactNode;
     if (!identity) {
-        body = <Text style={styles.note}>This phone has no BeanPool account yet. Set one up first, then open the claim link again.</Text>;
+        body = <Text style={styles.note}>{t('This phone has no BeanPool account yet. Set one up first, then open the claim link again.')}</Text>;
     } else if (!origin) {
         body = (
             <>
-                <Text style={styles.title}>Claim a community</Text>
+                <Text style={styles.title}>{t('Claim a community')}</Text>
                 <Text style={styles.lead}>{t('Scan the QR code your server shows, or type its address.')}</Text>
                 <View style={styles.actions}>
                     <Pressable style={styles.secondary} onPress={openScanner} accessibilityRole="button" testID="claim-scan-server">
@@ -281,8 +286,8 @@ export default function ClaimCommunityScreen() {
                     </Pressable>
                 </View>
                 {scanNote ? <Text style={styles.note} testID="claim-scan-note">{scanNote}</Text> : null}
-                <Text style={styles.lead}>The address of the server you installed, as you reach it from this phone.</Text>
-                <Text style={styles.label}>Server address</Text>
+                <Text style={styles.lead}>{t('The address of the server you installed, as you reach it from this phone.')}</Text>
+                <Text style={styles.label}>{t('Server address')}</Text>
                 <TextInput
                     style={styles.input}
                     value={addressInput}
@@ -293,11 +298,11 @@ export default function ClaimCommunityScreen() {
                     autoCorrect={false}
                     keyboardType="url"
                     onSubmitEditing={checkAddress}
-                    accessibilityLabel="Server address"
+                    accessibilityLabel={t('Server address')}
                 />
                 {addressError ? <Text style={styles.error}>{addressError}</Text> : null}
                 <Pressable style={styles.primary} onPress={checkAddress} accessibilityRole="button">
-                    <Text style={styles.primaryText}>Check this server</Text>
+                    <Text style={styles.primaryText}>{t('Check this server')}</Text>
                 </Pressable>
             </>
         );
@@ -305,24 +310,28 @@ export default function ClaimCommunityScreen() {
         const actions = claimSuccessActions({ isAnchor, hasAddress });
         body = (
             <>
-                <Text style={styles.title}>You own {name}</Text>
+                <Text style={styles.title}>{named ? t('You own {name}', { name: named }) : t('You own this community')}</Text>
                 <Text style={styles.address} selectable>{origin}</Text>
-                <Text style={styles.lead}>This phone's screen lock is how you manage it; keep it on. Add a second owner soon.</Text>
+                <Text style={styles.lead}>{t("This phone's screen lock is how you manage it; keep it on. Add a second owner soon.")}</Text>
                 {numberOnly ? <Text style={styles.note} testID="claim-number-nudge">{numberNudge(numberOnly)}</Text> : null}
                 {actions.includes('set-address') || actions.includes('open-settings') ? (
                     <Pressable style={styles.primary} onPress={() => manage.start(name)} disabled={manage.busy} accessibilityRole="button">
-                        <Text style={styles.primaryText}>{manage.busy ? 'Opening…' : actions.includes('set-address') ? 'Set the address' : 'Open Settings'}</Text>
+                        <Text style={styles.primaryText}>{manage.busy ? t('Opening…') : actions.includes('set-address') ? t('Set the address') : t('Open Settings')}</Text>
                     </Pressable>
                 ) : null}
                 {actions.includes('make-mine') ? (
                     <>
-                        <Text style={styles.note}>This phone belongs to another community. To manage {name} from here, make it this phone's community.</Text>
+                        <Text style={styles.note}>
+                            {named
+                                ? t("This phone belongs to another community. To manage {name} from here, make it this phone's community.", { name: named })
+                                : t("This phone belongs to another community. To manage this community from here, make it this phone's community.")}
+                        </Text>
                         <Pressable style={styles.primary} onPress={makeMine} disabled={switching} accessibilityRole="button">
-                            <Text style={styles.primaryText}>{switching ? 'Switching…' : `Make ${name} my community`}</Text>
+                            <Text style={styles.primaryText}>{switching ? t('Switching…') : named ? t('Make {name} my community', { name: named }) : t('Make this community my community')}</Text>
                         </Pressable>
                         <View style={styles.actions}>
                             <Pressable style={styles.secondary} onPress={() => router.replace('/(tabs)')} accessibilityRole="button">
-                                <Text style={styles.secondaryText}>Not now</Text>
+                                <Text style={styles.secondaryText}>{t('Not now')}</Text>
                             </Pressable>
                         </View>
                     </>
@@ -334,33 +343,35 @@ export default function ClaimCommunityScreen() {
         body = (
             <View style={styles.busyRow}>
                 <ActivityIndicator />
-                <Text style={styles.note}>Asking the server…</Text>
+                <Text style={styles.note}>{t('Asking the server…')}</Text>
             </View>
         );
     } else if (status.kind === 'claimed') {
         body = (
             <>
-                <Text style={styles.title}>{name === 'this community' ? 'This community' : name} already has an owner</Text>
+                <Text style={styles.title}>{named ? t('{name} already has an owner', { name: named }) : t('This community already has an owner')}</Text>
                 <Text style={styles.address} selectable>{origin}</Text>
-                <Text style={styles.note}>Only a server with no owner yet can be claimed. Ask its owner to make you one.</Text>
+                <Text style={styles.note}>{t('Only a server with no owner yet can be claimed. Ask its owner to make you one.')}</Text>
             </>
         );
     } else if (status.kind !== 'unclaimed') {
         body = (
             <>
-                <Text style={styles.title}>Claim a community</Text>
+                <Text style={styles.title}>{t('Claim a community')}</Text>
                 <Text style={styles.address} selectable>{origin}</Text>
                 <Text style={styles.error}>
-                    {status.kind === 'no-code' ? 'This server has no claim code. Restart it to make one.'
-                        : status.kind === 'busy' ? `The server is busy. Try again${status.retryAfter ? ` in ${status.retryAfter} seconds` : ' in a moment'}.`
-                            : status.message}
+                    {status.kind === 'no-code' ? t('This server has no claim code. Restart it to make one.')
+                        : status.kind === 'busy'
+                            // One English form for both, as the screen wrote it ("in 1 seconds"): the other languages get theirs.
+                            ? (status.retryAfter ? tn(status.retryAfter, 'The server is busy. Try again in {n} seconds.', 'The server is busy. Try again in {n} seconds.') : t('The server is busy. Try again in a moment.'))
+                            : keyLineWords(status.message)}
                 </Text>
                 <View style={styles.actions}>
                     <Pressable style={styles.secondary} onPress={() => loadStatus(origin)} accessibilityRole="button">
-                        <Text style={styles.secondaryText}>Try again</Text>
+                        <Text style={styles.secondaryText}>{t('Try again')}</Text>
                     </Pressable>
                     <Pressable style={styles.secondary} onPress={() => { setOrigin(null); setStatus(null); }} accessibilityRole="button">
-                        <Text style={styles.secondaryText}>Another address</Text>
+                        <Text style={styles.secondaryText}>{t('Another address')}</Text>
                     </Pressable>
                 </View>
             </>
@@ -369,12 +380,12 @@ export default function ClaimCommunityScreen() {
         const busy = phase !== 'form';
         body = (
             <>
-                <Text style={styles.title}>Claim {name}</Text>
+                <Text style={styles.title}>{named ? t('Claim {name}', { name: named }) : t('Claim this community')}</Text>
                 <Text style={styles.address} selectable>{origin}</Text>
-                <Text style={styles.lead}>This community has no owner yet. Its one-time code is on its server.</Text>
-                {staleLink ? <Text style={styles.note}>The server made a new code since this link. Read the code on the server again.</Text> : null}
+                <Text style={styles.lead}>{t('This community has no owner yet. Its one-time code is on its server.')}</Text>
+                {staleLink ? <Text style={styles.note}>{t('The server made a new code since this link. Read the code on the server again.')}</Text> : null}
 
-                <Text style={styles.label}>Claim code</Text>
+                <Text style={styles.label}>{t('Claim code')}</Text>
                 <View style={styles.codeBox}>
                     <Text style={styles.codePrefix}>claim-</Text>
                     <TextInput
@@ -388,33 +399,33 @@ export default function ClaimCommunityScreen() {
                         spellCheck={false}
                         maxLength={19}
                         editable={!busy}
-                        accessibilityLabel="Claim code"
+                        accessibilityLabel={t('Claim code')}
                     />
                 </View>
                 <Text style={styles.hint} testID="claim-code-hint">{t('The code is on your server: {command} shows it.', { command: 'beanpool claim' })}</Text>
                 <View style={styles.actions}>
                     <Pressable style={styles.secondary} onPress={paste} disabled={busy} accessibilityRole="button">
                         <MaterialCommunityIcons name="content-paste" size={20} color={placeholder} />
-                        <Text style={styles.secondaryText}>Paste</Text>
+                        <Text style={styles.secondaryText}>{t('Paste')}</Text>
                     </Pressable>
                     <Pressable style={styles.secondary} onPress={openScanner} disabled={busy} accessibilityRole="button">
                         <MaterialCommunityIcons name="qrcode-scan" size={20} color={placeholder} />
-                        <Text style={styles.secondaryText}>Scan the code</Text>
+                        <Text style={styles.secondaryText}>{t('Scan the code')}</Text>
                     </Pressable>
                 </View>
 
                 {needsCallsign ? (
                     <>
-                        <Text style={styles.label}>Your name here</Text>
+                        <Text style={styles.label}>{t('Your name here')}</Text>
                         <TextInput
                             style={styles.input}
                             value={callsign}
                             onChangeText={text => setCallsign(text.slice(0, 20))}
-                            placeholder="Your callsign"
+                            placeholder={t('Your callsign')}
                             placeholderTextColor={placeholder}
                             autoCorrect={false}
                             editable={!busy}
-                            accessibilityLabel="Your callsign"
+                            accessibilityLabel={t('Your callsign')}
                         />
                     </>
                 ) : null}
@@ -424,7 +435,7 @@ export default function ClaimCommunityScreen() {
                 {phase === 'checking' ? (
                     <View style={styles.busyRow}>
                         <ActivityIndicator />
-                        <Text style={styles.note}>Checking the code…</Text>
+                        <Text style={styles.note}>{t('Checking the code…')}</Text>
                     </View>
                 ) : (
                     <Pressable
@@ -434,7 +445,7 @@ export default function ClaimCommunityScreen() {
                         accessibilityRole="button"
                         accessibilityState={{ disabled: !canClaim }}
                     >
-                        <Text style={styles.primaryText}>Claim and become owner</Text>
+                        <Text style={styles.primaryText}>{t('Claim and become owner')}</Text>
                     </Pressable>
                 )}
             </>
@@ -450,8 +461,8 @@ export default function ClaimCommunityScreen() {
             <Modal visible={scanning} animationType="slide" onRequestClose={() => setScanning(false)}>
                 <View style={styles.scanWrap}>
                     <CameraView style={StyleSheet.absoluteFillObject} barcodeScannerSettings={{ barcodeTypes: ['qr'] }} onBarcodeScanned={onScanned} />
-                    <Text style={styles.scanHint}>Point the camera at the claim QR on the server's screen.</Text>
-                    <Pressable style={styles.scanClose} onPress={() => setScanning(false)} accessibilityRole="button" accessibilityLabel="Close the camera">
+                    <Text style={styles.scanHint}>{t("Point the camera at the claim QR on the server's screen.")}</Text>
+                    <Pressable style={styles.scanClose} onPress={() => setScanning(false)} accessibilityRole="button" accessibilityLabel={t('Close the camera')}>
                         <MaterialCommunityIcons name="close" size={24} color="#fff" />
                     </Pressable>
                 </View>

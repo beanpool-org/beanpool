@@ -4,6 +4,7 @@ import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
 import { useRouter } from 'expo-router';
 import { colors } from '../../constants/colors';
+import { t } from '@beanpool/core';
 
 /**
  * TikTok OAuth Return Callback Route (The Pulse, Phase 5).
@@ -38,12 +39,12 @@ export default function TikTokAuthCallbackScreen() {
         <View
             style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface.app }}
             accessibilityRole="progressbar"
-            accessibilityLabel="Completing TikTok connection..."
+            accessibilityLabel={t('Completing {service} connection...', { service: 'TikTok' })}
             accessibilityLiveRegion="polite"
         >
             <ActivityIndicator size="large" color={colors.brand.primary} />
             <Text style={{ marginTop: 16, color: colors.text.secondary, fontSize: 14 }}>
-                Completing TikTok connection...
+                {t('Completing {service} connection...', { service: 'TikTok' })}
             </Text>
         </View>
     );

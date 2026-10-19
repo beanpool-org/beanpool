@@ -19,17 +19,19 @@ import { useTheme } from './ThemeContext';
 import { palette } from '../constants/colors';
 import { NO_DEVICE_LOCK_MESSAGE } from '../utils/node-admin';
 import {
-    readUnlockScan, unlockTextFromParams, scanProblemMessage, openedFromLinkWarning, lookupUnlock, approveUnlock, readLockPin,
+    readUnlockScan, unlockTextFromParams, scanProblemMessage, lookupUnlock, approveUnlock, readLockPin,
     type UnlockLookup, type UnlockOutcome,
 } from '../utils/takeover-unlock';
-import type { OwnerUnlockQr } from '@beanpool/core';
+import { formatDate, t, type OwnerUnlockQr } from '@beanpool/core';
+import { keyLineWords, openedFromLinkWords } from '../components/key-lines';
 
 type Found = { qr: OwnerUnlockQr; look: Extract<UnlockLookup, { kind: 'ok' }> };
 
-function day(iso: string | undefined): string {
-    if (!iso) return 'an unknown date';
+/** A day and a time in the member's language; null when the server sent none; a date it can't read, as it came. */
+function day(iso: string | undefined): string | null {
+    if (!iso) return null;
     const d = new Date(iso);
-    return Number.isNaN(d.getTime()) ? iso : d.toLocaleString(undefined, { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    return Number.isNaN(d.getTime()) ? iso : t('{date}, {time}', { date: formatDate(d, 'day-month-year'), time: formatDate(d, 'time') });
 }
 
 export default function UnlockKeysScreen() {
@@ -43,6 +45,8 @@ export default function UnlockKeysScreen() {
         p?: string | string[];
     }>();
     const communityName = (typeof params.community === 'string' && params.community.trim()) || 'your community';
+    /** The community's name as the link gave it, for the sheet's words (approveUnlock keeps `communityName`). */
+    const namedCommunity = (typeof params.community === 'string' && params.community.trim()) || null;
     const { identity, isLoading } = useIdentity();
     const { colors } = useTheme();
     const insets = useSafeAreaInsets();
@@ -63,7 +67,7 @@ export default function UnlockKeysScreen() {
 
     const problem = (title: string, message: string) => {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
-        Alert.alert(title, message, [{ text: 'OK', onPress: fromLink ? () => router.back() : resumeScanning }], { cancelable: false });
+        Alert.alert(title, message, [{ text: t('OK'), onPress: fromLink ? () => router.back() : resumeScanning }], { cancelable: false });
     };
 
     const read = async (text: string) => {
@@ -73,17 +77,17 @@ export default function UnlockKeysScreen() {
         const scan = readUnlockScan(text);
         if (scan.kind !== 'ok') {
             const m = scanProblemMessage(scan);
-            problem(m.title, m.message);
+            problem(keyLineWords(m.title), keyLineWords(m.message));
             return;
         }
         if (!identity?.privateKey) {
-            problem('No account on this phone', 'Sign in to your community on this phone first: the lock opens with your account.');
+            problem(t('No account on this phone'), t('Sign in to your community on this phone first: the lock opens with your account.'));
             return;
         }
         const pin = await readLockPin(AsyncStorage, identity.publicKey);
         const look = await lookupUnlock(scan.qr, identity, pin);
         if (look.kind !== 'ok') {
-            problem(look.kind === 'gone' ? 'That code has run out' : look.kind === 'refused' ? "This phone won't open it" : "Couldn't check the code", look.message);
+            problem(look.kind === 'gone' ? t('That code has run out') : look.kind === 'refused' ? t("This phone won't open it") : t("Couldn't check the code"), keyLineWords(look.message));
             return;
         }
         Haptics.selectionAsync().catch(() => {});
@@ -105,13 +109,13 @@ export default function UnlockKeysScreen() {
                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
                 return;
             case 'no-device-lock':
-                Alert.alert('Set a screen lock first', NO_DEVICE_LOCK_MESSAGE);
+                Alert.alert(t('Set a screen lock first'), keyLineWords(NO_DEVICE_LOCK_MESSAGE));
                 return;
             case 'unlock-failed':
                 return; // They cancelled, or the phone said no. The sheet stays for another try.
             case 'refused':
             case 'error':
-                Alert.alert("Couldn't unlock", out.message, [{ text: 'OK', onPress: fromLink ? () => router.back() : resumeScanning }]);
+                Alert.alert(t("Couldn't unlock"), keyLineWords(out.message), [{ text: t('OK'), onPress: fromLink ? () => router.back() : resumeScanning }]);
                 return;
         }
     };
@@ -131,7 +135,7 @@ export default function UnlockKeysScreen() {
             onPress={() => router.back()}
             style={[styles.closeBtn, { top: insets.top + 8 }]}
             accessibilityRole="button"
-            accessibilityLabel="Close"
+            accessibilityLabel={t('Close')}
             hitSlop={8}
         >
             <Text style={styles.closeText}>✕</Text>
@@ -148,18 +152,18 @@ export default function UnlockKeysScreen() {
                     {done && found ? (
                         <View style={{ alignItems: 'center' }} accessibilityLiveRegion="polite">
                             <Text style={{ fontSize: 40, marginBottom: 8 }} accessibilityElementsHidden>✅</Text>
-                            <Text style={[styles.title, { color: colors.text.heading }]}>Unlocked</Text>
+                            <Text style={[styles.title, { color: colors.text.heading }]}>{t('Unlocked')}</Text>
                             <Text style={[styles.body, { color: colors.text.secondary }]}>
                                 {done === 'takeover'
-                                    ? `Now finish on ${found.look.host}'s screen: it shows what will happen, then “Take over now”.`
-                                    : `${found.look.host} is restoring the backup and will restart by itself.`}
+                                    ? t("Now finish on {host}'s screen: it shows what will happen, then “Take over now”.", { host: found.look.host })
+                                    : t('{host} is restoring the backup and will restart by itself.', { host: found.look.host })}
                             </Text>
                             <Pressable style={[styles.primaryBtn, { backgroundColor: colors.brand.fill }]} onPress={() => router.back()} accessibilityRole="button">
-                                <Text style={[styles.primaryText, { color: colors.text.inverse }]}>Done</Text>
+                                <Text style={[styles.primaryText, { color: colors.text.inverse }]}>{t('Done')}</Text>
                             </Pressable>
                         </View>
                     ) : found ? (
-                        <UnlockDetails found={found} communityName={communityName} callsign={identity?.callsign} busy={busy} fromLink={!!fromLink}
+                        <UnlockDetails found={found} communityName={namedCommunity} callsign={identity?.callsign} busy={busy} fromLink={!!fromLink}
                             onApprove={approve} onCancel={() => (fromLink ? router.back() : resumeScanning())} />
                     ) : null}
                 </ScrollView>
@@ -185,9 +189,9 @@ export default function UnlockKeysScreen() {
         return (
             <View style={[styles.center, { backgroundColor: colors.surface.app, paddingTop: insets.top + 56 }]}>
                 {close}
-                <Text style={[styles.title, { color: colors.text.heading }]}>📷 Camera needed</Text>
+                <Text style={[styles.title, { color: colors.text.heading }]}>{t('📷 Camera needed')}</Text>
                 <Text style={[styles.body, { color: colors.text.secondary }]}>
-                    To take over or restore with this phone, BeanPool scans the code on the server's Settings page.
+                    {t("To take over or restore with this phone, BeanPool scans the code on the server's Settings page.")}
                 </Text>
                 <Pressable
                     style={[styles.primaryBtn, { backgroundColor: colors.brand.fill }]}
@@ -195,7 +199,7 @@ export default function UnlockKeysScreen() {
                     accessibilityRole="button"
                 >
                     <Text style={[styles.primaryText, { color: colors.text.inverse }]}>
-                        {permission.canAskAgain ? 'Allow the camera' : 'Open phone settings'}
+                        {permission.canAskAgain ? t('Allow the camera') : t('Open phone settings')}
                     </Text>
                 </Pressable>
             </View>
@@ -218,7 +222,7 @@ export default function UnlockKeysScreen() {
                     ? <ActivityIndicator color="#fff" />
                     : (
                         <Text style={styles.instructionText}>
-                            On the standby's Settings choose “Take over with an owner's phone”, or restore a backup with a phone. Then point the camera at the code.
+                            {t("On the standby's Settings choose “Take over with an owner's phone”, or restore a backup with a phone. Then point the camera at the code.")}
                         </Text>
                     )}
             </View>
@@ -228,68 +232,83 @@ export default function UnlockKeysScreen() {
 }
 
 function UnlockDetails({ found, communityName, callsign, busy, fromLink, onApprove, onCancel }: {
-    found: Found; communityName: string; callsign?: string; busy: boolean; fromLink: boolean; onApprove: () => void; onCancel: () => void;
+    found: Found; communityName: string | null; callsign?: string; busy: boolean; fromLink: boolean; onApprove: () => void; onCancel: () => void;
 }) {
     const { colors } = useTheme();
     const { look } = found;
     const takeover = look.described.purpose === 'takeover';
-    const community = look.sameCommunity ? communityName : `community ${look.check.header.communityId.slice(0, 8)}`;
+    // The community as the sheet names it: its name from the link, else "your community", else another one by its id.
+    const named = communityName;
+    const otherId = look.check.header.communityId.slice(0, 8);
+    const host = look.host;
+    const title = look.sameCommunity
+        ? (named
+            ? (takeover ? t('Take over {name} on {host}?', { name: named, host }) : t('Restore {name} on {host}?', { name: named, host }))
+            : (takeover ? t('Take over your community on {host}?', { host }) : t('Restore your community on {host}?', { host })))
+        : (takeover ? t('Take over community {id} on {host}?', { id: otherId, host }) : t('Restore community {id} on {host}?', { id: otherId, host }));
+    const communityLine = look.sameCommunity
+        ? (named ? t('Community: {name}', { name: named }) : t('Community: your community'))
+        : t('Community: community {id}', { id: otherId });
+    const backupLocked = day(look.described.restore?.backup?.createdAt ?? look.check.header.createdAt);
+    const keysLocked = day(look.check.header.createdAt);
     const mainAnswers = look.described.takeover?.mainServerAnswers === true;
     const otherSigner = look.check.signer === 'other' || look.described.restore?.databaseOnly === true;
     return (
         <>
             <Text style={[styles.title, { color: colors.text.heading }]} accessibilityRole="header">
-                {takeover ? `Take over ${community} on ${look.host}?` : `Restore ${community} on ${look.host}?`}
+                {title}
             </Text>
             <Text style={[styles.body, { color: colors.text.secondary }]}>
                 {takeover
-                    ? 'Do this only if your main server is really down. That server then becomes your community\'s main server, with the same identity, owners and web address.'
-                    : `That server restores the backup locked ${day(look.described.restore?.backup?.createdAt ?? look.check.header.createdAt)} and becomes your community's server.`}
+                    ? t("Do this only if your main server is really down. That server then becomes your community's main server, with the same identity, owners and web address.")
+                    : backupLocked
+                        ? t("That server restores the backup locked {date} and becomes your community's server.", { date: backupLocked })
+                        : t("That server restores the backup locked an unknown date and becomes your community's server.")}
             </Text>
             {fromLink && (
                 <View style={[styles.warnBox, { borderColor: colors.feedback.danger.solid }]} accessibilityRole="alert">
                     <Text style={[styles.infoLine, { color: colors.feedback.danger.fg, fontWeight: '700' }]}>
-                        {openedFromLinkWarning(takeover ? 'takeover' : 'restore', look.host)}
+                        {openedFromLinkWords(takeover ? 'takeover' : 'restore', look.host)}
                     </Text>
                 </View>
             )}
             {takeover && mainAnswers && (
                 <View style={[styles.warnBox, { borderColor: colors.feedback.danger.solid }]} accessibilityRole="alert">
                     <Text style={[styles.infoLine, { color: colors.feedback.danger.fg, fontWeight: '700' }]}>
-                        Your main server still answers. Two servers with one identity will compete. Take over only if it is really gone, and never start it again.
+                        {t('Your main server still answers. Two servers with one identity will compete. Take over only if it is really gone, and never start it again.')}
                     </Text>
                 </View>
             )}
             {otherSigner && (
                 <View style={[styles.warnBox, { borderColor: colors.feedback.danger.solid }]} accessibilityRole="alert">
                     <Text style={[styles.infoLine, { color: colors.text.body }]}>
-                        This backup was locked by another machine, not your community's server. Only its database comes back, never keys or passwords from inside it.
+                        {t("This backup was locked by another machine, not your community's server. Only its database comes back, never keys or passwords from inside it.")}
                     </Text>
                 </View>
             )}
             <View style={[styles.infoBox, { borderColor: colors.border.default }]}>
-                <Text style={[styles.infoLine, { color: colors.text.body }]}>Community: {community}</Text>
-                <Text style={[styles.infoLine, { color: colors.text.body }]}>Server: {look.host}</Text>
-                <Text style={[styles.infoLine, { color: colors.text.body }]}>Keys locked: {day(look.check.header.createdAt)}</Text>
-                <Text style={[styles.infoLine, { color: colors.text.body }]}>As: {callsign || 'you'}</Text>
+                <Text style={[styles.infoLine, { color: colors.text.body }]}>{communityLine}</Text>
+                <Text style={[styles.infoLine, { color: colors.text.body }]}>{t('Server: {host}', { host })}</Text>
+                <Text style={[styles.infoLine, { color: colors.text.body }]}>{keysLocked ? t('Keys locked: {date}', { date: keysLocked }) : t('Keys locked: an unknown date')}</Text>
+                <Text style={[styles.infoLine, { color: colors.text.body }]}>{callsign ? t('As: {name}', { name: callsign }) : t('As: you')}</Text>
             </View>
             <Text style={[styles.small, { color: colors.text.secondary }]}>
-                Your phone opens its own key to the locked keys and hands it to that server, locked so only that server can read it. Your phone never sees what is inside.
+                {t('Your phone opens its own key to the locked keys and hands it to that server, locked so only that server can read it. Your phone never sees what is inside.')}
             </Text>
             <Pressable
                 style={[styles.primaryBtn, { backgroundColor: colors.brand.fill }, busy && { opacity: 0.7 }]}
                 onPress={onApprove}
                 disabled={busy}
                 accessibilityRole="button"
-                accessibilityHint="Asks for your phone's unlock, then opens the keys for that server"
+                accessibilityHint={t("Asks for your phone's unlock, then opens the keys for that server")}
                 accessibilityState={{ busy, disabled: busy }}
             >
                 {busy
                     ? <ActivityIndicator color={colors.text.inverse} />
-                    : <Text style={[styles.primaryText, { color: colors.text.inverse }]}>{takeover ? 'Unlock for the take-over' : 'Unlock the backup'}</Text>}
+                    : <Text style={[styles.primaryText, { color: colors.text.inverse }]}>{takeover ? t('Unlock for the take-over') : t('Unlock the backup')}</Text>}
             </Pressable>
             <Pressable style={styles.secondaryBtn} onPress={onCancel} disabled={busy} accessibilityRole="button">
-                <Text style={[styles.secondaryText, { color: colors.text.secondary }]}>Not now</Text>
+                <Text style={[styles.secondaryText, { color: colors.text.secondary }]}>{t('Not now')}</Text>
             </Pressable>
         </>
     );

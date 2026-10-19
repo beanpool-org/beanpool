@@ -117,7 +117,7 @@ describe("welcome.tsx: Safety Backup's words", () => {
 
     it("the phone's own account's words come only through the lock, and one that answers after the step moved on shows nothing", () => {
         const body = showBehindLock();
-        const asked = body.indexOf("await readWordsBehindLock(account, 'Confirm your security to view your recovery phrase.')");
+        const asked = body.indexOf("await readWordsBehindLock(account, t('Confirm your security to view your recovery phrase.'))");
         const refused = body.indexOf('if (!words || pendingIdentityRef.current !== account) return;');
         const kept = body.indexOf('setPendingWords(words)');
         expect(body).toContain('const account = pendingIdentity;');
@@ -173,7 +173,7 @@ describe("welcome.tsx: Safety Backup's words for a key the phone already had go 
     it('so every Show asks the lock again, and one that answers after the member left shows nothing', () => {
         const body = showBehindLock();
         const turn = body.indexOf('const turn = pendingWordsTurnRef.current;');
-        const asked = body.indexOf("await readWordsBehindLock(account, 'Confirm your security to view your recovery phrase.')");
+        const asked = body.indexOf("await readWordsBehindLock(account, t('Confirm your security to view your recovery phrase.'))");
         const left = body.indexOf('if (turn !== pendingWordsTurnRef.current) return;');
         const kept = body.indexOf('setPendingWords(words)');
         expect(turn).toBeGreaterThan(-1);

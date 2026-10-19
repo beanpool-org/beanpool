@@ -20,6 +20,7 @@ import React, { createElement, type ComponentType, type ReactNode } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../app/ThemeContext';
 import { appLockScreen, askToUnlockApp, useAppLockScreen } from '../utils/app-lock-screen';
+import { t } from '@beanpool/core';
 
 const showsApp = () => appLockScreen() === 'none';
 
@@ -56,7 +57,7 @@ export function AppLockScreenView({ screen }: { screen: 'cover' | 'lock' }): Rea
                     marginBottom: 8,
                     textAlign: 'center'
                 }}>
-                    BeanPool Secure
+                    {t('BeanPool Secure')}
                 </Text>
                 <Text style={{
                     fontSize: 14,
@@ -65,7 +66,7 @@ export function AppLockScreenView({ screen }: { screen: 'cover' | 'lock' }): Rea
                     textAlign: 'center',
                     lineHeight: 20
                 }}>
-                    Unlock with your device security to access your wallet.
+                    {t('Unlock with your device security to access your wallet.')}
                 </Text>
                 <Pressable
                     style={{
@@ -80,7 +81,7 @@ export function AppLockScreenView({ screen }: { screen: 'cover' | 'lock' }): Rea
                     accessibilityRole="button"
                 >
                     <Text style={{ color: '#ffffff', fontSize: 16, fontWeight: 'bold' }}>
-                        Unlock App
+                        {t('Unlock App')}
                     </Text>
                 </Pressable>
             </View>

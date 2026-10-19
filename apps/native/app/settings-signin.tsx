@@ -18,12 +18,13 @@ import { anchorUrl as getAnchorUrl } from '../utils/node-post';
 import { NO_DEVICE_LOCK_MESSAGE } from '../utils/node-admin';
 import {
     readSigninScan, scanProblemMessage, lookupPairing, approveComputerSignin, declineComputerSignin, formatShortCode,
-    SIGNIN_QUESTION, SIGNIN_WARNING, computerLines, formatTimeLeft, confirmDigitsLine, AGENT_QUESTION, AGENT_WARNING, agentLines,
+    SIGNIN_QUESTION, SIGNIN_WARNING, AGENT_QUESTION, AGENT_WARNING,
     DIGITS_PRIVATE, DIGITS_SHOWN_MS, digitsDone,
     type ApproveOutcome, type PairingLookup,
 } from '../utils/settings-signin';
-import type { SettingsSigninQr } from '@beanpool/core';
+import { t, type SettingsSigninQr } from '@beanpool/core';
 import { TotpCodeDialog, looksLikeTotpCode } from '../components/TotpCodeDialog';
+import { agentLinesWords, computerLinesWords, confirmDigitsWords, digitsDoneWords, keyLineWords, timeLeftWords } from '../components/key-lines';
 
 /** `look` is the node's answer; `openedAt` lets "asked … ago" and the time left move while the sheet is open. */
 type Found = { qr: SettingsSigninQr; host: string; look: Extract<PairingLookup, { kind: 'ok' }>; openedAt: number };
@@ -32,6 +33,8 @@ export default function SettingsSigninScreen() {
     const { community } = useLocalSearchParams<{ community?: string | string[] }>();
     const communityStr = Array.isArray(community) ? community[0] : community;
     const communityName = (typeof communityStr === 'string' && communityStr.trim()) || 'your community';
+    /** The community's name as Settings gave it, for the screen's words (approveComputerSignin keeps `communityName`). */
+    const named = (typeof communityStr === 'string' && communityStr.trim()) || null;
     const { identity } = useIdentity();
     const { colors } = useTheme();
     const insets = useSafeAreaInsets();
@@ -58,7 +61,7 @@ export default function SettingsSigninScreen() {
 
     const problem = (title: string, message: string) => {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
-        Alert.alert(title, message, [{ text: 'OK', onPress: resumeScanning }], { cancelable: false });
+        Alert.alert(title, message, [{ text: t('OK'), onPress: resumeScanning }], { cancelable: false });
     };
 
     const onScanned = async ({ data }: BarcodeScanningResult) => {
@@ -69,12 +72,12 @@ export default function SettingsSigninScreen() {
         const scan = readSigninScan(data, appNode);
         if (scan.kind !== 'ok') {
             const m = scanProblemMessage(scan);
-            problem(m.title, m.message);
+            problem(keyLineWords(m.title), keyLineWords(m.message));
             return;
         }
         const look = await lookupPairing(scan.qr, identity);
         if (look.kind !== 'ok') {
-            problem(look.kind === 'gone' ? 'That code has run out' : "Couldn't check the code", look.message);
+            problem(look.kind === 'gone' ? t('That code has run out') : t("Couldn't check the code"), keyLineWords(look.message));
             return;
         }
         Haptics.selectionAsync().catch(() => {});
@@ -107,14 +110,14 @@ export default function SettingsSigninScreen() {
                 setCode('');
                 return;
             case 'no-device-lock':
-                Alert.alert('Set a screen lock first', NO_DEVICE_LOCK_MESSAGE);
+                Alert.alert(t('Set a screen lock first'), keyLineWords(NO_DEVICE_LOCK_MESSAGE));
                 return;
             case 'unlock-failed':
                 return; // They cancelled, or the phone said no. The sheet stays for another try.
             case 'refused':
             case 'error':
                 setTotp(null);
-                Alert.alert("Couldn't sign in the computer", out.message, [{ text: 'OK', onPress: resumeScanning }]);
+                Alert.alert(t("Couldn't sign in the computer"), keyLineWords(out.message), [{ text: t('OK'), onPress: resumeScanning }]);
                 return;
         }
     };
@@ -158,7 +161,7 @@ export default function SettingsSigninScreen() {
             onPress={() => router.back()}
             style={[styles.closeBtn, { top: insets.top + 8 }]}
             accessibilityRole="button"
-            accessibilityLabel="Close"
+            accessibilityLabel={t('Close')}
             hitSlop={8}
         >
             <Text style={styles.closeText}>✕</Text>
@@ -173,9 +176,9 @@ export default function SettingsSigninScreen() {
         return (
             <View style={[styles.center, { backgroundColor: colors.surface.app, paddingTop: insets.top + 56 }]}>
                 {close}
-                <Text style={[styles.title, { color: colors.text.heading }]}>📷 Camera needed</Text>
+                <Text style={[styles.title, { color: colors.text.heading }]}>{t('📷 Camera needed')}</Text>
                 <Text style={[styles.body, { color: colors.text.secondary }]}>
-                    To sign a computer in to the community's Settings, BeanPool scans the code on its screen.
+                    {t("To sign a computer in to the community's Settings, BeanPool scans the code on its screen.")}
                 </Text>
                 <Pressable
                     style={[styles.primaryBtn, { backgroundColor: colors.brand.fill }]}
@@ -183,7 +186,7 @@ export default function SettingsSigninScreen() {
                     accessibilityRole="button"
                 >
                     <Text style={[styles.primaryText, { color: colors.text.inverse }]}>
-                        {permission.canAskAgain ? 'Allow the camera' : 'Open phone settings'}
+                        {permission.canAskAgain ? t('Allow the camera') : t('Open phone settings')}
                     </Text>
                 </Pressable>
             </View>
@@ -206,7 +209,9 @@ export default function SettingsSigninScreen() {
                     ? <ActivityIndicator color="#fff" />
                     : (
                         <Text style={styles.instructionText}>
-                            On the computer, open {communityName}'s Settings and choose “Sign in with your phone”. Then point the camera at the code.
+                            {named
+                                ? t("On the computer, open {name}'s Settings and choose “Sign in with your phone”. Then point the camera at the code.", { name: named })
+                                : t("On the computer, open your community's Settings and choose “Sign in with your phone”. Then point the camera at the code.")}
                         </Text>
                     )}
             </View>
@@ -220,15 +225,17 @@ export default function SettingsSigninScreen() {
                         {done && confirmCode ? (
                             <View style={{ alignItems: 'center' }} accessibilityLiveRegion="polite">
                                 <Text style={[styles.title, { color: colors.text.heading }]} accessibilityRole="header">
-                                    {confirmDigitsLine(confirmCode)}
+                                    {confirmDigitsWords(confirmCode)}
                                 </Text>
-                                <Text style={[styles.digits, { color: colors.text.heading }]} accessibilityLabel={`Digits ${confirmCode.split('').join(' ')}`}>
+                                <Text style={[styles.digits, { color: colors.text.heading }]} accessibilityLabel={t('Digits {digits}', { digits: confirmCode.split('').join(' ') })}>
                                     {confirmCode}
                                 </Text>
                                 <Text style={[styles.body, { color: colors.text.secondary }]}>
-                                    The computer opens {communityName}'s Settings only when these are typed there, within 30 seconds. If no computer in front of you is asking for them, do nothing: nobody gets in.
+                                    {named
+                                        ? t("The computer opens {name}'s Settings only when these are typed there, within 30 seconds. If no computer in front of you is asking for them, do nothing: nobody gets in.", { name: named })
+                                        : t("The computer opens your community's Settings only when these are typed there, within 30 seconds. If no computer in front of you is asking for them, do nothing: nobody gets in.")}
                                 </Text>
-                                <Text style={[styles.body, { color: colors.text.heading, fontWeight: '700' }]}>{DIGITS_PRIVATE}</Text>
+                                <Text style={[styles.body, { color: colors.text.heading, fontWeight: '700' }]}>{keyLineWords(DIGITS_PRIVATE)}</Text>
                                 <Pressable
                                     style={[styles.primaryBtn, { backgroundColor: colors.brand.fill, opacity: digitsDoneButton.enabled ? 1 : 0.5 }]}
                                     onPress={() => router.back()}
@@ -236,65 +243,71 @@ export default function SettingsSigninScreen() {
                                     accessibilityRole="button"
                                     accessibilityState={{ disabled: !digitsDoneButton.enabled }}
                                 >
-                                    <Text style={[styles.primaryText, { color: colors.text.inverse }]}>{digitsDoneButton.label}</Text>
+                                    <Text style={[styles.primaryText, { color: colors.text.inverse }]}>{digitsDoneWords(digitsUntil - now)}</Text>
                                 </Pressable>
                             </View>
                         ) : done ? (
                             <View style={{ alignItems: 'center' }} accessibilityLiveRegion="polite">
                                 <Text style={{ fontSize: 40, marginBottom: 8 }} accessibilityElementsHidden>✅</Text>
-                                <Text style={[styles.title, { color: colors.text.heading }]}>{found?.look.agent ? 'Connected' : 'Signed in'}</Text>
+                                <Text style={[styles.title, { color: colors.text.heading }]}>{found?.look.agent ? t('Connected') : t('Signed in')}</Text>
                                 <Text style={[styles.body, { color: colors.text.secondary }]}>
                                     {found?.look.agent
-                                        ? `The assistant now reads ${communityName} as you. Disconnect it any time in Settings → Connected assistants.`
-                                        : `The computer is now in ${communityName}'s Settings, signed in as you. Sign out there when you're done.`}
+                                        ? (named
+                                            ? t('The assistant now reads {name} as you. Disconnect it any time in Settings → Connected assistants.', { name: named })
+                                            : t('The assistant now reads your community as you. Disconnect it any time in Settings → Connected assistants.'))
+                                        : (named
+                                            ? t("The computer is now in {name}'s Settings, signed in as you. Sign out there when you're done.", { name: named })
+                                            : t("The computer is now in your community's Settings, signed in as you. Sign out there when you're done."))}
                                 </Text>
                                 <Pressable style={[styles.primaryBtn, { backgroundColor: colors.brand.fill }]} onPress={() => router.back()} accessibilityRole="button">
-                                    <Text style={[styles.primaryText, { color: colors.text.inverse }]}>Done</Text>
+                                    <Text style={[styles.primaryText, { color: colors.text.inverse }]}>{t('Done')}</Text>
                                 </Pressable>
                             </View>
                         ) : found ? (
                             <>
                                 <Text style={[styles.title, { color: colors.text.heading }]} accessibilityRole="header">
-                                    {found.look.agent ? AGENT_QUESTION : SIGNIN_QUESTION}
+                                    {keyLineWords(found.look.agent ? AGENT_QUESTION : SIGNIN_QUESTION)}
                                 </Text>
                                 <Text style={[styles.body, { color: colors.feedback.danger.fg, fontWeight: '700' }]}>
-                                    {found.look.agent ? AGENT_WARNING : SIGNIN_WARNING}
+                                    {keyLineWords(found.look.agent ? AGENT_WARNING : SIGNIN_WARNING)}
                                 </Text>
                                 <Text style={[styles.body, { color: colors.text.secondary }]}>
-                                    Tap {found.look.agent ? 'Connect' : 'Sign in'} only if the computer in front of you shows this code:
+                                    {found.look.agent
+                                        ? t('Tap Connect only if the computer in front of you shows this code:')
+                                        : t('Tap Sign in only if the computer in front of you shows this code:')}
                                 </Text>
-                                <Text style={[styles.code, { color: colors.text.heading }]} accessibilityLabel={`Code ${found.qr.shortCode.split('').join(' ')}`}>
+                                <Text style={[styles.code, { color: colors.text.heading }]} accessibilityLabel={t('Code {code}', { code: found.qr.shortCode.split('').join(' ') })}>
                                     {formatShortCode(found.qr.shortCode)}
                                 </Text>
                                 <View style={[styles.infoBox, { borderColor: colors.border.default }]}>
-                                    <Text style={[styles.infoLine, { color: colors.text.body }]}>Community: {found.host}</Text>
-                                    {found.look.agent && agentLines(found.look.agent).map(line => (
-                                        <Text key={line.slice(0, 12)} style={[styles.infoLine, { color: colors.text.body, fontWeight: '600' }]}>{line}</Text>
+                                    <Text style={[styles.infoLine, { color: colors.text.body }]}>{t('Community: {name}', { name: found.host })}</Text>
+                                    {found.look.agent && agentLinesWords(found.look.agent).map((line, i) => (
+                                        <Text key={`agent-${i}`} style={[styles.infoLine, { color: colors.text.body, fontWeight: '600' }]}>{line}</Text>
                                     ))}
-                                    {computerLines(found.look, openSeconds).map(line => (
-                                        <Text key={line.slice(0, 6)} style={[styles.infoLine, { color: colors.text.body }]}>{line}</Text>
+                                    {computerLinesWords(found.look, openSeconds).map((line, i) => (
+                                        <Text key={`computer-${i}`} style={[styles.infoLine, { color: colors.text.body }]}>{line}</Text>
                                     ))}
-                                    <Text style={[styles.infoLine, { color: colors.text.body }]}>As: {identity?.callsign || 'you'}</Text>
+                                    <Text style={[styles.infoLine, { color: colors.text.body }]}>{identity?.callsign ? t('As: {name}', { name: identity.callsign }) : t('As: you')}</Text>
                                 </View>
                                 {found.look.expiresInSeconds !== null && (
-                                    <Text style={[styles.body, { color: colors.text.secondary }]}>{formatTimeLeft(found.look.expiresInSeconds - openSeconds)}</Text>
+                                    <Text style={[styles.body, { color: colors.text.secondary }]}>{timeLeftWords(found.look.expiresInSeconds - openSeconds)}</Text>
                                 )}
                                 <Pressable
                                     style={[styles.primaryBtn, { backgroundColor: colors.brand.fill }, busy && { opacity: 0.7 }]}
                                     onPress={approve}
                                     disabled={busy}
                                     accessibilityRole="button"
-                                    accessibilityLabel={busy ? (found.look.agent ? 'Connecting the assistant...' : 'Signing computer in...') : (found.look.agent ? 'Connect' : 'Sign in')}
-                                    accessibilityHint={found.look.agent ? "Asks for your phone's unlock, then connects the assistant as you" : "Asks for your phone's unlock, then signs the computer in"}
+                                    accessibilityLabel={busy ? (found.look.agent ? t('Connecting the assistant...') : t('Signing computer in...')) : (found.look.agent ? t('Connect') : t('Sign in'))}
+                                    accessibilityHint={found.look.agent ? t("Asks for your phone's unlock, then connects the assistant as you") : t("Asks for your phone's unlock, then signs the computer in")}
                                     accessibilityState={{ busy, disabled: busy }}
                                 >
-                                    {busy ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={[styles.primaryText, { color: colors.text.inverse }]}>{found.look.agent ? 'Connect' : 'Sign in'}</Text>}
+                                    {busy ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={[styles.primaryText, { color: colors.text.inverse }]}>{found.look.agent ? t('Connect') : t('Sign in')}</Text>}
                                 </Pressable>
                                 <Pressable style={styles.secondaryBtn} onPress={decline} disabled={busy} accessibilityRole="button">
-                                    <Text style={[styles.secondaryText, { color: colors.feedback.danger.fg }]}>{found.look.agent ? 'No, I did not add an assistant' : "No, that's not my computer"}</Text>
+                                    <Text style={[styles.secondaryText, { color: colors.feedback.danger.fg }]}>{found.look.agent ? t('No, I did not add an assistant') : t("No, that's not my computer")}</Text>
                                 </Pressable>
                                 <Pressable style={styles.secondaryBtn} onPress={resumeScanning} disabled={busy} accessibilityRole="button">
-                                    <Text style={[styles.secondaryText, { color: colors.text.secondary }]}>Scan again</Text>
+                                    <Text style={[styles.secondaryText, { color: colors.text.secondary }]}>{t('Scan again')}</Text>
                                 </Pressable>
                             </>
                         ) : null}
@@ -309,7 +322,7 @@ export default function SettingsSigninScreen() {
                     onChangeCode={setCode}
                     onSubmit={submitCode}
                     onCancel={() => { setTotp(null); setCode(''); }}
-                    submitLabel="Sign in"
+                    submitLabel={t('Sign in')}
                 />
             </Modal>
         </View>

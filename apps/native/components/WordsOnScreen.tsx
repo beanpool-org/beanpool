@@ -2,12 +2,15 @@
  * What goes with an account's 12 words wherever they are on screen (utils/words-on-screen.ts, utils/words-clipboard.ts):
  * no screenshots while they show, one plain line on a phone with no screen lock, and one next to Copy saying the copy
  * clears in a minute, and what it can't clear (a keyboard's clipboard history, a clipboard shared with other devices).
+ * In the member's language: the two utils' lines through components/welcome/welcome-lines.ts (those files handle the
+ * words, so their sentences stay English there).
  */
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Platform, Text, type StyleProp, type TextStyle } from 'react-native';
 import { useIsFocused } from 'expo-router';
 import { COPY_CLEARS_LINE } from '../utils/words-clipboard';
 import { useWords } from './LanguageProvider';
+import { welcomeLineWords } from './welcome/welcome-lines';
 import { NO_SCREEN_LOCK_LINE, holdNoScreenCapture, useNoScreenLock } from '../utils/words-on-screen';
 
 /**
@@ -71,7 +74,7 @@ function HeldWhileFocused({ children, fallback }: { children: React.ReactNode; f
 export function NoScreenLockNote({ style }: { style?: StyleProp<TextStyle> }): React.JSX.Element | null {
     const noLock = useNoScreenLock();
     if (!noLock) return null;
-    return <Text style={style}>{NO_SCREEN_LOCK_LINE}</Text>;
+    return <Text style={style}>{welcomeLineWords(NO_SCREEN_LOCK_LINE)}</Text>;
 }
 
 /**
@@ -84,7 +87,7 @@ export function CopyClearsNote({ style }: { style?: StyleProp<TextStyle> }): Rea
     if (Platform.OS === 'web') return null;
     return (
         <Text style={style}>
-            {COPY_CLEARS_LINE}{' '}
+            <Text>{welcomeLineWords(COPY_CLEARS_LINE)}</Text>{' '}
             <Text>{t("A keyboard's clipboard history or a clipboard shared with your other devices may keep a copy BeanPool can't clear.")}</Text>
         </Text>
     );

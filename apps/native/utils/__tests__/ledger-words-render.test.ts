@@ -138,7 +138,7 @@ vi.mock('../../components/showcase/LocalCommunityMark', () => ({
 vi.mock('../../components/MemberAvatar', () => ({ MemberAvatar: () => createElement('span', { 'data-avatar': 'true' }) }));
 vi.mock('../../components/TrustBadge', () => ({ TrustBadge: ({ level }: { level: string }) => createElement('span', { 'data-badge': level }) }));
 
-import { BLOCKED_BEANS_NOTE, CIRCULATION_FREE_BEANS, PROTOCOL_CONSTANTS, SAMPLE_COMMUNITY, TIER_LEVELS, pseudoLocalise, setLanguage, type UiLang } from '@beanpool/core';
+import { BLOCKED_BEANS_NOTE, CIRCULATION_FREE_BEANS, PROTOCOL_CONSTANTS, SAMPLE_COMMUNITY, TIER_LEVELS, formatNumber, pseudoLocalise, setLanguage, type UiLang } from '@beanpool/core';
 import { DrawnInLanguage, LanguageProvider } from '../../components/LanguageProvider';
 import { LanguageRow } from '../../components/LanguagePicker';
 import { PricingInfoModal } from '../../components/info-content/PricingInfoModal';
@@ -610,5 +610,65 @@ describe('the Ledger follows a language picked in Settings', () => {
         await click(byTestId('ledger-wallet-tab'), 'Wallet');
         expect(text()).toContain(fr['Nothing goes to the Commons while you hold {free} Beans or less.'].replace('{free}', String(CIRCULATION_FREE_BEANS)));
         expect(text()).toContain('Ana');
+    });
+});
+
+describe('Send Beans reads the amount in the member\'s language (#2202)', () => {
+    const fr = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../words/fr.json'), 'utf8')) as Record<string, string>;
+    /** A sentence as the screen draws it in `lang`: its translation, or the English while it has none (drafts come later). */
+    const said = (lang: 'en' | 'fr', english: string) => (lang === 'fr' && fr[english]) || english;
+
+    /** Opens Send Beans in `lang`, picks Mia, types `amount`; returns what sendTransfer was handed. */
+    async function sendIn(lang: 'en' | 'fr', amount: string, confirm = true) {
+        const sent: unknown[][] = [];
+        const answer = net.answer!;
+        net.answer = (name, args) => { if (name === 'sendTransfer') sent.push(args); return answer(name, args); };
+        await renderIn(lang);
+        await click(byTestId('ledger-wallet-tab'), 'Wallet');
+        await click(byLabel(said(lang, 'Send Beans')), 'Send Beans');
+        await click(Array.from(host.querySelectorAll('button')).find((b) => (b.textContent ?? '').includes(said(lang, 'Select recipient...'))), 'Select recipient');
+        await click(Array.from(host.querySelectorAll('button')).find((b) => (b.textContent ?? '').startsWith('Mia')), 'Mia');
+        await type(byLabel(said(lang, 'Amount to send')), amount);
+        const receives = Array.from(host.querySelectorAll('span')).find((el) => el.textContent === said(lang, 'Recipient receives:'))?.parentElement?.textContent ?? null;
+        if (confirm) await click(Array.from(host.querySelectorAll('button')).find((b) => b.textContent === said(lang, 'Confirm Transfer')), 'Confirm Transfer');
+        return { sent, receives };
+    }
+
+    it('fr "12,5": the confirmation reads 12,50 and 12.5 Beans are sent, never the 12 parseFloat read', async () => {
+        const { sent, receives } = await sendIn('fr', '12,5');
+        expect(receives).toContain('12,50');
+        expect(sent).toEqual([[me.identity.publicKey, 'mia-key', 12.5, '']]);
+        expect(text()).toContain(said('fr', '✓ Sent!'));
+    });
+
+    it('fr "12.5" is 12.5 too, shown the French way', async () => {
+        const { sent, receives } = await sendIn('fr', '12.5');
+        expect(receives).toContain('12,50');
+        expect(sent).toEqual([[me.identity.publicKey, 'mia-key', 12.5, '']]);
+    });
+
+    it('en "12.5" exactly as before: 12.50 shown, 12.5 sent', async () => {
+        const { sent, receives } = await sendIn('en', '12.5');
+        expect(receives).toContain('12.50');
+        expect(sent).toEqual([[me.identity.publicKey, 'mia-key', 12.5, '']]);
+        expect(text()).toContain('✓ Sent!');
+    });
+
+    it('fr "1.000" could be a thousand or one: no confirmation line, nothing sent, and words that say why', async () => {
+        const { sent, receives } = await sendIn('fr', '1.000');
+        expect(receives).toBeNull();
+        expect(sent).toEqual([]);
+        expect(text()).toContain(formatNumber(1000.5, undefined, 'fr'));
+        expect(text()).toContain('Type the amount without thousands separators, like 1000,5.');
+    });
+
+    it('en "1.234" still gets the cents guard\'s own words, and "abc" its own', async () => {
+        const cents = await sendIn('en', '1.234');
+        expect(cents.sent).toEqual([]);
+        expect(text()).toContain('The amount is a number of Beans above 0, to the cent.');
+        await type(byLabel('Amount to send'), 'abc');
+        await click(Array.from(host.querySelectorAll('button')).find((b) => b.textContent === 'Confirm Transfer'), 'Confirm Transfer');
+        expect(text()).toContain('Enter a valid amount');
+        expect(cents.sent).toEqual([]);
     });
 });

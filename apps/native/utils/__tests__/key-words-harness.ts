@@ -102,9 +102,9 @@ export function bypassing(host: Element, written: readonly string[] = [], said: 
 // ── 320 dp with text at 1.3× ────────────────────────────────────────────────────────────────────────────────────────
 
 export const SCALE = 1.3;
-const glyphEm = (c: string) => (/\p{M}/u.test(c) || /[️​‌‍]/.test(c) ? 0 : /\p{Extended_Pictographic}/u.test(c) ? 1.25 : 0.62);
+const glyphEm = (c: string) => (/\p{M}/u.test(c) || /[\uFE0F\u200B\u200C\u200D]/.test(c) ? 0 : /\p{Extended_Pictographic}/u.test(c) ? 1.25 : 0.62);
 export const widthOf = (text: string, px: number) => Array.from(text).reduce((w, c) => w + glyphEm(c) * px, 0);
-export const widestWord = (text: string) => text.split(/[\s​~]+/).reduce((a, b) => (widthOf(b, 1) > widthOf(a, 1) ? b : a), '');
+export const widestWord = (text: string) => text.split(/[\s\u200B~]+/).reduce((a, b) => (widthOf(b, 1) > widthOf(a, 1) ? b : a), '');
 const fontOf = (el: Element): number => { for (let e: Element | null = el; e; e = e.parentElement) { const f = e.getAttribute('data-font'); if (f) return Number(f); } return 14; };
 
 /**

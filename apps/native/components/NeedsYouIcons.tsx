@@ -16,6 +16,7 @@ import {
     type NeedsYouEntry, type NeedsYouInputs, type NeedsYouKind, type NeedsYouTarget,
 } from '../utils/needs-you';
 import { useManageNode } from './useManageNode';
+import { t } from '@beanpool/core';
 import { HOME_HEADER_WAIT_MS, homeForHeader, homePath, onHomeRead } from '../utils/home-store';
 import { localNeeds, mergeNeeds, type HomeAnswer, type HomeNeedsItem } from '../utils/home-cards';
 
@@ -263,9 +264,9 @@ export function NeedsYouIcons({ sheetTop }: { sheetTop: number }) {
             ) : <NeedIcon key={k} e={byKind.get(k)!} open={open} />)}
 
             <Modal visible={sheet} transparent animationType="fade" onRequestClose={() => setSheet(false)}>
-                <Pressable style={s.sheetBg} onPress={() => setSheet(false)} accessibilityRole="button" accessibilityLabel="Close">
+                <Pressable style={s.sheetBg} onPress={() => setSheet(false)} accessibilityRole="button" accessibilityLabel={t('Close')}>
                     <View style={[s.sheet, { marginTop: sheetTop, backgroundColor: colors.surface.card }]}>
-                        <Text style={[s.sheetTitle, { color: colors.text.secondary }]} accessibilityRole="header">Needs you</Text>
+                        <Text style={[s.sheetTitle, { color: colors.text.secondary }]} accessibilityRole="header">{t('Needs you')}</Text>
                         {entries.map(e => (
                             <Pressable key={e.kind} style={({ pressed }) => [s.sheetRow, pressed && { backgroundColor: colors.surface.subtle }]}
                                 onPress={() => { setSheet(false); open(e.target); }} accessibilityRole="button" accessibilityLabel={e.label}>

@@ -60,8 +60,12 @@ import {
     CATEGORIES,
     VIDEO_PLATFORMS,
     platformMeta,
+    platformName,
     categoryMeta,
+    t,
+    tn,
 } from '@beanpool/core';
+import { pulseLineWords } from '../components/pulse-lines';
 import {
     fetchPulseOAuthConfig,
     connectTikTokChannel,
@@ -87,6 +91,12 @@ interface Channel {
     postCountSeen?: number | null;
 }
 
+/** How a channel keeps the feed current, in the member's language: it updates itself, or a tap per post. */
+function listingWords(channel: Channel): string {
+    if (channel.supportsAutolist) return channel.oauthVerifiedAt ? t('Updates itself (connected)') : t('Updates itself');
+    const listing = platformMeta(channel.platform).listing;
+    return t(LISTING_LABEL[listing === 'auto' ? 'manual' : listing]);
+}
 
 export default function ChannelsScreen() {
     const { colors } = useTheme();
@@ -137,20 +147,20 @@ export default function ChannelsScreen() {
     const load = useCallback(async () => {
         // Clear the spinner rather than returning into it — an identity that never arrives would
         // otherwise leave the screen loading forever with nothing to explain why.
-        if (!identity) { setListError('No identity on this device yet.'); setLoading(false); return; }
+        if (!identity) { setListError(t('No identity on this device yet.')); setLoading(false); return; }
         try {
             const url = await anchorUrl();
-            if (!url) { setListError('No community node yet.'); setLoading(false); return; }
+            if (!url) { setListError(t('No community node yet.')); setLoading(false); return; }
             const res = await signedPost(url, '/api/channels/mine', {}, identity);
             const data = await readJson(res);
-            if (!res.ok) throw new Error(data?.message || data?.error || 'Could not load your channels.');
+            if (!res.ok) throw new Error(data?.message || data?.error || t('Could not load your channels.'));
             setChannels(data.channels || []);
             setListError(null);
 
             const conf = await fetchPulseOAuthConfig(url);
             setOAuthConfig(conf);
         } catch (e: any) {
-            setListError(e?.message || 'Could not load your channels.');
+            setListError(e?.message || t('Could not load your channels.'));
         } finally {
             setLoading(false);
         }
@@ -192,11 +202,11 @@ export default function ChannelsScreen() {
         setSaving(true);
         try {
             const url = await anchorUrl();
-            if (!url) throw new Error('No community node yet.');
+            if (!url) throw new Error(t('No community node yet.'));
             const res = await signedPost(url, '/api/member/channels',
                 { platform, url: value.trim(), category }, identity);
             const data = await readJson(res);
-            if (!res.ok) throw new Error(data?.message || 'Could not add that channel.');
+            if (!res.ok) throw new Error(data?.message || t('Could not add that channel.'));
 
             setValue('');
             setCategory(null);
@@ -221,16 +231,16 @@ export default function ChannelsScreen() {
                 // any autolisting channel in the list put it on the wrong button as soon as a
                 // member had three — the exact opposite of what this screen exists to tell them.
                 const label = (p: Platform, autoLists: boolean) =>
-                    platformMeta(p).label + (autoLists ? ' (updates itself)' : '');
+                    (autoLists ? t('{platform} (updates itself)', { platform: platformName(p) }) : platformName(p));
                 // "two places" and "Both" are wrong once a member has three video channels: the
                 // dialog still names only this one and the primary, so it is picking a winner
                 // among more than the two it mentions.
                 const several = others.length > 1;
                 Alert.alert(
-                    several ? 'You post video in more than one place' : 'You post video in two places',
-                    `If you put the same videos on ${platformMeta(platform).label} and ` +
-                    `${platformMeta(rival.platform).label}, they'd show up twice on the feed.\n\n` +
-                    'Which should the feed use?',
+                    several ? t('You post video in more than one place') : t('You post video in two places'),
+                    t("If you put the same videos on {platform} and {other}, they'd show up twice on the feed.\n\nWhich should the feed use?", {
+                        platform: platformName(platform), other: platformName(rival.platform),
+                    }),
                     [
                         {
                             text: label(platform, data.channel?.supportsAutolist === true),
@@ -240,12 +250,12 @@ export default function ChannelsScreen() {
                             text: label(rival.platform, rival.supportsAutolist === true),
                             onPress: () => setPrimary(rival.id),
                         },
-                        { text: several ? 'Keep all — I post different things' : 'Both — I post different things', style: 'cancel' },
+                        { text: several ? t('Keep all — I post different things') : t('Both — I post different things'), style: 'cancel' },
                     ],
                 );
             }
         } catch (e: any) {
-            setFormError(e?.message || 'Could not add that channel.');
+            setFormError(e?.message || t('Could not add that channel.'));
         } finally {
             setSaving(false);
         }
@@ -256,7 +266,7 @@ export default function ChannelsScreen() {
      *   back while a signed POST and a full re-fetch complete. Reverted if the write fails.
      */
     const patch = async (id: string, body: Record<string, unknown>, optimistic?: Partial<Channel>) => {
-        if (!identity) { setListError('No identity on this device yet.'); return; }
+        if (!identity) { setListError(t('No identity on this device yet.')); return; }
         // Read through the ref, not the render closure. Two switches flipped in quick succession
         // captured the same `channels` array, so the first one's failure restored a snapshot taken
         // before the second was touched — silently reverting a change that had already succeeded.
@@ -268,11 +278,11 @@ export default function ChannelsScreen() {
             // Inside the try: AsyncStorage can reject, and a switch that snaps back with no
             // message reads as the app ignoring the tap.
             const url = await anchorUrl();
-            if (!url) throw new Error('No community node yet.');
+            if (!url) throw new Error(t('No community node yet.'));
             const res = await signedPost(url, `/api/member/channels/${id}`, body, identity);
             if (!res.ok) {
                 const data = await readJson(res);
-                throw new Error(data?.message || 'Could not save that change.');
+                throw new Error(data?.message || t('Could not save that change.'));
             }
             await load();
         } catch (e: any) {
@@ -288,7 +298,7 @@ export default function ChannelsScreen() {
                     return restored;
                 }));
             }
-            setListError(e?.message || 'Could not save that change.');
+            setListError(e?.message || t('Could not save that change.'));
             // The banner lives above the cards; a switch toggled near the bottom would otherwise
             // fail with no visible explanation.
             scrollRef.current?.scrollTo({ y: 0, animated: true });
@@ -305,13 +315,13 @@ export default function ChannelsScreen() {
     };
 
     const connectChannel = async (channel: Channel) => {
-        if (!identity) { setListError('No identity on this device yet.'); return; }
+        if (!identity) { setListError(t('No identity on this device yet.')); return; }
         setConnectingId(channel.id);
         setCardErrors(prev => ({ ...prev, [channel.id]: null }));
 
         try {
             const url = await anchorUrl();
-            if (!url) throw new Error('No community node yet.');
+            if (!url) throw new Error(t('No community node yet.'));
 
             if (channel.platform === 'tiktok') {
                 const res = await connectTikTokChannel(channel, identity, url, oauthConfig.tiktok.clientKey);
@@ -319,8 +329,8 @@ export default function ChannelsScreen() {
                 await load();
                 if (res.newItemsCount > 0) {
                     Alert.alert(
-                        'TikTok Connected',
-                        `Imported ${res.newItemsCount} recent video${res.newItemsCount === 1 ? '' : 's'} to the community feed.`
+                        t('TikTok Connected'),
+                        tn(res.newItemsCount, 'Imported {n} recent video to the community feed.', 'Imported {n} recent videos to the community feed.'),
                     );
                 }
             } else if (channel.platform === 'instagram') {
@@ -332,7 +342,8 @@ export default function ChannelsScreen() {
             if (e instanceof PulseOAuthError && e.reason === 'cancelled') {
                 return;
             }
-            const msg = e?.message || 'Could not connect channel.';
+            // utils/pulse-oauth.ts writes English (it keeps the token): its sentences are translated here.
+            const msg = e?.message ? pulseLineWords(e.message) : t('Could not connect channel.');
             setCardErrors(prev => ({ ...prev, [channel.id]: msg }));
         } finally {
             setConnectingId(null);
@@ -340,25 +351,25 @@ export default function ChannelsScreen() {
     };
 
     const syncChannel = async (channel: Channel) => {
-        if (!identity) { setListError('No identity on this device yet.'); return; }
+        if (!identity) { setListError(t('No identity on this device yet.')); return; }
         setSyncingId(channel.id);
         setCardErrors(prev => ({ ...prev, [channel.id]: null }));
 
         try {
             const url = await anchorUrl();
-            if (!url) throw new Error('No community node yet.');
+            if (!url) throw new Error(t('No community node yet.'));
 
             const res = await syncChannelVideos(channel.id, identity, url);
             void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
             await load();
             if (res.synced > 0) {
                 Alert.alert(
-                    'Channel Synced',
-                    `Synced ${res.synced} video${res.synced === 1 ? '' : 's'} from ${platformMeta(channel.platform).label}.`
+                    t('Channel Synced'),
+                    tn(res.synced, 'Synced {n} video from {platform}.', 'Synced {n} videos from {platform}.', { platform: platformName(channel.platform) }),
                 );
             }
         } catch (e: any) {
-            const msg = e?.message || 'Could not sync channel videos.';
+            const msg = e?.message ? pulseLineWords(e.message) : t('Could not sync channel videos.');
             setCardErrors(prev => ({ ...prev, [channel.id]: msg }));
         } finally {
             setSyncingId(null);
@@ -366,26 +377,26 @@ export default function ChannelsScreen() {
     };
 
     const disconnectChannel = (channel: Channel) => {
-        const meta = platformMeta(channel.platform);
+        const name = platformName(channel.platform);
         Alert.alert(
-            `Disconnect ${meta.label}?`,
-            `Your ${meta.label} account will be disconnected from automatic updates and fall back to manual post sharing. Existing posts will remain on the community feed.`,
+            t('Disconnect {platform}?', { platform: name }),
+            t('Your {platform} account will be disconnected from automatic updates and fall back to manual post sharing. Existing posts will remain on the community feed.', { platform: name }),
             [
-                { text: 'Keep connected', style: 'cancel' },
+                { text: t('Keep connected'), style: 'cancel' },
                 {
-                    text: 'Disconnect',
+                    text: t('Disconnect'),
                     style: 'destructive',
                     onPress: async () => {
-                        if (!identity) { setListError('No identity on this device yet.'); return; }
+                        if (!identity) { setListError(t('No identity on this device yet.')); return; }
                         setCardErrors(prev => ({ ...prev, [channel.id]: null }));
                         try {
                             const url = await anchorUrl();
-                            if (!url) throw new Error('No community node yet.');
+                            if (!url) throw new Error(t('No community node yet.'));
                             await disconnectOAuthChannel(channel.id, identity, url);
                             void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
                             await load();
                         } catch (e: any) {
-                            const msg = e?.message || 'Could not disconnect channel.';
+                            const msg = e?.message ? pulseLineWords(e.message) : t('Could not disconnect channel.');
                             setCardErrors(prev => ({ ...prev, [channel.id]: msg }));
                         }
                     },
@@ -395,18 +406,19 @@ export default function ChannelsScreen() {
     };
 
     const remove = (channel: Channel) => {
+        const name = platformName(channel.platform);
         Alert.alert(
-            'Remove this channel?',
-            `${platformMeta(channel.platform).label}${channel.handle ? ` · ${channel.handle}` : ''} will no longer appear on your profile.`,
+            t('Remove this channel?'),
+            t('{channel} will no longer appear on your profile.', { channel: channel.handle ? `${name} · ${channel.handle}` : name }),
             [
-                { text: 'Keep it', style: 'cancel' },
+                { text: t('Keep it'), style: 'cancel' },
                 {
-                    text: 'Remove', style: 'destructive',
+                    text: t('Remove'), style: 'destructive',
                     onPress: async () => {
-                        if (!identity) { setListError('No identity on this device yet.'); return; }
+                        if (!identity) { setListError(t('No identity on this device yet.')); return; }
                         try {
                             const url = await anchorUrl();
-                            if (!url) throw new Error('No community node yet.');
+                            if (!url) throw new Error(t('No community node yet.'));
                             const res = await signedPost(url, `/api/member/channels/${channel.id}/delete`, {}, identity);
                             if (!res.ok) {
                                 // The server distinguishes "not yours" (403) from "already gone"
@@ -417,11 +429,11 @@ export default function ChannelsScreen() {
                                 // 401 with `{ error: 'Signed request required' }` and no message,
                                 // which would otherwise read as a generic delete failure. Same
                                 // fallback chain load() uses.
-                                throw new Error(data?.message || data?.error || 'Could not remove that channel.');
+                                throw new Error(data?.message || data?.error || t('Could not remove that channel.'));
                             }
                             await load();
                         } catch (e: any) {
-                            setListError(e?.message || 'Could not remove that channel.');
+                            setListError(e?.message || t('Could not remove that channel.'));
                             scrollRef.current?.scrollTo({ y: 0, animated: true });
                         }
                     },
@@ -433,6 +445,8 @@ export default function ChannelsScreen() {
     const videoChannels = channels.filter(c => VIDEO_PLATFORMS.includes(c.platform));
     const showCrossPostBanner = videoChannels.length > 1;
     const primary = videoChannels.find(c => c.isPrimaryVideo);
+    // The platform picked in the add form: its example of what to type.
+    const chosen = platformMeta(platform);
 
     return (
         <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
@@ -442,21 +456,21 @@ export default function ChannelsScreen() {
                         onPress={() => router.back()}
                         style={styles.backBtn}
                         accessibilityRole="button"
-                        accessibilityLabel="Go back"
+                        accessibilityLabel={t('Go back')}
                     >
-                        <Text style={styles.backText}>‹ Back</Text>
+                        <Text style={styles.backText}>{t('‹ Back')}</Text>
                     </Pressable>
                     <Pressable
                         onPress={() => router.push('/pulse')}
                         style={styles.feedLinkBtn}
                         accessibilityRole="button"
-                        accessibilityLabel="View The Pulse community feed"
+                        accessibilityLabel={t('View The Pulse community feed')}
                         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                     >
-                        <Text style={styles.feedLinkText}>View Feed ↗</Text>
+                        <Text style={styles.feedLinkText}>{t('View Feed ↗')}</Text>
                     </Pressable>
                 </View>
-                <Text style={styles.title}>Channels & Showcase</Text>
+                <Text style={styles.title}>{t('Channels & Showcase')}</Text>
             </View>
 
             {/* No keyboardVerticalOffset: this screen draws its own header (no navigation header), and keyboard-controller
@@ -477,10 +491,9 @@ export default function ChannelsScreen() {
 
                             {channels.length === 0 && !adding && (
                                 <View style={styles.empty}>
-                                    <Text style={styles.emptyTitle}>Already posting your work somewhere?</Text>
+                                    <Text style={styles.emptyTitle}>{t('Already posting your work somewhere?')}</Text>
                                     <Text style={styles.emptyBody}>
-                                        Add it here so your neighbours can find it — and trade with you.
-                                        You won't have to post twice.
+                                        {t("Add it here so your neighbours can find it — and trade with you. You won't have to post twice.")}
                                     </Text>
                                 </View>
                             )}
@@ -489,14 +502,15 @@ export default function ChannelsScreen() {
                                 <View style={styles.banner}>
                                     <Text style={styles.bannerText}>
                                         {primary
-                                            ? `You post video in more than one place. The feed uses your ${platformMeta(primary.platform).label} as the main one.`
-                                            : 'You post video in more than one place. Pick which one the feed should use.'}
+                                            ? t('You post video in more than one place. The feed uses your {platform} as the main one.', { platform: platformName(primary.platform) })
+                                            : t('You post video in more than one place. Pick which one the feed should use.')}
                                     </Text>
                                 </View>
                             )}
 
                             {channels.map(channel => {
                                 const meta = platformMeta(channel.platform);
+                                const name = platformName(channel.platform);
                                 const isConnecting = connectingId === channel.id;
                                 const isSyncing = syncingId === channel.id;
                                 const cardError = cardErrors[channel.id];
@@ -508,33 +522,26 @@ export default function ChannelsScreen() {
                                     <View key={channel.id} style={styles.card}>
                                         <View style={styles.cardTop}>
                                             <Text style={styles.cardTitle}>
-                                                {meta.icon} {meta.label}
+                                                {meta.icon} {name}
                                                 {channel.handle ? ` · ${channel.handle}` : ''}
                                             </Text>
                                             {channel.oauthVerifiedAt ? (
                                                 <View style={styles.verifiedBadgeRow}>
-                                                    <Text style={styles.verifiedText}>✓ Verified</Text>
+                                                    <Text style={styles.verifiedText}>{t('✓ Verified')}</Text>
                                                 </View>
                                             ) : null}
                                         </View>
 
                                         <Text style={styles.cardMeta}>
-                                            {channel.supportsAutolist
-                                                ? (channel.oauthVerifiedAt ? 'Updates itself (connected)' : 'Updates itself')
-                                                : LISTING_LABEL[
-                                                    platformMeta(channel.platform).listing === 'auto'
-                                                        ? 'manual'
-                                                        : platformMeta(channel.platform).listing
-                                                ]}
-                                            {channel.isPrimaryVideo ? ' · main video channel' : ''}
+                                            {channel.isPrimaryVideo ? t('{listing} · main video channel', { listing: listingWords(channel) }) : listingWords(channel)}
                                         </Text>
 
                                         <View style={styles.row}>
-                                            <Text style={styles.rowLabel}>Show on the local feed</Text>
+                                            <Text style={styles.rowLabel}>{t('Show on the local feed')}</Text>
                                             <Switch
                                                 value={channel.syndicateToNode}
                                                 onValueChange={v => patch(channel.id, { syndicateToNode: v }, { syndicateToNode: v })}
-                                                accessibilityLabel={`Show ${meta.label} on the local feed`}
+                                                accessibilityLabel={t('Show {platform} on the local feed', { platform: name })}
                                             />
                                         </View>
 
@@ -544,7 +551,7 @@ export default function ChannelsScreen() {
                                             still Remove and re-add. */}
                                         <View style={styles.row}>
                                             <Text style={styles.rowLabel}>
-                                                {categoryMeta(channel.category).icon} {categoryMeta(channel.category).label}
+                                                {t('{emoji} {label}', { emoji: categoryMeta(channel.category).icon, label: t(categoryMeta(channel.category).label) })}
                                             </Text>
                                             <Pressable
                                                 onPress={() => setEditingId(editingId === channel.id ? null : channel.id)}
@@ -555,11 +562,11 @@ export default function ChannelsScreen() {
                                                 hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                                                 accessibilityRole="button"
                                                 accessibilityLabel={editingId === channel.id
-                                                    ? `Stop changing the category for ${meta.label}`
-                                                    : `Change the category for ${meta.label}`}
+                                                    ? t('Stop changing the category for {platform}', { platform: name })
+                                                    : t('Change the category for {platform}', { platform: name })}
                                             >
                                                 <Text style={styles.editLink}>
-                                                    {editingId === channel.id ? 'Done' : 'Change'}
+                                                    {editingId === channel.id ? t('Done') : t('Change')}
                                                 </Text>
                                             </Pressable>
                                         </View>
@@ -575,10 +582,10 @@ export default function ChannelsScreen() {
                                                             style={[styles.chip, on && styles.chipActive]}
                                                             accessibilityRole="radio"
                                                             accessibilityState={{ selected: on }}
-                                                            accessibilityLabel={c.label}
+                                                            accessibilityLabel={t(c.label)}
                                                         >
                                                             <Text style={[styles.chipText, on && styles.chipTextActive]}>
-                                                                {c.icon} {c.label}
+                                                                {t('{emoji} {label}', { emoji: c.icon, label: t(c.label) })}
                                                             </Text>
                                                         </Pressable>
                                                     );
@@ -593,7 +600,7 @@ export default function ChannelsScreen() {
                                         )}
 
                                         {isOauthPlatform && isOauthEnabled && !channel.oauthVerifiedAt && lostBadgeIds.has(channel.id) && (
-                                            <Text style={styles.badgeHintText}>Reconnect to restore your verified badge</Text>
+                                            <Text style={styles.badgeHintText}>{t('Reconnect to restore your verified badge')}</Text>
                                         )}
 
                                         <View style={styles.cardActions}>
@@ -606,20 +613,20 @@ export default function ChannelsScreen() {
                                                             disabled={isSyncing}
                                                             style={[styles.oauthSyncBtn, isSyncing && styles.btnDisabled]}
                                                             accessibilityRole="button"
-                                                            accessibilityLabel={`Sync latest videos from ${meta.label}`}
+                                                            accessibilityLabel={t('Sync latest videos from {platform}', { platform: name })}
                                                             accessibilityState={{ disabled: isSyncing, busy: isSyncing }}
                                                         >
                                                             <Text style={styles.oauthSyncBtnText}>
-                                                                {isSyncing ? 'Syncing…' : '↻ Sync videos'}
+                                                                {isSyncing ? t('Syncing…') : t('↻ Sync videos')}
                                                             </Text>
                                                         </Pressable>
                                                         <Pressable
                                                             onPress={() => disconnectChannel(channel)}
                                                             style={styles.oauthDisconnectBtn}
                                                             accessibilityRole="button"
-                                                            accessibilityLabel={`Disconnect ${meta.label} account`}
+                                                            accessibilityLabel={t('Disconnect {platform} account', { platform: name })}
                                                         >
-                                                            <Text style={styles.oauthDisconnectBtnText}>Disconnect</Text>
+                                                            <Text style={styles.oauthDisconnectBtnText}>{t('Disconnect')}</Text>
                                                         </Pressable>
                                                     </>
                                                 ) : isOauthEnabled ? (
@@ -628,11 +635,15 @@ export default function ChannelsScreen() {
                                                         disabled={isConnecting}
                                                         style={[styles.oauthConnectBtn, isConnecting && styles.btnDisabled]}
                                                         accessibilityRole="button"
-                                                        accessibilityLabel={`Connect ${meta.label} account`}
+                                                        accessibilityLabel={t('Connect {platform} account', { platform: name })}
                                                         accessibilityState={{ disabled: isConnecting, busy: isConnecting }}
                                                     >
                                                         <Text style={styles.oauthConnectBtnText}>
-                                                            {isConnecting ? 'Connecting…' : `${lostBadgeIds.has(channel.id) ? 'Reconnect' : 'Connect'} ${meta.label}`}
+                                                            {isConnecting
+                                                                ? t('Connecting…')
+                                                                : lostBadgeIds.has(channel.id)
+                                                                    ? t('Reconnect {platform}', { platform: name })
+                                                                    : t('Connect {platform}', { platform: name })}
                                                         </Text>
                                                     </Pressable>
                                                 ) : null
@@ -643,9 +654,9 @@ export default function ChannelsScreen() {
                                                     onPress={() => router.push({ pathname: '/pulse-intake', params: { channelId: channel.id } })}
                                                     style={styles.shareBtn}
                                                     accessibilityRole="button"
-                                                    accessibilityLabel={`Share a post from ${meta.label} to Pulse`}
+                                                    accessibilityLabel={t('Share a post from {platform} to Pulse', { platform: name })}
                                                 >
-                                                    <Text style={styles.shareBtnText}>+ Share post</Text>
+                                                    <Text style={styles.shareBtnText}>{t('+ Share post')}</Text>
                                                 </Pressable>
                                             )}
                                             {VIDEO_PLATFORMS.includes(channel.platform) && !channel.isPrimaryVideo && videoChannels.length > 1 && (
@@ -653,18 +664,18 @@ export default function ChannelsScreen() {
                                                     onPress={() => setPrimary(channel.id)}
                                                     style={styles.secondaryBtn}
                                                     accessibilityRole="button"
-                                                    accessibilityLabel={`Make ${meta.label} the main video channel`}
+                                                    accessibilityLabel={t('Make {platform} the main video channel', { platform: name })}
                                                 >
-                                                    <Text style={styles.secondaryBtnText}>Make main</Text>
+                                                    <Text style={styles.secondaryBtnText}>{t('Make main')}</Text>
                                                 </Pressable>
                                             )}
                                             <Pressable
                                                 onPress={() => remove(channel)}
                                                 style={styles.removeBtn}
                                                 accessibilityRole="button"
-                                                accessibilityLabel={`Remove ${meta.label}`}
+                                                accessibilityLabel={t('Remove {platform}', { platform: name })}
                                             >
-                                                <Text style={styles.removeBtnText}>Remove</Text>
+                                                <Text style={styles.removeBtnText}>{t('Remove')}</Text>
                                             </Pressable>
                                         </View>
                                     </View>
@@ -673,7 +684,7 @@ export default function ChannelsScreen() {
 
                             {adding ? (
                                 <View style={styles.card}>
-                                    <Text style={styles.sectionLabel}>Where do you post?</Text>
+                                    <Text style={styles.sectionLabel}>{t('Where do you post?')}</Text>
                                     <View style={styles.tiles}>
                                         {PLATFORMS.map(p => {
                                             const active = p.id === platform;
@@ -684,25 +695,25 @@ export default function ChannelsScreen() {
                                                     style={[styles.tile, active && styles.tileActive]}
                                                     accessibilityRole="radio"
                                                     accessibilityState={{ selected: active }}
-                                                    accessibilityLabel={`${p.label}, ${LISTING_LABEL[p.listing]}`}
+                                                    accessibilityLabel={t('{platform}, {listing}', { platform: platformName(p.id), listing: t(LISTING_LABEL[p.listing]) })}
                                                 >
                                                     <Text style={styles.tileIcon}>{p.icon}</Text>
-                                                    <Text style={[styles.tileLabel, active && styles.tileLabelActive]}>{p.label}</Text>
-                                                    <Text style={styles.tileHint}>{LISTING_LABEL[p.listing]}</Text>
+                                                    <Text style={[styles.tileLabel, active && styles.tileLabelActive]}>{platformName(p.id)}</Text>
+                                                    <Text style={styles.tileHint}>{t(LISTING_LABEL[p.listing])}</Text>
                                                 </Pressable>
                                             );
                                         })}
                                     </View>
 
-                                    <Text style={styles.sectionLabel}>Your link or handle</Text>
+                                    <Text style={styles.sectionLabel}>{t('Your link or handle')}</Text>
                                     <TextInput
                                         value={value}
                                         // Whitespace stripped as it arrives. autoCorrect={false} does not
                                         // stop Android's gesture typing and suggestion strip inserting a
                                         // space mid-string — "bean pool.org" is a link a member typed
                                         // correctly and the parser then rejected.
-                                        onChangeText={t => setValue(t.replace(/\s/g, ''))}
-                                        placeholder={platformMeta(platform).hint}
+                                        onChangeText={typed => setValue(typed.replace(/\s/g, ''))}
+                                        placeholder={chosen.hint ? t(chosen.hint) : ''}
                                         placeholderTextColor={colors.text.muted}
                                         autoCapitalize="none"
                                         autoCorrect={false}
@@ -711,10 +722,10 @@ export default function ChannelsScreen() {
                                         // on the primary layer.
                                         keyboardType="url"
                                         style={styles.input}
-                                        accessibilityLabel="Your link or handle"
+                                        accessibilityLabel={t('Your link or handle')}
                                     />
 
-                                    <Text style={styles.sectionLabel}>What's it about?</Text>
+                                    <Text style={styles.sectionLabel}>{t("What's it about?")}</Text>
                                     <View style={styles.chips}>
                                         {CATEGORIES.map(c => {
                                             const active = c.id === category;
@@ -725,10 +736,10 @@ export default function ChannelsScreen() {
                                                     style={[styles.chip, active && styles.chipActive]}
                                                     accessibilityRole="radio"
                                                     accessibilityState={{ selected: active }}
-                                                    accessibilityLabel={c.label}
+                                                    accessibilityLabel={t(c.label)}
                                                 >
                                                     <Text style={[styles.chipText, active && styles.chipTextActive]}>
-                                                        {c.icon} {c.label}
+                                                        {t('{emoji} {label}', { emoji: c.icon, label: t(c.label) })}
                                                     </Text>
                                                 </Pressable>
                                             );
@@ -750,21 +761,21 @@ export default function ChannelsScreen() {
                                             style={styles.secondaryBtn}
                                             accessibilityRole="button"
                                         >
-                                            <Text style={styles.secondaryBtnText}>Cancel</Text>
+                                            <Text style={styles.secondaryBtnText}>{t('Cancel')}</Text>
                                         </Pressable>
                                         <Pressable
                                             onPress={add}
                                             disabled={saving || !value.trim() || !category}
                                             style={[styles.primaryBtn, (saving || !value.trim() || !category) && styles.primaryBtnDisabled]}
                                             accessibilityRole="button"
-                                            accessibilityLabel="Add channel"
+                                            accessibilityLabel={t('Add channel')}
                                             // Disabled and busy were conveyed by colour alone.
                                             accessibilityState={{
                                                 disabled: Boolean(saving || !value.trim() || !category),
                                                 busy: saving,
                                             }}
                                         >
-                                            <Text style={styles.primaryBtnText}>{saving ? 'Adding…' : 'Add channel'}</Text>
+                                            <Text style={styles.primaryBtnText}>{saving ? t('Adding…') : t('Add channel')}</Text>
                                         </Pressable>
                                     </View>
                                 </View>
@@ -774,9 +785,9 @@ export default function ChannelsScreen() {
                                         onPress={() => { setAdding(true); setFormError(null); }}
                                         style={styles.addBtn}
                                         accessibilityRole="button"
-                                        accessibilityLabel="Add a channel"
+                                        accessibilityLabel={t('Add a channel')}
                                     >
-                                        <Text style={styles.addBtnText}>+ Add a channel</Text>
+                                        <Text style={styles.addBtnText}>{t('+ Add a channel')}</Text>
                                     </Pressable>
 
                                     {channels.length > 0 && (
@@ -784,9 +795,9 @@ export default function ChannelsScreen() {
                                             onPress={() => router.push('/pulse-intake')}
                                             style={styles.manualIntakeBtn}
                                             accessibilityRole="button"
-                                            accessibilityLabel="Share a post manually to Pulse"
+                                            accessibilityLabel={t('Share a post manually to Pulse')}
                                         >
-                                            <Text style={styles.manualIntakeBtnText}>Share a post to Pulse →</Text>
+                                            <Text style={styles.manualIntakeBtnText}>{t('Share a post to Pulse →')}</Text>
                                         </Pressable>
                                     )}
                                 </View>

@@ -67,7 +67,7 @@ const HOST = '7'.repeat(64);
 const who = vi.hoisted(() => ({ value: { identity: { publicKey: '9'.repeat(64), privateKey: '8'.repeat(64), callsign: 'Wren' } } }));
 vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => who.value }));
 const node = vi.hoisted(() => ({
-    view: null as any, rsvpError: null as null | Error, deleted: [] as string[], groups: [] as unknown[],
+    view: null as any, rsvpError: null as null | Error, deleteError: null as null | Error, deleted: [] as string[], groups: [] as unknown[],
     reminders: [] as unknown[],
 }));
 vi.mock('../db', async () => {
@@ -79,7 +79,7 @@ vi.mock('../db', async () => {
             node.view = { ...node.view, myRsvp: next };
             return { success: true, post: node.view };
         },
-        deletePost: async (id: string) => { node.deleted.push(id); node.view = { ...node.view, status: 'cancelled', eventState: 'cancelled' }; },
+        deletePost: async (id: string) => { if (node.deleteError) throw node.deleteError; node.deleted.push(id); node.view = { ...node.view, status: 'cancelled', eventState: 'cancelled' }; },
         reportAbuse: async () => ({ ok: true }),
         letInToEvent: async () => ({ success: true, post: node.view }),
         fetchMemberPreferences: async () => ({}),
@@ -113,6 +113,7 @@ import { NewEventModal } from '../../components/NewEventModal';
 import { reminderChoiceWords } from '../../components/EventExtras';
 import { formatReminderChoice } from '../event-extras';
 import { UNSIGNABLE_RSVP_MESSAGE } from '../events';
+import { eventLineWords } from '../../components/event-lines';
 import { bypassing, bracketed, unfit } from './profile-events-words-harness';
 
 /** What members wrote: the event's title, text, place and note, names, a group's name. */
@@ -142,6 +143,7 @@ beforeEach(() => {
     store.map.set('beanpool_anchor_url', 'https://mullum.example');
     node.view = null;
     node.rsvpError = null;
+    node.deleteError = null;
     node.deleted.length = 0;
     node.groups = [];
     node.reminders = [];
@@ -235,6 +237,58 @@ describe('an event\'s page in the pseudo-locale: every word came through t() (wo
         await click(byLabel(xx('Report event')), 'Report');
         expect(host.textContent).toContain(xx('WHY ARE YOU REPORTING IT?'));
         expect(bypassing(host, MEMBERS, said())).toEqual([]);
+    });
+
+    it("the phone's own refusals in the member's language: an RSVP with no community set, a cancel that never reached the node", async () => {
+        node.view = { ...base, myRsvp: null };
+        node.rsvpError = new Error('You are currently offline.');
+        await renderIn('xx', createElement(EventDetail, { post: base }));
+        await click(byLabel(xx('Interested')), 'Interested');
+        expect(said()).toEqual([xx('RSVP not saved'), xx('You are currently offline.')]);
+        act(() => root.unmount());
+        root = createRoot(host);
+        alerts.said.length = 0;
+        node.view = { ...base, author_pubkey: ME, authorPublicKey: ME, authorCallsign: 'Wren', eventRsvps: RSVPS };
+        node.deleteError = new Error('Offline or anchor node unreachable: Failed to remove post on Node');
+        await renderIn('xx', createElement(EventDetail, { post: { ...base, author_pubkey: ME, authorPublicKey: ME } }));
+        await click(byLabel(xx('Cancel event')), 'Cancel event');
+        alerts.said.length = 0;
+        await pressAlert('Cancel event');
+        expect(node.deleted).toEqual([]);
+        expect(said()).toEqual([xx('Not cancelled'), xx('Offline or anchor node unreachable: {reason}').replace('{reason}', xx('Failed to remove post on Node'))]);
+        expect(bypassing(host, MEMBERS, said())).toEqual([]);
+    });
+
+    it("the refusals are utils/db.ts's, as rsvpEvent, deletePost and letInToEvent throw them; a node's words as given", () => {
+        const db = fs.readFileSync(path.resolve(__dirname, '../db.ts'), 'utf8');
+        const body = (start: string) => {
+            const at = db.indexOf(start);
+            expect(at, start).toBeGreaterThan(-1);
+            return db.slice(at, db.indexOf('\n}\n', at));
+        };
+        // Every fixed sentence each one throws, or falls back to when the node's refusal has no words: a new one fails here.
+        const thrown = (src: string) => [...src.matchAll(/(?:new Error\(|errMsg = |errorMsg = |\|\| )'([^']+)'/g)].map((m) => m[1]);
+        const rsvp = body('export async function rsvpEvent(');
+        const remove = body('export async function deletePost(');
+        const signed = body('async function _signedRequest(');
+        expect(rsvp).toContain('throw new Error(UNSIGNABLE_RSVP_MESSAGE)');
+        expect(thrown(rsvp)).toEqual(['You are currently offline.', 'No identity found.', 'Could not save your RSVP']);
+        expect(thrown(remove)).toEqual(['Action requires internet connection.', 'Not logged in. Identity required.', 'Failed to remove post on Node']);
+        expect(remove).toContain('throw new Error(`Offline or anchor node unreachable: ${e.message}`)');
+        expect(thrown(signed)).toEqual(['You are off-grid. Please connect to a BeanPool Node to perform this action.', 'No identity found. You must be logged in.', 'Network request failed. You must be connected to a node.']);
+        expect(signed).toContain('`Server returned ${res.status}`');
+        const fixed = [UNSIGNABLE_RSVP_MESSAGE as string, ...thrown(rsvp), ...thrown(remove), ...thrown(signed)];
+        const filled = ['Offline or anchor node unreachable: Failed to remove post on Node', 'Server returned 502'];
+        for (const s of [...fixed, ...filled]) expect(eventLineWords(s), s).toBe(s);
+        setLanguage('xx');
+        for (const s of fixed) expect(eventLineWords(s), s).toBe(xx(s));
+        expect(eventLineWords(filled[0])).toBe(xx('Offline or anchor node unreachable: {reason}').replace('{reason}', xx('Failed to remove post on Node')));
+        expect(eventLineWords(filled[1])).toBe(xx('Server returned {status}').replace('{status}', '502'));
+        // A node's own words, or the platform's, exactly as given (slice S4); inside db.ts's sentence, that sentence is worded.
+        expect(eventLineWords('Only the host can cancel this event.')).toBe('Only the host can cancel this event.');
+        expect(eventLineWords('Offline or anchor node unreachable: Network request failed'))
+            .toBe(xx('Offline or anchor node unreachable: {reason}').replace('{reason}', 'Network request failed'));
+        setLanguage('en');
     });
 
     it('the host: who\'s going, the group-only line, edit, copy and cancel, and the cancel\'s questions and answer', async () => {

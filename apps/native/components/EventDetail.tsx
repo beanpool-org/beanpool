@@ -31,16 +31,15 @@ import { NewEventModal } from './NewEventModal';
 import { EventReminder, EventShareAndCalendar } from './EventExtras';
 import { EventNextDates } from './EventNextDates';
 import { ReportReasonBox } from './ReportReasonBox';
+import { eventLineWords } from './event-lines';
 import { reportedAlertBody } from '../utils/reportReasons';
 import {
     formatEventWhenFor, eventWhen, eventRepeatCaption, withMovedFromLine, eventHostLine, eventPlaceLine, eventLinkWaitWords, isOnlineEvent, eventBadge, eventStateOf, isEventEnded, nextRsvp, applyRsvp, formatRsvpCounts,
     canOpenEventChat, eventChatEntryLabel, buildEventCopy, isEventHostView, isOwnEvent, eventEditBlockedReason, eventEditValues,
-    eventLetInState, eventLetInLine, eventWaitingCount, eventWaitingLine, letEveryoneInQuestion, eventChatWaitingText, letInButtonLabel, UNSIGNABLE_RSVP_MESSAGE,
+    eventLetInState, eventLetInLine, eventWaitingCount, eventWaitingLine, letEveryoneInQuestion, eventChatWaitingText, letInButtonLabel,
     type EventRsvpStatus, type RsvpCounts, type EventCopy, type EventEditValues,
 } from '../utils/events';
 
-/** Marked in utils/events.ts, translated here where it is shown. */
-const LINES = { unsignableRsvp: UNSIGNABLE_RSVP_MESSAGE };
 
 interface EventDetailProps {
     post: any;
@@ -126,7 +125,7 @@ export function EventDetail({ post, openMembership = false }: EventDetailProps) 
             const res = await letInToEvent(post.id, who, on);
             if (res?.post) setView(res.post);
         } catch (err: any) {
-            Alert.alert(t('Not saved'), err?.message || t('Could not reach the node. Try again when you have signal.'));
+            Alert.alert(t('Not saved'), err?.message ? eventLineWords(err.message) : t('Could not reach the node. Try again when you have signal.'));
         } finally {
             setLetting(null);
         }
@@ -183,8 +182,8 @@ export function EventDetail({ post, openMembership = false }: EventDetailProps) 
             }
         } catch (err: any) {
             setCounts(before);
-            // The phone's own refusal (utils/db.ts throws it as written) in the member's language; the node's words as it sent them (slice S4).
-            Alert.alert(t('RSVP not saved'), err?.message === LINES.unsignableRsvp ? t(LINES.unsignableRsvp) : err?.message || t('Could not reach the node. Try again when you have signal.'));
+            // The phone's own refusals (utils/db.ts throws them as written) in the member's language; the node's words as it sent them (slice S4).
+            Alert.alert(t('RSVP not saved'), err?.message ? eventLineWords(err.message) : t('Could not reach the node. Try again when you have signal.'));
         } finally {
             setPending(null);
         }
@@ -213,7 +212,7 @@ export function EventDetail({ post, openMembership = false }: EventDetailProps) 
                         if (!after) setView((v: any) => ({ ...(v ?? {}), status: 'cancelled', eventState: 'cancelled' }));
                         Alert.alert(t('Event cancelled'), t('It now shows CANCELLED, and everyone going has been told.'));
                     } catch (e: any) {
-                        Alert.alert(t('Not cancelled'), e?.message || t('Could not reach the node.'));
+                        Alert.alert(t('Not cancelled'), e?.message ? eventLineWords(e.message) : t('Could not reach the node.'));
                     } finally {
                         setCancelling(false);
                     }

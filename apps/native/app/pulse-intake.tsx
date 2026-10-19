@@ -54,6 +54,7 @@ import { useIdentity } from './IdentityContext';
 import { useTheme, useStyles } from './ThemeContext';
 import { anchorUrl, signedPost } from '../utils/node-post';
 import { PulsePreviewCard, type PulsePreviewData } from '../components/PulsePreviewCard';
+import { pulseLineWords } from '../components/pulse-lines';
 
 interface Channel {
     id: string;
@@ -139,7 +140,9 @@ export default function PulseIntakeScreen() {
                 setSelectedCategory(list[0].category);
             }
         } catch (e: any) {
-            setChannelError(e?.message || t('Failed to load channels.'));
+            // Signing refuses an address that isn't plain (utils/node-url.ts) in English: translated here. A node's own
+            // message is shown as it came.
+            setChannelError(e?.message ? pulseLineWords(e.message) : t('Failed to load channels.'));
         } finally {
             setLoadingChannels(false);
         }
@@ -208,7 +211,7 @@ export default function PulseIntakeScreen() {
                 }
             }
         } catch (e: any) {
-            setUrlError(e?.message || t('Unable to resolve post preview.'));
+            setUrlError(e?.message ? pulseLineWords(e.message) : t('Unable to resolve post preview.'));
             setPreviewData(null);
         } finally {
             setResolving(false);
@@ -331,7 +334,7 @@ export default function PulseIntakeScreen() {
                 }
             }, 1200);
         } catch (e: any) {
-            setSubmitError(e?.message || t('Submission failed. Please check the details and retry.'));
+            setSubmitError(e?.message ? pulseLineWords(e.message) : t('Submission failed. Please check the details and retry.'));
             void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
         } finally {
             setSubmitting(false);

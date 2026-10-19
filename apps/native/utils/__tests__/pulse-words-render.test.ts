@@ -515,6 +515,28 @@ describe('Add to Pulse in the pseudo-locale (words S3f)', () => {
         expect(host.textContent).toContain(xx('Review toggle is currently opted out. Toggle "Publish to Pulse" to submit.'));
         expect(bypassing(), 'opted out').toEqual([]);
     });
+
+    it('an address the phone won\'t sign for (node-url.ts), in the member\'s language: loading the channels, the preview, sending', async () => {
+        const refused = xx(UNSAFE_NODE_ADDRESS_MESSAGE);
+        node.unsafe = new Set(['/api/channels/mine']);
+        await renderIn('xx', createElement(PulseIntakeScreen));
+        expect(host.textContent, 'the channels').toContain(refused);
+        expect(bypassing(), 'the channels').toEqual([]);
+
+        node.unsafe = new Set(['/api/member/pulse/preview']);
+        params.now = { url: encodeURIComponent(PREVIEW.url) };
+        await again('xx', createElement(PulseIntakeScreen));
+        expect(host.textContent, 'the preview').toContain(refused);
+        expect(bypassing(), 'the preview').toEqual([]);
+
+        node.unsafe = new Set(['/api/member/pulse/submit']);
+        await again('xx', createElement(PulseIntakeScreen));
+        expect(host.textContent).toContain(PREVIEW.title);
+        expect(host.textContent).not.toContain(refused);
+        await click(byLabel(xx('Share to Pulse')), 'Share to Pulse');
+        expect(host.textContent, 'sending').toContain(refused);
+        expect(bypassing(), 'sending').toEqual([]);
+    });
 });
 
 describe('in English nothing is bracketed, and the words are as they were', () => {

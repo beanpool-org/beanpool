@@ -235,3 +235,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap:** [What was untested]\n**Learning:** [A
 **Gap:** `rollBackDoneWords` and `openedBy` attribution in `apps/manager/src/lib/restore-words.ts` were untested directly.
 **Learning:** Testing `rollBackDoneWords` verified default restart message fallbacks when body is non-object/null and confirmed custom `restorePointNote` and `restartNote` string formatting.
 **Action:** Continue identifying utility functions with missing direct assertions across `apps/manager/src/lib/`.
+
+## 2026-10-19 - [manager tests] alerts and offbox helpers unit tests
+**Gap:** `getAlertsStatus`, `saveAlertsChannel`, `acknowledgeAlerts`, `sendTestAlert`, `getOffboxStatus`, `saveOffboxSettings`, `runOffboxBackupNow`, and `listOffboxBackups` in `apps/manager/src/lib/node-client.ts` were untested directly.
+**Learning:** Offbox settings updates include `password` automatically via `offboxPost`, so test expectations for `saveAlertsChannel` and `saveOffboxSettings` payload bodies must expect `password`.
+**Action:** Continue expanding unit test coverage for any remaining node-client helpers.

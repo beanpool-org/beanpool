@@ -21,7 +21,9 @@ import {
     type ChannelCategory as Category,
     CATEGORIES,
     platformMeta,
+    platformName,
     isWebUrl,
+    t,
 } from '@beanpool/core';
 import {
     type MemberCreatorChannel,
@@ -77,7 +79,7 @@ export function PulseIntakePage({
      */
     const loadChannels = useCallback(async () => {
         if (!identity) {
-            setChannelError('No identity available on this device.');
+            setChannelError(t('No identity available on this device.'));
             setLoadingChannels(false);
             return;
         }
@@ -96,7 +98,7 @@ export function PulseIntakePage({
                 setSelectedCategory(list[0].category);
             }
         } catch (e: any) {
-            setChannelError(e?.message || 'Failed to load channels.');
+            setChannelError(e?.message || t('Failed to load channels.'));
         } finally {
             setLoadingChannels(false);
         }
@@ -148,7 +150,7 @@ export function PulseIntakePage({
                 }
             }
         } catch (e: any) {
-            setUrlError(e?.message || 'Unable to resolve post preview.');
+            setUrlError(e?.message || t('Unable to resolve post preview.'));
             setPreviewData(null);
         } finally {
             setResolving(false);
@@ -212,15 +214,15 @@ export function PulseIntakePage({
         if (!identity) return;
         if (resolving) return;
         if (!urlInput.trim()) {
-            setUrlError('Please enter a post URL.');
+            setUrlError(t('Please enter a post URL.'));
             return;
         }
         if (!selectedChannelId) {
-            setSubmitError('Please select which of your channels this post belongs to.');
+            setSubmitError(t('Please select which of your channels this post belongs to.'));
             return;
         }
         if (!isOptedIn) {
-            setSubmitError('Review toggle is currently opted out. Toggle "Publish to Pulse" to submit.');
+            setSubmitError(t('Review toggle is currently opted out. Toggle "Publish to Pulse" to submit.'));
             return;
         }
 
@@ -242,7 +244,7 @@ export function PulseIntakePage({
                 onSuccess();
             }, 900);
         } catch (e: any) {
-            setSubmitError(e?.message || 'Submission failed. Please check the details and retry.');
+            setSubmitError(e?.message || t('Submission failed. Please check the details and retry.'));
         } finally {
             setSubmitting(false);
         }
@@ -256,19 +258,19 @@ export function PulseIntakePage({
                     type="button"
                     onClick={onBack}
                     className="flex items-center gap-1 text-sm font-bold text-nature-600 dark:text-nature-400 hover:text-nature-900 dark:hover:text-white bg-transparent border-none cursor-pointer p-1 transition-colors"
-                    aria-label="Go back"
+                    aria-label={t('Go back')}
                 >
-                    ‹ Back
+                    {t('‹ Back')}
                 </button>
 
                 <h2 className="text-lg sm:text-xl font-extrabold text-nature-950 dark:text-white m-0 tracking-tight text-center flex-1">
-                    Add to Pulse
+                    {t('Add to Pulse')}
                 </h2>
                 <div className="w-12"></div>
             </div>
 
             <p className="text-xs sm:text-sm text-nature-600 dark:text-nature-400 mb-6 leading-relaxed">
-                Share a single post or video from your external channels to your local community feed.
+                {t('Share a single post or video from your external channels to your local community feed.')}
             </p>
 
             {/* No Channels Notice */}
@@ -276,17 +278,17 @@ export function PulseIntakePage({
                 <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-5 mb-6 text-center shadow-sm" role="alert">
                     <div className="text-3xl mb-2 select-none">ℹ️</div>
                     <h3 className="text-base font-bold text-nature-900 dark:text-white mb-2">
-                        No Channels Connected
+                        {t('No Channels Connected')}
                     </h3>
                     <p className="text-xs sm:text-sm text-nature-600 dark:text-nature-400 max-w-sm mx-auto mb-4 leading-relaxed">
-                        To share a post, you need to add your Instagram, TikTok, YouTube, or Blog channel first.
+                        {t('To share a post, you need to add your Instagram, TikTok, YouTube, or Blog channel first.')}
                     </p>
                     <button
                         type="button"
                         onClick={onManageChannels}
                         className="px-4 py-2 rounded-xl text-sm font-bold bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on cursor-pointer shadow-sm"
                     >
-                        Add a Channel
+                        {t('Add a Channel')}
                     </button>
                 </div>
             )}
@@ -301,14 +303,14 @@ export function PulseIntakePage({
             <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-4 sm:p-5 mb-5 shadow-sm">
                 <div className="flex items-center justify-between mb-2">
                     <label htmlFor="pulse-post-url" className="text-xs sm:text-sm font-bold text-nature-900 dark:text-white">
-                        Post URL
+                        {t('Post URL')}
                     </label>
                     <button
                         type="button"
                         onClick={pasteFromClipboard}
                         className="text-xs font-semibold px-2 py-0.5 rounded-md border border-nature-200 dark:border-nature-700 bg-nature-50 dark:bg-nature-800 text-terra-600 dark:text-terra-200 hover:bg-nature-100 dark:hover:bg-nature-700 cursor-pointer"
                     >
-                        Paste
+                        {t('Paste')}
                     </button>
                 </div>
 
@@ -317,7 +319,7 @@ export function PulseIntakePage({
                     type="url"
                     value={urlInput}
                     onChange={e => handleUrlChange(e.target.value)}
-                    placeholder="https://instagram.com/p/... or tiktok.com/..."
+                    placeholder={t('https://instagram.com/p/... or tiktok.com/...')}
                     autoCapitalize="none"
                     autoCorrect="off"
                     spellCheck="false"
@@ -334,7 +336,7 @@ export function PulseIntakePage({
                 {resolving && (
                     <div className="flex items-center gap-2 text-xs text-nature-500 dark:text-nature-400 mt-2.5">
                         <div className="w-3.5 h-3.5 rounded-full border-2 border-nature-300 dark:border-nature-600 border-t-terra-500 animate-spin"></div>
-                        <span>Resolving post preview...</span>
+                        <span>{t('Resolving post preview...')}</span>
                     </div>
                 )}
             </div>
@@ -343,7 +345,7 @@ export function PulseIntakePage({
             {channels.length > 0 && (
                 <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-4 sm:p-5 mb-5 shadow-sm">
                     <label className="block text-xs sm:text-sm font-bold text-nature-900 dark:text-white mb-2.5">
-                        Post from Channel
+                        {t('Post from Channel')}
                     </label>
                     <div className="flex flex-wrap gap-2">
                         {channels.map(ch => {
@@ -368,7 +370,7 @@ export function PulseIntakePage({
                                     aria-pressed={isSelected}
                                 >
                                     <span>{meta.icon}</span>
-                                    <span className="truncate max-w-[180px]">{meta.label}{handleText}</span>
+                                    <span className="truncate max-w-[180px]">{platformName(ch.platform)}{handleText}</span>
                                 </button>
                             );
                         })}
@@ -380,7 +382,7 @@ export function PulseIntakePage({
             {channels.length > 0 && (
                 <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-4 sm:p-5 mb-5 shadow-sm">
                     <label className="block text-xs sm:text-sm font-bold text-nature-900 dark:text-white mb-2.5">
-                        Category
+                        {t('Category')}
                     </label>
                     <div className="flex flex-wrap gap-2">
                         {CATEGORIES.map(cat => {
@@ -398,7 +400,7 @@ export function PulseIntakePage({
                                     aria-pressed={isSelected}
                                 >
                                     <span>{cat.icon}</span>
-                                    <span>{cat.label}</span>
+                                    <span>{t(cat.label)}</span>
                                 </button>
                             );
                         })}
@@ -410,7 +412,7 @@ export function PulseIntakePage({
             {previewData && (
                 <div className="mb-6">
                     <label className="block text-xs sm:text-sm font-bold text-nature-900 dark:text-white mb-2.5">
-                        Review & Confirm
+                        {t('Review & Confirm')}
                     </label>
                     <PulsePreviewCard
                         preview={{
@@ -434,7 +436,7 @@ export function PulseIntakePage({
             {submitSuccess && (
                 <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 p-3 rounded-xl mb-4 text-xs sm:text-sm font-medium flex items-center gap-2" role="alert">
                     <span>✓</span>
-                    <span>Post shared to The Pulse!</span>
+                    <span>{t('Post shared to The Pulse!')}</span>
                 </div>
             )}
 
@@ -448,15 +450,15 @@ export function PulseIntakePage({
                 {submitting ? (
                     <>
                         <div className="w-4 h-4 rounded-full border-2 border-white/40 border-t-white animate-spin"></div>
-                        <span>Submitting...</span>
+                        <span>{t('Submitting...')}</span>
                     </>
                 ) : resolving ? (
                     <>
                         <div className="w-4 h-4 rounded-full border-2 border-white/40 border-t-white animate-spin"></div>
-                        <span>Resolving preview...</span>
+                        <span>{t('Resolving preview...')}</span>
                     </>
                 ) : (
-                    <span>{previewData?.isDuplicate ? 'Update on Pulse' : 'Share to Pulse'}</span>
+                    <span>{previewData?.isDuplicate ? t('Update on Pulse') : t('Share to Pulse')}</span>
                 )}
             </button>
         </div>

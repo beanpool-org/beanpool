@@ -2,12 +2,14 @@ import { word } from '@beanpool/core';
 
 /**
  * The reasons a member picks when reporting. "Child safety" is read by the server as it is picked (services/alerts.ts
- * pickedChildSafety): the owners and admins are told at once, urgent, by count only. Keep its words exactly.
+ * pickedChildSafety): the owners and admins are told at once, urgent, by count only. Keep its words exactly: each reason
+ * is sent as it is written here (English, the node's to read) and SHOWN through t(), as a word() key, in the member's
+ * language (the same keys as the phone's utils/reportReasons.ts).
  */
-export const CHILD_SAFETY_REASON = 'Child safety';
-export const CHILD_SAFETY_HINT = 'A child at risk, or sexual content involving a minor.';
+export const CHILD_SAFETY_REASON = word('Child safety');
+export const CHILD_SAFETY_HINT = word('A child at risk, or sexual content involving a minor.');
 
-export const REPORT_REASONS = ['Spam or scam', 'Offensive content', 'Misleading post', CHILD_SAFETY_REASON, 'Other'];
+export const REPORT_REASONS = [word('Spam or scam'), word('Offensive content'), word('Misleading post'), CHILD_SAFETY_REASON, word('Other')];
 
 /** Where the visitor's line leads: the website's safety page (who reviews reports, and how to write to us). */
 export const VISITOR_REPORT_URL = 'https://beanpool.org/safety.html';
@@ -22,4 +24,7 @@ export const REPORT_WORDS = {
     /** A signed-out visitor has no report of their own (a report is a member's, signed); nothing here sends anything. */
     visitorLine: word('Something wrong here? Members report it from the listing.'),
     visitorLink: word('Without an account, tell us on our safety page.'),
+    /** The line under the reasons: "Child safety: <what it is for>". */
+    childSafety: CHILD_SAFETY_REASON,
+    childSafetyHint: CHILD_SAFETY_HINT,
 } as const;

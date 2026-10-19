@@ -234,8 +234,8 @@ async function main(): Promise<void> {
         const claimScreen = fs.readFileSync(path.join(nativeApp, 'app/claim-community.tsx'), 'utf8');
         const findScreen = fs.readFileSync(path.join(nativeApp, 'app/find-community.tsx'), 'utf8');
         const homeCard = fs.readFileSync(path.join(nativeApp, 'components/home/FindCommunityBody.tsx'), 'utf8');
-        check(['>Claim {name}<', '>Claim code<', '>Your name here<', '>Claim and become owner<', '>Claim a community<', '>Server address<', '>Check this server<'].every(l => claimScreen.includes(l))
-            && ['>Find a community<', '>Claim {claimable.name}<'].every(l => findScreen.includes(l)) && homeCard.includes("text={t('Communities near you')}"),
+        check(["t('Claim {name}'", "t('Claim code')", "t('Your name here')", "t('Claim and become owner')", "t('Claim a community')", "t('Server address')", "t('Check this server')"].every(l => claimScreen.includes(l))
+            && ["t('FIND A COMMUNITY')", "t('Claim {name}', { name: claimable.name })"].every(l => findScreen.includes(l)) && homeCard.includes("text={t('Communities near you')}"),
             'every label the steps name is still on the phone');
         check(readConfig(a).addressRequest === null, 'the request is cleared once the registrar holds the name');
 

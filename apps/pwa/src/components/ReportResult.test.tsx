@@ -74,7 +74,12 @@ describe('the report modal says what became of the report, in the card', () => {
 describe("the Market's inline report form", () => {
     it('says its result under the form, never in an alert()', () => {
         const src = readFileSync(resolve(__dirname, '../pages/MarketplacePage.tsx'), 'utf8');
-        const block = src.slice(src.indexOf('🚩 Report'), src.indexOf("{submittingReport ? 'Sending...' : 'Submit Report'}"));
+        // The form's words come through t() (words S3, web sweep W1): from its Report button to its Submit.
+        const from = src.indexOf("{t('🚩 Report')}");
+        const to = src.indexOf("{submittingReport ? t('Sending...') : t('Submit Report')}");
+        expect(from).toBeGreaterThan(-1);
+        expect(to).toBeGreaterThan(from);
+        const block = src.slice(from, to);
         expect(block).toContain('reportAbuse(');
         expect(block).not.toMatch(/\balert\(/);
         expect(block).toContain('setReportNote({ sent: true, text: t(REPORT_WORDS.sent) })');

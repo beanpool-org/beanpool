@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ml",
     "name": "Malayalam",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-19",
@@ -364,5 +364,106 @@
   },
   "Too many suggestions from your connection recently. Please try again later — your text is still here.": "അടുത്തിടെ നിങ്ങളുടെ കണക്ഷനിൽ നിന്ന് വളരെയധികം നിർദ്ദേശങ്ങൾ വന്നു. ദയവായി പിന്നീട് ശ്രമിക്കുക — നിങ്ങളുടെ എഴുത്ത് ഇവിടെത്തന്നെയുണ്ട്.",
   "This poll is shown at your area (about 10 km around it) to everyone who can read it.": "ഈ വോട്ടെടുപ്പ് നിങ്ങളുടെ പ്രദേശത്ത് (ചുറ്റുമുള്ള ഏകദേശം 10 കി.മീ) ഇത് വായിക്കാൻ കഴിയുന്ന എല്ലാവർക്കും കാണിക്കും.",
-  "You haven't set your area, so members nearby won't see this poll in their list; they can still find it by searching. Set it in Settings → Your area to show it near you.": "നിങ്ങൾ നിങ്ങളുടെ പ്രദേശം സജ്ജമാക്കിയിട്ടില്ല, അതിനാൽ അടുത്തുള്ള അംഗങ്ങൾക്ക് അവരുടെ ലിസ്റ്റിൽ ഈ വോട്ടെടുപ്പ് കാണാൻ കഴിയില്ല; തിരയുന്നതിലൂടെ അവർക്കിത് കണ്ടെത്താം. നിങ്ങളുടെ അടുത്തുള്ളവർക്ക് കാണിക്കാൻ ക്രമീകരണങ്ങൾ → നിങ്ങളുടെ പ്രദേശം എന്നതിൽ ഇത് സജ്ജമാക്കുക."
+  "You haven't set your area, so members nearby won't see this poll in their list; they can still find it by searching. Set it in Settings → Your area to show it near you.": "നിങ്ങൾ നിങ്ങളുടെ പ്രദേശം സജ്ജമാക്കിയിട്ടില്ല, അതിനാൽ അടുത്തുള്ള അംഗങ്ങൾക്ക് അവരുടെ ലിസ്റ്റിൽ ഈ വോട്ടെടുപ്പ് കാണാൻ കഴിയില്ല; തിരയുന്നതിലൂടെ അവർക്കിത് കണ്ടെത്താം. നിങ്ങളുടെ അടുത്തുള്ളവർക്ക് കാണിക്കാൻ ക്രമീകരണങ്ങൾ → നിങ്ങളുടെ പ്രദേശം എന്നതിൽ ഇത് സജ്ജമാക്കുക.",
+  "Project · A leader, a goal, an end date": "പ്രോജക്റ്റ് · ഒരു ലീഡർ, ഒരു ലക്ഷ്യം, അവസാന തീയതി",
+  "Enterprise · Run by its keepers": "സംരംഭം · സൂക്ഷിപ്പുകാർ നടത്തുന്നത്",
+  "Lead convenor\u0004group role": "പ്രധാന കൺവീനർ",
+  "Convenor\u0004group role": "കൺവീനർ",
+  "Member\u0004group role": "അംഗം",
+  "Observer\u0004group role": "നിരീക്ഷകൻ",
+  "Make one of the observers a member first, then hand the lead to them.": "ആദ്യം നിരീക്ഷകരിലൊരാളെ അംഗമാക്കുക, തുടർന്ന് അവർക്ക് നേതൃത്വം നൽകുക.",
+  "{name} receives {n} Beans. The 1.5% trade fee ({fee} Beans) goes to the Commons.|{name} receives {n} Beans. The 1.5% trade fee ({fee} Beans) goes to the Commons.": {
+    "one": "{name}-ന് {n} പയർ ലഭിക്കുന്നു. 1.5% വ്യാപാര ഫീസ് ({fee} പയർ) കോമൺസിലേക്ക് പോകുന്നു.",
+    "other": "{name}-ന് {n} പയർ ലഭിക്കുന്നു. 1.5% വ്യാപാര ഫീസ് ({fee} പയർ) കോമൺസിലേക്ക് പോകുന്നു."
+  },
+  "Enter an amount in Beans, like 40 or 12.50.": "40 അല്ലെങ്കിൽ 12.50 പോലെ, പയറിൽ ഒരു തുക നൽകുക.",
+  "The amount must be more than 0 Beans.": "തുക 0 പയറിലും കൂടുതലായിരിക്കണം.",
+  "The enterprise holds {n} Beans, so it can't pay more than that.|The enterprise holds {n} Beans, so it can't pay more than that.": {
+    "one": "സംരംഭത്തിൽ {n} പയർ ഉണ്ട്, അതിനാൽ അതിൽ കൂടുതൽ നൽകാൻ കഴിയില്ല.",
+    "other": "സംരംഭത്തിൽ {n} പയർ ഉണ്ട്, അതിനാൽ അതിൽ കൂടുതൽ നൽകാൻ കഴിയില്ല."
+  },
+  "Paying a keeper is a wage, and a wage comes only out of what the enterprise has earned above its costs (its earned surplus): {n} Beans now.|Paying a keeper is a wage, and a wage comes only out of what the enterprise has earned above its costs (its earned surplus): {n} Beans now.": {
+    "one": "ഒരു സൂക്ഷിപ്പുകാരന് നൽകുന്നത് വേതനമാണ്, വേതനം വരുന്നത് ചെലവുകൾ കഴിഞ്ഞ് സംരംഭം നേടിയതിൽ നിന്ന് (അതിന്റെ മിച്ച വരുമാനം) മാത്രമാണ്: ഇപ്പോൾ {n} പയർ.",
+    "other": "ഒരു സൂക്ഷിപ്പുകാരന് നൽകുന്നത് വേതനമാണ്, വേതനം വരുന്നത് ചെലവുകൾ കഴിഞ്ഞ് സംരംഭം നേടിയതിൽ നിന്ന് (അതിന്റെ മിച്ച വരുമാനം) മാത്രമാണ്: ഇപ്പോൾ {n} പയർ."
+  },
+  "Paying a keeper is a wage: only out of what the project has earned.": "ഒരു സൂക്ഷിപ്പുകാരന് നൽകുന്നത് വേതനമാണ്: പ്രോജക്റ്റ് നേടിയതിൽ നിന്ന് മാത്രം.",
+  "Paying a keeper is a wage: only out of what the enterprise has earned.": "ഒരു സൂക്ഷിപ്പുകാരന് നൽകുന്നത് വേതനമാണ്: സംരംഭം നേടിയതിൽ നിന്ന് മാത്രം.",
+  "Paying a keeper is a wage: only out of what the project has earned above its costs, {n} Beans now.|Paying a keeper is a wage: only out of what the project has earned above its costs, {n} Beans now.": {
+    "one": "ഒരു സൂക്ഷിപ്പുകാരന് നൽകുന്നത് വേതനമാണ്: ചെലവുകൾ കഴിഞ്ഞ് പ്രോജക്റ്റ് നേടിയതിൽ നിന്ന് മാത്രം, ഇപ്പോൾ {n} പയർ.",
+    "other": "ഒരു സൂക്ഷിപ്പുകാരന് നൽകുന്നത് വേതനമാണ്: ചെലവുകൾ കഴിഞ്ഞ് പ്രോജക്റ്റ് നേടിയതിൽ നിന്ന് മാത്രം, ഇപ്പോൾ {n} പയർ."
+  },
+  "Paying a keeper is a wage: only out of what the enterprise has earned above its costs, {n} Beans now.|Paying a keeper is a wage: only out of what the enterprise has earned above its costs, {n} Beans now.": {
+    "one": "ഒരു സൂക്ഷിപ്പുകാരന് നൽകുന്നത് വേതനമാണ്: ചെലവുകൾ കഴിഞ്ഞ് സംരംഭം നേടിയതിൽ നിന്ന് മാത്രം, ഇപ്പോൾ {n} പയർ.",
+    "other": "ഒരു സൂക്ഷിപ്പുകാരന് നൽകുന്നത് വേതനമാണ്: ചെലവുകൾ കഴിഞ്ഞ് സംരംഭം നേടിയതിൽ നിന്ന് മാത്രം, ഇപ്പോൾ {n} പയർ."
+  },
+  "Pay Beans out": "പയർ നൽകുക",
+  "Remove a collaborator": "ഒരു സഹകാരിയെ നീക്കം ചെയ്യുക",
+  "Remove a keeper": "ഒരു സൂക്ഷിപ്പുകാരനെ നീക്കം ചെയ്യുക",
+  "Make another keeper the lead": "മറ്റൊരു സൂക്ഷിപ്പുകാരനെ പ്രധാന സൂക്ഷിപ്പുകാരനാക്കുക",
+  "You're not in this group now, but you were when these votes opened, so you can still vote on them.": "നിങ്ങൾ ഇപ്പോൾ ഈ ഗ്രൂപ്പിൽ ഇല്ല, എന്നാൽ ഈ വോട്ടുകൾ തുടങ്ങിയപ്പോൾ നിങ്ങൾ ഉണ്ടായിരുന്നു, അതിനാൽ നിങ്ങൾക്ക് ഇപ്പോഴും വോട്ട് ചെയ്യാം.",
+  "You're not in this group now. These are the votes you were part of.": "നിങ്ങൾ ഇപ്പോൾ ഈ ഗ്രൂപ്പിൽ ഇല്ല. നിങ്ങൾ ഭാഗമായിരുന്ന വോട്ടുകളാണിവ.",
+  "someone in the group": "ഗ്രൂപ്പിലുള്ള ആരെങ്കിലും",
+  "someone": "ആരെങ്കിലും",
+  "Pay {n} Beans to {name}|Pay {n} Beans to {name}": {
+    "one": "{name}-ന് {n} പയർ നൽകുക",
+    "other": "{name}-ന് {n} പയർ നൽകുക"
+  },
+  "Remove {name} as a collaborator": "{name}-നെ സഹകാരി സ്ഥാനത്ത് നിന്ന് നീക്കം ചെയ്യുക",
+  "Remove {name} as a keeper": "{name}-നെ സൂക്ഷിപ്പുകാര സ്ഥാനത്ത് നിന്ന് നീക്കം ചെയ്യുക",
+  "Make {name} the leader": "{name}-നെ ലീഡറാക്കുക",
+  "Make {name} the lead keeper": "{name}-നെ പ്രധാന സൂക്ഷിപ്പുകാരനാക്കുക",
+  "Make {name} the lead convenor": "{name}-നെ പ്രധാന കൺവീനറാക്കുക",
+  "Make {name} a convenor": "{name}-നെ ഒരു കൺവീനറാക്കുക",
+  "Make {name} a member, no longer a convenor": "{name}-നെ കൺവീനറല്ലാതാക്കി അംഗമാക്കുക",
+  "Remove {name} from the group": "ഗ്രൂപ്പിൽ നിന്ന് {name}-നെ നീക്കം ചെയ്യുക",
+  "Change who can join: {policy}": "ആർക്കൊക്കെ ചേരാമെന്നത് മാറ്റുക: {policy}",
+  "Close the group. Its chat stays to read.": "ഗ്രൂപ്പ് അവസാനിപ്പിക്കുക. വായിക്കാൻ ചാറ്റ് നിലനിൽക്കും.",
+  "A vote": "ഒരു വോട്ട്",
+  "{voted} of {roll} has voted. {quorum} must vote. Yes and No show when it closes.": "{roll}-ൽ {voted} പേർ വോട്ട് ചെയ്തു. {quorum} പേർ വോട്ട് ചെയ്യണം. വോട്ടെടുപ്പ് അവസാനിക്കുമ്പോൾ Yes, No കാണിക്കും.",
+  "{n} of {roll} have voted. {quorum} must vote. Yes and No show when it closes.|{n} of {roll} have voted. {quorum} must vote. Yes and No show when it closes.": {
+    "one": "{roll}-ൽ {n} പേർ വോട്ട് ചെയ്തു. {quorum} പേർ വോട്ട് ചെയ്യണം. വോട്ടെടുപ്പ് അവസാനിക്കുമ്പോൾ Yes, No കാണിക്കും.",
+    "other": "{roll}-ൽ {n} പേർ വോട്ട് ചെയ്തു. {quorum} പേർ വോട്ട് ചെയ്യണം. വോട്ടെടുപ്പ് അവസാനിക്കുമ്പോൾ Yes, No കാണിക്കും."
+  },
+  "Yes {yes} · No {no}. {voted} of {roll} voted.": "Yes {yes} · No {no}. {roll}-ൽ {voted} പേർ വോട്ട് ചെയ്തു.",
+  "Open\u0004a vote": "തുറന്നത്",
+  "Passed and carried out": "പാസ്സായി നടപ്പിലാക്കി",
+  "Passed": "പാസ്സായി",
+  "Did not pass": "പാസ്സായില്ല",
+  "Not enough people voted": "ആവശ്യത്തിന് ആളുകൾ വോട്ട് ചെയ്തില്ല",
+  "Not enough keepers voted": "ആവശ്യത്തിന് സൂക്ഷിപ്പുകാർ വോട്ട് ചെയ്തില്ല",
+  "Passed, but not carried out: {reason}": "പാസ്സായി, പക്ഷെ നടപ്പിലാക്കിയില്ല: {reason}",
+  "Passed, but not carried out": "പാസ്സായി, പക്ഷെ നടപ്പിലാക്കിയില്ല",
+  "Passed, but there was nothing to do: {reason}": "പാസ്സായി, പക്ഷെ ഒന്നും ചെയ്യാനുണ്ടായിരുന്നില്ല: {reason}",
+  "Passed, but there was nothing to do": "പാസ്സായി, പക്ഷെ ഒന്നും ചെയ്യാനുണ്ടായിരുന്നില്ല",
+  "Closed\u0004a vote": "അവസാനിച്ചത്",
+  "closing now": "ഇപ്പോൾ അവസാനിക്കുന്നു",
+  "closes in {n} day|closes in {n} days": {
+    "one": "{n} ദിവസത്തിനുള്ളിൽ അവസാനിക്കും",
+    "other": "{n} ദിവസങ്ങൾക്കുള്ളിൽ അവസാനിക്കും"
+  },
+  "closes in {n} hour|closes in {n} hours": {
+    "one": "{n} മണിക്കൂറിനുള്ളിൽ അവസാനിക്കും",
+    "other": "{n} മണിക്കൂറുകൾക്കുള്ളിൽ അവസാനിക്കും"
+  },
+  "closes within the hour": "ഒരു മണിക്കൂറിനുള്ളിൽ അവസാനിക്കും",
+  "Nobody sees who voted how. In a very small group, though, the result and who has voted can show it.": "ആര് എങ്ങനെ വോട്ട് ചെയ്തുവെന്ന് ആരും കാണില്ല. എന്നാൽ വളരെ ചെറിയൊരു ഗ്രൂപ്പിൽ, ഫലവും ആരൊക്കെ വോട്ട് ചെയ്തുവെന്നതും അത് വ്യക്തമാക്കിയേക്കാം.",
+  "anyone can join": "ആർക്കും ചേരാം",
+  "people ask, and a convenor lets them in": "ആളുകൾ ചോദിക്കുന്നു, കൺവീനർ അവരെ അനുവദിക്കുന്നു",
+  "by invitation only": "ക്ഷണത്തിലൂടെ മാത്രം",
+  "a new rule": "ഒരു പുതിയ നിയമം",
+  "Choose a new lead convenor": "പുതിയ പ്രധാന കൺവീനറെ തിരഞ്ഞെടുക്കുക",
+  "Make someone a convenor": "ഒരാളെ കൺവീനറാക്കുക",
+  "Make a convenor a member": "ഒരു കൺവീനറെ അംഗമാക്കുക",
+  "Remove someone": "ഒരാളെ നീക്കം ചെയ്യുക",
+  "Change who can join": "ആർക്കൊക്കെ ചേരാമെന്നത് മാറ്റുക",
+  "Close the group": "ഗ്രൂപ്പ് അവസാനിപ്പിക്കുക",
+  "Who should lead?": "ആരാണ് നേതൃത്വം നൽകേണ്ടത്?",
+  "Who should be a convenor?": "ആരാണ് കൺവീനറാകേണ്ടത്?",
+  "Which convenor?": "ഏത് കൺവീനർ?",
+  "Remove whom?": "ആരെ നീക്കം ചെയ്യണം?",
+  "Open: anyone can join": "തുറന്നത്: ആർക്കും ചേരാം",
+  "Ask to join": "ചേരാൻ അഭ്യർത്ഥിക്കുക",
+  "Invite only": "ക്ഷണം വഴി മാത്രം",
+  "The group was closed by its members’ vote. Its chat stays to read.": "അംഗങ്ങളുടെ വോട്ടെടുപ്പിലൂടെ ഗ്രൂപ്പ് അവസാനിപ്പിച്ചു. വായിക്കാൻ ചാറ്റ് നിലനിൽക്കും.",
+  "Votes among the group's members and convenors; observers watch. More than half must vote. 7 days, or sooner once the answer can't change.": "ഗ്രൂപ്പിലെ അംഗങ്ങൾക്കും കൺവീനർമാർക്കും ഇടയിലുള്ള വോട്ടെടുപ്പ്; നിരീക്ഷകർ വീക്ഷിക്കുന്നു. പകുതിയിലധികം പേർ വോട്ട് ചെയ്യണം. 7 ദിവസം, അല്ലെങ്കിൽ മാറ്റമില്ലാത്ത ഫലമായാൽ അതിന് മുമ്പ്."
 }

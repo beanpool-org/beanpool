@@ -30,7 +30,7 @@ import {
     approxInstantMs, deviceZone, deviceZoneId, eventAdjustedWords, eventClockBody, eventLinkProblem, eventZoneLine, zoneOptions,
     type EventZoneSource,
 } from '../lib/event-zone';
-import { offsetMinutesOf, repeatRefusalText, seriesMovedFromLine, t, zoneLabelFor, type RepeatChoiceKey } from '@beanpool/core';
+import { offsetMinutesOf, repeatRefusalText, seriesMovedFromLine, t, zoneLabelFor, amountRefusalWords, ANY_DECIMALS, isAmbiguousAmount, parseAmount, type RepeatChoiceKey } from '@beanpool/core';
 import { EventRepeatFields, eventRepeatProblem } from '../components/EventRepeatFields';
 import { haversineDistance, loadRadiusSettings } from '../lib/geo';
 import { nearRead, nearParams, listingDistanceKm } from '../lib/listings-near';
@@ -1113,7 +1113,10 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
         // Validate all fields
         const errors = new Set<string>();
         if (!newPostTitle.trim()) errors.add('title');
-        if (!priceMarked && (newPostCredits.trim() === '' || isNaN(Number(newPostCredits)) || Number(newPostCredits) < 0)) errors.add('credits');
+        // The price in the language's decimal mark (core parseAmount): fr "12,5" is 12.5, any decimals, as before.
+        const priceRead = parseAmount(newPostCredits, undefined, ANY_DECIMALS);
+        const priceValue = priceRead.ok ? priceRead.value : NaN;
+        if (!priceMarked && (newPostCredits.trim() === '' || isNaN(priceValue) || priceValue < 0)) errors.add('credits');
         if (!newPostDescription.trim()) errors.add('description');
         if (postLat == null || postLng == null) errors.add('location');
         if (photoRequired && newPostPhotos.length < 1) errors.add('photos');
@@ -1135,7 +1138,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                 category: newPostCategory,
                 title: newPostTitle.trim(),
                 description: newPostDescription.trim(),
-                credits: priceMarked ? 0 : Number(newPostCredits) || 0,
+                credits: priceMarked ? 0 : priceValue || 0,
                 priceType: priceMarked ? 'fixed' : newPostPriceType,
                 authorPublicKey: identity?.publicKey || '',
                 repeatable: newPostRepeatable,
@@ -2817,11 +2820,11 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                 }`}
                             />
                             {!priceMarked && (<>
+                            {/* Text, not type="number": a number box reads "12,5" by the browser's language, not the member's (#2202). */}
                             <input
                                 placeholder="B"
-                                type="number"
-                                min="0"
-                                step="0.01"
+                                type="text"
+                                inputMode="decimal"
                                 value={newPostCredits}
                                 onChange={e => { setNewPostCredits(e.target.value); setValidationErrors(prev => { const n = new Set(prev); n.delete('credits'); return n; }); }}
                                 className={`w-20 py-3 px-2 rounded-xl border bg-white dark:bg-nature-800 text-nature-900 dark:text-white text-[15px] focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm text-center font-bold tracking-tight transition-all ${
@@ -2854,7 +2857,10 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                             className="text-[13.5px] text-nature-700 dark:text-nature-300 mt-1 mb-3 font-semibold cursor-pointer hover:text-nature-900 dark:hover:text-white transition-colors"
                         >
                             {(() => {
-                                const parsed = parseFloat(newPostCredits);
+                                // The price as the post sends it (handleCreatePost): what could be a thousand says so here.
+                                const read = parseAmount(newPostCredits, undefined, ANY_DECIMALS);
+                                if (!read.ok && isAmbiguousAmount(read.refusal)) return `${amountRefusalWords(read.refusal)} `;
+                                const parsed = read.ok ? read.value : NaN;
                                 if (!isNaN(parsed) && parsed > 0) {
                                     const net = Math.round(parsed * 0.985 * 100) / 100;
                                     return `1.5% fee: ${newPostType === 'offer' ? 'You will receive' : 'Fulfiller receives'} ${net.toFixed(2)} B. `;

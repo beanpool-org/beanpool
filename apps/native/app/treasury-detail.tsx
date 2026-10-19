@@ -28,7 +28,7 @@ import {
     successionDeadlineText, myChoice, successionHeading, successionExplainer, type KeeperChangeLite,
 } from '../utils/keeper-governance';
 import { decodeBase64, decodeUtf8 } from '../utils/crypto';
-import { formatDate, formatNumber, groupKindLine, inCapitalsOf, isWholeCents, keeperWords, t, tn, isSampleId } from '@beanpool/core';
+import { formatDate, formatNumber, groupKindLine, inCapitalsOf, isWholeCents, keeperWords, t, tn, isSampleId, parseAmount, amountRefusalWords, isAmbiguousAmount, ANY_DECIMALS } from '@beanpool/core';
 import { loadIdentity } from '../utils/identity';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { EnterpriseDecisions } from '../components/EnterpriseDecisions';
@@ -590,7 +590,11 @@ export default function TreasuryDetailScreen() {
 
     const handleSweep = async () => {
         if (!treasuryKey || sweeping) return;
-        const amt = Number(sweepAmount);
+        // The language's decimal mark (core parseAmount): fr "12,5" is 12.5, never refused as not a number; "1.000", which
+        // could be a thousand, is refused in words that say so. The node's cents rule decides the decimals, as before.
+        const read = parseAmount(sweepAmount, undefined, ANY_DECIMALS);
+        if (!read.ok && isAmbiguousAmount(read.refusal)) { Alert.alert(t('Enter an amount'), amountRefusalWords(read.refusal)); return; }
+        const amt = read.ok ? read.value : NaN;
         if (isNaN(amt) || amt <= 0) { Alert.alert(t('Enter an amount'), t('Type a positive number of Beans to sweep into the Commons.')); return; }
         if (amt > balance) {
             Alert.alert(t('Not enough surplus'), project
@@ -779,7 +783,14 @@ export default function TreasuryDetailScreen() {
 
     const handlePledge = async () => {
         if (!treasuryKey || pledging) return;
-        const amt = Number(pledgeAmount);
+        // The language's decimal mark (core parseAmount): fr "12,5" is 12.5, never refused as not a number; "1.000", which
+        // could be a thousand, is refused in words that say so. The cents guard below decides the decimals, as before.
+        const read = parseAmount(pledgeAmount, undefined, ANY_DECIMALS);
+        if (!read.ok && isAmbiguousAmount(read.refusal)) {
+            Alert.alert(t('Invalid Amount'), amountRefusalWords(read.refusal));
+            return;
+        }
+        const amt = read.ok ? read.value : NaN;
         if (isNaN(amt) || amt <= 0) {
             Alert.alert(t('Invalid Amount'), t('Please enter a positive number of Beans to pledge.'));
             return;
@@ -885,7 +896,8 @@ export default function TreasuryDetailScreen() {
     const handleCompleteDeal = (d: any) => {
         if (!treasuryKey) return;
         if (d.price_type && d.price_type !== 'fixed') {
-            setHourlyDealHours(d.hours ? String(d.hours) : '1');
+            // In the language's way ("2,5"), so it reads back as the same hours.
+            setHourlyDealHours(d.hours ? formatNumber(d.hours) : '1');
             setHourlyDealPrompt(d);
             return;
         }
@@ -1318,8 +1330,10 @@ export default function TreasuryDetailScreen() {
                                         <TextInput
                                             style={styles.joinInput}
                                             value={joinBackingPledge}
-                                            onChangeText={(t) => {
-                                                const raw = Math.floor(Number(t) || 0);
+                                            onChangeText={(typed) => {
+                                                // Whole Beans of standing, read as every typed amount is (core parseAmount).
+                                                const read = parseAmount(typed, undefined, ANY_DECIMALS);
+                                                const raw = Math.floor(read.ok ? read.value : 0);
                                                 const clamped = Math.max(0, Math.min(availableToBack, raw));
                                                 setJoinBackingPledge(isNaN(raw) ? '0' : String(clamped));
                                             }}
@@ -2114,7 +2128,7 @@ export default function TreasuryDetailScreen() {
                                 value={hourlyDealHours}
                                 onChangeText={setHourlyDealHours}
                                 keyboardType="numeric"
-                                placeholder={t('e.g. 2.5')}
+                                placeholder={t('e.g. {amount}', { amount: 2.5 })}
                                 placeholderTextColor={colors.text.muted}
                                 autoFocus
                             />
@@ -2131,8 +2145,14 @@ export default function TreasuryDetailScreen() {
                                     accessibilityRole="button"
                                     onPress={async () => {
                                         // A decimal comma as the example shows it in comma languages ("ex. 2,5"), and as a comma
-                                        // phone's decimal pad types it.
-                                        const parsed = Number(hourlyDealHours.trim().replace(',', '.'));
+                                        // phone's decimal pad types it: the one reading of a typed number (core parseAmount). Any
+                                        // decimals, as before; "1.000" in a comma language could be a thousand, so it is refused.
+                                        const read = parseAmount(hourlyDealHours, undefined, ANY_DECIMALS);
+                                        if (!read.ok && isAmbiguousAmount(read.refusal)) {
+                                            Alert.alert(t('Invalid Hours'), amountRefusalWords(read.refusal));
+                                            return;
+                                        }
+                                        const parsed = read.ok ? read.value : NaN;
                                         if (isNaN(parsed) || parsed <= 0) {
                                             Alert.alert(t('Invalid Hours'), t('Please enter a valid positive number of hours.'));
                                             return;

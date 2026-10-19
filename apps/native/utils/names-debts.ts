@@ -8,6 +8,7 @@
  * opened. Every request here is signed by the member's own key (node-post), as the node's middleware requires. Amounts
  * are Beans to the cent.
  */
+import { parseAmount } from '@beanpool/core';
 import { signedGet, signedPost } from './node-post';
 import type { BeanPoolIdentity } from './identity';
 import { confirmPayment, sendConfirmedPayment, isNoAnswer, type ConfirmedPayment, type SendResult } from './payment-request';
@@ -189,11 +190,14 @@ export function fetchMyRepayment(node: string, identity: BeanPoolIdentity): Prom
 /** A pay-back code as an admin shares it: the debt record's id, 32 hexadecimal characters. */
 export const debtCodeOk = (code: string): boolean => /^[0-9a-f]{32}$/.test(code.trim().toLowerCase());
 
-/** Beans typed by a member, to the cent; null if it isn't an amount above 0 with at most two decimals. */
+/**
+ * Beans typed by a member, to the cent; null if it isn't an amount above 0 with at most two decimals. Read as every
+ * typed amount is (core parseAmount): the language's decimal mark and digits; "1.000" or "1,000" is refused, never a guess.
+ */
 export function parseBeans(text: string): number | null {
-    const t = text.trim().replace(',', '.');
-    if (!/^\d+(\.\d{1,2})?$/.test(t)) return null;
-    const n = Math.round(Number(t) * 100) / 100;
+    const read = parseAmount(text);
+    if (!read.ok) return null;
+    const n = Math.round(read.value * 100) / 100;
     return n > 0 ? n : null;
 }
 

@@ -11,6 +11,7 @@
  * members wrote (a vote's title and why) and the node's own words (an execution reason) are shown as written.
  */
 import { TRANSACTION_FEE_RATE } from './ledger.js';
+import { amountRefusalWords, parseAmount } from './amount-input.js';
 import { t, tn, word } from './words.js';
 
 export type ScopedEffect = 'pay_out' | 'remove_keeper' | 'replace_lead';
@@ -106,9 +107,12 @@ export const PAY_OUT_WAGE_WORDS = 'Paying a keeper is a wage, and a wage comes o
  * surplus not known (null) is left to the node. Returns the amount, or the words to show under the field.
  */
 export function checkPayOutAmount(typed: string, held: number, wageSurplus?: number | null): { amount: number } | { error: string } {
-    const asTyped = typed.trim().replace(',', '.');
-    if (!/^\d+(\.\d{1,2})?$/.test(asTyped)) return { error: t('Enter an amount in Beans, like 40 or 12.50.') };
-    const amount = Number(asTyped);
+    // The one reading of a typed amount (amount-input.ts): the language's decimal mark and digits, cents at most.
+    const read = parseAmount(typed);
+    if (!read.ok) {
+        return { error: read.refusal === 'empty' || read.refusal === 'not-a-number' ? t('Enter an amount in Beans, like 40 or 12.50.') : amountRefusalWords(read.refusal) };
+    }
+    const amount = read.value;
     if (!(amount > 0)) return { error: t('The amount must be more than 0 Beans.') };
     if (Math.round(amount * 100) > heldCents(held)) {
         const n = Number(beansHeld(held));

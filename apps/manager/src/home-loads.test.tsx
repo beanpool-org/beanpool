@@ -1,7 +1,7 @@
 import { render, screen, fireEvent, act, waitFor, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { App } from './App';
-import { NODE_DATA_ANSWER_MS } from './lib/node-client';
+import { NODE_DATA_ANSWER_MS, NODE_DIAG_ANSWER_MS } from './lib/node-client';
 
 /**
  * Settings' Home on a real community, as the owner reaches it from the phone's "Needs you" (Marty, 19 Oct, Mullumbimby on
@@ -178,6 +178,45 @@ describe('Settings Home after the phone link: real figures, or "couldn\'t load",
             });
             await step(1_000);
             expect(card(/Members/)).toHaveTextContent('34');
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('a diagnostics read that never answers ends in "couldn\'t load" with Retries, not "loading" with none (review r4309522121)', async () => {
+        vi.useFakeTimers();
+        try {
+            let stall = true;
+            const node: NodeStub = {
+                signedIn: false, hold: false, held: [],
+                data: () => ok(communityData()),
+                diag: () => (stall ? new Promise(() => { /* the phone link never brings it */ }) : ok(diagnostics())),
+            };
+            const fetchMock = stubNode(node);
+            await openFromPhone();
+            await step(1_000);
+            expect(card(/Members/)).toHaveTextContent('34');
+            expect(screen.getByTestId('home-connections')).toHaveTextContent('Connections loading…');
+            await step(NODE_DIAG_ANSWER_MS);
+            expect(screen.getByTestId('home-connections')).toHaveTextContent("Connections couldn't load");
+            expect(screen.queryByText(/0 active connections/)).toBeNull();
+            const panel = screen.getByTestId('home-action-required');
+            expect(panel).toHaveTextContent("Couldn't check storage and the server's alerts (The node didn't answer within 30 seconds)");
+            expect(within(panel).getByRole('button', { name: 'Retry the checks' })).toBeInTheDocument();
+            expect(screen.queryByText(/All clear/)).toBeNull();
+            // Never two at once while one is stalled; the poll asks again once it has ended, and Home still says why.
+            const diagReads = () => fetchMock.mock.calls.filter(([u]) => String(u).includes(DIAGNOSTICS)).length;
+            expect(diagReads()).toBe(1);
+            await step(5_000);
+            expect(diagReads()).toBe(2);
+            expect(screen.getByTestId('home-connections')).toHaveTextContent("Connections couldn't load");
+            stall = false;
+            await act(async () => {
+                fireEvent.click(screen.getByRole('button', { name: 'Retry connections' }));
+            });
+            await step(1_000);
+            expect(screen.getByTestId('home-connections')).toHaveTextContent('3 active connections');
+            expect(within(screen.getByTestId('home-action-required')).getByText(/All clear/)).toBeInTheDocument();
         } finally {
             vi.useRealTimers();
         }

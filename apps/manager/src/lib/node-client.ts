@@ -603,16 +603,58 @@ export function isAuthFailure(message: string): boolean {
         || message.includes(PASSWORD_NEEDS_2FA_HINT) || message.includes(PASSWORD_RETIRED_HINT);
 }
 
+/**
+ * Time limits for one read from a node: its answer (status and headers) within `answerMs` of the request, and its body
+ * within `allMs` of it. Each rejects in words and stops the request; a fetch that ignored the abort still ends here. Each
+ * limit's timer stops when its own work settles: the answer's, left running, aborted a body still arriving after it
+ * (review r4309522009). `answer` starts the clock again, so a second request (a retry after the 2FA code) has its own.
+ */
+export function nodeReadLimits(answerMs: number, allMs: number, words: { answer: string; all: string }) {
+    const ctl = new AbortController();
+    let started = Date.now();
+    const within = <T>(work: Promise<T>, ms: number, why: string): Promise<T> => {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        return Promise.race([work, new Promise<never>((_, reject) => {
+            timer = setTimeout(() => {
+                const e = new Error(why);
+                reject(e);
+                ctl.abort(e);
+            }, ms);
+        })]).finally(() => clearTimeout(timer));
+    };
+    return {
+        signal: ctl.signal,
+        answer: <T>(request: Promise<T>): Promise<T> => {
+            started = Date.now();
+            return within(request, answerMs, words.answer);
+        },
+        body: <T>(read: Promise<T>): Promise<T> => within(read, allMs - (Date.now() - started), words.all),
+    };
+}
+
+/**
+ * Diagnostics carry the server's alerts, so a stalled read fails rather than leave Home on "loading" with no Retry
+ * (review r4309522121). About a kilobyte: the node answers within 30 s, and all of it arrives within a minute.
+ */
+export const NODE_DIAG_ANSWER_MS = 30_000;
+export const NODE_DIAG_ALL_MS = 60_000;
+export const diagnosticsReadLimits = () => nodeReadLimits(NODE_DIAG_ANSWER_MS, NODE_DIAG_ALL_MS, {
+    answer: "The node didn't answer within 30 seconds",
+    all: "The node's diagnostics didn't all arrive within a minute",
+});
+
 export async function fetchDiagnostics(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<DiagnosticsResponse> {
     const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/diagnostics');
-    const res = await fetch(endpoint, {
+    const limits = diagnosticsReadLimits();
+    const res = await limits.answer(fetch(endpoint, {
         headers: buildAdminHeaders(adminPassword, tfaToken),
         cache: 'no-store',
-    });
+        signal: limits.signal,
+    }));
     if (!res.ok) {
-        throw (await passwordNeeds2faError(res)) ?? new Error(`HTTP ${res.status}: ${res.statusText}`);
+        throw (await limits.body(passwordNeeds2faError(res))) ?? new Error(`HTTP ${res.status}: ${res.statusText}`);
     }
-    return res.json();
+    return limits.body(res.json());
 }
 
 export async function acknowledgeShutdownStatus(
@@ -1016,31 +1058,20 @@ export const NODE_DATA_ALL_MS = 5 * 60_000;
 
 export async function fetchNodeData(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<NodeDataPayload> {
     const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/data');
-    const ctl = new AbortController();
-    // Rejects with `words` once `ms` pass, and stops the request: a fetch that ignored the abort still ends here. Each
-    // limit's timer stops when its own work settles: the answer's, left running, aborted a body still arriving after 30 s
-    // (review r4309522009).
-    const within = <T>(work: Promise<T>, ms: number, words: string): Promise<T> => {
-        let timer: ReturnType<typeof setTimeout> | undefined;
-        return Promise.race([work, new Promise<never>((_, reject) => {
-            timer = setTimeout(() => {
-                const e = new Error(words);
-                reject(e);
-                ctl.abort(e);
-            }, ms);
-        })]).finally(() => clearTimeout(timer));
-    };
-    const started = Date.now();
-    const res = await within(fetch(endpoint, {
+    const limits = nodeReadLimits(NODE_DATA_ANSWER_MS, NODE_DATA_ALL_MS, {
+        answer: "The node didn't answer within 30 seconds",
+        all: "The node's data didn't all arrive within 5 minutes",
+    });
+    const res = await limits.answer(fetch(endpoint, {
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
         body: JSON.stringify({ ...passwordField(adminPassword) }),
-        signal: ctl.signal,
-    }), NODE_DATA_ANSWER_MS, "The node didn't answer within 30 seconds");
+        signal: limits.signal,
+    }));
     if (!res.ok) {
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
     }
-    const json = await within(res.json(), NODE_DATA_ALL_MS - (Date.now() - started), "The node's data didn't all arrive within 5 minutes");
+    const json = await limits.body(res.json());
     return normalizeNodeData(json);
 }
 

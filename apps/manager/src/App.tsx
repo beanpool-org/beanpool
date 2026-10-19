@@ -12,6 +12,7 @@ import {
 } from './lib/profiles';
 import {
     fetchDiagnostics,
+    diagnosticsReadLimits,
     fetchGatewayConfig,
     updateGatewayConfig,
     fetchNodeData,
@@ -822,16 +823,19 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
             try {
                 // Use raw fetch instead of fetchDiagnostics so we can inspect
                 // the response body for totpRequired errors (which node-client's
-                // helper throws away).
+                // helper throws away). The same time limits, though: a request that never settled held
+                // diagInFlightRef, so no other was asked and Home said "loading" with no Retry (review r4309522121).
+                // The wait for the operator's 2FA code is not limited, only the requests either side of it.
                 const diagUrl = resolveNodeApiUrl(p.url, '/api/local/admin/diagnostics');
                 const diagHeaders = buildAdminHeaders(nodeCredential(p), getTfaSessionToken(p.id));
-                const diagRes = await fetch(diagUrl, { headers: diagHeaders, cache: 'no-store' });
+                const limits = diagnosticsReadLimits();
+                const diagRes = await limits.answer(fetch(diagUrl, { headers: diagHeaders, cache: 'no-store', signal: limits.signal }));
 
                 let totpRetry = false;
                 let sessionToken: string | undefined;
                 if (diagRes.status === 401) {
                     let body: Record<string, unknown> | null = null;
-                    try { body = await diagRes.json(); } catch {}
+                    try { body = await limits.body(diagRes.json()); } catch {}
                     if (body?.sessionExpired && !isFleetMode) {
                         sessionEndedRef.current(typeof body.error === 'string' ? body.error : undefined);
                         return;
@@ -854,11 +858,11 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                         if (totpRetry) {
                             // Retry diagnostics with the session token
                             const retryHeaders = buildAdminHeaders(nodeCredential(p), sessionToken);
-                            const retryRes = await fetch(diagUrl, { headers: retryHeaders, cache: 'no-store' });
+                            const retryRes = await limits.answer(fetch(diagUrl, { headers: retryHeaders, cache: 'no-store', signal: limits.signal }));
                             if (!retryRes.ok) {
                                 throw new Error(`HTTP ${retryRes.status}: ${retryRes.statusText}`);
                             }
-                            const data = await retryRes.json();
+                            const data = await limits.body(retryRes.json());
                             diagSuccess(p, data, opts);
                         } else {
                             // User cancelled the TOTP prompt
@@ -869,11 +873,11 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                 }
 
                 // A node with two-factor sign-in off refuses the password per request (step 7c): its words, not "offline".
-                const needs2fa = await passwordNeeds2faError(diagRes);
+                const needs2fa = await limits.body(passwordNeeds2faError(diagRes));
                 if (needs2fa) throw needs2fa;
                 if (diagRes.status === 403 && !isFleetMode) {
                     // The password session is held to the 2FA card (2FA was turned off, here or elsewhere).
-                    const body = await diagRes.json().catch(() => null) as Record<string, unknown> | null;
+                    const body = await limits.body(diagRes.json()).catch(() => null) as Record<string, unknown> | null;
                     if (body?.code === 'totp_setup_required') {
                         setTotpGate(true);
                         return;
@@ -883,7 +887,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                 if (!diagRes.ok) {
                     throw new Error(`HTTP ${diagRes.status}: ${diagRes.statusText}`);
                 }
-                const data = await diagRes.json();
+                const data = await limits.body(diagRes.json());
                 diagSuccess(p, data, opts);
             } catch (e: unknown) {
                 const errMsg = e instanceof Error ? e.message : 'Failed to connect';

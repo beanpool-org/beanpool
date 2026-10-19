@@ -2,7 +2,7 @@
   "_meta": {
     "language": "zh-Hans",
     "name": "Chinese (Simplified)",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-19",
@@ -304,5 +304,41 @@
   },
   "{n} of these {count} from a new or 12-word account|{n} of these {count} from new or 12-word accounts": {
     "other": "这 {count} 票中有 {n} 票来自新账户或 12 词账户"
-  }
+  },
+  "updates itself": "自动更新",
+  "a tap per post": "每帖点按一次",
+  "shows as a card": "显示为卡片",
+  "youtube.com/@you": "youtube.com/@你的账号",
+  "@yourhandle": "@你的账号",
+  "soundcloud.com/you": "soundcloud.com/你的账号",
+  "yoursite.com": "yoursite.com",
+  "facebook.com/yourpage": "facebook.com/你的主页",
+  "yourblog.com/feed": "yourblog.com/feed",
+  "Community": "社区",
+  "Food & growing": "食物与种植",
+  "Making & craft": "手作与工艺",
+  "Repair & reuse": "维修与再利用",
+  "Art & music": "艺术与音乐",
+  "Business": "商业",
+  "Other": "其他",
+  "Website": "网站",
+  "Blog / RSS": "博客 / RSS",
+  "Link": "链接",
+  "Idea": "想法",
+  "Problem": "问题",
+  "This goes to the BeanPool project team, not to your community. Don't include personal details.": "这会发送给 BeanPool 项目团队，而不是你的社区。请勿包含个人信息。",
+  "Thank you — your suggestion has reached the BeanPool project team.": "谢谢 — 你的建议已送达 BeanPool 项目团队。",
+  "Please write at least {n} characters.|Please write at least {n} characters.": {
+    "other": "请至少输入 {n} 个字符。"
+  },
+  "Please keep it under {n} characters ({count} now).|Please keep it under {n} characters ({count} now).": {
+    "other": "请保持在 {n} 个字符以内（当前 {count} 个）。"
+  },
+  "Couldn't reach the BeanPool project just now. Your text is still here — please try again later.": "刚才无法连接到 BeanPool 项目。你输入的内容仍在这里 — 请稍后再试。",
+  "Please keep the community name under {n} characters.|Please keep the community name under {n} characters.": {
+    "other": "请将社区名称保持在 {n} 个字符以内。"
+  },
+  "Too many suggestions from your connection recently. Please try again later — your text is still here.": "你所在的网络连接最近提交了过多建议。请稍后再试 — 你输入的内容仍在这里。",
+  "This poll is shown at your area (about 10 km around it) to everyone who can read it.": "此投票会在你所在的区域（周围约 10 公里内）向所有能看到它的成员展示。",
+  "You haven't set your area, so members nearby won't see this poll in their list; they can still find it by searching. Set it in Settings → Your area to show it near you.": "你尚未设置你的区域，因此附近的成员不会在列表中看到此投票；他们仍可通过搜索找到它。在“设置 → 你的区域”中进行设置即可在附近展示。"
 }

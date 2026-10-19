@@ -1589,7 +1589,8 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                                             nodeDataError={nodeDataError}
                                             diagError={diagError}
                                             onRetryNodeData={() => loadNodeData()}
-                                            onRetryDiag={() => refreshFleetDiagnostics({ manual: true })}
+                                            // The diagnostics only: a manual fleet refresh also re-reads the full data, a logged look at names.
+                                            onRetryDiag={() => loadDiagnostics()}
                                             onNavigate={(tab, sub, anchor) => {
                                                 setNavSubTab(sub);
                                                 setActiveTab(tab);

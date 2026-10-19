@@ -157,6 +157,30 @@ describe('Settings Home after the phone link: real figures, or "couldn\'t load",
         expect(screen.queryByText(/All clear/)).toBeNull();
     });
 
+    it('Retry connections asks for the diagnostics again, and not for the full data (a logged look at names)', async () => {
+        let diagFails = true;
+        const node: NodeStub = {
+            signedIn: false, hold: false, held: [],
+            data: () => ok(communityData()),
+            diag: () => (diagFails ? refused(500, { error: 'boom' }) : ok(diagnostics())),
+        };
+        const fetchMock = stubNode(node);
+        await openFromPhone();
+        await waitFor(() => expect(card(/Members/)).toHaveTextContent('34'));
+        await waitFor(() => expect(screen.getByTestId('home-connections')).toHaveTextContent(/couldn.t load/i));
+        const asked = (path: string) => fetchMock.mock.calls.filter(([u]) => String(u).includes(path)).length;
+        const dataReads = asked(DATA);
+        const diagReads = asked(DIAGNOSTICS);
+        diagFails = false;
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: 'Retry connections' }));
+        });
+        await waitFor(() => expect(screen.getByTestId('home-connections')).toHaveTextContent('3 active connections'));
+        expect(asked(DIAGNOSTICS)).toBeGreaterThan(diagReads);
+        expect(asked(DATA)).toBe(dataReads);
+        expect(asked('/api/local/admin/alerts-summary')).toBe(0);
+    });
+
     it("the server's alerts the phone counts are listed in Action Required, each linking to the Alerts card", async () => {
         const items = [{ key: 'backups.none', title: 'backups stay on this server', priority: 2, since: Date.now() - 3_600_000, detail: 'Backups stay on this server: no destination and no recovery code.' }];
         const node: NodeStub = {

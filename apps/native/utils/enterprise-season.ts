@@ -10,7 +10,7 @@
  * Pure: no React Native imports, so it runs under the node test runner.
  */
 
-import { formatDate, keeperWords, type KeeperWords } from '@beanpool/core';
+import { formatDate, formatNumber, keeperWords, t, tn, word, type WordKey } from '@beanpool/core';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const PAUSE_DAYS = 90;
@@ -19,13 +19,14 @@ const GRACE_DAYS = 7;
 // A closed enterprise refuses every lifecycle call (requireKeeperOrAdmin). Same list the web map-pin gate uses (#844).
 const CLOSED_STATUSES = ['completed', 'disabled', 'suspended', 'pruned'];
 
-const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
 const keeperKey = (k: any): string | undefined => k?.publicKey || k?.pubkey || k?.memberPubkey;
-/** A project says leader / collaborators, an enterprise lead keeper / keepers (group decisions pick 8). */
-const wordsOf = (detail: any): KeeperWords => keeperWords(detail?.lifecycle);
-const aKind = (w: KeeperWords): string => (w.kind === 'project' ? 'a project' : 'an enterprise');
+/**
+ * A project says leader / collaborators, an enterprise lead keeper / keepers (group decisions pick 8). Each sentence is
+ * written whole for each kind, never with the kind's word glued in, so a language can inflect it.
+ */
+const isProject = (detail: any): boolean => keeperWords(detail?.lifecycle).kind === 'project';
 
 /** "17 December" — what the web's toLocaleDateString('en-GB', { day, month: 'long' }) prints, without relying on Intl. */
 export function formatPauseDate(iso: string | null | undefined): string {
@@ -62,14 +63,16 @@ export type SeasonBanner =
 export function seasonBanner(detail: any, now: number = Date.now()): SeasonBanner | null {
     if (!detail) return null;
     const status = detail.status;
-    const w = wordsOf(detail);
+    const project = isProject(detail);
 
     if (status === 'completed') {
         return {
             kind: 'completed',
-            label: 'Completed',
-            headline: 'Completed · Wound up',
-            body: `This ${w.kind} has completed its purpose and wound up permanently. Surplus was returned to the Commons, ${w.keepers} were released, and listings are closed.`,
+            label: t('Completed', undefined, 'enterprise state'),
+            headline: t('Completed · Wound up'),
+            body: project
+                ? t('This project has completed its purpose and wound up permanently. Surplus was returned to the Commons, collaborators were released, and listings are closed.')
+                : t('This enterprise has completed its purpose and wound up permanently. Surplus was returned to the Commons, keepers were released, and listings are closed.'),
         };
     }
 
@@ -82,30 +85,41 @@ export function seasonBanner(detail: any, now: number = Date.now()): SeasonBanne
         const graceEnded = !isNaN(endsMs) && now >= endsMs;
         const by = detail.windUpInitiatedBy as string | null | undefined;
         const initiator = Array.isArray(detail.keepers) ? detail.keepers.find((k: any) => keeperKey(k) === by) : undefined;
-        const initiatorName = initiator?.callsign || (by ? `${by.slice(0, 8)}…` : `a ${w.keeper}`);
+        // A member's name as they wrote it, or the start of their key (no words in it).
+        const initiatorName = initiator?.callsign || (by ? `${by.slice(0, 8)}…` : null);
         return {
             kind: 'winding_up',
-            label: 'Winding Up',
-            headline: `Winding up (${plural(daysLeft, 'day')} left · started by ${initiatorName})`,
-            body: `This ${w.kind} is winding down. Listings are inactive and cannot be bought. Any ${w.keeper} can stop this during the 7-day grace period.`,
-            graceEndedNote: graceEnded ? 'The 7-day grace period has elapsed. Ready to be finalised.' : null,
+            label: t('Winding Up'),
+            headline: initiatorName
+                ? tn(daysLeft, 'Winding up ({n} day left · started by {name})', 'Winding up ({n} days left · started by {name})', { name: initiatorName })
+                : project
+                    ? tn(daysLeft, 'Winding up ({n} day left · started by a collaborator)', 'Winding up ({n} days left · started by a collaborator)')
+                    : tn(daysLeft, 'Winding up ({n} day left · started by a keeper)', 'Winding up ({n} days left · started by a keeper)'),
+            body: project
+                ? t('This project is winding down. Listings are inactive and cannot be bought. Any collaborator can stop this during the 7-day grace period.')
+                : t('This enterprise is winding down. Listings are inactive and cannot be bought. Any keeper can stop this during the 7-day grace period.'),
+            graceEndedNote: graceEnded ? t('The 7-day grace period has elapsed. Ready to be finalised.') : null,
         };
     }
 
     if (detail.paused) {
         const until = formatPauseDate(pauseExpiresAt(detail));
         const daysRemaining = detail.pauseDaysRemaining;
+        const held = heldCredit(detail);
+        // The node's own warning is shown as it sent it (words slice S4).
         const warning = detail.pauseWarning
             || (typeof daysRemaining === 'number' && daysRemaining <= 14
                 ? (daysRemaining === 0
-                    ? 'Pause credit floor snapshot has expired'
-                    : `Pause credit floor snapshot expires in ${plural(daysRemaining, 'day')}`)
+                    ? t('Pause credit floor snapshot has expired')
+                    : tn(daysRemaining, 'Pause credit floor snapshot expires in {n} day', 'Pause credit floor snapshot expires in {n} days'))
                 : null);
         return {
             kind: 'paused',
-            label: 'Paused for the season',
-            headline: `Paused for the season. Credit held at ${heldCredit(detail)} beans${until ? ` until ${until}.` : '.'}`,
-            body: 'Listings are paused and cannot be bought right now.',
+            label: t('Paused for the season'),
+            headline: until
+                ? tn(held, 'Paused for the season. Credit held at {n} beans until {date}.', 'Paused for the season. Credit held at {n} beans until {date}.', { date: until })
+                : tn(held, 'Paused for the season. Credit held at {n} beans.', 'Paused for the season. Credit held at {n} beans.'),
+            body: t('Listings are paused and cannot be bought right now.'),
             warning,
         };
     }
@@ -161,42 +175,62 @@ export function seasonControls(detail: any, myPublicKey: string | null | undefin
 /** Plain-words consequences, shown before the confirming tap. */
 export function pauseConfirmText(detail: any): string {
     const until = formatPauseDate(pauseExpiresAt(detail));
-    return `Pausing for the season holds your credit floor at ${heldCredit(detail)} beans${until ? ` until ${until}` : ' for up to 90 days'} and pauses active listings so members cannot buy. Any ${wordsOf(detail).keeper} can resume at any time.`;
+    const held = heldCredit(detail);
+    if (isProject(detail)) {
+        return until
+            ? tn(held, 'Pausing for the season holds your credit floor at {n} beans until {date} and pauses active listings so members cannot buy. Any collaborator can resume at any time.', 'Pausing for the season holds your credit floor at {n} beans until {date} and pauses active listings so members cannot buy. Any collaborator can resume at any time.', { date: until })
+            : tn(held, 'Pausing for the season holds your credit floor at {n} beans for up to 90 days and pauses active listings so members cannot buy. Any collaborator can resume at any time.', 'Pausing for the season holds your credit floor at {n} beans for up to 90 days and pauses active listings so members cannot buy. Any collaborator can resume at any time.');
+    }
+    return until
+        ? tn(held, 'Pausing for the season holds your credit floor at {n} beans until {date} and pauses active listings so members cannot buy. Any keeper can resume at any time.', 'Pausing for the season holds your credit floor at {n} beans until {date} and pauses active listings so members cannot buy. Any keeper can resume at any time.', { date: until })
+        : tn(held, 'Pausing for the season holds your credit floor at {n} beans for up to 90 days and pauses active listings so members cannot buy. Any keeper can resume at any time.', 'Pausing for the season holds your credit floor at {n} beans for up to 90 days and pauses active listings so members cannot buy. Any keeper can resume at any time.');
 }
 
-export const RESUME_CONFIRM_TEXT = 'Resuming reactivates all listings and restores the credit floor to normal daily calculation.';
+/** Marked here, translated where it is shown: t(RESUME_CONFIRM_TEXT). */
+export const RESUME_CONFIRM_TEXT = word('Resuming reactivates all listings and restores the credit floor to normal daily calculation.');
 
 function keeperCount(detail: any): number {
     return Array.isArray(detail?.keepers) && detail.keepers.length > 0 ? detail.keepers.length : 1;
 }
 
 export function windUpConfirmText(detail: any, name: string): string {
-    const back = Math.max(0, Number(detail?.balance) || 0).toFixed(2);
-    const w = wordsOf(detail);
-    return `Winding up returns ${back} beans to the Commons, releases ${plural(keeperCount(detail), w.keeper)}, and closes ${name} for good. Any ${w.keeper} can stop this for the next 7 days.`;
+    const amount = formatNumber(Math.max(0, Number(detail?.balance) || 0), 2);
+    const count = keeperCount(detail);
+    return isProject(detail)
+        ? tn(count, 'Winding up returns {amount} beans to the Commons, releases {n} collaborator, and closes {name} for good. Any collaborator can stop this for the next 7 days.', 'Winding up returns {amount} beans to the Commons, releases {n} collaborators, and closes {name} for good. Any collaborator can stop this for the next 7 days.', { amount, name })
+        : tn(count, 'Winding up returns {amount} beans to the Commons, releases {n} keeper, and closes {name} for good. Any keeper can stop this for the next 7 days.', 'Winding up returns {amount} beans to the Commons, releases {n} keepers, and closes {name} for good. Any keeper can stop this for the next 7 days.', { amount, name });
 }
 
 /** Set when wind-up cannot start: the server refuses an enterprise in deficit. */
 export function windUpDeficitText(detail: any): string | null {
     const balance = Number(detail?.balance) || 0;
-    return balance < 0 ? `Cannot wind up ${aKind(wordsOf(detail))} in deficit (${balance} 🫘). Debt must be resolved or written off first.` : null;
+    if (balance >= 0) return null;
+    return isProject(detail)
+        ? t('Cannot wind up a project in deficit ({amount} 🫘). Debt must be resolved or written off first.', { amount: balance })
+        : t('Cannot wind up an enterprise in deficit ({amount} 🫘). Debt must be resolved or written off first.', { amount: balance });
 }
 
 export function cancelWindUpConfirmText(name: string, lifecycle?: string | null): string {
-    return `Cancelling wind-up restores ${name} to active status immediately. ${keeperWords(lifecycle).Keepers} remain appointed and listings can resume.`;
+    return keeperWords(lifecycle).kind === 'project'
+        ? t('Cancelling wind-up restores {name} to active status immediately. Collaborators remain appointed and listings can resume.', { name })
+        : t('Cancelling wind-up restores {name} to active status immediately. Keepers remain appointed and listings can resume.', { name });
 }
 
 export function finaliseWindUpConfirmText(detail: any, name: string): string {
-    const back = Math.max(0, Number(detail?.balance) || 0).toFixed(2);
-    return `The 7-day grace period has elapsed. Finalising sweeps ${back} beans to the Commons, releases all ${wordsOf(detail).keepers}, and closes ${name} for good.`;
+    const back = Math.max(0, Number(detail?.balance) || 0);
+    // {n} written to two places, as the node counts Beans; its plural form still read from the amount.
+    const values = { n: formatNumber(back, 2), name };
+    return isProject(detail)
+        ? tn(back, 'The 7-day grace period has elapsed. Finalising sweeps {n} beans to the Commons, releases all collaborators, and closes {name} for good.', 'The 7-day grace period has elapsed. Finalising sweeps {n} beans to the Commons, releases all collaborators, and closes {name} for good.', values)
+        : tn(back, 'The 7-day grace period has elapsed. Finalising sweeps {n} beans to the Commons, releases all keepers, and closes {name} for good.', 'The 7-day grace period has elapsed. Finalising sweeps {n} beans to the Commons, releases all keepers, and closes {name} for good.', values);
 }
 
 /** Posting new listings is refused while paused, winding up or completed; null when posting is open. */
 export function postingBlockedText(detail: any): string | null {
     if (!detail) return null;
-    if (detail.status === 'completed') return `${wordsOf(detail).Kind} closed permanently.`;
-    if (detail.status === 'winding_up') return 'Winding up — posting new listings is disabled.';
-    if (detail.paused) return 'Paused for the season — posting new listings is disabled.';
+    if (detail.status === 'completed') return isProject(detail) ? t('Project closed permanently.') : t('Enterprise closed permanently.');
+    if (detail.status === 'winding_up') return t('Winding up — posting new listings is disabled.');
+    if (detail.paused) return t('Paused for the season — posting new listings is disabled.');
     return null;
 }
 
@@ -204,11 +238,12 @@ export function postingBlockedText(detail: any): string | null {
 
 export type LedgerPeriod = 'all' | '30d' | '90d' | '365d';
 
-export const LEDGER_PERIODS: Array<{ key: LedgerPeriod; label: string; a11y: string }> = [
-    { key: 'all', label: 'All time', a11y: 'All time' },
-    { key: '30d', label: '30d', a11y: 'Last 30 days' },
-    { key: '90d', label: '90d', a11y: 'Last 90 days' },
-    { key: '365d', label: '1y', a11y: 'Last year' },
+/** The period tabs, marked here and translated where they are shown: t(p.label), t(p.a11y). */
+export const LEDGER_PERIODS: Array<{ key: LedgerPeriod; label: WordKey; a11y: WordKey }> = [
+    { key: 'all', label: word('All time'), a11y: word('All time') },
+    { key: '30d', label: word('30d'), a11y: word('Last 30 days') },
+    { key: '90d', label: word('90d'), a11y: word('Last 90 days') },
+    { key: '365d', label: word('1y'), a11y: word('Last year') },
 ];
 
 /** The `since` the ledger route takes for a period; undefined for all time. */
@@ -217,23 +252,23 @@ export function ledgerSince(period: LedgerPeriod, now: number = Date.now()): str
     return days ? new Date(now - days * DAY_MS).toISOString() : undefined;
 }
 
-/** "Came in" / "Went out" and who the other side was, for one ledger line. */
+/** "Came in" / "Went out" and who the other side was, for one ledger line. The name and the memo are as written. */
 export function ledgerLineLabels(entry: { direction: 'income' | 'spend'; counterpartyName?: string; memo?: string }): { flow: string; with: string; what: string } {
     return {
-        flow: entry.direction === 'income' ? 'Came in' : 'Went out',
-        with: entry.counterpartyName || 'Member',
-        what: entry.memo || 'Transfer',
+        flow: entry.direction === 'income' ? t('Came in') : t('Went out'),
+        with: entry.counterpartyName || t('Member'),
+        what: entry.memo || t('Transfer'),
     };
 }
 
 export function signedBeans(n: number, direction: 'income' | 'spend'): string {
-    return `${direction === 'income' ? '+' : '-'}${(Number(n) || 0).toFixed(2)} 🫘`;
+    return `${direction === 'income' ? '+' : '-'}${formatNumber(Number(n) || 0, 2)} 🫘`;
 }
 
 /** Beans to 2 places with a sign, but never "-0.00" / "+0.00": anything that rounds to zero is plain "0.00". */
 function signedTotal(n: number, sign: '+' | '-'): string {
     const cents = Math.round(Math.abs(Number(n) || 0) * 100);
-    return cents === 0 ? '0.00 🫘' : `${sign}${(cents / 100).toFixed(2)} 🫘`;
+    return cents === 0 ? `${formatNumber(0, 2)} 🫘` : `${sign}${formatNumber(cents / 100, 2)} 🫘`;
 }
 
 export interface PlSummaryText {
@@ -257,6 +292,6 @@ export function plSummaryText(summary: { totalIncome?: number; totalSpend?: numb
         wentOut: signedTotal(spend, '-'),
         net: signedTotal(net, net < 0 ? '-' : '+'),
         netIsPositive: net >= 0,
-        feeNote: fees > 0 ? `Came in is before fees: ${fees.toFixed(2)} 🫘 in fees came off it.` : null,
+        feeNote: fees > 0 ? t('Came in is before fees: {amount} 🫘 in fees came off it.', { amount: formatNumber(fees, 2) }) : null,
     };
 }

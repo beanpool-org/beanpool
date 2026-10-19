@@ -25,13 +25,39 @@ import {
     type GroupRole,
     type JoinPolicy
 } from '../utils/db';
-import { MAKE_OBSERVER_MEMBER_FIRST, GROUP_CLOSED_NOTE, type GroupPerson } from '@beanpool/core';
+import { MAKE_OBSERVER_MEMBER_FIRST, GROUP_CLOSED_NOTE, inCapitalsOf, t, word, type GroupPerson, type WordKey } from '@beanpool/core';
 import { MemberAvatar } from './MemberAvatar';
 import { GroupSuccessionPanel } from './GroupSuccessionPanel';
 import { GroupDecisions } from './EnterpriseDecisions';
+import { Sentence } from './Sentence';
 import { buildRosterView, rosterHeading } from '../utils/group-roster';
 import { hapticSuccess, hapticTick } from '../utils/haptics';
 import { KEY_CHANGED_HINT } from '../utils/name-key-memory';
+import { chatLineWords } from '../utils/chat-line-words';
+
+/** Sentences marked in core, translated here where they are shown. */
+const LINES = { observerFirst: MAKE_OBSERVER_MEMBER_FIRST, closed: GROUP_CLOSED_NOTE };
+
+/**
+ * The info pills say the group's category and join rule in the lower-case words they always have; a code this phone
+ * does not know yet is shown as it came (it is a code, not words). Marked here, translated where drawn.
+ */
+const CATEGORY_PILL: Readonly<Record<string, WordKey>> = {
+    social: word('social', 'group category'), general: word('general', 'group category'), working_group: word('working group', 'group category'),
+    project: word('project', 'group category'), guild: word('guild', 'group category'),
+};
+const POLICY_WORDS: Readonly<Record<string, WordKey>> = {
+    open: word('open', 'join policy'), request_to_join: word('request to join', 'join policy'), invite_only: word('invite only', 'join policy'),
+};
+/** A roster row's role badge, in capitals in the words themselves (never toUpperCase on a translated word). */
+const ROLE_BADGE: Readonly<Record<string, WordKey>> = {
+    convenor: word('CONVENOR', 'group role badge'), member: word('MEMBER', 'group role badge'), observer: word('OBSERVER', 'group role badge'),
+};
+
+const own = (table: Readonly<Record<string, WordKey>>, code: string) => Object.prototype.hasOwnProperty.call(table, code);
+const categoryPill = (code: string) => (own(CATEGORY_PILL, code) ? t(CATEGORY_PILL[code]) : code.replace(/_/g, ' '));
+const policyWords = (code: string) => (own(POLICY_WORDS, code) ? t(POLICY_WORDS[code]) : code.replace(/_/g, ' '));
+const roleBadge = (code: string) => (own(ROLE_BADGE, code) ? t(ROLE_BADGE[code]) : code.toUpperCase());
 
 interface GroupDetailModalProps {
     group: GroupItem | null;
@@ -173,7 +199,6 @@ export function GroupDetailModal({
             fontSize: 12,
             fontWeight: '800',
             color: colors.text.secondary,
-            textTransform: 'uppercase',
             letterSpacing: 0.5,
             marginBottom: 10,
             marginTop: 16,
@@ -238,7 +263,6 @@ export function GroupDetailModal({
             fontWeight: '800',
             color: colors.brand.primary,
             marginBottom: 10,
-            textTransform: 'uppercase',
             letterSpacing: 0.5,
         },
         // Name on its own line, Approve / Decline on a row beneath: side by side, the two buttons
@@ -411,7 +435,7 @@ export function GroupDetailModal({
             await loadDetails();
             if (onMembershipChanged) onMembershipChanged();
         } catch (e: any) {
-            Alert.alert('Join Failed', e.message || 'Failed to join group');
+            Alert.alert(t('Join Failed'), e.message || t('Failed to join group'));
         } finally {
             setActionLoading(false);
         }
@@ -426,7 +450,7 @@ export function GroupDetailModal({
             await loadDetails();
             if (onMembershipChanged) onMembershipChanged();
         } catch (e: any) {
-            Alert.alert('Hand Over Failed', e.message || 'Could not hand the lead over');
+            Alert.alert(t('Hand Over Failed'), e.message || t('Could not hand the lead over'));
         } finally {
             setActionLoading(false);
         }
@@ -439,11 +463,11 @@ export function GroupDetailModal({
     const handleHandOverLeadTo = (targetPubkey: string, callsign?: string) => {
         const who = callsign || targetPubkey.slice(0, 10);
         Alert.alert(
-            'Hand Over Lead',
-            `Make ${who} the lead convenor of ${groupData.name}? They can remove and demote convenors, and you cannot take the lead back.`,
+            t('Hand Over Lead'),
+            t('Make {name} the lead convenor of {group}? They can remove and demote convenors, and you cannot take the lead back.', { name: who, group: groupData.name }),
             [
-                { text: 'Cancel', style: 'cancel' as const },
-                { text: 'Make Lead', onPress: () => { void performHandOverLead(targetPubkey); } },
+                { text: t('Cancel'), style: 'cancel' as const },
+                { text: t('Make Lead'), onPress: () => { void performHandOverLead(targetPubkey); } },
             ],
         );
     };
@@ -458,16 +482,16 @@ export function GroupDetailModal({
         if (candidates.length === 0) {
             // Observers cannot take the lead, so a roster of only observers is not "nobody" — it is one role
             // change away from a hand-over. Say which.
-            Alert.alert('Hand Over Lead', roster.handOverBlockedByObservers
-                ? MAKE_OBSERVER_MEMBER_FIRST
-                : 'There is nobody else in this group to hand the lead to.');
+            Alert.alert(t('Hand Over Lead'), roster.handOverBlockedByObservers
+                ? t(LINES.observerFirst)
+                : t('There is nobody else in this group to hand the lead to.'));
             return;
         }
         Alert.alert(
-            'Hand Over Lead',
+            t('Hand Over Lead'),
             candidates.length > 6
-                ? `Who should lead ${groupData.name}? They can remove and demote convenors, and you cannot take the lead back. For anyone not listed here, use the shield beside their name on the roster.`
-                : `Who should lead ${groupData.name}? They can remove and demote convenors, and you cannot take the lead back.`,
+                ? t('Who should lead {group}? They can remove and demote convenors, and you cannot take the lead back. For anyone not listed here, use the shield beside their name on the roster.', { group: groupData.name })
+                : t('Who should lead {group}? They can remove and demote convenors, and you cannot take the lead back.', { group: groupData.name }),
             [
                 // A long roster would overflow an Alert, so it offers the first few; everyone else is reachable by
                 // the shield on their own row. 320dp-safe either way: an Alert lays its buttons out vertically.
@@ -475,7 +499,7 @@ export function GroupDetailModal({
                     text: c.callsign || c.memberPubkey.slice(0, 10),
                     onPress: () => { void performHandOverLead(c.memberPubkey); },
                 })),
-                { text: 'Cancel', style: 'cancel' as const },
+                { text: t('Cancel'), style: 'cancel' as const },
             ],
         );
     };
@@ -487,29 +511,30 @@ export function GroupDetailModal({
             // Everyone else an observer: offering "Hand Over Lead" here would only lead to the refusal above, so
             // the alert names the one step that unblocks them and offers no dead-end button.
             if (roster.handOverBlockedByObservers) {
+                // MAKE_OBSERVER_MEMBER_FIRST's words, after the line that says whose lead it is: one sentence.
                 Alert.alert(
-                    'Make an Observer a Member First',
-                    `You are the lead convenor of ${groupData.name}. ${MAKE_OBSERVER_MEMBER_FIRST}`,
+                    t('Make an Observer a Member First'),
+                    t('You are the lead convenor of {group}. Make one of the observers a member first, then hand the lead to them.', { group: groupData.name }),
                 );
                 return;
             }
             Alert.alert(
-                'Hand Over the Lead First',
-                `You are the lead convenor of ${groupData.name}. Hand the lead to someone else, then you can leave.`,
+                t('Hand Over the Lead First'),
+                t('You are the lead convenor of {group}. Hand the lead to someone else, then you can leave.', { group: groupData.name }),
                 [
-                    { text: 'Not Now', style: 'cancel' },
-                    { text: 'Hand Over Lead', onPress: handleHandOverLead },
+                    { text: t('Not Now'), style: 'cancel' },
+                    { text: t('Hand Over Lead'), onPress: handleHandOverLead },
                 ],
             );
             return;
         }
         Alert.alert(
-            'Leave Group',
-            `Are you sure you want to leave ${groupData.name}?`,
+            t('Leave Group'),
+            t('Are you sure you want to leave {group}?', { group: groupData.name }),
             [
-                { text: 'Cancel', style: 'cancel' },
+                { text: t('Cancel'), style: 'cancel' },
                 {
-                    text: 'Leave',
+                    text: t('Leave'),
                     style: 'destructive',
                     onPress: async () => {
                         setActionLoading(true);
@@ -519,7 +544,7 @@ export function GroupDetailModal({
                             await loadDetails();
                             if (onMembershipChanged) onMembershipChanged();
                         } catch (e: any) {
-                            Alert.alert('Leave Failed', e.message || 'Failed to leave group');
+                            Alert.alert(t('Leave Failed'), e.message || t('Failed to leave group'));
                         } finally {
                             setActionLoading(false);
                         }
@@ -537,7 +562,7 @@ export function GroupDetailModal({
             await loadDetails();
             if (onMembershipChanged) onMembershipChanged();
         } catch (e: any) {
-            Alert.alert('Approval Failed', e.message || 'Failed to approve request');
+            Alert.alert(t('Approval Failed'), e.message || t('Failed to approve request'));
         } finally {
             setActionLoading(false);
         }
@@ -546,15 +571,19 @@ export function GroupDetailModal({
     // Declining a join request goes through the same API as removing a member, but the dialog must say which one
     // it is: a decline titled "Remove Member" read as throwing out an existing member.
     const handleRemoveMember = async (memberPubkey: string, callsign?: string, kind: 'remove' | 'decline' = 'remove') => {
-        const who = callsign || (kind === 'decline' ? 'this person' : 'this member');
         const decline = kind === 'decline';
+        const group = groupData.name;
+        // The member's name as written; with none, each sentence says "this person" / "this member" itself.
+        const question = decline
+            ? (callsign ? t("Decline {name}'s request to join {group}?", { name: callsign, group }) : t("Decline this person's request to join {group}?", { group }))
+            : (callsign ? t('Remove {name} from {group}?', { name: callsign, group }) : t('Remove this member from {group}?', { group }));
         Alert.alert(
-            decline ? 'Decline Request' : 'Remove Member',
-            decline ? `Decline ${who}'s request to join ${groupData.name}?` : `Remove ${who} from ${groupData.name}?`,
+            decline ? t('Decline Request') : t('Remove Member'),
+            question,
             [
-                { text: 'Cancel', style: 'cancel' },
+                { text: t('Cancel'), style: 'cancel' },
                 {
-                    text: decline ? 'Decline' : 'Remove',
+                    text: decline ? t('Decline') : t('Remove'),
                     style: 'destructive',
                     onPress: async () => {
                         setActionLoading(true);
@@ -565,8 +594,8 @@ export function GroupDetailModal({
                             if (onMembershipChanged) onMembershipChanged();
                         } catch (e: any) {
                             Alert.alert(
-                                decline ? 'Decline Failed' : 'Removal Failed',
-                                e.message || (decline ? 'Failed to decline the request' : 'Failed to remove member'),
+                                decline ? t('Decline Failed') : t('Removal Failed'),
+                                e.message || (decline ? t('Failed to decline the request') : t('Failed to remove member')),
                             );
                         } finally {
                             setActionLoading(false);
@@ -579,11 +608,11 @@ export function GroupDetailModal({
 
     const handleChangeRole = (memberPubkey: string, currentRole: GroupRole, callsign?: string) => {
         Alert.alert(
-            'Change Role',
-            `Select a role for ${callsign || 'this member'}:`,
+            t('Change Role'),
+            callsign ? t('Select a role for {name}:', { name: callsign }) : t('Select a role for this member:'),
             [
                 {
-                    text: 'Convenor',
+                    text: t('Convenor', undefined, 'group role'),
                     onPress: async () => {
                         try {
                             await setGroupMemberRoleApi(groupData.id, memberPubkey, 'convenor');
@@ -591,12 +620,12 @@ export function GroupDetailModal({
                             loadDetails();
                             if (onMembershipChanged) onMembershipChanged();
                         } catch (e: any) {
-                            Alert.alert('Error', e.message || 'Failed to set role');
+                            Alert.alert(t('Error'), e.message || t('Failed to set role'));
                         }
                     }
                 },
                 {
-                    text: 'Member',
+                    text: t('Member', undefined, 'group role'),
                     onPress: async () => {
                         try {
                             await setGroupMemberRoleApi(groupData.id, memberPubkey, 'member');
@@ -604,12 +633,12 @@ export function GroupDetailModal({
                             loadDetails();
                             if (onMembershipChanged) onMembershipChanged();
                         } catch (e: any) {
-                            Alert.alert('Error', e.message || 'Failed to set role');
+                            Alert.alert(t('Error'), e.message || t('Failed to set role'));
                         }
                     }
                 },
                 {
-                    text: 'Observer',
+                    text: t('Observer', undefined, 'group role'),
                     onPress: async () => {
                         try {
                             await setGroupMemberRoleApi(groupData.id, memberPubkey, 'observer');
@@ -617,23 +646,23 @@ export function GroupDetailModal({
                             loadDetails();
                             if (onMembershipChanged) onMembershipChanged();
                         } catch (e: any) {
-                            Alert.alert('Error', e.message || 'Failed to set role');
+                            Alert.alert(t('Error'), e.message || t('Failed to set role'));
                         }
                     }
                 },
-                { text: 'Cancel', style: 'cancel' }
+                { text: t('Cancel'), style: 'cancel' }
             ]
         );
     };
 
     const handleSetPolicy = (policy: JoinPolicy) => {
         Alert.alert(
-            'Change Join Policy',
-            `Set join policy to ${policy.replace(/_/g, ' ')}?`,
+            t('Change Join Policy'),
+            t('Set join policy to {policy}?', { policy: policyWords(policy) }),
             [
-                { text: 'Cancel', style: 'cancel' },
+                { text: t('Cancel'), style: 'cancel' },
                 {
-                    text: 'Confirm',
+                    text: t('Confirm'),
                     onPress: async () => {
                         try {
                             await updateGroupApi(groupData.id, { joinPolicy: policy });
@@ -642,7 +671,7 @@ export function GroupDetailModal({
                             loadDetails();
                             if (onMembershipChanged) onMembershipChanged();
                         } catch (e: any) {
-                            Alert.alert('Error', e.message || 'Failed to update policy');
+                            Alert.alert(t('Error'), e.message || t('Failed to update policy'));
                         }
                     }
                 }
@@ -665,7 +694,7 @@ export function GroupDetailModal({
                             style={styles.closeBtn}
                             onPress={onClose}
                             accessibilityRole="button"
-                            accessibilityLabel="Close group details"
+                            accessibilityLabel={t('Close group details')}
                             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                         >
                             <MaterialCommunityIcons name="close" size={22} color={colors.text.muted} />
@@ -676,16 +705,16 @@ export function GroupDetailModal({
                         <View style={styles.badgeRow}>
                             <View style={styles.pill}>
                                 <MaterialCommunityIcons name="tag-outline" size={14} color={colors.text.secondary} />
-                                <Text style={styles.pillText}>{groupData.category.replace(/_/g, ' ')}</Text>
+                                <Text style={[styles.pillText, { flexShrink: 1 }]}>{categoryPill(groupData.category)}</Text>
                             </View>
                             <View style={styles.pill}>
                                 <MaterialCommunityIcons name="door-open" size={14} color={colors.text.secondary} />
-                                <Text style={styles.pillText}>{groupData.joinPolicy.replace(/_/g, ' ')}</Text>
+                                <Text style={[styles.pillText, { flexShrink: 1 }]}>{policyWords(groupData.joinPolicy)}</Text>
                             </View>
                             {closed && (
-                                <View style={styles.pill} accessibilityLabel="Closed by its members' vote">
+                                <View style={styles.pill} accessibilityLabel={t("Closed by its members' vote")}>
                                     <MaterialCommunityIcons name="lock-outline" size={14} color={colors.text.secondary} />
-                                    <Text style={styles.pillText}>Closed</Text>
+                                    <Text style={styles.pillText}>{t('Closed', undefined, 'a group')}</Text>
                                 </View>
                             )}
                             {isConvenor && (
@@ -696,7 +725,7 @@ export function GroupDetailModal({
                                         color={colors.brand.primary}
                                     />
                                     <Text style={[styles.pillText, { color: colors.brand.primary }]}>
-                                        {roster.viewerIsLead ? 'Lead convenor' : 'Convenor'}
+                                        {roster.viewerIsLead ? t('Lead convenor', undefined, 'group role') : t('Convenor', undefined, 'group role')}
                                     </Text>
                                 </View>
                             )}
@@ -705,18 +734,23 @@ export function GroupDetailModal({
                         {/* Group info names the lead convenor. Never "owner" — that is the owner of a node. */}
                         {roster.leadCallsign ? (
                             <Text style={styles.leadLine}>
-                                Lead convenor: <Text style={{ fontWeight: '800', color: colors.text.heading }}>{roster.leadCallsign}</Text>
-                                {roster.viewerIsLead ? ' (you)' : ''}. Only the lead can remove or demote a convenor, and nobody can remove the lead.
+                                <Sentence
+                                    text={roster.viewerIsLead
+                                        ? t('Lead convenor: {name} (you). Only the lead can remove or demote a convenor, and nobody can remove the lead.')
+                                        : t('Lead convenor: {name}. Only the lead can remove or demote a convenor, and nobody can remove the lead.')}
+                                    parts={{ name: <Text style={{ fontWeight: '800', color: colors.text.heading }}>{roster.leadCallsign}</Text> }}
+                                />
                             </Text>
                         ) : null}
 
                         <View style={styles.infoNotice}>
                             <MaterialCommunityIcons name="information-outline" size={16} color={colors.text.secondary} />
                             <Text style={styles.infoNoticeText}>
-                                A group is a place to talk to some people rather than everyone. It does not hold beans and does not confer trust.
+                                {t('A group is a place to talk to some people rather than everyone. It does not hold beans and does not confer trust.')}
                             </Text>
                         </View>
 
+                        {/* What its members wrote: shown as written. */}
                         {groupData.description ? (
                             <Text style={styles.description}>{groupData.description}</Text>
                         ) : null}
@@ -724,7 +758,7 @@ export function GroupDetailModal({
                         {closed && (
                             <View style={styles.infoNotice}>
                                 <MaterialCommunityIcons name="lock-outline" size={16} color={colors.text.secondary} />
-                                <Text style={styles.infoNoticeText}>{GROUP_CLOSED_NOTE}</Text>
+                                <Text style={styles.infoNoticeText}>{t(LINES.closed)}</Text>
                             </View>
                         )}
 
@@ -748,29 +782,34 @@ export function GroupDetailModal({
                         {/* Convenor Tools Section */}
                         {isConvenor && !closed && (
                             <View style={styles.convenorCard}>
-                                <Text style={styles.convenorTitle}>Convenor Tools</Text>
-                                
+                                <Text style={styles.convenorTitle}>{inCapitalsOf(t('Convenor Tools'))}</Text>
+
                                 {/* Join Policy Setter */}
                                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                                    <Text style={{ flex: 1, marginRight: 8, fontSize: 13, color: colors.text.secondary }}>Join Policy: <Text style={{ fontWeight: '700', color: colors.text.heading }}>{groupData.joinPolicy.replace(/_/g, ' ')}</Text></Text>
+                                    <Text style={{ flex: 1, marginRight: 8, fontSize: 13, color: colors.text.secondary }}>
+                                        <Sentence
+                                            text={t('Join Policy: {policy}')}
+                                            parts={{ policy: <Text style={{ fontWeight: '700', color: colors.text.heading }}>{policyWords(groupData.joinPolicy)}</Text> }}
+                                        />
+                                    </Text>
                                     <Pressable
                                         style={styles.manageBtn}
                                         accessibilityRole="button"
-                                        accessibilityLabel="Change join policy"
+                                        accessibilityLabel={t('Change join policy')}
                                         onPress={() => {
                                             Alert.alert(
-                                                'Set Join Policy',
-                                                'Choose who can join this group:',
+                                                t('Set Join Policy'),
+                                                t('Choose who can join this group:'),
                                                 [
-                                                    { text: 'Open (immediate)', onPress: () => handleSetPolicy('open') },
-                                                    { text: 'Request to Join (approval required)', onPress: () => handleSetPolicy('request_to_join') },
-                                                    { text: 'Invite Only', onPress: () => handleSetPolicy('invite_only') },
-                                                    { text: 'Cancel', style: 'cancel' }
+                                                    { text: t('Open (immediate)'), onPress: () => handleSetPolicy('open') },
+                                                    { text: t('Request to Join (approval required)'), onPress: () => handleSetPolicy('request_to_join') },
+                                                    { text: t('Invite Only'), onPress: () => handleSetPolicy('invite_only') },
+                                                    { text: t('Cancel'), style: 'cancel' }
                                                 ]
                                             );
                                         }}
                                     >
-                                        <Text style={styles.manageBtnText}>Change</Text>
+                                        <Text style={styles.manageBtnText} numberOfLines={2}>{t('Change')}</Text>
                                     </Pressable>
                                 </View>
 
@@ -778,16 +817,16 @@ export function GroupDetailModal({
                                 {roster.viewerIsLead && roster.handOverCandidates.length > 0 && (
                                     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
                                         <Text style={{ flex: 1, marginRight: 8, fontSize: 13, color: colors.text.secondary }}>
-                                            You are the lead convenor
+                                            {t('You are the lead convenor')}
                                         </Text>
                                         <Pressable
                                             style={styles.manageBtn}
                                             accessibilityRole="button"
-                                            accessibilityLabel="Hand over lead convenor"
+                                            accessibilityLabel={t('Hand over lead convenor')}
                                             disabled={actionLoading}
                                             onPress={handleHandOverLead}
                                         >
-                                            <Text style={styles.manageBtnText} numberOfLines={2}>Hand over</Text>
+                                            <Text style={styles.manageBtnText} numberOfLines={2}>{t('Hand over')}</Text>
                                         </Pressable>
                                     </View>
                                 )}
@@ -796,7 +835,7 @@ export function GroupDetailModal({
                                 {pendingMembers.length > 0 && (
                                     <View style={{ marginTop: 8 }}>
                                         <Text style={{ fontSize: 12, fontWeight: '800', color: colors.text.secondary, marginBottom: 6 }}>
-                                            Pending Requests ({pendingMembers.length})
+                                            {t('Pending Requests ({n})', { n: pendingMembers.length })}
                                         </Text>
                                         {pendingMembers.map(p => (
                                             <View key={p.memberPubkey} style={styles.pendingItem}>
@@ -809,21 +848,21 @@ export function GroupDetailModal({
                                                 <View style={styles.pendingActions}>
                                                     <Pressable
                                                         accessibilityRole="button"
-                                                        accessibilityLabel={`Approve join request from ${p.callsign || p.memberPubkey.slice(0, 10)}`}
+                                                        accessibilityLabel={t('Approve join request from {name}', { name: p.callsign || p.memberPubkey.slice(0, 10) })}
                                                         disabled={actionLoading}
                                                         style={[styles.approveBtn, actionLoading && { opacity: 0.6 }]}
                                                         onPress={() => handleApprove(p.memberPubkey)}
                                                     >
-                                                        <Text style={styles.approveBtnText} numberOfLines={1}>Approve</Text>
+                                                        <Text style={styles.approveBtnText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Approve')}</Text>
                                                     </Pressable>
                                                     <Pressable
                                                         accessibilityRole="button"
-                                                        accessibilityLabel={`Decline join request from ${p.callsign || p.memberPubkey.slice(0, 10)}`}
+                                                        accessibilityLabel={t('Decline join request from {name}', { name: p.callsign || p.memberPubkey.slice(0, 10) })}
                                                         disabled={actionLoading}
                                                         style={[styles.declineBtn, actionLoading && { opacity: 0.6 }]}
                                                         onPress={() => handleRemoveMember(p.memberPubkey, p.callsign, 'decline')}
                                                     >
-                                                        <Text style={styles.declineBtnText} numberOfLines={1}>Decline</Text>
+                                                        <Text style={styles.declineBtnText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Decline')}</Text>
                                                     </Pressable>
                                                 </View>
                                             </View>
@@ -850,7 +889,7 @@ export function GroupDetailModal({
                         )}
 
                         <Text style={styles.sectionTitle}>
-                            {heading.title}
+                            {inCapitalsOf(heading.title)}
                         </Text>
                         {heading.note && <Text style={styles.description}>{heading.note}</Text>}
 
@@ -866,18 +905,20 @@ export function GroupDetailModal({
                                             <MemberAvatar avatarUrl={m.avatarUrl} pubkey={m.memberPubkey} callsign={m.callsign || '?'} size={36} />
                                             <View style={styles.memberInfo}>
                                                 <Text style={styles.memberCallsign} numberOfLines={1}>
-                                                    {m.callsign || m.memberPubkey.slice(0, 10)}{row.isYou ? ' (You)' : ''}
+                                                    {row.isYou
+                                                        ? t('{name} (You)', { name: m.callsign || m.memberPubkey.slice(0, 10) })
+                                                        : (m.callsign || m.memberPubkey.slice(0, 10))}
                                                 </Text>
                                                 {/* The badge says LEAD on the one row it belongs to. It wraps rather than
                                                     squeezing the callsign at 320dp with 1.3× text. */}
                                                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 4 }}>
                                                     <View style={[styles.roleBadge, highlight && styles.roleBadgeConvenor]}>
                                                         <Text style={[styles.roleBadgeText, highlight && styles.roleBadgeConvenorText]} numberOfLines={1}>
-                                                            {row.isLead ? 'LEAD' : m.role.toUpperCase()}
+                                                            {row.isLead ? t('LEAD', undefined, 'group role badge') : roleBadge(m.role)}
                                                         </Text>
                                                     </View>
                                                     {row.isLead && (
-                                                        <Text style={styles.leadNote} numberOfLines={1}>lead convenor</Text>
+                                                        <Text style={styles.leadNote} numberOfLines={1}>{t('lead convenor', undefined, 'roster note')}</Text>
                                                     )}
                                                 </View>
                                             </View>
@@ -889,7 +930,7 @@ export function GroupDetailModal({
                                                         <Pressable
                                                             style={styles.manageBtn}
                                                             accessibilityRole="button"
-                                                            accessibilityLabel={`Make ${m.callsign || 'this member'} the lead convenor`}
+                                                            accessibilityLabel={m.callsign ? t('Make {name} the lead convenor', { name: m.callsign }) : t('Make this member the lead convenor')}
                                                             onPress={() => handleHandOverLeadTo(m.memberPubkey, m.callsign)}
                                                         >
                                                             <MaterialCommunityIcons name="shield-star-outline" size={18} color={colors.text.secondary} />
@@ -899,17 +940,17 @@ export function GroupDetailModal({
                                                         <Pressable
                                                             style={styles.manageBtn}
                                                             accessibilityRole="button"
-                                                            accessibilityLabel={`Change role for ${m.callsign || 'this member'}`}
+                                                            accessibilityLabel={m.callsign ? t('Change role for {name}', { name: m.callsign }) : t('Change role for this member')}
                                                             onPress={() => handleChangeRole(m.memberPubkey, m.role, m.callsign)}
                                                         >
-                                                            <Text style={styles.manageBtnText} numberOfLines={1}>Role</Text>
+                                                            <Text style={styles.manageBtnText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Role')}</Text>
                                                         </Pressable>
                                                     )}
                                                     {row.canRemove && (
                                                         <Pressable
                                                             style={[styles.manageBtn, { borderColor: colors.feedback.danger.solid }]}
                                                             accessibilityRole="button"
-                                                            accessibilityLabel={`Remove ${m.callsign || 'this member'} from the group`}
+                                                            accessibilityLabel={m.callsign ? t('Remove {name} from the group', { name: m.callsign }) : t('Remove this member from the group')}
                                                             onPress={() => handleRemoveMember(m.memberPubkey, m.callsign)}
                                                         >
                                                             <MaterialCommunityIcons name="close" size={18} color={colors.feedback.danger.fg} />
@@ -922,7 +963,7 @@ export function GroupDetailModal({
                                             every name on a convenor's roster at 320dp (NB9); inside the name's column,
                                             the lead's three buttons left 66px and "changed)" broke mid-word (NB4). */}
                                         {keyChanged?.has(m.memberPubkey) && (
-                                            <Text style={styles.memberKeyChanged}>{KEY_CHANGED_HINT}</Text>
+                                            <Text style={styles.memberKeyChanged}>{chatLineWords(KEY_CHANGED_HINT)}</Text>
                                         )}
                                     </View>
                                 );
@@ -934,14 +975,14 @@ export function GroupDetailModal({
                                 <Pressable
                                     style={styles.postBtn}
                                     accessibilityRole="button"
-                                    accessibilityLabel={`Post to ${groupData.name}`}
+                                    accessibilityLabel={t('Post to {name}', { name: groupData.name })}
                                     onPress={() => {
                                         onClose();
                                         onPostToGroup(groupData);
                                     }}
                                 >
                                     <MaterialCommunityIcons name="pencil" size={18} color={colors.text.inverse} style={{ flexShrink: 0 }} />
-                                    <Text style={styles.postBtnText} numberOfLines={1}>Post to {groupData.name}</Text>
+                                    <Text style={styles.postBtnText} numberOfLines={1}>{t('Post to {name}', { name: groupData.name })}</Text>
                                 </Pressable>
                             )}
 
@@ -952,33 +993,33 @@ export function GroupDetailModal({
                                     style={styles.leaveBtn}
                                     onPress={handleLeave}
                                     accessibilityRole="button"
-                                    accessibilityLabel="Leave Group"
+                                    accessibilityLabel={t('Leave Group')}
                                     accessibilityState={{ disabled: actionLoading }}
                                 >
-                                    <Text style={styles.leaveBtnText}>Leave Group</Text>
+                                    <Text style={styles.leaveBtnText}>{t('Leave Group')}</Text>
                                 </Pressable>
                             ) : closed ? (
                                 <View style={[styles.joinBtn, styles.joinBtnDisabled]}>
-                                    <Text style={styles.joinBtnText}>Closed</Text>
+                                    <Text style={styles.joinBtnText}>{t('Closed', undefined, 'a group')}</Text>
                                 </View>
                             ) : isPending ? (
                                 <View style={[styles.joinBtn, styles.joinBtnDisabled]}>
-                                    <Text style={styles.joinBtnText}>Request Pending Approval</Text>
+                                    <Text style={[styles.joinBtnText, { textAlign: 'center' }]}>{t('Request Pending Approval')}</Text>
                                 </View>
                             ) : groupData.joinPolicy === 'invite_only' ? (
                                 <View style={[styles.joinBtn, styles.joinBtnDisabled]}>
-                                    <Text style={styles.joinBtnText}>Invite Only</Text>
+                                    <Text style={styles.joinBtnText}>{t('Invite Only')}</Text>
                                 </View>
                             ) : (
                                 <Pressable
                                     style={styles.joinBtn}
                                     onPress={handleJoin}
                                     accessibilityRole="button"
-                                    accessibilityLabel={groupData.joinPolicy === 'request_to_join' ? 'Request to Join' : 'Join Group'}
+                                    accessibilityLabel={groupData.joinPolicy === 'request_to_join' ? t('Request to Join') : t('Join Group')}
                                     accessibilityState={{ disabled: actionLoading }}
                                 >
-                                    <Text style={styles.joinBtnText}>
-                                        {groupData.joinPolicy === 'request_to_join' ? 'Request to Join' : 'Join Group'}
+                                    <Text style={[styles.joinBtnText, { textAlign: 'center' }]}>
+                                        {groupData.joinPolicy === 'request_to_join' ? t('Request to Join') : t('Join Group')}
                                     </Text>
                                 </Pressable>
                             )}

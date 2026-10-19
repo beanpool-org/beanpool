@@ -21,6 +21,7 @@ import {
     type GroupMemberItem,
 } from '../utils/db';
 import { buildSuccessionView, voteConfirmText, type GroupSuccessionData } from '../utils/group-succession';
+import { inCapitalsOf, t } from '@beanpool/core';
 import { hapticSuccess } from '../utils/haptics';
 
 interface Props {
@@ -64,7 +65,6 @@ export function GroupSuccessionPanel({ groupId, members, myPubkey, onLeadChanged
         heading: {
             fontSize: 12,
             fontWeight: '800',
-            textTransform: 'uppercase',
             letterSpacing: 0.5,
             color: colors.feedback.warning.fg,
         },
@@ -81,7 +81,6 @@ export function GroupSuccessionPanel({ groupId, members, myPubkey, onLeadChanged
         quietHeading: {
             fontSize: 12,
             fontWeight: '700',
-            textTransform: 'uppercase',
             letterSpacing: 0.5,
             color: colors.text.muted,
         },
@@ -142,24 +141,24 @@ export function GroupSuccessionPanel({ groupId, members, myPubkey, onLeadChanged
             if (res?.executed && onLeadChanged) onLeadChanged();
         } catch (e: any) {
             // The server's own words. It knows who may stand and who may propose; this does not.
-            setError(e?.message || 'Could not propose a new lead.');
+            setError(e?.message || t('Could not propose a new lead.'));
         } finally {
             setBusy(false);
         }
     };
 
     const confirmPropose = (m: GroupMemberItem) => {
-        const who = m.memberPubkey === myPubkey
-            ? 'yourself'
-            : (m.callsign || m.memberPubkey.slice(0, 10));
+        const question = m.memberPubkey === myPubkey
+            ? t("Propose yourself as the group's new lead convenor? Proposing counts as your yes, and votes can't be changed.")
+            : t("Propose {name} as the group's new lead convenor? Proposing counts as your yes, and votes can't be changed.", { name: m.callsign || m.memberPubkey.slice(0, 10) });
         // Nothing here takes typing, but the screen around it might: never leave a keyboard up under an Alert.
         Keyboard.dismiss();
         Alert.alert(
-            'Propose a new lead',
-            `Propose ${who} as the group's new lead convenor? Proposing counts as your yes, and votes can't be changed.`,
+            t('Propose a new lead'),
+            question,
             [
-                { text: 'Cancel', style: 'cancel' as const },
-                { text: 'Propose', onPress: () => { void performPropose(m.memberPubkey); } },
+                { text: t('Cancel'), style: 'cancel' as const },
+                { text: t('Propose'), onPress: () => { void performPropose(m.memberPubkey); } },
             ],
         );
     };
@@ -173,7 +172,7 @@ export function GroupSuccessionPanel({ groupId, members, myPubkey, onLeadChanged
             await load();
             if (res?.executed && onLeadChanged) onLeadChanged();
         } catch (e: any) {
-            setError(e?.message || 'Could not record your vote.');
+            setError(e?.message || t('Could not record your vote.'));
         } finally {
             setBusy(false);
         }
@@ -184,11 +183,11 @@ export function GroupSuccessionPanel({ groupId, members, myPubkey, onLeadChanged
         if (!open) return;
         Keyboard.dismiss();
         Alert.alert(
-            choice === 'yes' ? 'Vote yes' : 'Vote no',
+            choice === 'yes' ? t('Vote yes') : t('Vote no'),
             voteConfirmText(choice, open.candidateCallsign),
             [
-                { text: 'Cancel', style: 'cancel' as const },
-                { text: choice === 'yes' ? 'Yes' : 'No', onPress: () => { void performVote(open.id, choice); } },
+                { text: t('Cancel'), style: 'cancel' as const },
+                { text: choice === 'yes' ? t('Yes') : t('No'), onPress: () => { void performVote(open.id, choice); } },
             ],
         );
     };
@@ -201,7 +200,7 @@ export function GroupSuccessionPanel({ groupId, members, myPubkey, onLeadChanged
         if (!view.outcomeLine) return null;
         return (
             <View style={styles.quietCard}>
-                <Text style={styles.quietHeading}>Lead convenor</Text>
+                <Text style={styles.quietHeading}>{inCapitalsOf(t('Lead convenor', undefined, 'group role'))}</Text>
                 <Text style={styles.body}>{view.outcomeLine}</Text>
             </View>
         );
@@ -211,8 +210,8 @@ export function GroupSuccessionPanel({ groupId, members, myPubkey, onLeadChanged
     const candidateName = open?.candidateCallsign || open?.candidatePubkey.slice(0, 10) || '';
 
     return (
-        <View style={styles.card} accessibilityLabel="Choosing a new lead convenor">
-            <Text style={styles.heading}>Choosing a new lead convenor</Text>
+        <View style={styles.card} accessibilityLabel={t('Choosing a new lead convenor')}>
+            <Text style={styles.heading}>{inCapitalsOf(t('Choosing a new lead convenor'))}</Text>
 
             {view.silenceLine ? <Text style={styles.body}>{view.silenceLine}</Text> : null}
             {/* Who takes part: only people in the group before the lead went quiet. Anyone offered no button reads why. */}
@@ -222,19 +221,21 @@ export function GroupSuccessionPanel({ groupId, members, myPubkey, onLeadChanged
 
             {open ? (
                 <View style={styles.inner}>
-                    <Text style={styles.candidateLine}>Proposed as the new lead: {candidateName}</Text>
+                    <Text style={styles.candidateLine}>{t('Proposed as the new lead: {name}', { name: candidateName })}</Text>
                     {view.closingLine ? <Text style={styles.body}>{view.closingLine}</Text> : null}
                     {/* Totals only. Who voted which way is nobody's business but their own, and the server never
                         sends it: there is no voter list here to leak. */}
                     <Text style={styles.body}>{view.tallyLine}</Text>
                     <Text style={styles.note}>
-                        It passes if more than half of those who answer say yes. Votes are secret, and nobody sees who voted which way.
+                        {t('It passes if more than half of those who answer say yes. Votes are secret, and nobody sees who voted which way.')}
                     </Text>
 
                     {view.myVote ? (
                         <View style={styles.votedPill}>
                             <MaterialCommunityIcons name="check" size={16} color={colors.feedback.success.fg} />
-                            <Text style={styles.votedText}>You voted {view.myVote}. Votes can&apos;t be changed.</Text>
+                            <Text style={[styles.votedText, { flexShrink: 1 }]}>
+                                {view.myVote === 'no' ? t("You voted no. Votes can't be changed.") : t("You voted yes. Votes can't be changed.")}
+                            </Text>
                         </View>
                     ) : view.canVote ? (
                         <View style={styles.buttonRow}>
@@ -242,49 +243,51 @@ export function GroupSuccessionPanel({ groupId, members, myPubkey, onLeadChanged
                                 style={[styles.yesBtn, busy && { opacity: 0.6 }]}
                                 disabled={busy}
                                 accessibilityRole="button"
-                                accessibilityLabel={`Vote yes to make ${candidateName} the lead convenor`}
+                                accessibilityLabel={t('Vote yes to make {name} the lead convenor', { name: candidateName })}
                                 accessibilityState={{ disabled: busy }}
                                 onPress={() => confirmVote('yes')}
                             >
-                                <Text style={styles.yesBtnText}>Yes</Text>
+                                <Text style={styles.yesBtnText}>{t('Yes')}</Text>
                             </Pressable>
                             <Pressable
                                 style={[styles.noBtn, busy && { opacity: 0.6 }]}
                                 disabled={busy}
                                 accessibilityRole="button"
-                                accessibilityLabel={`Vote no to making ${candidateName} the lead convenor`}
+                                accessibilityLabel={t('Vote no to making {name} the lead convenor', { name: candidateName })}
                                 accessibilityState={{ disabled: busy }}
                                 onPress={() => confirmVote('no')}
                             >
-                                <Text style={styles.noBtnText}>No</Text>
+                                <Text style={styles.noBtnText}>{t('No')}</Text>
                             </Pressable>
                         </View>
                     ) : null}
                 </View>
             ) : view.canPropose ? (
                 <View style={styles.inner}>
-                    <Text style={styles.candidateLine}>Propose a new lead</Text>
+                    <Text style={styles.candidateLine}>{t('Propose a new lead')}</Text>
                     {/* One row each, rather than an Alert's handful of buttons: when the lead is a group's only
                         convenor the electorate is every member, and a list of six would hide most of them. */}
                     {view.candidates.map(m => (
                         <View key={m.memberPubkey} style={styles.candidateRow}>
                             <Text style={styles.candidateName} numberOfLines={2}>
-                                {(m.callsign || m.memberPubkey.slice(0, 10)) + (m.memberPubkey === myPubkey ? ' (yourself)' : '')}
+                                {m.memberPubkey === myPubkey
+                                    ? t('{name} (yourself)', { name: m.callsign || m.memberPubkey.slice(0, 10) })
+                                    : (m.callsign || m.memberPubkey.slice(0, 10))}
                             </Text>
                             <Pressable
                                 style={[styles.proposeBtn, busy && { opacity: 0.6 }]}
                                 disabled={busy}
                                 accessibilityRole="button"
-                                accessibilityLabel={`Propose ${m.callsign || m.memberPubkey.slice(0, 10)} as the lead convenor`}
+                                accessibilityLabel={t('Propose {name} as the lead convenor', { name: m.callsign || m.memberPubkey.slice(0, 10) })}
                                 accessibilityState={{ disabled: busy }}
                                 onPress={() => confirmPropose(m)}
                             >
-                                <Text style={styles.proposeBtnText} numberOfLines={1}>Propose</Text>
+                                <Text style={styles.proposeBtnText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Propose')}</Text>
                             </Pressable>
                         </View>
                     ))}
                     <Text style={styles.note}>
-                        Proposing counts as your yes. The vote runs for 14 days, and closes at once if the lead comes back.
+                        {t('Proposing counts as your yes. The vote runs for 14 days, and closes at once if the lead comes back.')}
                     </Text>
                 </View>
             ) : null}

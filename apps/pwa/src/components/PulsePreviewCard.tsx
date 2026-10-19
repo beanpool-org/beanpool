@@ -17,8 +17,10 @@
 import { useState, useEffect } from 'react';
 import {
     platformMeta,
+    platformName,
     categoryMeta,
     isWebUrl,
+    t,
     type ChannelPlatform,
     type ChannelCategory,
 } from '@beanpool/core';
@@ -60,7 +62,7 @@ export function PulsePreviewCard({
 
     const platform = platformMeta(preview.platform);
     const category = categoryMeta(preview.category);
-    const displayCallsign = preview.authorCallsign || callsign || 'You';
+    const displayCallsign = preview.authorCallsign || callsign || t('You');
     const hasValidThumbnail = Boolean(preview.thumbnailUrl && isWebUrl(preview.thumbnailUrl) && !imageError);
 
     return (
@@ -71,7 +73,7 @@ export function PulsePreviewCard({
                     : 'border-nature-200 dark:border-nature-800'
             } ${!isOptedIn ? 'opacity-60 bg-nature-50 dark:bg-nature-950' : ''}`}
             role="region"
-            aria-label={`Preview of ${platform.label} post: ${preview.title || 'Untitled'}`}
+            aria-label={t('Preview of {platform} post: {title}', { platform: platformName(preview.platform), title: preview.title || t('Untitled') })}
         >
             {/* Header: Author Callout & Badges */}
             <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
@@ -81,8 +83,8 @@ export function PulsePreviewCard({
                     {preview.isVerified && (
                         <span
                             className="w-3.5 h-3.5 rounded-full bg-bp-commit-fill text-bp-commit-on flex items-center justify-center text-[9px] font-black shrink-0"
-                            title="Verified creator"
-                            aria-label="Verified creator"
+                            title={t('Verified creator')}
+                            aria-label={t('Verified creator')}
                         >
                             ✓
                         </span>
@@ -91,7 +93,7 @@ export function PulsePreviewCard({
 
                 <div className="inline-flex items-center gap-1 text-xs font-medium text-nature-500 dark:text-nature-300 px-2 py-0.5 rounded-md bg-nature-50 dark:bg-nature-800/50">
                     <span aria-hidden="true">{category.icon}</span>
-                    <span>{category.label}</span>
+                    <span>{t(category.label)}</span>
                 </div>
             </div>
 
@@ -112,11 +114,12 @@ export function PulsePreviewCard({
 
                 <div className="flex-1 min-w-0">
                     <h4
+                        dir="auto"
                         className={`font-semibold text-sm sm:text-base text-nature-950 dark:text-white line-clamp-3 leading-snug mb-1.5 ${
                             !isOptedIn ? 'line-through text-nature-400 dark:text-nature-400' : ''
                         }`}
                     >
-                        {preview.title || 'Untitled Post'}
+                        {preview.title || t('Untitled Post')}
                     </h4>
                     <p className="text-xs text-nature-500 dark:text-nature-400 truncate font-mono">
                         {preview.url}
@@ -132,7 +135,7 @@ export function PulsePreviewCard({
                 >
                     <span aria-hidden="true">ℹ️</span>
                     <span className="flex-1 leading-tight">
-                        Already published to Pulse. Submitting will update the title or category.
+                        {t('Already published to Pulse. Submitting will update the title or category.')}
                     </span>
                 </div>
             )}
@@ -142,10 +145,10 @@ export function PulsePreviewCard({
                 <div className="flex items-center justify-between mt-3 pt-3 border-t border-nature-100 dark:border-nature-800/60">
                     <div className="pr-3 min-w-0">
                         <div className="text-xs sm:text-sm font-semibold text-nature-900 dark:text-white">
-                            Publish to Pulse
+                            {t('Publish to Pulse')}
                         </div>
                         <div className="text-[11px] sm:text-xs text-nature-500 dark:text-nature-400 truncate">
-                            {isOptedIn ? 'Will be shared with your local community' : 'Excluded from this publish'}
+                            {isOptedIn ? t('Will be shared with your local community') : t('Excluded from this publish')}
                         </div>
                     </div>
                     <label className="relative inline-flex items-center cursor-pointer shrink-0">
@@ -154,7 +157,7 @@ export function PulsePreviewCard({
                             checked={isOptedIn}
                             onChange={(e) => onToggleOptIn(e.target.checked)}
                             className="sr-only peer"
-                            aria-label="Publish to Pulse"
+                            aria-label={t('Publish to Pulse')}
                         />
                         <div className="w-11 h-6 bg-nature-200 peer-focus-visible:ring-2 peer-focus-visible:ring-terra-500 peer-focus-visible:ring-offset-2 dark:peer-focus-visible:ring-offset-nature-900 rounded-full peer dark:bg-nature-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-terra-500"></div>
                     </label>

@@ -17,11 +17,11 @@
  */
 
 import { useEffect, useState } from 'react';
-import { t, placeShownRoughly, PLACE_WORDS } from '@beanpool/core';
+import { t, word, placeShownRoughly, PLACE_WORDS, type WordKey } from '@beanpool/core';
 import { getMarketplacePosts, rsvpEvent, removeMarketplacePost, letInToEvent, type EventRsvpStatus, type MarketplacePost } from '../lib/api';
 import type { BeanPoolIdentity } from '../lib/identity';
 import {
-    CLIENT_POST_TYPES, EVENT_CHAT_ENTRY_LABEL, eventEditBlockedReason, eventRepeatCaption, eventWhenParts, formatDistance, formatEventWhen,
+    CLIENT_POST_TYPES, eventEditBlockedReason, eventRepeatCaption, eventWhenParts, formatDistance, formatEventWhen,
     isEventHostView, isEventOpen,
     eventLetInState, eventLetInLine, eventWaitingCount, eventWaitingLine, letEveryoneInQuestion, eventChatWaitingText, letInButtonLabel,
 } from '../lib/events';
@@ -29,6 +29,7 @@ import { EventReminder, EventShareAndCalendar } from './EventExtras';
 import { EventNextDates } from './EventNextDates';
 import { visitorDistanceText } from '../lib/visitor-lobby';
 import { useCommunityInfo } from '../lib/features';
+import { Sentence } from './Sentence';
 
 interface RsvpState {
     livePost: MarketplacePost;
@@ -49,7 +50,7 @@ function useEventRsvp(post: MarketplacePost, identity: BeanPoolIdentity | null |
 
     const tap = async (status: EventRsvpStatus) => {
         if (!identity) {
-            setError('Join this community to RSVP.');
+            setError(t('Join this community to RSVP.'));
             return;
         }
         // Tapping the status you already have takes it back: "not going" is no RSVP at all.
@@ -77,7 +78,7 @@ function useEventRsvp(post: MarketplacePost, identity: BeanPoolIdentity | null |
                 onChange?.(updated);
             }
         } catch (e: any) {
-            setError(e?.message || 'Could not save your RSVP.');
+            setError(e?.message || t('Could not save your RSVP.'));
         } finally {
             setBusy(null);
         }
@@ -88,16 +89,16 @@ function useEventRsvp(post: MarketplacePost, identity: BeanPoolIdentity | null |
 
 function StateBadge({ post }: { post: MarketplacePost }) {
     const ended = !isEventOpen(post) && post.eventState !== 'cancelled' && post.status !== 'cancelled';
-    const label = post.eventState === 'cancelled' || post.status === 'cancelled'
-        ? 'CANCELLED'
-        : ended ? 'ENDED' : post.eventState === 'updated' ? 'UPDATED' : null;
-    if (!label) return null;
-    const tone = label === 'UPDATED'
+    const state = post.eventState === 'cancelled' || post.status === 'cancelled'
+        ? 'cancelled'
+        : ended ? 'ended' : post.eventState === 'updated' ? 'updated' : null;
+    if (!state) return null;
+    const tone = state === 'updated'
         ? 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/50 dark:text-amber-200 dark:border-amber-800'
         : 'bg-red-100 text-red-700 border-red-300 dark:bg-red-950/50 dark:text-red-300 dark:border-red-800';
     return (
         <span data-testid="event-state-badge" className={`flex-shrink-0 text-[11px] font-black tracking-wide px-2 py-0.5 rounded-md border ${tone}`}>
-            {label}
+            {state === 'cancelled' ? t('CANCELLED', undefined, 'event') : state === 'ended' ? t('ENDED', undefined, 'event') : t('UPDATED', undefined, 'event')}
         </span>
     );
 }
@@ -118,7 +119,7 @@ function RsvpButtons({ rsvp }: { rsvp: RsvpState }) {
     if (isEventHostView(livePost)) {
         return (
             <p data-testid="event-hosting" className="m-0 text-sm font-bold text-violet-800 dark:text-violet-200">
-                You're hosting this event
+                {t("You're hosting this event")}
             </p>
         );
     }
@@ -146,13 +147,13 @@ function RsvpButtons({ rsvp }: { rsvp: RsvpState }) {
                   * tap and could flip the row between stacked and side by side under the finger, then back when
                   * the save lands. A spinner fits inside the narrowest label, so the width never moves.
                   */}
-                <span className={busy === status ? 'invisible' : undefined}>{mine ? `${label} ✓` : label}</span>
+                <span className={busy === status ? 'invisible' : undefined}>{mine ? t('{label} ✓', { label }) : label}</span>
                 {busy === status && (
                     <>
                         <span className="absolute inset-0 flex items-center justify-center" aria-hidden="true">
                             <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
                         </span>
-                        <span className="sr-only">, saving…</span>
+                        <span className="sr-only">{t(', saving…')}</span>
                     </>
                 )}
             </button>
@@ -160,8 +161,8 @@ function RsvpButtons({ rsvp }: { rsvp: RsvpState }) {
     };
     return (
         <div data-testid="event-rsvp-row" className="flex flex-wrap gap-2">
-            {btn('going', 'Going')}
-            {btn('interested', 'Interested')}
+            {btn('going', t('Going'))}
+            {btn('interested', t('Interested'))}
         </div>
     );
 }
@@ -228,6 +229,21 @@ function EventWhen({ post, className, testId, hostLine = false }: { post: Market
 
 const YOUR_TIME = ' your time';
 
+/**
+ * Why the host cannot edit, as a member reads it: lib/events.ts's eventEditBlockedReason keeps the English (the map's
+ * edit alert shares it), and its two sentences are word() keys here by that English, shown through t(); any other line
+ * as written (the phone's chat-actions.ts does the same with its constants).
+ */
+const EDIT_BLOCKED_WORDS: Readonly<Record<string, WordKey>> = {
+    'This event was cancelled, so it can no longer be edited.': word('This event was cancelled, so it can no longer be edited.'),
+    'This event has ended, so it can no longer be edited.': word('This event has ended, so it can no longer be edited.'),
+};
+
+function editBlockedWords(reason: string | null): string | null {
+    if (!reason) return null;
+    return Object.prototype.hasOwnProperty.call(EDIT_BLOCKED_WORDS, reason) ? t(EDIT_BLOCKED_WORDS[reason]) : reason;
+}
+
 /** A join link the page may open: the node takes http(s) only, and this is the second lock. */
 function joinHref(link: string | undefined): string | null {
     return link && /^https?:\/\//i.test(link) ? link : null;
@@ -241,7 +257,7 @@ function joinHref(link: string | undefined): string | null {
  */
 function countsLine(post: MarketplacePost): string | null {
     if (post.goingCount == null && post.interestedCount == null) return null;
-    return `${post.goingCount ?? 0} going · ${post.interestedCount ?? 0} interested`;
+    return t('{going} going · {interested} interested', { going: post.goingCount ?? 0, interested: post.interestedCount ?? 0 });
 }
 
 interface EventCardProps {
@@ -289,7 +305,7 @@ export function EventCard({ post, identity, distanceKm, viewMode = 'grid', onOpe
     const lines = (
         <>
             <EventWhen post={p} testId="event-when" className="text-lg font-black text-violet-800 dark:text-violet-200 leading-tight" />
-            <span className="block w-full truncate text-base font-extrabold text-nature-950 dark:text-white leading-snug">
+            <span dir="auto" className="block w-full truncate text-base font-extrabold text-nature-950 dark:text-white leading-snug">
                 {p.title}
             </span>
             {place && (
@@ -311,7 +327,7 @@ export function EventCard({ post, identity, distanceKm, viewMode = 'grid', onOpe
                 type="button"
                 onClick={onOpen}
                 disabled={!onOpen}
-                aria-label={`Open event: ${p.title}`}
+                aria-label={t('Open event: {title}', { title: p.title })}
                 className={`w-full min-w-0 text-left bg-transparent border-0 p-0 flex cursor-pointer disabled:cursor-default focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 rounded-lg ${
                     asRow ? 'flex-row items-start gap-3' : 'flex-col gap-1'
                 }`}
@@ -403,7 +419,7 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
     };
 
     const handleCancel = async () => {
-        if (!window.confirm('Cancel this event? Everyone will see it as cancelled.')) return;
+        if (!window.confirm(t('Cancel this event? Everyone will see it as cancelled.'))) return;
         setCancelling(true);
         setCancelError(null);
         try {
@@ -418,7 +434,7 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
             rsvp.setLivePost(next);
             onCancelled?.(after);
         } catch (e: any) {
-            setCancelError(e?.message || 'Could not cancel the event.');
+            setCancelError(e?.message || t('Could not cancel the event.'));
         } finally {
             setCancelling(false);
         }
@@ -433,7 +449,7 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                 <h2 className="m-0 min-w-0 flex flex-col gap-1">
                     <EventWhen post={p} hostLine className="text-xl font-black text-violet-800 dark:text-violet-200 leading-tight" />
                 </h2>
-                <h3 className="m-0 text-lg font-extrabold text-nature-950 dark:text-white leading-snug break-words">{p.title}</h3>
+                <h3 dir="auto" className="m-0 text-lg font-extrabold text-nature-950 dark:text-white leading-snug break-words">{p.title}</h3>
                 <EventNextDates
                     post={p}
                     isHost={isHost && open}
@@ -471,7 +487,7 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                 {!p.eventOnline && (p.eventPlaceName || p.lat != null) && (
                     <div className="flex flex-col items-start gap-1 min-w-0">
                         <span className="w-full min-w-0 break-words text-sm font-semibold text-nature-700 dark:text-nature-300">
-                            <span aria-hidden="true">📍 </span>{[p.eventPlaceName, distanceKm != null ? formatDistance(distanceKm) : ''].filter(Boolean).join(' · ') || 'On the map'}
+                            <span aria-hidden="true">📍 </span>{[p.eventPlaceName, distanceKm != null ? formatDistance(distanceKm) : ''].filter(Boolean).join(' · ') || t('On the map')}
                         </span>
                         {onShowOnMap && p.lat != null && p.lng != null && (
                             <button
@@ -479,7 +495,7 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                                 onClick={() => onShowOnMap(p)}
                                 className="flex-shrink-0 min-h-[48px] px-3 rounded-xl border border-violet-300 dark:border-violet-800 text-sm font-bold text-violet-800 dark:text-violet-200 bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-1"
                             >
-                                Show on map
+                                {t('Show on map')}
                             </button>
                         )}
                         {/* Where anyone can join, the spot is the host's to give (DESIGN-global-member-privacy-fable.md §4). */}
@@ -492,19 +508,26 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                 )}
 
                 {p.description && (
-                    <p className="m-0 text-sm text-nature-700 dark:text-nature-300 whitespace-pre-wrap break-words">{p.description}</p>
+                    <p dir="auto" className="m-0 text-sm text-nature-700 dark:text-nature-300 whitespace-pre-wrap break-words">{p.description}</p>
                 )}
 
                 <p className="m-0 text-sm text-nature-600 dark:text-nature-400 min-w-0">
-                    Hosted by{' '}
-                    <button
-                        type="button"
-                        onClick={() => onOpenProfile?.(p.authorPublicKey)}
-                        className="inline-flex items-center min-h-[48px] max-w-full bg-transparent border-0 p-0 font-bold text-left text-nature-900 dark:text-white underline decoration-dotted cursor-pointer break-words focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-1 rounded-sm"
-                    >
-                        {hostName}
-                    </button>
-                    {p.audienceScope === 'group' && p.targetGroupName ? <> · for {p.targetGroupName} only</> : null}
+                    {/* One sentence with the host's name (a button) and the group's in it: the order is the language's. */}
+                    <Sentence
+                        text={p.audienceScope === 'group' && p.targetGroupName ? t('Hosted by {host} · for {group} only') : t('Hosted by {host}')}
+                        parts={{
+                            host: (
+                                <button
+                                    type="button"
+                                    onClick={() => onOpenProfile?.(p.authorPublicKey)}
+                                    className="inline-flex items-center min-h-[48px] max-w-full bg-transparent border-0 p-0 font-bold text-left text-nature-900 dark:text-white underline decoration-dotted cursor-pointer break-words focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-1 rounded-sm"
+                                >
+                                    {hostName}
+                                </button>
+                            ),
+                            group: p.targetGroupName ?? '',
+                        }}
+                    />
                 </p>
 
                 {countsLine(p) && (
@@ -540,24 +563,24 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                         onClick={() => onOpenChat(p)}
                         className="min-h-[48px] w-full px-3 rounded-xl border border-violet-300 dark:border-violet-800 text-sm font-bold text-violet-800 dark:text-violet-200 bg-violet-50 dark:bg-violet-950/40 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-1"
                     >
-                        💬 {EVENT_CHAT_ENTRY_LABEL}
+                        <span aria-hidden="true">💬</span> {t('Open event chat')}
                     </button>
                 )}
 
                 {p.eventPrivateNote ? (
                     <div data-testid="event-private-note" className="p-3 rounded-xl bg-violet-50 dark:bg-violet-950/40 border border-violet-200 dark:border-violet-800">
-                        <p className="m-0 mb-1 text-xs font-black uppercase tracking-wide text-violet-800 dark:text-violet-300">Note for people who are going</p>
-                        <p className="m-0 text-sm text-nature-900 dark:text-nature-100 whitespace-pre-wrap break-words">{p.eventPrivateNote}</p>
+                        <p className="m-0 mb-1 text-xs font-black uppercase tracking-wide text-violet-800 dark:text-violet-300">{t('Note for people who are going')}</p>
+                        <p dir="auto" className="m-0 text-sm text-nature-900 dark:text-nature-100 whitespace-pre-wrap break-words">{p.eventPrivateNote}</p>
                     </div>
                 ) : !isHost && open && !letInLine ? (
                     <p className="m-0 text-xs text-nature-500 dark:text-nature-400">
-                        If the host left a note (a gate code, parking, what to bring), it shows here once you tap Going.
+                        {t('If the host left a note (a gate code, parking, what to bring), it shows here once you tap Going.')}
                     </p>
                 ) : null}
 
                 {isHost && (
                     <div data-testid="event-host-panel" className="flex flex-col gap-2 pt-2 border-t border-nature-100 dark:border-nature-800">
-                        <p className="m-0 text-xs font-black uppercase tracking-wide text-nature-500 dark:text-nature-400">Who's going</p>
+                        <p className="m-0 text-xs font-black uppercase tracking-wide text-nature-500 dark:text-nature-400">{t("Who's going")}</p>
                         {waiting > 0 && (
                             <p data-testid="event-waiting-count" className="m-0 text-sm font-bold text-nature-800 dark:text-nature-200">{eventWaitingLine(waiting)}</p>
                         )}
@@ -573,7 +596,7 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                             </button>
                         )}
                         {going.length === 0 && interested.length === 0 ? (
-                            <p className="m-0 text-sm text-nature-500 dark:text-nature-400">Nobody yet.</p>
+                            <p className="m-0 text-sm text-nature-500 dark:text-nature-400">{t('Nobody yet.')}</p>
                         ) : (
                             <ul className="m-0 p-0 list-none flex flex-col gap-1">
                                 {[...going, ...interested].map(r => (
@@ -597,7 +620,7 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                                             </button>
                                         ) : (
                                             <span className="flex-shrink-0 text-xs font-bold text-nature-500 dark:text-nature-400">
-                                                {r.status === 'going' ? 'Going' : 'Interested'}
+                                                {r.status === 'going' ? t('Going') : t('Interested')}
                                             </span>
                                         )}
                                     </li>
@@ -611,11 +634,11 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                                 onClick={() => onEdit(p)}
                                 className="min-h-[48px] px-3 rounded-xl border border-violet-700 dark:border-violet-400 text-sm font-bold text-white bg-violet-700 dark:bg-violet-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-1"
                             >
-                                Edit event
+                                {t('Edit event')}
                             </button>
                         )}
                         {onEdit && editBlocked && (
-                            <p data-testid="event-edit-blocked" className="m-0 text-sm text-nature-600 dark:text-nature-400">{editBlocked}</p>
+                            <p data-testid="event-edit-blocked" className="m-0 text-sm text-nature-600 dark:text-nature-400">{editBlockedWords(editBlocked)}</p>
                         )}
                         {onCopyToNewDate && (
                             <button
@@ -624,7 +647,7 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                                 onClick={() => onCopyToNewDate(p)}
                                 className="min-h-[48px] px-3 rounded-xl border border-violet-300 dark:border-violet-800 text-sm font-bold text-violet-800 dark:text-violet-200 bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-1"
                             >
-                                Copy to a new date
+                                {t('Copy to a new date')}
                             </button>
                         )}
                         {open && (
@@ -634,7 +657,7 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                                 disabled={cancelling}
                                 className="min-h-[48px] px-3 rounded-xl border border-red-300 dark:border-red-900 text-sm font-bold text-red-700 dark:text-red-300 bg-transparent disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-1"
                             >
-                                {cancelling ? 'Cancelling…' : 'Cancel event'}
+                                {cancelling ? t('Cancelling…') : t('Cancel event')}
                             </button>
                         )}
                         {cancelError && <p role="alert" className="m-0 text-xs text-red-600 dark:text-red-400">{cancelError}</p>}

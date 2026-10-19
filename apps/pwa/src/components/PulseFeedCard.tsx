@@ -14,13 +14,16 @@ import { useState, useEffect } from 'react';
 import {
     isWebUrl,
     platformMeta,
+    platformName,
     categoryMeta,
     VIDEO_PLATFORMS,
+    t,
 } from '@beanpool/core';
 import { type PulseFeedItem } from '../lib/api';
 import { formatRelativeTime, isOfficialSource, resolvePulseThumbnailUrl } from '../lib/pulse';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { ReportModal } from './ReportModal';
+import { Sentence } from './Sentence';
 
 interface Props {
     item: PulseFeedItem;
@@ -43,10 +46,12 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onDelete, onOpenPro
     const isOwner = Boolean(currentPubkey && item.ownerPubkey === currentPubkey);
     const canReport = Boolean(currentPubkey && item.ownerPubkey && !isOwner);
     const platMeta = platformMeta(item.platform);
+    // A brand (YouTube, Instagram …) as written; our own names (Website, Blog / RSS, Link) in the member's language.
+    const platName = platformName(item.platform);
     const catMeta = categoryMeta(item.category);
     const isVideo = VIDEO_PLATFORMS.includes(item.platform as any);
     const timeAgo = formatRelativeTime(item.publishedAt);
-    const authorName = item.callsign?.trim() || (item.ownerPubkey ? `${item.ownerPubkey.slice(0, 8)}…` : 'Neighbour');
+    const authorName = item.callsign?.trim() || (item.ownerPubkey ? `${item.ownerPubkey.slice(0, 8)}…` : t('Neighbour'));
     const avatarResolved = resolveAvatarUrl(item.avatarUrl);
     const proxiedThumbnailUrl = item.thumbnailUrl ? resolvePulseThumbnailUrl(item.id) : null;
 
@@ -106,7 +111,7 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onDelete, onOpenPro
     return (
         <article
             className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl mb-4 overflow-hidden shadow-sm hover:shadow-md transition-shadow duration-200"
-            aria-label={`${item.title || 'Community post'} by ${authorName} on ${platMeta.label}`}
+            aria-label={t('{title} by {name} on {platform}', { title: item.title || t('Community post'), name: authorName, platform: platName })}
         >
             {/* Header: Neighbour details + Category + Owner actions */}
             <div className="flex items-center justify-between p-3 sm:p-3.5 gap-2 border-b border-nature-100 dark:border-nature-800/60">
@@ -114,7 +119,7 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onDelete, onOpenPro
                     type="button"
                     onClick={handleAuthorClick}
                     className="flex items-center gap-2.5 min-w-0 flex-1 text-left bg-transparent border-none p-1 -m-1 rounded-lg cursor-pointer group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terra-500"
-                    aria-label={`View ${authorName}'s public profile`}
+                    aria-label={t("View {name}'s public profile", { name: authorName })}
                 >
                     <div className="w-9 h-9 rounded-full overflow-hidden bg-oat-100 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 flex items-center justify-center shrink-0">
                         {avatarResolved ? (
@@ -133,8 +138,8 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onDelete, onOpenPro
                             {item.isVerified && (
                                 <span
                                     className="w-3.5 h-3.5 rounded-full bg-bp-commit-fill text-bp-commit-on flex items-center justify-center text-[9px] font-black shrink-0"
-                                    title="Verified account"
-                                    aria-label="Verified account"
+                                    title={t('Verified account')}
+                                    aria-label={t('Verified account')}
                                 >
                                     ✓
                                 </span>
@@ -142,7 +147,7 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onDelete, onOpenPro
                         </div>
                         <div className="flex items-center gap-1 text-xs text-nature-500 dark:text-nature-400 mt-0.5 truncate">
                             <span className={isOfficialSource(item) ? "font-bold text-terra-600 dark:text-terra-400" : "font-medium"}>
-                                {isOfficialSource(item) ? '📰 Local source' : `${platMeta.icon} ${platMeta.label}`}
+                                {isOfficialSource(item) ? t('\u{1F4F0} Local source') : `${platMeta.icon} ${platName}`}
                             </span>
                             {timeAgo && <span className="shrink-0">· {timeAgo}</span>}
                         </div>
@@ -152,10 +157,10 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onDelete, onOpenPro
                 <div className="flex items-center gap-2 shrink-0">
                     <span
                         className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 border border-nature-200 dark:border-nature-700"
-                        title={`Category: ${catMeta.label}`}
+                        title={t('Category: {category}', { category: t(catMeta.label) })}
                     >
                         <span>{catMeta.icon}</span>
-                        <span className="hidden xs:inline">{catMeta.label}</span>
+                        <span className="hidden xs:inline">{t(catMeta.label)}</span>
                     </span>
 
                     {canReport && (
@@ -166,8 +171,8 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onDelete, onOpenPro
                                 setShowReport(true);
                             }}
                             className="min-h-[48px] min-w-[48px] flex items-center justify-center text-base rounded-lg bg-transparent text-nature-400 hover:text-red-600 dark:hover:text-red-300 hover:bg-nature-100 dark:hover:bg-nature-800 border-none cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
-                            aria-label="Report this post"
-                            title="Report"
+                            aria-label={t('Report this post')}
+                            title={t('Report', undefined, 'button: report a post')}
                         >
                             <span aria-hidden="true">⚑</span>
                         </button>
@@ -180,9 +185,9 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onDelete, onOpenPro
                                     type="button"
                                     onClick={handleMuteClick}
                                     className="min-h-[44px] px-3 py-2 text-xs font-semibold rounded-lg bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 hover:bg-nature-200 dark:hover:bg-nature-700 dark:hover:text-nature-200 border border-nature-200 dark:border-nature-700 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terra-500"
-                                    aria-label="Hide this item from feed"
+                                    aria-label={t('Hide this item from feed')}
                                 >
-                                    Hide
+                                    {t('Hide')}
                                 </button>
                             )}
                             {onDelete && (
@@ -190,9 +195,9 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onDelete, onOpenPro
                                     type="button"
                                     onClick={handleDeleteClick}
                                     className="min-h-[44px] px-3 py-2 text-xs font-semibold rounded-lg bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/50 border border-red-200 dark:border-red-900/40 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
-                                    aria-label="Delete this post"
+                                    aria-label={t('Delete this post')}
                                 >
-                                    Delete
+                                    {t('Delete')}
                                 </button>
                             )}
                         </div>
@@ -212,7 +217,7 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onDelete, onOpenPro
                     }
                 }}
                 className="cursor-pointer group block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terra-500"
-                aria-label={`Open post on ${platMeta.label}`}
+                aria-label={t('Open post on {platform}', { platform: platName })}
             >
                 <div className="w-full aspect-video relative bg-nature-100 dark:bg-nature-800 overflow-hidden flex items-center justify-center">
                     {proxiedThumbnailUrl && !imageFailed ? (
@@ -238,18 +243,19 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onDelete, onOpenPro
                     )}
 
                     <div className="absolute bottom-2 right-2 bg-black/75 backdrop-blur-sm text-white text-[11px] font-bold px-2 py-0.5 rounded-md shadow">
-                        {platMeta.label} ↗
+                        {platName} ↗
                     </div>
                 </div>
 
                 {/* Title and permalink action */}
                 <div className="p-3 sm:p-3.5">
-                    <h3 className="font-bold text-sm sm:text-base text-nature-950 dark:text-white line-clamp-3 leading-snug group-hover:text-terra-600 dark:group-hover:text-terra-400 transition-colors m-0">
-                        {item.title || `View post on ${platMeta.label}`}
+                    <h3 dir="auto" className="font-bold text-sm sm:text-base text-nature-950 dark:text-white line-clamp-3 leading-snug group-hover:text-terra-600 dark:group-hover:text-terra-400 transition-colors m-0">
+                        {item.title || t('View post on {platform}', { platform: platName })}
                     </h3>
                     <div className="flex items-center gap-1 text-xs font-semibold text-terra-600 dark:text-terra-400 mt-2">
-                        <span>Open on {platMeta.label}</span>
-                        <span aria-hidden="true">↗</span>
+                        <span>
+                            <Sentence text={t('Open on {platform} {arrow}', { platform: platName })} parts={{ arrow: <span aria-hidden="true">↗</span> }} />
+                        </span>
                     </div>
                 </div>
             </div>
@@ -268,10 +274,10 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onDelete, onOpenPro
                         className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl max-w-sm w-full p-5 shadow-2xl"
                     >
                         <h4 id={`mute-dialog-title-${item.id}`} className="text-base font-bold text-nature-900 dark:text-white mb-2">
-                            Hide this post from feed?
+                            {t('Hide this post from feed?')}
                         </h4>
                         <p className="text-sm text-nature-600 dark:text-nature-400 mb-5 leading-relaxed">
-                            "{item.title || 'This item'}" will no longer be visible to your neighbours on the community feed.
+                            {t('"{title}" will no longer be visible to your neighbours on the community feed.', { title: item.title || t('This item') })}
                         </p>
                         <div className="flex gap-2 justify-end">
                             <button
@@ -279,14 +285,14 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onDelete, onOpenPro
                                 onClick={() => setShowMuteConfirm(false)}
                                 className="min-h-[44px] px-4 py-2 rounded-xl text-sm font-semibold border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-700 dark:text-nature-200 hover:bg-nature-50 dark:hover:bg-nature-700 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terra-500"
                             >
-                                Keep post
+                                {t('Keep post')}
                             </button>
                             <button
                                 type="button"
                                 onClick={confirmMute}
                                 className="min-h-[44px] px-4 py-2 rounded-xl text-sm font-bold bg-nature-800 hover:bg-nature-900 dark:bg-nature-700 dark:hover:bg-nature-600 text-white transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terra-500"
                             >
-                                Hide from feed
+                                {t('Hide from feed')}
                             </button>
                         </div>
                     </div>
@@ -307,10 +313,10 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onDelete, onOpenPro
                         className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl max-w-sm w-full p-5 shadow-2xl"
                     >
                         <h4 id={`delete-dialog-title-${item.id}`} className="text-base font-bold text-nature-900 dark:text-white mb-2">
-                            Delete this post?
+                            {t('Delete this post?')}
                         </h4>
                         <p className="text-sm text-nature-600 dark:text-nature-400 mb-5 leading-relaxed">
-                            "{item.title || 'This item'}" will be permanently removed from The Pulse.
+                            {t('"{title}" will be permanently removed from The Pulse.', { title: item.title || t('This item') })}
                         </p>
                         <div className="flex gap-2 justify-end">
                             <button
@@ -318,14 +324,14 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onDelete, onOpenPro
                                 onClick={() => setShowDeleteConfirm(false)}
                                 className="min-h-[44px] px-4 py-2 rounded-xl text-sm font-semibold border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-700 dark:text-nature-200 hover:bg-nature-50 dark:hover:bg-nature-700 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terra-500"
                             >
-                                Cancel
+                                {t('Cancel')}
                             </button>
                             <button
                                 type="button"
                                 onClick={confirmDelete}
                                 className="min-h-[44px] px-4 py-2 rounded-xl text-sm font-bold bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
                             >
-                                Delete permanently
+                                {t('Delete permanently')}
                             </button>
                         </div>
                     </div>
@@ -337,7 +343,7 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onDelete, onOpenPro
                     onClose={() => setShowReport(false)}
                     reporterPubkey={currentPubkey}
                     targetPubkey={item.ownerPubkey}
-                    targetName={`${authorName}'s post`}
+                    targetName={t("{name}'s post", { name: authorName })}
                     targetPulseItemId={item.id}
                 />
             )}

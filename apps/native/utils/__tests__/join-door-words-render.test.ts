@@ -33,6 +33,11 @@ vi.mock('react-native', () => {
         if (accessibilityLabel) attrs['aria-label'] = accessibilityLabel;
         if (placeholder) attrs.placeholder = placeholder;
         if (accessibilityRole && roles[accessibilityRole]) attrs.role = roles[accessibilityRole];
+        const s = Object.assign({}, ...[props.style].flat(4).filter((x) => x && typeof x === 'object'));
+        if (s.flexDirection === 'row') attrs['data-row'] = 'true';
+        if (s.flex !== undefined) attrs['data-flex'] = String(s.flex);
+        if (typeof s.flexShrink === 'number' && s.flexShrink > 0) attrs['data-flex-shrink'] = String(s.flexShrink);
+        if (typeof s.fontSize === 'number') attrs['data-font'] = String(s.fontSize);
         return createElement(tag, attrs, children);
     };
     const listener = () => ({ remove() {} });
@@ -274,6 +279,50 @@ describe('another community\'s door, and an address the screen refuses, in the p
         expect(host.textContent).toContain(pseudoLocalise('Join a community'));
         expect(host.textContent).toContain(pseudoLocalise('← Back'));
         expect(bypassing()).toEqual([]);
+    });
+});
+
+// ── 320 dp with text at 1.3× (checked with the pseudo-locale) ─────────────────────────────────────────────────────────
+const SCALE = 1.3;
+const glyphEm = (c: string) => (/\p{M}/u.test(c) || /[\uFE0F\u200B\u200C\u200D]/.test(c) ? 0 : /\p{Extended_Pictographic}/u.test(c) ? 1.25 : 0.62);
+const widthOf = (text: string, px: number) => Array.from(text).reduce((w, c) => w + glyphEm(c) * px, 0);
+const widestWord = (text: string) => text.split(/[\s\u200B~]+/).reduce((a, b) => (widthOf(b, 1) > widthOf(a, 1) ? b : a), '');
+const fontOf = (el: Element): number => { for (let e: Element | null = el; e; e = e.parentElement) { const f = e.getAttribute('data-font'); if (f) return Number(f); } return 14; };
+
+describe('the door at 320 dp with 1.3× text, in the pseudo-locale', () => {
+    // 320 - 2 × 16 (the scroll's padding) - 2 × 16 (the card's) - 2 × 1 (its border).
+    const CARD = 320 - 32 - 32 - 2;
+    const unfit = (): string[] => {
+        const out: string[] = [];
+        for (const span of Array.from(host.querySelectorAll('span')).filter((s) => /\p{L}/u.test(s.textContent ?? ''))) {
+            const word = widestWord(span.textContent ?? '');
+            const px = fontOf(span) * SCALE;
+            if (widthOf(word, px) > CARD) out.push(`${word} (${Math.round(widthOf(word, px))} > ${CARD})`);
+            const row = span.parentElement;
+            if (/^\[/.test(span.textContent ?? '') && row?.getAttribute('data-row') === 'true' && row.children.length > 1
+                && !span.getAttribute('data-flex') && !span.getAttribute('data-flex-shrink')) out.push(`stuck in a row: ${span.textContent}`);
+        }
+        return out;
+    };
+
+    it('the two ways in, the name step and its buttons: no word wider than the card, nothing stuck in a row', async () => {
+        globalThis.fetch = network({ [GLOBAL]: OPEN });
+        await renderIn('xx');
+        expect(unfit(), 'choose').toEqual([]);
+        await click(host.querySelector('[data-testid="words-way"]'), 'the 12-words way');
+        expect(host.textContent).toContain(pseudoLocalise('Choose another way'));
+        expect(unfit(), 'name').toEqual([]);
+    });
+
+    it('the sign-in door and a refusal: the same', async () => {
+        globalThis.fetch = network({ [GLOBAL]: SIGN_IN_ONLY });
+        await renderIn('xx');
+        expect(unfit(), 'sign-in').toEqual([]);
+        act(() => root.unmount());
+        root = createRoot(host);
+        globalThis.fetch = network({ [GLOBAL]: null });
+        await renderIn('xx');
+        expect(unfit(), 'unreachable').toEqual([]);
     });
 });
 

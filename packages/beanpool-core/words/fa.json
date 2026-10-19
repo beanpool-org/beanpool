@@ -2,7 +2,7 @@
   "_meta": {
     "language": "fa",
     "name": "Persian",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-19",
@@ -325,5 +325,44 @@
   "{n} of these {count} from a new or 12-word account|{n} of these {count} from new or 12-word accounts": {
     "one": "{n} از این {count} مورد از یک حساب جدید یا ۱۲ کلمه‌ای",
     "other": "{n} از این {count} مورد از حساب‌های جدید یا ۱۲ کلمه‌ای"
-  }
+  },
+  "updates itself": "خودبه‌خود به‌روزرسانی می‌شود",
+  "a tap per post": "یک ضربه برای هر پست",
+  "shows as a card": "به صورت کارت نمایش داده می‌شود",
+  "youtube.com/@you": "youtube.com/@نام_شما",
+  "@yourhandle": "@نام_کاربری_شما",
+  "soundcloud.com/you": "soundcloud.com/نام_شما",
+  "yoursite.com": "yoursite.com",
+  "facebook.com/yourpage": "facebook.com/صفحه_شما",
+  "yourblog.com/feed": "yourblog.com/feed",
+  "Community": "جامعه",
+  "Food & growing": "غذا و پرورش",
+  "Making & craft": "ساخت و صنایع دستی",
+  "Repair & reuse": "تعمیر و استفاده مجدد",
+  "Art & music": "هنر و موسیقی",
+  "Business": "کسب‌وکار",
+  "Other": "غیره",
+  "Website": "وب‌سایت",
+  "Blog / RSS": "وبلاگ / RSS",
+  "Link": "پیوند",
+  "Idea": "ایده",
+  "Problem": "مشکل",
+  "This goes to the BeanPool project team, not to your community. Don't include personal details.": "این برای تیم پروژه BeanPool ارسال می‌شود، نه جامعه شما. اطلاعات شخصی را وارد نکنید.",
+  "Thank you — your suggestion has reached the BeanPool project team.": "سپاسگزاریم — پیشنهاد شما به تیم پروژه BeanPool رسید.",
+  "Please write at least {n} characters.|Please write at least {n} characters.": {
+    "one": "لطفاً حداقل {n} نویسه بنویسید.",
+    "other": "لطفاً حداقل {n} نویسه بنویسید."
+  },
+  "Please keep it under {n} characters ({count} now).|Please keep it under {n} characters ({count} now).": {
+    "one": "لطفاً آن را کمتر از {n} نویسه نگه دارید (اکنون {count}).",
+    "other": "لطفاً آن را کمتر از {n} نویسه نگه دارید (اکنون {count})."
+  },
+  "Couldn't reach the BeanPool project just now. Your text is still here — please try again later.": "هم‌اکنون ارتباط با پروژه BeanPool برقرار نشد. متن شما همچنان اینجاست — لطفاً بعداً دوباره امتحان کنید.",
+  "Please keep the community name under {n} characters.|Please keep the community name under {n} characters.": {
+    "one": "لطفاً نام جامعه را کمتر از {n} نویسه نگه دارید.",
+    "other": "لطفاً نام جامعه را کمتر از {n} نویسه نگه دارید."
+  },
+  "Too many suggestions from your connection recently. Please try again later — your text is still here.": "اخیراً پیشنهادهای بسیار زیادی از طرف اتصال شما ارسال شده است. لطفاً بعداً دوباره امتحان کنید — متن شما همچنان اینجاست.",
+  "This poll is shown at your area (about 10 km around it) to everyone who can read it.": "این نظرسنجی در منطقه شما (حدود ۱۰ کیلومتر در اطراف آن) برای همه کسانی که می‌توانند آن را بخوانند نمایش داده می‌شود.",
+  "You haven't set your area, so members nearby won't see this poll in their list; they can still find it by searching. Set it in Settings → Your area to show it near you.": "شما منطقه خود را تنظیم نکرده‌اید، بنابراین اعضای نزدیک این نظرسنجی را در فهرست خود نخواهند دید؛ آنها همچنان می‌توانند آن را با جستجو پیدا کنند. برای نمایش در نزدیکی خود، آن را در تنظیمات ← منطقه شما تنظیم کنید."
 }

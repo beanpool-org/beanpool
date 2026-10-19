@@ -18,6 +18,10 @@ import { memoryIndexedDB } from '../lib/memory-indexeddb';
 import { resetGroupChatLockStoreForTest } from '../lib/group-chat-lock-store';
 import { groupChatNotice } from '../lib/group-chat-lines';
 import { backToEnglish, bracketed, bypassing, showIn, xx } from '../words-xx.test-support';
+import { chooseAndShowLanguage } from '../lib/language';
+import { useLanguage } from '../lib/useLanguage';
+import { formatDate } from '@beanpool/core';
+import ruWords from '../../words/ru.json';
 
 if (typeof window !== 'undefined' && window.HTMLElement) window.HTMLElement.prototype.scrollIntoView = vi.fn();
 
@@ -284,5 +288,36 @@ describe('Talk on the web in English', () => {
         fireEvent.click(screen.getByRole('button', { name: '✅ Release Credits' }));
         expect(said).toEqual(['Release 3 Beans to the provider? This action is final.']);
         expect(bracketed()).toBe(0);
+    });
+});
+
+describe('Talk follows a language switch live (Settings → Language, the first screen\'s switch)', () => {
+    // As App does: the root re-renders when the language changes (lib/useLanguage.ts).
+    const Live = () => { useLanguage(); return <MessagesPage identity={me} />; };
+
+    it('English → Russian → English on the open page: its words and dates follow, what members wrote stays', async () => {
+        render(<Live />);
+        await screen.findByText('Action Needed: Review Partner');
+        expect(screen.getAllByText('3 members').length).toBeGreaterThan(0);
+        expect(screen.getByText('14 Oct 2026')).toBeInTheDocument();
+
+        await act(async () => { expect(await chooseAndShowLanguage('ru')).toBe(true); });
+        const threeMembers = (ruWords as Record<string, Record<string, string>>)['{n} member|{n} members'].few.replace('{n}', '3');
+        expect(threeMembers).not.toBe('3 members');
+        expect(screen.getAllByText(threeMembers).length).toBeGreaterThan(0);
+        expect(screen.queryByText('3 members')).toBeNull();
+        // The row's date in Russian, from core's tables (the Russian date words came with the language).
+        const russianDate = formatDate(new Date(bobDm.createdAt), 'day-month-year');
+        expect(russianDate).not.toBe('14 Oct 2026');
+        expect(screen.getByText(russianDate)).toBeInTheDocument();
+        // A sentence with no Russian yet reads in English (never blank); members' words as they wrote them.
+        expect(screen.getByText('Action Needed: Review Partner')).toBeInTheDocument();
+        expect(screen.getByText('Garden crew')).toBeInTheDocument();
+        expect(screen.getByText('Sourdough loaf')).toBeInTheDocument();
+
+        await act(async () => { expect(await chooseAndShowLanguage('en')).toBe(true); });
+        expect(screen.getAllByText('3 members').length).toBeGreaterThan(0);
+        expect(screen.getByText('14 Oct 2026')).toBeInTheDocument();
+        expect(screen.queryByText(threeMembers)).toBeNull();
     });
 });

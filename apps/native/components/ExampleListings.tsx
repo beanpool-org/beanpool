@@ -9,7 +9,7 @@
 
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { t } from '@beanpool/core';
+import { t, upperCase } from '@beanpool/core';
 import { useTheme } from '../app/ThemeContext';
 import { EXAMPLE_BADGE, EXAMPLE_LISTINGS, EXAMPLES_HEADING, EXAMPLES_NOTE, exampleCardA11y } from '../utils/example-listings';
 
@@ -37,7 +37,7 @@ export function ExampleListings() {
                         <View style={styles.body}>
                             <View style={styles.badges}>
                                 <View style={[styles.badge, { backgroundColor: colors.border.default, borderColor: colors.border.strong }]}>
-                                    <Text style={[styles.badgeText, { color: colors.text.heading }]} maxFontSizeMultiplier={1.3}>{t(LINES.badge).toUpperCase()}</Text>
+                                    <Text style={[styles.badgeText, { color: colors.text.heading }]} maxFontSizeMultiplier={1.3}>{upperCase(t(LINES.badge))}</Text>
                                 </View>
                                 <View style={[styles.badge, { backgroundColor: type.bg, borderColor: type.bg }]}>
                                     <Text style={[styles.badgeText, { color: type.fg }]} maxFontSizeMultiplier={1.3}>

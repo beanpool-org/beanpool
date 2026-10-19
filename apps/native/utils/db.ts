@@ -1293,6 +1293,11 @@ export async function getConversations(myPubkey: string) {
 
     return rows.map(row => {
         let displayMsg = row.lastMessage ? '[Message]' : 'Started conversation';
+        // Whether BeanPool wrote the preview: a stand-in for a line it can't show, a deleted line's fixed text, a system
+        // line (a trade's, the node's own: nonce 00000, type system or author SYSTEM). Only then is it translated where
+        // shown (chat-line-words.ts chatPreviewWords). Words someone wrote, a member's line or the admins' message, are
+        // shown exactly as written, even when they match a sentence BeanPool writes.
+        let fromApp = true;
         // A DM's newest line, judged as the thread judges it (e2e-crypto checkDmThread): an encrypted line opened bound to
         // the author and id the node stores it under, under this conversation's id or one its metadata names (folded
         // threads). Only words that open are shown as words; a row in a member's name that isn't an encrypted line, an
@@ -1308,11 +1313,18 @@ export async function getConversations(myPubkey: string) {
             if (lastView.mark === 'not-verified') displayMsg = '🔒 Encrypted message';
             else if (lastView.mark === 'not-encrypted') displayMsg = DM_LINE_NOT_ENCRYPTED_TEXT;
             else if (lastView.mark === 'old-app') displayMsg = dmLineMarkText('old-app') as string;
-            else if (lastView.mark === 'from-admins') displayMsg = `From your community's admins: ${lastView.text}`;
-            else displayMsg = dmLineShownText(lastView);
+            else if (lastView.mark === 'from-admins') {
+                displayMsg = `From your community's admins: ${lastView.text}`;
+                fromApp = false;
+            } else {
+                displayMsg = dmLineShownText(lastView);
+                // Only a line that opened (format 2 or 3) holds its author's words; a deleted line's text is fixed.
+                fromApp = lastView.format === null;
+            }
         } else if (row.lastNonce && row.lastNonce.startsWith('plaintext')) {
             try {
                 displayMsg = decodeUtf8(decodeBase64(row.lastMessage));
+                fromApp = row.lastMsgType === 'system' || row.lastAuthor === 'SYSTEM';
             } catch {
                 displayMsg = '[Unreadable message]';
             }
@@ -1363,6 +1375,7 @@ export async function getConversations(myPubkey: string) {
             // pins, no tag: the chat itself says why it can't send).
             keyChanged: (row.convType || 'dm') === 'dm' && !!previewPins && (!!dmPinFor(previewPins, row.id)?.offered || isUnplacedSight(dmSightFor(previewPins, row.id))),
             lastMessage: displayMsg,
+            lastMessageFromApp: fromApp,
             lastMsgType: row.lastMsgType,
             lastSysType: row.lastSysType,
             timestamp: row.timestamp ? new Date(row.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'New',

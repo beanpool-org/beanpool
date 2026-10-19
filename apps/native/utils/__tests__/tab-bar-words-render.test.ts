@@ -8,7 +8,9 @@
  * bypassed t(). At 320 dp with text at 1.3× (the label capped at 1.1×) six tabs share the strip; a longer word shrinks
  * to fit its tab (adjustsFontSizeToFit, down to 0.6) on its one line rather than being cut off, but a translated tab
  * word must fit at 0.8 (8.8 dp, still readable): the short `tab` word, never a full one that needs more shrink. Widths
- * are a model of the styles' own numbers, as language-switch-render.test.ts measures the welcome screen's buttons.
+ * are a model of the styles' own numbers, as language-switch-render.test.ts measures the welcome screen's buttons, except
+ * in hi, bn, ta and ml, which the model counts far too narrow: there each tab word's width is measured as Android draws it
+ * (tab-word-widths.json, from scripts/words/measure-tab-words.mjs).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement } from 'react';
@@ -112,11 +114,30 @@ const widthOf = (text: string, px: number) => Array.from(text).reduce((w, c) => 
  * LABEL_MIN_SCALE (0.6) is only the safety net that keeps a label whole.
  */
 const READABLE_SCALE = 0.8;
-/** The tab words in a catalog that fit their tab only below `scale`: each named with its tab. */
-const tooWide = (words: Record<string, unknown>, scale: number) => STRIP.flatMap(([, english]) => {
+/**
+ * Tab words in hi, bn, ta and ml, in em, shaped by HarfBuzz in Noto Sans <script> Bold (and its UI variant, the wider):
+ * the model above counts these scripts 1.03–4.9× too narrow (a Tamil letter is near an em; ml "ഹോം" is one cluster three
+ * em wide), and conjuncts fold several code points into one glyph, so no per-letter em is both safe and close. For the
+ * other catalogs the model holds: their tab words, shaped in Roboto Bold and Noto Naskh / Nastaliq Bold, are within 8 %
+ * of it and every one fits unshrunk.
+ */
+const MEASURED: { widths: Record<string, Record<string, number>>; probes: Record<string, Record<string, number>> } = JSON.parse(fs.readFileSync(path.resolve(__dirname, 'tab-word-widths.json'), 'utf8'));
+const MEASURED_LANGS = Object.keys(MEASURED.widths);
+const REMEASURE = 'node scripts/words/measure-tab-words.mjs';
+/**
+ * The tab words in a catalog that fit their tab only below `scale`: each named with its tab. In a measured language a
+ * word is held to its measured width, and one with none fails (`measured` adds the review's probe words).
+ */
+const tooWide = (words: Record<string, unknown>, scale: number, lang?: string, measured: Record<string, number> = MEASURED.widths[lang ?? ''] ?? {}) => STRIP.flatMap(([, english]) => {
     const translated = words[TAB_KEY(english)];
-    return typeof translated === 'string' && widthOf(translated, num('LABEL_SIZE') * num('LABEL_MAX_SCALE') * scale) > FLOOR / STRIP.length
-        ? [`"${translated}" (the ${english} tab)`] : [];
+    if (typeof translated !== 'string') return [];
+    const px = num('LABEL_SIZE') * num('LABEL_MAX_SCALE') * scale;
+    if (lang && MEASURED_LANGS.includes(lang)) {
+        const em = measured[translated];
+        if (em === undefined) return [`"${translated}" (the ${english} tab) has no measured width: ${REMEASURE}`];
+        return em * px > FLOOR / STRIP.length ? [`"${translated}" (the ${english} tab)`] : [];
+    }
+    return widthOf(translated, px) > FLOOR / STRIP.length ? [`"${translated}" (the ${english} tab)`] : [];
 });
 
 let root: Root | null = null;
@@ -186,7 +207,7 @@ describe('the tab strip in the pseudo-locale at 320 dp with 1.3× text', () => {
     it('a translated tab name, in any catalog that has one, fits its tab at 8.8 dp (0.8), not only at the safety net', () => {
         expect(READABLE_SCALE).toBeGreaterThan(num('LABEL_MIN_SCALE'));
         expect(num('LABEL_SIZE') * num('LABEL_MAX_SCALE') * READABLE_SCALE).toBeCloseTo(8.8, 5);
-        for (const lang of CATALOG_LANGS) expect([lang, tooWide(catalog(lang), READABLE_SCALE)]).toEqual([lang, []]);
+        for (const lang of CATALOG_LANGS) expect([lang, tooWide(catalog(lang), READABLE_SCALE, lang)]).toEqual([lang, []]);
     });
 
     it('a full word that fits only by shrinking below 0.8 fails: the catalog must give the short `tab` word', () => {
@@ -197,5 +218,44 @@ describe('the tab strip in the pseudo-locale at 320 dp with 1.3× text', () => {
         expect(tooWide(full, num('LABEL_MIN_SCALE'))).toEqual([]);
         // The short word passes; so does a word in a context other than `tab` (the page's own title).
         expect(tooWide({ [TAB_KEY('Commons')]: 'Comuns', 'Commons': 'Bens comuns' }, READABLE_SCALE)).toEqual([]);
+    });
+});
+
+describe('hi, bn, ta and ml at 320 dp with 1.3× text: each tab word as the font draws it (#2152 deciding review)', () => {
+    const tabWidth = FLOOR / STRIP.length;
+    const labelPx = () => num('LABEL_SIZE') * num('LABEL_MAX_SCALE');
+
+    it('every tab word in those catalogs has a measured width, and the table holds no word they no longer have', () => {
+        expect(MEASURED_LANGS.sort()).toEqual(['bn', 'hi', 'ml', 'ta']);
+        for (const lang of MEASURED_LANGS) {
+            const words = STRIP.map(([, english]) => catalog(lang)[TAB_KEY(english)]).filter((w): w is string => typeof w === 'string');
+            expect([lang, words.length]).toEqual([lang, STRIP.length]);
+            expect([lang, Object.keys(MEASURED.widths[lang]).sort()], REMEASURE).toEqual([lang, [...words].sort()]);
+        }
+    });
+
+    it('each is drawn at 0.8 or larger, so at 8.8 dp or more, and none leans on the 0.6 net (Tamil Map is the tightest)', () => {
+        const scales: Record<string, number> = {};
+        for (const lang of MEASURED_LANGS) {
+            for (const [word, em] of Object.entries(MEASURED.widths[lang])) scales[`${lang} ${word}`] = Math.min(1, tabWidth / (em * labelPx()));
+        }
+        for (const [word, scale] of Object.entries(scales)) expect([word, scale >= READABLE_SCALE]).toEqual([word, true]);
+        expect(Math.min(...Object.values(scales))).toBeCloseTo(scales['ta வரைபடம்'], 10);
+        expect(scales['ta வரைபடம்']).toBeGreaterThan(0.85);
+    });
+
+    it('the model counts these scripts too narrow: it passes words the font draws below 0.8, even below the 0.6 net, which the measured check refuses', () => {
+        for (const [lang, probes] of Object.entries(MEASURED.probes)) {
+            for (const [word, em] of Object.entries(probes)) {
+                const asLedger = { [TAB_KEY('Ledger')]: word };
+                // By the model it fits at 0.8 …
+                expect([lang, word, tooWide(asLedger, READABLE_SCALE)]).toEqual([lang, word, []]);
+                // … the font draws it below the 0.6 net: cut off on the phone.
+                expect(tabWidth / (em * labelPx())).toBeLessThan(num('LABEL_MIN_SCALE'));
+                expect(tooWide(asLedger, READABLE_SCALE, lang, { ...MEASURED.widths[lang], ...probes })).toEqual([`"${word}" (the Ledger tab)`]);
+            }
+        }
+        // A tab word changed in a catalog without being measured fails, saying how to measure it.
+        expect(tooWide({ [TAB_KEY('Map')]: 'நிலவரைபடம்' }, READABLE_SCALE, 'ta')).toEqual([`"நிலவரைபடம்" (the Map tab) has no measured width: ${REMEASURE}`]);
     });
 });

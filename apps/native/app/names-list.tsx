@@ -48,6 +48,24 @@ import { makeOfflineTicket } from '../utils/member-statements';
 import {
     DEBT_COPY, fetchNamesDebts, workOffDebt, settleDebt, debtsOfEntry, openDebtOf, debtLine, openDebtForName, leftOf, beans, type NamesDebt,
 } from '../utils/names-debts';
+import { keyLineWords } from '../components/key-lines';
+import { formatNumber, t, tn } from '@beanpool/core';
+
+/**
+ * The words this screen shows from utils/names-list.ts, names-debts.ts and community-health.ts (which hold the list's
+ * keys and sign its requests, so stay off the words layer): each in the member's language where components/key-lines.ts
+ * knows it, paragraph by paragraph; anything else (a server's own words, a sentence with an amount in it) as written.
+ */
+function say(text: string): string {
+    return text.split('\n\n').map(keyLineWords).join('\n\n');
+}
+
+/** names-debts.ts beans() in the member's language: "12 Beans", "12.50 Beans" (one English form, as beans() writes it). */
+function beansWords(n: number): string {
+    const cents = Math.round(n * 100);
+    const amount = cents % 100 === 0 ? formatNumber(cents / 100) : formatNumber(cents / 100, 2);
+    return tn(cents / 100, '{n} Beans', '{n} Beans', { n: amount });
+}
 
 export { ErrorBoundary };
 
@@ -131,7 +149,7 @@ export default function NamesListScreen() {
             // A Remove this phone couldn't keep (round 16, :186): its own card says so and offers it again, in place of the list.
             if (result.code === 'remove_not_kept') return;
             setCopyRefused(COPY_REFUSED_CODES.includes(result.code ?? ''));
-            setError(result.status === 404 ? 'This community keeps no names list.' : result.message);
+            setError(result.status === 404 ? t('This community keeps no names list.') : result.message);
             // Show the state the pin is in, not the last list: a Remove whose open failed still stands.
             if (openedRef.current) setStale(await pendingRemovals(STORE, identity, url, openedRef.current.state).catch(() => []));
             return;
@@ -153,7 +171,7 @@ export default function NamesListScreen() {
         setError(null);
         try {
             const url = await getAnchorUrl();
-            if (!url) { setError('This phone isn’t connected to a community.'); return; }
+            if (!url) { setError(t('This phone isn’t connected to a community.')); return; }
             setAnchor(url);
             await take(url, await openNamesList(url, identity, STORE));
         } finally {
@@ -194,9 +212,9 @@ export default function NamesListScreen() {
     // ── the key: each of these asks first ──────────────────────────────────────────────────────
 
     const ask = (title: string, message: string, confirm: string, onConfirm: () => void, destructive = true) => {
-        Alert.alert(title, message, [
-            { text: 'Cancel', style: 'cancel' },
-            { text: confirm, style: destructive ? 'destructive' : 'default', onPress: onConfirm },
+        Alert.alert(say(title), say(message), [
+            { text: t('Cancel'), style: 'cancel' },
+            { text: say(confirm), style: destructive ? 'destructive' : 'default', onPress: onConfirm },
         ]);
     };
 
@@ -224,7 +242,7 @@ export default function NamesListScreen() {
     /** "Start afresh on this phone" (design §5): asked first; the only way a fresh record replaces the node's copy. */
     const startAfresh = () => {
         if (!identity) return;
-        ask(COPY.startAfresh, 'This phone starts the names list from nothing, and the copy on the server is replaced. Then check codes with another admin and their phone will send the keys.', COPY.startAfresh, () => {
+        ask(COPY.startAfresh, t('This phone starts the names list from nothing, and the copy on the server is replaced. Then check codes with another admin and their phone will send the keys.'), COPY.startAfresh, () => {
             void run((url) => startAfreshOnThisPhone(url, identity, STORE));
         });
     };
@@ -248,7 +266,7 @@ export default function NamesListScreen() {
             finish();
         }
         if (!done.ok) { setError(done.message); return; }
-        setNotice(`Sent the keys to @${admin.callsign}.`);
+        setNotice(t('Sent the keys to @{name}.', { name: admin.callsign }));
     };
 
     // ── checking each other ────────────────────────────────────────────────────────────────────
@@ -346,10 +364,10 @@ export default function NamesListScreen() {
     const remove = (entry: OpenedEntry) => {
         if (!anchor || !identity || !opened || !list) return;
         if (entry.confirmation) { setFormError(COPY.deleteConfirmed); return; }
-        Alert.alert('Delete this entry?', 'It goes from the list for every admin. Your paper copy, if you keep one, is yours to update.', [
-            { text: 'Cancel', style: 'cancel' },
+        Alert.alert(t('Delete this entry?'), t('It goes from the list for every admin. Your paper copy, if you keep one, is yours to update.'), [
+            { text: t('Cancel'), style: 'cancel' },
             {
-                text: 'Delete', style: 'destructive', onPress: async () => {
+                text: t('Delete'), style: 'destructive', onPress: async () => {
                     if (!begin()) return;
                     const done = await deleteNamesEntry(anchor, identity, entry.id, STORE);
                     finish();
@@ -377,8 +395,10 @@ export default function NamesListScreen() {
         finish();
         if (!done.ok) { setError(done.message); return; }
         setNotice(done.value.status === 'awaiting_second'
-            ? `@${member.callsign} is confirmed by you and waits for a second admin.`
-            : `@${member.callsign} is confirmed against ${entry.text?.name ?? 'the entry'}.`);
+            ? t('@{member} is confirmed by you and waits for a second admin.', { member: member.callsign })
+            : entry.text?.name
+                ? t('@{member} is confirmed against {name}.', { member: member.callsign, name: entry.text.name })
+                : t('@{member} is confirmed against the entry.', { member: member.callsign }));
         setMode({ kind: 'list' });
     };
 
@@ -405,22 +425,26 @@ export default function NamesListScreen() {
             finish();
             if (!done.ok) { setError(done.message); return; }
             setNotice(done.value.status === 'awaiting_second'
-                ? `@${member.callsign} is confirmed by you to work off the debt, and waits for a second admin.`
-                : `@${member.callsign} is confirmed against ${entry.text?.name ?? 'the entry'} and is working off ${beans(leftOf(debt))}.`);
+                ? t('@{member} is confirmed by you to work off the debt, and waits for a second admin.', { member: member.callsign })
+                : entry.text?.name
+                    ? t('@{member} is confirmed against {name} and is working off {amount}.', { member: member.callsign, name: entry.text.name, amount: beansWords(leftOf(debt)) })
+                    : t('@{member} is confirmed against the entry and is working off {amount}.', { member: member.callsign, amount: beansWords(leftOf(debt)) }));
             setMode({ kind: 'list' });
         }, false);
     };
 
     /** Count a payment the member made without the code: asked first; the node counts it once, up to what is left. */
     const settleWith = (entry: OpenedEntry, debt: NamesDebt) => {
-        if (!payRef.trim()) { setError('Paste the payment’s reference the member gave you.'); return; }
+        if (!payRef.trim()) { setError(t('Paste the payment’s reference the member gave you.')); return; }
         ask(DEBT_COPY.settleTitle, DEBT_COPY.settle(debt), DEBT_COPY.settleButton, async () => {
             if (!anchor || !identity || !begin()) return;
             const done = await settleDebt(anchor, identity, debt.id, payRef, settleNote);
             if (done.ok) await refreshDebts();
             finish();
             if (!done.ok) { setError(done.message); return; }
-            setNotice(`The debt on ${entry.text?.name ?? 'this entry'} is settled: paid back.`);
+            setNotice(entry.text?.name
+                ? t('The debt on {name} is settled: paid back.', { name: entry.text.name })
+                : t('The debt on this entry is settled: paid back.'));
             setMode({ kind: 'list' });
         }, false);
     };
@@ -436,9 +460,9 @@ export default function NamesListScreen() {
                     description: `A member who left owed the Commons ${beans(debt.amount)}${debt.repaid > 0 ? `, and ${beans(debt.repaid)} of it was repaid` : ''}. `
                         + 'Forgiving it moves no Beans: the Commons took the debt when they left. The record stays, marked forgiven.',
                 });
-                setNotice('The Decision is open: the community votes on forgiving the debt.');
+                setNotice(t('The Decision is open: the community votes on forgiving the debt.'));
             } catch (e: any) {
-                setError(typeof e?.message === 'string' && e.message ? e.message : 'The Decision couldn’t be started. Nothing was changed.');
+                setError(typeof e?.message === 'string' && e.message ? e.message : t('The Decision couldn’t be started. Nothing was changed.'));
             } finally {
                 finish();
             }
@@ -472,11 +496,13 @@ export default function NamesListScreen() {
 
     const revoke = (entry: OpenedEntry) => {
         if (!anchor || !identity || !entry.confirmation) return;
-        const who = entry.confirmation.callsign ? `@${entry.confirmation.callsign}` : 'this member';
-        Alert.alert(COPY.removedConfirmTitle, `${who} will no longer be confirmed against this entry. You can confirm them again later.`, [
-            { text: 'Cancel', style: 'cancel' },
+        const member = entry.confirmation.callsign;
+        Alert.alert(say(COPY.removedConfirmTitle), member
+            ? t('@{member} will no longer be confirmed against this entry. You can confirm them again later.', { member })
+            : t('This member will no longer be confirmed against this entry. You can confirm them again later.'), [
+            { text: t('Cancel'), style: 'cancel' },
             {
-                text: 'Revoke', style: 'destructive', onPress: async () => {
+                text: t('Revoke'), style: 'destructive', onPress: async () => {
                     if (!begin()) return;
                     const done = await revokeConfirmation(anchor, identity, entry.confirmation!.id);
                     if (done.ok) await afterConfirmation();
@@ -489,10 +515,10 @@ export default function NamesListScreen() {
 
     const exportPdf = () => {
         if (!anchor || !identity || !opened) return;
-        Alert.alert(COPY.exportTitle, COPY.export, [
-            { text: 'Cancel', style: 'cancel' },
+        Alert.alert(say(COPY.exportTitle), say(COPY.export), [
+            { text: t('Cancel'), style: 'cancel' },
             {
-                text: 'Export', onPress: async () => {
+                text: t('Export'), onPress: async () => {
                     if (!begin()) return;
                     try {
                         // Fetched for the export, so the node logs it as one: the PDF is made from this answer.
@@ -505,13 +531,13 @@ export default function NamesListScreen() {
                         const FileSystem = require('expo-file-system/legacy') as typeof import('expo-file-system/legacy');
                         const { uri } = await Print.printToFileAsync({ html });
                         try {
-                            await Sharing.shareAsync(uri, { mimeType: 'application/pdf', UTI: 'com.adobe.pdf', dialogTitle: 'Names list' });
+                            await Sharing.shareAsync(uri, { mimeType: 'application/pdf', UTI: 'com.adobe.pdf', dialogTitle: t('Names list') });
                         } finally {
                             // The copy this phone made for sharing goes: what was shared is the admin's to keep safe.
                             await FileSystem.deleteAsync(uri, { idempotent: true }).catch(() => {});
                         }
                     } catch {
-                        setError('The PDF couldn’t be made on this phone. Update the app and try again.');
+                        setError(t('The PDF couldn’t be made on this phone. Update the app and try again.'));
                     } finally {
                         finish();
                     }
@@ -557,15 +583,15 @@ export default function NamesListScreen() {
         <View style={styles.header}>
             <Pressable
                 onPress={() => (mode.kind === 'list' ? router.back() : setMode({ kind: 'list' }))}
-                style={styles.backButton} accessibilityRole="button" accessibilityLabel={mode.kind === 'list' ? 'Back' : 'Back to the list'}
+                style={styles.backButton} accessibilityRole="button" accessibilityLabel={mode.kind === 'list' ? t('Back') : t('Back to the list')}
             >
                 <MaterialCommunityIcons name="arrow-left" size={26} color={colors.text.heading} />
             </Pressable>
             <Text style={styles.headerTitle} numberOfLines={2} accessibilityRole="header">
-                {mode.kind === 'edit' ? (mode.entry ? 'Change an entry' : 'Add a name') : mode.kind === 'pick' ? (mode.workOff ? 'Work off a debt' : 'Confirm a member')
-                    : mode.kind === 'settle' ? 'Settle a debt'
-                    : mode.kind === 'health' ? 'Community health'
-                    : mode.kind === 'check' ? COPY.checkEachOtherTitle : COPY.title}
+                {mode.kind === 'edit' ? (mode.entry ? t('Change an entry') : t('Add a name')) : mode.kind === 'pick' ? (mode.workOff ? t('Work off a debt') : t('Confirm a member'))
+                    : mode.kind === 'settle' ? t('Settle a debt')
+                    : mode.kind === 'health' ? t('Community health')
+                    : say(mode.kind === 'check' ? COPY.checkEachOtherTitle : COPY.title)}
             </Text>
         </View>
     );
@@ -586,16 +612,16 @@ export default function NamesListScreen() {
             accessibilityState={{ disabled: off, busy: off }}
             {...(hint ? { accessibilityHint: hint } : {})}
         >
-            <Text style={BUTTONS[kind][1]}>{label}</Text>
+            <Text style={BUTTONS[kind][1]}>{say(label)}</Text>
         </Pressable>
     );
 
     const statusBlocks = (
         <>
-            {notice ? <View style={styles.notice} accessibilityLiveRegion="polite"><Text style={styles.noticeText}>{notice}</Text></View> : null}
+            {notice ? <View style={styles.notice} accessibilityLiveRegion="polite"><Text style={styles.noticeText}>{say(notice)}</Text></View> : null}
             {error ? (
                 <View style={styles.error} accessibilityLiveRegion="assertive">
-                    <Text style={styles.errorText}>{error}</Text>
+                    <Text style={styles.errorText}>{say(error)}</Text>
                     {copyRefused ? <View style={styles.buttonRow}>{btn(COPY.startAfresh, startAfresh, 'danger')}</View> : null}
                 </View>
             ) : null}
@@ -608,16 +634,17 @@ export default function NamesListScreen() {
     const listKey = opened ? listKeyOf(opened) : null;
     const myKeyCard = mine ? (
         <View style={styles.keyCard}>
-            <Text style={styles.keyCardTitle} accessibilityRole="header">{COPY.myKeyTitle}</Text>
-            <Text style={styles.keyCardText}>{COPY.myKey}</Text>
+            <Text style={styles.keyCardTitle} accessibilityRole="header">{say(COPY.myKeyTitle)}</Text>
+            <Text style={styles.keyCardText}>{say(COPY.myKey)}</Text>
             <View style={styles.qrBox}>
                 <QRCode value={mine.qr} size={200} quietZone={8} backgroundColor="#ffffff" color="#000000" />
             </View>
-            <Text style={styles.codeText} selectable accessibilityLabel={COPY.myCode(mine.code.split('').join(' '))}>{COPY.myCode(mine.code)}</Text>
+            {/* names-list.ts NAMES_COPY.myCode and listKey, said again with the same code: the code is never looked up. */}
+            <Text style={styles.codeText} selectable accessibilityLabel={t('Your code: {code}', { code: mine.code.split('').join(' ') })}>{t('Your code: {code}', { code: mine.code })}</Text>
             {listKey ? (
                 <>
-                    <Text style={styles.codeText} selectable>{COPY.listKey(listKey.n, listKey.code)}</Text>
-                    <Text style={styles.keyCardText}>{COPY.compareListKey}</Text>
+                    <Text style={styles.codeText} selectable>{t('This phone adds names under list key {n}, code {code}.', { n: listKey.n, code: listKey.code })}</Text>
+                    <Text style={styles.keyCardText}>{say(COPY.compareListKey)}</Text>
                 </>
             ) : null}
         </View>
@@ -626,35 +653,35 @@ export default function NamesListScreen() {
 
     let body: React.ReactNode;
     if (loading && !opened) {
-        body = <ActivityIndicator color={colors.brand.primary} accessibilityLabel="Opening the names list" />;
+        body = <ActivityIndicator color={colors.brand.primary} accessibilityLabel={t('Opening the names list')} />;
     } else if (mode.kind === 'edit') {
         const entry = mode.entry;
         body = (
             <>
                 {entry && !entry.text ? (
                     <View style={styles.warn}>
-                        <Text style={styles.warnText}>{COPY.lockedEntry(entry.key?.n ?? null, callsignOf(entry.key?.maker ?? ''), entry.holders, entry.notTrusting, entry.checkedHere)}</Text>
+                        <Text style={styles.warnText}>{say(COPY.lockedEntry(entry.key?.n ?? null, callsignOf(entry.key?.maker ?? ''), entry.holders, entry.notTrusting, entry.checkedHere))}</Text>
                     </View>
                 ) : null}
-                <Text style={styles.label}>NAME</Text>
+                <Text style={styles.label}>{t('NAME')}</Text>
                 <TextInput
-                    style={styles.input} value={name} onChangeText={setName} placeholder="Their real name"
-                    placeholderTextColor={colors.text.muted} autoCapitalize="words" autoCorrect={false} accessibilityLabel="Their real name"
+                    style={styles.input} value={name} onChangeText={setName} placeholder={t('Their real name')}
+                    placeholderTextColor={colors.text.muted} autoCapitalize="words" autoCorrect={false} accessibilityLabel={t('Their real name')}
                     maxLength={200} editable={!busy}
                 />
-                <Text style={styles.label}>NOTE (OPTIONAL)</Text>
+                <Text style={styles.label}>{t('NOTE (OPTIONAL)')}</Text>
                 <TextInput
                     style={[styles.input, styles.noteInput]} value={note} onChangeText={setNote} multiline
-                    placeholder="How the community knows them" placeholderTextColor={colors.text.muted}
-                    accessibilityLabel="A note: how the community knows them" maxLength={1000} editable={!busy}
+                    placeholder={t('How the community knows them')} placeholderTextColor={colors.text.muted}
+                    accessibilityLabel={t('A note: how the community knows them')} maxLength={1000} editable={!busy}
                 />
-                <Text style={styles.hint}>A name and a short note only: no address, date of birth or ID number. Sealed on this phone before it’s sent.</Text>
-                {formError ? <View style={styles.error}><Text style={styles.errorText}>{formError}</Text></View> : null}
+                <Text style={styles.hint}>{t('A name and a short note only: no address, date of birth or ID number. Sealed on this phone before it’s sent.')}</Text>
+                {formError ? <View style={styles.error}><Text style={styles.errorText}>{say(formError)}</Text></View> : null}
                 <View style={styles.buttonRow}>
-                    {btn('Save', saveChecked, 'primary')}
-                    {btn('Cancel', () => setMode({ kind: 'list' }), 'secondary')}
+                    {btn(t('Save'), saveChecked, 'primary')}
+                    {btn(t('Cancel'), () => setMode({ kind: 'list' }), 'secondary')}
                 </View>
-                {entry ? <View style={styles.buttonRow}>{btn('Delete this entry', () => remove(entry), 'danger')}</View> : null}
+                {entry ? <View style={styles.buttonRow}>{btn(t('Delete this entry'), () => remove(entry), 'danger')}</View> : null}
             </>
         );
     } else if (mode.kind === 'pick') {
@@ -662,18 +689,24 @@ export default function NamesListScreen() {
             .filter((m) => !memberQuery.trim() || m.callsign.toLocaleLowerCase().includes(memberQuery.trim().toLocaleLowerCase()));
         body = (
             <>
-                <Text style={styles.body}>Which member is {mode.entry.text?.name ?? 'this person'}? Confirm only someone you know is them.</Text>
-                {mode.workOff ? <Text style={styles.hint}>They work off {beans(leftOf(mode.workOff))}: a known floor of 0, and every Bean they receive above 0 goes to the Commons until it is cleared.</Text> : null}
+                <Text style={styles.body}>
+                    {mode.entry.text?.name
+                        ? t('Which member is {name}? Confirm only someone you know is them.', { name: mode.entry.text.name })
+                        : t('Which member is this person? Confirm only someone you know is them.')}
+                </Text>
+                {mode.workOff ? <Text style={styles.hint}>{t('They work off {amount}: a known floor of 0, and every Bean they receive above 0 goes to the Commons until it is cleared.', { amount: beansWords(leftOf(mode.workOff)) })}</Text> : null}
                 <TextInput
-                    style={styles.search} value={memberQuery} onChangeText={setMemberQuery} placeholder="Find a member"
-                    placeholderTextColor={colors.text.muted} autoCorrect={false} accessibilityLabel="Find a member by name"
+                    style={styles.search} value={memberQuery} onChangeText={setMemberQuery} placeholder={t('Find a member')}
+                    placeholderTextColor={colors.text.muted} autoCorrect={false} accessibilityLabel={t('Find a member by name')}
                 />
-                {candidates.length === 0 ? <Text style={styles.hint}>Nobody here is waiting to be confirmed.</Text> : null}
+                {candidates.length === 0 ? <Text style={styles.hint}>{t('Nobody here is waiting to be confirmed.')}</Text> : null}
                 {candidates.slice(0, 100).map((m) => (
                     <Pressable
                         key={m.publicKey} style={[styles.pickRow, off && styles.disabled]} disabled={off}
                         onPress={() => confirmAs(mode.entry, m)} accessibilityRole="button"
-                        accessibilityLabel={`Confirm @${m.callsign} as ${mode.entry.text?.name ?? 'this entry'}`}
+                        accessibilityLabel={mode.entry.text?.name
+                            ? t('Confirm @{member} as {name}', { member: m.callsign, name: mode.entry.text.name })
+                            : t('Confirm @{member} as this entry', { member: m.callsign })}
                     >
                         <Text style={styles.pickName}>@{m.callsign}</Text>
                     </Pressable>
@@ -685,21 +718,21 @@ export default function NamesListScreen() {
             <>
                 <Text style={styles.body}>{debtLine(mode.debt, at)}</Text>
                 <Text style={styles.hint}>{DEBT_COPY.settle(mode.debt)}</Text>
-                <Text style={styles.label}>THE PAYMENT’S REFERENCE</Text>
+                <Text style={styles.label}>{t('THE PAYMENT’S REFERENCE')}</Text>
                 <TextInput
-                    style={styles.input} value={payRef} onChangeText={setPayRef} placeholder="As their app showed it"
-                    placeholderTextColor={colors.text.muted} autoCapitalize="none" autoCorrect={false} accessibilityLabel="The payment’s reference"
+                    style={styles.input} value={payRef} onChangeText={setPayRef} placeholder={t('As their app showed it')}
+                    placeholderTextColor={colors.text.muted} autoCapitalize="none" autoCorrect={false} accessibilityLabel={t('The payment’s reference')}
                     maxLength={100} editable={!busy}
                 />
-                <Text style={styles.label}>NOTE (OPTIONAL)</Text>
+                <Text style={styles.label}>{t('NOTE (OPTIONAL)')}</Text>
                 <TextInput
                     style={[styles.input, styles.noteInput]} value={settleNote} onChangeText={setSettleNote} multiline
-                    placeholder="No name: it is kept unsealed" placeholderTextColor={colors.text.muted}
-                    accessibilityLabel="A note, with no name in it" maxLength={200} editable={!busy}
+                    placeholder={t('No name: it is kept unsealed')} placeholderTextColor={colors.text.muted}
+                    accessibilityLabel={t('A note, with no name in it')} maxLength={200} editable={!busy}
                 />
                 <View style={styles.buttonRow}>
                     {btn(DEBT_COPY.settleButton, () => settleWith(mode.entry, mode.debt), 'primary')}
-                    {btn('Cancel', () => setMode({ kind: 'list' }), 'secondary')}
+                    {btn(t('Cancel'), () => setMode({ kind: 'list' }), 'secondary')}
                 </View>
             </>
         );
@@ -716,37 +749,39 @@ export default function NamesListScreen() {
         );
         body = (
             <>
-                <Text style={styles.label} accessibilityRole="header">{HEALTH_COPY.totalsHeading}</Text>
-                <Text style={styles.hint}>{HEALTH_COPY.totalsHint}</Text>
+                <Text style={styles.label} accessibilityRole="header">{say(HEALTH_COPY.totalsHeading)}</Text>
+                <Text style={styles.hint}>{say(HEALTH_COPY.totalsHint)}</Text>
                 {mode.totals ? (
                     <View style={styles.entry}>
-                        {totalsRows(mode.totals).map((t) => (
-                            <View key={t.label} accessible accessibilityLabel={`${t.label}: ${t.value}`}>
-                                <Text style={styles.hint}>{t.label}</Text>
-                                <Text style={styles.entryName}>{t.value}</Text>
+                        {totalsRows(mode.totals).map((row) => (
+                            <View key={row.label} accessible accessibilityLabel={t('{label}: {value}', { label: row.label, value: row.value })}>
+                                <Text style={styles.hint}>{row.label}</Text>
+                                <Text style={styles.entryName}>{row.value}</Text>
                             </View>
                         ))}
                     </View>
-                ) : <Text style={styles.hint}>{mode.totalsMissing}</Text>}
+                ) : <Text style={styles.hint}>{say(mode.totalsMissing)}</Text>}
                 {mode.refused ? (
                     <View style={styles.warn} accessibilityLiveRegion="polite"><Text style={styles.warnText}>{mode.refused}</Text></View>
                 ) : null}
                 {mode.body ? (
                     <>
                         <Text style={styles.body}>
-                            Only members who agreed to what the admins can see, past {mode.body.settings.debtLinePct}% of their floor or in debit
-                            with no sale for {mode.body.settings.quietDays} days. Their trades are never shown.
+                            {tn(mode.body.settings.quietDays,
+                                'Only members who agreed to what the admins can see, past {pct}% of their floor or in debit with no sale for {n} days. Their trades are never shown.',
+                                'Only members who agreed to what the admins can see, past {pct}% of their floor or in debit with no sale for {n} days. Their trades are never shown.',
+                                { pct: mode.body.settings.debtLinePct })}
                         </Text>
-                        <Text style={styles.label}>PAST A LINE</Text>
-                        {rows.length === 0 ? <Text style={styles.hint}>Nobody is past a line.</Text> : null}
+                        <Text style={styles.label}>{t('PAST A LINE')}</Text>
+                        {rows.length === 0 ? <Text style={styles.hint}>{t('Nobody is past a line.')}</Text> : null}
                         {rows.map((r) => (
                             <View key={r.key} style={styles.entry}>
                                 <Text style={styles.entryName}>{r.name}</Text>
                                 <Text style={styles.entryNote}>{r.detail}</Text>
                             </View>
                         ))}
-                        <Text style={styles.label}>LEFT WITH A DEBT</Text>
-                        {departed.length === 0 ? <Text style={styles.hint}>Nobody left owing Beans.</Text> : null}
+                        <Text style={styles.label}>{t('LEFT WITH A DEBT')}</Text>
+                        {departed.length === 0 ? <Text style={styles.hint}>{t('Nobody left owing Beans.')}</Text> : null}
                         {departed.map((r) => (
                             <View key={r.key} style={styles.entry}>
                                 <Text style={styles.entryName}>{r.name}</Text>
@@ -757,16 +792,16 @@ export default function NamesListScreen() {
                 ) : null}
                 {logList(mode.logs.balance)}
                 {logList(mode.logs.trades)}
-                <View style={styles.buttonRow}>{btn('Back to the list', () => setMode({ kind: 'list' }), 'secondary')}</View>
+                <View style={styles.buttonRow}>{btn(t('Back to the list'), () => setMode({ kind: 'list' }), 'secondary')}</View>
             </>
         );
     } else if (mode.kind === 'check') {
         const who = mode.picked?.callsign ?? '';
         body = (
             <>
-                <Text style={styles.body}>{COPY.checkIntro(who)}</Text>
+                <Text style={styles.body}>{say(COPY.checkIntro(who))}</Text>
                 {myKeyCard}
-                {scanning && permission && !permission.granted ? <Text style={styles.hint}>{COPY.cameraNeeded}</Text> : null}
+                {scanning && permission && !permission.granted ? <Text style={styles.hint}>{say(COPY.cameraNeeded)}</Text> : null}
                 <View style={styles.buttonRow}>
                     {btn(COPY.scanButton, async () => {
                         setCheckError(null);
@@ -775,16 +810,16 @@ export default function NamesListScreen() {
                         setScanning(true);
                     }, 'primary')}
                 </View>
-                <Text style={styles.label}>{COPY.codeLabel}</Text>
+                <Text style={styles.label}>{say(COPY.codeLabel)}</Text>
                 <TextInput
                     style={styles.input} value={typedCode} onChangeText={setTypedCode} placeholder="0000 0000 0000 0000 0000"
                     placeholderTextColor={colors.text.muted} keyboardType="number-pad" autoCorrect={false} maxLength={30}
-                    accessibilityLabel={who ? `The code on @${who}'s phone` : 'The code on the other admin’s phone'}
+                    accessibilityLabel={who ? t("The code on @{member}'s phone", { member: who }) : t('The code on the other admin’s phone')}
                 />
-                {checkError ? <View style={styles.error} accessibilityLiveRegion="assertive"><Text style={styles.errorText}>{checkError}</Text></View> : null}
+                {checkError ? <View style={styles.error} accessibilityLiveRegion="assertive"><Text style={styles.errorText}>{say(checkError)}</Text></View> : null}
                 <View style={styles.buttonRow}>
                     {btn(COPY.compareButton, () => { void finishCheck(typedCode); }, 'primary')}
-                    {btn('Cancel', () => setMode({ kind: 'list' }), 'secondary')}
+                    {btn(t('Cancel'), () => setMode({ kind: 'list' }), 'secondary')}
                 </View>
             </>
         );
@@ -795,7 +830,7 @@ export default function NamesListScreen() {
             <>
                 {words ? (
                     <View style={styles.warn} accessibilityLiveRegion="polite">
-                        <Text style={styles.warnText}>{words}</Text>
+                        <Text style={styles.warnText}>{say(words)}</Text>
                     </View>
                 ) : null}
                 <View style={styles.buttonRow}>
@@ -818,7 +853,7 @@ export default function NamesListScreen() {
         body = (
             <>
                 <View style={styles.warn} accessibilityLiveRegion="assertive">
-                    <Text style={styles.warnText}>{COPY.removeNotKept(who.map((a) => a.callsign))}</Text>
+                    <Text style={styles.warnText}>{say(COPY.removeNotKept(who.map((a) => a.callsign)))}</Text>
                 </View>
                 <View style={styles.buttonRow}>{who.map((a) => btn(COPY.removeKeyButton(a.callsign), () => removeKey(a), 'primary'))}</View>
             </>
@@ -839,7 +874,7 @@ export default function NamesListScreen() {
                             </>
                         ) : (
                             <>
-                                <Text style={styles.entryNote}>{COPY.toCheck(a.callsign)}</Text>
+                                <Text style={styles.entryNote}>{say(COPY.toCheck(a.callsign))}</Text>
                                 {/* Remove works for any admin the server lists, checked here or not (design Addendum 2, ruling 4). */}
                                 <View style={styles.buttonRow}>
                                     {btn(COPY.checkButton(a.callsign), () => startCheck({ pubkey: a.pubkey, callsign: a.callsign }), 'small')}
@@ -850,17 +885,21 @@ export default function NamesListScreen() {
                     </View>
                 ))}
                 <View style={styles.buttonRow}>
-                    {btn('Add a name', () => openForm(null), 'primary')}
-                    {btn('Export as PDF', exportPdf, 'secondary', 'Makes a PDF of the list on this phone, to keep with your paper copy')}
-                    {btn('Community health', () => { void openHealth(); }, 'secondary', 'Opens who is past a debt line (every opening is logged for all admins)')}
+                    {btn(t('Add a name'), () => openForm(null), 'primary')}
+                    {btn(t('Export as PDF'), exportPdf, 'secondary', t('Makes a PDF of the list on this phone, to keep with your paper copy'))}
+                    {btn(t('Community health'), () => { void openHealth(); }, 'secondary', t('Opens who is past a debt line (every opening is logged for all admins)'))}
                 </View>
                 <TextInput
-                    style={styles.search} value={query} onChangeText={setQuery} placeholder="Search names and notes"
-                    placeholderTextColor={colors.text.muted} autoCorrect={false} accessibilityLabel="Search names and notes"
+                    style={styles.search} value={query} onChangeText={setQuery} placeholder={t('Search names and notes')}
+                    placeholderTextColor={colors.text.muted} autoCorrect={false} accessibilityLabel={t('Search names and notes')}
                 />
+                {/* The counts, each its own phrase in the line. */}
                 <Text style={styles.hint}>
-                    {state.counts.entries} {state.counts.entries === 1 ? 'entry' : 'entries'} · {state.counts.confirmed} confirmed
-                    {state.counts.awaitingSecond ? ` · ${state.counts.awaitingSecond} waiting for a second admin` : ''}
+                    <Text>{tn(state.counts.entries, '{n} entry', '{n} entries')}</Text>
+                    <Text>{' · '}</Text>
+                    <Text>{tn(state.counts.confirmed, '{n} confirmed', '{n} confirmed')}</Text>
+                    {state.counts.awaitingSecond ? <Text>{' · '}</Text> : null}
+                    {state.counts.awaitingSecond ? <Text>{tn(state.counts.awaitingSecond, '{n} waiting for a second admin', '{n} waiting for a second admin')}</Text> : null}
                 </Text>
                 {shown.map((e) => {
                     const acts = e.confirmation ? confirmationActions(e.confirmation, identity?.publicKey ?? '') : null;
@@ -875,9 +914,9 @@ export default function NamesListScreen() {
                                     {e.text.note ? <Text style={styles.entryNote}>{e.text.note}</Text> : null}
                                 </>
                             ) : (
-                                <Text style={styles.lockedText}>{COPY.lockedEntry(e.key?.n ?? null, callsignOf(e.key?.maker ?? ''), e.holders, e.notTrusting, e.checkedHere)}</Text>
+                                <Text style={styles.lockedText}>{say(COPY.lockedEntry(e.key?.n ?? null, callsignOf(e.key?.maker ?? ''), e.holders, e.notTrusting, e.checkedHere))}</Text>
                             )}
-                            <Text style={styles.entryMeta}>{e.confirmation ? confirmationLine(e.confirmation, at) : 'No member confirmed against it'}</Text>
+                            <Text style={styles.entryMeta}>{e.confirmation ? confirmationLine(e.confirmation, at) : t('No member confirmed against it')}</Text>
                             {!e.confirmation && invitesForEntry(boundInvites, e.id)[0] ? (
                                 <Text style={styles.entryMeta}>{boundInviteLine(invitesForEntry(boundInvites, e.id)[0], (pk) => (callsignOf(pk) ? `@${callsignOf(pk)}` : 'Someone'))}</Text>
                             ) : null}
@@ -885,36 +924,36 @@ export default function NamesListScreen() {
                                 <Text key={d.id} style={[styles.entryMeta, d.status === 'open' && styles.lockedText]}>{debtLine(d, at)}</Text>
                             ))}
                             <View style={styles.buttonRow}>
-                                {btn(e.text ? 'Change' : 'Type it again', () => openForm(e), 'small')}
-                                {!e.confirmation && e.text && !open ? btn('Invite this person', () => inviteEntry(e), 'small') : null}
-                                {!e.confirmation && e.text && !open ? btn('Confirm a member', () => { setMemberQuery(''); setMode({ kind: 'pick', entry: e }); }, 'small') : null}
+                                {btn(e.text ? t('Change') : t('Type it again'), () => openForm(e), 'small')}
+                                {!e.confirmation && e.text && !open ? btn(t('Invite this person'), () => inviteEntry(e), 'small') : null}
+                                {!e.confirmation && e.text && !open ? btn(t('Confirm a member'), () => { setMemberQuery(''); setMode({ kind: 'pick', entry: e }); }, 'small') : null}
                                 {!e.confirmation && e.text && open && !open.repaying_pubkey
-                                    ? btn('Work it off', () => { setMemberQuery(''); setMode({ kind: 'pick', entry: e, workOff: open }); }, 'small') : null}
-                                {e.text && open ? btn('Count a payment made without the code', () => { setPayRef(''); setSettleNote(''); setMode({ kind: 'settle', entry: e, debt: open }); }, 'small') : null}
-                                {e.text && open ? btn('Share the pay-back code', () => sharePayBackCode(open), 'small') : null}
-                                {open ? btn('Ask to forgive it', () => askToForgive(open), 'small') : null}
-                                {acts?.second ? btn('Confirm as second admin', () => second(e), 'small') : null}
-                                {acts?.revoke ? btn('Revoke', () => revoke(e), 'small') : null}
+                                    ? btn(t('Work it off'), () => { setMemberQuery(''); setMode({ kind: 'pick', entry: e, workOff: open }); }, 'small') : null}
+                                {e.text && open ? btn(t('Count a payment made without the code'), () => { setPayRef(''); setSettleNote(''); setMode({ kind: 'settle', entry: e, debt: open }); }, 'small') : null}
+                                {e.text && open ? btn(t('Share the pay-back code'), () => sharePayBackCode(open), 'small') : null}
+                                {open ? btn(t('Ask to forgive it'), () => askToForgive(open), 'small') : null}
+                                {acts?.second ? btn(t('Confirm as second admin'), () => second(e), 'small') : null}
+                                {acts?.revoke ? btn(t('Revoke'), () => revoke(e), 'small') : null}
                             </View>
                         </View>
                     );
                 })}
                 {state.me.owner ? (
                     <>
-                        <Text style={styles.label}>SETTINGS (OWNERS)</Text>
+                        <Text style={styles.label}>{t('SETTINGS (OWNERS)')}</Text>
                         <View style={styles.switchRow}>
-                            <Text style={styles.switchLabel}>{COPY.twoAdminsLabel}</Text>
+                            <Text style={styles.switchLabel}>{say(COPY.twoAdminsLabel)}</Text>
                             <Switch
                                 value={state.settings.twoAdminsToConfirm} onValueChange={setTwoAdmins} disabled={off}
-                                accessibilityLabel={COPY.twoAdminsLabel} accessibilityHint={COPY.twoAdminsHelp}
+                                accessibilityLabel={say(COPY.twoAdminsLabel)} accessibilityHint={say(COPY.twoAdminsHelp)}
                             />
                         </View>
-                        <Text style={styles.hint}>{COPY.twoAdminsHelp}</Text>
+                        <Text style={styles.hint}>{say(COPY.twoAdminsHelp)}</Text>
                     </>
                 ) : null}
-                <Text style={styles.hint}>{COPY.notShownToMembers}</Text>
-                <Text style={styles.label}>WHO OPENED OR CHANGED THE LIST</Text>
-                {log.length === 0 ? <Text style={styles.hint}>Nothing yet.</Text> : null}
+                <Text style={styles.hint}>{say(COPY.notShownToMembers)}</Text>
+                <Text style={styles.label}>{t('WHO OPENED OR CHANGED THE LIST')}</Text>
+                {log.length === 0 ? <Text style={styles.hint}>{t('Nothing yet.')}</Text> : null}
                 {log.map((l) => <Text key={l.id} style={styles.logLine}>{logLineText(l, at)}</Text>)}
                 <View style={styles.buttonRow}>
                     {checkSomeone}
@@ -928,7 +967,7 @@ export default function NamesListScreen() {
         body = (
             <>
                 <View style={styles.warn} accessibilityLiveRegion="polite">
-                    <Text style={styles.warnText}>{stale.length ? COPY.stillRemoving(stale) : COPY.notReady}</Text>
+                    <Text style={styles.warnText}>{say(stale.length ? COPY.stillRemoving(stale) : COPY.notReady)}</Text>
                 </View>
                 <View style={styles.buttonRow}>{btn(COPY.openAgainButton, () => { void load(); }, 'primary')}</View>
             </>
@@ -947,29 +986,29 @@ export default function NamesListScreen() {
             <KeyboardAwareScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" bottomOffset={24}>
                 {mode.kind === 'list' ? (
                     <>
-                        <Text style={styles.body}>{showWho ? COPY.who : firstSentence(COPY.who).first}</Text>
+                        <Text style={styles.body}>{say(showWho ? COPY.who : firstSentence(COPY.who).first)}</Text>
                         <Pressable
                             style={[styles.smallBtn, styles.moreBtn]} onPress={() => setShowWho(!showWho)} accessibilityRole="button"
                             accessibilityState={{ expanded: showWho }}
                         >
-                            <Text style={styles.smallBtnText}>{showWho ? COPY.whoLess : COPY.whoMore}</Text>
+                            <Text style={styles.smallBtnText}>{say(showWho ? COPY.whoLess : COPY.whoMore)}</Text>
                         </Pressable>
                     </>
                 ) : null}
                 {statusBlocks}
                 {body}
-                {busy ? <ActivityIndicator color={colors.brand.primary} accessibilityLabel="Working" /> : null}
+                {busy ? <ActivityIndicator color={colors.brand.primary} accessibilityLabel={t('Working')} /> : null}
                 {loading && opened ? (
                     <View style={styles.notice} accessibilityLiveRegion="polite">
-                        <ActivityIndicator color={colors.brand.primary} accessibilityLabel={COPY.reloading} />
-                        <Text style={styles.noticeText}>{COPY.reloading}</Text>
+                        <ActivityIndicator color={colors.brand.primary} accessibilityLabel={say(COPY.reloading)} />
+                        <Text style={styles.noticeText}>{say(COPY.reloading)}</Text>
                     </View>
                 ) : null}
             </KeyboardAwareScrollView>
             {/* The scanner: full screen, a camera and one button, no text field (so no keyboard provider in a Modal). */}
             <Modal visible={scanning && !!permission?.granted} animationType="slide" onRequestClose={() => setScanning(false)}>
                 <SafeAreaView style={styles.scanner} edges={['top', 'left', 'right', 'bottom']}>
-                    <Text style={styles.scannerText}>{COPY.checkIntro(mode.kind === 'check' ? mode.picked?.callsign ?? '' : '')}</Text>
+                    <Text style={styles.scannerText}>{say(COPY.checkIntro(mode.kind === 'check' ? mode.picked?.callsign ?? '' : ''))}</Text>
                     <View style={styles.camera}>
                         <CameraView style={StyleSheet.absoluteFillObject} barcodeScannerSettings={{ barcodeTypes: ['qr'] }} onBarcodeScanned={onScanned} />
                     </View>
@@ -979,11 +1018,11 @@ export default function NamesListScreen() {
             <Modal visible={!!invited} animationType="slide" onRequestClose={() => setInvited(null)}>
                 <SafeAreaView style={styles.screen} edges={['top', 'left', 'right', 'bottom']}>
                     <ScrollView contentContainerStyle={styles.scroll}>
-                        <Text style={styles.headerTitle} accessibilityRole="header">Invite {invited?.name}</Text>
+                        <Text style={styles.headerTitle} accessibilityRole="header">{t('Invite {name}', { name: invited?.name ?? '' })}</Text>
                         <Text style={styles.body}>
                             {invited?.offline
-                                ? 'No signal, so this is an offline ticket. When they join with it, they are confirmed as this person, by you.'
-                                : 'When they join with this invite, they are confirmed as this person, by you. Give it to them yourself.'}
+                                ? t('No signal, so this is an offline ticket. When they join with it, they are confirmed as this person, by you.')
+                                : t('When they join with this invite, they are confirmed as this person, by you. Give it to them yourself.')}
                         </Text>
                         {invited && anchor ? (
                             <View style={styles.keyCard}>
@@ -994,10 +1033,10 @@ export default function NamesListScreen() {
                             </View>
                         ) : null}
                         <View style={styles.buttonRow}>
-                            {btn('Share', () => {
-                                if (invited && anchor) Share.share({ message: invited.offline ? invited.code : `Join us on BeanPool: ${inviteLink(anchor, invited.code)}\n\nOr enter this invite code in the app: ${invited.code}` }).catch(() => {});
+                            {btn(t('Share'), () => {
+                                if (invited && anchor) Share.share({ message: invited.offline ? invited.code : t('Join us on BeanPool: {link}\n\nOr enter this invite code in the app: {code}', { link: inviteLink(anchor, invited.code), code: invited.code }) }).catch(() => {});
                             }, 'secondary')}
-                            {btn('Done', () => setInvited(null))}
+                            {btn(t('Done'), () => setInvited(null))}
                         </View>
                     </ScrollView>
                 </SafeAreaView>

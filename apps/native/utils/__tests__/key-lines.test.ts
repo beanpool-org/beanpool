@@ -170,8 +170,7 @@ describe('key-lines.ts: sentences with a name, an address or a number, read back
         { line: NAMES_COPY.codeMismatch('Wren'), names: ['@Wren'] },
         { line: NAMES_COPY.mismatch('Wren'), names: ['@Wren'] },
         { line: NAMES_COPY.matched('Wren'), names: ['@Wren'] },
-        { line: NAMES_COPY.myCode('12345678901234567890'), names: ['12345678901234567890'] },
-        { line: NAMES_COPY.listKey(3, 'K7F3QX'), names: ['K7F3QX'] },
+
         { line: NAMES_COPY.refusedRolledBack(2, 5), names: [] },
     ];
 

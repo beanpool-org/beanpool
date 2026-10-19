@@ -221,8 +221,6 @@ const FILLED: readonly WordKey[] = [
     word('Those digits aren’t {who}’s key as the server lists it. Nothing was trusted. Scan their QR code instead, on a video call or together, and tell your other admins.'),
     word('The key you scanned isn’t the one the server lists for {who}. Your phone trusts the key you scanned and nothing is sent to the server’s key. Either the server has put {who}’s name on another key, or this isn’t {who}’s phone. Tell your other admins.'),
     word('Checked: this phone now trusts {who}’s phone.'),
-    word('Your code: {code}'),
-    word('This phone adds names under list key {n}, code {code}.'),
     word('The server offers an older key history (up to key {n}) than this phone has (key {m}). A server put back to an older copy does that. Nothing was read or written. You can put the key history back from this phone; entries written since the copy are gone and must be typed again from your paper copy.'),
 ];
 

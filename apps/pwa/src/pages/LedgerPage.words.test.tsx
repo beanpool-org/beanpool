@@ -5,8 +5,8 @@
  * English is the same; members' names and notes, and what the node writes, as they came. In English every word is as it
  * was, and a switch to Russian redraws the page in Russian where the words have it.
  *
- * Left English here (not this page's to change; listed in the PR): the frozen-line card's sentences (lib/credit-line-card.ts,
- * a lib file this sweep does not touch) and a node's note on a line. A row's date is core's ('{date}, {time}').
+ * The frozen-line card's sentences are lib/credit-line-card.ts's (the phone's, through t()/tn()). Left English here (listed
+ * in the PR): a node's note on a line. A row's date is core's ('{date}, {time}').
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -104,6 +104,22 @@ describe('the Ledger in the pseudo-locale', () => {
         expect(screen.getByText(xx('Spending paused — your balance is below what your {n} active offer unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.').replace('{n}', '1').replace('{limit}', '200'))).toBeInTheDocument();
         expect(screen.getByText(xx('{n} trust to go').replace('{n}', String(TIER_LEVELS[2].minCredit - RESIDENT.tierCredit)))).toBeInTheDocument();
         expect(barBold()).toHaveLength(2);
+        expect(bypassing(document.body, { others: [...OTHERS, ...barBold()] })).toEqual([]);
+    });
+
+    it('a frozen line: the card, how far down a member in debit is, and the known part frozen under the bar', async () => {
+        await showIn('xx');
+        await open({ ...NEWCOMER, balance: -12.25, creditFrozen: true });
+        expect(screen.getByText(xx('Your credit line is frozen'))).toBeInTheDocument();
+        expect(screen.getByTestId('ledger-frozen-debit').textContent).toBe(
+            xx('You are {n} Beans in debit. Selling or receiving Beans brings you back up, and once you are above zero you can spend what you hold.').replace('{n}', '12.3'),
+        );
+        expect(bypassing(document.body, { others: OTHERS })).toEqual([]);
+        cleanup();
+
+        vi.mocked(getTransactions).mockClear();
+        await open({ ...RESIDENT, frozen: false, knownFrozen: true });
+        expect(await screen.findByText(xx("Your community's admins have frozen the part of your credit line that comes from being a confirmed member; the rest works as before. To ask why, ask one of the admins."))).toBeInTheDocument();
         expect(bypassing(document.body, { others: [...OTHERS, ...barBold()] })).toEqual([]);
     });
 

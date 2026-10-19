@@ -29,7 +29,7 @@ import { withJitter } from '../lib/jitter';
 import { onSyncActivity } from '../lib/sync';
 import { getBlockedUsers, onBlocklistUpdated } from '../lib/blocklist';
 import { useMembersOnDemand, useMemberSearch, getMembersWhole, MEMBERS_SEARCH_MIN_CHARS } from '../lib/members-on-demand';
-import { creditLineCard, knownFrozenPartNote, frozenDebitLine, KNOWN_FROZEN_TITLE, KNOWN_FROZEN_BODY } from '../lib/credit-line-card';
+import { creditLineCard, knownFrozenPartNote, frozenDebitLine, KNOWN_FROZEN } from '../lib/credit-line-card';
 import { LocalCommunityAction, LocalCommunityStrip, type LocalCommunityWays } from '../components/LocalCommunityMark';
 import { SampleHeader, sampleLedger, type LedgerRowView } from '../components/ShowcasePreviews';
 import { t, tn, word, splitBold, isWholeCents, monthlyCirculation, CIRCULATION_FREE_BEANS, formatDate, formatNumber, amountRefusalWords, ANY_DECIMALS, isAmbiguousAmount, parseAmount, type WordKey } from '@beanpool/core';
@@ -490,8 +490,8 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                     <div className="flex items-start gap-3 bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-800 rounded-xl p-3">
                         <span className="text-xl leading-none" aria-hidden="true">❄️</span>
                         <div>
-                            <h2 className="text-sm font-extrabold text-sky-800 dark:text-sky-200">{KNOWN_FROZEN_TITLE}</h2>
-                            <div className="text-xs text-nature-600 dark:text-nature-300 leading-relaxed mt-0.5">{KNOWN_FROZEN_BODY}</div>
+                            <h2 className="text-sm font-extrabold text-sky-800 dark:text-sky-200">{t(KNOWN_FROZEN.title)}</h2>
+                            <div className="text-xs text-nature-600 dark:text-nature-300 leading-relaxed mt-0.5">{t(KNOWN_FROZEN.body)}</div>
                             {frozenDebitLine(balanceInfo?.balance) && (
                                 <p className="text-xs font-bold text-nature-800 dark:text-nature-100 leading-relaxed mt-1.5" data-testid="ledger-frozen-debit">{frozenDebitLine(balanceInfo?.balance)}</p>
                             )}

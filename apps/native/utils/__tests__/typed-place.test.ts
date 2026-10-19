@@ -77,7 +77,13 @@ describe('the lookup is the shared one (no second geocoder, no new host)', () =>
     it('the find screen and the Home card use components/AddressSearch, and neither asks a geocoder itself', () => {
         const screen = src('app/find-community.tsx');
         expect(screen).toMatch(/import \{ AddressSearch \} from '\.\.\/components\/AddressSearch'/);
-        expect(screen).toContain('words={FIND_TOWN_SEARCH_WORDS}');
+        // The find town search's own words (core FIND_TOWN_SEARCH_WORDS), in the member's language since words S3l.
+        expect(screen).toContain('words={findTownSearchWords()}');
+        const lines = src('components/find-community-lines.ts');
+        for (const field of ['label', 'placeholder', 'unavailable', 'noMatches', 'source']) {
+            expect(lines, field).toContain(`${field}: t(FIND_TOWN_SEARCH_WORDS.${field}),`);
+        }
+        expect(lines).toContain('pickLabel: FIND_TOWN_SEARCH_WORDS.pickLabel,');
         // Location off or failed: the note offers the town, and the box opens.
         expect(screen).toMatch(/setLocationNote\(LOCATION_NOTES\.off\);\s*setTownOpen\(true\);/);
         expect(screen).toMatch(/setLocationNote\(LOCATION_NOTES\.failed\);\s*setTownOpen\(true\);/);
@@ -93,10 +99,12 @@ describe('the lookup is the shared one (no second geocoder, no new host)', () =>
         const screen = src('app/find-community.tsx');
         expect(NOT_HERE_TYPE_YOUR_TOWN).toBe('Not here? Type your town');
         // Cancel sits with the open box and only closes it: the typed town (and its "Near Lismore") stands.
-        expect(screen).toMatch(/\{townOpen && \([\s\S]*?<AddressSearch [\s\S]*?onPress=\{\(\) => setTownOpen\(false\)\}[\s\S]*?testID="find-town-cancel"[\s\S]*?>Cancel<\/Text>/);
+        // The words through t() since words S3l: the same Cancel, the same link (core's word() key, through the screen's LINES).
+        expect(screen).toMatch(/\{townOpen && \([\s\S]*?<AddressSearch [\s\S]*?onPress=\{\(\) => setTownOpen\(false\)\}[\s\S]*?testID="find-town-cancel"[\s\S]*?>\{t\('Cancel'\)\}<\/Text>/);
         expect(screen).toMatch(/\{typed && !townOpen && \(\s*<View style=\{styles\.placeRow\} testID="find-town-picked">/);
         // A point the phone found (not typed): the town is still one tap away.
-        expect(screen).toMatch(/\{!!point && !typed && !townOpen && \(\s*<Pressable [^>]*onPress=\{\(\) => setTownOpen\(true\)\}[^>]*testID="find-type-town-instead">\s*<Text style=\{styles\.linkText\}>\{NOT_HERE_TYPE_YOUR_TOWN\}<\/Text>/);
+        expect(screen).toContain('notHereTypeYourTown: NOT_HERE_TYPE_YOUR_TOWN');
+        expect(screen).toMatch(/\{!!point && !typed && !townOpen && \(\s*<Pressable [^>]*onPress=\{\(\) => setTownOpen\(true\)\}[^>]*testID="find-type-town-instead">\s*<Text style=\{styles\.linkText\}>\{t\(LINES\.notHereTypeYourTown\)\}<\/Text>/);
     });
 
     it('Sign Out and Replace wipe the typed town with the account', () => {

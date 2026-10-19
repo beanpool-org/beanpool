@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { tourStepCaption, type TourStep } from '@beanpool/core';
+import { t, tourStepCaption, upperCase, type TourStep } from '@beanpool/core';
 import type { AppColors } from '../constants/colors';
 import type { TourHome } from '../utils/tour-store';
 
@@ -46,10 +46,11 @@ export function TourBar({ steps, index, home, colors, bottomInset, onHeight, onN
             testID="tour-bar"
         >
             <Text style={[tourStyles.caption, { color: colors.text.secondary }]} maxFontSizeMultiplier={TOUR_TEXT_MAX_SCALE} testID="tour-step-caption">
-                {tourStepCaption(index, steps.length).toUpperCase()}
+                {/* In capitals the language's way (core upperCase), never toUpperCase on a translated sentence. */}
+                {upperCase(tourStepCaption(index, steps.length))}
             </Text>
             <Text style={[tourStyles.words, { color: colors.text.heading }]} maxFontSizeMultiplier={TOUR_TEXT_MAX_SCALE} accessibilityLiveRegion="polite" accessible testID="tour-words">
-                {step.words}
+                {t(step.words)}
             </Text>
             {chips.length > 0 && home && (
                 <View style={tourStyles.chips} testID="tour-chips">
@@ -63,33 +64,33 @@ export function TourBar({ steps, index, home, colors, bottomInset, onHeight, onN
                                 disabled={on}
                                 style={[tourStyles.chip, { borderColor: on ? colors.border.default : colors.brand.dark, backgroundColor: on ? colors.surface.app : colors.surface.card }]}
                                 accessibilityRole="button"
-                                accessibilityLabel={on ? `${name} is on Home` : `Put ${name} on Home`}
+                                accessibilityLabel={on ? t('{name} is on Home', { name }) : t('Put {name} on Home', { name })}
                                 accessibilityState={{ disabled: on }}
                                 testID={`tour-chip-${type}`}
                             >
                                 <Text style={[tourStyles.chipText, { color: on ? colors.text.secondary : colors.text.link }]} maxFontSizeMultiplier={TOUR_TEXT_MAX_SCALE} numberOfLines={2}>
-                                    {on ? `${name} · On Home ✓` : name}
+                                    {on ? t('{name} · On Home ✓', { name }) : name}
                                 </Text>
                             </Pressable>
                         );
                     })}
-                    <Pressable onPress={home.moreCards} style={tourStyles.more} accessibilityRole="button" accessibilityLabel="More cards: open Add a card" testID="tour-more-cards">
-                        <Text style={[tourStyles.chipText, { color: colors.text.link }]} maxFontSizeMultiplier={TOUR_TEXT_MAX_SCALE}>More cards ›</Text>
+                    <Pressable onPress={home.moreCards} style={tourStyles.more} accessibilityRole="button" accessibilityLabel={t('More cards: open Add a card')} testID="tour-more-cards">
+                        <Text style={[tourStyles.chipText, { color: colors.text.link }]} maxFontSizeMultiplier={TOUR_TEXT_MAX_SCALE}>{t('More cards ›')}</Text>
                     </Pressable>
                 </View>
             )}
             <View style={tourStyles.row}>
-                <Pressable onPress={onSkip} style={tourStyles.skip} accessibilityRole="button" accessibilityLabel="Skip the tour" testID="tour-skip">
-                    <Text style={[tourStyles.skipText, { color: colors.text.link }]} maxFontSizeMultiplier={TOUR_TEXT_MAX_SCALE}>Skip</Text>
+                <Pressable onPress={onSkip} style={tourStyles.skip} accessibilityRole="button" accessibilityLabel={t('Skip the tour')} testID="tour-skip">
+                    <Text style={[tourStyles.skipText, { color: colors.text.link }]} maxFontSizeMultiplier={TOUR_TEXT_MAX_SCALE}>{t('Skip')}</Text>
                 </Pressable>
                 <Pressable
                     onPress={last ? onDone : onNext}
                     style={({ pressed }) => [tourStyles.next, { backgroundColor: colors.brand.fill }, pressed && { opacity: 0.85 }]}
                     accessibilityRole="button"
-                    accessibilityLabel={last ? 'Done: end the tour' : `Next: step ${index + 2} of ${steps.length}`}
+                    accessibilityLabel={last ? t('Done: end the tour') : t('Next: step {n} of {total}', { n: index + 2, total: steps.length })}
                     testID={last ? 'tour-done' : 'tour-next'}
                 >
-                    <Text style={[tourStyles.nextText, { color: colors.text.inverse }]} maxFontSizeMultiplier={TOUR_TEXT_MAX_SCALE}>{last ? 'Done' : 'Next ›'}</Text>
+                    <Text style={[tourStyles.nextText, { color: colors.text.inverse }]} maxFontSizeMultiplier={TOUR_TEXT_MAX_SCALE}>{last ? t('Done') : t('Next ›')}</Text>
                 </Pressable>
             </View>
         </View>

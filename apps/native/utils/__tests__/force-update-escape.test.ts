@@ -150,7 +150,7 @@ describe('the block, as it is wired (components/ForceUpdateBlock.tsx)', () => {
         expect(block).toMatch(/\{identity && \(/);
         expect(block).toContain('See my 12 words');
         expect(block).toContain('Add my 12 words to this phone');
-        expect(block).toMatch(/const words = await readWordsBehindLock\(identity, WORDS_REASON\);\s*if \(!words \|\| turn !== turnRef\.current\) return;\s*setPage\(\{ kind: 'words', words \}\);/);
+        expect(block).toMatch(/const words = await readWordsBehindLock\(identity, t\(REASONS\.words\)\);\s*if \(!words \|\| turn !== turnRef\.current\) return;\s*setPage\(\{ kind: 'words', words \}\);/);
         // The words' pages are drawn only in a WordsWindow: capture blocked first, and on Android a window opened after.
         expect(block).toMatch(/<WordsOutsideScreens>\s*<NoScreenCapture>\s*\{Platform\.OS === 'android'\s*\? <Modal visible/);
         expect(block).toMatch(/page\.kind === 'words'\) \{\s*pageView = \(\s*<WordsWindow/);
@@ -165,16 +165,17 @@ describe('the block, as it is wired (components/ForceUpdateBlock.tsx)', () => {
         expect(block).toContain('await planLeaveFromUpdateBlock()');
         const leave = block.slice(block.indexOf('const leave = async'), block.indexOf('const secondary ='));
         // With an account on the phone; with none there is nothing for the lock to protect.
-        const asked = leave.indexOf('if (identity && !checked && !(await authenticateUser(plan.next ? LEAVE_REASON : LAST_LEAVE_REASON))) return;');
+        // The lock's reasons in the member's language since words S3l (word() keys in REASONS): the same lock, the same order.
+        const asked = leave.indexOf('if (identity && !checked && !(await authenticateUser(plan.next ? t(REASONS.leave) : t(REASONS.lastLeave)))) return;');
         expect(asked).toBeGreaterThan(-1);
         expect(leave.indexOf('await leaveFromUpdateBlock(identity ?? null, plan)')).toBeGreaterThan(asked);
         // Offered with or without an account: a join never finished can't leave the phone stuck on this community.
         expect(block).toMatch(/\{!identity && \(\s*<View style=\{\[\.\.\.card, styles\.next\]\}>\s*<Pressable onPress=\{\(\) => \{ void openLeave\(\); \}\}/);
         // `checked` only after the words were shown behind the same lock, on the last community's page.
         expect(block.match(/void leave\(plan, checked\)/g)).toHaveLength(1);
-        expect(block).toContain(`leaveButton("I've written them down: leave", true)`);
-        expect(block.match(/leaveButton\([^)]*, true\)/g)).toHaveLength(1);
-        expect(block).toMatch(/await readWordsBehindLock\(identity, LAST_LEAVE_REASON\);\s*if \(!words \|\| turn !== turnRef\.current\) return;\s*setPage\(\{ kind: 'leave', plan, words \}\);/);
+        expect(block).toContain(`leaveButton(t("I've written them down: leave"), true)`);
+        expect(block.match(/leaveButton\((?:t\([^)]*\)|[^)]*), true\)/g)).toHaveLength(1);
+        expect(block).toMatch(/await readWordsBehindLock\(identity, t\(REASONS\.lastLeave\)\);\s*if \(!words \|\| turn !== turnRef\.current\) return;\s*setPage\(\{ kind: 'leave', plan, words \}\);/);
     });
 
     it('no way out goes through a screen the block covers, or reads what the community says about the member', () => {

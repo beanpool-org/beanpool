@@ -8,6 +8,7 @@
 import { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { t } from '@beanpool/core';
 import { type RadiusSettings } from '../lib/geo';
 
 interface Props {
@@ -139,7 +140,7 @@ export function RadiusPickerPage({ initial, defaultRadius = 20, onApply, onCance
                 }
             },
             (err) => {
-                alert("Could not access location services: " + err.message);
+                alert(t('Could not access location services: {error}', { error: err.message }));
             },
             { timeout: 5000, enableHighAccuracy: true }
         );
@@ -167,29 +168,29 @@ export function RadiusPickerPage({ initial, defaultRadius = 20, onApply, onCance
                 <button
                     type="button"
                     onClick={onCancel}
-                    aria-label="Cancel location selection"
+                    aria-label={t('Cancel location selection')}
                     className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 rounded-md"
                     style={{
                         background: 'none', border: 'none', color: 'var(--text-muted)',
                         fontSize: '0.9rem', cursor: 'pointer', fontFamily: 'inherit',
                     }}
                 >
-                    Cancel
+                    {t('Cancel')}
                 </button>
                 <h3 id="radius-picker-title" style={{ fontSize: '1rem', fontWeight: 700, margin: 0 }}>
-                    📍 Set Location & Radius
+                    {t('📍 Set Location & Radius')}
                 </h3>
                 <button
                     type="button"
                     onClick={onReset}
-                    aria-label="Reset location settings"
+                    aria-label={t('Reset location settings')}
                     className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 rounded-md"
                     style={{
                         background: 'none', border: 'none', color: '#ef4444',
                         fontSize: '0.85rem', cursor: 'pointer', fontFamily: 'inherit',
                     }}
                 >
-                    Reset
+                    {t('Reset')}
                 </button>
             </div>
 
@@ -201,7 +202,7 @@ export function RadiusPickerPage({ initial, defaultRadius = 20, onApply, onCance
                 <button
                     type="button"
                     onClick={handleGpsLocate}
-                    aria-label="Center map on my location"
+                    aria-label={t('Center map on my location')}
                     className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
                     style={{
                         position: 'absolute',
@@ -229,7 +230,7 @@ export function RadiusPickerPage({ initial, defaultRadius = 20, onApply, onCance
                         e.currentTarget.style.transform = 'scale(1)';
                         e.currentTarget.style.color = '#4b5563';
                     }}
-                    title="Center on my location"
+                    title={t('Center on my location')}
                 >
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                         <circle cx="12" cy="12" r="10" />
@@ -254,16 +255,16 @@ export function RadiusPickerPage({ initial, defaultRadius = 20, onApply, onCance
                     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                     marginBottom: '0.5rem',
                 }}>
-                    <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Search radius</span>
+                    <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{t('Search radius')}</span>
                     <span style={{ fontSize: '1.1rem', fontWeight: 700, color: '#f59e0b' }}>
-                        {radiusKm < 1 ? `${Math.round(radiusKm * 1000)}m` : `${radiusKm} km`}
+                        {radiusKm < 1 ? t('{n}m', { n: Math.round(radiusKm * 1000) }) : t('{distance} km', { distance: radiusKm })}
                     </span>
                 </div>
 
                 {/* Slider */}
                 <input
                     type="range"
-                    aria-label="Search radius"
+                    aria-label={t('Search radius')}
                     min={0}
                     max={RADIUS_STEPS.length - 1}
                     value={radiusIdx}
@@ -283,10 +284,10 @@ export function RadiusPickerPage({ initial, defaultRadius = 20, onApply, onCance
                     marginBottom: '1rem',
                     paddingLeft: '0.2rem', paddingRight: '0.2rem',
                 }}>
-                    <span>100m</span>
-                    <span>1km</span>
-                    <span>10km</span>
-                    <span>50km</span>
+                    <span>{t('{n}m', { n: 100 })}</span>
+                    <span>{t('{n}km', { n: 1 })}</span>
+                    <span>{t('{n}km', { n: 10 })}</span>
+                    <span>{t('{n}km', { n: 50 })}</span>
                 </div>
 
                 {/* Tap hint */}
@@ -294,7 +295,7 @@ export function RadiusPickerPage({ initial, defaultRadius = 20, onApply, onCance
                     textAlign: 'center', fontSize: '0.75rem', color: 'var(--text-faint)',
                     marginBottom: '0.75rem',
                 }}>
-                    Tap the map or drag the pin to move the center point
+                    {t('Tap the map or drag the pin to move the center point')}
                 </p>
 
                 {/* Apply button */}
@@ -315,7 +316,7 @@ export function RadiusPickerPage({ initial, defaultRadius = 20, onApply, onCance
                         boxShadow: '0 4px 16px rgba(245, 158, 11, 0.3)',
                     }}
                 >
-                    Apply — {radiusKm < 1 ? `${Math.round(radiusKm * 1000)}m` : `${radiusKm}km`} radius
+                    {t('Apply — {distance} radius', { distance: radiusKm < 1 ? t('{n}m', { n: Math.round(radiusKm * 1000) }) : t('{n}km', { n: radiusKm }) })}
                 </button>
                 {initial && (
                     <button
@@ -330,7 +331,7 @@ export function RadiusPickerPage({ initial, defaultRadius = 20, onApply, onCance
                             marginTop: '0.75rem',
                         }}
                     >
-                        Clear Filter
+                        {t('Clear Filter')}
                     </button>
                 )}
             </div>

@@ -4,10 +4,12 @@ import {
     QUICK_SPARK_QUESTIONS,
     DEEP_RESONANCE_QUESTIONS,
     scoreQuiz,
+    t,
     type ArchetypeKey,
     type QuizQuestion,
     type QuizResult,
 } from '@beanpool/core';
+import { Sentence } from './Sentence';
 
 interface ArchetypeQuizModalProps {
     visible: boolean;
@@ -117,7 +119,7 @@ export function ArchetypeQuizModal({
             await persistResult(result);
             onClose();
         } catch (e: any) {
-            setSaveError(e?.message || 'Failed to save to profile. Please try again.');
+            setSaveError(e?.message || t('Failed to save to profile. Please try again.'));
         } finally {
             setSaving(false);
         }
@@ -141,7 +143,7 @@ export function ArchetypeQuizModal({
                     {step === 'quiz' ? (
                         <button
                             type="button"
-                            aria-label="Go back to previous question"
+                            aria-label={t('Go back to previous question')}
                             onClick={handleBackQuestion}
                             className="w-11 h-11 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl bg-transparent hover:bg-nature-100 dark:hover:bg-nature-800 text-nature-700 dark:text-nature-300 transition-colors cursor-pointer border-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                         >
@@ -153,17 +155,17 @@ export function ArchetypeQuizModal({
                         <div className="w-11 h-11 min-w-[44px] min-h-[44px]" />
                     )}
 
-                    <h3 id="quiz-modal-title" className="text-base sm:text-lg font-bold text-nature-950 dark:text-white m-0 text-center flex-1 px-2 truncate">
+                    <h3 id="quiz-modal-title" className="text-base sm:text-lg font-bold text-nature-950 dark:text-white m-0 text-center flex-1 min-w-0 px-2 break-words">
                         {step === 'intro'
-                            ? 'How you like to work'
+                            ? t('How you like to work')
                             : step === 'quiz'
-                            ? `${mode === 'quick' ? '⚡ Quick Spark' : '🧭 Deep Resonance'}`
-                            : '✨ Your Working Style'}
+                            ? (mode === 'quick' ? t('⚡ Quick Spark') : t('🧭 Deep Resonance'))
+                            : t('✨ Your Working Style')}
                     </h3>
 
                     <button
                         type="button"
-                        aria-label="Close quiz modal"
+                        aria-label={t('Close quiz modal')}
                         onClick={handleClose}
                         className="w-11 h-11 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl bg-transparent hover:bg-nature-100 dark:hover:bg-nature-800 text-nature-500 hover:text-nature-900 dark:text-nature-400 dark:hover:text-white transition-colors cursor-pointer border-none text-lg font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                     >
@@ -180,18 +182,16 @@ export function ArchetypeQuizModal({
                             </div>
 
                             <h2 className="text-xl sm:text-2xl font-extrabold text-nature-950 dark:text-white text-center mb-2 tracking-tight">
-                                Community Working Style
+                                {t('Community Working Style')}
                             </h2>
                             <p className="text-xs sm:text-sm text-nature-600 dark:text-nature-400 text-center leading-relaxed mb-6 px-1">
-                                Every community thrives on a balance of different energies — from
-                                creative visionaries and organizers to anchors and champions. Say what
-                                you prefer, and get tips for working well with neighbours.
+                                {t('Every community thrives on a balance of different energies — from creative visionaries and organizers to anchors and champions. Say what you prefer, and get tips for working well with neighbours.')}
                             </p>
 
                             {/* Mode Card: Quick Spark */}
                             <button
                                 type="button"
-                                aria-label="Quick Spark: 9 questions, approx 1 minute. A 60-second snapshot of how you like to work."
+                                aria-label={t('Quick Spark: 9 questions, approx 1 minute. A 60-second snapshot of how you like to work.')}
                                 onClick={() => {
                                     setMode('quick');
                                     setCurrentIndex(0);
@@ -207,15 +207,14 @@ export function ArchetypeQuizModal({
                                     <div className="flex-1 min-w-0">
                                         <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
                                             <span className="text-[15px] font-bold text-nature-950 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors min-w-0">
-                                                Quick Spark
+                                                {t('Quick Spark')}
                                             </span>
                                             <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-bp-chip-ok-tint text-bp-chip-ok-ink border border-transparent shrink-0">
-                                                9 Qs • ~1 min
+                                                {t('9 Qs • ~1 min')}
                                             </span>
                                         </div>
                                         <p className="text-xs text-nature-600 dark:text-nature-400 leading-normal m-0">
-                                            A 60-second snapshot of how you like to work, plus tips for
-                                            working with others.
+                                            {t('A 60-second snapshot of how you like to work, plus tips for working with others.')}
                                         </p>
                                     </div>
                                 </div>
@@ -224,7 +223,7 @@ export function ArchetypeQuizModal({
                             {/* Mode Card: Deep Resonance */}
                             <button
                                 type="button"
-                                aria-label="Deep Resonance: 27 questions, approx 3 minutes. Recommended for deep accuracy."
+                                aria-label={t('Deep Resonance: 27 questions, approx 3 minutes. Recommended for deep accuracy.')}
                                 onClick={() => {
                                     setMode('deep');
                                     setCurrentIndex(0);
@@ -240,15 +239,14 @@ export function ArchetypeQuizModal({
                                     <div className="flex-1 min-w-0">
                                         <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
                                             <span className="text-[15px] font-bold text-nature-950 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors min-w-0">
-                                                Deep Resonance
+                                                {t('Deep Resonance')}
                                             </span>
                                             <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-bp-chip-ok-tint text-bp-chip-ok-ink border border-transparent shrink-0">
-                                                27 Qs • ~3 min
+                                                {t('27 Qs • ~3 min')}
                                             </span>
                                         </div>
                                         <p className="text-xs text-nature-600 dark:text-nature-400 leading-normal m-0">
-                                            Recommended for deep accuracy. Maps your primary archetype,
-                                            secondary wings, and complementary collaborator pairings.
+                                            {t('Recommended for deep accuracy. Maps your primary archetype, secondary wings, and complementary collaborator pairings.')}
                                         </p>
                                     </div>
                                 </div>
@@ -258,9 +256,10 @@ export function ArchetypeQuizModal({
                             <div className="w-full flex items-start gap-2.5 p-3.5 rounded-2xl bg-emerald-50/60 dark:bg-nature-900/60 border border-emerald-200/80 dark:border-nature-800 text-xs text-nature-700 dark:text-nature-300 leading-relaxed">
                                 <span className="text-emerald-600 dark:text-emerald-400 text-base shrink-0 leading-none mt-0.5" aria-hidden="true">🛡️</span>
                                 <div>
-                                    <strong className="font-bold text-nature-900 dark:text-white">Privacy-First:</strong> We never
-                                    show your type to other members, only tips for working with you. No
-                                    labels on profiles, lists or the map.
+                                    <Sentence
+                                        text={t('{lead} We never show your type to other members, only tips for working with you. No labels on profiles, lists or the map.')}
+                                        parts={{ lead: <strong className="font-bold text-nature-900 dark:text-white">{t('Privacy-First:')}</strong> }}
+                                    />
                                 </div>
                             </div>
                         </div>
@@ -271,7 +270,7 @@ export function ArchetypeQuizModal({
                             {/* Progress Header */}
                             <div
                                 role="progressbar"
-                                aria-label="Quiz progress"
+                                aria-label={t('Quiz progress')}
                                 aria-valuemin={1}
                                 aria-valuemax={totalQuestions}
                                 aria-valuenow={currentIndex + 1}
@@ -284,19 +283,19 @@ export function ArchetypeQuizModal({
                                     />
                                 </div>
                                 <div className="text-xs font-semibold text-nature-500 dark:text-nature-400 text-right">
-                                    Question {currentIndex + 1} of {totalQuestions}
+                                    {t('Question {n} of {total}', { n: currentIndex + 1, total: totalQuestions })}
                                 </div>
                             </div>
 
                             {/* Question Prompt Card */}
                             <div className="bg-white dark:bg-nature-900 p-5 rounded-2xl border border-nature-200 dark:border-nature-800 shadow-sm mb-4">
                                 <h4 className="text-base sm:text-lg font-bold text-nature-950 dark:text-white leading-snug m-0">
-                                    {currentQ.prompt}
+                                    {t(currentQ.prompt)}
                                 </h4>
                             </div>
 
                             {/* Options List */}
-                            <div role="radiogroup" aria-label={currentQ.prompt} className="flex flex-col gap-2.5">
+                            <div role="radiogroup" aria-label={t(currentQ.prompt)} className="flex flex-col gap-2.5">
                                 {currentQ.options.map((opt, idx) => {
                                     const isSelected = answers[currentIndex] === opt.target;
                                     return (
@@ -305,7 +304,7 @@ export function ArchetypeQuizModal({
                                             type="button"
                                             role="radio"
                                             aria-checked={isSelected}
-                                            aria-label={opt.text}
+                                            aria-label={t(opt.text)}
                                             onClick={() => handleSelectOption(opt.target)}
                                             className={`w-full flex items-center gap-3 p-4 rounded-2xl border text-left transition-all cursor-pointer shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
                                                 isSelected
@@ -319,7 +318,7 @@ export function ArchetypeQuizModal({
                                                 </span>
                                             )}
                                             <span className="flex-1 text-sm sm:text-base leading-normal">
-                                                {opt.text}
+                                                {t(opt.text)}
                                             </span>
                                             {isSelected && (
                                                 <span className="text-emerald-600 dark:text-emerald-400 font-bold text-lg shrink-0">
@@ -341,18 +340,18 @@ export function ArchetypeQuizModal({
                                     {primaryInfo.emoji}
                                 </span>
                                 <h3 className="text-2xl font-black text-nature-950 dark:text-white m-0 tracking-tight">
-                                    {primaryInfo.name}
+                                    {t(primaryInfo.name)}
                                 </h3>
                                 <div className="text-sm font-bold text-emerald-600 dark:text-emerald-400 mt-1 mb-3">
-                                    {primaryInfo.tagline}
+                                    {t(primaryInfo.tagline)}
                                 </div>
                                 <p className="text-xs sm:text-sm text-nature-600 dark:text-nature-300 leading-relaxed m-0 text-center">
-                                    {primaryInfo.description}
+                                    {t(primaryInfo.description)}
                                 </p>
 
                                 {secondaryInfo && (
                                     <div className="mt-4 px-3.5 py-1.5 rounded-full bg-oat-100 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 text-xs font-semibold text-nature-800 dark:text-nature-200">
-                                        Secondary Rhythm: {secondaryInfo.emoji} {secondaryInfo.name}
+                                        {t('Secondary Rhythm: {emoji} {name}', { emoji: secondaryInfo.emoji, name: t(secondaryInfo.name) })}
                                     </div>
                                 )}
                             </div>
@@ -360,13 +359,13 @@ export function ArchetypeQuizModal({
                             {/* Superpowers */}
                             <div className="bg-white dark:bg-nature-900 p-5 rounded-2xl border border-nature-200 dark:border-nature-800 shadow-sm">
                                 <h4 className="text-sm font-bold text-nature-950 dark:text-white uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                                    <span aria-hidden="true">🌟</span> What you tend to enjoy
+                                    <span aria-hidden="true">🌟</span> {t('What you tend to enjoy')}
                                 </h4>
                                 <ul className="space-y-2 m-0 p-0 list-none">
-                                    {primaryInfo.superpowers.map((power, i) => (
+                                    {primaryInfo.superpowers.map((_, i) => (
                                         <li key={i} className="flex items-start gap-2.5 text-xs sm:text-sm text-nature-700 dark:text-nature-300 leading-normal">
                                             <span className="text-emerald-600 dark:text-emerald-400 font-bold shrink-0">•</span>
-                                            <span>{power}</span>
+                                            <span>{t(primaryInfo.superpowers[i])}</span>
                                         </li>
                                     ))}
                                 </ul>
@@ -375,10 +374,10 @@ export function ArchetypeQuizModal({
                             {/* Ideal Collaborators */}
                             <div className="bg-white dark:bg-nature-900 p-5 rounded-2xl border border-nature-200 dark:border-nature-800 shadow-sm">
                                 <h4 className="text-sm font-bold text-nature-950 dark:text-white uppercase tracking-wider mb-1 flex items-center gap-1.5">
-                                    <span aria-hidden="true">👥</span> Who you work well with
+                                    <span aria-hidden="true">👥</span> {t('Who you work well with')}
                                 </h4>
                                 <p className="text-xs text-nature-500 dark:text-nature-400 mb-3 leading-normal">
-                                    You tend to work well with people who prefer the styles of:
+                                    {t('You tend to work well with people who prefer the styles of:')}
                                 </p>
                                 <div className="flex flex-wrap gap-2">
                                     {primaryInfo.idealPartners.map((partnerKey) => {
@@ -390,7 +389,7 @@ export function ArchetypeQuizModal({
                                                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-oat-100 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 text-xs font-bold text-nature-900 dark:text-white"
                                             >
                                                 <span>{p.emoji}</span>
-                                                <span>{p.name}</span>
+                                                <span>{t(p.name)}</span>
                                             </div>
                                         );
                                     })}
@@ -407,7 +406,7 @@ export function ArchetypeQuizModal({
                             <div className="pt-2 flex flex-col gap-2.5">
                                 <button
                                     type="button"
-                                    aria-label={saving ? "Saving archetype to profile" : "Done · Save to Profile"}
+                                    aria-label={saving ? t('Saving archetype to profile') : t('Done · Save to Profile')}
                                     onClick={handleSave}
                                     disabled={saving}
                                     className="w-full py-3.5 px-4 rounded-xl font-bold bg-bp-commit-fill hover:bg-bp-commit-hover disabled:opacity-60 text-bp-commit-on shadow-md transition-all cursor-pointer text-sm sm:text-base border-none flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
@@ -415,17 +414,17 @@ export function ArchetypeQuizModal({
                                     {saving ? (
                                         <>
                                             <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                                            <span>Saving...</span>
+                                            <span>{t('Saving...')}</span>
                                         </>
                                     ) : (
-                                        'Done · Save to Profile'
+                                        t('Done · Save to Profile')
                                     )}
                                 </button>
 
                                 {mode === 'quick' && (
                                     <button
                                         type="button"
-                                        aria-label="Deepen with 27 Questions, approx 3 minutes"
+                                        aria-label={t('Deepen with 27 Questions, approx 3 minutes')}
                                         onClick={() => {
                                             setMode('deep');
                                             setCurrentIndex(0);
@@ -434,7 +433,7 @@ export function ArchetypeQuizModal({
                                         }}
                                         className="w-full py-3 px-4 rounded-xl font-bold bg-transparent hover:bg-nature-100 dark:hover:bg-nature-800 text-emerald-600 dark:text-emerald-400 transition-all cursor-pointer text-xs sm:text-sm border border-emerald-300 dark:border-emerald-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                                     >
-                                        🧭 Deepen with 27 Questions (~3 min)
+                                        {t('🧭 Deepen with 27 Questions (~3 min)')}
                                     </button>
                                 )}
                             </div>

@@ -22,19 +22,84 @@ import {
 } from '../lib/keeper-governance';
 import { type BeanPoolIdentity } from '../lib/identity';
 import { resolveAvatarUrl } from '../lib/avatar';
-import { ACCOUNT_DELETED_TEXT, blankedWithAccount } from '../lib/chat-tombstone';
+import { blankedWithAccount } from '../lib/chat-tombstone';
 import { MARKETPLACE_CATEGORIES } from '../lib/marketplace';
 import { pledgeClosedLine } from '../lib/enterprise-pledge';
-import { formatNumber, groupKindLine, isSampleId, isWholeCents, keeperWords, t, amountRefusalWords, ANY_DECIMALS, isAmbiguousAmount, parseAmount } from '@beanpool/core';
+import {
+    formatDate, formatNumber, groupKindLine, isSampleId, isWholeCents, keeperWords, t, tn, word, amountRefusalWords, ANY_DECIMALS,
+    isAmbiguousAmount, parseAmount, type WordKey,
+} from '@beanpool/core';
 import { ReportModal } from '../components/ReportModal';
 import { EnterpriseDecisions } from '../components/EnterpriseDecisions';
 import { EnterpriseLocationPicker } from '../components/EnterpriseLocationPicker';
+import { Sentence } from '../components/Sentence';
 import { sampleTreasuryDetail, sampleEnterpriseLedger, SampleHeader } from '../components/ShowcasePreviews';
 import { LocalCommunityStrip, LocalCommunityAction, LocalCommunityLine, type LocalCommunityWays } from '../components/LocalCommunityMark';
 
+/*
+ * The page's words (words sweep W2): a project says leader / collaborators and an enterprise lead keeper / keepers
+ * (group decisions pick 8), each sentence written whole for each kind, never core's keeperWords glued into a sentence,
+ * so a language can inflect them (the phone's app/treasury-detail.tsx, words S3h, has the same sentences where the
+ * English is the same). What members wrote (the name, the purpose, listings, memos, messages, names) is shown as written;
+ * the node's own error words are shown as it sent them (slice S4).
+ */
+
+/** What stands in for a message a keeper (a project's collaborator) removed: the same words the remove confirm quotes. */
+function removedLine(project: boolean): string {
+    return project ? t('removed by a collaborator') : t('removed by a keeper');
+}
+
+/** A keeper's part on their chip, in their kind's words (the phone's words, Talk's own keys). */
+function keeperRoleWord(project: boolean, isLead: boolean): string {
+    if (project) return isLead ? t('Leader', undefined, 'project role') : t('Collaborator', undefined, 'project role');
+    return isLead ? t('Lead keeper', undefined, 'enterprise role') : t('Keeper', undefined, 'enterprise role');
+}
+
+/** The P&L's periods (the phone's LEDGER_PERIODS labels): marked here, translated where shown. */
+const LEDGER_PERIOD_WORDS: Readonly<Record<'all' | '30d' | '90d' | '365d', WordKey>> = {
+    all: word('All time'),
+    '30d': word('30d'),
+    '90d': word('90d'),
+    '365d': word('1y'),
+};
+
+/**
+ * The Market's categories by id, for the post form's picker (the same English keys as the Market's own: lib/marketplace.ts
+ * labels them with word() in sweep W1). A category this table does not know shows its label as the table wrote it.
+ */
+const CATEGORY_WORDS: Readonly<Record<string, WordKey>> = {
+    food: word('Food & Produce'), services: word('Services'), labour: word('Labour'), tools: word('Tools'), goods: word('Goods'),
+    garden: word('Garden'), housing: word('Housing'), transport: word('Transport'), education: word('Education'), arts: word('Arts'),
+    health: word('Health & Wellness'), care: word('Care & Support'), animals: word('Animals'), tech: word('Tech & Digital'),
+    energy: word('Energy'), mindset: word('Mindset & Philosophy'), general: word('General'),
+};
+function categoryWords(c: { id: string; label: string }): string {
+    return Object.prototype.hasOwnProperty.call(CATEGORY_WORDS, c.id) ? t(CATEGORY_WORDS[c.id]) : c.label;
+}
+
+/** A listing's price unit on this page ("/hourly"); a type the page does not know reads as the node sent it. */
+function priceTypeWords(priceType: string): string {
+    if (priceType === 'hourly') return t('/hourly', undefined, 'price type');
+    if (priceType === 'daily') return t('/daily', undefined, 'price type');
+    if (priceType === 'weekly') return t('/weekly', undefined, 'price type');
+    if (priceType === 'monthly') return t('/monthly', undefined, 'price type');
+    return `/${priceType}`;
+}
+
+/** "19 Oct, 9:05": core's date and time, in the member's language (never the browser's toLocaleString). */
+function formatTimestamp(ts: any): string {
+    try {
+        const d = new Date(typeof ts === 'number' ? ts : String(ts));
+        if (isNaN(d.getTime())) return '';
+        return t('{date}, {time}', { date: formatDate(d, 'day-month'), time: formatDate(d, 'time') });
+    } catch {
+        return '';
+    }
+}
+
 /** A removed line is a keeper's removal, or its author's own delete when they deleted their account (lib/chat-tombstone.ts). */
-function decodeThreadText(ciphertext: string, type: string, metadata?: string, keeper = 'keeper'): string {
-    if (type === 'removed') return blankedWithAccount(metadata) ? ACCOUNT_DELETED_TEXT : `removed by a ${keeper}`;
+function decodeThreadText(ciphertext: string, type: string, metadata: string | undefined, project: boolean): string {
+    if (type === 'removed') return blankedWithAccount(metadata) ? t('This message was deleted') : removedLine(project);
     try {
         const binString = atob(ciphertext);
         const bytes = Uint8Array.from(binString, (m) => m.charCodeAt(0));
@@ -76,6 +141,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
     const [detail, setDetail] = useState<any>(null);
     /** A project has a leader and collaborators; an enterprise a lead keeper and keepers (pick 8). */
     const kw = keeperWords(detail?.lifecycle);
+    const project = kw.kind === 'project';
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [isKeeperOfThis, setIsKeeperOfThis] = useState(false);
@@ -152,15 +218,18 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
             setSubmittingJoinRequest(true);
             setActionFeedback(null);
             await requestToJoinEnterprise(pubkey, Number(joinBackingPledge));
+            const amount = formatNumber(joinBackingPledge);
             setActionFeedback({
                 type: 'success',
-                message: `Join request submitted with ${joinBackingPledge} 🫘 backing pledge. Awaiting ${kw.lead} review.`
+                message: project
+                    ? t('Join request submitted with {amount} 🫘 backing pledge. Awaiting leader review.', { amount })
+                    : t('Join request submitted with {amount} 🫘 backing pledge. Awaiting lead keeper review.', { amount })
             });
             await load();
         } catch (err: any) {
             setActionFeedback({
                 type: 'error',
-                message: err.message || 'Failed to submit join request.'
+                message: err.message || t('Failed to submit join request.')
             });
         } finally {
             setSubmittingJoinRequest(false);
@@ -173,17 +242,22 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
             setRequestProcessingId(requestId);
             setActionFeedback(null);
             const res = await approveKeeperRequest(pubkey, requestId);
+            const amount = formatNumber(res.backing ?? 0);
             setActionFeedback({
                 type: 'success',
                 message: res.applied === false
-                    ? `Approved. They become a ${kw.keeper} in 3 days, unless another ${kw.keeper} objects first.`
-                    : `Approved ${kw.keeper} request with ${res.backing ?? 0} 🫘 backing.`
+                    ? (project
+                        ? t('Approved. They become a collaborator in 3 days, unless another collaborator objects first.')
+                        : t('Approved. They become a keeper in 3 days, unless another keeper objects first.'))
+                    : (project
+                        ? t('Approved collaborator request with {amount} 🫘 backing.', { amount })
+                        : t('Approved keeper request with {amount} 🫘 backing.', { amount }))
             });
             await load();
         } catch (err: any) {
             setActionFeedback({
                 type: 'error',
-                message: err.message || `Failed to approve ${kw.keeper} request.`
+                message: err.message || (project ? t('Failed to approve collaborator request.') : t('Failed to approve keeper request.'))
             });
         } finally {
             setRequestProcessingId(null);
@@ -198,13 +272,13 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
             await declineKeeperRequest(pubkey, requestId);
             setActionFeedback({
                 type: 'success',
-                message: `Declined ${kw.keeper} request.`
+                message: project ? t('Declined collaborator request.') : t('Declined keeper request.')
             });
             await load();
         } catch (err: any) {
             setActionFeedback({
                 type: 'error',
-                message: err.message || `Failed to decline ${kw.keeper} request.`
+                message: err.message || (project ? t('Failed to decline collaborator request.') : t('Failed to decline keeper request.'))
             });
         } finally {
             setRequestProcessingId(null);
@@ -222,14 +296,19 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
             if (passed) {
                 setActionFeedback({
                     type: 'success',
-                    message: `Succession passed! The ${kw.lead} role moved to the candidate.`
+                    message: project
+                        ? t('Succession passed! The leader role moved to the candidate.')
+                        : t('Succession passed! The lead keeper role moved to the candidate.')
                 });
             } else {
                 const count = res.proposal?.votesCount ?? res.votesCount ?? 1;
                 const req = res.proposal?.requiredVotes ?? res.votesRequired ?? 2;
+                // English says "votes" for every count; another language may not.
                 setActionFeedback({
                     type: 'success',
-                    message: `Succession proposal submitted (${count} of ${req} votes). Awaiting other ${kw.keepers}.`
+                    message: project
+                        ? tn(req, 'Succession proposal submitted ({count} of {n} votes). Awaiting other collaborators.', 'Succession proposal submitted ({count} of {n} votes). Awaiting other collaborators.', { count })
+                        : tn(req, 'Succession proposal submitted ({count} of {n} votes). Awaiting other keepers.', 'Succession proposal submitted ({count} of {n} votes). Awaiting other keepers.', { count })
                 });
             }
             setSelectedSuccessionCandidate('');
@@ -237,7 +316,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
         } catch (err: any) {
             setActionFeedback({
                 type: 'error',
-                message: err.message || `Failed to propose a new ${kw.lead}.`
+                message: err.message || (project ? t('Failed to propose a new leader.') : t('Failed to propose a new lead keeper.'))
             });
         } finally {
             setSubmittingSuccession(false);
@@ -250,10 +329,10 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
             setChangeProcessingId(changeId);
             setActionFeedback(null);
             await objectToKeeperChange(pubkey, changeId);
-            setActionFeedback({ type: 'success', message: 'Objection recorded. The change is cancelled.' });
+            setActionFeedback({ type: 'success', message: t('Objection recorded. The change is cancelled.') });
             await load();
         } catch (err: any) {
-            setActionFeedback({ type: 'error', message: err.message || 'Could not object.' });
+            setActionFeedback({ type: 'error', message: err.message || t('Could not object.') });
         } finally {
             setChangeProcessingId(null);
         }
@@ -261,7 +340,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
 
     const handleRemoveKeeper = async (k: any) => {
         if (changeProcessingId) return;
-        if (!window.confirm(`Remove ${k.callsign}? ${removeKeeperConfirmText(k, kw)}`)) return;
+        if (!window.confirm(t('Remove {name}? {what}', { name: k.callsign, what: removeKeeperConfirmText(k, kw) }))) return;
         try {
             setChangeProcessingId(k.publicKey);
             setActionFeedback(null);
@@ -269,7 +348,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
             setActionFeedback({ type: 'success', message: removeKeeperConfirmText(k, kw) });
             await load();
         } catch (err: any) {
-            setActionFeedback({ type: 'error', message: err.message || `Could not remove the ${kw.keeper}.` });
+            setActionFeedback({ type: 'error', message: err.message || (project ? t('Could not remove the collaborator.') : t('Could not remove the keeper.')) });
         } finally {
             setChangeProcessingId(null);
         }
@@ -278,16 +357,17 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
     const handleStepDown = async () => {
         const me = identity?.publicKey;
         if (!me || steppingDown) return;
-        if (!window.confirm(`Step down as a ${kw.keeper}? ${stepDownConfirmText(me, keeperList, kw)}`)) return;
+        const what = stepDownConfirmText(me, keeperList, kw);
+        if (!window.confirm(project ? t('Step down as a collaborator? {what}', { what }) : t('Step down as a keeper? {what}', { what }))) return;
         try {
             setSteppingDown(true);
             setActionFeedback(null);
             await stepDownAsKeeper(pubkey);
-            setActionFeedback({ type: 'success', message: `You have stepped down as a ${kw.keeper}.` });
+            setActionFeedback({ type: 'success', message: project ? t('You have stepped down as a collaborator.') : t('You have stepped down as a keeper.') });
             await load();
         } catch (err: any) {
             // The server says plainly what must happen first (e.g. the debt your pledge covers).
-            setActionFeedback({ type: 'error', message: err.message || 'Could not step down.' });
+            setActionFeedback({ type: 'error', message: err.message || t('Could not step down.') });
         } finally {
             setSteppingDown(false);
         }
@@ -303,23 +383,30 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
             if (passed) {
                 setActionFeedback({
                     type: 'success',
-                    message: `Succession vote registered and passed! The ${kw.lead} role has been transferred.`
+                    message: project
+                        ? t('Succession vote registered and passed! The leader role has been transferred.')
+                        : t('Succession vote registered and passed! The lead keeper role has been transferred.')
                 });
             } else if (res.proposal?.closedReason === 'rejected') {
-                setActionFeedback({ type: 'success', message: `Vote registered. Not enough ${kw.keepers} can now say yes, so the ${kw.kind === 'project' ? 'leader' : 'lead'} stays.` });
+                setActionFeedback({
+                    type: 'success',
+                    message: project
+                        ? t('Vote registered. Not enough collaborators can now say yes, so the leader stays.')
+                        : t('Vote registered. Not enough keepers can now say yes, so the lead stays.'),
+                });
             } else {
                 const count = res.proposal?.votesCount ?? res.votesCount ?? 1;
                 const req = res.proposal?.requiredVotes ?? res.votesRequired ?? 2;
                 setActionFeedback({
                     type: 'success',
-                    message: `Succession vote registered (${count} yes of ${req} needed).`
+                    message: t('Succession vote registered ({count} yes of {needed} needed).', { count, needed: req })
                 });
             }
             await load();
         } catch (err: any) {
             setActionFeedback({
                 type: 'error',
-                message: err.message || 'Failed to vote on succession.'
+                message: err.message || t('Failed to vote on succession.')
             });
         } finally {
             setSubmittingSuccession(false);
@@ -339,7 +426,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
         }
         const amt = read.ok ? read.value : NaN;
         if (isNaN(amt) || amt <= 0) {
-            setActionFeedback({ type: 'error', message: 'Please enter a positive amount of Beans to pledge.' });
+            setActionFeedback({ type: 'error', message: t('Please enter a positive amount of Beans to pledge.') });
             return;
         }
         // To the cent, as the node takes it (core isWholeCents).
@@ -353,22 +440,30 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
             await treasuryPledge(pubkey, amt, pledgeMemo.trim() || undefined);
             setPledgeAmount('');
             setPledgeMemo('');
-            setActionFeedback({ type: 'success', message: `Successfully pledged ${amt} 🫘 to ${detail?.name || `the ${kw.kind}`}!` });
+            const amount = formatNumber(amt);
+            setActionFeedback({
+                type: 'success',
+                message: detail?.name
+                    ? t('Successfully pledged {amount} 🫘 to {name}!', { amount, name: detail.name })
+                    : project ? t('Successfully pledged {amount} 🫘 to the project!', { amount }) : t('Successfully pledged {amount} 🫘 to the enterprise!', { amount }),
+            });
             await load();
         } catch (err: any) {
-            setActionFeedback({ type: 'error', message: err.message || 'Failed to complete pledge.' });
+            setActionFeedback({ type: 'error', message: err.message || t('Failed to complete pledge.') });
         } finally {
             setPledging(false);
         }
     };
 
-    const getDaysRemaining = (deadline: string | null | undefined) => {
+    /** The deadline badge's words, and whether the deadline has passed (the badge's colour): never by comparing words. */
+    const getDaysRemaining = (deadline: string | null | undefined): { text: string; expired: boolean } | null => {
         if (!deadline) return null;
         const diff = new Date(deadline).getTime() - new Date().getTime();
         const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
-        if (days < 0) return 'Expired';
-        if (days === 0) return 'Ends today';
-        return `${days} days left`;
+        if (days < 0) return { text: t('Expired'), expired: true };
+        if (days === 0) return { text: t('Ends today'), expired: false };
+        // English says "days" for every count, as it always has here; another language may not.
+        return { text: tn(days, '{n} days left', '{n} days left'), expired: false };
     };
 
     const load = useCallback(async () => {
@@ -408,7 +503,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                 setIsKeeperOfThis(false);
             }
         } catch (e: any) {
-            setError(e.message || 'Check your connection and try again.');
+            setError(e.message || t('Check your connection and try again.'));
         } finally {
             setLoading(false);
         }
@@ -441,7 +536,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
             const data = await getEnterpriseLedger(pubkey, { since });
             setLedgerData(data);
         } catch (e: any) {
-            setLedgerError(e?.message || 'Could not load the ledger');
+            setLedgerError(e?.message || t('Could not load the ledger'));
         } finally {
             setLedgerLoading(false);
         }
@@ -486,7 +581,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                 await loadThread();
             }
         } catch (e: any) {
-            setThreadError(e?.message || 'Could not post message');
+            setThreadError(e?.message || t('Could not post message'));
         } finally {
             setThreadPosting(false);
         }
@@ -494,14 +589,14 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
 
     const handleRemoveThreadMessage = async (messageId: string) => {
         if (!pubkey || threadRemovingId) return;
-        if (!window.confirm(`Are you sure you want to remove this message? It will show as "removed by a ${kw.keeper}".`)) return;
+        if (!window.confirm(t('Are you sure you want to remove this message? It will show as "{removed}".', { removed: removedLine(project) }))) return;
         setThreadRemovingId(messageId);
         setThreadError(null);
         try {
             await removeEnterpriseThreadMessage(pubkey, messageId);
             await loadThread();
         } catch (e: any) {
-            setThreadError(e?.message || 'Could not remove message');
+            setThreadError(e?.message || t('Could not remove message'));
         } finally {
             setThreadRemovingId(null);
         }
@@ -513,11 +608,14 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
             setActionFeedback(null);
             await pauseEnterprise(pubkey);
             setConfirmingPause(false);
-            setActionFeedback({ type: 'success', message: `${kw.Kind} paused for the season. Credit held at snapshot.` });
+            setActionFeedback({
+                type: 'success',
+                message: project ? t('Project paused for the season. Credit held at snapshot.') : t('Enterprise paused for the season. Credit held at snapshot.'),
+            });
             await load();
             await loadLedger(ledgerPeriod);
         } catch (e: any) {
-            setActionFeedback({ type: 'error', message: e?.message || `Failed to pause the ${kw.kind}` });
+            setActionFeedback({ type: 'error', message: e?.message || (project ? t('Failed to pause the project') : t('Failed to pause the enterprise')) });
         } finally {
             setLifecycleActionLoading(false);
         }
@@ -529,11 +627,14 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
             setActionFeedback(null);
             await resumeEnterprise(pubkey);
             setConfirmingResume(false);
-            setActionFeedback({ type: 'success', message: `${kw.Kind} resumed! Active listings are now buyable again.` });
+            setActionFeedback({
+                type: 'success',
+                message: project ? t('Project resumed! Active listings are now buyable again.') : t('Enterprise resumed! Active listings are now buyable again.'),
+            });
             await load();
             await loadLedger(ledgerPeriod);
         } catch (e: any) {
-            setActionFeedback({ type: 'error', message: e?.message || `Failed to resume the ${kw.kind}` });
+            setActionFeedback({ type: 'error', message: e?.message || (project ? t('Failed to resume the project') : t('Failed to resume the enterprise')) });
         } finally {
             setLifecycleActionLoading(false);
         }
@@ -545,11 +646,11 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
             setActionFeedback(null);
             await initiateWindUp(pubkey);
             setConfirmingWindUp(false);
-            setActionFeedback({ type: 'success', message: 'Wind-up initiated. 7-day grace period has begun.' });
+            setActionFeedback({ type: 'success', message: t('Wind-up initiated. 7-day grace period has begun.') });
             await load();
             await loadLedger(ledgerPeriod);
         } catch (e: any) {
-            setActionFeedback({ type: 'error', message: e?.message || 'Failed to initiate wind-up' });
+            setActionFeedback({ type: 'error', message: e?.message || t('Failed to initiate wind-up') });
         } finally {
             setLifecycleActionLoading(false);
         }
@@ -561,11 +662,14 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
             setActionFeedback(null);
             await cancelWindUp(pubkey);
             setConfirmingCancelWindUp(false);
-            setActionFeedback({ type: 'success', message: `Wind-up cancelled. ${kw.Kind} restored to active status.` });
+            setActionFeedback({
+                type: 'success',
+                message: project ? t('Wind-up cancelled. Project restored to active status.') : t('Wind-up cancelled. Enterprise restored to active status.'),
+            });
             await load();
             await loadLedger(ledgerPeriod);
         } catch (e: any) {
-            setActionFeedback({ type: 'error', message: e?.message || 'Failed to cancel wind-up' });
+            setActionFeedback({ type: 'error', message: e?.message || t('Failed to cancel wind-up') });
         } finally {
             setLifecycleActionLoading(false);
         }
@@ -577,14 +681,17 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
             setActionFeedback(null);
             const res = await finaliseWindUp(pubkey);
             setConfirmingFinaliseWindUp(false);
+            const amount = formatNumber(res.sweptAmount ?? 0);
             setActionFeedback({
                 type: 'success',
-                message: `Wind-up finalised. Swept ${res.sweptAmount ?? 0} 🫘 to Commons and released ${kw.keepers}.`,
+                message: project
+                    ? t('Wind-up finalised. Swept {amount} 🫘 to Commons and released collaborators.', { amount })
+                    : t('Wind-up finalised. Swept {amount} 🫘 to Commons and released keepers.', { amount }),
             });
             await load();
             await loadLedger(ledgerPeriod);
         } catch (e: any) {
-            setActionFeedback({ type: 'error', message: e?.message || 'Failed to finalise wind-up' });
+            setActionFeedback({ type: 'error', message: e?.message || t('Failed to finalise wind-up') });
         } finally {
             setLifecycleActionLoading(false);
         }
@@ -617,11 +724,11 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
         const amt = read.ok ? read.value : NaN;
         const bal = detail?.balance ?? 0;
         if (isNaN(amt) || amt <= 0) {
-            setActionFeedback({ type: 'error', message: 'Please enter a positive amount of Beans to sweep.' });
+            setActionFeedback({ type: 'error', message: t('Please enter a positive amount of Beans to sweep.') });
             return;
         }
         if (amt > bal) {
-            setActionFeedback({ type: 'error', message: `Cannot sweep more than current surplus (${bal} 🫘).` });
+            setActionFeedback({ type: 'error', message: t('Cannot sweep more than current surplus ({amount} 🫘).', { amount: formatNumber(bal) }) });
             return;
         }
 
@@ -630,10 +737,10 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
             setActionFeedback(null);
             await treasurySweep(pubkey, amt);
             setSweepAmount('');
-            setActionFeedback({ type: 'success', message: `Successfully swept ${amt} 🫘 to the shared Commons pool.` });
+            setActionFeedback({ type: 'success', message: t('Successfully swept {amount} 🫘 to the shared Commons pool.', { amount: formatNumber(amt) }) });
             await load();
         } catch (e: any) {
-            setActionFeedback({ type: 'error', message: e.message || 'Failed to sweep surplus to the Commons.' });
+            setActionFeedback({ type: 'error', message: e.message || t('Failed to sweep surplus to the Commons.') });
         } finally {
             setSweeping(false);
         }
@@ -644,26 +751,26 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
             setActionState({ id: txId, type: 'approve' });
             setActionFeedback(null);
             await treasuryApprove(pubkey, txId);
-            setActionFeedback({ type: 'success', message: 'Bid approved! Escrow funds locked in trust.' });
+            setActionFeedback({ type: 'success', message: t('Bid approved! Escrow funds locked in trust.') });
             await load();
         } catch (e: any) {
-            setActionFeedback({ type: 'error', message: e.message || 'Failed to approve bid.' });
+            setActionFeedback({ type: 'error', message: e.message || t('Failed to approve bid.') });
         } finally {
             setActionState(null);
         }
     };
 
     const handleRejectBid = async (txId: string) => {
-        const confirmed = window.confirm('Are you sure you want to decline this request? The member will be notified.');
+        const confirmed = window.confirm(t('Are you sure you want to decline this request? The member will be notified.'));
         if (!confirmed) return;
         try {
             setActionState({ id: txId, type: 'reject' });
             setActionFeedback(null);
             await treasuryReject(pubkey, txId);
-            setActionFeedback({ type: 'success', message: 'Bid declined.' });
+            setActionFeedback({ type: 'success', message: t('Bid declined.') });
             await load();
         } catch (e: any) {
-            setActionFeedback({ type: 'error', message: e.message || 'Failed to decline bid.' });
+            setActionFeedback({ type: 'error', message: e.message || t('Failed to decline bid.') });
         } finally {
             setActionState(null);
         }
@@ -673,7 +780,8 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
         let finalHours: number | undefined;
         if (priceType && priceType !== 'fixed') {
             // The hours as typed, in the language's decimal mark (core parseAmount): fr "2,5" is 2.5, any decimals, as before.
-            const input = window.prompt(`Enter hours worked for "${postTitle || 'deal'}":`, initialHours ? formatNumber(initialHours) : '1');
+            const question = postTitle ? t('Enter hours worked for "{title}":', { title: postTitle }) : t('Enter hours worked for "deal":');
+            const input = window.prompt(question, initialHours ? formatNumber(initialHours) : '1');
             if (input === null) return;
             const read = parseAmount(input, undefined, ANY_DECIMALS);
             if (!read.ok && isAmbiguousAmount(read.refusal)) {
@@ -682,22 +790,25 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
             }
             const parsed = read.ok ? read.value : NaN;
             if (isNaN(parsed) || parsed <= 0) {
-                alert('Please enter a valid positive number of hours.');
+                alert(t('Please enter a valid positive number of hours.'));
                 return;
             }
             finalHours = parsed;
         } else {
-            const confirmed = window.confirm(`Release payment of ${credits ?? ''} 🫘 for "${postTitle || 'deal'}"? This action cannot be reversed.`);
+            const amount = credits != null ? formatNumber(credits) : '';
+            const confirmed = window.confirm(postTitle
+                ? t('Release payment of {amount} 🫘 for "{title}"? This action cannot be reversed.', { amount, title: postTitle })
+                : t('Release payment of {amount} 🫘 for "deal"? This action cannot be reversed.', { amount }));
             if (!confirmed) return;
         }
         try {
             setActionState({ id: txId, type: 'complete' });
             setActionFeedback(null);
             await treasuryComplete(pubkey, txId, finalHours);
-            setActionFeedback({ type: 'success', message: 'Payment released! Worker has been paid.' });
+            setActionFeedback({ type: 'success', message: t('Payment released! Worker has been paid.') });
             await load();
         } catch (e: any) {
-            setActionFeedback({ type: 'error', message: e.message || 'Failed to release payment.' });
+            setActionFeedback({ type: 'error', message: e.message || t('Failed to release payment.') });
         } finally {
             setActionState(null);
         }
@@ -706,17 +817,17 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
     const handleCancelInitiative = async () => {
         if (!pubkey || cancelling) return;
         const confirmed = window.confirm(
-            'Cancel Initiative & Refund Backers?\n\nThis will close the initiative and immediately refund all escrowed pledges back to their backers.'
+            t('Cancel Initiative & Refund Backers?\n\nThis will close the initiative and immediately refund all escrowed pledges back to their backers.')
         );
         if (!confirmed) return;
         try {
             setCancelling(true);
             setActionFeedback(null);
             await deleteCrowdfundProject(pubkey, identity?.publicKey);
-            alert('Initiative Cancelled 🌱\n\nPledges have been refunded to backers.');
+            alert(t('Initiative Cancelled 🌱\n\nPledges have been refunded to backers.'));
             onBack();
         } catch (e: any) {
-            setActionFeedback({ type: 'error', message: e.message || 'Could not cancel initiative.' });
+            setActionFeedback({ type: 'error', message: e.message || t('Could not cancel initiative.') });
         } finally {
             setCancelling(false);
         }
@@ -728,7 +839,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
         const creditsRead = parseAmount(postCredits, undefined, ANY_DECIMALS);
         const creditsNum = creditsRead.ok ? creditsRead.value : NaN;
         if (!postTitle.trim()) {
-            setPostError('Title is required');
+            setPostError(t('Title is required'));
             return;
         }
         if (!creditsRead.ok && isAmbiguousAmount(creditsRead.refusal)) {
@@ -736,7 +847,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
             return;
         }
         if (isNaN(creditsNum) || creditsNum <= 0) {
-            setPostError('Please enter a valid credit amount');
+            setPostError(t('Please enter a valid credit amount'));
             return;
         }
 
@@ -765,54 +876,35 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
             setPostTitle('');
             setPostDescription('');
             setPostCredits('');
+            const offer = postModalMode === 'offer';
             setActionFeedback({
                 type: 'success',
-                message: `${postModalMode === 'offer' ? 'Offer' : 'Need'} posted on behalf of the ${kw.kind}.`
+                message: project
+                    ? (offer ? t('Offer posted on behalf of the project.') : t('Need posted on behalf of the project.'))
+                    : (offer ? t('Offer posted on behalf of the enterprise.') : t('Need posted on behalf of the enterprise.'))
             });
             await load();
         } catch (e: any) {
-            setPostError(e.message || `Failed to post ${postModalMode}.`);
+            setPostError(e.message || (postModalMode === 'offer' ? t('Failed to post offer.') : t('Failed to post need.')));
         } finally {
             setPosting(false);
         }
     };
 
-    const formatTimestamp = (ts: any) => {
-        try {
-            const d = new Date(typeof ts === 'number' ? ts : String(ts));
-            if (isNaN(d.getTime())) return '';
-            return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ', ' +
-                d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
-        } catch {
-            return '';
-        }
-    };
-
+    /** "17 December": core's long date in the member's language (en as toLocaleDateString('en-GB', { day, month: 'long' }) printed it). */
     const formatPauseDate = (iso: string | null | undefined): string => {
         if (!iso) return '';
         try {
             const d = new Date(iso);
             if (isNaN(d.getTime())) return '';
-            return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long' });
-        } catch {
-            return '';
-        }
-    };
-
-    const formatShortDate = (iso: string | null | undefined): string => {
-        if (!iso) return '';
-        try {
-            const d = new Date(iso);
-            if (isNaN(d.getTime())) return '';
-            return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ' ' +
-                d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+            return formatDate(d, 'day-month', { width: 'long' });
         } catch {
             return '';
         }
     };
 
     const balance = detail?.balance ?? 0;
-    const name = detail?.name || 'Community Enterprise';
+    const name = detail?.name || t('Community Enterprise');
     const avatarUrl = resolveAvatarUrl(detail?.avatar);
     // What the node's P&L summary counts as "came in" is gross; net change is net of the community fee.
     const ledgerFees = ledgerData?.summary
@@ -838,7 +930,13 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
         : 0;
     const windUpGraceEnded = windUpGraceEndsAt ? Date.now() >= new Date(windUpGraceEndsAt).getTime() : false;
     const initiatorKeeper = detail?.keepers?.find((k: any) => k.publicKey === detail?.windUpInitiatedBy);
-    const initiatorName = initiatorKeeper?.callsign || (detail?.windUpInitiatedBy ? `${detail.windUpInitiatedBy.slice(0, 8)}…` : `a ${kw.keeper}`);
+    const initiatorName: string | null = initiatorKeeper?.callsign || (detail?.windUpInitiatedBy ? `${detail.windUpInitiatedBy.slice(0, 8)}…` : null);
+    // Who started it, or the role in their place: each its own sentence (the phone's enterprise-season.ts).
+    const windingUpLine = initiatorName
+        ? tn(windUpDaysLeft, 'Winding up ({n} day left · started by {name})', 'Winding up ({n} days left · started by {name})', { name: initiatorName })
+        : project
+            ? tn(windUpDaysLeft, 'Winding up ({n} day left · started by a collaborator)', 'Winding up ({n} days left · started by a collaborator)')
+            : tn(windUpDaysLeft, 'Winding up ({n} day left · started by a keeper)', 'Winding up ({n} days left · started by a keeper)');
     const keeperCount = detail?.keepers?.length || 1;
 
     const availableToBack = detail?.availableToBack ?? 0;
@@ -877,12 +975,12 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                 <button
                     onClick={onBack}
                     className="shrink-0 min-h-[48px] text-nature-600 dark:text-nature-400 font-bold hover:text-nature-900 dark:hover:text-white transition-colors bg-transparent border-none cursor-pointer flex items-center gap-1.5"
-                    aria-label="Go back"
+                    aria-label={t('Go back')}
                 >
                     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                     </svg>
-                    Back
+                    {t('Back')}
                 </button>
                 {/* Up to two lines below sm, so a name like "Community Eggs" reads whole at 320px with 1.3x text; a
                     longer one ends in an ellipsis on the second line. Back never shrinks, so it stays on the row. */}
@@ -894,16 +992,16 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
 
             <div className="max-w-2xl mx-auto p-4 sm:p-6 space-y-6 pb-24" style={{ paddingBottom: 'calc(var(--bottom-nav-offset) + 4rem)' }}>
                 {loading ? (
-                    <div className="py-20 text-center text-nature-500 font-medium">Loading…</div>
+                    <div className="py-20 text-center text-nature-500 font-medium">{t('Loading…')}</div>
                 ) : error ? (
                     <div className="p-6 rounded-2xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 text-red-600 dark:text-red-400 text-center">
-                        <p className="font-bold mb-2">Couldn't load this group</p>
+                        <p className="font-bold mb-2">{t("Couldn't load this group")}</p>
                         <p className="text-sm">{error}</p>
                         <button
                             onClick={load}
                             className="mt-4 px-4 py-2 bg-bp-danger-fill text-bp-danger-on font-bold rounded-xl text-sm"
                         >
-                            Retry
+                            {t('Retry')}
                         </button>
                     </div>
                 ) : !detail && elsewhere ? (
@@ -911,7 +1009,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                         <LocalCommunityLine feature="enterprises" text={t('🏘️ Enterprises live in a local community ›')} {...ways} />
                     </div>
                 ) : !detail ? (
-                    <div className="py-20 text-center text-nature-500">Group not found.</div>
+                    <div className="py-20 text-center text-nature-500">{t('Group not found.')}</div>
                 ) : (
                     <>
                         {isEffectivePreview && (
@@ -956,19 +1054,24 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                 <div className="flex items-center gap-2">
                                     <span className="text-xl" aria-hidden="true">❄️</span>
                                     <span className="text-xs font-black uppercase tracking-wider text-amber-800 dark:text-amber-300">
-                                        Paused for the season
+                                        {t('Paused for the season')}
                                     </span>
                                 </div>
                                 <p className="text-sm sm:text-base font-bold text-amber-900 dark:text-amber-100 leading-snug">
-                                    Paused for the season. Credit held at {heldCredit} beans{pauseDateFormatted ? ` until ${pauseDateFormatted}.` : '.'}
+                                    {pauseDateFormatted
+                                        ? tn(heldCredit, 'Paused for the season. Credit held at {n} beans until {date}.', 'Paused for the season. Credit held at {n} beans until {date}.', { date: pauseDateFormatted })
+                                        : tn(heldCredit, 'Paused for the season. Credit held at {n} beans.', 'Paused for the season. Credit held at {n} beans.')}
                                 </p>
                                 <p className="text-xs text-amber-800 dark:text-amber-300">
-                                    Listings are paused and cannot be bought right now.
+                                    {t('Listings are paused and cannot be bought right now.')}
                                 </p>
                                 {(detail.pauseWarning || (detail.pauseDaysRemaining !== null && detail.pauseDaysRemaining !== undefined && detail.pauseDaysRemaining <= 14)) && (
                                     <div className="pt-2 border-t border-amber-300/60 dark:border-amber-700/60 text-xs font-bold text-amber-900 dark:text-amber-200 flex items-center gap-1.5">
                                         <span aria-hidden="true">⚠️</span>
-                                        <span>{detail.pauseWarning || (detail.pauseDaysRemaining === 0 ? 'Pause credit floor snapshot has expired' : `Pause credit floor snapshot expires in ${detail.pauseDaysRemaining} day${detail.pauseDaysRemaining === 1 ? '' : 's'}`)}</span>
+                                        {/* The node's own warning is shown as it sent it (slice S4). */}
+                                        <span>{detail.pauseWarning || (detail.pauseDaysRemaining === 0
+                                            ? t('Pause credit floor snapshot has expired')
+                                            : tn(detail.pauseDaysRemaining, 'Pause credit floor snapshot expires in {n} day', 'Pause credit floor snapshot expires in {n} days'))}</span>
                                     </div>
                                 )}
                             </div>
@@ -983,18 +1086,20 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                 <div className="flex items-center gap-2">
                                     <span className="text-xl" aria-hidden="true">⏳</span>
                                     <span className="text-xs font-black uppercase tracking-wider text-rose-800 dark:text-rose-300">
-                                        Winding Up
+                                        {t('Winding Up')}
                                     </span>
                                 </div>
                                 <p className="text-sm sm:text-base font-bold text-rose-900 dark:text-rose-100 leading-snug">
-                                    Winding up ({windUpDaysLeft} day{windUpDaysLeft === 1 ? '' : 's'} left · started by {initiatorName})
+                                    {windingUpLine}
                                 </p>
                                 <p className="text-xs text-rose-800 dark:text-rose-300 leading-relaxed font-medium">
-                                    This {kw.kind} is winding down. Listings are inactive and cannot be bought. Any {kw.keeper} can stop this during the 7-day grace period.
+                                    {project
+                                        ? t('This project is winding down. Listings are inactive and cannot be bought. Any collaborator can stop this during the 7-day grace period.')
+                                        : t('This enterprise is winding down. Listings are inactive and cannot be bought. Any keeper can stop this during the 7-day grace period.')}
                                 </p>
                                 {windUpGraceEnded && (
                                     <p className="text-xs font-bold text-rose-700 dark:text-rose-400 pt-1">
-                                        The 7-day grace period has elapsed. Ready to be finalised.
+                                        {t('The 7-day grace period has elapsed. Ready to be finalised.')}
                                     </p>
                                 )}
                             </div>
@@ -1009,14 +1114,16 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                 <div className="flex items-center gap-2">
                                     <span className="text-xl" aria-hidden="true">🏁</span>
                                     <span className="text-xs font-black uppercase tracking-wider text-stone-600 dark:text-stone-400">
-                                        Completed
+                                        {t('Completed', undefined, 'enterprise state')}
                                     </span>
                                 </div>
                                 <p className="text-sm sm:text-base font-bold leading-snug">
-                                    Completed · Wound up
+                                    {t('Completed · Wound up')}
                                 </p>
                                 <p className="text-xs text-stone-600 dark:text-stone-400 leading-relaxed font-medium">
-                                    This {kw.kind} has completed its purpose and wound up permanently. Surplus was returned to the Commons, {kw.keepers} were released, and listings are closed.
+                                    {project
+                                        ? t('This project has completed its purpose and wound up permanently. Surplus was returned to the Commons, collaborators were released, and listings are closed.')
+                                        : t('This enterprise has completed its purpose and wound up permanently. Surplus was returned to the Commons, keepers were released, and listings are closed.')}
                                 </p>
                             </div>
                         )}
@@ -1024,7 +1131,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                         {detail?.purpose && (
                             <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-5 shadow-sm space-y-2">
                                 <div className="text-xs font-bold uppercase tracking-wider text-nature-500 dark:text-nature-400">
-                                    Purpose
+                                    {t('Purpose')}
                                 </div>
                                 <p className="text-sm text-nature-800 dark:text-nature-200 leading-relaxed">
                                     {detail.purpose}
@@ -1047,19 +1154,25 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                     <div className="flex justify-between items-end">
                                         <div>
                                             <div className="text-xs font-bold uppercase tracking-wider text-nature-500 dark:text-nature-400">
-                                                Funding Progress
+                                                {t('Funding Progress')}
                                             </div>
                                             <div className={`text-2xl font-black mt-1 ${isFunded ? 'text-emerald-600 dark:text-emerald-400' : 'text-nature-900 dark:text-white'}`}>
-                                                {current} 🫘 <span className="text-xs font-semibold text-nature-500 dark:text-nature-400">raised of {goal} 🫘 goal</span>
+                                                <Sentence
+                                                    text={t('{amount} 🫘 {raised}')}
+                                                    parts={{
+                                                        amount: formatNumber(current),
+                                                        raised: <span className="text-xs font-semibold text-nature-500 dark:text-nature-400">{t('raised of {goal} 🫘 goal', { goal: formatNumber(goal) })}</span>,
+                                                    }}
+                                                />
                                             </div>
                                         </div>
                                         {daysRemaining && (
                                             <span className={`text-xs font-bold px-2.5 py-1 rounded-lg ${
-                                                daysRemaining === 'Expired'
+                                                daysRemaining.expired
                                                     ? 'bg-bp-chip-danger-tint text-bp-chip-danger-ink'
                                                     : 'bg-bp-chip-ok-tint text-bp-chip-ok-ink'
                                             }`}>
-                                                ⏳ {daysRemaining}
+                                                ⏳ {daysRemaining.text}
                                             </span>
                                         )}
                                     </div>
@@ -1073,8 +1186,12 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
 
                                     <p className="text-xs text-nature-500 dark:text-nature-400 leading-relaxed">
                                         {isFunded
-                                            ? `🎉 This ${kw.kind} reached its funding goal! Pledged funds are held securely in the ${kw.kind}'s account.`
-                                            : `🔒 Pledges are held securely in the ${kw.kind}'s account, spendable only on transparent offers and needs that the whole community can see.`}
+                                            ? (project
+                                                ? t("🎉 This project reached its funding goal! Pledged funds are held securely in the project's account.")
+                                                : t("🎉 This enterprise reached its funding goal! Pledged funds are held securely in the enterprise's account."))
+                                            : (project
+                                                ? t("🔒 Pledges are held securely in the project's account, spendable only on transparent offers and needs that the whole community can see.")
+                                                : t("🔒 Pledges are held securely in the enterprise's account, spendable only on transparent offers and needs that the whole community can see."))}
                                     </p>
 
                                     {/* Inline Pledge Form — pledging moves the member's own beans */}
@@ -1095,21 +1212,21 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                             {viewerIsMember && !pledgesClosed && (
                                             <form onSubmit={handlePledge} className="pt-2 border-t border-nature-100 dark:border-nature-800 space-y-3">
                                                 <div className="text-xs font-bold uppercase tracking-wider text-nature-600 dark:text-nature-300">
-                                                    Back this initiative
+                                                    {t('Back this initiative')}
                                                 </div>
                                                 <div className="flex gap-2">
                                                     {/* Text, not type="number": a number box reads "12,5" by the browser's language, not the member's (#2202). */}
                                                     <input
                                                         type="text"
                                                         inputMode="decimal"
-                                                        placeholder="Amount (🫘)"
+                                                        placeholder={t('Amount (🫘)')}
                                                         value={pledgeAmount}
                                                         onChange={(e) => setPledgeAmount(e.target.value)}
                                                         className="w-32 sm:w-36 min-w-[7.5rem] bg-nature-50 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 rounded-xl px-3 py-2 text-sm font-bold text-nature-900 dark:text-white placeholder-nature-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                                                     />
                                                     <input
                                                         type="text"
-                                                        placeholder="Memo (optional)"
+                                                        placeholder={t('Memo (optional)')}
                                                         value={pledgeMemo}
                                                         onChange={(e) => setPledgeMemo(e.target.value)}
                                                         className="flex-1 bg-nature-50 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 rounded-xl px-3 py-2 text-sm text-nature-900 dark:text-white placeholder-nature-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
@@ -1119,7 +1236,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                         disabled={pledging || !pledgeAmount}
                                                         className="py-2 px-4 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-bold text-sm shadow-sm transition-all disabled:opacity-40 whitespace-nowrap"
                                                     >
-                                                        {pledging ? 'Pledging…' : 'Pledge Beans 🌱'}
+                                                        {pledging ? t('Pledging…') : t('Pledge Beans 🌱')}
                                                     </button>
                                                 </div>
                                             </form>
@@ -2166,7 +2283,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                 {ledgerData.entries.map((entry) => (
                                                     <tr key={entry.id} className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-0.5 py-2.5 sm:py-0 sm:table-row hover:bg-nature-50/50 dark:hover:bg-nature-800/30 transition-colors" data-testid="ledger-entry">
                                                         <td className="order-5 text-[11px] sm:text-xs sm:order-none sm:py-2.5 sm:pr-3 text-nature-500 dark:text-nature-300 whitespace-nowrap">
-                                                            {formatShortDate(entry.timestamp)}
+                                                            {formatTimestamp(entry.timestamp)}
                                                         </td>
                                                         <td className="order-1 sm:order-none sm:py-2.5 sm:px-3 font-semibold text-nature-800 dark:text-nature-200 [overflow-wrap:anywhere] sm:max-w-[140px] sm:truncate" title={entry.memo}>
                                                             {entry.memo || 'Transfer'}
@@ -2336,7 +2453,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                     {threadMessages.map((m) => {
                                         const isRemoved = m.type === 'removed';
                                         const authorName = m.authorCallsign || (m.authorPubkey ? m.authorPubkey.slice(0, 8) : 'Member');
-                                        const textContent = decodeThreadText(m.ciphertext, m.type, m.metadata, kw.keeper);
+                                        const textContent = decodeThreadText(m.ciphertext, m.type, m.metadata, project);
                                         return (
                                             <div key={m.id} className="py-3 flex items-start gap-3 text-xs">
                                                 {m.authorAvatar ? (

@@ -355,7 +355,7 @@ describe('the member’s side: the Ledger’s repayment card and Pay the Commons
     });
     it('the link’s amount is what was left when the admin shared it: prefilled, said so, in the confirm for that code only; the paid words use the node’s', () => {
         const pay = read('app', 'pay-commons.tsx');
-        expect(pay).toContain("const linkLeft = linkCode && typeof params.amount === 'string' ? parseBeans(params.amount) : null;");
+        expect(pay).toContain("const linkLeft = linkCode && typeof amountParam === 'string' ? parseBeans(amountParam) : null;");
         expect(pay).toContain("useState(linkLeft !== null ? String(linkLeft) : '')");
         expect(pay).toContain('const shared = debt && debt.toLowerCase() === linkCode ? linkLeft : null;');
         expect(pay).toContain('REPAYMENT_COPY.payConfirm(beans, !!debt, shared, !debt && !!myDebt)');

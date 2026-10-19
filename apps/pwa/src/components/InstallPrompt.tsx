@@ -13,7 +13,9 @@
  */
 
 import { useState, useEffect } from 'react';
+import { t } from '@beanpool/core';
 import { useScreenCovered } from '../lib/screen-cover';
+import { Sentence } from './Sentence';
 
 const ON_BRAND = 'var(--bp-commit-on)';
 
@@ -111,7 +113,7 @@ export function InstallPrompt({ hidden = false }: { hidden?: boolean } = {}) {
     return (
         <div
             role="region"
-            aria-label="App installation prompt"
+            aria-label={t('App installation prompt')}
             style={{
                 position: 'fixed',
                 bottom: '4.5rem',
@@ -146,17 +148,17 @@ export function InstallPrompt({ hidden = false }: { hidden?: boolean } = {}) {
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                 }}
                 className="focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
-                aria-label="Dismiss install prompt"
+                aria-label={t('Dismiss install prompt')}
             >✕</button>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: showSteps ? '0.75rem' : 0 }}>
                 <span style={{ fontSize: '2rem' }} aria-hidden="true">📲</span>
                 <div style={{ flex: 1 }}>
                     <p style={{ fontWeight: 700, fontSize: '0.95rem', color: ON_BRAND, marginBottom: '0.2rem' }}>
-                        Install BeanPool
+                        {t('Install BeanPool')}
                     </p>
                     <p style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
-                        Get the full app on your home screen
+                        {t('Get the full app on your home screen')}
                     </p>
                 </div>
                 {deferredPrompt ? (
@@ -172,7 +174,7 @@ export function InstallPrompt({ hidden = false }: { hidden?: boolean } = {}) {
                         }}
                         className="focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
                     >
-                        Install
+                        {t('Install')}
                     </button>
                 ) : (
                     <button
@@ -189,7 +191,7 @@ export function InstallPrompt({ hidden = false }: { hidden?: boolean } = {}) {
                         }}
                         className="focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
                     >
-                        {showSteps ? 'Hide steps' : 'How?'}
+                        {showSteps ? t('Hide steps') : t('How?')}
                     </button>
                 )}
             </div>
@@ -208,7 +210,7 @@ export function InstallPrompt({ hidden = false }: { hidden?: boolean } = {}) {
                 }}
                 className="focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
             >
-                Don&rsquo;t show this again
+                {t('Don’t show this again')}
             </button>
 
             {/* Device-specific instructions */}
@@ -220,22 +222,22 @@ export function InstallPrompt({ hidden = false }: { hidden?: boolean } = {}) {
                 }}>
                     {ios ? (
                         <>
-                            <p style={{ fontWeight: 600, color: ON_BRAND, marginBottom: '0.4rem' }}>iPhone / iPad:</p>
-                            <p>1. Tap the <strong style={{ color: '#60a5fa' }}>Share</strong> button <span style={{ fontSize: '1.1rem' }}>⬆</span> at the bottom</p>
-                            <p>2. Scroll down and tap <strong style={{ color: '#60a5fa' }}>"Add to Home Screen"</strong></p>
-                            <p>3. Tap <strong style={{ color: '#60a5fa' }}>"Add"</strong> in the top right</p>
+                            <p style={{ fontWeight: 600, color: ON_BRAND, marginBottom: '0.4rem' }}>{t('iPhone / iPad:')}</p>
+                            <p><Sentence text={t('1. Tap the {share} button {icon} at the bottom')} parts={{ share: <strong style={{ color: '#60a5fa' }}>{t('Share')}</strong>, icon: <span style={{ fontSize: '1.1rem' }}>⬆</span> }} /></p>
+                            <p><Sentence text={t('2. Scroll down and tap {add}')} parts={{ add: <strong style={{ color: '#60a5fa' }}>{t('"Add to Home Screen"')}</strong> }} /></p>
+                            <p><Sentence text={t('3. Tap {add} in the top right')} parts={{ add: <strong style={{ color: '#60a5fa' }}>{t('"Add"')}</strong> }} /></p>
                         </>
                     ) : android ? (
                         <>
-                            <p style={{ fontWeight: 600, color: ON_BRAND, marginBottom: '0.4rem' }}>Android:</p>
-                            <p>1. Tap the <strong style={{ color: '#60a5fa' }}>⋮ menu</strong> in the top right</p>
-                            <p>2. Tap <strong style={{ color: '#60a5fa' }}>"Add to Home screen"</strong></p>
-                            <p>3. Tap <strong style={{ color: '#60a5fa' }}>"Add"</strong> to confirm</p>
+                            <p style={{ fontWeight: 600, color: ON_BRAND, marginBottom: '0.4rem' }}>{t('Android:')}</p>
+                            <p><Sentence text={t('1. Tap the {menu} in the top right')} parts={{ menu: <strong style={{ color: '#60a5fa' }}>{t('⋮ menu')}</strong> }} /></p>
+                            <p><Sentence text={t('2. Tap {add}')} parts={{ add: <strong style={{ color: '#60a5fa' }}>{t('"Add to Home screen"')}</strong> }} /></p>
+                            <p><Sentence text={t('3. Tap {add} to confirm')} parts={{ add: <strong style={{ color: '#60a5fa' }}>{t('"Add"')}</strong> }} /></p>
                         </>
                     ) : (
                         <>
-                            <p style={{ fontWeight: 600, color: ON_BRAND, marginBottom: '0.4rem' }}>Desktop:</p>
-                            <p>Look for the <strong style={{ color: '#60a5fa' }}>install icon</strong> (⊕) in your browser's address bar, or use your browser menu → "Install app"</p>
+                            <p style={{ fontWeight: 600, color: ON_BRAND, marginBottom: '0.4rem' }}>{t('Desktop:')}</p>
+                            <p><Sentence text={t('Look for the {icon} (⊕) in your browser\'s address bar, or use your browser menu → "Install app"')} parts={{ icon: <strong style={{ color: '#60a5fa' }}>{t('install icon')}</strong> }} /></p>
                         </>
                     )}
                 </div>

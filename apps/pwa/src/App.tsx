@@ -39,7 +39,7 @@ import { ProjectsPage } from './pages/ProjectsPage';
 import { PulsePage } from './pages/PulsePage';
 import { HomePage } from './pages/HomePage';
 import { HeaderControls, HeaderTitle, SidebarControls, useDotOnlyChip } from './components/HeaderControls';
-import { helpSheetFor, tourStepForTab, tourSteps, webHelpKey, type HomeSearchSettings } from '@beanpool/core';
+import { helpSheetFor, t, tourStepForTab, tourSteps, webHelpKey, word, type HomeSearchSettings, type WordKey } from '@beanpool/core';
 import { TourBar } from './components/TourBar';
 import { HelpDialog } from './components/HelpDialog';
 import { OPEN_HELP_EVENT, askTourAgain, endTour, moveTour, useTour } from './lib/tour-store';
@@ -617,19 +617,21 @@ export function App() {
     }, [identity]);
 
     // Home first; the Pulse is a card on Home with its page one tap away, so Home takes its slot (design §8, §13 Q1).
-    const TABS: { id: Tab; label: string; emoji: string }[] = [
-        { id: 'home', label: 'Home', emoji: '🏠' },
-        { id: 'marketplace', label: 'Market', emoji: '🤝' },
-        { id: 'map', label: 'Map', emoji: '🗺️' },
-        { id: 'projects', label: 'Commons', emoji: '🌱' },
-        { id: 'messages', label: 'Chat', emoji: '💬' },
-        { id: 'people', label: 'People', emoji: '👥' },
-        { id: 'ledger', label: 'Ledger', emoji: '📊' },
+    // The tabs' names are the phone's tab words (word(…, 'tab')), so one translation serves both; "Chat" is the web's own.
+    const TABS: { id: Tab; label: WordKey; emoji: string }[] = [
+        { id: 'home', label: word('Home', 'tab'), emoji: '🏠' },
+        { id: 'marketplace', label: word('Market', 'tab'), emoji: '🤝' },
+        { id: 'map', label: word('Map', 'tab'), emoji: '🗺️' },
+        { id: 'projects', label: word('Commons', 'tab'), emoji: '🌱' },
+        { id: 'messages', label: word('Chat', 'tab'), emoji: '💬' },
+        { id: 'people', label: word('People', 'tab'), emoji: '👥' },
+        { id: 'ledger', label: word('Ledger', 'tab'), emoji: '📊' },
     ];
+    const activeTabEntry = TABS.find(tb => tb.id === activeTab);
 
     // The mobile header's title (none on the map, which shows the community's name), and the sync chip as its dot alone
     // where the title wouldn't fit beside the chip's words (a hook, so above the returns before the app).
-    const headerTitle = activeTab !== 'map' || showSettings ? ((activeTab === 'pulse' ? 'The Pulse' : TABS.find(t => t.id === activeTab)?.label) ?? '') : null;
+    const headerTitle = activeTab !== 'map' || showSettings ? (activeTab === 'pulse' ? t('The Pulse') : activeTabEntry ? t(activeTabEntry.label) : '') : null;
     const [headerRef, chipDotOnly] = useDotOnlyChip(headerTitle);
 
     if (loading || (!identity && visitorView.kind === 'checking')) {
@@ -642,7 +644,7 @@ export function App() {
                 color: '#888',
                 fontSize: '1.1rem',
             }}>
-                Loading...
+                {t('Loading...')}
             </div>
         );
     }
@@ -676,20 +678,20 @@ export function App() {
             <div className="flex items-center gap-2 mb-3">
                 <span className={`w-2.5 h-2.5 rounded-full ${communityHealth.online ? 'bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.6)]' : 'bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.6)]'}`} />
                 <span className="font-bold text-sm text-nature-900 dark:text-white">
-                    {communityHealth.online ? 'Online' : 'Offline'}
+                    {communityHealth.online ? t('Online') : t('Offline')}
                 </span>
             </div>
             <div className="space-y-1.5 text-xs text-nature-600 dark:text-nature-300">
                 <div className="flex justify-between">
-                    <span>Node:</span>
-                    <span className="font-mono font-semibold">{communityHealth.nodeName || communityHealth.callsign || 'Local'}</span>
+                    <span>{t('Node:')}</span>
+                    <span className="font-mono font-semibold">{communityHealth.nodeName || communityHealth.callsign || t('Local')}</span>
                 </div>
                 <div className="flex justify-between">
-                    <span>Members:</span>
+                    <span>{t('Members:')}</span>
                     <span className="font-mono font-semibold">{communityHealth.memberCount ?? communityHealth.tree?.totalMembers ?? 0}</span>
                 </div>
                 <div className="flex justify-between">
-                    <span>Active Posts:</span>
+                    <span>{t('Active Posts:')}</span>
                     <span className="font-mono font-semibold">{communityHealth.postCount ?? communityHealth.activity?.totalPosts ?? 0}</span>
                 </div>
             </div>
@@ -697,7 +699,7 @@ export function App() {
                 onClick={() => setShowCommunityStatus(false)}
                 className="mt-3 w-full py-1 text-xs font-semibold text-center text-nature-500 dark:text-nature-400 hover:text-nature-800 dark:hover:text-white transition-colors"
             >
-                Close
+                {t('Close')}
             </button>
         </div>
     );
@@ -725,13 +727,13 @@ export function App() {
                             setOpenProfilePubkey(null);
                         }}
                     >
-                        <img src="/bean.png" alt="BeanPool Icon" className="w-9 h-9 object-contain drop-shadow-sm" />
+                        <img src="/bean.png" alt={t('BeanPool Icon')} className="w-9 h-9 object-contain drop-shadow-sm" />
                         <div className="flex flex-col">
                             <span className="font-extrabold text-xl tracking-tight text-rainbow">BeanPool</span>
                             <span
                                 className="text-[10px] font-bold text-amber-700 dark:text-amber-500 tracking-wider"
-                                aria-label={`Version ${displayVersion}`}
-                            >v{displayVersion}</span>
+                                aria-label={t('Version {version}', { version: displayVersion })}
+                            >{t('v{version}', { version: displayVersion })}</span>
                         </div>
                     </div>
                 </div>
@@ -758,7 +760,7 @@ export function App() {
                             >
                                 <div className="flex items-center gap-3">
                                     <span className="text-xl">{tab.emoji}</span>
-                                    <span>{tab.label}</span>
+                                    <span>{t(tab.label)}</span>
                                 </div>
                                 {tab.id === 'messages' && totalUnread > 0 && (
                                     <span className="bg-bp-cta-fill text-bp-cta-on text-xs font-black px-2 py-0.5 rounded-full shadow-sm">
@@ -791,8 +793,8 @@ export function App() {
                                 {identity.callsign ? identity.callsign.substring(0, 2).toUpperCase() : 'ME'}
                             </div>
                             <div className="flex flex-col truncate">
-                                <span className="font-bold text-xs truncate text-nature-900 dark:text-white">{identity.callsign || 'Anonymous'}</span>
-                                <span className="text-[10px] text-nature-500 dark:text-nature-400">View Profile</span>
+                                <span className="font-bold text-xs truncate text-nature-900 dark:text-white">{identity.callsign || t('Anonymous')}</span>
+                                <span className="text-[10px] text-nature-500 dark:text-nature-400">{t('View Profile')}</span>
                             </div>
                         </button>
                     )}
@@ -811,9 +813,9 @@ export function App() {
                         <div className="flex items-center gap-2 flex-1 min-w-[200px]">
                             <span className="text-lg shrink-0" aria-hidden="true">⚠️</span>
                             <div className="leading-tight">
-                                <span className="font-bold">BeanPool has been updated: </span>
+                                <span className="font-bold">{t('BeanPool has been updated:')} </span>
                                 <span className="text-xs sm:text-sm">
-                                    this page is version {__APP_VERSION__} and your community now runs {serverVersionAhead}. Refresh to load it.
+                                    {t('this page is version {page} and your community now runs {node}. Refresh to load it.', { page: __APP_VERSION__, node: serverVersionAhead })}
                                 </span>
                             </div>
                         </div>
@@ -822,7 +824,7 @@ export function App() {
                             onClick={() => window.location.reload()}
                             className="px-3 py-1.5 bg-white text-amber-900 font-bold rounded-lg text-xs hover:bg-amber-50 active:scale-95 transition-all cursor-pointer border-none shadow-sm shrink-0"
                         >
-                            Refresh
+                            {t('Refresh')}
                         </button>
                     </div>
                 )}
@@ -864,12 +866,12 @@ export function App() {
                                 style={{ transform: 'translateX(-12px) translateY(-2px)' }}
                                 onClick={toggleCommunityStatus}
                             >
-                                <img src="/bean.png" alt="BeanPool Icon" style={{ width: '40px', height: '40px', objectFit: 'contain' }} className="drop-shadow-sm" />
+                                <img src="/bean.png" alt={t('BeanPool Icon')} style={{ width: '40px', height: '40px', objectFit: 'contain' }} className="drop-shadow-sm" />
                                 <span className="font-extrabold text-[1.6rem] tracking-tight text-rainbow drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">BeanPool</span>
                                 <span
                                     className="absolute -right-6 bottom-0.5 text-[10px] font-bold text-amber-500 tracking-wider whitespace-nowrap"
-                                    aria-label={`Version ${displayVersion}`}
-                                >v{displayVersion}</span>
+                                    aria-label={t('Version {version}', { version: displayVersion })}
+                                >{t('v{version}', { version: displayVersion })}</span>
                             </div>
                             {communityStatus}
                         </div>
@@ -949,7 +951,7 @@ export function App() {
                                 </div>
                             )}
                             {activeTab === 'map' && (
-                                <Suspense fallback={<div className="flex-1 flex items-center justify-center">Loading map...</div>}>
+                                <Suspense fallback={<div className="flex-1 flex items-center justify-center">{t('Loading map...')}</div>}>
                                     <MapPage
                                         identity={identity}
                                         openNewPost={openNewPost}
@@ -1138,7 +1140,7 @@ export function App() {
                             style={{
                                 // Width follows label length (floor 4, the emoji's width), so "Commons"
                                 // gets the room it needs instead of every tab shrinking to fit it.
-                                flexGrow: navTabWeight(tab.label),
+                                flexGrow: navTabWeight(t(tab.label)),
                                 flexShrink: 1,
                                 flexBasis: 0,
                                 minWidth: 0,
@@ -1217,7 +1219,7 @@ export function App() {
                                     to "Mar…"/"Co…" on a 320px phone at 1.3x. The vw cap keeps whole labels
                                     there; wider screens still get the full 0.6rem. */}
                                 <span data-nav-label className={`${isActive ? 'text-rainbow text-dark-aura font-extrabold' : 'text-dark-aura font-semibold'} truncate max-w-full text-center`} style={{ fontSize: NAV_LABEL_FONT_SIZE, lineHeight: 1.1 }}>
-                                    {tab.label}
+                                    {t(tab.label)}
                                 </span>
                             </div>
                         </button>

@@ -17,7 +17,7 @@ import { recordRequestSigning } from './nodes';
 import { trackInfoRead } from './request-signing-version';
 
 import { GLOBAL_NODE_URL } from './global-node-url';
-import { featureModeFor, normaliseLang, word, type FeatureMode, type Lang, type ShowcaseFeature } from '@beanpool/core';
+import { featureModeFor, normaliseLang, word, type FeatureMode, type Lang, type ShowcaseFeature, type WordKey } from '@beanpool/core';
 
 /** The worldwide community's one address (utils/global-node-url.ts, which imports nothing). */
 export { GLOBAL_NODE_URL };
@@ -335,13 +335,16 @@ export async function checkGlobalDoor(
     return { ok: true, profile };
 }
 
-/** What the member reads for each refusal. Never a hard gate: invites always still work. */
-export const GLOBAL_DOOR_MESSAGES: Record<GlobalDoorRefusal, string> = {
-    unreachable: "Can't reach the global community right now. Try again, or join with an invite.",
-    not_global: "The global community isn't available right now. You can still join a community with an invite.",
-    door_closed: "The global community isn't taking new members right now. You can still join a community with an invite.",
+/**
+ * What the member reads for each refusal. Never a hard gate: invites always still work. word() keys: the door screen shows
+ * them through t() (utils/open-door-words.ts).
+ */
+export const GLOBAL_DOOR_MESSAGES: Record<GlobalDoorRefusal, WordKey> = {
+    unreachable: word("Can't reach the global community right now. Try again, or join with an invite."),
+    not_global: word("The global community isn't available right now. You can still join a community with an invite."),
+    door_closed: word("The global community isn't taking new members right now. You can still join a community with an invite."),
     // The node's own sentence (apps/server config/private-preview.ts), word for word.
-    private_preview: 'This community is in a private preview. Ask its owner for an invite.',
+    private_preview: word('This community is in a private preview. Ask its owner for an invite.'),
 };
 
 /** Whether this node is in a private preview (an invite from its owner or an admin is the only way in). */

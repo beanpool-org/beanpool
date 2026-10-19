@@ -15,13 +15,33 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { View, Text, Pressable, StyleSheet, ActivityIndicator } from 'react-native';
 import * as Location from 'expo-location';
-import { AREA_TOWN_SEARCH_WORDS, type AddressResult } from '@beanpool/core';
+import { AREA_TOWN_SEARCH_WORDS, t, word, type AddressResult } from '@beanpool/core';
 import { AddressSearch } from './AddressSearch';
 import { useWords } from './LanguageProvider';
 import { AREA_READING_TIMEOUT_MS, AREA_WORDS, areaWhyLine, withTimeLimit, writeMemberArea, type MemberArea } from '../utils/member-area';
 import type { NodeFeatures } from '../utils/node-profile';
 import { palette, type AppColors } from '../constants/colors';
 import { useOnboardingColors } from '../app/ThemeContext';
+
+/**
+ * utils/member-area.ts signs the area's request, so it stays off the words layer (core recovery-path-files' rule for a file
+ * that handles keys or signatures): its own failure sentences are matched here, where they are shown, and drawn in the
+ * member's language. Anything else is the community's own sentence, shown as it sent it (words slice S4).
+ */
+const AREA_SAVE_FAILURES = {
+    unreadable: word("That place couldn't be read. Try again or type a town."),
+    unreachable: word("Couldn't reach the community. Check your connection and try again."),
+} as const;
+const REFUSED = /^The community said no \((\d+)\)\. Try again later\.$/;
+
+/** A failed save's line (writeMemberArea's `error`), in the member's language. */
+export function areaSaveFailureWords(error: string): string {
+    if (error === AREA_SAVE_FAILURES.unreadable) return t(AREA_SAVE_FAILURES.unreadable);
+    if (error === AREA_SAVE_FAILURES.unreachable) return t(AREA_SAVE_FAILURES.unreachable);
+    const refused = REFUSED.exec(error);
+    if (refused) return t('The community said no ({status}). Try again later.', { status: refused[1] });
+    return error;
+}
 
 interface AreaPickerProps {
     /** The community's address; null when the phone has none (offline join), then only Skip does anything. */
@@ -74,7 +94,7 @@ export function AreaPicker({ url, identity, features, onSaved, onSkip, skipLabel
         if (saving.current === stop) saving.current = null;
         setBusy(null);
         if (result.ok) onSaved(result.area, placeName);
-        else setError(result.error);
+        else setError(areaSaveFailureWords(result.error));
     };
 
     const useMyLocation = async () => {

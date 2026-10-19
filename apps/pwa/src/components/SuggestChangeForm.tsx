@@ -6,7 +6,7 @@
 
 import { useState, type FormEvent } from 'react';
 import {
-    FEEDBACK_KINDS, FEEDBACK_NOTICE, FEEDBACK_THANKS, FEEDBACK_TEXT_MAX, FEEDBACK_COMMUNITY_MAX,
+    FEEDBACK_KINDS, FEEDBACK_LINES, FEEDBACK_TEXT_MAX, FEEDBACK_COMMUNITY_MAX, t,
     feedbackCharCount, feedbackTextProblem, submitFeedback, type FeedbackKind, type FeedbackResult,
     type FeedbackInput,
 } from '@beanpool/core';
@@ -52,7 +52,7 @@ export function SuggestChangeForm({ appVersion, onDone, submit = submitFeedback 
         return (
             <div className="bg-white dark:bg-nature-900 rounded-2xl p-6 shadow-soft border border-nature-200 dark:border-nature-800 text-center">
                 <p className="text-3xl mb-2" aria-hidden="true">🌱</p>
-                <p className="text-[15px] font-semibold text-nature-900 dark:text-white mb-5" role="status">{FEEDBACK_THANKS}</p>
+                <p className="text-[15px] font-semibold text-nature-900 dark:text-white mb-5" role="status">{t(FEEDBACK_LINES.thanks)}</p>
                 <button
                     type="button"
                     onClick={onDone}
@@ -71,7 +71,7 @@ export function SuggestChangeForm({ appVersion, onDone, submit = submitFeedback 
                 Suggest a change to BeanPool
             </h3>
             <p className="text-sm text-nature-700 dark:text-nature-300 mb-5 leading-relaxed bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-xl p-3">
-                {FEEDBACK_NOTICE}
+                {t(FEEDBACK_LINES.notice)}
             </p>
 
             <div className="text-xs font-bold uppercase tracking-wider text-nature-500 dark:text-nature-400 mb-2" id="suggest-kind-label">What kind?</div>
@@ -89,7 +89,7 @@ export function SuggestChangeForm({ appVersion, onDone, submit = submitFeedback 
                                 ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-500 text-emerald-800 dark:text-emerald-300'
                                 : 'bg-white dark:bg-nature-800 border-nature-300 dark:border-nature-700 text-nature-700 dark:text-nature-300'}`}
                         >
-                            {k.label}
+                            {t(k.label)}
                         </button>
                     );
                 })}

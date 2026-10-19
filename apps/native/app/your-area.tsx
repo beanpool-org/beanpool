@@ -20,7 +20,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 export { ErrorBoundary };
 import { useIdentity } from './IdentityContext';
 import { useNodeProfile } from '../utils/use-node-profile';
-import { AreaPicker } from '../components/AreaPicker';
+import { AreaPicker, areaSaveFailureWords } from '../components/AreaPicker';
 import { describeArea, readMemberArea, recallAreaPlace, rememberAreaPlace, writeMemberArea, type MemberArea } from '../utils/member-area';
 import { palette, type AppColors } from '../constants/colors';
 import { useOnboardingColors } from './ThemeContext';
@@ -67,7 +67,7 @@ export default function YourAreaScreen() {
         setError(null);
         const result = await writeMemberArea(url, identity, null);
         setClearing(false);
-        if (!result.ok) { setError(result.error); return; }
+        if (!result.ok) { setError(areaSaveFailureWords(result.error)); return; }
         await rememberAreaPlace(url, null);
         setArea(null);
         setPlace(null);

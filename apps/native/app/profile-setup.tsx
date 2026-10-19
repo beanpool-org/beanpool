@@ -22,6 +22,7 @@ import { palette, type AppColors } from '../constants/colors';
 import { useOnboardingColors } from './ThemeContext';
 import { AreaPicker } from '../components/AreaPicker';
 import { profileSteps, rememberAreaPlace, type ProfileStep } from '../utils/member-area';
+import { t } from '@beanpool/core';
 
 type Step = ProfileStep;
 
@@ -125,7 +126,7 @@ export default function ProfileSetupScreen() {
         if (c.length < 2) { setNameStatus('too_short'); setSuggestions([]); return; }
         let cancelled = false;
         setNameStatus('checking');
-        const t = setTimeout(async () => {
+        const timer = setTimeout(async () => {
             // Signed by the member's key, so their own current name reads as theirs (the node takes it from the signature).
             const signer = identity ?? undefined;
             const status = await checkCallsignAvailable(c, undefined, { signer });
@@ -138,7 +139,7 @@ export default function ProfileSetupScreen() {
                 setSuggestions([]);
             }
         }, 400);
-        return () => { cancelled = true; clearTimeout(t); };
+        return () => { cancelled = true; clearTimeout(timer); };
     }, [callsign, identity?.publicKey, step]);
 
     // Block "Next" on a taken/too-short/checking name; allow 'available' and also
@@ -189,7 +190,7 @@ export default function ProfileSetupScreen() {
                     const res = await fetch(`${url}/api/profile/update`, { method: 'POST', headers, body: bodyString });
                     if (res.status === 409) {
                         setStep('name');
-                        setError('That name was just taken — please pick another.');
+                        setError(t('That name was just taken — please pick another.'));
                         return; // finally clears loading; name-step effect refreshes suggestions
                     }
                     published = res.ok;
@@ -228,7 +229,7 @@ export default function ProfileSetupScreen() {
 
             leaveWizard();
         } catch (err: any) {
-            setError(err?.message || 'Could not save your profile. Try again.');
+            setError(err?.message || t('Could not save your profile. Try again.'));
         } finally {
             setLoading(false);
         }
@@ -243,20 +244,20 @@ export default function ProfileSetupScreen() {
                     {stepOrder.map((s, i) => (
                         <View key={s} style={[styles.stepDot, i <= stepIndex && styles.stepDotActive]} />
                     ))}
-                    <Text style={styles.stepLabel}>Step {stepIndex + 1} of {stepOrder.length}</Text>
+                    <Text style={styles.stepLabel}>{t('Step {n} of {total}', { n: stepIndex + 1, total: stepOrder.length })}</Text>
                 </View>
 
                 <View style={styles.card}>
                     {step === 'name' && (
                         <>
-                            <Text style={styles.title}>👋 Your name</Text>
+                            <Text style={styles.title}>{t('👋 Your name')}</Text>
                             <Text style={styles.subtitle}>
-                                This is how neighbours will know you. You can change it any time.
+                                {t('This is how neighbours will know you. You can change it any time.')}
                             </Text>
                             <TextInput
-                                accessibilityLabel="Your callsign"
+                                accessibilityLabel={t('Your callsign')}
                                 style={styles.input}
-                                placeholder="Your name (e.g. Sally)"
+                                placeholder={t('Your name (e.g. Sally)')}
                                 placeholderTextColor={colors.text.muted}
                                 value={callsign}
                                 onChangeText={setCallsign}
@@ -264,18 +265,18 @@ export default function ProfileSetupScreen() {
                                 autoCapitalize="words"
                             />
                             {nameOk && nameStatus === 'checking' && (
-                                <Text style={styles.hintMuted}>Checking availability…</Text>
+                                <Text style={styles.hintMuted}>{t('Checking availability…')}</Text>
                             )}
                             {nameOk && nameStatus === 'available' && (
-                                <Text style={styles.hintOk}>✓ Available on this community</Text>
+                                <Text style={styles.hintOk}>{t('✓ Available on this community')}</Text>
                             )}
                             {nameOk && nameStatus === 'unknown' && (
-                                <Text style={styles.hintMuted}>Couldn't check right now — you can still continue.</Text>
+                                <Text style={styles.hintMuted}>{t("Couldn't check right now — you can still continue.")}</Text>
                             )}
                             {nameOk && nameStatus === 'taken' && (
                                 <>
                                     <Text style={styles.hintTaken}>
-                                        ✗ That name's taken here. Pick one of these, or edit your own:
+                                        {t("✗ That name's taken here. Pick one of these, or edit your own:")}
                                     </Text>
                                     {suggestions.length > 0 && (
                                         <View style={styles.suggestRow}>
@@ -285,7 +286,7 @@ export default function ProfileSetupScreen() {
                                                     style={styles.suggestChip}
                                                     onPress={() => { setError(null); setCallsign(s); }}
                                                     accessibilityRole="button"
-                                                    accessibilityLabel={`Use the name ${s}`}
+                                                    accessibilityLabel={t('Use the name {name}', { name: s })}
                                                 >
                                                     <Text style={styles.suggestChipText}>{s}</Text>
                                                 </Pressable>
@@ -301,19 +302,19 @@ export default function ProfileSetupScreen() {
                                 onPress={() => { setError(null); setStep('avatar'); }}
                                 accessibilityRole="button"
                             >
-                                <Text style={styles.primaryBtnText}>Next →</Text>
+                                <Text style={styles.primaryBtnText}>{t('Next →')}</Text>
                             </Pressable>
-                            <Pressable style={styles.backBtn} onPress={leaveWizard} accessibilityRole="button" accessibilityLabel="Cancel">
-                                <Text style={styles.backBtnText}>Cancel</Text>
+                            <Pressable style={styles.backBtn} onPress={leaveWizard} accessibilityRole="button" accessibilityLabel={t('Cancel')}>
+                                <Text style={styles.backBtnText}>{t('Cancel')}</Text>
                             </Pressable>
                         </>
                     )}
 
                     {step === 'avatar' && (
                         <>
-                            <Text style={styles.title}>📸 Choose your look</Text>
+                            <Text style={styles.title}>{t('📸 Choose your look')}</Text>
                             <Text style={styles.subtitle}>
-                                Add a photo, or pick a fun avatar — whatever feels like you.
+                                {t('Add a photo, or pick a fun avatar — whatever feels like you.')}
                             </Text>
                             <View style={styles.previewContainer}>
                                 {/* Through MemberAvatar, like every other avatar in the app: it
@@ -330,7 +331,7 @@ export default function ProfileSetupScreen() {
                             </View>
                             <Pressable style={styles.secondaryBtn} onPress={() => setShowAvatarPicker(true)} accessibilityRole="button">
                                 <Text style={styles.secondaryBtnText}>
-                                    {displayAvatar ? 'Change Photo or Avatar' : 'Choose Photo or Avatar'}
+                                    {displayAvatar ? t('Change Photo or Avatar') : t('Choose Photo or Avatar')}
                                 </Text>
                             </Pressable>
                             {error && <Text style={styles.error}>{error}</Text>}
@@ -340,10 +341,10 @@ export default function ProfileSetupScreen() {
                                 onPress={nextStep}
                                 accessibilityRole="button"
                             >
-                                <Text style={styles.primaryBtnText}>Next →</Text>
+                                <Text style={styles.primaryBtnText}>{t('Next →')}</Text>
                             </Pressable>
-                            <Pressable style={styles.backBtn} onPress={goBackStep} accessibilityRole="button" accessibilityLabel="Back">
-                                <Text style={styles.backBtnText}>← Back</Text>
+                            <Pressable style={styles.backBtn} onPress={goBackStep} accessibilityRole="button" accessibilityLabel={t('Back')}>
+                                <Text style={styles.backBtnText}>{t('← Back')}</Text>
                             </Pressable>
                         </>
                     )}
@@ -360,15 +361,15 @@ export default function ProfileSetupScreen() {
                                 }}
                                 onSkip={nextStep}
                             />
-                            <Pressable style={styles.backBtn} onPress={goBackStep} accessibilityRole="button" accessibilityLabel="Back">
-                                <Text style={styles.backBtnText}>← Back</Text>
+                            <Pressable style={styles.backBtn} onPress={goBackStep} accessibilityRole="button" accessibilityLabel={t('Back')}>
+                                <Text style={styles.backBtnText}>{t('← Back')}</Text>
                             </Pressable>
                         </>
                     )}
 
                     {step === 'guide' && (
                         <>
-                            <Text style={styles.title}>🫘 How BeanPool works</Text>
+                            <Text style={styles.title}>{t('🫘 How BeanPool works')}</Text>
                             <Text style={styles.subtitle}>{howItWorksSubtitle(nodeProfile?.features)}</Text>
                             <OnboardingGuide beansOn={beansOn(nodeProfile?.features)} />
                             {error && <Text style={styles.error}>{error}</Text>}
@@ -377,13 +378,13 @@ export default function ProfileSetupScreen() {
                                 disabled={loading}
                                 onPress={handleFinish}
                                 accessibilityRole="button"
-                                accessibilityLabel={loading ? 'Saving profile...' : 'Done'}
+                                accessibilityLabel={loading ? t('Saving profile...') : t('Done')}
                                 accessibilityState={{ disabled: loading, busy: loading }}
                             >
-                                {loading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>Done ✓</Text>}
+                                {loading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>{t('Done ✓')}</Text>}
                             </Pressable>
-                            <Pressable style={styles.backBtn} onPress={goBackStep} disabled={loading} accessibilityRole="button" accessibilityLabel="Back">
-                                <Text style={styles.backBtnText}>← Back</Text>
+                            <Pressable style={styles.backBtn} onPress={goBackStep} disabled={loading} accessibilityRole="button" accessibilityLabel={t('Back')}>
+                                <Text style={styles.backBtnText}>{t('← Back')}</Text>
                             </Pressable>
                         </>
                     )}
@@ -407,7 +408,8 @@ return StyleSheet.create({
     steps: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
     stepDot: { width: 26, height: 4, borderRadius: 2, backgroundColor: colors.border.strong, marginRight: 6 },
     stepDotActive: { backgroundColor: palette.blue600 },
-    stepLabel: { marginLeft: 6, fontSize: 12, color: colors.text.secondary },
+    // Shrinks beside the dots, so a longer language's "Step 2 of 4" wraps rather than running off the edge.
+    stepLabel: { marginLeft: 6, fontSize: 12, color: colors.text.secondary, flexShrink: 1 },
     card: { backgroundColor: colors.surface.card, borderRadius: 16, padding: 20 },
     title: { fontSize: 24, fontWeight: '800', color: colors.text.heading, marginBottom: 6 },
     subtitle: { fontSize: 14, color: colors.text.secondary, marginBottom: 16, lineHeight: 20 },

@@ -1006,18 +1006,42 @@ export async function fetchAlertsSummary(nodeUrl: string, adminPassword?: string
     };
 }
 
+/**
+ * The data read fails rather than hang, so Home says it couldn't load, with a Retry, instead of "Loading…" for as long as
+ * the browser keeps the socket open (review r4309394025). The node answers within 30 s or it hasn't answered; the rest
+ * has 5 minutes, long on purpose: it is every member (~4 MB on a big node), over what can be a slow phone link.
+ */
+export const NODE_DATA_ANSWER_MS = 30_000;
+export const NODE_DATA_ALL_MS = 5 * 60_000;
+
 export async function fetchNodeData(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<NodeDataPayload> {
     const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/data');
-    const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: buildAdminHeaders(adminPassword, tfaToken),
-        body: JSON.stringify({ ...passwordField(adminPassword) }),
-    });
-    if (!res.ok) {
-        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    const ctl = new AbortController();
+    const timers: Array<ReturnType<typeof setTimeout>> = [];
+    // Rejects with `words` once `ms` pass, and stops the request: a fetch that ignored the abort still ends here.
+    const within = <T>(work: Promise<T>, ms: number, words: string): Promise<T> => Promise.race([work, new Promise<never>((_, reject) => {
+        timers.push(setTimeout(() => {
+            const e = new Error(words);
+            reject(e);
+            ctl.abort(e);
+        }, ms));
+    })]);
+    const started = Date.now();
+    try {
+        const res = await within(fetch(endpoint, {
+            method: 'POST',
+            headers: buildAdminHeaders(adminPassword, tfaToken),
+            body: JSON.stringify({ ...passwordField(adminPassword) }),
+            signal: ctl.signal,
+        }), NODE_DATA_ANSWER_MS, "The node didn't answer within 30 seconds");
+        if (!res.ok) {
+            throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        }
+        const json = await within(res.json(), NODE_DATA_ALL_MS - (Date.now() - started), "The node's data didn't all arrive within 5 minutes");
+        return normalizeNodeData(json);
+    } finally {
+        timers.forEach(clearTimeout);
     }
-    const json = await res.json();
-    return normalizeNodeData(json);
 }
 
 export async function fetchNodeLogs(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<any[]> {

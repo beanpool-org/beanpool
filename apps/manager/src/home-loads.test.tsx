@@ -1,6 +1,7 @@
 import { render, screen, fireEvent, act, waitFor, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { App } from './App';
+import { NODE_DATA_ANSWER_MS } from './lib/node-client';
 
 /**
  * Settings' Home on a real community, as the owner reaches it from the phone's "Needs you" (Marty, 19 Oct, Mullumbimby on
@@ -77,6 +78,15 @@ async function openFromPhone() {
 
 const card = (name: RegExp) => screen.getByRole('button', { name });
 
+/** With fake timers: the clock a second at a time, each in its own act, so React flushes between (polling-cadence.test). */
+async function step(ms: number) {
+    for (let elapsed = 0; elapsed < ms; elapsed += 1000) {
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(1000);
+        });
+    }
+}
+
 describe('Settings Home after the phone link: real figures, or "couldn\'t load", never 0', () => {
     beforeEach(() => {
         localStorage.clear();
@@ -141,6 +151,36 @@ describe('Settings Home after the phone link: real figures, or "couldn\'t load",
         const members = await screen.findByTestId('home-figure-members');
         await waitFor(() => expect(members).toHaveTextContent(/couldn.t load/i));
         expect(members).not.toHaveTextContent(/\b0\b/);
+    });
+
+    it('a data read that never answers ends in "couldn\'t load" with a Retry, not "Loading…" for as long as the socket stays open', async () => {
+        vi.useFakeTimers();
+        try {
+            let stall = true;
+            const node: NodeStub = {
+                signedIn: false, hold: false, held: [],
+                data: () => (stall ? new Promise(() => { /* the phone link never brings it */ }) : ok(communityData())),
+                diag: () => ok(diagnostics()),
+            };
+            stubNode(node);
+            await openFromPhone();
+            await step(1_000);
+            expect(screen.getByTestId('home-figure-members')).toHaveTextContent('Loading…');
+            await step(NODE_DATA_ANSWER_MS);
+            const members = screen.getByTestId('home-figure-members');
+            expect(members).toHaveTextContent(/couldn.t load/i);
+            expect(members).not.toHaveTextContent(/\b0\b/);
+            expect(screen.getByTestId('home-figures-unloaded')).toHaveTextContent("The node didn't answer within 30 seconds");
+            expect(screen.queryByText(/All clear/)).toBeNull();
+            stall = false;
+            await act(async () => {
+                fireEvent.click(screen.getByRole('button', { name: 'Retry the figures' }));
+            });
+            await step(1_000);
+            expect(card(/Members/)).toHaveTextContent('34');
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it("diagnostics that fail leave the connections unknown, not 0, and nothing all clear", async () => {

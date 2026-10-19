@@ -28,7 +28,7 @@ function priceUnit(priceType: string | undefined): string {
     return '';
 }
 
-/** The price on a card: the language's decimal sign (English as before); "?" when the listing has none. */
+/** The price on a card: the language's decimal mark, English as before; "?" when the listing has none. */
 function priceAmount(credits: number | null | undefined): string {
     if (credits === undefined) return '?';
     return typeof credits === 'number' ? formatNumber(credits) : String(credits ?? '');

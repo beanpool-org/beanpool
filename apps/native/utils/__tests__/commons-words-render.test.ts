@@ -486,10 +486,13 @@ describe('the Commons in the pseudo-locale: every word on it came through t() (w
         expect(alerts.said).toContain(pseudoLocalise('Missing Title'));
         await click(button('Remove a lead keeper or project leader'), 'Remove a lead');
         expect(host.textContent).toContain(inCapitalsOf(pseudoLocalise('The lead keeper or leader to remove: callsign or public key')));
+        expect(byPlaceholder("Enter the lead keeper or leader's callsign or pubkey...")).not.toBeNull();
         await type(byPlaceholder('e.g. Grant 200 beans to the Tool Library'), 'Replace the lead');
         await type(byPlaceholder('Explain why this decision is needed, what will be done, and who is responsible.'), 'They left');
+        // The Egg flock's key: the form knows it for an enterprise (the screen hands it the node's list, #2200), so it
+        // asks for its lead keeper.
         await type(byPlaceholder('Or enter its public key...'), 'e'.repeat(64));
-        expect(byPlaceholder("Enter the lead keeper or leader's callsign or pubkey...")).not.toBeNull();
+        expect(byPlaceholder("Enter the lead keeper's callsign or pubkey...")).not.toBeNull();
         // No lead named: the form asks for the member first (its lead alert follows only a named one, never reached).
         await click(byLabel(pseudoLocalise('Submit Community Decision')), 'Submit');
         expect(alerts.said).toContain(pseudoLocalise('Please enter or select a valid member callsign or 64-character public key.'));

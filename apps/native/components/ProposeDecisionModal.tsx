@@ -20,7 +20,7 @@ import {
     type DecisionEffect,
     createDecision,
 } from '../utils/db';
-import { inCapitalsOf, keeperWords, t, tn, word, type WordKey } from '@beanpool/core';
+import { amountRefusalWords, ANY_DECIMALS, inCapitalsOf, isAmbiguousAmount, keeperWords, parseAmount, t, tn, word, type WordKey } from '@beanpool/core';
 import { Sentence } from './Sentence';
 
 interface Props {
@@ -342,7 +342,14 @@ export function ProposeDecisionModal({
 
         let params: any = {};
         if (effect === 'grant_enterprise' || effect === 'grant_hardship') {
-            const amount = Number(grantAmount);
+            // The language's decimal mark (core parseAmount): fr "12,5" is 12.5, never refused as not a number; "1.000", which
+            // could be a thousand, is refused in words that say so. The node's cents rule decides the decimals, as before.
+            const read = parseAmount(grantAmount, undefined, ANY_DECIMALS);
+            if (!read.ok && isAmbiguousAmount(read.refusal)) {
+                Alert.alert(t('Invalid Amount'), amountRefusalWords(read.refusal));
+                return;
+            }
+            const amount = read.ok ? read.value : NaN;
             if (!amount || amount <= 0) {
                 Alert.alert(t('Invalid Amount'), t('Please specify a valid grant amount in Beans.'));
                 return;
@@ -544,7 +551,7 @@ export function ProposeDecisionModal({
                                 <Text style={styles.sectionLabel}>{inCapitalsOf(t('Grant Amount (Beans)'))}</Text>
                                 <TextInput
                                     style={styles.input}
-                                    placeholder={t('e.g. 250')}
+                                    placeholder={t('e.g. {amount}', { amount: 250 })}
                                     placeholderTextColor={colors.text.muted}
                                     value={grantAmount}
                                     onChangeText={setGrantAmount}
@@ -566,7 +573,7 @@ export function ProposeDecisionModal({
                                 <Text style={styles.sectionLabel}>{inCapitalsOf(t('Hardship Amount (Beans)'))}</Text>
                                 <TextInput
                                     style={styles.input}
-                                    placeholder={t('e.g. 100')}
+                                    placeholder={t('e.g. {amount}', { amount: 100 })}
                                     placeholderTextColor={colors.text.muted}
                                     value={grantAmount}
                                     onChangeText={setGrantAmount}

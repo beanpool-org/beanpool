@@ -19,7 +19,10 @@ import { CLIENT_POST_TYPES, EVENT_WINDOWS, eventsFeedFilter, formatDistance, isE
 import { CategoryPickerModal } from '../components/CategoryPickerModal';
 import { MyDealsModal } from '../components/MyDealsModal';
 import { LocalCommunityAction, LocalCommunityLine } from '../components/LocalCommunityMark';
-import { LOCAL_COMMUNITY_EMOJI, LOCAL_COMMUNITY_LINES, placeShownRoughly, PLACE_WORDS, formatNumber, t, tn, word, type WordKey } from '@beanpool/core';
+import {
+    LOCAL_COMMUNITY_EMOJI, LOCAL_COMMUNITY_LINES, placeShownRoughly, PLACE_WORDS, formatNumber, t, tn, word, type WordKey,
+    amountRefusalWords, ANY_DECIMALS, isAmbiguousAmount, parseAmount,
+} from '@beanpool/core';
 import { Sentence } from '../components/Sentence';
 import { marked, readsOwn, treasuriesFallback, useFeatureMode, useReadsOwn } from '../lib/features';
 import { ProfileGateModal } from '../components/ProfileGateModal';
@@ -615,7 +618,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     const [editCategory, setEditCategory] = useState('other');
     const [editTitle, setEditTitle] = useState('');
     const [editDescription, setEditDescription] = useState('');
-    const [editCredits, setEditCredits] = useState(0);
+    const [editCredits, setEditCredits] = useState('');
     const [editPriceType, setEditPriceType] = useState<'fixed' | 'hourly' | 'daily' | 'weekly' | 'monthly'>('fixed');
     const [editRepeatable, setEditRepeatable] = useState(false);
     const [editPhotos, setEditPhotos] = useState<string[]>([]);
@@ -630,6 +633,11 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     const [acceptHours, setAcceptHours] = useState('1');
     const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
     const [completeHours, setCompleteHours] = useState('');
+    // The hours as typed, read as every typed amount is (core parseAmount): the language's decimal mark, any decimals.
+    const acceptHoursRead = parseAmount(acceptHours, undefined, ANY_DECIMALS);
+    const acceptHoursValue = acceptHoursRead.ok ? acceptHoursRead.value : NaN;
+    const completeHoursRead = parseAmount(completeHours, undefined, ANY_DECIMALS);
+    const completeHoursValue = completeHoursRead.ok ? completeHoursRead.value : NaN;
 
     // Requests Dashboard
     const [requests, setRequests] = useState<MarketplaceTransaction[]>([]);
@@ -1508,13 +1516,13 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                  <label className="block text-xs font-bold text-emerald-700 dark:text-emerald-500 mb-1 uppercase tracking-wider">
                                                      {actualWorkedLabel(selectedPost.priceType)}
                                                  </label>
+                                                 {/* Text, not type="number": a number box reads "2,5" by the browser's language, not the member's (#2202). */}
                                                  <input
-                                                     type="number"
+                                                     type="text"
+                                                     inputMode="decimal"
                                                      value={completeHours}
                                                      onChange={(e) => setCompleteHours(e.target.value)}
-                                                     min="0.5"
-                                                     step="0.5"
-                                                     placeholder={t('e.g. 2.5')}
+                                                     placeholder={t('e.g. {amount}', { amount: 2.5 })}
                                                      className="w-full bg-white dark:bg-nature-900 border border-emerald-200 dark:border-emerald-800 rounded-lg px-3 py-2 text-nature-900 dark:text-white font-mono text-center focus:ring-2 focus:ring-emerald-400 focus:outline-none"
                                                  />
                                              </div>
@@ -1522,7 +1530,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                          
                                          <div className="text-center mb-4 text-xs font-bold text-emerald-800 dark:text-emerald-300 bg-white dark:bg-nature-900 py-2.5 rounded-lg border border-emerald-100 dark:border-emerald-900 shadow-sm">
                                              {(() => {
-                                                 const hrs = Number(completeHours) || 0;
+                                                 if (selectedPost.priceType !== 'fixed' && !completeHoursRead.ok && isAmbiguousAmount(completeHoursRead.refusal)) return amountRefusalWords(completeHoursRead.refusal);
+                                                 const hrs = completeHoursValue || 0;
                                                  const tot = selectedPost.priceType !== 'fixed' ? selectedPost.credits * hrs : selectedPost.credits;
                                                  return t('Transferring {n} B to {name}', { n: tot, name: targetPeerCallsign });
                                              })()}
@@ -1543,7 +1552,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                      setAccepting(true);
                                                      try {
                                                          const isVariable = selectedPost.priceType !== 'fixed';
-                                                         const finalHours = isVariable ? Number(completeHours) : undefined;
+                                                         const finalHours = isVariable ? completeHoursValue : undefined;
                                                          const txId = txToComplete;
                                                          const targetPubkey = isPayer ? (activeTx?.sellerPublicKey || (selectedPost as any).acceptedBy!) : (activeTx?.buyerPublicKey || selectedPost.authorPublicKey);
                                                          const targetCallsign = targetPeerCallsign;
@@ -1570,7 +1579,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                          setAccepting(false);
                                                      }
                                                  }}
-                                                 disabled={accepting || (selectedPost.priceType !== 'fixed' && (!completeHours || Number(completeHours) <= 0))}
+                                                 disabled={accepting || (selectedPost.priceType !== 'fixed' && (!completeHours || !(completeHoursValue > 0)))}
                                                  className={`flex-1 py-2.5 rounded-lg font-bold text-bp-commit-on text-sm transition-all shadow-sm ${
                                                      accepting 
                                                          ? 'bg-bp-commit-fill cursor-not-allowed opacity-60' 
@@ -1795,11 +1804,12 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         <label className="block text-xs font-bold text-nature-600 dark:text-nature-400 mb-1 uppercase tracking-wider">
                                             {estimatedLabel(selectedPost.priceType)}
                                         </label>
+                                        {/* Text, not type="number": a number box reads "2,5" by the browser's language, not the member's (#2202). */}
                                         <input
-                                            type="number"
+                                            type="text"
+                                            inputMode="decimal"
                                             value={acceptHours}
                                             onChange={(e) => setAcceptHours(e.target.value)}
-                                            min="1"
                                             className="w-full bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-lg px-3 py-2 text-nature-900 dark:text-white font-mono text-center focus:ring-2 focus:ring-amber-400 focus:outline-none"
                                         />
                                         <p className="text-[10px] text-nature-500 mt-1 text-center">
@@ -1810,7 +1820,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
                                 <div className="text-center mb-4 text-xs font-medium text-nature-700 dark:text-nature-300 bg-white dark:bg-nature-900 py-3 px-2 rounded-lg border border-nature-100 dark:border-nature-800">
                                     {(() => {
-                                        const hrs = Number(acceptHours) || 0;
+                                        if (selectedPost.priceType !== 'fixed' && !acceptHoursRead.ok && isAmbiguousAmount(acceptHoursRead.refusal)) return amountRefusalWords(acceptHoursRead.refusal);
+                                        const hrs = acceptHoursValue || 0;
                                         const tot = selectedPost.priceType !== 'fixed' ? selectedPost.credits * hrs : selectedPost.credits;
                                         if (tot === 0) return t('This is a free listing (0 B). No credits transferred.');
 
@@ -1857,7 +1868,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             setAccepting(true);
                                             try {
                                                 const isVariable = selectedPost.priceType !== 'fixed';
-                                                const estimatedHours = isVariable ? Number(acceptHours) : undefined;
+                                                const estimatedHours = isVariable ? acceptHoursValue : undefined;
                                                 const totalCredits = isVariable ? selectedPost.credits * (estimatedHours || 0) : selectedPost.credits;
 
                                                 const remoteNode = (selectedPost as any)._remoteNode;
@@ -1893,7 +1904,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 setAccepting(false);
                                             }
                                         }}
-                                        disabled={accepting || isRemotePost || !!authorEnterpriseInactive || (selectedPost.priceType !== 'fixed' && (!acceptHours || Number(acceptHours) <= 0))}
+                                        disabled={accepting || isRemotePost || !!authorEnterpriseInactive || (selectedPost.priceType !== 'fixed' && (!acceptHours || !(acceptHoursValue > 0)))}
                                         className={`flex-1 py-2.5 rounded-lg font-bold text-bp-commit-on text-sm transition-all shadow-sm ${
                                             accepting || isRemotePost || !!authorEnterpriseInactive
                                                 ? 'bg-bp-commit-fill cursor-not-allowed opacity-60'
@@ -2308,7 +2319,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         setEditCategory(selectedPost.category);
                                         setEditTitle(selectedPost.title);
                                         setEditDescription(selectedPost.description);
-                                        setEditCredits(selectedPost.credits);
+                                        // In the language's way ("12,5"), so it reads back as the same price.
+                                        setEditCredits(formatNumber(selectedPost.credits));
                                         setEditPriceType(selectedPost.priceType || 'fixed');
                                         setEditRepeatable(!!selectedPost.repeatable);
                                         setEditPhotos(selectedPost.photos || []);
@@ -2395,10 +2407,12 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
                                 {/* Credits + Unit */}
                                 <div className="flex gap-2 mb-4">
+                                    {/* Text, not type="number": a number box reads "2,5" by the browser's language, not the member's (#2202). */}
                                     <input
-                                        type="number"
+                                        type="text"
+                                        inputMode="decimal"
                                         value={editCredits}
-                                        onChange={(e) => setEditCredits(Number(e.target.value) || 0)}
+                                        onChange={(e) => setEditCredits(e.target.value)}
                                         placeholder={t('Credits (B)')}
                                         className="flex-1 py-3 px-4 rounded-xl border border-nature-200 bg-white text-nature-900 text-[15px] dark:bg-bg-input dark:text-text-primary dark:border-nature-500 focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm min-w-0"
                                         style={{...inputStyle, marginBottom: 0, width: undefined}}
@@ -2501,6 +2515,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     <button
                                         onClick={async () => {
                                             if (!identity || !selectedPost || !editTitle.trim()) return;
+                                            // The price in the language's decimal mark (core parseAmount): fr "12,5" is 12.5, never
+                                            // saved as 0. Any decimals, as before; an empty box is 0, as before.
+                                            const price = parseAmount(editCredits, undefined, ANY_DECIMALS);
+                                            if (!price.ok && price.refusal !== 'empty') { setError(amountRefusalWords(price.refusal)); return; }
                                             setSaving(true);
                                             try {
                                                 const result = await updateMarketplacePost(selectedPost.id, identity.publicKey, {
@@ -2508,7 +2526,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                     category: editCategory,
                                                     title: editTitle.trim(),
                                                     description: editDescription.trim(),
-                                                    credits: editCredits,
+                                                    credits: price.ok ? price.value : 0,
                                                     priceType: editPriceType,
                                                     repeatable: editRepeatable,
                                                     photos: editPhotos,

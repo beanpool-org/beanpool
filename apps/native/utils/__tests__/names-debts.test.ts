@@ -295,13 +295,14 @@ describe('the names list screen (app/names-list.tsx): every debt control asks fi
     });
     it('a refusal is shown in the node’s words; an entry with an open debt offers settling, not inviting or confirming', () => {
         expect(screen.match(/if \(!done\.ok\) \{ setError\(done\.message\); return; \}/g)?.length).toBeGreaterThanOrEqual(3);
-        expect(screen).toContain("!e.confirmation && e.text && !open ? btn('Invite this person'");
-        expect(screen).toContain("!e.confirmation && e.text && !open ? btn('Confirm a member'");
-        expect(screen).toContain("btn('Work it off'");
+        // The buttons' words go through t() (words S3k): the same English.
+        expect(screen).toContain("!e.confirmation && e.text && !open ? btn(t('Invite this person')");
+        expect(screen).toContain("!e.confirmation && e.text && !open ? btn(t('Confirm a member')");
+        expect(screen).toContain("btn(t('Work it off')");
     });
     it('Save says first when the name matches an entry with an open debt', () => {
         expect(screen).toMatch(/const saveChecked = \(\) => \{[\s\S]{0,200}openDebtForName\(name, entries, debts, mode\.entry\?\.id\)/);
-        expect(screen).toContain("btn('Save', saveChecked, 'primary')");
+        expect(screen).toContain("btn(t('Save'), saveChecked, 'primary')");
     });
 });
 

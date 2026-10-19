@@ -244,6 +244,6 @@ describe("the owners' check on a phone without the 12 words", () => {
         const src = fs.readFileSync(path.resolve(__dirname, '../../app/owner-words-check.tsx'), 'utf-8');
         expect(src).toMatch(/offerSave: shouldOfferSaveWords\(identity\)/);
         expect(src).toMatch(/await saveCheckedWords\(words\)/);
-        expect(src).toContain('{ownerWordsFindThem(hasMnemonic(identity))}');
+        expect(src).toContain('{keyLineWords(ownerWordsFindThem(hasMnemonic(identity)))}');
     });
 });

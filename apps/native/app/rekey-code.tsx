@@ -25,6 +25,8 @@ import { communitySwitched } from '../utils/community-switch';
 import { assertPlainNodeAddress } from '../utils/node-url';
 import { draftIdentity, getMnemonic, importIdentity, loadIdentity, StoredKeyUnreadableError, type BeanPoolIdentity } from '../utils/identity';
 import { useWords } from '../components/LanguageProvider';
+import { keyLineWords } from '../components/key-lines';
+import { upperCase } from '@beanpool/core';
 import { buildSignedHeaders } from '../utils/crypto';
 import { signReEnrollStatement } from '../utils/member-statements';
 import { rekeySlotStore } from '../utils/rekey-slot-store';
@@ -46,14 +48,6 @@ const deps: RekeyDeps = {
     fetch: (input, init) => fetch(input, init),
 };
 
-/** Time left on the code, in words. */
-function timeLeft(expiresAt: string, now: number): string {
-    const ms = new Date(expiresAt).getTime() - now;
-    if (!Number.isFinite(ms)) return '';
-    if (ms <= 0) return 'The code has expired.';
-    const min = Math.max(1, Math.floor(ms / 60000));
-    return min >= 60 ? `The code works for ${Math.floor(min / 60)} h ${min % 60} min more.` : `The code works for ${min} min more.`;
-}
 
 /** The phone already had an account: it moves onto this community too, as joining another community does. */
 async function moveOntoCommunity(url: string, name: string): Promise<void> {
@@ -76,13 +70,24 @@ function hostOf(community: string | undefined): string {
 export default function RekeyCodeScreen() {
     const params = useLocalSearchParams<{ link?: string }>();
     const { setIdentity } = useIdentity();
-    const { t } = useWords();
+    const { t, lang } = useWords();
+    /** Time left on the code, in words. */
+    const timeLeft = (expiresAt: string, now: number): string => {
+        const ms = new Date(expiresAt).getTime() - now;
+        if (!Number.isFinite(ms)) return '';
+        if (ms <= 0) return t('The code has expired.');
+        const min = Math.max(1, Math.floor(ms / 60000));
+        return min >= 60
+            ? t('The code works for {h} h {min} min more.', { h: Math.floor(min / 60), min: min % 60 })
+            : t('The code works for {min} min more.', { min });
+    };
     const { colors } = useTheme();
     const styles = useStyles(({ theme, colors: c }) => StyleSheet.create({
         container: { flex: 1, backgroundColor: c.surface.page },
         header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, minHeight: 56, borderBottomWidth: 1, borderBottomColor: c.border.default, backgroundColor: theme === 'dark' ? c.surface.card : c.text.heading },
         backButton: { width: 48, height: 48, justifyContent: 'center', alignItems: 'center' },
-        headerTitle: { flex: 1, textAlign: 'center', fontSize: 16, fontWeight: 'bold', color: c.brand.primary, letterSpacing: 0.5, textTransform: 'uppercase', paddingVertical: 4 },
+        // In capitals by the language's rule (upperCase below), never a textTransform.
+        headerTitle: { flex: 1, textAlign: 'center', fontSize: 16, fontWeight: 'bold', color: c.brand.primary, letterSpacing: 0.5, paddingVertical: 4 },
         scroll: { padding: 16 },
         title: { fontSize: 22, fontWeight: '800', color: c.text.heading, lineHeight: 28 },
         lead: { fontSize: 15, color: c.text.body, lineHeight: 21, marginTop: 12 },
@@ -162,7 +167,7 @@ export default function RekeyCodeScreen() {
             // An account on the phone that can't be read, or one that was not there a moment ago: never replaced (identity.ts).
             setError(e instanceof StoredKeyUnreadableError
                 ? t("BeanPool can't read the account on this phone. Restart and try again, or restore with your 12 words.")
-                : e instanceof Error ? e.message : REKEY_TEXT.changedAccount);
+                : keyLineWords(e instanceof Error ? e.message : REKEY_TEXT.changedAccount));
             setPhase('ended');
         }
     }, [setIdentity, t]);
@@ -177,10 +182,10 @@ export default function RekeyCodeScreen() {
         } else if (answer.state === 'bound') {
             await onBound(s, answer);
         } else if (answer.state === 'unreachable') {
-            setError(REKEY_TEXT.unreachable);
+            setError(keyLineWords(REKEY_TEXT.unreachable));
         } else {
             if (endsRekey(answer)) await abandonRekey(deps);
-            setError(answer.state === 'declined' ? REKEY_TEXT.declined : answer.state === 'gone' ? REKEY_TEXT.gone : answer.message);
+            setError(keyLineWords(answer.state === 'declined' ? REKEY_TEXT.declined : answer.state === 'gone' ? REKEY_TEXT.gone : answer.message));
             setPhase(endsRekey(answer) ? 'ended' : 'form');
         }
     }, [onBound]);
@@ -218,7 +223,7 @@ export default function RekeyCodeScreen() {
         setError(null);
         setHeldHost(null);
         const url = rekeyCommunityUrl(community);
-        if (!url) { setError('Type your community’s name or address, as your admin gave it.'); return; }
+        if (!url) { setError(t('Type your community’s name or address, as your admin gave it.')); return; }
         setPhase('asking');
         try {
             const s = await beginRekey(url, code, deps);
@@ -227,7 +232,7 @@ export default function RekeyCodeScreen() {
             setSlot(s);
             await apply(s, await askRekey(s, deps));
         } catch (e) {
-            setError(e instanceof Error ? e.message : REKEY_TEXT.unreachable);
+            setError(keyLineWords(e instanceof Error ? e.message : REKEY_TEXT.unreachable));
             if (e instanceof RekeyHeldError && e.canForget) setHeldHost(e.host);
             setPhase('form');
         }
@@ -237,9 +242,9 @@ export default function RekeyCodeScreen() {
     // The way out when an earlier ask can't be checked: its record and key go, after one warning.
     const forgetHeld = () => {
         if (!heldHost) return;
-        Alert.alert(`Forget the re-key at ${heldHost}?`, `If an admin at ${heldHost} has typed the number this phone showed, or types it later, your account there moves to a key this phone will no longer have. Only a new code from them gets you back in.`, [
-            { text: 'Keep it', style: 'cancel' },
-            { text: 'Forget it', style: 'destructive', onPress: async () => { await abandonRekey(deps); setHeldHost(null); setError(null); } },
+        Alert.alert(t('Forget the re-key at {host}?', { host: heldHost }), t('If an admin at {host} has typed the number this phone showed, or types it later, your account there moves to a key this phone will no longer have. Only a new code from them gets you back in.', { host: heldHost }), [
+            { text: t('Keep it'), style: 'cancel' },
+            { text: t('Forget it'), style: 'destructive', onPress: async () => { await abandonRekey(deps); setHeldHost(null); setError(null); } },
         ]);
     };
 
@@ -252,7 +257,7 @@ export default function RekeyCodeScreen() {
     const openScanner = async () => {
         if (!permission?.granted) {
             const p = await requestPermission();
-            if (!p.granted) { Alert.alert('Camera is off', 'Allow the camera for BeanPool in your phone settings, or type the code.'); return; }
+            if (!p.granted) { Alert.alert(t('Camera is off'), t('Allow the camera for BeanPool in your phone settings, or type the code.')); return; }
         }
         scanLock.current = false;
         setScanning(true);
@@ -271,10 +276,10 @@ export default function RekeyCodeScreen() {
 
     const header = (
         <View style={styles.header}>
-            <Pressable style={styles.backButton} onPress={() => router.back()} accessibilityRole="button" accessibilityLabel="Back">
+            <Pressable style={styles.backButton} onPress={() => router.back()} accessibilityRole="button" accessibilityLabel={t('Back')}>
                 <MaterialCommunityIcons name="arrow-left" size={24} color={colors.brand.primary} />
             </Pressable>
-            <Text style={styles.headerTitle} numberOfLines={2}>Re-key code</Text>
+            <Text style={styles.headerTitle} numberOfLines={2}>{upperCase(t('Re-key code'), lang)}</Text>
             <View style={{ width: 48 }} />
         </View>
     );
@@ -283,32 +288,32 @@ export default function RekeyCodeScreen() {
     if (phase === 'waiting' && match) {
         body = (
             <View>
-                <Text style={styles.title} accessibilityRole="header">Show this number to your admin</Text>
+                <Text style={styles.title} accessibilityRole="header">{t('Show this number to your admin')}</Text>
                 <View style={styles.numberCard}>
-                    <Text style={styles.number} accessibilityLabel={`Number ${match.split('').join(' ')}`}>{match}</Text>
+                    <Text style={styles.number} accessibilityLabel={t('Number {digits}', { digits: match.split('').join(' ') })}>{match}</Text>
                     {/* The community this number came from, so the admin can check it is theirs: a mistyped or look-alike
                         address could relay someone else's number here (#1783 review N9). */}
-                    <Text style={styles.numberLabel} testID="rekey-number-host">from {hostOf(slot?.community)}</Text>
+                    <Text style={styles.numberLabel} testID="rekey-number-host">{t('from {host}', { host: hostOf(slot?.community) })}</Text>
                     <Text style={styles.numberLabel}>
-                        They type it on their screen. Check the address above is your community's. Your old phone stops working for good.
+                        {t("They type it on their screen. Check the address above is your community's. Your old phone stops working for good.")}
                     </Text>
                 </View>
                 <View style={styles.busyRow}>
                     <ActivityIndicator color={colors.brand.primary} />
-                    <Text style={[styles.note, { marginTop: 0, flex: 1 }]}>Waiting for your admin…</Text>
+                    <Text style={[styles.note, { marginTop: 0, flex: 1 }]}>{t('Waiting for your admin…')}</Text>
                 </View>
                 {expiresAt ? <Text style={styles.note}>{timeLeft(expiresAt, now)}</Text> : null}
                 {error ? <Text style={styles.error}>{error}</Text> : null}
                 <Pressable style={styles.secondary} onPress={stop} accessibilityRole="button">
-                    <Text style={styles.secondaryText}>Not now</Text>
+                    <Text style={styles.secondaryText}>{t('Not now')}</Text>
                 </Pressable>
             </View>
         );
     } else if (phase === 'words' && newWords) {
         body = (
             <View>
-                <Text style={styles.title} accessibilityRole="header">You’re in</Text>
-                <Text style={styles.lead}>These are the 12 words of your NEW key. Your old words no longer work. Write them down and keep them safe: they bring your account back if you lose this phone.</Text>
+                <Text style={styles.title} accessibilityRole="header">{t('You’re in')}</Text>
+                <Text style={styles.lead}>{t('These are the 12 words of your NEW key. Your old words no longer work. Write them down and keep them safe: they bring your account back if you lose this phone.')}</Text>
                 <View style={styles.words}>
                     {newWords.map((w, i) => (
                         <View key={i} style={styles.word}><Text style={styles.wordText}>{i + 1}. {w}</Text></View>
@@ -316,58 +321,58 @@ export default function RekeyCodeScreen() {
                 </View>
                 <Pressable style={styles.tickRow} onPress={() => setWroteThemDown(v => !v)} accessibilityRole="checkbox" accessibilityState={{ checked: wroteThemDown }}>
                     <MaterialCommunityIcons name={wroteThemDown ? 'checkbox-marked' : 'checkbox-blank-outline'} size={28} color={colors.brand.primary} />
-                    <Text style={styles.tickText}>I’ve written my 12 words down</Text>
+                    <Text style={styles.tickText}>{t('I’ve written my 12 words down')}</Text>
                 </Pressable>
                 <Pressable style={styles.primary} onPress={() => setPhase('linkAgain')} accessibilityRole="button">
-                    <Text style={styles.primaryText}>Continue</Text>
+                    <Text style={styles.primaryText}>{t('Continue')}</Text>
                 </Pressable>
             </View>
         );
     } else if (phase === 'linkAgain' && !linkSignInAgain) {
         body = (
             <View>
-                <Text style={styles.title} accessibilityRole="header">You’re in</Text>
-                <Text style={styles.lead}>This phone now holds your account: your Beans, your name and your history.</Text>
+                <Text style={styles.title} accessibilityRole="header">{t('You’re in')}</Text>
+                <Text style={styles.lead}>{t('This phone now holds your account: your Beans, your name and your history.')}</Text>
                 <Pressable style={styles.primary} onPress={() => router.replace('/(tabs)')} accessibilityRole="button">
-                    <Text style={styles.primaryText}>Done</Text>
+                    <Text style={styles.primaryText}>{t('Done')}</Text>
                 </Pressable>
             </View>
         );
     } else if (phase === 'linkAgain') {
         body = (
             <View>
-                <Text style={styles.title} accessibilityRole="header">Link your sign-in again</Text>
-                <Text style={styles.lead}>A sign-in you had linked protected your old key, so it was removed. Link it again from this phone, so you can get back in if you lose it.</Text>
+                <Text style={styles.title} accessibilityRole="header">{t('Link your sign-in again')}</Text>
+                <Text style={styles.lead}>{t('A sign-in you had linked protected your old key, so it was removed. Link it again from this phone, so you can get back in if you lose it.')}</Text>
                 <Pressable style={styles.primary} onPress={() => router.replace({ pathname: '/(tabs)/settings', params: { section: 'protection' } })} accessibilityRole="button">
-                    <Text style={styles.primaryText}>Link my sign-in</Text>
+                    <Text style={styles.primaryText}>{t('Link my sign-in')}</Text>
                 </Pressable>
                 <Pressable style={styles.secondary} onPress={() => router.replace('/(tabs)')} accessibilityRole="button">
-                    <Text style={styles.secondaryText}>Later</Text>
+                    <Text style={styles.secondaryText}>{t('Later')}</Text>
                 </Pressable>
             </View>
         );
     } else {
         body = (
             <View>
-                <Text style={styles.title} accessibilityRole="header">🪪 An admin gave me a re-key code</Text>
-                <Text style={styles.lead}>Lost your phone and your 12 words? An admin of your community checked it’s you and made a code. This phone takes over your account: your Beans, your name and your history.</Text>
+                <Text style={styles.title} accessibilityRole="header">{t('🪪 An admin gave me a re-key code')}</Text>
+                <Text style={styles.lead}>{t('Lost your phone and your 12 words? An admin of your community checked it’s you and made a code. This phone takes over your account: your Beans, your name and your history.')}</Text>
                 <Pressable style={styles.secondary} onPress={openScanner} accessibilityRole="button">
                     <MaterialCommunityIcons name="qrcode-scan" size={22} color={colors.text.body} />
-                    <Text style={styles.secondaryText}>Scan the code on the admin’s screen</Text>
+                    <Text style={styles.secondaryText}>{t('Scan the code on the admin’s screen')}</Text>
                 </Pressable>
-                <Text style={styles.label}>Your community</Text>
+                <Text style={styles.label}>{t('Your community')}</Text>
                 <TextInput
                     style={styles.input}
                     value={community}
                     onChangeText={setCommunity}
-                    placeholder="Its name or address"
+                    placeholder={t('Its name or address')}
                     placeholderTextColor={colors.text.muted}
                     autoCapitalize="none"
                     autoCorrect={false}
                     keyboardType="url"
-                    accessibilityLabel="Your community's name or address"
+                    accessibilityLabel={t("Your community's name or address")}
                 />
-                <Text style={styles.label}>The code</Text>
+                <Text style={styles.label}>{t('The code')}</Text>
                 <TextInput
                     style={[styles.input, styles.codeInput]}
                     value={code}
@@ -376,7 +381,7 @@ export default function RekeyCodeScreen() {
                     placeholderTextColor={colors.text.muted}
                     autoCapitalize="characters"
                     autoCorrect={false}
-                    accessibilityLabel="The re-key code"
+                    accessibilityLabel={t('The re-key code')}
                 />
                 {error ? <Text style={styles.error}>{error}</Text> : null}
                 <Pressable
@@ -384,15 +389,15 @@ export default function RekeyCodeScreen() {
                     onPress={ask}
                     disabled={phase === 'asking'}
                     accessibilityRole="button"
-                    accessibilityLabel={phase === 'asking' ? 'Submitting re-key code...' : phase === 'ended' ? 'Try again' : 'Continue'}
-                    accessibilityHint="Submits code to community node to re-enroll this device"
+                    accessibilityLabel={phase === 'asking' ? t('Submitting re-key code...') : phase === 'ended' ? t('Try again') : t('Continue')}
+                    accessibilityHint={t('Submits code to community node to re-enroll this device')}
                     accessibilityState={{ disabled: phase === 'asking', busy: phase === 'asking' }}
                 >
-                    {phase === 'asking' ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryText}>{phase === 'ended' ? 'Try again' : 'Continue'}</Text>}
+                    {phase === 'asking' ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryText}>{phase === 'ended' ? t('Try again') : t('Continue')}</Text>}
                 </Pressable>
                 {heldHost ? (
                     <Pressable style={styles.secondary} onPress={forgetHeld} accessibilityRole="button">
-                        <Text style={styles.secondaryText}>Forget the re-key at {heldHost}</Text>
+                        <Text style={styles.secondaryText}>{t('Forget the re-key at {host}', { host: heldHost })}</Text>
                     </Pressable>
                 ) : null}
             </View>
@@ -408,8 +413,8 @@ export default function RekeyCodeScreen() {
             <Modal visible={scanning} animationType="slide" onRequestClose={() => setScanning(false)}>
                 <View style={styles.scanWrap}>
                     <CameraView style={StyleSheet.absoluteFillObject} barcodeScannerSettings={{ barcodeTypes: ['qr'] }} onBarcodeScanned={onScanned} />
-                    <Text style={styles.scanHint}>Point the camera at the QR code on your admin’s screen.</Text>
-                    <Pressable style={styles.scanClose} onPress={() => setScanning(false)} accessibilityRole="button" accessibilityLabel="Close the camera">
+                    <Text style={styles.scanHint}>{t('Point the camera at the QR code on your admin’s screen.')}</Text>
+                    <Pressable style={styles.scanClose} onPress={() => setScanning(false)} accessibilityRole="button" accessibilityLabel={t('Close the camera')}>
                         <MaterialCommunityIcons name="close" size={24} color="#fff" />
                     </Pressable>
                 </View>

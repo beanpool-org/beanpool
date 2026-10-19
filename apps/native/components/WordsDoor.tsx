@@ -3,7 +3,8 @@ import { View, Text, Pressable, Platform, StyleSheet } from 'react-native';
 import { colors as lightColors, type AppColors } from '../constants/colors';
 import { GoogleButton, AppleButton, FacebookButton } from './SsoButton';
 import { DOOR_WORK_MESSAGES, type DoorWorkState } from '../utils/door-work';
-import type { SsoProvider } from '../utils/sso-providers';
+import { SSO_PROVIDER_NAMES, type SsoProvider } from '../utils/sso-providers';
+import { t, word } from '@beanpool/core';
 
 /**
  * The global community's door on a node with the 12-words door (two-doors design §2.6): two ways in, side by side,
@@ -13,10 +14,10 @@ import type { SsoProvider } from '../utils/sso-providers';
  */
 
 export const DOOR_CHOICE_TEXT = {
-    words: 'Create an account with 12 secret words',
-    wordsLine: 'No Google, Apple or Facebook needed. Your 12 words are the only way back in.',
-    signInHeading: 'Or sign in',
-    signInLine: 'Also a way back if you lose your phone.',
+    words: word('Create an account with 12 secret words'),
+    wordsLine: word('No Google, Apple or Facebook needed. Your 12 words are the only way back in.'),
+    signInHeading: word('Or sign in'),
+    signInLine: word('Also a way back if you lose your phone.'),
 } as const;
 
 export function DoorChoices({
@@ -48,29 +49,37 @@ export function DoorChoices({
                     onPress={onWords}
                     disabled={disabled}
                     accessibilityRole="button"
-                    accessibilityLabel={DOOR_CHOICE_TEXT.words}
-                    accessibilityHint={DOOR_CHOICE_TEXT.wordsLine}
+                    accessibilityLabel={t(DOOR_CHOICE_TEXT.words)}
+                    accessibilityHint={t(DOOR_CHOICE_TEXT.wordsLine)}
                 >
                     <Text style={s.wordsIcon} accessible={false}>🔑</Text>
-                    <Text style={s.wordsBtnText}>{DOOR_CHOICE_TEXT.words}</Text>
+                    <Text style={s.wordsBtnText}>{t(DOOR_CHOICE_TEXT.words)}</Text>
                 </Pressable>
-                <Text style={s.line}>{DOOR_CHOICE_TEXT.wordsLine}</Text>
+                <Text style={s.line}>{t(DOOR_CHOICE_TEXT.wordsLine)}</Text>
                 {busy ? <Text style={s.busy} accessibilityLiveRegion="polite">{busy}</Text> : null}
                 {wordsProblem ? <Text style={s.problem} accessibilityLiveRegion="polite">{wordsProblem}</Text> : null}
             </View>
 
             <View style={[s.block, s.signInBlock]}>
-                <Text style={s.heading} accessibilityRole="header">{DOOR_CHOICE_TEXT.signInHeading}</Text>
+                <Text style={s.heading} accessibilityRole="header">{t(DOOR_CHOICE_TEXT.signInHeading)}</Text>
                 {Platform.OS === 'ios' && (
-                    <AppleButton title="Continue with Apple" onPress={() => onSignIn('apple')} disabled={disabled} style={s.sso} />
+                    <AppleButton title={t('Continue with {provider}', { provider: SSO_PROVIDER_NAMES.apple })} onPress={() => onSignIn('apple')} disabled={disabled} style={s.sso} />
                 )}
-                <GoogleButton title="Continue with Google" onPress={() => onSignIn('google')} disabled={disabled} style={s.sso} />
-                <FacebookButton title="Continue with Facebook" onPress={() => onSignIn('facebook')} disabled={disabled} style={s.sso} />
-                <Text style={s.line}>{DOOR_CHOICE_TEXT.signInLine}</Text>
+                <GoogleButton title={t('Continue with {provider}', { provider: SSO_PROVIDER_NAMES.google })} onPress={() => onSignIn('google')} disabled={disabled} style={s.sso} />
+                <FacebookButton title={t('Continue with {provider}', { provider: SSO_PROVIDER_NAMES.facebook })} onPress={() => onSignIn('facebook')} disabled={disabled} style={s.sso} />
+                <Text style={s.line}>{t(DOOR_CHOICE_TEXT.signInLine)}</Text>
                 {signInNote ? <Text style={s.small}>{signInNote}</Text> : null}
             </View>
         </View>
     );
+}
+
+/**
+ * door-work.ts's "Setting up your account…" (it solves the join's work and stays off the words layer), translated here
+ * when it reads exactly as that file writes it.
+ */
+export function settingUpWords(): string {
+    return DOOR_WORK_MESSAGES.settingUp === 'Setting up your account…' ? t('Setting up your account…') : DOOR_WORK_MESSAGES.settingUp;
 }
 
 /**
@@ -83,12 +92,12 @@ export function DoorWorkProgress({ state, colors = lightColors }: { state: DoorW
     const done = state?.phase === 'ready' ? parts : state?.partsDone ?? 0;
     return (
         <View style={s.progress} accessibilityLiveRegion="polite">
-            <Text style={s.progressText}>{DOOR_WORK_MESSAGES.settingUp}</Text>
+            <Text style={s.progressText}>{settingUpWords()}</Text>
             <View
                 style={s.bar}
                 accessible
                 accessibilityRole="progressbar"
-                accessibilityLabel={DOOR_WORK_MESSAGES.settingUp}
+                accessibilityLabel={settingUpWords()}
                 accessibilityValue={{ min: 0, max: parts, now: done }}
             >
                 {Array.from({ length: parts }, (_, i) => (
@@ -101,21 +110,23 @@ export function DoorWorkProgress({ state, colors = lightColors }: { state: DoorW
 
 /**
  * Safety Backup for a member who joined with 12 words (design §2.5), in this order: what the words are, then the
- * existing tickbox and the words, then one secondary action. Nothing here is a gate.
+ * existing tickbox and the words, then one secondary action. Nothing here is a gate. Whole sentences: the note's body
+ * and what TalkBack reads for it are one string each.
  */
 export const WORDS_BACKUP_TEXT = {
-    are: 'These 12 words ARE your account.',
-    nobody: 'Nobody can reset them: not us, not this community.',
-    gone: 'If you lose them and this phone, the account is gone for good.',
-    addSignIn: 'Add a sign-in as a second way back',
+    title: word('🔑 These 12 words ARE your account.'),
+    body: word('Nobody can reset them: not us, not this community. If you lose them and this phone, the account is gone for good.'),
+    /** The note as TalkBack reads it: the title, without the key, and the body. */
+    label: word('These 12 words ARE your account. Nobody can reset them: not us, not this community. If you lose them and this phone, the account is gone for good.'),
+    addSignIn: word('Add a sign-in as a second way back'),
 } as const;
 
 export function WordsBackupNote({ colors = lightColors }: { colors?: AppColors }): React.JSX.Element {
     const s = styles(colors);
     return (
-        <View style={s.backup} accessible accessibilityLabel={`${WORDS_BACKUP_TEXT.are} ${WORDS_BACKUP_TEXT.nobody} ${WORDS_BACKUP_TEXT.gone}`}>
-            <Text style={s.backupTitle}>🔑 {WORDS_BACKUP_TEXT.are}</Text>
-            <Text style={s.backupBody}>{WORDS_BACKUP_TEXT.nobody} {WORDS_BACKUP_TEXT.gone}</Text>
+        <View style={s.backup} accessible accessibilityLabel={t(WORDS_BACKUP_TEXT.label)}>
+            <Text style={s.backupTitle}>{t(WORDS_BACKUP_TEXT.title)}</Text>
+            <Text style={s.backupBody}>{t(WORDS_BACKUP_TEXT.body)}</Text>
         </View>
     );
 }

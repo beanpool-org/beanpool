@@ -489,7 +489,9 @@ describe('the claim screen at 320dp and 1.3× font: the whole code at once', () 
     });
 
     it('the header title wraps instead of cutting off; the community name is the body title, which wraps', () => {
-        expect(src).toMatch(/<Text style=\{styles\.headerTitle\} numberOfLines=\{2\}[^>]*>Claim a community<\/Text>/);
-        expect(src).toMatch(/<Text style=\{styles\.title\}>Claim \{name\}<\/Text>/);
+        // In the member's language, in capitals by the language's rule (words S3k): no textTransform.
+        expect(src).toMatch(/<Text style=\{styles\.headerTitle\} numberOfLines=\{2\}[^>]*>\{upperCase\(t\('Claim a community'\)\)\}<\/Text>/);
+        expect(src).not.toMatch(/textTransform:/);
+        expect(src).toMatch(/<Text style=\{styles\.title\}>\{named \? t\('Claim \{name\}', \{ name: named \}\) : t\('Claim this community'\)\}<\/Text>/);
     });
 });

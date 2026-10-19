@@ -27,7 +27,7 @@ import { SetUpServerRow } from '../components/SetUpServerRow';
 import { readTypedPlace, saveTypedPlace, forgetTypedPlace, LOCATION_NOTES, type TypedPlace } from '../utils/typed-place';
 import { joinedNudgeWords } from '../utils/joined-nudge-words';
 import { findLineWords, findTownSearchWords, nearWords } from '../components/find-community-lines';
-import { settingsLineWords } from '../components/settings/settings-lines';
+import { welcomeLineWords } from '../components/welcome/welcome-lines';
 
 export { ErrorBoundary };
 
@@ -308,8 +308,9 @@ export default function FindCommunityScreen() {
                     : []),
             ], { cancelable: false });
         } catch (e: any) {
-            // The redeem's own words (the community's), or the phone's refusal of an address in the member's language.
-            Alert.alert(t("Couldn't join"), e?.message ? settingsLineWords(e.message) : t('Please try again.'));
+            // The redeem's own words (the community's) as given; the phone's (redeemInvite's: the node down, no answer in
+            // time, a refusal with no words; the refusal of an address) in the member's language, as the invite join says them.
+            Alert.alert(t("Couldn't join"), e?.message ? welcomeLineWords(e.message) : t('Please try again.'));
         } finally {
             setJoining(null);
         }

@@ -245,6 +245,22 @@ describe('Find a community in the pseudo-locale: every word came through t() (wo
         world.join = new Error(UNSAFE_NODE_ADDRESS_MESSAGE);
         await click(byLabel(xx('Join {name}').replace('{name}', 'Lismore Commons')), 'Join');
         expect(alerts.said).toEqual([xx("Couldn't join"), xx(UNSAFE_NODE_ADDRESS_MESSAGE)]);
+        // redeemInvite's own sentences (utils/db.ts), rethrown by joinAnotherCommunity; the community's words as given.
+        // REDEEM_NO_ANSWER, written again: db.ts isn't loaded here (welcome-lines.test.ts holds the table to the constant).
+        const REDEEM_NO_ANSWER = 'No answer from the community node in time. Check your connection and try again.';
+        const cases: Array<[string, string]> = [
+            ['Relay Node Offline: The selected community node is currently unreachable (HTTP 502).',
+                xx('Relay Node Offline: The selected community node is currently unreachable (HTTP {status}).').replace('{status}', '502')],
+            ['Failed to redeem invite (HTTP 500)', xx('Failed to redeem invite (HTTP {status})').replace('{status}', '500')],
+            [REDEEM_NO_ANSWER, xx(REDEEM_NO_ANSWER)],
+            ['This invite has expired.', 'This invite has expired.'],
+        ];
+        for (const [thrown, body] of cases) {
+            world.join = new Error(thrown);
+            alerts.said.length = 0;
+            await click(byLabel(xx('Join {name}').replace('{name}', 'Lismore Commons')), 'Join');
+            expect(alerts.said, thrown).toEqual([xx("Couldn't join"), body]);
+        }
     });
 
     it('no place: Use my location, location off, the town search, its Cancel; the list not loaded; watching a place', async () => {

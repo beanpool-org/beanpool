@@ -333,7 +333,7 @@ describe('the member’s side: the Ledger’s repayment card and Pay the Commons
     });
     it('Pay the Commons checks the amount and code, asks first, then pays with the code as the debt id', () => {
         const pay = read('app', 'pay-commons.tsx');
-        expect(pay).toMatch(/parseBeans\(amount\)[\s\S]{0,300}debtCodeOk\(debt\)[\s\S]{0,200}Alert\.alert\(REPAYMENT_COPY\.payTitle[\s\S]{0,300}send\(confirmCommonsPayment\(beans, debt \|\| undefined\)\)/);
+        expect(pay).toMatch(/parseBeans\(amount\)[\s\S]{0,300}debtCodeOk\(debt\)[\s\S]{0,200}Alert\.alert\(t\(REPAYMENT_LINES\.payTitle\)[\s\S]{0,300}send\(confirmCommonsPayment\(beans, debt \|\| undefined\)\)/);
         expect(pay).toContain('const r = await payTheCommons(node, identity, payment);');
         expect(pay).toContain('if (!r.ok) { setError(r.message); return; }');
     });
@@ -344,13 +344,14 @@ describe('the member’s side: the Ledger’s repayment card and Pay the Commons
         expect(pay).toContain('const edit = (set: (v: string) => void) => (v: string) => { set(v); setHeld(null); };');
         expect(pay).toContain('onChangeText={edit(setAmount)}');
         expect(pay).toContain('onChangeText={edit((v) => { codeTyped.current = true; setCode(v); })}');
-        expect(pay).toContain("{held ? 'Try again' : REPAYMENT_COPY.payTitle}");
+        // In the member's language since words S3l (components/repayment-lines.ts): the same words, the same place.
+        expect(pay).toContain("{held ? t('Try again') : t(REPAYMENT_LINES.payTitle)}");
     });
     it('one payment at a time: the confirmed tap goes through oneAtATime, with nothing awaited before it', () => {
         const pay = read('app', 'pay-commons.tsx');
         expect(pay).toContain('const once = useRef(oneAtATime(setBusy)).current;');
         expect(pay).toMatch(/const send = \(payment: ConfirmedPayment<CommonsPayment>\) => once\(async \(\) => \{\s*setError\(null\);\s*const node = await anchorUrl\(\);/);
-        expect(pay).toContain("{ text: 'Pay', onPress: () => send(confirmCommonsPayment(beans, debt || undefined)) }");
+        expect(pay).toContain("{ text: t('Pay'), onPress: () => send(confirmCommonsPayment(beans, debt || undefined)) }");
         expect(pay).not.toMatch(/setBusy\(true\)/);
     });
     it('the link’s amount is what was left when the admin shared it: prefilled, said so, in the confirm for that code only; the paid words use the node’s', () => {
@@ -358,9 +359,11 @@ describe('the member’s side: the Ledger’s repayment card and Pay the Commons
         expect(pay).toContain("const linkLeft = linkCode && typeof params.amount === 'string' ? parseBeans(params.amount) : null;");
         expect(pay).toContain("useState(linkLeft !== null ? String(linkLeft) : '')");
         expect(pay).toContain('const shared = debt && debt.toLowerCase() === linkCode ? linkLeft : null;');
-        expect(pay).toContain('REPAYMENT_COPY.payConfirm(beans, !!debt, shared, !debt && !!myDebt)');
-        expect(pay).toContain('{REPAYMENT_COPY.linkLeft(linkLeft)}');
-        expect(pay).toContain('REPAYMENT_COPY.paid(r.value.amount, r.value.transactionId, forDebt, r.value, !forDebt && !!myDebt)');
+        // REPAYMENT_COPY's sentences built again in the member's language from the same inputs (components/repayment-lines.ts;
+        // rest-words-render.test.ts holds each to REPAYMENT_COPY in English, for every variant).
+        expect(pay).toContain('payConfirmWords(beans, !!debt, shared, !debt && !!myDebt)');
+        expect(pay).toContain('{linkLeftWords(linkLeft)}');
+        expect(pay).toContain('paidWords(r.value.amount, r.value.transactionId, forDebt, r.value, !forDebt && !!myDebt)');
         expect(REPAYMENT_COPY.linkLeft(300)).toBe('What was left when the admin shared this: 300 Beans.');
     });
     it('working a debt off, Pay the Commons opens with their own code, from the banner or any other way in; a payment without it is said not to come off the debt, before and after (confirmation 4)', () => {

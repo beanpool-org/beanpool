@@ -96,7 +96,7 @@ type ExpoGlobalForTests = { expo?: { modules: Record<string, { elapsedMs(): numb
  * A phone with a PIN and App Lock on, BeanPool open on it with an account, and the return lock listening. Fresh modules
  * each time: the prompt marker is module state.
  */
-async function phoneWithAppLock() {
+async function phoneWithAppLock(unlockReason?: () => string) {
     vi.resetModules();
     // The phone's since-boot clock (modules/boot-clock), where the app reads it. It counts with the faked timers
     // (performance.now), and setting the wall clock (vi.setSystemTime) doesn't move it. Unless bootClockStart says otherwise
@@ -126,7 +126,7 @@ async function phoneWithAppLock() {
 
     let locked = false;
     const setLocked = (v: boolean) => { locked = v; };
-    const onChange = ReturnLock.createReturnLock(setLocked);
+    const onChange = ReturnLock.createReturnLock(setLocked, undefined, unlockReason);
 
     return {
         LocalAuth,
@@ -463,6 +463,28 @@ describe('a real leave, with no prompt open, locks exactly as before', () => {
         await flush();
         expect(phone.locked()).toBe(false);
         expect(phone.prompts()).toBe(1);
+    });
+
+    it("its prompt asks in the words the app gives it (the member's language), read each time it asks", async () => {
+        let words = 'Ţĥé ƒîŕšţ ŵöŕđš';
+        const phone = await phoneWithAppLock(() => words);
+
+        await leaveAndReturn(phone, 60 * SEC);
+        expect(phone.locked()).toBe(true);
+        expect(phone.reasons()).toEqual(['Ţĥé ƒîŕšţ ŵöŕđš']);
+        phone.answer(true);
+        await flush();
+        expect(phone.locked()).toBe(false);
+
+        // Another language picked since: the next return asks in it.
+        words = 'Déverrouiller BeanPool';
+        await leaveAndReturn(phone, 3600 * SEC);
+        expect(phone.locked()).toBe(true);
+        expect(phone.reasons()).toEqual(['Ţĥé ƒîŕšţ ŵöŕđš', 'Déverrouiller BeanPool']);
+        phone.answer(true);
+        await flush();
+        expect(phone.locked()).toBe(false);
+        expect(phone.prompts()).toBe(2);
     });
 
     it('iOS: inactive, then background, then back after 15 seconds: locked and asked once', async () => {
@@ -1545,17 +1567,22 @@ describe("app/_layout.tsx listens with it", () => {
         const s = layout();
         expect(s).toContain("import { createReturnLock, unlockWithPhoneLock } from '../utils/return-lock';");
         // The lock screen and the cover are the app-wide value every screen and pop-up draws (utils/app-lock-screen.ts).
-        expect(s).toContain('if (!returnLock.current) returnLock.current = createReturnLock(setAppLocked, setAppCovered);');
+        // Its prompt's words in the member's language since words S3l, read each time it asks.
+        expect(s).toContain("if (!returnLock.current) returnLock.current = createReturnLock(setAppLocked, setAppCovered, () => t('Unlock BeanPool'));");
         expect(s).toMatch(/AppState\.addEventListener\('change', \(next\) => \{\s*onChange\(next, !!identity\);\s*\}\);/);
     });
 
     it('the launch lock and the Unlock App button take the lock screen down through unlockWithPhoneLock, never on a bare pass', () => {
         const s = layout();
         expect(s).toContain("import { createReturnLock, unlockWithPhoneLock } from '../utils/return-lock';");
-        expect(s.match(/await unlockWithPhoneLock\('Unlock BeanPool'\)/g)).toHaveLength(2);
+        // The prompt's words in the member's language since words S3l: the same two prompts.
+        expect(s.match(/await unlockWithPhoneLock\(t\('Unlock BeanPool'\)\)/g)).toHaveLength(2);
         expect(s).not.toMatch(/authenticateUser\(/);
         const returnLock = fs.readFileSync(path.resolve(__dirname, '../return-lock.ts'), 'utf-8');
-        expect(returnLock).toContain("if (await unlockWithPhoneLock('Unlock BeanPool')) setLocked(false);");
+        // The return lock's own prompt: the words app/_layout.tsx gives it (above), 'Unlock BeanPool' when none are given.
+        expect(returnLock).toContain('if (await unlockWithPhoneLock(unlockReason())) setLocked(false);');
+        expect(returnLock).toContain("unlockReason: () => string = () => 'Unlock BeanPool',");
+        expect(returnLock.match(/unlockWithPhoneLock\(/g)).toHaveLength(2);
         // The one prompt it asks is App Lock's (2026-09-29, doors-held-pass.test.ts: authenticateUser became the doors'
         // check, with a held-pass rule of its own; App Lock's unlock keeps the return lock's). Once, in unlockWithPhoneLock,
         // and no bare authenticateUser.

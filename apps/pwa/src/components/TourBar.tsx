@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef } from 'react';
-import { tourStepCaption, type TourStep } from '@beanpool/core';
+import { t, type TourStep } from '@beanpool/core';
 import type { TourHome } from '../lib/tour-store';
 
 const primary = 'min-w-[96px] min-h-[44px] px-4 rounded-xl border-0 bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on text-sm font-bold cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400';
@@ -46,17 +46,17 @@ export function TourBar({ steps, index, home, onNext, onSkip, onDone }: {
     return (
         <section
             ref={bar}
-            aria-label="A look around the app"
+            aria-label={t('A look around the app')}
             data-testid="tour-bar"
             className="fixed left-0 right-0 md:left-auto md:right-4 md:w-[360px] md:rounded-2xl md:bottom-4 border-t md:border border-nature-200 dark:border-nature-800 bg-white dark:bg-nature-900 shadow-lg px-4 pt-3 pb-3 min-w-0"
             style={{ bottom: 'calc(var(--bottom-nav-offset, 0px) - var(--tour-bar-height, 0px))', zIndex: 90 }}
         >
             <p className="m-0 text-[0.6875rem] font-bold uppercase tracking-wide text-nature-700 dark:text-nature-300" data-testid="tour-step-caption">
-                {tourStepCaption(index, steps.length)}
+                {t('Step {step} of {total}', { step: index + 1, total: steps.length })}
             </p>
             <p ref={words} tabIndex={-1} aria-live="polite" data-testid="tour-words"
                 className="m-0 mt-1 text-[0.9375rem] leading-snug text-nature-950 dark:text-white break-words focus:outline-none">
-                {step.words}
+                {t(step.words)}
             </p>
             {chips.length > 0 && home && (
                 <div className="flex flex-wrap gap-2 mt-2" data-testid="tour-chips">
@@ -64,24 +64,24 @@ export function TourBar({ steps, index, home, onNext, onSkip, onDone }: {
                         const on = home.onHome(type);
                         const name = home.chipName(type);
                         return (
-                            <button key={type} type="button" disabled={on} onClick={() => home.addChip(type)} data-testid={`tour-chip-${type}`} title={on ? `${name} is on Home` : undefined}
-                                aria-label={on ? `${name} is on Home` : `Put ${name} on Home`}
+                            <button key={type} type="button" disabled={on} onClick={() => home.addChip(type)} data-testid={`tour-chip-${type}`} title={on ? t('{name} is on Home', { name }) : undefined}
+                                aria-label={on ? t('{name} is on Home', { name }) : t('Put {name} on Home', { name })}
                                 className={`${chip} ${on ? 'border-nature-300 dark:border-nature-700 bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-200 cursor-default' : 'border-emerald-700 dark:border-emerald-400 bg-transparent text-emerald-800 dark:text-emerald-300 cursor-pointer'}`}>
-                                {on ? <>{name} ✓<span className="sr-only"> on Home</span></> : name}
+                                {on ? <>{name} ✓<span className="sr-only"> {t('on Home', undefined, 'tour chip: the card is there already')}</span></> : name}
                             </button>
                         );
                     })}
                 </div>
             )}
             <div className="flex items-center justify-between gap-2 mt-2">
-                <button type="button" onClick={onSkip} className={quiet} data-testid="tour-skip" aria-label="Skip the tour">Skip</button>
+                <button type="button" onClick={onSkip} className={quiet} data-testid="tour-skip" aria-label={t('Skip the tour')}>{t('Skip')}</button>
                 {/* On the last step, in the button row: at 320 px with 130% text a row of its own made the bar 421 px tall. */}
                 {chips.length > 0 && home && (
-                    <button type="button" onClick={home.moreCards} className={`${quiet} ml-auto whitespace-nowrap`} data-testid="tour-more-cards" aria-label="More cards: open Add a card">More cards ›</button>
+                    <button type="button" onClick={home.moreCards} className={`${quiet} ml-auto whitespace-nowrap`} data-testid="tour-more-cards" aria-label={t('More cards: open Add a card')}>{t('More cards ›')}</button>
                 )}
                 <button type="button" onClick={last ? onDone : onNext} className={primary} data-testid={last ? 'tour-done' : 'tour-next'}
-                    aria-label={last ? 'Done: end the tour' : `Next: step ${index + 2} of ${steps.length}`}>
-                    {last ? 'Done' : 'Next ›'}
+                    aria-label={last ? t('Done: end the tour') : t('Next: step {step} of {total}', { step: index + 2, total: steps.length })}>
+                    {last ? t('Done') : t('Next ›')}
                 </button>
             </div>
         </section>

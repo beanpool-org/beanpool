@@ -88,8 +88,3 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap found:** [What was untested]\n**Learning
 **Gap found:** `POST /api/node/owner/lock-open-check` in `apps/server/src/routes/owner-unlock.ts` had no corresponding test file.
 **Learning:** Testing lock open check endpoint requires validating signature auth middleware behavior (401 for unsigned/stale timestamp, 403 for non-owners) and verifying that valid owner requests record report data into `owner_lock_opens` database table.
 **Action:** Created `test-owner-lock-open-check.ts` and registered it in `scripts/server-suites.mjs`.
-
-## 2026-10-19 - [Probation State Engine Coverage]
-**Gap found:** `apps/server/src/engine/probation.ts` had no isolated test file covering probation state rules, 12-words vs ordinary member rules, rate limits, role exemptions, and summary calculation.
-**Learning:** `probationState` and related newcomer rate limit functions rely on `NODE_PROFILE=global` to activate `probation` profile switches. Unique callsigns and IDs must be generated during test setup to avoid SQLite constraint conflicts when seeding state engine database tables.
-**Action:** Created `test-probation.ts` and registered it in `scripts/server-suites.mjs`.

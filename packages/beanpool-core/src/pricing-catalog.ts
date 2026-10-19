@@ -6,6 +6,8 @@
  * and multiplier calculations.
  */
 
+import { word, type WordKey } from './words.js';
+
 export type PricingCategory =
     | 'food'
     | 'services'
@@ -27,29 +29,30 @@ export type PricingCategory =
 
 export interface PricingCategoryMeta {
     id: PricingCategory;
-    label: string;
+    /** A word() key: an app shows it through t() (the node and the web send and show it as written). */
+    label: WordKey;
     emoji: string;
     description: string;
 }
 
 export const PRICING_CATEGORIES: PricingCategoryMeta[] = [
-    { id: 'food', label: 'Food & Produce', emoji: '🥕', description: 'Fresh farm produce, eggs, honey, bread, pantry staples, and prepared meals' },
-    { id: 'services', label: 'Services & Trade', emoji: '🤝', description: 'Plumbing, electrical, carpentry, repairs, fabrication, and professional services' },
-    { id: 'labour', label: 'Labour & Help', emoji: '👷', description: 'Gardening help, property sitting, firewood splitting, and heavy lifting' },
-    { id: 'tools', label: 'Tools & Hardware', emoji: '🛠️', description: 'Tool hire, power equipment, garden machinery, and workshop gear' },
-    { id: 'goods', label: 'Goods & Materials', emoji: '📦', description: 'Homewares, kitchenware, furniture, building supplies, and clothing' },
-    { id: 'garden', label: 'Plants & Garden', emoji: '🌻', description: 'Seedlings, fruit trees, compost, mulch, seeds, and cuttings' },
-    { id: 'housing', label: 'Housing & Space', emoji: '🏠', description: 'Guest rooms, shed storage, campsite, and workshop bench access' },
-    { id: 'transport', label: 'Transport & Rides', emoji: '🚗', description: 'Rides, trailer hire, deliveries, and vehicle/cargo bike share' },
-    { id: 'education', label: 'Education & Lessons', emoji: '📚', description: 'Music lessons, tutoring, design consults, and classes' },
-    { id: 'arts', label: 'Arts & Crafts', emoji: '🎨', description: 'Handmade crafts, pottery, sewing, painting, and creative work' },
-    { id: 'health', label: 'Health & Wellness', emoji: '🌿', description: 'Herbal remedies, natural care, wellness consults, and bodywork' },
-    { id: 'care', label: 'Care & Family', emoji: '❤️', description: 'Babysitting, child care, prams, baby gear, and elder support' },
-    { id: 'animals', label: 'Animals & Pets', emoji: '🐾', description: 'Poultry, hay, pet sitting, dog walking, and animal care' },
-    { id: 'tech', label: 'Tech & Digital', emoji: '💻', description: 'Phone repair, computing, home WiFi, 3D printing, and digital support' },
-    { id: 'energy', label: 'Energy & Firewood', emoji: '☀️', description: 'Firewood, kindling, solar consults, and off-grid power solutions' },
-    { id: 'mindset', label: 'Mindset & Wisdom', emoji: '📜', description: 'Philosophy, mutual aid, daily pulse essays, community mindset' },
-    { id: 'general', label: 'General & Community', emoji: '🌱', description: 'Event gear, venue space, marquee, sound hire, and community items' },
+    { id: 'food', label: word('Food & Produce'), emoji: '🥕', description: 'Fresh farm produce, eggs, honey, bread, pantry staples, and prepared meals' },
+    { id: 'services', label: word('Services & Trade'), emoji: '🤝', description: 'Plumbing, electrical, carpentry, repairs, fabrication, and professional services' },
+    { id: 'labour', label: word('Labour & Help'), emoji: '👷', description: 'Gardening help, property sitting, firewood splitting, and heavy lifting' },
+    { id: 'tools', label: word('Tools & Hardware'), emoji: '🛠️', description: 'Tool hire, power equipment, garden machinery, and workshop gear' },
+    { id: 'goods', label: word('Goods & Materials'), emoji: '📦', description: 'Homewares, kitchenware, furniture, building supplies, and clothing' },
+    { id: 'garden', label: word('Plants & Garden'), emoji: '🌻', description: 'Seedlings, fruit trees, compost, mulch, seeds, and cuttings' },
+    { id: 'housing', label: word('Housing & Space'), emoji: '🏠', description: 'Guest rooms, shed storage, campsite, and workshop bench access' },
+    { id: 'transport', label: word('Transport & Rides'), emoji: '🚗', description: 'Rides, trailer hire, deliveries, and vehicle/cargo bike share' },
+    { id: 'education', label: word('Education & Lessons'), emoji: '📚', description: 'Music lessons, tutoring, design consults, and classes' },
+    { id: 'arts', label: word('Arts & Crafts'), emoji: '🎨', description: 'Handmade crafts, pottery, sewing, painting, and creative work' },
+    { id: 'health', label: word('Health & Wellness'), emoji: '🌿', description: 'Herbal remedies, natural care, wellness consults, and bodywork' },
+    { id: 'care', label: word('Care & Family'), emoji: '❤️', description: 'Babysitting, child care, prams, baby gear, and elder support' },
+    { id: 'animals', label: word('Animals & Pets'), emoji: '🐾', description: 'Poultry, hay, pet sitting, dog walking, and animal care' },
+    { id: 'tech', label: word('Tech & Digital'), emoji: '💻', description: 'Phone repair, computing, home WiFi, 3D printing, and digital support' },
+    { id: 'energy', label: word('Energy & Firewood'), emoji: '☀️', description: 'Firewood, kindling, solar consults, and off-grid power solutions' },
+    { id: 'mindset', label: word('Mindset & Wisdom'), emoji: '📜', description: 'Philosophy, mutual aid, daily pulse essays, community mindset' },
+    { id: 'general', label: word('General & Community'), emoji: '🌱', description: 'Event gear, venue space, marquee, sound hire, and community items' },
 ];
 
 export const LEGACY_CATEGORY_ALIASES: Record<string, PricingCategory> = {

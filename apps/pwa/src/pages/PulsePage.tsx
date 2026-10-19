@@ -13,7 +13,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { CATEGORIES, type ChannelCategory } from '@beanpool/core';
+import { CATEGORIES, t, type ChannelCategory } from '@beanpool/core';
 import {
     type PulseFeedItem,
     type MemberCreatorChannel,
@@ -82,7 +82,7 @@ export function PulsePage({ identity, onOpenProfile }: Props) {
             setNextCursor(res.nextCursor);
         } catch (e: any) {
             if (activeCategoryRef.current === category) {
-                setError(e?.message || 'Could not load community feed.');
+                setError(e?.message || t('Could not load community feed.'));
             }
         } finally {
             setLoading(false);
@@ -162,7 +162,7 @@ export function PulsePage({ identity, onOpenProfile }: Props) {
                 });
                 return updated;
             });
-            setError(e?.message || 'Could not hide that item.');
+            setError(e?.message || t('Could not hide that item.'));
         }
     };
 
@@ -189,7 +189,7 @@ export function PulsePage({ identity, onOpenProfile }: Props) {
                 });
                 return updated;
             });
-            setError(e?.message || 'Could not delete that item.');
+            setError(e?.message || t('Could not delete that item.'));
         }
     };
 
@@ -236,18 +236,18 @@ export function PulsePage({ identity, onOpenProfile }: Props) {
         <div className="max-w-2xl mx-auto p-4 sm:p-6 pb-24 min-h-full">
             {/* Header: Title, subtitle, refresh & channels actions */}
             <div className="mb-4">
-                <div className="flex items-center justify-between gap-3 mb-1">
-                    <h1 className="text-xl sm:text-2xl font-black text-nature-950 dark:text-white m-0 tracking-tight">
-                        The Pulse
+                <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 mb-1">
+                    <h1 className="text-xl sm:text-2xl font-black text-nature-950 dark:text-white m-0 tracking-tight min-w-0 break-words">
+                        {t('The Pulse')}
                     </h1>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 ml-auto">
                         <button
                             type="button"
                             onClick={() => void handleRefresh()}
                             disabled={refreshing || loading}
                             className="inline-flex items-center justify-center p-1.5 rounded-xl text-xs sm:text-sm font-bold bg-white dark:bg-nature-800 border border-nature-200 dark:border-nature-700 text-nature-800 dark:text-nature-200 hover:bg-nature-50 dark:hover:bg-nature-700/80 cursor-pointer shadow-sm transition-colors disabled:opacity-50"
-                            aria-label="Refresh feed"
-                            title="Refresh feed"
+                            aria-label={t('Refresh feed')}
+                            title={t('Refresh feed')}
                         >
                             <span className={refreshing ? 'inline-block animate-spin' : ''}>🔄</span>
                         </button>
@@ -255,16 +255,16 @@ export function PulsePage({ identity, onOpenProfile }: Props) {
                             type="button"
                             onClick={() => setView('channels')}
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs sm:text-sm font-bold bg-white dark:bg-nature-800 border border-nature-200 dark:border-nature-700 text-nature-800 dark:text-nature-200 hover:bg-nature-50 dark:hover:bg-nature-700/80 cursor-pointer shadow-sm transition-colors"
-                            aria-label="Manage your channels"
+                            aria-label={t('Manage your channels')}
                         >
-                            <span>+ Channels</span>
+                            <span>{t('+ Channels')}</span>
                         </button>
                     </div>
                 </div>
                 <p className="text-xs sm:text-sm text-nature-500 dark:text-nature-400 m-0">
                     {activeLane === 'local'
-                        ? 'News and notices from around the shire'
-                        : 'What your neighbours are creating and sharing'}
+                        ? t('News and notices from around the shire')
+                        : t('What your neighbours are creating and sharing')}
                 </p>
             </div>
 
@@ -274,14 +274,14 @@ export function PulsePage({ identity, onOpenProfile }: Props) {
                     <button
                         type="button"
                         onClick={() => setLane('neighbours')}
-                        className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer border-none ${
+                        className={`flex-1 min-w-0 flex items-center justify-center gap-1.5 py-2 px-2 sm:px-3 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer border-none ${
                             activeLane === 'neighbours'
                                 ? 'bg-white dark:bg-nature-800 text-nature-950 dark:text-white shadow-sm'
                                 : 'bg-transparent text-nature-500 dark:text-nature-400 hover:text-nature-900 dark:hover:text-white'
                         }`}
                         aria-pressed={activeLane === 'neighbours'}
                     >
-                        <span>👥 Neighbours</span>
+                        <span className="min-w-0 break-words text-center"><span aria-hidden="true">👥</span> {t('Neighbours')}</span>
                         {neighbourItems.length > 0 && (
                             <span className="text-[10px] font-extrabold px-1.5 py-0.2 rounded-full bg-nature-200 dark:bg-nature-700 text-nature-700 dark:text-nature-200">
                                 {neighbourItems.length}
@@ -291,14 +291,14 @@ export function PulsePage({ identity, onOpenProfile }: Props) {
                     <button
                         type="button"
                         onClick={() => setLane('local')}
-                        className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer border-none ${
+                        className={`flex-1 min-w-0 flex items-center justify-center gap-1.5 py-2 px-2 sm:px-3 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer border-none ${
                             activeLane === 'local'
                                 ? 'bg-white dark:bg-nature-800 text-nature-950 dark:text-white shadow-sm'
                                 : 'bg-transparent text-nature-500 dark:text-nature-400 hover:text-nature-900 dark:hover:text-white'
                         }`}
                         aria-pressed={activeLane === 'local'}
                     >
-                        <span>📰 Local</span>
+                        <span className="min-w-0 break-words text-center"><span aria-hidden="true">📰</span> {t('Local')}</span>
                         {localItems.length > 0 && (
                             <span className="text-[10px] font-extrabold px-1.5 py-0.2 rounded-full bg-nature-200 dark:bg-nature-700 text-nature-700 dark:text-nature-200">
                                 {localItems.length}
@@ -321,7 +321,7 @@ export function PulsePage({ identity, onOpenProfile }: Props) {
                     aria-pressed={selectedCategory === 'all'}
                 >
                     <span>🌐</span>
-                    <span>All</span>
+                    <span>{t('All')}</span>
                 </button>
 
                 {CATEGORIES.map(c => {
@@ -339,7 +339,7 @@ export function PulsePage({ identity, onOpenProfile }: Props) {
                             aria-pressed={active}
                         >
                             <span>{c.icon}</span>
-                            <span>{c.label}</span>
+                            <span>{t(c.label)}</span>
                         </button>
                     );
                 })}
@@ -364,7 +364,7 @@ export function PulsePage({ identity, onOpenProfile }: Props) {
                         onClick={() => void loadFeed(false, selectedCategory)}
                         className="px-3 py-1 rounded-xl text-xs font-bold bg-white dark:bg-nature-800 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-950/30 cursor-pointer shrink-0"
                     >
-                        Retry
+                        {t('Retry')}
                     </button>
                 </div>
             )}
@@ -373,41 +373,41 @@ export function PulsePage({ identity, onOpenProfile }: Props) {
             {loading && !refreshing ? (
                 <div className="flex flex-col items-center justify-center p-12 text-nature-500 dark:text-nature-400">
                     <div className="w-8 h-8 rounded-full border-4 border-nature-200 dark:border-nature-800 border-t-terra-500 animate-spin mb-3"></div>
-                    <span className="text-xs sm:text-sm">Loading community feed…</span>
+                    <span className="text-xs sm:text-sm">{t('Loading community feed…')}</span>
                 </div>
             ) : visibleItems.length === 0 ? (
                 selectedCategory !== 'all' ? (
                     <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-3xl p-8 text-center my-4 shadow-sm">
                         <div className="text-4xl mb-3 select-none">🔍</div>
                         <h3 className="text-base sm:text-lg font-bold text-nature-900 dark:text-white mb-2">
-                            No posts in this category yet
+                            {t('No posts in this category yet')}
                         </h3>
                         <p className="text-xs sm:text-sm text-nature-600 dark:text-nature-400 max-w-sm mx-auto mb-5 leading-relaxed">
-                            Try selecting "All" or check another category to see what neighbours have posted.
+                            {t('Try selecting "All" or check another category to see what neighbours have posted.')}
                         </p>
                         <button
                             type="button"
                             onClick={() => setSelectedCategory('all')}
                             className="px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-800 dark:text-nature-200 hover:bg-nature-50 dark:hover:bg-nature-700 cursor-pointer shadow-sm"
                         >
-                            Show all categories
+                            {t('Show all categories')}
                         </button>
                     </div>
                 ) : (
                     <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-3xl p-8 text-center my-4 shadow-sm">
                         <div className="text-4xl mb-3 select-none">🗞️</div>
                         <h3 className="text-base sm:text-lg font-bold text-nature-900 dark:text-white mb-2">
-                            The Pulse is quiet right now
+                            {t('The Pulse is quiet right now')}
                         </h3>
                         <p className="text-xs sm:text-sm text-nature-600 dark:text-nature-400 max-w-sm mx-auto mb-5 leading-relaxed">
-                            Items from neighbours' YouTube channels and blogs appear here automatically once syndicated. As more members connect their channels, this feed will fill up.
+                            {t("Items from neighbours' YouTube channels and blogs appear here automatically once syndicated. As more members connect their channels, this feed will fill up.")}
                         </p>
                         <button
                             type="button"
                             onClick={() => setView('channels')}
                             className="px-5 py-2.5 rounded-xl font-bold text-sm bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on cursor-pointer shadow-sm transition-transform active:scale-95"
                         >
-                            + Connect your channels
+                            {t('+ Connect your channels')}
                         </button>
                     </div>
                 )
@@ -433,7 +433,7 @@ export function PulsePage({ identity, onOpenProfile }: Props) {
                                 disabled={loadingMore}
                                 className="px-5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-800 dark:text-nature-200 hover:bg-nature-50 dark:hover:bg-nature-700 cursor-pointer shadow-sm disabled:opacity-50"
                             >
-                                {loadingMore ? 'Loading more posts…' : 'Load more posts'}
+                                {loadingMore ? t('Loading more posts…') : t('Load more posts')}
                             </button>
                         </div>
                     )}

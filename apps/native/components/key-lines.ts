@@ -7,7 +7,7 @@
  * (an owner's 12 words), utils/takeover-unlock.ts (a standby's locked keys), utils/settings-signin.ts (signs a computer
  * in), utils/rekey-redeem.ts (a re-key's new key), utils/node-claim.ts (signs a claim), utils/node-admin.ts (the phone's
  * lock before a signed admin request), utils/names-list.ts, names-debts.ts and names-invite.ts (the names list's keys and
- * signed requests), utils/delete-here.ts (signs the delete). The screens translate their sentences here: by the exact
+ * signed requests) and core's names-list-crypto.ts (seals an entry), utils/delete-here.ts (signs the delete). The screens translate their sentences here: by the exact
  * English (the key IS the English), by the English with a name, an address or a number in it (FILLED: the sentence is
  * read back only when the reading is the one way to read it), or built again from the same values, word for word in
  * English. Nothing here imports those files' words: utils/__tests__/key-lines.test.ts holds every sentence to the
@@ -162,6 +162,8 @@ const FIXED: Readonly<Record<string, WordKey>> = {
     'This phone couldn’t read the names list’s keys just now. Nothing was changed. Try again.': word('This phone couldn’t read the names list’s keys just now. Nothing was changed. Try again.'),
     'There is no new key to make here.': word('There is no new key to make here.'),
     'There is no key history to follow here.': word('There is no key history to follow here.'),
+    // core names-list-crypto.ts normaliseNamesEntryText (names-list.ts sealedFor passes it on): a name and note it won't seal.
+    'Write the person’s name.': word('Write the person’s name.'),
     // utils/names-debts.ts DEBT_COPY: the titles and buttons (the sentences with an amount in them stay as written).
     'Confirm them to work it off?': word('Confirm them to work it off?'),
     'Confirm to work it off': word('Confirm to work it off'),
@@ -231,6 +233,9 @@ const FILLED: readonly WordKey[] = [
     word('The key you scanned isn’t the one the server lists for {who}. Your phone trusts the key you scanned and nothing is sent to the server’s key. Either the server has put {who}’s name on another key, or this isn’t {who}’s phone. Tell your other admins.'),
     word('Checked: this phone now trusts {who}’s phone.'),
     word('The server offers an older key history (up to key {n}) than this phone has (key {m}). A server put back to an older copy does that. Nothing was read or written. You can put the key history back from this phone; entries written since the copy are gone and must be typed again from your paper copy.'),
+    // core names-list-crypto.ts normaliseNamesEntryText: a name or a note over NAMES_LIMITS.
+    word('Keep the name to {n} characters.'),
+    word('Keep the note to {n} characters.'),
 ];
 
 /**

@@ -28,7 +28,7 @@ vi.mock('../db', () => ({ clearDB: async () => {}, closeDB: async () => {}, init
 vi.mock('../community-cache', () => ({ removeCommunityCaches: async () => {} }));
 vi.mock('../../services/pillar-sync', () => ({ resetSyncFingerprints: () => {} }));
 
-import { setLanguage } from '@beanpool/core';
+import { NAMES_LIMITS, normaliseNamesEntryText, setLanguage } from '@beanpool/core';
 import {
     LOCKED_HISTORY_WORDS, NEW_PHONE_BAD_CODE, NEW_PHONE_CONFIRM_ACTION, NEW_PHONE_SHOW_BODY, NEW_PHONE_SHOW_TITLE, OLD_WORDS_DONE,
     OLD_WORDS_NOTHING_LISTED, OLD_WORDS_NOT_THE_KEY, OLD_WORDS_OWNER, confirmedByText, newPhoneConfirmText, newPhoneEnd, newPhoneKeyWasOtherText,
@@ -84,6 +84,8 @@ const NAMES_LIST_INLINE = [
     'This phone couldn’t read the names list’s keys just now. Nothing was changed. Try again.',
     'There is no new key to make here.', 'There is no key history to follow here.',
 ];
+/** Why core's names-list-crypto.ts won't seal a name and note (names-list.ts sealedFor passes it on as a bad_text refusal). */
+const entryRefusal = (raw: { name?: string; note?: string }) => { const r = normaliseNamesEntryText(raw); return r.ok ? '' : r.error; };
 
 /** Every sentence key-lines.ts knows whole, from the files that write it. */
 const WHOLE: string[] = [
@@ -120,7 +122,7 @@ const WHOLE: string[] = [
     NAMES_COPY.follow, NAMES_COPY.myKeyTitle, NAMES_COPY.myKey, NAMES_COPY.showMyKey, NAMES_COPY.hideMyKey, NAMES_COPY.scanButton, NAMES_COPY.stopScan,
     NAMES_COPY.cameraNeeded, NAMES_COPY.codeLabel, NAMES_COPY.compareButton, NAMES_COPY.unreadable, NAMES_COPY.noMatch, NAMES_COPY.self,
     NAMES_COPY.checkNotKept, NAMES_COPY.exportTitle, NAMES_COPY.export, NAMES_COPY.deleteConfirmed, NAMES_COPY.removedConfirmTitle,
-    NAMES_COPY.twoAdminsLabel, NAMES_COPY.twoAdminsHelp, UNREACHABLE, ...NAMES_LIST_INLINE,
+    NAMES_COPY.twoAdminsLabel, NAMES_COPY.twoAdminsHelp, UNREACHABLE, ...NAMES_LIST_INLINE, entryRefusal({ name: '' }),
     DEBT_COPY.workOffTitle, DEBT_COPY.workOffButton, DEBT_COPY.settleTitle, DEBT_COPY.settleButton, DEBT_COPY.forgiveTitle, DEBT_COPY.forgiveButton,
     DEBT_COPY.sameNameTitle, DEBT_COPY.sameNameAdd, DEBT_UNREACHABLE, SETTLE_UNANSWERED,
     HEALTH_COPY.totalsHeading, HEALTH_COPY.totalsHint, HEALTH_COPY.totalsMissing, HEALTH_COPY.totalsNotOnThisNode,
@@ -181,6 +183,8 @@ describe('key-lines.ts: sentences with a name, an address or a number, read back
         { line: NAMES_COPY.matched('Wren'), names: ['@Wren'] },
 
         { line: NAMES_COPY.refusedRolledBack(2, 5), names: [] },
+        { line: entryRefusal({ name: 'x'.repeat(NAMES_LIMITS.nameChars + 1) }), names: [] },
+        { line: entryRefusal({ name: 'Wren', note: 'x'.repeat(NAMES_LIMITS.noteChars + 1) }), names: [] },
     ];
 
     it('the sources still write each one so (the ones a function writes inline, in its source)', () => {
@@ -196,6 +200,9 @@ describe('key-lines.ts: sentences with a name, an address or a number, read back
         expect(writtenIn('utils/node-claim.ts', 'The server refused the claim ({status}).')).toBe(true);
         // The phone's lock prompt the claim screen passes says what node-admin.ts says when it is given none.
         expect(writtenIn('utils/node-admin.ts', "promptMessage: promptMessage ?? `Confirm it's you to manage {name}`")).toBe(true);
+        // A name and a note over core's limits (names-list-crypto.ts, a key-path file): the limit is the sentence's number.
+        expect(writtenIn('../../packages/beanpool-core/src/names-list-crypto.ts', 'Keep the name to {n} characters.')).toBe(true);
+        expect(writtenIn('../../packages/beanpool-core/src/names-list-crypto.ts', 'Keep the note to {n} characters.')).toBe(true);
     });
 
     it('in English each reads as written; in the pseudo-locale each is translated, with its names as they are', () => {
@@ -207,6 +214,8 @@ describe('key-lines.ts: sentences with a name, an address or a number, read back
         }
         // A count is given to the language as a number.
         expect(inXx(() => keyLineWords(NAMES_COPY.refusedRolledBack(2, 5)))).toMatch(/2.*5/s);
+        expect(inXx(() => keyLineWords(entryRefusal({ name: 'x'.repeat(NAMES_LIMITS.nameChars + 1) })))).toContain(String(NAMES_LIMITS.nameChars));
+        expect(inXx(() => keyLineWords(entryRefusal({ name: 'Wren', note: 'x'.repeat(NAMES_LIMITS.noteChars + 1) })))).toContain(String(NAMES_LIMITS.noteChars));
     });
 
     it('a name the lower layer had to fill with English ("an admin"), and one that could be read two ways, are shown as they came', () => {

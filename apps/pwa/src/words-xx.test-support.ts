@@ -5,7 +5,7 @@
  * with letters outside a bracket bypassed t(). The phone's checks do the same (apps/native/utils/__tests__/
  * market-words-render.test.ts); this is the web's, for jsdom and Testing Library.
  *
- * jsdom does no layout: the 320 px × 1.3 checks of these screens run in a real browser (e2e/words-sweep-check.mjs).
+ * jsdom does no layout: the 320 px × 1.3 checks of these screens run in a real browser (e2e/words-w1-check.mjs).
  */
 import { act } from '@testing-library/react';
 import { pseudoLocalise, type UiLang } from '@beanpool/core';

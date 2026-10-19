@@ -3,7 +3,7 @@
  * components/RepaymentCard.tsx.
  *
  * utils/names-debts.ts signs the payments with the member's key, so it never reaches the words layer: its REPAYMENT_COPY
- * and its two fixed refusals are worded again here, whole sentences per variant, from the same inputs. The file they
+ * and its three fixed refusals are worded again here, whole sentences per variant, from the same inputs. The file they
  * stand for is not touched; what paying does is unchanged. utils/__tests__/rest-words-render.test.ts holds every one to
  * the English names-debts.ts writes, for every variant. A community's own words are shown as given (slice S4).
  */
@@ -67,6 +67,8 @@ const FIXED: Readonly<Record<string, WordKey>> = {
     'Your community’s server didn’t answer. Nothing was changed. Try again when you have signal.': word('Your community’s server didn’t answer. Nothing was changed. Try again when you have signal.'),
     // PAY_UNANSWERED_RETRY.
     'Your community’s server didn’t answer, so this payment may have gone through. Tap Try again: the same payment is never paid twice. If you change it or leave this screen, check your Ledger before you pay again.': word('Your community’s server didn’t answer, so this payment may have gone through. Tap Try again: the same payment is never paid twice. If you change it or leave this screen, check your Ledger before you pay again.'),
+    // PAY_REFUSED_UNSAID: a refusal below 500 without the node's words (a proxy's 429 page); nothing was paid.
+    'Your community’s server turned this payment away without saying why, so nothing was paid. Try again in a minute.': word('Your community’s server turned this payment away without saying why, so nothing was paid. Try again in a minute.'),
     // REPAYMENT_COPY.badAmount, .badCode.
     'Write an amount of Beans above 0, to the cent (for example 12.50).': word('Write an amount of Beans above 0, to the cent (for example 12.50).'),
     'A pay-back code is 32 letters and digits, as the admin shared it. Leave it empty to pay without one.': word('A pay-back code is 32 letters and digits, as the admin shared it. Leave it empty to pay without one.'),

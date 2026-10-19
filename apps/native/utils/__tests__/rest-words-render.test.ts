@@ -129,7 +129,7 @@ import { OneWayBackCard, ONE_WAY_BACK_LINES } from '../../components/OneWayBackC
 import { SavedNodePicker } from '../../components/SavedNodePicker';
 import { SyncStatus } from '../../components/SyncStatus';
 import { beansWords, linkLeftWords, paidWords, payConfirmWords, repaymentBannerWords, repaymentLineWords, REPAYMENT_LINES } from '../../components/repayment-lines';
-import { DEBT_UNREACHABLE, PAY_UNANSWERED_RETRY, REPAYMENT_COPY, beans } from '../names-debts';
+import { DEBT_UNREACHABLE, PAY_REFUSED_UNSAID, PAY_UNANSWERED_RETRY, REPAYMENT_COPY, beans } from '../names-debts';
 import { ONE_WAY_BACK_TEXT } from '../one-way-back';
 import { lightColors } from '../../constants/colors';
 import { bypassing, bracketed, unfit } from './profile-events-words-harness';
@@ -275,6 +275,19 @@ describe('Pay the Commons and the repayment card in the pseudo-locale', () => {
         expect(bypassing(host, [], alerts.said)).toEqual([]);
     });
 
+    it("a refusal without the node's words (a proxy's 429 page): nothing was paid, in the member's language", async () => {
+        // What payTheCommons answers a wordless 429 (names-debts.test.ts holds it to that): not unanswered, so no Try again.
+        debt.pay = { ok: false, status: 429, message: PAY_REFUSED_UNSAID };
+        await renderIn('xx', createElement(PayCommonsScreen));
+        await type(byLabel(xx('How many Beans')), '5');
+        await click(buttonReading(xx(REPAYMENT_LINES.payTitle)), 'Pay the Commons');
+        await pressAlert(xx('Pay'));
+        expect(host.textContent).toContain(xx(PAY_REFUSED_UNSAID));
+        expect(host.textContent).not.toContain(PAY_REFUSED_UNSAID);
+        expect(buttonReading(xx('Try again'))).toBeNull();
+        expect(bypassing(host, [], alerts.said)).toEqual([]);
+    });
+
     it('the repayment card: what is left, and the way to pay', async () => {
         debt.repayment = { amount: 200, repaid: 50, left: 150, debtId: 'a'.repeat(32) };
         await renderIn('xx', createElement(RepaymentCard));
@@ -305,7 +318,7 @@ describe('Pay the Commons and the repayment card in the pseudo-locale', () => {
                 }
             }
         }
-        for (const s of [DEBT_UNREACHABLE, PAY_UNANSWERED_RETRY, REPAYMENT_COPY.badAmount, REPAYMENT_COPY.badCode]) {
+        for (const s of [DEBT_UNREACHABLE, PAY_UNANSWERED_RETRY, PAY_REFUSED_UNSAID, REPAYMENT_COPY.badAmount, REPAYMENT_COPY.badCode]) {
             expect(repaymentLineWords(s)).toBe(s);
             setLanguage('xx');
             expect(repaymentLineWords(s)).toMatch(/^\[.*\]$/s);

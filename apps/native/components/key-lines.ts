@@ -35,6 +35,8 @@ const FIXED: Readonly<Record<string, WordKey>> = {
     'Meet a member of your groups in person. They scan this code with "Confirm a member\'s new phone".': word('Meet a member of your groups in person. They scan this code with "Confirm a member\'s new phone".'),
     "Confirm a member's new phone": word("Confirm a member's new phone"),
     "This isn't a BeanPool new-phone code.": word("This isn't a BeanPool new-phone code."),
+    // A new phone's code with no callsign, that no group lists ("this member" is what the file writes for nobody).
+    "This isn't the phone the community lists for this member.": word("This isn't the phone the community lists for this member."),
     // utils/owner-words.ts OWNER_WORDS_COPY: the "Check your 12 words" screen.
     'Check your 12 words': word('Check your 12 words'),
     "You're an owner of this community. Its take-over keys and backups are locked to your account. If you lose this phone, your 12 words are what get you back in — so check you still have the right ones.": word("You're an owner of this community. Its take-over keys and backups are locked to your account. If you lose this phone, your 12 words are what get you back in — so check you still have the right ones."),
@@ -188,7 +190,7 @@ const NUMBER_PLACES = new Set(['n', 'm', 'count', 'seconds', 'hours']);
 /** Placeholders read back as one unbroken token: a status, a code, an address. */
 const TOKEN_PLACES = new Set(['status', 'code', 'host', 'other_host']);
 /** What a lower layer writes when it has no name: read back inside a sentence, it would be English in another language. */
-const NO_NAME = new Set(['an admin', 'this person', 'the entry', 'this entry', 'this community', 'your community', 'This sign-in', 'Your sign-in']);
+const NO_NAME = new Set(['an admin', 'this person', 'this member', 'the entry', 'this entry', 'this community', 'your community', 'This sign-in', 'Your sign-in']);
 
 /**
  * Sentences with a name, an address or a number in them, as the lower layer writes them, `{placeholder}` for each

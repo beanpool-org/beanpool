@@ -28,7 +28,7 @@ vi.mock('../db', () => ({ clearDB: async () => {}, closeDB: async () => {}, init
 vi.mock('../community-cache', () => ({ removeCommunityCaches: async () => {} }));
 vi.mock('../../services/pillar-sync', () => ({ resetSyncFingerprints: () => {} }));
 
-import { NAMES_LIMITS, normaliseNamesEntryText, setLanguage } from '@beanpool/core';
+import { NAMES_LIMITS, normaliseNamesEntryText, pseudoLocalise, setLanguage } from '@beanpool/core';
 import {
     LOCKED_HISTORY_WORDS, NEW_PHONE_BAD_CODE, NEW_PHONE_CONFIRM_ACTION, NEW_PHONE_SHOW_BODY, NEW_PHONE_SHOW_TITLE, OLD_WORDS_DONE,
     OLD_WORDS_NOTHING_LISTED, OLD_WORDS_NOT_THE_KEY, OLD_WORDS_OWNER, confirmedByText, newPhoneConfirmText, newPhoneEnd, newPhoneKeyWasOtherText,
@@ -90,7 +90,7 @@ const entryRefusal = (raw: { name?: string; note?: string }) => { const r = norm
 /** Every sentence key-lines.ts knows whole, from the files that write it. */
 const WHOLE: string[] = [
     LOCKED_HISTORY_WORDS, OLD_WORDS_NOT_THE_KEY, OLD_WORDS_OWNER, OLD_WORDS_DONE, OLD_WORDS_NOTHING_LISTED, NEW_PHONE_SHOW_TITLE, NEW_PHONE_SHOW_BODY,
-    NEW_PHONE_CONFIRM_ACTION, NEW_PHONE_BAD_CODE,
+    NEW_PHONE_CONFIRM_ACTION, NEW_PHONE_BAD_CODE, newPhoneNotListedText('this member'),
     OWNER_WORDS_COPY.title, OWNER_WORDS_COPY.why, OWNER_WORDS_COPY.stays, OWNER_WORDS_COPY.match, OWNER_WORDS_COPY.matchSaved, OWNER_WORDS_COPY.matchNotSaved,
     OWNER_WORDS_COPY.mismatch, ownerWordsFindThem(true), ownerWordsFindThem(false), OWNER_WORDS_COPY.saveOffer, OWNER_WORDS_COPY.saveButton,
     OWNER_WORDS_COPY.saving, OWNER_WORDS_COPY.saved, OWNER_WORDS_COPY.saveFailed,
@@ -203,6 +203,8 @@ describe('key-lines.ts: sentences with a name, an address or a number, read back
         // A name and a note over core's limits (names-list-crypto.ts, a key-path file): the limit is the sentence's number.
         expect(writtenIn('../../packages/beanpool-core/src/names-list-crypto.ts', 'Keep the name to {n} characters.')).toBe(true);
         expect(writtenIn('../../packages/beanpool-core/src/names-list-crypto.ts', 'Keep the note to {n} characters.')).toBe(true);
+        // A new phone whose code carries no callsign is "this member" (NO_NAME): its not-listed line is a FIXED sentence.
+        expect(writtenIn('utils/group-history-unlock.ts', "const shownName = name ?? (code.callsign || 'this member');")).toBe(true);
     });
 
     it('in English each reads as written; in the pseudo-locale each is translated, with its names as they are', () => {
@@ -221,6 +223,10 @@ describe('key-lines.ts: sentences with a name, an address or a number, read back
     it('a name the lower layer had to fill with English ("an admin"), and one that could be read two ways, are shown as they came', () => {
         expect(inXx(() => keyLineWords(NAMES_COPY.removeKeyButton('')))).toBe(NAMES_COPY.removeKeyButton(''));
         expect(inXx(() => keyLineWords(NAMES_COPY.matched('')))).toBe(NAMES_COPY.matched(''));
+        // "this member" is group-history-unlock.ts's name for a code with no callsign: never read back as a name, and its
+        // not-listed line is said whole, with no English left inside it.
+        expect(inXx(() => keyLineWords(newPhoneMismatchText('this member')))).toBe(newPhoneMismatchText('this member'));
+        expect(inXx(() => keyLineWords(newPhoneNotListedText('this member')))).toBe(pseudoLocalise(newPhoneNotListedText('this member')));
         // "Check an admin’s code" with nobody named is the button's own sentence (checkSomeone), so it is translated.
         expect(NAMES_COPY.checkButton('')).toBe(NAMES_COPY.checkSomeone);
         // "Ash, not Wren" could be either name: the sentence is shown as written, never with the names swapped.

@@ -11,6 +11,7 @@
  * names the card by its screen-reader name (lib/home-layout.ts `cardLabelName`: a saved search by its words).
  */
 import { useEffect, useRef, useState } from 'react';
+import { t, word } from '@beanpool/core';
 import { NOT_ON_ACCOUNT_LINE } from '../lib/home-layout';
 import { useDialogFocus } from './dialog-focus';
 
@@ -40,7 +41,7 @@ interface Props {
     returnFocus?: () => HTMLElement | null | undefined;
 }
 
-export const EDIT_HOME_NOTE = "Needs you stays at the top, and your community's card at the bottom.";
+export const EDIT_HOME_NOTE = word("Needs you stays at the top, and your community's card at the bottom.");
 
 export function EditHomeDialog({ rows, notOnAccount, onAdd, onMove, onSettings, onRemove, onReset, onClose, returnFocus }: Props) {
     const dialog = useRef<HTMLDivElement | null>(null);
@@ -73,16 +74,16 @@ export function EditHomeDialog({ rows, notOnAccount, onAdd, onMove, onSettings, 
             onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
             <div ref={dialog} role="dialog" aria-modal="true" aria-labelledby="home-edit-title" data-testid="home-edit-dialog"
                 className="w-full sm:max-w-md max-h-[90vh] overflow-y-auto bg-white dark:bg-nature-950 rounded-t-2xl sm:rounded-2xl shadow-2xl p-4 min-w-0">
-                <h2 id="home-edit-title" tabIndex={-1} className="m-0 mb-1 text-lg font-extrabold text-nature-950 dark:text-white focus:outline-none">Edit home</h2>
-                <p className="m-0 mb-3 text-sm text-nature-700 dark:text-nature-200">{EDIT_HOME_NOTE}</p>
+                <h2 id="home-edit-title" tabIndex={-1} className="m-0 mb-1 text-lg font-extrabold text-nature-950 dark:text-white focus:outline-none">{t('Edit home')}</h2>
+                <p className="m-0 mb-3 text-sm text-nature-700 dark:text-nature-200">{t(EDIT_HOME_NOTE)}</p>
                 {notOnAccount && (
-                    <p data-testid="home-edit-not-on-account" className="m-0 mb-3 text-sm text-nature-700 dark:text-nature-200">{NOT_ON_ACCOUNT_LINE}</p>
+                    <p data-testid="home-edit-not-on-account" className="m-0 mb-3 text-sm text-nature-700 dark:text-nature-200">{t(NOT_ON_ACCOUNT_LINE)}</p>
                 )}
                 <button type="button" data-testid="home-edit-add" onClick={onAdd}
                     className="w-full mb-3 min-h-[44px] px-4 rounded-xl border-0 bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on text-sm font-bold cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400">
-                    <span aria-hidden="true">＋ </span>Add a card
+                    <span aria-hidden="true">＋ </span>{t('Add a card')}
                 </button>
-                <ul className="list-none m-0 p-0" aria-label="On Home">
+                <ul className="list-none m-0 p-0" aria-label={t('On Home')}>
                     {rows.map((r, i) => (
                         <li key={r.id} data-testid={`home-edit-row-${r.id}`}
                             className="relative flex items-center gap-1 py-1.5 border-b border-nature-100 dark:border-nature-800 last:border-b-0 min-w-0">
@@ -90,27 +91,27 @@ export function EditHomeDialog({ rows, notOnAccount, onAdd, onMove, onSettings, 
                                 {r.name}
                                 {r.note && <span className="block text-xs font-normal text-nature-600 dark:text-nature-300">{r.note}</span>}
                             </span>
-                            <button type="button" className={btn} aria-label={`Move ${r.label} up`} data-testid={`home-edit-up-${r.id}`} disabled={i === 0}
+                            <button type="button" className={btn} aria-label={t('Move {card} up', { card: r.label })} data-testid={`home-edit-up-${r.id}`} disabled={i === 0}
                                 onClick={() => { onMove(r.id, 'up'); setRefocus(`[data-testid="home-edit-up-${r.id}"]:not([disabled]), [data-testid="home-edit-down-${r.id}"]`); }}>
                                 <span aria-hidden="true">↑</span>
                             </button>
-                            <button type="button" className={btn} aria-label={`Move ${r.label} down`} data-testid={`home-edit-down-${r.id}`} disabled={i === rows.length - 1}
+                            <button type="button" className={btn} aria-label={t('Move {card} down', { card: r.label })} data-testid={`home-edit-down-${r.id}`} disabled={i === rows.length - 1}
                                 onClick={() => { onMove(r.id, 'down'); setRefocus(`[data-testid="home-edit-down-${r.id}"]:not([disabled]), [data-testid="home-edit-up-${r.id}"]`); }}>
                                 <span aria-hidden="true">↓</span>
                             </button>
-                            <button type="button" className={btn} aria-label={`Options for ${r.label}`} aria-haspopup="true" aria-expanded={menuFor === r.id}
+                            <button type="button" className={btn} aria-label={t('Options for {card}', { card: r.label })} aria-haspopup="true" aria-expanded={menuFor === r.id}
                                 data-testid={`home-edit-menu-${r.id}`} onClick={() => setMenuFor(m => (m === r.id ? null : r.id))}>
                                 <span aria-hidden="true">…</span>
                             </button>
                             {menuFor === r.id && (
-                                <div role="group" aria-label={`Options for ${r.label}`}
+                                <div role="group" aria-label={t('Options for {card}', { card: r.label })}
                                     className="absolute right-0 top-full z-30 w-48 max-w-[calc(100vw-2rem)] py-1 rounded-xl shadow-xl bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-700">
                                     {r.hasSettings && (
-                                        <button type="button" className={item} aria-label={`Settings for ${r.label}`} data-testid={`home-edit-settings-${r.id}`}
-                                            onClick={() => { setMenuFor(null); onSettings(r.id); }}>Settings…</button>
+                                        <button type="button" className={item} aria-label={t('Settings for {card}', { card: r.label })} data-testid={`home-edit-settings-${r.id}`}
+                                            onClick={() => { setMenuFor(null); onSettings(r.id); }}>{t('Settings…')}</button>
                                     )}
-                                    <button type="button" className={item} aria-label={`Remove ${r.label} from Home`} data-testid={`home-edit-remove-${r.id}`}
-                                        onClick={() => remove(i)}>Remove</button>
+                                    <button type="button" className={item} aria-label={t('Remove {card} from Home', { card: r.label })} data-testid={`home-edit-remove-${r.id}`}
+                                        onClick={() => remove(i)}>{t('Remove')}</button>
                                 </div>
                             )}
                         </li>
@@ -119,11 +120,11 @@ export function EditHomeDialog({ rows, notOnAccount, onAdd, onMove, onSettings, 
                 <div className="flex flex-wrap gap-2 mt-4">
                     <button type="button" data-testid="home-edit-reset" onClick={onReset}
                         className="flex-1 min-w-[140px] min-h-[44px] px-4 rounded-xl border border-nature-300 dark:border-nature-700 bg-transparent text-sm font-bold text-nature-800 dark:text-nature-100 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
-                        Reset to defaults
+                        {t('Reset to defaults')}
                     </button>
                     <button type="button" data-testid="home-edit-done" onClick={onClose}
                         className="flex-1 min-w-[140px] min-h-[44px] px-4 rounded-xl border-0 bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on text-sm font-bold cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400">
-                        Done
+                        {t('Done')}
                     </button>
                 </div>
             </div>

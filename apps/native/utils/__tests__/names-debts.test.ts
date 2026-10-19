@@ -279,8 +279,23 @@ describe('words and checks', () => {
         expect(parseBeans('1.234')).toBeNull();
         expect(parseBeans('-3')).toBeNull();
         expect(parseBeans('abc')).toBeNull();
+        // Could be a thousand or one (#2202): refused, never read as either.
+        expect(parseBeans('1,000')).toBeNull();
         expect(debtCodeOk(` ${'A'.repeat(32)} `)).toBe(true);
         expect(debtCodeOk('a'.repeat(31))).toBe(false);
+    });
+
+    it("typed amounts in the member's language (#2202): fr \"12,5\" is 12.5, fr \"1.000\" is refused", async () => {
+        const { setLanguage } = await import('@beanpool/core');
+        setLanguage('fr');
+        try {
+            expect(parseBeans('12,5')).toBe(12.5);
+            expect(parseBeans('12.5')).toBe(12.5);
+            expect(parseBeans('1.000')).toBeNull();
+            expect(parseBeans('1.000,50')).toBeNull();
+        } finally {
+            setLanguage('en');
+        }
     });
 });
 

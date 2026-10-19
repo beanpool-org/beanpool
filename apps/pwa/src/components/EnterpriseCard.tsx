@@ -78,12 +78,12 @@ export function EnterpriseCard({ treasury: t, onOpen, sample = false }: { treasu
                             </h3>
                             {t.paused && t.status !== 'winding_up' && t.status !== 'completed' && (
                                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-amber-500/20 text-amber-400 border-amber-500/40">
-                                    <span aria-hidden="true">⏸️ </span>Paused
+                                    ⏸️ Paused
                                 </span>
                             )}
                             {t.status === 'winding_up' && (
                                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-rose-500/20 text-rose-400 border-rose-500/40">
-                                    <span aria-hidden="true">⏳ </span>Winding up
+                                    ⏳ Winding up
                                 </span>
                             )}
                             {t.status === 'completed' && (
@@ -93,15 +93,15 @@ export function EnterpriseCard({ treasury: t, onOpen, sample = false }: { treasu
                             )}
                             {isFunded ? (
                                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-emerald-950/50 text-emerald-300 border-emerald-800/60">
-                                    <span aria-hidden="true">🎉 </span>Funded
+                                    🎉 Funded
                                 </span>
                             ) : hasGoal || t.lifecycle === 'bounded' ? (
                                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-amber-950/50 text-amber-300 border-amber-800/60">
-                                    <span aria-hidden="true">🌱 </span>Project
+                                    🌱 Project
                                 </span>
                             ) : (
                                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-blue-950/50 text-blue-300 border-blue-800/60">
-                                    <span aria-hidden="true">🏛️ </span>Enterprise
+                                    🏛️ Enterprise
                                 </span>
                             )}
                         </div>

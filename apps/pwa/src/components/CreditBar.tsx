@@ -10,7 +10,7 @@
  *
  * Its words are in the member's language (words S3, web sweep W2): each caption one sentence through t()/tn(), the
  * bold parts marked **so** in it (a translator moves them where the language puts them), the numbers in the
- * language's digits and decimal sign (formatNumber).
+ * language's digits and decimal mark (formatNumber).
  */
 
 import { Fragment } from 'react';

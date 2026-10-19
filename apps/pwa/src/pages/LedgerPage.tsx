@@ -11,7 +11,7 @@
  *
  * Its words are in the member's language (words S3, web sweep W2), with the phone's Ledger keys where the English is the
  * same (S3i): the level names and their blurbs and perks are word() keys, put through t() where they are shown; counts
- * through tn(); amounts in the language's digits and decimal sign (formatNumber). Members' names and notes are theirs.
+ * through tn(); amounts in the language's digits and decimal mark (formatNumber). Members' names and notes are theirs.
  */
 
 import { Fragment, useState, useEffect, useCallback, useMemo, useRef } from 'react';

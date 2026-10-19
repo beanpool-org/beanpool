@@ -17,6 +17,23 @@ import { useIdentity } from '../app/IdentityContext';
 import { anchorUrl as getAnchorUrl } from '../utils/node-post';
 import { OWNER_WORDS_COPY as COPY, fetchOwnerWordsStatus, type OwnerWordsStatus } from '../utils/owner-words';
 import { readLockPin, runLockOpenCheck } from '../utils/takeover-unlock';
+import { formatDate, t, word, type WordKey } from '@beanpool/core';
+
+/**
+ * utils/owner-words.ts is on the 12 words' key path and never reaches the words layer: the rows' lines it writes are
+ * translated here, by their exact English (utils/__tests__/settings-words-render.test.ts holds them to OWNER_WORDS_COPY).
+ */
+const ROW_LINES: Readonly<Record<string, WordKey>> = {
+    'Check your 12 words': word('Check your 12 words'),
+    "Your 12 words aren't checked. If you lose this phone you couldn't take over the server or open a backup.": word("Your 12 words aren't checked. If you lose this phone you couldn't take over the server or open a backup."),
+    'Take over or restore with this phone': word('Take over or restore with this phone'),
+    "If your main server is gone: scan the code on the standby's Settings, or on a server restoring a backup.": word("If your main server is gone: scan the code on the standby's Settings, or on a server restoring a backup."),
+};
+
+/** One of owner-words.ts's row lines in the member's language; anything else exactly as given. */
+export function ownerRowWords(english: string): string {
+    return Object.prototype.hasOwnProperty.call(ROW_LINES, english) ? t(ROW_LINES[english]) : english;
+}
 
 /** The Settings screen's own menu styles, so the row looks like every other row. */
 interface MenuStyles {
@@ -49,23 +66,26 @@ export function OwnerWordsCard({ styles }: { styles: MenuStyles }) {
     // The node's answer decides; with no answer at all, what this phone remembers does (the main server may be gone).
     const owner = status ? status.owner : rememberedOwner;
     if (!owner) return null;
-    const sub = status?.wordsCheckedAt ? COPY.checked(status.wordsCheckedAt) : COPY.notChecked;
+    // COPY.checked's sentence, its date through core's formatDate (it was the device's own date format).
+    const sub = status?.wordsCheckedAt
+        ? t('12 words checked {date}', { date: formatDate(new Date(status.wordsCheckedAt), 'day-month-year') })
+        : ownerRowWords(COPY.notChecked);
 
     return (
         <>
-            <Text style={styles.sectionHeader}>COMMUNITY KEYS</Text>
+            <Text style={styles.sectionHeader}>{t('COMMUNITY KEYS')}</Text>
             <View style={styles.menuGroup}>
                 {status?.owner && (
                     <Pressable
                         style={[styles.menuBtn, { minHeight: 48 }]}
                         onPress={() => router.push('/owner-words-check')}
                         accessibilityRole="button"
-                        accessibilityLabel={COPY.title}
+                        accessibilityLabel={ownerRowWords(COPY.title)}
                         accessibilityHint={sub}
                     >
                         <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🔑</Text></View>
                         <View style={{ flex: 1 }}>
-                            <Text style={styles.menuText}>{COPY.title}</Text>
+                            <Text style={styles.menuText}>{ownerRowWords(COPY.title)}</Text>
                             <Text style={styles.menuSub}>{sub}</Text>
                         </View>
                         <Text style={styles.menuChevron}>›</Text>
@@ -75,13 +95,13 @@ export function OwnerWordsCard({ styles }: { styles: MenuStyles }) {
                     style={[styles.menuBtn, styles.menuBtnLast, { minHeight: 48 }]}
                     onPress={() => router.push('/unlock-keys')}
                     accessibilityRole="button"
-                    accessibilityLabel={COPY.unlockTitle}
-                    accessibilityHint={COPY.unlockSub}
+                    accessibilityLabel={ownerRowWords(COPY.unlockTitle)}
+                    accessibilityHint={ownerRowWords(COPY.unlockSub)}
                 >
                     <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>📲</Text></View>
                     <View style={{ flex: 1 }}>
-                        <Text style={styles.menuText}>{COPY.unlockTitle}</Text>
-                        <Text style={styles.menuSub}>{COPY.unlockSub}</Text>
+                        <Text style={styles.menuText}>{ownerRowWords(COPY.unlockTitle)}</Text>
+                        <Text style={styles.menuSub}>{ownerRowWords(COPY.unlockSub)}</Text>
                     </View>
                     <Text style={styles.menuChevron}>›</Text>
                 </Pressable>

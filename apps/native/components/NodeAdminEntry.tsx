@@ -27,14 +27,18 @@ import { useFocusEffect, router } from 'expo-router';
 import { useIdentity } from '../app/IdentityContext';
 import { useTheme } from '../app/ThemeContext';
 import { anchorUrl as getAnchorUrl } from '../utils/node-post';
-import { fetchMyNodeRole, rememberNodeRole, canManageNode, manageLabel, manageSubtitle, computerSigninLabel, type ManageRole } from '../utils/node-admin';
+import { fetchMyNodeRole, rememberNodeRole, canManageNode, type ManageRole } from '../utils/node-admin';
 import { useManageNode } from './useManageNode';
 import { useNodeProfile } from '../utils/use-node-profile';
 import { offersNamesList } from '../utils/names-list';
 import { issueBreakGlassCodeOnce, forgetBreakGlassCode } from '../utils/break-glass';
-import { signOutEverywhereOnce, signOutEverywhereWarning, signOutEverywhereDone } from '../utils/sign-out-everywhere';
-import { turnAppLockOnForRole, APP_LOCK_ON_FOR_ROLE } from '../utils/LocalAuth';
+import { signOutEverywhereOnce, signOutEverywhereDone } from '../utils/sign-out-everywhere';
+import { turnAppLockOnForRole } from '../utils/LocalAuth';
 import { numberNudge, numberOnlyAddress } from '../utils/address-follow';
+import { t } from '@beanpool/core';
+import {
+    appLockOnForRoleWords, computerSigninLabelWords, manageLabelWords, manageSubtitleWords, settingsLineWords, signOutEverywhereWarningWords,
+} from './settings/settings-lines';
 
 /** The Settings screen's own menu styles, so the entry looks like every other row. */
 interface MenuStyles {
@@ -81,7 +85,7 @@ export function NodeAdminEntry({ styles, fallbackCommunityName, onAppLockTurnedO
                 setAnchor(url);
                 if (canManageNode(mine.role) && (await turnAppLockOnForRole()) === 'turned-on' && !cancelled) {
                     onAppLockTurnedOn?.();
-                    Alert.alert('App Lock is on', APP_LOCK_ON_FOR_ROLE(mine.communityName || fallbackCommunityName || 'your community'));
+                    Alert.alert(t('App Lock is on'), appLockOnForRoleWords(mine.communityName || fallbackCommunityName || t('your community')));
                 }
             })().catch(() => { if (!cancelled) setRole(null); });
             return () => { cancelled = true; };
@@ -101,14 +105,14 @@ export function NodeAdminEntry({ styles, fallbackCommunityName, onAppLockTurnedO
             if (!url || !identity?.privateKey) return;
             const r = await issueBreakGlassCodeOnce(url, identity, community);
             if (!r.ok) {
-                if (r.reason !== 'busy') Alert.alert('No break-glass code', r.message);
+                if (r.reason !== 'busy') Alert.alert(t('No break-glass code'), settingsLineWords(r.message));
                 return;
             }
             await forgetBreakGlassCode(url, identity.publicKey).catch(() => {});
             Alert.alert(
-                'Your break-glass code',
-                `${r.code}\n\nIt adds a new admin key if you lose this phone. Write it down and keep it offline, away from this phone: the app keeps no copy. It is shown only now; any earlier code no longer works, and "Sign out everywhere" (below) retires this one too.`,
-                [{ text: 'I wrote it down', style: 'cancel' }],
+                t('Your break-glass code'),
+                t('{code}\n\nIt adds a new admin key if you lose this phone. Write it down and keep it offline, away from this phone: the app keeps no copy. It is shown only now; any earlier code no longer works, and "Sign out everywhere" (below) retires this one too.', { code: r.code }),
+                [{ text: t('I wrote it down'), style: 'cancel' }],
             );
         } finally {
             issuingRef.current = false;
@@ -127,30 +131,30 @@ export function NodeAdminEntry({ styles, fallbackCommunityName, onAppLockTurnedO
             if (!url || !identity?.privateKey) return;
             const r = await signOutEverywhereOnce(url, identity);
             if (!r.ok) {
-                if (r.reason !== 'busy') Alert.alert('Not signed out', r.message);
+                if (r.reason !== 'busy') Alert.alert(t('Not signed out'), settingsLineWords(r.message));
                 return;
             }
-            Alert.alert('Signed out everywhere', signOutEverywhereDone(r));
+            Alert.alert(t('Signed out everywhere'), settingsLineWords(signOutEverywhereDone(r)));
         } finally {
             signingOutRef.current = false;
             setSigningOut(false);
         }
     };
     const confirmSignOutAll = (community: string) => {
-        Alert.alert('Sign out everywhere?', signOutEverywhereWarning(community, role === 'owner'), [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Sign out everywhere', style: 'destructive', onPress: () => { signOutAll().catch(() => {}); } },
+        Alert.alert(t('Sign out everywhere?'), signOutEverywhereWarningWords(community, role === 'owner'), [
+            { text: t('Cancel'), style: 'cancel' },
+            { text: t('Sign out everywhere'), style: 'destructive', onPress: () => { signOutAll().catch(() => {}); } },
         ]);
     };
-    const name = communityName || fallbackCommunityName || 'this community';
-    const label = manageLabel(role, name);
-    const computerLabel = computerSigninLabel(role);
+    const name = communityName || fallbackCommunityName || t('this community');
+    const label = manageLabelWords(role, name);
+    const computerLabel = computerSigninLabelWords(role);
     // Public Address is the owners' (the node's Settings), so the nudge is theirs. The addresses are the profile's copy.
     const numberOnly = role === 'owner' ? numberOnlyAddress(anchor, profile?.addresses) : null;
 
     return (
         <>
-            <Text style={styles.sectionHeader}>{role === 'moderator' ? 'COMMUNITY MODERATION' : 'COMMUNITY ADMIN'}</Text>
+            <Text style={styles.sectionHeader}>{role === 'moderator' ? t('COMMUNITY MODERATION') : t('COMMUNITY ADMIN')}</Text>
             <View style={styles.menuGroup}>
                 <Pressable
                     style={[styles.menuBtn, { minHeight: 48 }]}
@@ -159,14 +163,14 @@ export function NodeAdminEntry({ styles, fallbackCommunityName, onAppLockTurnedO
                     accessibilityRole="button"
                     accessibilityLabel={label}
                     accessibilityHint={role === 'moderator'
-                        ? "Asks for your phone's unlock, then opens the community's reports in a browser tab"
-                        : "Asks for your phone's unlock, then opens the community's admin settings in a browser tab"}
+                        ? t("Asks for your phone's unlock, then opens the community's reports in a browser tab")
+                        : t("Asks for your phone's unlock, then opens the community's admin settings in a browser tab")}
                     accessibilityState={{ busy, disabled: busy }}
                 >
                     <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🛡️</Text></View>
                     <View style={{ flex: 1 }}>
                         <Text style={styles.menuText}>{label}</Text>
-                        <Text style={styles.menuSub}>{manageSubtitle(role)}</Text>
+                        <Text style={styles.menuSub}>{manageSubtitleWords(role)}</Text>
                     </View>
                     {busy ? <ActivityIndicator size="small" color={colors.brand.primary} /> : <Text style={styles.menuChevron}>›</Text>}
                 </Pressable>
@@ -181,13 +185,13 @@ export function NodeAdminEntry({ styles, fallbackCommunityName, onAppLockTurnedO
                         onPress={() => router.push({ pathname: '/names-list', params: { community: name } })}
                         disabled={busy}
                         accessibilityRole="button"
-                        accessibilityLabel="Names list"
-                        accessibilityHint="Opens the admins' list of members' real names, on this phone. Only owners and admins can read it"
+                        accessibilityLabel={t('Names list')}
+                        accessibilityHint={t("Opens the admins' list of members' real names, on this phone. Only owners and admins can read it")}
                     >
                         <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>📇</Text></View>
                         <View style={{ flex: 1 }}>
-                            <Text style={styles.menuText}>Names list</Text>
-                            <Text style={styles.menuSub}>Who your members are, by name · sealed on admins' phones</Text>
+                            <Text style={styles.menuText}>{t('Names list')}</Text>
+                            <Text style={styles.menuSub}>{t("Who your members are, by name · sealed on admins' phones")}</Text>
                         </View>
                         <Text style={styles.menuChevron}>›</Text>
                     </Pressable>
@@ -198,14 +202,14 @@ export function NodeAdminEntry({ styles, fallbackCommunityName, onAppLockTurnedO
                         onPress={() => { breakGlass(name).catch(() => {}); }}
                         disabled={busy || issuing}
                         accessibilityRole="button"
-                        accessibilityLabel="Break-glass code"
-                        accessibilityHint="Asks for your phone's unlock, then shows a new break-glass code once. Your old code stops working"
+                        accessibilityLabel={t('Break-glass code')}
+                        accessibilityHint={t("Asks for your phone's unlock, then shows a new break-glass code once. Your old code stops working")}
                         accessibilityState={{ busy: issuing, disabled: busy || issuing }}
                     >
                         <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🚨</Text></View>
                         <View style={{ flex: 1 }}>
-                            <Text style={styles.menuText}>Break-glass code</Text>
-                            <Text style={styles.menuSub}>A spare way to add a new admin key · shown once</Text>
+                            <Text style={styles.menuText}>{t('Break-glass code')}</Text>
+                            <Text style={styles.menuSub}>{t('A spare way to add a new admin key · shown once')}</Text>
                         </View>
                         {issuing ? <ActivityIndicator size="small" color={colors.brand.primary} /> : <Text style={styles.menuChevron}>›</Text>}
                     </Pressable>
@@ -215,14 +219,14 @@ export function NodeAdminEntry({ styles, fallbackCommunityName, onAppLockTurnedO
                     onPress={() => confirmSignOutAll(name)}
                     disabled={busy || signingOut}
                     accessibilityRole="button"
-                    accessibilityLabel="Sign out everywhere"
-                    accessibilityHint={`Asks first, then ends your sign-ins to ${name}'s Settings on every computer and phone. Your key stays on this phone`}
+                    accessibilityLabel={t('Sign out everywhere')}
+                    accessibilityHint={t("Asks first, then ends your sign-ins to {name}'s Settings on every computer and phone. Your key stays on this phone", { name })}
                     accessibilityState={{ busy: signingOut, disabled: busy || signingOut }}
                 >
                     <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🚪</Text></View>
                     <View style={{ flex: 1 }}>
-                        <Text style={styles.menuText}>Sign out everywhere</Text>
-                        <Text style={styles.menuSub}>Ends your Settings sign-ins on every computer and phone</Text>
+                        <Text style={styles.menuText}>{t('Sign out everywhere')}</Text>
+                        <Text style={styles.menuSub}>{t('Ends your Settings sign-ins on every computer and phone')}</Text>
                     </View>
                     {signingOut ? <ActivityIndicator size="small" color={colors.brand.primary} /> : <Text style={styles.menuChevron}>›</Text>}
                 </Pressable>
@@ -232,12 +236,12 @@ export function NodeAdminEntry({ styles, fallbackCommunityName, onAppLockTurnedO
                     disabled={busy}
                     accessibilityRole="button"
                     accessibilityLabel={computerLabel}
-                    accessibilityHint={`Scan the code on ${name}'s Settings page in a computer's browser to sign it in as you. Your key stays on this phone`}
+                    accessibilityHint={t("Scan the code on {name}'s Settings page in a computer's browser to sign it in as you. Your key stays on this phone", { name })}
                 >
                     <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>💻</Text></View>
                     <View style={{ flex: 1 }}>
                         <Text style={styles.menuText}>{computerLabel}</Text>
-                        <Text style={styles.menuSub}>Scan the code on its Settings page · your key stays on this phone</Text>
+                        <Text style={styles.menuSub}>{t('Scan the code on its Settings page · your key stays on this phone')}</Text>
                     </View>
                     <Text style={styles.menuChevron}>›</Text>
                 </Pressable>

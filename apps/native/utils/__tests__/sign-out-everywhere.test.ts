@@ -83,9 +83,9 @@ describe('NodeAdminEntry wiring', () => {
 
     it('the row asks first, then sends; labelled as it reads', () => {
         expect(src).toContain('onPress={() => confirmSignOutAll(name)}');
-        expect(src).toContain('accessibilityLabel="Sign out everywhere"');
-        expect(src).toContain('<Text style={styles.menuText}>Sign out everywhere</Text>');
-        expect(src).toMatch(/Alert\.alert\('Sign out everywhere\?'[\s\S]*?text: 'Cancel'[\s\S]*?onPress: \(\) => \{ signOutAll\(\)/);
+        expect(src).toContain("accessibilityLabel={t('Sign out everywhere')}");
+        expect(src).toContain("<Text style={styles.menuText}>{t('Sign out everywhere')}</Text>");
+        expect(src).toMatch(/Alert\.alert\(t\('Sign out everywhere\?'\)[\s\S]*?text: t\('Cancel'\)[\s\S]*?onPress: \(\) => \{ signOutAll\(\)/);
     });
 
     it("a second tap can't clear the first one's spinner (#1548 NB2): both rows return at once while one runs", () => {

@@ -63,7 +63,7 @@ describe("Account Protection's Show My 12 Recovery Words", () => {
     it('every Show asks the lock, and one that answers after the member left shows nothing', () => {
         const body = reveal();
         const turn = body.indexOf('const turn = protectionWordsTurnRef.current;');
-        const asked = body.indexOf(`await readWordsBehindLock(identity, '${REASON}')`);
+        const asked = body.indexOf(`await readWordsBehindLock(identity, t('${REASON}'))`);
         const left = body.indexOf('if (turn !== protectionWordsTurnRef.current) return;');
         const kept = body.indexOf('setMnemonicWords(words.join');
         const shown = body.indexOf('setRevealWords(true)');
@@ -95,7 +95,7 @@ describe("View Recovery Phrase's words", () => {
         expect(s).toContain('onPress={handleShowSeedWords}');
         const body = show();
         const turn = body.indexOf('const turn = seedWordsTurnRef.current;');
-        const asked = body.indexOf(`await readWordsBehindLock(identity, '${REASON}')`);
+        const asked = body.indexOf(`await readWordsBehindLock(identity, t('${REASON}'))`);
         const left = body.indexOf('if (!words || turn !== seedWordsTurnRef.current) return;');
         const kept = body.indexOf('setSeedWords(words)');
         const shown = body.indexOf('setSeedVisible(true)');

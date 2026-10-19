@@ -9,9 +9,15 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, Pressable, Alert } from 'react-native';
 import { useStyles } from '../app/ThemeContext';
 import { isFriendLocal, removeFriendOnNode } from '../utils/db';
+import { t, word } from '@beanpool/core';
 
-export const BLOCKED_FRIEND_NOTE = 'Still your friend. They can notice a removal.';
-export const BLOCKED_FRIEND_REMOVED = 'No longer your friend. Still blocked.';
+/** The line under the name while they are a friend, and after the removal: word() keys, shown with t(). */
+const BLOCKED_FRIEND_WORDS = {
+    note: word('Still your friend. They can notice a removal.'),
+    removed: word('No longer your friend. Still blocked.'),
+} as const;
+export const BLOCKED_FRIEND_NOTE = BLOCKED_FRIEND_WORDS.note;
+export const BLOCKED_FRIEND_REMOVED = BLOCKED_FRIEND_WORDS.removed;
 
 export function BlockedFriendRemove({ myKey, pubkey, callsign }: { myKey: string; pubkey: string; callsign: string }) {
     const styles = useStyles(({ colors }) => ({
@@ -40,31 +46,31 @@ export function BlockedFriendRemove({ myKey, pubkey, callsign }: { myKey: string
             await removeFriendOnNode(myKey, pubkey);
             setState('removed');
         } catch (e: any) {
-            setError(String(e?.message || 'That did not go through, so they are still your friend. Please try again.'));
+            setError(String(e?.message || t('That did not go through, so they are still your friend. Please try again.')));
             setState('friend');
         }
     };
 
     if (state === 'checking' || state === 'not') return null;
-    if (state === 'removed') return <View style={styles.box}><Text style={styles.note}>{BLOCKED_FRIEND_REMOVED}</Text></View>;
+    if (state === 'removed') return <View style={styles.box}><Text style={styles.note}>{t(BLOCKED_FRIEND_WORDS.removed)}</Text></View>;
     return (
         <View style={styles.box}>
-            <Text style={styles.note}>{BLOCKED_FRIEND_NOTE}</Text>
+            <Text style={styles.note}>{t(BLOCKED_FRIEND_WORDS.note)}</Text>
             <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={`Also remove ${callsign} from friends`}
+                accessibilityLabel={t('Also remove {name} from friends', { name: callsign })}
                 style={styles.button}
                 disabled={state === 'busy'}
                 onPress={() => Alert.alert(
-                    'Remove from friends?',
-                    `${callsign} stays blocked and is no longer your friend. They can notice a removal.`,
+                    t('Remove from friends?'),
+                    t('{name} stays blocked and is no longer your friend. They can notice a removal.', { name: callsign }),
                     [
-                        { text: 'Cancel', style: 'cancel' },
-                        { text: 'Remove', style: 'destructive', onPress: () => { void remove(); } },
+                        { text: t('Cancel'), style: 'cancel' },
+                        { text: t('Remove'), style: 'destructive', onPress: () => { void remove(); } },
                     ],
                 )}
             >
-                <Text style={styles.buttonText}>{state === 'busy' ? 'Removing…' : 'Also remove from friends'}</Text>
+                <Text style={styles.buttonText}>{state === 'busy' ? t('Removing…') : t('Also remove from friends')}</Text>
             </Pressable>
             {error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
         </View>

@@ -3078,9 +3078,9 @@ describe('§8 23. Sign Out saves the copy first; what it says when the node didn
         const after = src.slice(src.indexOf('async function signOutAfterNamesCopies'));
         expect(after).toContain('namesSignOutWords(await namesCopiesBeforeSignOut(identity))');
         expect(after).toMatch(/if \(!words\) return signOutNow\(\);/);
-        expect(after).toMatch(/text: NAMES_COPY\.signOutAnyway, style: 'destructive' as const, onPress: \(\) => void signOutNow\(\)/);
-        expect(after).toMatch(/text: NAMES_COPY\.tryAgain, onPress: \(\) => void signOutAfterNamesCopies\(\)/);
-        expect(after).toMatch(/words\.pdf \? \[\{ text: NAMES_COPY\.savePdf/);
+        expect(after).toMatch(/text: settingsLineWords\(NAMES_COPY\.signOutAnyway\), style: 'destructive' as const, onPress: \(\) => void signOutNow\(\)/);
+        expect(after).toMatch(/text: settingsLineWords\(NAMES_COPY\.tryAgain\), onPress: \(\) => void signOutAfterNamesCopies\(\)/);
+        expect(after).toMatch(/words\.pdf \? \[\{ text: settingsLineWords\(NAMES_COPY\.savePdf\)/);
         expect(src).toContain('await signOutOfThisPhone(identity, { namesCopiesSaved: true });');
     });
 });

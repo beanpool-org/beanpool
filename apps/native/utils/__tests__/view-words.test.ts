@@ -156,7 +156,7 @@ describe('"View Recovery Phrase" on a phone without the 12 words', () => {
         const src = fs.readFileSync(path.resolve(__dirname, '../../app/(tabs)/settings.tsx'), 'utf-8');
         // The row: one label for both phones.
         expect(src).toMatch(/const viewWordsRow = hasMnemonic\(identity\) \? VIEW_WORDS_MENU : NO_WORDS_MENU;/);
-        expect(src).toMatch(/<Text style=\{styles\.menuText\}>\{viewWordsRow\.title\}<\/Text>/);
+        expect(src).toMatch(/<Text style=\{styles\.menuText\}>\{settingsLineWords\(viewWordsRow\.title\)\}<\/Text>/);
         // Both entry points open the seed screen through one handler, and it asks viewWordsOpens what to show.
         expect(src).toMatch(/const openViewWords = \(\) => \{[^}]*setMode\('seed'\);\s*\};/);
         expect(src).toContain('onPress={openViewWords}');

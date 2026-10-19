@@ -34,7 +34,7 @@ describe("Settings' computer rows", () => {
         expect(row).toContain('accessibilityLabel={computerLabel}');
         expect(row).toContain('<Text style={styles.menuText}>{computerLabel}</Text>');
         expect(row).toContain('your key stays on this phone');
-        expect(read('components/NodeAdminEntry.tsx')).toContain('const computerLabel = computerSigninLabel(role);');
+        expect(read('components/NodeAdminEntry.tsx')).toContain('const computerLabel = computerSigninLabelWords(role);');
     });
 
     it('the account one: "Link a device", on screen and for a screen reader', () => {

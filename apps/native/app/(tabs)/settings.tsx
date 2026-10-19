@@ -11,8 +11,7 @@ import { updateCallsign, hasMnemonic } from '../../utils/identity';
 import { namesCopiesBeforeSignOut, signOutOfThisPhone } from '../../utils/account-leaves-phone';
 import { NAMES_COPY, namesSignOutWords } from '../../utils/names-list';
 import {
-    DELETE_CARD_LINE, DELETE_CHECKING_LINE, SIGN_OUT_INSTEAD_LINE, deleteAccountHere, deleteFailedLine, deletePlanFailedLine,
-    deletedButLine, finishLastDelete, keepsKeyLine, lastCommunityLine, listNames, planDelete, vaultCopyStaysLine,
+    DELETE_CARD_LINE, DELETE_CHECKING_LINE, SIGN_OUT_INSTEAD_LINE, deleteAccountHere, finishLastDelete, planDelete,
     type DeleteOutcome, type DeletePlan, type VaultCopyChoice,
 } from '../../utils/delete-here';
 import { hapticTick } from '../../utils/haptics';
@@ -20,7 +19,6 @@ import { buildSignedHeaders } from '../../utils/crypto';
 import { updateMemberProfile, getMemberProfile, signedRequest, signedGet, resetDmChatMemory } from '../../utils/db';
 import {
     DEFAULT_REMINDER_OFFSETS, REMINDER_OFFSETS, REMINDER_PREF_KEY, normaliseReminderOffsets, parseReminderOffsets,
-    reminderOffsetLabel,
 } from '../../utils/event-extras';
 import { getCanonicalProfile } from '../../utils/canonical-profile';
 import { explicitEditAvatar, resolveProfilePublishAvatar, retireParkedPickAfterPublish, type ProfilePublishAvatar } from '../../utils/avatar-value';
@@ -63,7 +61,7 @@ import { hasVault, VAULT_MESSAGES, VaultError } from '../../utils/vault';
 import { VaultMoveCard } from '../../components/VaultMoveCard';
 import { SSO_PROVIDER_NAMES, type SsoProvider } from '../../utils/sso-providers';
 import { signedPost, anchorUrl as getAnchorUrl } from '../../utils/node-post';
-import { parseArchetype, FEEDBACK_LIVE, beanPoolSettingsEntries, CONTACT_VALUE_LIMIT, t, type QuizResult } from '@beanpool/core';
+import { parseArchetype, FEEDBACK_LIVE, beanPoolSettingsEntries, CONTACT_VALUE_LIMIT, t, word, formatNumber, type QuizResult } from '@beanpool/core';
 import { openBeanPoolWebsite } from '../../utils/beanpool-links';
 import { PricingGuideModal } from '../../components/PricingGuideModal';
 import { useNodeProfile } from '../../utils/use-node-profile';
@@ -79,6 +77,10 @@ import { OwnerWordsCard } from '../../components/OwnerWordsCard';
 import { OneWayBackCard } from '../../components/OneWayBackCard';
 import { BlockedFriendRemove } from '../../components/BlockedFriendRemove';
 import { LanguageRow } from '../../components/LanguagePicker';
+import {
+    deleteFailedWords, deletePlanFailedWords, deletedButWords, keepsKeyWords, lastCommunityWords, listNameWords, reminderBeforeWords,
+    settingsLineWords, vaultCopyStaysWords,
+} from '../../components/settings/settings-lines';
 
 
 function getDatabaseFilePaths(dbFilename: string): string[] {
@@ -157,9 +159,11 @@ export default function SettingsScreen() {
         pubkeyText: { fontSize: 13, color: palette.emerald300, fontFamily: 'Courier', letterSpacing: 1 },
 
         // ─── Section Headers ───
+        // Written in capitals in the words themselves (never textTransform, which upper-cases a translation by the
+        // phone's rules, not its language's).
         sectionHeader: {
             fontSize: 11, fontWeight: '800', color: colors.text.muted, letterSpacing: 1,
-            textTransform: 'uppercase', marginBottom: 8, marginTop: 24, marginLeft: 4,
+            marginBottom: 8, marginTop: 24, marginLeft: 4,
         },
 
         // ─── Menu Groups ───
@@ -209,7 +213,8 @@ export default function SettingsScreen() {
 
         // ─── Appearance (Same as phone / Light / Dark) ───
         // Three equal segments that wrap rather than truncate: "Same as phone" takes two lines at
-        // 320dp + 1.3x text, and every segment keeps a 48dp touch target.
+        // 320dp + 1.3x text, and every segment keeps a 48dp touch target. A longer language's words shrink (to 0.6) to
+        // stay whole on their two lines.
         appearanceBlock: {
             padding: 14,
             borderBottomWidth: 1, borderBottomColor: colors.surface.subtle,
@@ -221,7 +226,7 @@ export default function SettingsScreen() {
         },
         segment: {
             flex: 1, minHeight: 48, borderRadius: 9,
-            alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6, paddingVertical: 6,
+            alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4, paddingVertical: 6,
         },
         segmentSelected: {
             backgroundColor: colors.surface.card,
@@ -355,14 +360,14 @@ export default function SettingsScreen() {
             return;
         }
         if (!hasMnemonic(identity)) {
-            Alert.alert("No recovery words found", "Your account key was generated without local passphrase words.");
+            Alert.alert(t("No recovery words found"), t("Your account key was generated without local passphrase words."));
             return;
         }
         const turn = protectionWordsTurnRef.current;
         setRevealLoading(true);
         try {
             // The phone's lock first, as View Recovery Phrase asks it: a check that does not pass shows nothing.
-            const words = await readWordsBehindLock(identity, 'Confirm your security to view your recovery phrase.');
+            const words = await readWordsBehindLock(identity, t('Confirm your security to view your recovery phrase.'));
             // Put away while the check was up (the member left): nothing is shown.
             if (turn !== protectionWordsTurnRef.current) return;
             if (words && Array.isArray(words)) {
@@ -370,7 +375,7 @@ export default function SettingsScreen() {
                 setRevealWords(true);
             }
         } catch (e) {
-            Alert.alert("Error reading recovery words", (e as Error).message);
+            Alert.alert(t("Error reading recovery words"), (e as Error).message);
         } finally {
             setRevealLoading(false);
         }
@@ -482,16 +487,16 @@ export default function SettingsScreen() {
             // and assuming they're covered everywhere.
             const community = protectionNodeLabel || await resolveCommunityLabel();
             message = community
-                ? `On a new phone, this sign-in account will no longer be able to restore your account for ${community}. Your other communities are unaffected.`
-                : `This sign-in account will no longer be able to restore your account on a new phone.`;
+                ? t('On a new phone, this sign-in account will no longer be able to restore your account for {community}. Your other communities are unaffected.', { community })
+                : t('This sign-in account will no longer be able to restore your account on a new phone.');
         }
         Alert.alert(
-            `Disconnect ${provName}?`,
+            t('Disconnect {name}?', { name: provName }),
             message,
             [
-                { text: 'Cancel', style: 'cancel' },
+                { text: t('Cancel'), style: 'cancel' },
                 {
-                    text: 'Disconnect',
+                    text: t('Disconnect'),
                     style: 'destructive',
                     onPress: async () => {
                         setProtectionLoading(true);
@@ -499,11 +504,11 @@ export default function SettingsScreen() {
                             const { disconnectSsoKeeper } = await import('../../utils/keeper-enrolment');
                             const res = await disconnectSsoKeeper(provider, identity);
                             if (!res.success && res.error) {
-                                Alert.alert('Error', res.error);
+                                Alert.alert(t('Error'), settingsLineWords(res.error));
                             }
                             await fetchProtectionStatus();
                         } catch (e) {
-                            Alert.alert('Error', (e as Error).message);
+                            Alert.alert(t('Error'), (e as Error).message);
                         } finally {
                             setProtectionLoading(false);
                         }
@@ -518,7 +523,7 @@ export default function SettingsScreen() {
     }, [mode]);
     const [dbStats, setDbStats] = useState<{ members: number, posts: number, transactions: number, messages: number, integrity: string } | null>(null);
     const [diagLoading, setDiagLoading] = useState(false);
-    const [dbSize, setDbSize] = useState<string>('0.0 MB');
+    const [dbSize, setDbSize] = useState<string>(() => t('{size} MB', { size: formatNumber(0, 1) }));
     const [remoteStats, setRemoteStats] = useState<{ members: number, posts: number, transactions: number } | null>(null);
     const params = useLocalSearchParams<{ section?: string }>();
 
@@ -539,9 +544,9 @@ export default function SettingsScreen() {
     const handleLocationToggle = async () => {
         const { status, canAskAgain } = await Location.getForegroundPermissionsAsync();
         if (status === 'granted') {
-            Alert.alert('Location Enabled', 'BeanPool currently has access to your location. To disable it, please visit your device Settings.', [
-                { text: 'Cancel', style: 'cancel' },
-                { text: 'Open Settings', onPress: () => Linking.openSettings() },
+            Alert.alert(t('Location Enabled'), t('BeanPool currently has access to your location. To disable it, please visit your device Settings.'), [
+                { text: t('Cancel'), style: 'cancel' },
+                { text: t('Open Settings'), onPress: () => Linking.openSettings() },
             ]);
             return;
         }
@@ -549,9 +554,9 @@ export default function SettingsScreen() {
             const res = await Location.requestForegroundPermissionsAsync();
             setLocationEnabled(res.status === 'granted');
         } else {
-            Alert.alert('Permission Denied', 'Location permission was denied. Please enable it in your device settings to use location features.', [
-                { text: 'Cancel', style: 'cancel' },
-                { text: 'Open Settings', onPress: () => Linking.openSettings() },
+            Alert.alert(t('Permission Denied'), t('Location permission was denied. Please enable it in your device settings to use location features.'), [
+                { text: t('Cancel'), style: 'cancel' },
+                { text: t('Open Settings'), onPress: () => Linking.openSettings() },
             ]);
         }
     };
@@ -713,14 +718,14 @@ export default function SettingsScreen() {
             await signedRequest('/api/members/holiday', { enabled: next });
             setHolidayMode(next);
             Alert.alert(
-                next ? '🌴 Holiday mode on' : 'Welcome back',
+                next ? t('🌴 Holiday mode on') : t('Welcome back'),
                 next
-                    ? "Your offers are hidden and you won't get new trade requests. Turn this off anytime to come back."
-                    : 'Your offers are live again.'
+                    ? t("Your offers are hidden and you won't get new trade requests. Turn this off anytime to come back.")
+                    : t('Your offers are live again.')
             );
         } catch (e: any) {
             // Server blocks turning it on while trades are in progress — surface that message.
-            Alert.alert(next ? "Can't start holiday yet" : 'Update failed', e?.message || 'Please try again.');
+            Alert.alert(next ? t("Can't start holiday yet") : t('Update failed'), e?.message || t('Please try again.'));
         } finally {
             setHolidayLoading(false);
         }
@@ -790,12 +795,12 @@ export default function SettingsScreen() {
             }
             if (fileFound) {
                 if (sizeBytes >= 1024 * 1024) {
-                    setDbSize(`${(sizeBytes / 1024 / 1024).toFixed(2)} MB`);
+                    setDbSize(t('{size} MB', { size: formatNumber(sizeBytes / 1024 / 1024, 2) }));
                 } else {
-                    setDbSize(`${(sizeBytes / 1024).toFixed(1)} KB`);
+                    setDbSize(t('{size} KB', { size: formatNumber(sizeBytes / 1024, 1) }));
                 }
             } else {
-                setDbSize('0.0 MB');
+                setDbSize(t('{size} MB', { size: formatNumber(0, 1) }));
             }
 
             // Fetch remote health stats for visual compare
@@ -890,7 +895,7 @@ export default function SettingsScreen() {
 
     const handleShowSeedWords = async () => {
         const turn = seedWordsTurnRef.current;
-        const words = await readWordsBehindLock(identity, 'Confirm your security to view your recovery phrase.');
+        const words = await readWordsBehindLock(identity, t('Confirm your security to view your recovery phrase.'));
         // A check that did not pass shows nothing. Nor does one that answers after the member left.
         if (!words || turn !== seedWordsTurnRef.current) return;
         setSeedWords(words);
@@ -959,15 +964,15 @@ export default function SettingsScreen() {
     const handleToggleAppLock = async () => {
         // With no screen lock, "App Lock enabled" would ask nothing at the next launch. Turning it off never waits on this.
         if (!appLockEnabled && (await getScreenLock()) === 'none') {
-            Alert.alert('Set a screen lock first', APP_LOCK_NEEDS_SCREEN_LOCK);
+            Alert.alert(t('Set a screen lock first'), settingsLineWords(APP_LOCK_NEEDS_SCREEN_LOCK));
             return;
         }
-        const success = await authenticateUser(appLockEnabled ? 'Confirm your security to disable App Lock.' : 'Confirm your security to enable App Lock.');
+        const success = await authenticateUser(appLockEnabled ? t('Confirm your security to disable App Lock.') : t('Confirm your security to enable App Lock.'));
         if (success) {
             const newValue = !appLockEnabled;
             await setAppLockEnabled(newValue);
             setAppLockEnabledState(newValue);
-            Alert.alert('Success', newValue ? 'App Lock enabled.' : 'App Lock disabled.');
+            Alert.alert(t('Success'), newValue ? t('App Lock enabled.') : t('App Lock disabled.'));
         }
     };
 
@@ -1056,7 +1061,7 @@ export default function SettingsScreen() {
     if (!identity) {
         return (
             <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.surface.app }}>
-                <Text style={{ fontSize: 18, color: 'red' }}>Debug: Identity is null.</Text>
+                <Text style={{ fontSize: 18, color: 'red' }}>{t('Debug: Identity is null.')}</Text>
             </View>
         );
     }
@@ -1072,7 +1077,7 @@ export default function SettingsScreen() {
         if (!identity) return;
         const newCallsign = editCallsign.trim();
         if (newCallsign.length < 2) {
-            Alert.alert('Error', 'Callsign must be at least 2 characters.');
+            Alert.alert(t('Error'), t('Callsign must be at least 2 characters.'));
             return;
         }
         setLoading(true);
@@ -1132,8 +1137,8 @@ export default function SettingsScreen() {
                     // than committing a value the server has already rejected.
                     const serverMsg = await res.json().then((b: any) => b?.message).catch(() => null);
                     Alert.alert(
-                        res.status === 409 ? 'Name Taken' : 'Could Not Save',
-                        serverMsg || 'The community node rejected this profile update. Please try again.'
+                        res.status === 409 ? t('Name Taken') : t('Could Not Save'),
+                        serverMsg || t('The community node rejected this profile update. Please try again.')
                     );
                     return;
                 }
@@ -1149,7 +1154,7 @@ export default function SettingsScreen() {
                 // stores nothing here and so still says nothing about the photo.
                 const offlinePick = explicitEditAvatar(avatarPickedThisSession);
                 if (offlinePick) await AsyncStorage.setItem('pending_profile_avatar', offlinePick);
-                Alert.alert('Offline Mode', 'Profile saved locally. It will be published automatically in the background when you reconnect to the network.');
+                Alert.alert(t('Offline Mode'), t('Profile saved locally. It will be published automatically in the background when you reconnect to the network.'));
             } else if (avatarDecision) {
                 // The node has accepted. Retire the parked pick ONLY if this payload carried it
                 // (or a newer pick that supersedes it): a bio-only Save publishes no photo, and
@@ -1181,7 +1186,7 @@ export default function SettingsScreen() {
 
             setMode('menu');
         } catch (e: any) {
-            Alert.alert('Error', e?.message || 'Could not update profile.');
+            Alert.alert(t('Error'), e?.message || t('Could not update profile.'));
         } finally {
             setLoading(false);
         }
@@ -1192,7 +1197,7 @@ export default function SettingsScreen() {
         if (targetUrl === anchorUrl) return;
         // Only a plain host[:port] becomes the phone's community (utils/node-url.ts).
         if (!isPlainNodeAddress(targetUrl)) {
-            Alert.alert('Pivot Failed', UNSAFE_NODE_ADDRESS_MESSAGE);
+            Alert.alert(t('Pivot Failed'), settingsLineWords(UNSAFE_NODE_ADDRESS_MESSAGE));
             return;
         }
         setAdvancedLoading(true);
@@ -1208,7 +1213,7 @@ export default function SettingsScreen() {
             // Hard bounce the Application State Tree via the Welcome resolver
             router.replace('/welcome');
         } catch (e: any) {
-            Alert.alert("Pivot Failed", e.message);
+            Alert.alert(t("Pivot Failed"), e.message);
         }
     }
 
@@ -1224,10 +1229,10 @@ export default function SettingsScreen() {
             const { requestSync } = await import('../../services/pillar-sync');
             requestSync().catch(console.error);
 
-            Alert.alert('Success', 'Invite redeemed successfully on current node! Syncing data...');
+            Alert.alert(t('Success'), t('Invite redeemed successfully on current node! Syncing data...'));
             setRedeemInviteCode('');
         } catch (e: any) {
-            Alert.alert('Redemption Failed', e.message);
+            Alert.alert(t('Redemption Failed'), e.message);
         } finally {
             setRedeemLoading(false);
         }
@@ -1237,17 +1242,17 @@ export default function SettingsScreen() {
         if (targetUrl === anchorUrl) {
             const remainingNodes = savedNodes.filter(n => n.url !== targetUrl);
             if (remainingNodes.length === 0) {
-                Alert.alert("Action Denied", "You cannot forget your only saved node. If you want to leave BeanPool completely, please use 'Delete Account' to destroy your identity.");
+                Alert.alert(t("Action Denied"), t("You cannot forget your only saved node. If you want to leave BeanPool completely, please use 'Delete Account' to destroy your identity."));
                 return;
             }
-            
+
             Alert.alert(
-                "Forget Active Node",
-                "You are currently connected to this node. To forget it, you will automatically be switched to your next saved node.",
+                t("Forget Active Node"),
+                t("You are currently connected to this node. To forget it, you will automatically be switched to your next saved node."),
                 [
-                    { text: "Cancel", style: "cancel" },
-                    { 
-                        text: "Forget & Switch", 
+                    { text: t("Cancel"), style: "cancel" },
+                    {
+                        text: t("Forget & Switch"),
                         style: "destructive",
                         onPress: async () => {
                             await removeSavedNode(targetUrl);
@@ -1273,12 +1278,12 @@ export default function SettingsScreen() {
         }
 
         Alert.alert(
-            "Forget Community?",
-            `This removes "${targetUrl}" from your saved communities and deletes its local data from this phone. Your identity and other communities are not affected — you can rejoin later, but any unsynced local data for this community will be lost.`,
+            t("Forget Community?"),
+            t('This removes "{address}" from your saved communities and deletes its local data from this phone. Your identity and other communities are not affected — you can rejoin later, but any unsynced local data for this community will be lost.', { address: targetUrl }),
             [
-                { text: "Cancel", style: "cancel" },
+                { text: t("Cancel"), style: "cancel" },
                 {
-                    text: "Forget",
+                    text: t("Forget"),
                     style: "destructive",
                     onPress: async () => {
                         await removeSavedNode(targetUrl);
@@ -1303,12 +1308,12 @@ export default function SettingsScreen() {
     async function handleForceResync(targetUrl: string) {
         if (resyncing) return; // guard against re-entry from either resync button
         Alert.alert(
-            "Force Resync",
-            "This will delete your local database for this community and redownload everything from scratch.",
+            t("Force Resync"),
+            t("This will delete your local database for this community and redownload everything from scratch."),
             [
-                { text: "Cancel", style: "cancel" },
+                { text: t("Cancel"), style: "cancel" },
                 {
-                    text: "Clear & Resync",
+                    text: t("Clear & Resync"),
                     style: "destructive",
                     onPress: async () => {
                         setResyncing(true);
@@ -1375,7 +1380,7 @@ export default function SettingsScreen() {
                             setResyncModalVisible(false);
                             setResyncing(false);
                             setAdvancedLoading(false);
-                            Alert.alert("Resync Error", e?.message || String(e) || "Failed to rebuild and re-sync.");
+                            Alert.alert(t("Resync Error"), e?.message || String(e) || t("Failed to rebuild and re-sync."));
                         } finally {
                             setResyncing(false);
                             setAdvancedLoading(false);
@@ -1389,7 +1394,7 @@ export default function SettingsScreen() {
 
     async function handleUpdateAnchor() {
         if (!newAnchorInput.trim()) {
-            Alert.alert("Invalid URL", "Please enter a valid BeanPool Node IP address.");
+            Alert.alert(t("Invalid URL"), t("Please enter a valid BeanPool Node IP address."));
             return;
         }
 
@@ -1438,10 +1443,10 @@ export default function SettingsScreen() {
             requestSync()
                 .catch((err: any) => console.error("Sync caught an error:", err));
 
-            Alert.alert("Node Added", "You have successfully connected to the new community.");
+            Alert.alert(t("Node Added"), t("You have successfully connected to the new community."));
             setAnchorUrl(finalAnchorUrl);
         } catch (e: any) {
-            Alert.alert("Update Failed", String(e.message || e));
+            Alert.alert(t("Update Failed"), settingsLineWords(String(e.message || e)));
         } finally {
             setAdvancedLoading(false);
         }
@@ -1449,10 +1454,10 @@ export default function SettingsScreen() {
 
     async function handleLocalWipe() {
         if (wipeConfirm !== 'WIPE') {
-            Alert.alert("Warning", "You must type exactly 'WIPE' to remove your account from this device.");
+            Alert.alert(t("Warning"), t("You must type exactly '{word}' to remove your account from this device.", { word: 'WIPE' }));
             return;
         }
-        const success = await authenticateUser('Confirm authentication to sign out of this device.');
+        const success = await authenticateUser(t('Confirm authentication to sign out of this device.'));
         if (!success) return;
 
         async function signOutNow() {
@@ -1463,7 +1468,7 @@ export default function SettingsScreen() {
                 await signOutOfThisPhone(identity, { namesCopiesSaved: true });
                 setIdentity(null);
             } catch (e: any) {
-                Alert.alert("Sign Out Failed", e.message || "Failed to sign out.");
+                Alert.alert(t("Sign Out Failed"), e.message || t("Failed to sign out."));
             } finally {
                 setAdvancedLoading(false);
             }
@@ -1482,23 +1487,23 @@ export default function SettingsScreen() {
                 setAdvancedLoading(false);
             }
             if (!words) return signOutNow();
-            Alert.alert(NAMES_COPY.title, words.text, [
-                { text: NAMES_COPY.tryAgain, onPress: () => void signOutAfterNamesCopies() },
+            Alert.alert(settingsLineWords(NAMES_COPY.title), settingsLineWords(words.text), [
+                { text: settingsLineWords(NAMES_COPY.tryAgain), onPress: () => void signOutAfterNamesCopies() },
                 // The names list's own "Export as PDF" (names-list.tsx).
-                ...(words.pdf ? [{ text: NAMES_COPY.savePdf, onPress: () => router.push('/names-list') }] : []),
-                { text: NAMES_COPY.signOutAnyway, style: 'destructive' as const, onPress: () => void signOutNow() },
+                ...(words.pdf ? [{ text: settingsLineWords(NAMES_COPY.savePdf), onPress: () => router.push('/names-list') }] : []),
+                { text: settingsLineWords(NAMES_COPY.signOutAnyway), style: 'destructive' as const, onPress: () => void signOutNow() },
             ]);
         }
 
         Alert.alert(
-            "Sign Out (Device Only)",
+            t("Sign Out (Device Only)"),
             hasMnemonic(identity)
-                ? "This removes your private key and local database from this phone. Your account remains safely stored on the community node and can be restored anytime with your 12-word recovery phrase."
-                : NO_WORDS_SIGN_OUT_ALERT,
+                ? t("This removes your private key and local database from this phone. Your account remains safely stored on the community node and can be restored anytime with your 12-word recovery phrase.")
+                : settingsLineWords(NO_WORDS_SIGN_OUT_ALERT),
             [
-                { text: "Cancel", style: "cancel" },
-                { 
-                    text: "Sign Out", 
+                { text: t("Cancel"), style: "cancel" },
+                {
+                    text: t("Sign Out"),
                     style: "destructive",
                     onPress: () => void signOutAfterNamesCopies()
                 }
@@ -1519,29 +1524,30 @@ export default function SettingsScreen() {
             .filter((c): c is string => typeof c === 'string' && c.trim().length > 0)
             .map(c => c.trim().toLowerCase());
         if (purgeConfirm !== 'DELETE' && !purgeNames.includes(purgeConfirm.trim().toLowerCase())) {
-            Alert.alert("Warning", `You must type exactly 'DELETE' or '${nodeCallsign || identity.callsign || 'CALLSIGN'}' to permanently purge your account.`);
+            Alert.alert(t("Warning"), t("You must type exactly '{word}' or '{name}' to permanently purge your account.", { word: 'DELETE', name: nodeCallsign || identity.callsign || 'CALLSIGN' }));
             return;
         }
-        const success = await authenticateUser('Confirm authentication to permanently purge your account from the node.');
+        const success = await authenticateUser(t('Confirm authentication to permanently purge your account from the node.'));
         if (!success) return;
 
         const words = hasMnemonic(identity);
-        const cannotUndo = words ? 'This CANNOT be undone, even with your 12-word phrase.' : 'This CANNOT be undone.';
-        const keptFor = plan.kind === 'this-one' ? listNames(plan.keeps.map((c) => c.name)) : '';
+        const keptFor = plan.kind === 'this-one' ? listNameWords(plan.keeps.map((c) => c.name)) : '';
 
         function showPurgeOutcome(outcome: DeleteOutcome) {
             if (!identity || !plan) return;
             switch (outcome.kind) {
                 case 'not-deleted':
-                    Alert.alert("Purge Failed", deleteFailedLine(outcome.reason || "Failed to purge account from node. Active escrow trades may need to be completed or cancelled first.", words));
+                    Alert.alert(t("Purge Failed"), deleteFailedWords(outcome.reason || t("Failed to purge account from node. Active escrow trades may need to be completed or cancelled first."), words));
                     return;
                 case 'left-unfinished':
-                    Alert.alert("Account Deleted Here", deletedButLine(plan.hereName, outcome.reason, true, words));
+                    Alert.alert(t("Account Deleted Here"), deletedButWords(plan.hereName, outcome.reason, true, words));
                     return;
                 case 'left':
                     Alert.alert(
-                        "Account Deleted Here",
-                        `Your account at ${plan.hereName} has been permanently deleted. ${words ? 'Your key and 12 words stay' : 'Your key stays'} on this phone for ${keptFor}.`,
+                        t("Account Deleted Here"),
+                        words
+                            ? t('Your account at {here} has been permanently deleted. Your key and 12 words stay on this phone for {communities}.', { here: plan.hereName, communities: keptFor })
+                            : t('Your account at {here} has been permanently deleted. Your key stays on this phone for {communities}.', { here: plan.hereName, communities: keptFor }),
                     );
                     // Through Welcome for the next community, as switching community does.
                     router.replace('/welcome');
@@ -1551,20 +1557,20 @@ export default function SettingsScreen() {
                     // phone is wiped only by their answer (utils/delete-here.ts finishLastDelete).
                     Alert.alert(
                         t("Vault Copy Not Removed"),
-                        vaultCopyStaysLine(plan.hereName, outcome),
+                        vaultCopyStaysWords(plan.hereName, outcome),
                         [
-                            { text: "Try Again", onPress: () => { void finishPurgeAtLast('try-again'); } },
-                            { text: "Delete Anyway", style: "destructive", onPress: () => { void finishPurgeAtLast('delete-anyway'); } },
+                            { text: t("Try Again"), onPress: () => { void finishPurgeAtLast('try-again'); } },
+                            { text: t("Delete Anyway"), style: "destructive", onPress: () => { void finishPurgeAtLast('delete-anyway'); } },
                         ],
                         { cancelable: false },
                     );
                     return;
                 case 'wipe-unfinished':
-                    Alert.alert("Account Purged", deletedButLine(plan.hereName, outcome.reason, false, words));
+                    Alert.alert(t("Account Purged"), deletedButWords(plan.hereName, outcome.reason, false, words));
                     return;
                 case 'wiped':
                     setIdentity(null);
-                    Alert.alert("Account Purged", "Your account and profile have been permanently purged from the community node.");
+                    Alert.alert(t("Account Purged"), t("Your account and profile have been permanently purged from the community node."));
                     return;
             }
         }
@@ -1580,15 +1586,23 @@ export default function SettingsScreen() {
             }
         }
 
+        // Whole sentences per variant: where it deletes, and whether the 12 words could have undone it.
+        const purgeWhat = plan.kind === 'this-one'
+            ? (words
+                ? t('This will permanently delete your profile, listings, and data at {here}. Your Bean balance there will be settled with its Commons Pool. This CANNOT be undone, even with your 12-word phrase.', { here: plan.hereName })
+                : t('This will permanently delete your profile, listings, and data at {here}. Your Bean balance there will be settled with its Commons Pool. This CANNOT be undone.', { here: plan.hereName }))
+            : (words
+                ? t('This will permanently delete your profile, listings, and data from the community node and wipe this phone. Your Bean balance will be settled with the Commons Pool. This CANNOT be undone, even with your 12-word phrase.')
+                : t('This will permanently delete your profile, listings, and data from the community node and wipe this phone. Your Bean balance will be settled with the Commons Pool. This CANNOT be undone.'));
         Alert.alert(
-            "Permanent Node Purge",
+            t("Permanent Node Purge"),
             plan.kind === 'this-one'
-                ? `This will permanently delete your profile, listings, and data at ${plan.hereName}. Your Bean balance there will be settled with its Commons Pool. ${cannotUndo}\n\n${keepsKeyLine(plan, words)}`
-                : `This will permanently delete your profile, listings, and data from the community node and wipe this phone. Your Bean balance will be settled with the Commons Pool. ${cannotUndo}\n\n${lastCommunityLine(plan, words)}`,
+                ? `${purgeWhat}\n\n${keepsKeyWords(plan, words)}`
+                : `${purgeWhat}\n\n${lastCommunityWords(plan, words, hasVault())}`,
             [
-                { text: "Cancel", style: "cancel" },
+                { text: t("Cancel"), style: "cancel" },
                 {
-                    text: "Permanently Purge",
+                    text: t("Permanently Purge"),
                     style: "destructive",
                     onPress: async () => {
                         setAdvancedLoading(true);
@@ -1627,7 +1641,7 @@ export default function SettingsScreen() {
                 <View style={styles.identityInner}>
                     {/* Edit button — top-right corner */}
                     <Pressable style={styles.editBadge} onPress={() => setMode('profile')} accessibilityRole="button">
-                        <Text style={styles.editBadgeText}>✏️ Edit</Text>
+                        <Text style={styles.editBadgeText}>{t('✏️ Edit')}</Text>
                     </Pressable>
 
                     {/* Avatar */}
@@ -1638,7 +1652,7 @@ export default function SettingsScreen() {
                         My Profile showed the photo. MemberAvatar resolves the path against the
                         anchor node and falls back to initials, never to a blank circle. Same
                         96px, same ring, same tap target and labels. */}
-                    <Pressable onPress={() => setMode('profile')} style={styles.avatarWrap} accessibilityRole="button" accessibilityLabel="Edit profile">
+                    <Pressable onPress={() => setMode('profile')} style={styles.avatarWrap} accessibilityRole="button" accessibilityLabel={t('Edit profile')}>
                         <MemberAvatar
                             avatarUrl={avatar}
                             pubkey={identity.publicKey}
@@ -1666,10 +1680,10 @@ export default function SettingsScreen() {
                     <Pressable
                         style={styles.pubkeyRow}
                         accessibilityRole="button"
-                        accessibilityLabel="Copy public key"
+                        accessibilityLabel={t('Copy public key')}
                         onPress={async () => {
                             await Clipboard.setStringAsync(identity.publicKey);
-                            Alert.alert('Copied', 'Public key copied to clipboard.');
+                            Alert.alert(t('Copied'), t('Public key copied to clipboard.'));
                         }}
                     >
                         <Text style={styles.pubkeyText}>
@@ -1692,13 +1706,13 @@ export default function SettingsScreen() {
                 <NodeAdminEntry styles={styles} fallbackCommunityName={protectionNodeLabel} onAppLockTurnedOn={onAppLockTurnedOn} />
                 {/* Owners only: "Check your 12 words" (sealed-keys.md §7); see components/OwnerWordsCard.tsx. */}
                 <OwnerWordsCard styles={styles} />
-                <Text style={styles.sectionHeader}>ACCOUNT & IDENTITY</Text>
+                <Text style={styles.sectionHeader}>{t("ACCOUNT & IDENTITY")}</Text>
                 <View style={styles.menuGroup}>
                     <Pressable style={styles.menuBtn} onPress={() => router.push('/profile-setup')} accessibilityRole="button">
                         <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>✨</Text></View>
                         <View style={{ flex: 1 }}>
-                            <Text style={styles.menuText}>Re-run Setup</Text>
-                            <Text style={styles.menuSub}>Update your name & photo, and how BeanPool works</Text>
+                            <Text style={styles.menuText}>{t("Re-run Setup")}</Text>
+                            <Text style={styles.menuSub}>{t("Update your name & photo, and how BeanPool works")}</Text>
                         </View>
                         <Text style={styles.menuChevron}>›</Text>
                     </Pressable>
@@ -1706,8 +1720,8 @@ export default function SettingsScreen() {
                     <Pressable style={styles.menuBtn} onPress={() => { setMode('protection'); }} accessibilityRole="button">
                         <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🛡️</Text></View>
                         <View style={{ flex: 1 }}>
-                            <Text style={styles.menuText}>Account Protection</Text>
-                            <Text style={styles.menuSub}>Manage how you get back into your account</Text>
+                            <Text style={styles.menuText}>{t("Account Protection")}</Text>
+                            <Text style={styles.menuSub}>{t("Manage how you get back into your account")}</Text>
                         </View>
                         <Text style={styles.menuChevron}>›</Text>
                     </Pressable>
@@ -1724,29 +1738,29 @@ export default function SettingsScreen() {
                     </Pressable>
 
 
-                    <Pressable style={styles.menuBtn} onPress={() => router.push('/pulse')} accessibilityRole="button" accessibilityLabel="The Pulse community feed">
+                    <Pressable style={styles.menuBtn} onPress={() => router.push('/pulse')} accessibilityRole="button" accessibilityLabel={t("The Pulse community feed")}>
                         <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🗞️</Text></View>
                         <View style={{ flex: 1 }}>
-                            <Text style={styles.menuText}>The Pulse</Text>
-                            <Text style={styles.menuSub}>What your neighbours are creating and posting</Text>
+                            <Text style={styles.menuText}>{t("The Pulse")}</Text>
+                            <Text style={styles.menuSub}>{t("What your neighbours are creating and posting")}</Text>
                         </View>
                         <Text style={styles.menuChevron}>›</Text>
                     </Pressable>
 
-                    <Pressable style={styles.menuBtn} onPress={() => router.push('/channels')} accessibilityRole="button" accessibilityLabel="Channels and showcase">
+                    <Pressable style={styles.menuBtn} onPress={() => router.push('/channels')} accessibilityRole="button" accessibilityLabel={t("Channels and showcase")}>
                         <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>📡</Text></View>
                         <View style={{ flex: 1 }}>
-                            <Text style={styles.menuText}>Channels & Showcase</Text>
-                            <Text style={styles.menuSub}>Link the places you already post your work</Text>
+                            <Text style={styles.menuText}>{t("Channels & Showcase")}</Text>
+                            <Text style={styles.menuSub}>{t("Link the places you already post your work")}</Text>
                         </View>
                         <Text style={styles.menuChevron}>›</Text>
                     </Pressable>
 
-                    <Pressable style={styles.menuBtn} onPress={() => router.push('/pulse-intake')} accessibilityRole="button" accessibilityLabel="Share post to Pulse">
+                    <Pressable style={styles.menuBtn} onPress={() => router.push('/pulse-intake')} accessibilityRole="button" accessibilityLabel={t("Share post to Pulse")}>
                         <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>✨</Text></View>
                         <View style={{ flex: 1 }}>
-                            <Text style={styles.menuText}>Share to Pulse</Text>
-                            <Text style={styles.menuSub}>Manually share a post from your channels</Text>
+                            <Text style={styles.menuText}>{t("Share to Pulse")}</Text>
+                            <Text style={styles.menuSub}>{t("Manually share a post from your channels")}</Text>
                         </View>
                         <Text style={styles.menuChevron}>›</Text>
                     </Pressable>
@@ -1765,8 +1779,8 @@ export default function SettingsScreen() {
                         <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🔑</Text></View>
                         {/* On every phone. With no copy of the words here, the line under it says so and the row opens the add form. */}
                         <View style={{ flex: 1 }}>
-                            <Text style={styles.menuText}>{viewWordsRow.title}</Text>
-                            <Text style={styles.menuSub}>{viewWordsRow.sub}</Text>
+                            <Text style={styles.menuText}>{settingsLineWords(viewWordsRow.title)}</Text>
+                            <Text style={styles.menuSub}>{settingsLineWords(viewWordsRow.sub)}</Text>
                         </View>
                         <Text style={styles.menuChevron}>›</Text>
                     </Pressable>
@@ -1775,13 +1789,13 @@ export default function SettingsScreen() {
                 {/* ─── Community Pricing Guide ─── */}
                 {showsBeans && (
                 <>
-                <Text style={styles.sectionHeader}>COMMUNITY PRICING GUIDE</Text>
+                <Text style={styles.sectionHeader}>{t("COMMUNITY PRICING GUIDE")}</Text>
                 <View style={styles.menuGroup}>
-                    <Pressable style={[styles.menuBtn, styles.menuBtnLast]} onPress={() => setShowPricingGuide(true)} accessibilityRole="button" accessibilityLabel="Open Community Pricing Guide">
+                    <Pressable style={[styles.menuBtn, styles.menuBtnLast]} onPress={() => setShowPricingGuide(true)} accessibilityRole="button" accessibilityLabel={t("Open Community Pricing Guide")}>
                         <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>💡</Text></View>
                         <View style={{ flex: 1 }}>
-                            <Text style={styles.menuText}>Browse 500+ Item Estimates</Text>
-                            <Text style={styles.menuSub}>Search benchmark community prices & report feedback</Text>
+                            <Text style={styles.menuText}>{t("Browse 500+ Item Estimates")}</Text>
+                            <Text style={styles.menuSub}>{t("Search benchmark community prices & report feedback")}</Text>
                         </View>
                         <Text style={styles.menuChevron}>›</Text>
                     </Pressable>
@@ -1790,30 +1804,31 @@ export default function SettingsScreen() {
                 )}
 
                 {/* ─── App Settings ─── */}
-                <Text style={styles.sectionHeader}>APP SETTINGS</Text>
+                <Text style={styles.sectionHeader}>{t("APP SETTINGS")}</Text>
                 <View style={styles.menuGroup}>
                     {/* Appearance: follow the phone, or always light / dark */}
                     <View style={styles.appearanceBlock}>
                         <View style={styles.appearanceHeader}>
                             <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🌙</Text></View>
                             <View style={{ flex: 1 }}>
-                                <Text style={styles.menuText}>Appearance</Text>
-                                <Text style={styles.menuSub}>Light or dark, or the same as your phone</Text>
+                                <Text style={styles.menuText}>{t("Appearance")}</Text>
+                                <Text style={styles.menuSub}>{t("Light or dark, or the same as your phone")}</Text>
                             </View>
                         </View>
-                        <View style={styles.segmentRow} accessibilityRole="radiogroup" accessibilityLabel="Appearance">
-                            {THEME_PREFERENCE_OPTIONS.map(({ value, label }) => {
+                        <View style={styles.segmentRow} accessibilityRole="radiogroup" accessibilityLabel={t("Appearance")}>
+                            {THEME_PREFERENCE_OPTIONS.map((option) => {
+                                const { value } = option;
                                 const selected = themePreference === value;
                                 return (
                                     <Pressable
                                         key={value}
                                         style={[styles.segment, selected && styles.segmentSelected]}
                                         accessibilityRole="radio"
-                                        accessibilityLabel={label}
+                                        accessibilityLabel={t(option.label)}
                                         accessibilityState={{ checked: selected }}
                                         onPress={() => setThemePreference(value)}
                                     >
-                                        <Text style={[styles.segmentText, selected && styles.segmentTextSelected]}>{label}</Text>
+                                        <Text style={[styles.segmentText, selected && styles.segmentTextSelected]} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.6}>{t(option.label)}</Text>
                                     </Pressable>
                                 );
                             })}
@@ -1827,13 +1842,13 @@ export default function SettingsScreen() {
                     <View style={styles.menuBtn}>
                         <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🎨</Text></View>
                         <View style={{ flex: 1 }}>
-                            <Text style={styles.menuText}>Background pattern</Text>
-                            <Text style={styles.menuSub}>Doodles behind the app, or a plain background</Text>
+                            <Text style={styles.menuText}>{t("Background pattern")}</Text>
+                            <Text style={styles.menuSub}>{t("Doodles behind the app, or a plain background")}</Text>
                         </View>
                         <Pressable
                             style={[styles.toggle, patternEnabled && styles.toggleOn]}
                             accessibilityRole="switch"
-                            accessibilityLabel="Background pattern"
+                            accessibilityLabel={t("Background pattern")}
                             accessibilityState={{ checked: patternEnabled }}
                             onPress={() => setPatternEnabled(!patternEnabled)}
                         >
@@ -1845,13 +1860,13 @@ export default function SettingsScreen() {
                     <View style={styles.menuBtn}>
                         <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🔒</Text></View>
                         <View style={{ flex: 1 }}>
-                            <Text style={styles.menuText}>App Lock</Text>
-                            <Text style={styles.menuSub}>Asks for your phone's screen lock when BeanPool opens</Text>
+                            <Text style={styles.menuText}>{t("App Lock")}</Text>
+                            <Text style={styles.menuSub}>{t("Asks for your phone's screen lock when BeanPool opens")}</Text>
                         </View>
                         <Pressable 
                             style={[styles.toggle, appLockEnabled && styles.toggleOn]} 
                             accessibilityRole="button" 
-                            accessibilityLabel="Toggle App Lock" 
+                            accessibilityLabel={t("Toggle App Lock")} 
                             accessibilityState={{ checked: appLockEnabled }} 
                             onPress={handleToggleAppLock}
                         >
@@ -1878,21 +1893,21 @@ export default function SettingsScreen() {
                     }} accessibilityRole="button">
                         <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🔔</Text></View>
                         <View style={{ flex: 1 }}>
-                            <Text style={styles.menuText}>Notification Preferences</Text>
-                            <Text style={styles.menuSub}>Control push alerts by category</Text>
+                            <Text style={styles.menuText}>{t("Notification Preferences")}</Text>
+                            <Text style={styles.menuSub}>{t("Control push alerts by category")}</Text>
                         </View>
                         <Text style={styles.menuChevron}>›</Text>
                     </Pressable>
                     <View style={styles.menuBtn}>
                         <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>📍</Text></View>
                         <View style={{ flex: 1 }}>
-                            <Text style={styles.menuText}>Location</Text>
-                            <Text style={styles.menuSub}>{locationEnabled ? 'Enabled — used for nearby posts & map' : 'Disabled — tap to enable'}</Text>
+                            <Text style={styles.menuText}>{t("Location")}</Text>
+                            <Text style={styles.menuSub}>{locationEnabled ? t('Enabled — used for nearby posts & map') : t('Disabled — tap to enable')}</Text>
                         </View>
                         <Pressable
                             style={[styles.toggle, locationEnabled && styles.toggleOn]}
                             accessibilityRole="button"
-                            accessibilityLabel="Toggle Location permission"
+                            accessibilityLabel={t("Toggle Location permission")}
                             accessibilityState={{ checked: locationEnabled }}
                             onPress={handleLocationToggle}
                         >
@@ -1904,13 +1919,13 @@ export default function SettingsScreen() {
                             style={styles.menuBtn}
                             onPress={() => router.push('/your-area' as any)}
                             accessibilityRole="button"
-                            accessibilityLabel={`Your area: ${areaLine}`}
+                            accessibilityLabel={t('Your area: {area}', { area: settingsLineWords(areaLine) })}
                             testID="settings-your-area"
                         >
                             <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🗺️</Text></View>
                             <View style={{ flex: 1 }}>
-                                <Text style={styles.menuText}>Your area</Text>
-                                <Text style={styles.menuSub}>{areaLine}</Text>
+                                <Text style={styles.menuText}>{t("Your area")}</Text>
+                                <Text style={styles.menuSub}>{settingsLineWords(areaLine)}</Text>
                             </View>
                             <Text style={styles.menuChevron}>›</Text>
                         </Pressable>
@@ -1919,13 +1934,13 @@ export default function SettingsScreen() {
                     <View style={[styles.menuBtn, styles.menuBtnLast]}>
                         <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🌴</Text></View>
                         <View style={{ flex: 1 }}>
-                            <Text style={styles.menuText}>Holiday Mode</Text>
-                            <Text style={styles.menuSub}>{holidayMode ? "You're away — offers hidden, no new requests" : 'Going away? Hide your offers and pause requests'}</Text>
+                            <Text style={styles.menuText}>{t("Holiday Mode")}</Text>
+                            <Text style={styles.menuSub}>{holidayMode ? t("You're away — offers hidden, no new requests") : t('Going away? Hide your offers and pause requests')}</Text>
                         </View>
                         <Pressable
                             style={[styles.toggle, holidayMode && styles.toggleOn, holidayLoading && { opacity: 0.5 }]}
                             accessibilityRole="button"
-                            accessibilityLabel="Toggle Holiday Mode"
+                            accessibilityLabel={t("Toggle Holiday Mode")}
                             accessibilityState={{ checked: holidayMode }}
                             disabled={holidayLoading}
                             onPress={handleToggleHoliday}
@@ -1936,37 +1951,37 @@ export default function SettingsScreen() {
                 </View>
 
                 {/* ─── BeanPool: the members' sheet, Suggest a change (goes to beanpool.org, not this community's node), the website ─── */}
-                <Text style={styles.sectionHeader}>BEANPOOL</Text>
+                <Text style={styles.sectionHeader}>{t("BEANPOOL")}</Text>
                 <View style={styles.menuGroup}>
                     {beanPoolSettingsEntries(FEEDBACK_LIVE).map((entry, i, all) => {
                         const last = i === all.length - 1 ? styles.menuBtnLast : null;
                         if (entry === 'help') return (
-                            <Pressable key={entry} style={[styles.menuBtn, last]} onPress={() => router.push('/beanpool')} accessibilityRole="button" accessibilityLabel="BeanPool: help and how it works">
+                            <Pressable key={entry} style={[styles.menuBtn, last]} onPress={() => router.push('/beanpool')} accessibilityRole="button" accessibilityLabel={t("BeanPool: help and how it works")}>
                                 <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🫘</Text></View>
                                 <View style={{ flex: 1 }}>
-                                    <Text style={styles.menuText}>Help & how it works</Text>
-                                    <Text style={styles.menuSub}>How to use every part of the app, the rules, questions</Text>
+                                    <Text style={styles.menuText}>{t("Help & how it works")}</Text>
+                                    <Text style={styles.menuSub}>{t("How to use every part of the app, the rules, questions")}</Text>
                                 </View>
                                 <Text style={styles.menuChevron}>›</Text>
                             </Pressable>
                         );
                         // Only while FEEDBACK_LIVE: the same suggest-change screen the BeanPool sheet opens.
                         if (entry === 'suggest') return (
-                            <Pressable key={entry} style={[styles.menuBtn, last]} onPress={() => router.push('/suggest-change')} accessibilityRole="button" accessibilityLabel="Suggest a change to BeanPool">
+                            <Pressable key={entry} style={[styles.menuBtn, last]} onPress={() => router.push('/suggest-change')} accessibilityRole="button" accessibilityLabel={t("Suggest a change to BeanPool")}>
                                 <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>💬</Text></View>
                                 <View style={{ flex: 1 }}>
-                                    <Text style={styles.menuText}>Suggest a change</Text>
-                                    <Text style={styles.menuSub}>Ideas and problems go to the BeanPool project team</Text>
+                                    <Text style={styles.menuText}>{t("Suggest a change")}</Text>
+                                    <Text style={styles.menuSub}>{t("Ideas and problems go to the BeanPool project team")}</Text>
                                 </View>
                                 <Text style={styles.menuChevron}>›</Text>
                             </Pressable>
                         );
                         return (
-                            <Pressable key={entry} style={[styles.menuBtn, last]} onPress={() => { void openBeanPoolWebsite(); }} accessibilityRole="link" accessibilityLabel="beanpool.org, opens in your browser">
+                            <Pressable key={entry} style={[styles.menuBtn, last]} onPress={() => { void openBeanPoolWebsite(); }} accessibilityRole="link" accessibilityLabel={t("beanpool.org, opens in your browser")}>
                                 <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🌐</Text></View>
                                 <View style={{ flex: 1 }}>
                                     <Text style={styles.menuText}>beanpool.org</Text>
-                                    <Text style={styles.menuSub}>The BeanPool project website</Text>
+                                    <Text style={styles.menuSub}>{t("The BeanPool project website")}</Text>
                                 </View>
                                 <Text style={styles.menuChevron}>›</Text>
                             </Pressable>
@@ -1975,27 +1990,27 @@ export default function SettingsScreen() {
                 </View>
 
                 {/* ─── Legal & Privacy ─── */}
-                <Text style={styles.sectionHeader}>LEGAL & PRIVACY</Text>
+                <Text style={styles.sectionHeader}>{t("LEGAL & PRIVACY")}</Text>
                 <View style={styles.menuGroup}>
                     <Pressable style={styles.menuBtn} onPress={handleOpenBlockedModal} accessibilityRole="button">
                         <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🚫</Text></View>
-                        <Text style={[styles.menuText, { flex: 1 }]}>Manage Blocked Users</Text>
+                        <Text style={[styles.menuText, { flex: 1 }]}>{t("Manage Blocked Users")}</Text>
                         <Text style={styles.menuChevron} aria-hidden={true} importantForAccessibility="no">›</Text>
                     </Pressable>
                     {showAsConnection !== null && (
                         <View style={styles.menuBtn}>
                             <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🤝</Text></View>
                             <View style={{ flex: 1 }}>
-                                <Text style={styles.menuText}>Show me as a connection in common</Text>
-                                <Text style={styles.menuSub}>When you and two people are friends both ways, each can see your name on the other's profile</Text>
+                                <Text style={styles.menuText}>{t("Show me as a connection in common")}</Text>
+                                <Text style={styles.menuSub}>{t("When you and two people are friends both ways, each can see your name on the other's profile")}</Text>
                             </View>
-                            <Pressable style={[styles.toggle, showAsConnection && styles.toggleOn]} accessibilityRole="switch" accessibilityLabel="Show me as a connection in common" accessibilityState={{ checked: showAsConnection }} onPress={async () => {
+                            <Pressable style={[styles.toggle, showAsConnection && styles.toggleOn]} accessibilityRole="switch" accessibilityLabel={t("Show me as a connection in common")} accessibilityState={{ checked: showAsConnection }} onPress={async () => {
                                 const next = !showAsConnection; setShowAsConnection(next);
                                 try {
                                     if (identity?.publicKey) await signedRequest('/api/members/preferences', { publicKey: identity.publicKey, preferences: { show_as_connection_in_common: next } });
                                 } catch (e: any) {
                                     setShowAsConnection(!next);
-                                    Alert.alert('Not saved', e?.message || 'Your community could not save that.');
+                                    Alert.alert(t('Not saved'), e?.message || t('Your community could not save that.'));
                                 }
                             }}>
                                 <View style={[styles.toggleThumb, showAsConnection && styles.toggleThumbOn]} />
@@ -2004,23 +2019,23 @@ export default function SettingsScreen() {
                     )}
                     <Pressable style={styles.menuBtn} onPress={() => Linking.openURL('https://beanpool.org/privacy.html')} accessibilityRole="button">
                         <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🛡️</Text></View>
-                        <Text style={[styles.menuText, { flex: 1 }]}>Privacy Policy</Text>
+                        <Text style={[styles.menuText, { flex: 1 }]}>{t("Privacy Policy")}</Text>
                         <Text style={styles.menuChevron}>›</Text>
                     </Pressable>
                     <Pressable style={styles.menuBtn} onPress={() => Linking.openURL('https://beanpool.org/terms.html')} accessibilityRole="button">
                         <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>⚖️</Text></View>
-                        <Text style={[styles.menuText, { flex: 1 }]}>Terms of Service & EULA</Text>
+                        <Text style={[styles.menuText, { flex: 1 }]}>{t("Terms of Service & EULA")}</Text>
                         <Text style={styles.menuChevron}>›</Text>
                     </Pressable>
                     <Pressable style={[styles.menuBtn, styles.menuBtnLast]} onPress={() => Linking.openURL('https://beanpool.org/safety.html')} accessibilityRole="button">
                         <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🚸</Text></View>
-                        <Text style={[styles.menuText, { flex: 1 }]}>Child Safety Standards</Text>
+                        <Text style={[styles.menuText, { flex: 1 }]}>{t("Child Safety Standards")}</Text>
                         <Text style={styles.menuChevron}>›</Text>
                     </Pressable>
                 </View>
 
                 {/* ─── Advanced ─── */}
-                <Text style={styles.sectionHeader}>SYSTEM</Text>
+                <Text style={styles.sectionHeader}>{t("SYSTEM")}</Text>
                 <View style={styles.menuGroup}>
                     <Pressable style={styles.menuBtn} onPress={async () => {
                         setMode('diagnostics');
@@ -2028,16 +2043,16 @@ export default function SettingsScreen() {
                     }} accessibilityRole="button">
                         <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>📊</Text></View>
                         <View style={{ flex: 1 }}>
-                            <Text style={styles.menuText}>Database Health & Stats</Text>
-                            <Text style={styles.menuSub}>Local storage metrics & integrity checks</Text>
+                            <Text style={styles.menuText}>{t("Database Health & Stats")}</Text>
+                            <Text style={styles.menuSub}>{t("Local storage metrics & integrity checks")}</Text>
                         </View>
                         <Text style={styles.menuChevron}>›</Text>
                     </Pressable>
                     <Pressable style={[styles.menuBtn, styles.menuBtnLast]} onPress={() => setMode('advanced')} accessibilityRole="button">
                         <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>⚙️</Text></View>
                         <View style={{ flex: 1 }}>
-                            <Text style={styles.menuText}>Advanced / Subsystem</Text>
-                            <Text style={styles.menuSub}>Node management & cache controls</Text>
+                            <Text style={styles.menuText}>{t("Advanced / Subsystem")}</Text>
+                            <Text style={styles.menuSub}>{t("Node management & cache controls")}</Text>
                         </View>
                         <Text style={styles.menuChevron}>›</Text>
                     </Pressable>
@@ -2055,10 +2070,10 @@ export default function SettingsScreen() {
                                 setPurgeConfirm(''); 
                             }} 
                             accessibilityRole="button" 
-                            accessibilityHint="Choose to remove account from device or permanently delete from node"
+                            accessibilityHint={t("Choose to remove account from device or permanently delete from node")}
                         >
                             <View style={[styles.menuIconWrap, { backgroundColor: theme === 'dark' ? colors.feedback.danger.bg : palette.red50 }]}><Text style={styles.menuIcon}>⚠️</Text></View>
-                            <Text style={[styles.menuText, { flex: 1, color: colors.feedback.danger.fg }]}>Account Deletion & Sign Out</Text>
+                            <Text style={[styles.menuText, { flex: 1, color: colors.feedback.danger.fg }]}>{t("Account Deletion & Sign Out")}</Text>
                             <Text style={[styles.menuChevron, { color: palette.red300 }]}>›</Text>
                         </Pressable>
                     </View>
@@ -2066,16 +2081,16 @@ export default function SettingsScreen() {
 
                 {/* ─── Version Footer ─── */}
                 <Text style={styles.versionText}>
-                    BEANPOOL OS {appConfig.expo.version} (Build {Platform.OS === 'ios' ? appConfig.expo.ios.buildNumber : appConfig.expo.android.versionCode})
+                    {t('BEANPOOL OS {version} (Build {build})', { version: appConfig.expo.version, build: Platform.OS === 'ios' ? appConfig.expo.ios.buildNumber : String(appConfig.expo.android.versionCode) })}
                 </Text>
                 </>
             )}
 
             {mode === 'protection' && (
                 <View style={styles.card}>
-                    <Text style={styles.sectionTitle}>🛡️ Account Protection</Text>
+                    <Text style={styles.sectionTitle}>{t("🛡️ Account Protection")}</Text>
                     <Text style={styles.infoText}>
-                        This is how you get back into your account if you lose your phone.
+                        {t("This is how you get back into your account if you lose your phone.")}
                     </Text>
 
                     {/* The code a chat partner checks when their phone says the key behind your name changed. Worked out
@@ -2086,7 +2101,7 @@ export default function SettingsScreen() {
                     {/* Only the sign-in part waits for its answer (the key vault's, up to 20 s, or the community's): the
                         12 words below never wait behind it (PR #1336 review finding 9). */}
                     {protectionLoading ? (
-                        <ActivityIndicator color={colors.brand.primary} style={{ marginVertical: 20 }} accessibilityLabel="Checking your sign-in accounts" />
+                        <ActivityIndicator color={colors.brand.primary} style={{ marginVertical: 20 }} accessibilityLabel={t("Checking your sign-in accounts")} />
                     ) : (
                         <>
                             <RecoveryAlertBanner onStopSuccess={fetchProtectionStatus} />
@@ -2094,7 +2109,7 @@ export default function SettingsScreen() {
                             <OneWayBackCard place="settings" colors={colors} />
                             <VaultMoveCard onMoved={() => { void fetchProtectionStatus(); }} />
                             {protectionNote && (
-                                <Text style={[styles.infoText, { marginBottom: 12 }]} accessibilityLiveRegion="polite">{protectionNote}</Text>
+                                <Text style={[styles.infoText, { marginBottom: 12 }]} accessibilityLiveRegion="polite">{settingsLineWords(protectionNote)}</Text>
                             )}
                             <KeeperProtectionPanel
                                 colors={colors}
@@ -2116,12 +2131,12 @@ export default function SettingsScreen() {
                             sign-in) it says so in one line and opens "Add your 12 words" (openViewWords). */}
                         <View style={{ marginTop: 24, paddingTop: 20, borderTopWidth: 1, borderTopColor: colors.border.default }}>
                             <Text style={{ color: colors.text.heading, fontSize: 16, fontWeight: 'bold', marginBottom: 8 }}>
-                                🔑 12 Recovery Words
+                                {t("🔑 12 Recovery Words")}
                             </Text>
                             <Text style={{ color: colors.text.secondary, fontSize: 13, lineHeight: 18, marginBottom: 12 }}>
                                 {hasMnemonic(identity)
-                                    ? 'Your 12 recovery words can restore your account on any device. Keep them private and never share them with anyone.'
-                                    : NO_WORDS_VIEW_LINE}
+                                    ? t('Your 12 recovery words can restore your account on any device. Keep them private and never share them with anyone.')
+                                    : settingsLineWords(NO_WORDS_VIEW_LINE)}
                             </Text>
 
                             {!(hasMnemonic(identity) && revealWords) ? (
@@ -2137,11 +2152,11 @@ export default function SettingsScreen() {
                                     onPress={hasMnemonic(identity) ? handleRevealWords : openViewWords}
                                     disabled={revealLoading}
                                     accessibilityRole="button"
-                                    accessibilityLabel="Show my 12 recovery words"
-                                    accessibilityHint={hasMnemonic(identity) ? undefined : NO_WORDS_MENU.sub}
+                                    accessibilityLabel={t("Show my 12 recovery words")}
+                                    accessibilityHint={hasMnemonic(identity) ? undefined : settingsLineWords(NO_WORDS_MENU.sub)}
                                 >
                                     <Text style={{ color: colors.text.heading, fontWeight: '600', fontSize: 15 }}>
-                                        👁️ Show My 12 Recovery Words
+                                        {t("👁️ Show My 12 Recovery Words")}
                                     </Text>
                                 </Pressable>
                             ) : (
@@ -2152,7 +2167,7 @@ export default function SettingsScreen() {
                                             <View
                                                 key={`${word}-${idx}`}
                                                 accessible={true}
-                                                accessibilityLabel={`Word ${idx + 1}: ${word}`}
+                                                accessibilityLabel={t('Word {n}: {word}', { n: idx + 1, word })}
                                                 style={{ backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.default, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, flexDirection: 'row', alignItems: 'center' }}
                                             >
                                                 <Text style={{ color: colors.text.muted, fontSize: 11, marginRight: 6 }}>{idx + 1}.</Text>
@@ -2167,19 +2182,19 @@ export default function SettingsScreen() {
                                             style={{ flex: 1, backgroundColor: colors.brand.fill, borderRadius: 10, paddingVertical: 12, alignItems: 'center' }}
                                             onPress={handleCopyWords}
                                             accessibilityRole="button"
-                                            accessibilityLabel={copiedWords ? "Recovery words copied to clipboard" : "Copy 12 recovery words to clipboard"}
+                                            accessibilityLabel={copiedWords ? t("Recovery words copied to clipboard") : t("Copy 12 recovery words to clipboard")}
                                         >
                                             <Text style={{ color: colors.text.inverse, fontWeight: 'bold', fontSize: 14 }}>
-                                                {copiedWords ? '✅ Copied!' : '📋 Copy Words'}
+                                                {copiedWords ? t('✅ Copied!') : t('📋 Copy Words')}
                                             </Text>
                                         </Pressable>
                                         <Pressable
                                             style={{ backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.default, borderRadius: 10, paddingHorizontal: 16, paddingVertical: 12, alignItems: 'center' }}
                                             onPress={putProtectionWordsAway}
                                             accessibilityRole="button"
-                                            accessibilityLabel="Hide 12 recovery words"
+                                            accessibilityLabel={t("Hide 12 recovery words")}
                                         >
-                                            <Text style={{ color: colors.text.body, fontWeight: '600', fontSize: 14 }}>Hide</Text>
+                                            <Text style={{ color: colors.text.body, fontWeight: '600', fontSize: 14 }}>{t("Hide")}</Text>
                                         </Pressable>
                                     </View>
                                     <View style={{ marginTop: 10 }}>
@@ -2194,10 +2209,10 @@ export default function SettingsScreen() {
                         {Platform.OS === 'web' && (
                             <View style={{ backgroundColor: colors.feedback.info.bg, borderColor: colors.feedback.info.border, borderWidth: 1, borderRadius: 12, padding: 16, marginTop: 8 }}>
                                 <Text style={{ color: colors.text.body, fontSize: 14, lineHeight: 20 }}>
-                                    The web version of BeanPool runs inside your hub's server, which means it can't safely manage recovery keys. Your 12 words are the only way back on the web.
+                                    {t("The web version of BeanPool runs inside your hub's server, which means it can't safely manage recovery keys. Your 12 words are the only way back on the web.")}
                                 </Text>
                                 <Text style={{ color: colors.text.secondary, fontSize: 13, lineHeight: 18, marginTop: 8 }}>
-                                    For sign-in account recovery (Apple, Google), use the BeanPool app on your phone.
+                                    {t("For sign-in account recovery (Apple, Google), use the BeanPool app on your phone.")}
                                 </Text>
                             </View>
                         )}
@@ -2208,7 +2223,7 @@ export default function SettingsScreen() {
                         onPress={() => setMode('menu')}
                         accessibilityRole="button"
                     >
-                        <Text style={styles.backBtnText}>← Back</Text>
+                        <Text style={styles.backBtnText}>{t("← Back")}</Text>
                     </Pressable>
                 </View>
             )}
@@ -2232,11 +2247,11 @@ export default function SettingsScreen() {
 
             {mode === 'profile' && (
                 <View style={styles.card}>
-                    <Text style={styles.sectionTitle}>Edit Profile</Text>
+                    <Text style={styles.sectionTitle}>{t("Edit Profile")}</Text>
                     
                     {/* Avatar Picker */}
                     <View style={{ alignItems: 'center', marginBottom: 20 }}>
-                        <Pressable onPress={handlePickImage} style={{ alignItems: 'center' }} accessibilityRole="button" accessibilityLabel="Change profile photo">
+                        <Pressable onPress={handlePickImage} style={{ alignItems: 'center' }} accessibilityRole="button" accessibilityLabel={t("Change profile photo")}>
                             <View style={{ width: 100, height: 100, borderRadius: 50, backgroundColor: colors.surface.subtle, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.border.default, overflow: 'hidden' }}>
                                 {/* Same resolver as the card above, for the same reason. The
                                     camera glyph stays the empty state: here it is an invitation
@@ -2252,51 +2267,51 @@ export default function SettingsScreen() {
                                     <Text style={{ fontSize: 32 }}>📷</Text>
                                 )}
                             </View>
-                            <Text style={{ color: colors.text.secondary, fontSize: 12, marginTop: 8 }}>Tap to change photo</Text>
+                            <Text style={{ color: colors.text.secondary, fontSize: 12, marginTop: 8 }}>{t("Tap to change photo")}</Text>
                         </Pressable>
                     </View>
 
-                    <Text style={styles.label}>CALLSIGN</Text>
+                    <Text style={styles.label}>{t("CALLSIGN")}</Text>
                     <TextInput
                         style={styles.input}
                         value={editCallsign}
                         onChangeText={setEditCallsign}
                         maxLength={32}
-                        accessibilityLabel="Callsign"
+                        accessibilityLabel={t("Callsign")}
                     />
 
-                    <Text style={styles.label}>BIO</Text>
+                    <Text style={styles.label}>{t("BIO")}</Text>
                     <TextInput
                         style={[styles.input, { height: 80, textAlignVertical: 'top' }]}
                         value={bio}
                         onChangeText={setBio}
                         multiline
                         maxLength={200}
-                        placeholder="A short bio about yourself..."
+                        placeholder={t("A short bio about yourself...")}
                         placeholderTextColor={colors.text.secondary}
-                        accessibilityLabel="Bio"
+                        accessibilityLabel={t("Bio")}
                     />
 
-                    <Text style={styles.label}>CONTACT DETAILS</Text>
+                    <Text style={styles.label}>{t("CONTACT DETAILS")}</Text>
                     <TextInput
                         style={styles.input}
                         value={contact}
                         onChangeText={setContact}
                         // The node refuses a longer one (#1493), and a refused save would keep the background profile sync retrying.
                         maxLength={CONTACT_VALUE_LIMIT.chars}
-                        placeholder="Phone, email, or WhatsApp"
+                        placeholder={t("Phone, email, or WhatsApp")}
                         placeholderTextColor={colors.text.secondary}
-                        accessibilityLabel="Contact details"
+                        accessibilityLabel={t("Contact details")}
                     />
 
                     {contact.trim().length > 0 && (
                         <View style={styles.visibilitySection}>
-                            <Text style={styles.visibilityLabel}>Who can see this?</Text>
+                            <Text style={styles.visibilityLabel}>{t("Who can see this?")}</Text>
                             {([
-                                { value: 'hidden' as const, emoji: '🔒', label: 'Hidden', desc: 'Only you can see it' },
-                                { value: 'trade_partners' as const, emoji: '🤝', label: 'Trade Partners', desc: 'Visible when you enter a trade' },
-                                { value: 'friends' as const, emoji: '👥', label: 'Friends', desc: 'People you have added as friends' },
-                                { value: 'community' as const, emoji: '🌍', label: 'Community', desc: 'Anyone on this node' },
+                                { value: 'hidden' as const, emoji: '🔒', label: word('Hidden', 'who can see your contact details'), desc: word('Only you can see it') },
+                                { value: 'trade_partners' as const, emoji: '🤝', label: word('Trade Partners'), desc: word('Visible when you enter a trade') },
+                                { value: 'friends' as const, emoji: '👥', label: word('Friends'), desc: word('People you have added as friends') },
+                                { value: 'community' as const, emoji: '🌍', label: word('Community'), desc: word('Anyone on this node') },
                             ]).map(opt => {
                                 const isActive = contactVisibility === opt.value;
                                 return (
@@ -2309,8 +2324,8 @@ export default function SettingsScreen() {
                                     >
                                         <Text style={styles.visibilityEmoji}>{opt.emoji}</Text>
                                         <View style={{ flex: 1 }}>
-                                            <Text style={[styles.visibilityOptionLabel, isActive && styles.visibilityOptionLabelActive]}>{opt.label}</Text>
-                                            <Text style={[styles.visibilityOptionDesc, isActive && styles.visibilityOptionDescActive]}>{opt.desc}</Text>
+                                            <Text style={[styles.visibilityOptionLabel, isActive && styles.visibilityOptionLabelActive]}>{t(opt.label)}</Text>
+                                            <Text style={[styles.visibilityOptionDesc, isActive && styles.visibilityOptionDescActive]}>{t(opt.desc)}</Text>
                                         </View>
                                         {isActive && <Text style={styles.visibilityCheck}>✓</Text>}
                                     </Pressable>
@@ -2320,10 +2335,10 @@ export default function SettingsScreen() {
                     )}
 
                     <Pressable style={styles.primaryBtn} onPress={handleUpdateCallsign} disabled={loading} accessibilityRole="button">
-                        {loading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>Save Profile</Text>}
+                        {loading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>{t("Save Profile")}</Text>}
                     </Pressable>
                     <Pressable style={styles.backBtn} onPress={() => setMode('menu')} accessibilityRole="button">
-                        <Text style={styles.backBtnText}>Cancel</Text>
+                        <Text style={styles.backBtnText}>{t("Cancel")}</Text>
                     </Pressable>
                 </View>
             )}
@@ -2332,9 +2347,9 @@ export default function SettingsScreen() {
 
             {mode === 'notifications' && (
                 <View style={styles.card}>
-                    <Text style={styles.sectionTitle}>🔔 Notification Preferences</Text>
+                    <Text style={styles.sectionTitle}>{t("🔔 Notification Preferences")}</Text>
                     <Text style={styles.infoText}>
-                        Control which push notifications wake up your device. Changes are saved automatically.
+                        {t("Control which push notifications wake up your device. Changes are saved automatically.")}
                     </Text>
 
                     {notifLoading ? (
@@ -2344,10 +2359,10 @@ export default function SettingsScreen() {
                             <View style={styles.menuBtn}>
                                 <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>💬</Text></View>
                                 <View style={{ flex: 1 }}>
-                                    <Text style={styles.menuText}>Direct Messages</Text>
-                                    <Text style={styles.menuSub}>Get notified when someone messages you</Text>
+                                    <Text style={styles.menuText}>{t("Direct Messages")}</Text>
+                                    <Text style={styles.menuSub}>{t("Get notified when someone messages you")}</Text>
                                 </View>
-                                <Pressable style={[styles.toggle, notifChat && styles.toggleOn]} accessibilityRole="button" accessibilityLabel="Direct messages notifications" accessibilityState={{ checked: notifChat }} onPress={async () => {
+                                <Pressable style={[styles.toggle, notifChat && styles.toggleOn]} accessibilityRole="button" accessibilityLabel={t("Direct messages notifications")} accessibilityState={{ checked: notifChat }} onPress={async () => {
                                     const next = !notifChat; setNotifChat(next);
                                     try { if (identity?.publicKey) { await signedRequest('/api/members/preferences', { publicKey: identity.publicKey, preferences: { notify_chat: next } }); } } catch (e) { console.warn('[Prefs]', e); }
                                 }}>
@@ -2357,10 +2372,10 @@ export default function SettingsScreen() {
                             <View style={styles.menuBtn}>
                                 <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>📬</Text></View>
                                 <View style={{ flex: 1 }}>
-                                    <Text style={styles.menuText}>Marketplace Activity</Text>
-                                    <Text style={styles.menuSub}>Requests, approvals & rejections</Text>
+                                    <Text style={styles.menuText}>{t("Marketplace Activity")}</Text>
+                                    <Text style={styles.menuSub}>{t("Requests, approvals & rejections")}</Text>
                                 </View>
-                                <Pressable style={[styles.toggle, notifMarketplace && styles.toggleOn]} accessibilityRole="button" accessibilityLabel="Marketplace activity notifications" accessibilityState={{ checked: notifMarketplace }} onPress={async () => {
+                                <Pressable style={[styles.toggle, notifMarketplace && styles.toggleOn]} accessibilityRole="button" accessibilityLabel={t("Marketplace activity notifications")} accessibilityState={{ checked: notifMarketplace }} onPress={async () => {
                                     const next = !notifMarketplace; setNotifMarketplace(next);
                                     try { if (identity?.publicKey) { await signedRequest('/api/members/preferences', { publicKey: identity.publicKey, preferences: { notify_marketplace: next } }); } } catch (e) { console.warn('[Prefs]', e); }
                                 }}>
@@ -2370,10 +2385,10 @@ export default function SettingsScreen() {
                             <View style={[styles.menuBtn, styles.menuBtnLast]}>
                                 <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🔒</Text></View>
                                 <View style={{ flex: 1 }}>
-                                    <Text style={styles.menuText}>Held in Trust & System</Text>
-                                    <Text style={styles.menuSub}>Credits held in trust, released, or disputed</Text>
+                                    <Text style={styles.menuText}>{t("Held in Trust & System")}</Text>
+                                    <Text style={styles.menuSub}>{t("Credits held in trust, released, or disputed")}</Text>
                                 </View>
-                                <Pressable style={[styles.toggle, notifEscrow && styles.toggleOn]} accessibilityRole="button" accessibilityLabel="Held in trust and system notifications" accessibilityState={{ checked: notifEscrow }} onPress={async () => {
+                                <Pressable style={[styles.toggle, notifEscrow && styles.toggleOn]} accessibilityRole="button" accessibilityLabel={t("Held in trust and system notifications")} accessibilityState={{ checked: notifEscrow }} onPress={async () => {
                                     const next = !notifEscrow; setNotifEscrow(next);
                                     try { if (identity?.publicKey) { await signedRequest('/api/members/preferences', { publicKey: identity.publicKey, preferences: { notify_escrow: next } }); } } catch (e) { console.warn('[Prefs]', e); }
                                 }}>
@@ -2391,8 +2406,8 @@ export default function SettingsScreen() {
                             <View style={styles.menuBtn}>
                                 <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>⏰</Text></View>
                                 <View style={{ flex: 1 }}>
-                                    <Text style={styles.menuText}>Event reminders</Text>
-                                    <Text style={styles.menuSub}>Before an event you are going to, or interested in, starts</Text>
+                                    <Text style={styles.menuText}>{t("Event reminders")}</Text>
+                                    <Text style={styles.menuSub}>{t("Before an event you are going to, or interested in, starts")}</Text>
                                 </View>
                             </View>
                             {REMINDER_OFFSETS.map(minutes => {
@@ -2405,13 +2420,13 @@ export default function SettingsScreen() {
                                             on ? eventReminders.filter(m => m !== minutes) : [...eventReminders, minutes]
                                         ))}
                                         accessibilityRole="checkbox"
-                                        accessibilityLabel={`${reminderOffsetLabel(minutes)} before`}
+                                        accessibilityLabel={reminderBeforeWords(minutes)}
                                         accessibilityState={{ checked: on }}
                                     >
                                         <View style={[styles.reminderTick, on && styles.reminderTickOn]}>
                                             {on && <Text style={styles.reminderTickMark}>✓</Text>}
                                         </View>
-                                        <Text style={styles.reminderLabel} numberOfLines={2}>{reminderOffsetLabel(minutes)} before</Text>
+                                        <Text style={styles.reminderLabel} numberOfLines={2}>{reminderBeforeWords(minutes)}</Text>
                                     </Pressable>
                                 );
                             })}
@@ -2419,22 +2434,22 @@ export default function SettingsScreen() {
                                 style={[styles.reminderRow, styles.menuBtnLast]}
                                 onPress={() => { if (eventReminders.length > 0) saveEventReminders([]); }}
                                 accessibilityRole="checkbox"
-                                accessibilityLabel="Off"
+                                accessibilityLabel={t('Off', undefined, 'event reminders')}
                                 accessibilityState={{ checked: eventReminders.length === 0 }}
                             >
                                 <View style={[styles.reminderTick, eventReminders.length === 0 && styles.reminderTickOn]}>
                                     {eventReminders.length === 0 && <Text style={styles.reminderTickMark}>✓</Text>}
                                 </View>
-                                <Text style={styles.reminderLabel} numberOfLines={2}>Off</Text>
+                                <Text style={styles.reminderLabel} numberOfLines={2}>{t('Off', undefined, 'event reminders')}</Text>
                             </Pressable>
                             <Text style={styles.reminderNote}>
-                                Reminders arrive with your Marketplace alerts, so they stop if you switch those off. You can change the reminder on any one event.
+                                {t("Reminders arrive with your Marketplace alerts, so they stop if you switch those off. You can change the reminder on any one event.")}
                             </Text>
                         </View>
                     )}
 
                     <Pressable style={styles.backBtn} onPress={() => setMode('menu')} accessibilityRole="button">
-                        <Text style={styles.backBtnText}>← Back</Text>
+                        <Text style={styles.backBtnText}>{t("← Back")}</Text>
                     </Pressable>
                 </View>
             )}
@@ -2454,9 +2469,9 @@ export default function SettingsScreen() {
 
             {mode === 'advanced' && (
                 <View style={styles.card}>
-                    <Text style={styles.sectionTitle}>Saved Communities</Text>
+                    <Text style={styles.sectionTitle}>{t("Saved Communities")}</Text>
                     <Text style={styles.infoText}>
-                        Your physical identity automatically ports between the dormant disconnected local states tracking below.
+                        {t("Your physical identity automatically ports between the dormant disconnected local states tracking below.")}
                     </Text>
 
                     {savedNodes.map((node, i) => {
@@ -2468,37 +2483,37 @@ export default function SettingsScreen() {
                                         <Text style={{ fontSize: 16 }}>{node.status === 'pinging' ? '🟡' : node.status === 'online' ? '🟢' : '🔴'}</Text>
                                         <Text style={{ fontSize: 14, fontWeight: 'bold', color: colors.text.heading }}>{node.url}</Text>
                                     </View>
-                                    <Text style={{ fontSize: 12, color: colors.text.secondary, fontWeight: 'bold' }}>{(node.sizeBytes / 1024 / 1024).toFixed(1)} MB</Text>
+                                    <Text style={{ fontSize: 12, color: colors.text.secondary, fontWeight: 'bold' }}>{t('{size} MB', { size: formatNumber(node.sizeBytes / 1024 / 1024, 1) })}</Text>
                                 </View>
                                 <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
                                     {!isActive ? (
                                         <Pressable style={{ flex: 1, backgroundColor: colors.surface.subtle, padding: 8, borderRadius: 6, alignItems: 'center' }} onPress={() => handleSwitchNode(node.url)} disabled={advancedLoading} accessibilityRole="button">
-                                            <Text style={{ fontSize: 12, fontWeight: 'bold', color: theme === 'dark' ? colors.text.body : palette.gray700 }}>{advancedLoading ? 'Mounting...' : 'Switch to Town'}</Text>
+                                            <Text style={{ fontSize: 12, fontWeight: 'bold', color: theme === 'dark' ? colors.text.body : palette.gray700 }}>{advancedLoading ? t('Mounting...') : t('Switch to Town')}</Text>
                                         </Pressable>
                                     ) : (
                                         <View style={{ flex: 1, backgroundColor: colors.accent.tint, padding: 8, borderRadius: 6, alignItems: 'center' }}>
-                                            <Text style={{ fontSize: 12, fontWeight: 'bold', color: colors.accent.primary }}>Active Node</Text>
+                                            <Text style={{ fontSize: 12, fontWeight: 'bold', color: colors.accent.primary }}>{t("Active Node")}</Text>
                                         </View>
                                     )}
                                     {!isActive && (
-                                        <Pressable style={{ padding: 8, backgroundColor: theme === 'dark' ? colors.feedback.danger.bg : palette.red100, borderRadius: 6 }} onPress={() => handleForgetNode(node.url)} accessibilityRole="button" accessibilityHint="Removes this community and deletes its local data from this device">
-                                            <Text style={{ fontSize: 12, fontWeight: 'bold', color: colors.feedback.danger.fg }}>Forget</Text>
+                                        <Pressable style={{ padding: 8, backgroundColor: theme === 'dark' ? colors.feedback.danger.bg : palette.red100, borderRadius: 6 }} onPress={() => handleForgetNode(node.url)} accessibilityRole="button" accessibilityHint={t("Removes this community and deletes its local data from this device")}>
+                                            <Text style={{ fontSize: 12, fontWeight: 'bold', color: colors.feedback.danger.fg }}>{t("Forget")}</Text>
                                         </Pressable>
                                     )}
                                 </View>
 
                                 {isActive && (
                                     <View style={{ marginTop: 12, padding: 12, backgroundColor: colors.surface.subtle, borderRadius: 8, borderWidth: 1, borderColor: colors.border.default }}>
-                                        <Text style={{ fontSize: 13, fontWeight: 'bold', color: theme === 'dark' ? colors.text.body : palette.gray700, marginBottom: 8 }}>Authenticate Identity on this Node</Text>
+                                        <Text style={{ fontSize: 13, fontWeight: 'bold', color: theme === 'dark' ? colors.text.body : palette.gray700, marginBottom: 8 }}>{t("Authenticate Identity on this Node")}</Text>
                                         <View style={{ flexDirection: 'row', gap: 8 }}>
                                             <TextInput
                                                 style={{ flex: 1, backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.strong, borderRadius: 6, paddingHorizontal: 10, height: 36, fontSize: 13, color: theme === 'dark' ? colors.text.body : undefined }}
-                                                placeholder="Invite Code (e.g. INV-...)"
+                                                placeholder={t("Invite Code (e.g. INV-...)")}
                                                 placeholderTextColor={theme === 'dark' ? colors.text.muted : undefined}
                                                 value={redeemInviteCode}
                                                 onChangeText={setRedeemInviteCode}
                                                 autoCapitalize="characters"
-                                                accessibilityLabel="Invite code"
+                                                accessibilityLabel={t("Invite code")}
                                             />
                                             <Pressable
                                                 style={{ backgroundColor: colors.brand.fill, paddingHorizontal: 16, borderRadius: 6, justifyContent: 'center' }}
@@ -2506,12 +2521,12 @@ export default function SettingsScreen() {
                                                 disabled={redeemLoading || !redeemInviteCode.trim()}
                                                 accessibilityRole="button"
                                             >
-                                                {redeemLoading ? <ActivityIndicator size="small" color={colors.text.inverse} /> : <Text style={{ color: colors.text.inverse, fontWeight: 'bold', fontSize: 13 }}>Redeem</Text>}
+                                                {redeemLoading ? <ActivityIndicator size="small" color={colors.text.inverse} /> : <Text style={{ color: colors.text.inverse, fontWeight: 'bold', fontSize: 13 }}>{t("Redeem")}</Text>}
                                             </Pressable>
                                         </View>
                                         <View style={{ marginTop: 16, flexDirection: 'row', justifyContent: 'flex-start', paddingTop: 12, borderTopWidth: 1, borderTopColor: colors.border.default }}>
-                                            <Pressable style={{ backgroundColor: theme === 'dark' ? colors.feedback.danger.bg : palette.red50, padding: 8, borderRadius: 6, borderWidth: 1, borderColor: theme === 'dark' ? colors.feedback.danger.border : palette.red300 }} onPress={() => handleForceResync(node.url)} accessibilityRole="button" accessibilityHint="Deletes the local database for this community and redownloads everything">
-                                                <Text style={{ fontSize: 12, fontWeight: 'bold', color: colors.feedback.danger.fg }}>Clear Cache & Resync</Text>
+                                            <Pressable style={{ backgroundColor: theme === 'dark' ? colors.feedback.danger.bg : palette.red50, padding: 8, borderRadius: 6, borderWidth: 1, borderColor: theme === 'dark' ? colors.feedback.danger.border : palette.red300 }} onPress={() => handleForceResync(node.url)} accessibilityRole="button" accessibilityHint={t("Deletes the local database for this community and redownloads everything")}>
+                                                <Text style={{ fontSize: 12, fontWeight: 'bold', color: colors.feedback.danger.fg }}>{t("Clear Cache & Resync")}</Text>
                                             </Pressable>
                                         </View>
                                     </View>
@@ -2524,70 +2539,70 @@ export default function SettingsScreen() {
 
                     {offerGlobal && (
                         <>
-                            <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.text.heading, marginBottom: 8 }}>Join the global community</Text>
-                            <Text style={styles.infoText}>Meet people from everywhere and find communities near you, as the account on this phone. Sign in once: your key and your 12 words stay the same, and nothing changes in your other communities.</Text>
+                            <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.text.heading, marginBottom: 8 }}>{t("Join the global community")}</Text>
+                            <Text style={styles.infoText}>{t("Meet people from everywhere and find communities near you, as the account on this phone. Sign in once: your key and your 12 words stay the same, and nothing changes in your other communities.")}</Text>
                             <Pressable style={[styles.primaryBtn, { backgroundColor: colors.brand.fill }]} onPress={() => router.push('/join-global')} accessibilityRole="button">
-                                <Text style={styles.primaryBtnText}>🌍 Join the global community</Text>
+                                <Text style={styles.primaryBtnText}>{t("🌍 Join the global community")}</Text>
                             </Pressable>
                             <View style={{ height: 1, backgroundColor: colors.border.default, marginVertical: 24 }} />
                         </>
                     )}
 
-                    <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.text.heading, marginBottom: 8 }}>Add Manual Node</Text>
-                    <Text style={styles.infoText}>You can manually append an offline Node IP Address to your keychain bypass, directly executing a forced sync pipeline setup.</Text>
+                    <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.text.heading, marginBottom: 8 }}>{t("Add Manual Node")}</Text>
+                    <Text style={styles.infoText}>{t("You can manually append an offline Node IP Address to your keychain bypass, directly executing a forced sync pipeline setup.")}</Text>
 
-                    <Text style={styles.label}>COMMUNITY ALIAS (OPTIONAL)</Text>
+                    <Text style={styles.label}>{t("COMMUNITY ALIAS (OPTIONAL)")}</Text>
                     <TextInput
                         style={styles.input}
                         value={newNodeAlias}
                         onChangeText={setNewNodeAlias}
-                        placeholder="e.g. My Secret Base"
+                        placeholder={t("e.g. My Secret Base")}
                         placeholderTextColor={colors.text.secondary}
                         autoCapitalize="words"
                         autoCorrect={false}
-                        accessibilityLabel="Community alias (optional)"
+                        accessibilityLabel={t("Community alias (optional)")}
                     />
 
-                    <Text style={styles.label}>NEW NODE IP</Text>
+                    <Text style={styles.label}>{t("NEW NODE IP")}</Text>
                     <TextInput
                         style={styles.input}
                         value={newAnchorInput}
                         onChangeText={setNewAnchorInput}
-                        placeholder="e.g. http://192.168.1.55"
+                        placeholder={t('e.g. {address}', { address: 'http://192.168.1.55' })}
                         placeholderTextColor={colors.text.secondary}
                         autoCapitalize="none"
                         autoCorrect={false}
-                        accessibilityLabel="New node IP"
+                        accessibilityLabel={t("New node IP")}
                     />
                     
                     <Pressable style={[styles.primaryBtn, { backgroundColor: colors.brand.fill }, advancedLoading && { opacity: 0.5 }]} onPress={handleUpdateAnchor} disabled={advancedLoading} accessibilityRole="button">
-                        {advancedLoading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>Add & Connect</Text>}
+                        {advancedLoading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>{t("Add & Connect")}</Text>}
                     </Pressable>
 
                     <Pressable style={styles.backBtn} onPress={() => setMode('menu')} accessibilityRole="button">
-                        <Text style={styles.backBtnText}>← Back</Text>
+                        <Text style={styles.backBtnText}>{t("← Back")}</Text>
                     </Pressable>
                 </View>
             )}
 
             {mode === 'diagnostics' && (
                 <View style={styles.card}>
-                    <Text style={styles.sectionTitle}>📊 Database Diagnostics & Health</Text>
+                    <Text style={styles.sectionTitle}>{t("📊 Database Diagnostics & Health")}</Text>
                     <Text style={styles.infoText}>
-                        Transparency metrics for your local off-grid database cache. Structural check verifies zero data corruption natively.
+                        {t("Transparency metrics for your local off-grid database cache. Structural check verifies zero data corruption natively.")}
                     </Text>
 
                     {diagLoading ? (
                         <View style={{ marginVertical: 40, alignItems: 'center' }}>
                             <ActivityIndicator size="large" color={colors.accent.primary} />
-                            <Text style={{ marginTop: 12, color: colors.text.secondary, fontWeight: '600' }}>Running Structural Integrity Check...</Text>
+                            <Text style={{ marginTop: 12, color: colors.text.secondary, fontWeight: '600' }}>{t("Running Structural Integrity Check...")}</Text>
                         </View>
                     ) : (
                         <>
                              {/* Database Health & Sync Status Indicator */}
                              <View style={{ backgroundColor: colors.surface.subtle, padding: 14, borderRadius: 12, marginBottom: 20 }}>
                                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                                      <Text style={{ fontWeight: 'bold', color: theme === 'dark' ? colors.text.body : palette.gray700 }}>Database Status:</Text>
+                                      <Text style={{ fontWeight: 'bold', color: theme === 'dark' ? colors.text.body : palette.gray700 }}>{t("Database Status:")}</Text>
                                       {(() => {
                                           const hasIntegrityError = dbStats && dbStats.integrity !== 'ok';
                                           const isSynced = !remoteStats || (dbStats && 
@@ -2597,23 +2612,23 @@ export default function SettingsScreen() {
                                           let pillBg: string = palette.emerald100;
                                           let pillBorder: string = palette.emerald400;
                                           let textColor: string = palette.emerald800;
-                                          let displayText = '🟢 Healthy & Synced';
+                                          let displayText = t('🟢 Healthy & Synced');
 
                                           if (hasIntegrityError) {
                                               pillBg = palette.red100;
                                               pillBorder = palette.red300;
                                               textColor = palette.red700;
-                                              displayText = `🔴 Corrupted: ${dbStats?.integrity}`;
+                                              displayText = t('🔴 Corrupted: {detail}', { detail: dbStats?.integrity ?? '' });
                                           } else if (!remoteStats) {
                                               pillBg = colors.border.default;
                                               pillBorder = colors.border.strong;
                                               textColor = palette.gray600;
-                                              displayText = '⚪ Offline / Local-First';
+                                              displayText = t('⚪ Offline / Local-First');
                                           } else if (!isSynced) {
                                               pillBg = palette.orange100;
                                               pillBorder = palette.orange300;
                                               textColor = palette.orange700;
-                                              displayText = '⚠️ Out of Sync';
+                                              displayText = t('⚠️ Out of Sync');
                                           }
 
                                           return (
@@ -2628,60 +2643,65 @@ export default function SettingsScreen() {
                              </View>
 
                             {/* Stats Grid */}
-                            <Text style={styles.label}>LOCAL RECORD CACHE</Text>
+                            <Text style={styles.label}>{t("LOCAL RECORD CACHE")}</Text>
                             <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginTop: 8 }}>
                                 <View style={{ width: '48%', backgroundColor: colors.surface.app, borderWidth: 1, borderColor: colors.border.default, borderRadius: 12, padding: 14, marginBottom: 12 }}>
                                     <Text style={{ fontSize: 24, marginBottom: 2 }}>👥</Text>
-                                    <Text style={{ fontSize: 18, fontWeight: 'bold', color: colors.text.heading }} numberOfLines={1}>{dbStats?.members ?? 0}</Text>
-                                    <Text style={{ fontSize: 12, color: colors.text.muted, fontWeight: '600' }} numberOfLines={2}>Cached Members</Text>
+                                    <Text style={{ fontSize: 18, fontWeight: 'bold', color: colors.text.heading }} numberOfLines={1}>{formatNumber(dbStats?.members ?? 0)}</Text>
+                                    <Text style={{ fontSize: 12, color: colors.text.muted, fontWeight: '600' }} numberOfLines={2}>{t('Cached Members')}</Text>
                                     {remoteStats && (
                                         <Text style={{ fontSize: 10, color: dbStats?.members === remoteStats.members ? colors.brand.primary : colors.feedback.warning.fg, fontWeight: 'bold', marginTop: 4 }}>
-                                            {dbStats?.members === remoteStats.members ? '🟢 Node In Sync' : `⚠️ Node has ${remoteStats.members}`}
+                                            {dbStats?.members === remoteStats.members ? t('🟢 Node In Sync') : t('⚠️ Node has {n}', { n: remoteStats.members })}
                                         </Text>
                                     )}
                                 </View>
                                 <View style={{ width: '48%', backgroundColor: colors.surface.app, borderWidth: 1, borderColor: colors.border.default, borderRadius: 12, padding: 14, marginBottom: 12 }}>
                                     <Text style={{ fontSize: 24, marginBottom: 2 }}>🛒</Text>
-                                    <Text style={{ fontSize: 18, fontWeight: 'bold', color: colors.text.heading }} numberOfLines={1}>{dbStats?.posts ?? 0}</Text>
-                                    <Text style={{ fontSize: 12, color: colors.text.muted, fontWeight: '600' }} numberOfLines={2}>Active Posts</Text>
+                                    <Text style={{ fontSize: 18, fontWeight: 'bold', color: colors.text.heading }} numberOfLines={1}>{formatNumber(dbStats?.posts ?? 0)}</Text>
+                                    <Text style={{ fontSize: 12, color: colors.text.muted, fontWeight: '600' }} numberOfLines={2}>{t('Active Posts')}</Text>
                                     {remoteStats && (
                                         <Text style={{ fontSize: 10, color: dbStats?.posts === remoteStats.posts ? colors.brand.primary : colors.feedback.warning.fg, fontWeight: 'bold', marginTop: 4 }}>
-                                            {dbStats?.posts === remoteStats.posts ? '🟢 Node In Sync' : `⚠️ Node has ${remoteStats.posts}`}
+                                            {dbStats?.posts === remoteStats.posts ? t('🟢 Node In Sync') : t('⚠️ Node has {n}', { n: remoteStats.posts })}
                                         </Text>
                                     )}
                                 </View>
                                 <View style={{ width: '48%', backgroundColor: colors.surface.app, borderWidth: 1, borderColor: colors.border.default, borderRadius: 12, padding: 14, marginBottom: 12 }}>
                                     <Text style={{ fontSize: 24, marginBottom: 2 }}>💸</Text>
-                                    <Text style={{ fontSize: 18, fontWeight: 'bold', color: colors.text.heading }} numberOfLines={1}>{dbStats?.transactions ?? 0}</Text>
-                                    <Text style={{ fontSize: 12, color: colors.text.muted, fontWeight: '600' }} numberOfLines={2}>Your Ledger Deals</Text>
+                                    <Text style={{ fontSize: 18, fontWeight: 'bold', color: colors.text.heading }} numberOfLines={1}>{formatNumber(dbStats?.transactions ?? 0)}</Text>
+                                    <Text style={{ fontSize: 12, color: colors.text.muted, fontWeight: '600' }} numberOfLines={2}>{t('Your Ledger Deals')}</Text>
                                     {remoteStats && (
                                         <Text style={{ fontSize: 10, color: colors.brand.primary, fontWeight: 'bold', marginTop: 4 }}>
-                                            🟢 Node History ({remoteStats.transactions})
+                                            {t('🟢 Node History ({n})', { n: remoteStats.transactions })}
                                         </Text>
                                     )}
                                 </View>
                                 <View style={{ width: '48%', backgroundColor: colors.surface.app, borderWidth: 1, borderColor: colors.border.default, borderRadius: 12, padding: 14, marginBottom: 12 }}>
                                     <Text style={{ fontSize: 24, marginBottom: 2 }}>💬</Text>
-                                    <Text style={{ fontSize: 18, fontWeight: 'bold', color: colors.text.heading }}>{dbStats?.messages ?? 0}</Text>
-                                    <Text style={{ fontSize: 12, color: colors.text.muted, fontWeight: '600' }}>Messages</Text>
+                                    <Text style={{ fontSize: 18, fontWeight: 'bold', color: colors.text.heading }}>{formatNumber(dbStats?.messages ?? 0)}</Text>
+                                    <Text style={{ fontSize: 12, color: colors.text.muted, fontWeight: '600' }}>{t('Messages')}</Text>
                                     {remoteStats && (
                                         <Text style={{ fontSize: 10, color: colors.brand.primary, fontWeight: 'bold', marginTop: 4 }}>
-                                            🟢 Local First Offline
+                                            {t("🟢 Local First Offline")}
                                         </Text>
                                     )}
                                 </View>
                             </View>
 
                             {/* Storage allocation */}
-                            <Text style={styles.label}>STORAGE ALLOCATION</Text>
+                            <Text style={styles.label}>{t("STORAGE ALLOCATION")}</Text>
                             <View style={{ backgroundColor: colors.surface.app, borderWidth: 1, borderColor: colors.border.default, borderRadius: 12, padding: 14, marginTop: 8, marginBottom: 20 }}>
                                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
-                                    <Text style={{ fontSize: 13, color: colors.text.secondary, fontWeight: '600' }}>Active DB File size:</Text>
+                                    <Text style={{ fontSize: 13, color: colors.text.secondary, fontWeight: '600' }}>{t("Active DB File size:")}</Text>
                                     <Text style={{ fontSize: 13, color: colors.text.heading, fontWeight: 'bold' }}>{dbSize}</Text>
                                 </View>
                                 <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                                    <Text style={{ fontSize: 13, color: colors.text.secondary, fontWeight: '600' }}>Active Connection Node:</Text>
-                                    <Text style={{ fontSize: 11, color: colors.text.secondary, fontFamily: 'monospace' }}>{anchorUrl ? anchorUrl.slice(0, 32) : 'Detecting...'}{anchorUrl && anchorUrl.length > 32 ? '...' : ''}</Text>
+                                    <Text style={{ fontSize: 13, color: colors.text.secondary, fontWeight: '600' }}>{t("Active Connection Node:")}</Text>
+                                    {/* An address, cut at 32 characters; the two placeholders before one is known are words, shown whole. */}
+                                    <Text style={{ fontSize: 11, color: colors.text.secondary, fontFamily: 'monospace' }}>
+                                        {!anchorUrl || anchorUrl === 'Detecting...' ? t('Detecting...')
+                                            : anchorUrl === 'Local discovery (or offline)' ? t('Local discovery (or offline)')
+                                            : `${anchorUrl.slice(0, 32)}${anchorUrl.length > 32 ? '...' : ''}`}
+                                    </Text>
                                 </View>
                             </View>
 
@@ -2692,7 +2712,7 @@ export default function SettingsScreen() {
                                 accessibilityRole="button"
                             >
                                 <Text style={{ fontSize: 16 }}>🔄</Text>
-                                <Text style={[styles.primaryBtnText, { color: colors.text.onAccent }]}>Re-Run Structural Diagnostic Check</Text>
+                                <Text style={[styles.primaryBtnText, { color: colors.text.onAccent }]}>{t("Re-Run Structural Diagnostic Check")}</Text>
                             </Pressable>
 
                             {/* Re-Sync Database Button */}
@@ -2702,17 +2722,17 @@ export default function SettingsScreen() {
                                 disabled={resyncing}
                                 accessibilityRole="button"
                                 accessibilityState={{ busy: resyncing, disabled: resyncing }}
-                                accessibilityHint="Deletes the local database and redownloads everything from scratch"
+                                accessibilityHint={t("Deletes the local database and redownloads everything from scratch")}
                             >
                                 {resyncing ? (
                                     <>
                                         <ActivityIndicator size="small" color={colors.feedback.danger.fg} />
-                                        <Text style={[styles.primaryBtnText, { color: colors.feedback.danger.fg }]}>Clearing & re-syncing…</Text>
+                                        <Text style={[styles.primaryBtnText, { color: colors.feedback.danger.fg }]}>{t("Clearing & re-syncing…")}</Text>
                                     </>
                                 ) : (
                                     <>
                                         <Text style={{ fontSize: 16 }}>⚡</Text>
-                                        <Text style={[styles.primaryBtnText, { color: colors.feedback.danger.fg }]}>Force Clear & Re-Sync Database</Text>
+                                        <Text style={[styles.primaryBtnText, { color: colors.feedback.danger.fg }]}>{t("Force Clear & Re-Sync Database")}</Text>
                                     </>
                                 )}
                             </Pressable>
@@ -2720,14 +2740,14 @@ export default function SettingsScreen() {
                     )}
 
                     <Pressable style={styles.backBtn} onPress={() => setMode('menu')} accessibilityRole="button">
-                        <Text style={styles.backBtnText}>← Back</Text>
+                        <Text style={styles.backBtnText}>{t("← Back")}</Text>
                     </Pressable>
                 </View>
             )}
 
             {mode === 'seed' && (
                 <View style={styles.card}>
-                    <Text style={styles.sectionTitle}>🔑 Recovery Phrase</Text>
+                    <Text style={styles.sectionTitle}>{t("🔑 Recovery Phrase")}</Text>
                     {viewWordsOpens(identity) === 'add-words' ? (
                         <>
                             {/* No copy on this phone: the form, open, under the one plain line (its intro,
@@ -2745,7 +2765,7 @@ export default function SettingsScreen() {
                                 <NoWordsNotice
                                     kind="way-back"
                                     colors={colors}
-                                    action={{ label: NO_WORDS_CONNECT, onPress: () => setMode('protection') }}
+                                    action={{ label: settingsLineWords(NO_WORDS_CONNECT), onPress: () => setMode('protection') }}
                                 />
                             </View>
                         </>
@@ -2754,16 +2774,16 @@ export default function SettingsScreen() {
                             {wordsJustAdded && (
                                 <View style={{ backgroundColor: colors.feedback.success.bg, borderColor: colors.feedback.success.border, borderWidth: 1, borderRadius: 12, padding: 12, marginBottom: 16 }}>
                                     <Text style={{ color: colors.feedback.success.fg, fontSize: 13, lineHeight: 18, fontWeight: '600' }} accessibilityLiveRegion="polite">
-                                        ✅ {ADD_WORDS_COPY.done}
+                                        ✅ {settingsLineWords(ADD_WORDS_COPY.done)}
                                     </Text>
                                 </View>
                             )}
                             {!seedVisible ? (
                                 <>
                                     <Text style={styles.infoText}>
-                                        Your 12-word recovery phrase allows you to restore your identity on any device. Anyone with these words can control your account.
+                                        {t("Your 12-word recovery phrase allows you to restore your identity on any device. Anyone with these words can control your account.")}
                                     </Text>
-                                    <Text style={styles.label}>TYPE 'CONFIRM' TO VIEW SEED</Text>
+                                    <Text style={styles.label}>{t("TYPE '{word}' TO VIEW SEED", { word: 'CONFIRM' })}</Text>
                                     <TextInput
                                         style={[styles.input, { textAlign: 'center', fontWeight: 'bold' }]}
                                         value={seedConfirm}
@@ -2772,7 +2792,7 @@ export default function SettingsScreen() {
                                         placeholderTextColor={colors.text.secondary}
                                         autoCapitalize="characters"
                                         autoCorrect={false}
-                                        accessibilityLabel="Type CONFIRM to view recovery phrase"
+                                        accessibilityLabel={t('Type {word} to view recovery phrase', { word: 'CONFIRM' })}
                                     />
                                     <Pressable
                                         style={[styles.primaryBtn, seedConfirm !== 'CONFIRM' && { opacity: 0.5 }]}
@@ -2780,13 +2800,13 @@ export default function SettingsScreen() {
                                         disabled={seedConfirm !== 'CONFIRM'}
                                         accessibilityRole="button"
                                     >
-                                        <Text style={styles.primaryBtnText}>Show Recovery Phrase</Text>
+                                        <Text style={styles.primaryBtnText}>{t("Show Recovery Phrase")}</Text>
                                     </Pressable>
                                 </>
                             ) : (
                                 <>
                                     <Text style={[styles.infoText, { color: colors.feedback.danger.fg, fontWeight: 'bold' }]}>
-                                        Never share this phrase with anyone. Write it down on paper and keep it secure.
+                                        {t("Never share this phrase with anyone. Write it down on paper and keep it secure.")}
                                     </Text>
                                     <View style={styles.seedGrid}>
                                         {/*
@@ -2802,7 +2822,7 @@ export default function SettingsScreen() {
                                                 key={i}
                                                 style={styles.seedWord}
                                                 accessible={true}
-                                                accessibilityLabel={`Word ${i + 1}: ${word}`}
+                                                accessibilityLabel={t('Word {n}: {word}', { n: i + 1, word })}
                                             >
                                                 <Text style={styles.seedWordNum}>{i + 1}.</Text>
                                                 <Text style={styles.seedWordText}>{word}</Text>
@@ -2816,7 +2836,7 @@ export default function SettingsScreen() {
                                         accessibilityRole="button"
                                     >
                                         <Text style={styles.primaryBtnText}>
-                                            {seedCopied ? '✅ Copied!' : '📋 Copy Words'}
+                                            {seedCopied ? t('✅ Copied!') : t('📋 Copy Words')}
                                         </Text>
                                     </Pressable>
                                     <View style={{ marginTop: 12 }}>
@@ -2829,7 +2849,7 @@ export default function SettingsScreen() {
                         </>
                     )}
                     <Pressable style={[styles.backBtn, { marginTop: 24 }]} onPress={() => setMode('menu')} accessibilityRole="button">
-                        <Text style={styles.backBtnText}>← Back</Text>
+                        <Text style={styles.backBtnText}>{t("← Back")}</Text>
                     </Pressable>
                 </View>
             )}
@@ -2837,13 +2857,13 @@ export default function SettingsScreen() {
             {mode === 'wipe' && (
                 <View style={styles.card}>
                     <Text style={{ fontSize: 18, fontWeight: 'bold', color: colors.feedback.danger.fg, marginBottom: 8 }}>
-                        Account Deletion & Sign Out
+                        {t('Account Deletion & Sign Out')}
                     </Text>
 
                     {wipeType === 'options' && (
                         <View style={{ gap: 14, marginTop: 4 }}>
                             <Text style={styles.infoText}>
-                                Choose whether to sign out of this device or permanently purge your account from the community node.
+                                {t("Choose whether to sign out of this device or permanently purge your account from the community node.")}
                             </Text>
 
                             {/* Option 1: Device Sign Out */}
@@ -2851,13 +2871,13 @@ export default function SettingsScreen() {
                                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                                     <Text style={{ fontSize: 18 }}>🚪</Text>
                                     <Text style={{ fontSize: 15, fontWeight: 'bold', color: colors.text.heading }}>
-                                        Remove from This Device Only
+                                        {t("Remove from This Device Only")}
                                     </Text>
                                 </View>
                                 <Text style={{ fontSize: 13, color: colors.text.secondary, lineHeight: 18 }}>
                                     {hasMnemonic(identity)
-                                        ? 'Clears your private key and local database from this phone. Your account and listings remain active on the community node and can be restored anytime with your 12-word recovery phrase.'
-                                        : `Clears your private key and local database from this phone. Your account and listings remain active on the community node. ${noWordsBeforeWipe()}`}
+                                        ? t('Clears your private key and local database from this phone. Your account and listings remain active on the community node and can be restored anytime with your 12-word recovery phrase.')
+                                        : t('{sentence} {next}', { sentence: t('Clears your private key and local database from this phone. Your account and listings remain active on the community node.'), next: settingsLineWords(noWordsBeforeWipe()) })}
                                 </Text>
                                 <Pressable
                                     style={{
@@ -2877,10 +2897,10 @@ export default function SettingsScreen() {
                                         setWipeType('local');
                                     }}
                                     accessibilityRole="button"
-                                    accessibilityLabel="Sign out of this device only"
+                                    accessibilityLabel={t("Sign out of this device only")}
                                 >
                                     <Text style={{ color: colors.text.heading, fontSize: 13, fontWeight: 'bold' }}>
-                                        Sign Out (Device Only) →
+                                        {t("Sign Out (Device Only) →")}
                                     </Text>
                                 </Pressable>
                             </View>
@@ -2890,11 +2910,11 @@ export default function SettingsScreen() {
                                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                                     <Text style={{ fontSize: 18 }}>🗑️</Text>
                                     <Text style={{ fontSize: 15, fontWeight: 'bold', color: colors.feedback.danger.fg }}>
-                                        Permanently Delete Account & Node Data
+                                        {t("Permanently Delete Account & Node Data")}
                                     </Text>
                                 </View>
                                 <Text style={{ fontSize: 13, color: colors.feedback.danger.fg, lineHeight: 18 }}>
-                                    {DELETE_CARD_LINE} <Text style={{ fontWeight: 'bold' }}>{hasMnemonic(identity) ? 'Cannot be undone, even with your 12-word phrase.' : 'Cannot be undone.'}</Text>
+                                    {settingsLineWords(DELETE_CARD_LINE)} <Text style={{ fontWeight: 'bold' }}>{hasMnemonic(identity) ? t('Cannot be undone, even with your 12-word phrase.') : t('Cannot be undone.')}</Text>
                                 </Text>
                                 <Pressable
                                     style={{
@@ -2913,16 +2933,16 @@ export default function SettingsScreen() {
                                         askDeletePlan();
                                     }}
                                     accessibilityRole="button"
-                                    accessibilityLabel="Permanently delete account and node data"
+                                    accessibilityLabel={t("Permanently delete account and node data")}
                                 >
                                     <Text style={{ color: '#ffffff', fontSize: 13, fontWeight: 'bold' }}>
-                                        Permanently Delete Account →
+                                        {t("Permanently Delete Account →")}
                                     </Text>
                                 </Pressable>
                             </View>
 
-                            <Pressable style={styles.backBtn} onPress={() => setMode('menu')} accessibilityRole="button" accessibilityLabel="Back to Settings">
-                                <Text style={styles.backBtnText}>← Back to Settings</Text>
+                            <Pressable style={styles.backBtn} onPress={() => setMode('menu')} accessibilityRole="button" accessibilityLabel={t("Back to Settings")}>
+                                <Text style={styles.backBtnText}>{t("← Back to Settings")}</Text>
                             </Pressable>
                         </View>
                     )}
@@ -2931,33 +2951,33 @@ export default function SettingsScreen() {
                         <View style={{ gap: 12, marginTop: 4 }}>
                             <Text style={styles.infoText}>
                                 {hasMnemonic(identity)
-                                    ? 'This will remove your private key and local database from this phone. You will need your 12-word recovery phrase to restore access later.'
-                                    : 'This will remove your private key and local database from this phone.'}
+                                    ? t('This will remove your private key and local database from this phone. You will need your 12-word recovery phrase to restore access later.')
+                                    : t('This will remove your private key and local database from this phone.')}
                             </Text>
 
                             {hasMnemonic(identity) ? (
                                 <View style={{ backgroundColor: colors.feedback.warning.bg, borderWidth: 1, borderColor: colors.feedback.warning.border, borderRadius: 12, padding: 12, gap: 8 }}>
                                     <Text style={{ color: colors.feedback.warning.fg, fontSize: 13, lineHeight: 18 }}>
-                                        Have you backed up your 12 words? They are your primary way back into your account.
+                                        {t("Have you backed up your 12 words? They are your primary way back into your account.")}
                                     </Text>
                                     <Pressable
                                         style={{ backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.feedback.warning.border, padding: 10, borderRadius: 8, alignItems: 'center', minHeight: 44, justifyContent: 'center' }}
                                         onPress={() => { setSeedConfirm(''); setSeedVisible(false); setMode('seed'); }}
                                         accessibilityRole="button"
-                                        accessibilityLabel="View recovery words first"
+                                        accessibilityLabel={t("View recovery words first")}
                                     >
-                                        <Text style={{ color: colors.feedback.warning.fg, fontSize: 13, fontWeight: '700' }}>🔑 View Recovery Words First</Text>
+                                        <Text style={{ color: colors.feedback.warning.fg, fontSize: 13, fontWeight: '700' }}>{t("🔑 View Recovery Words First")}</Text>
                                     </Pressable>
                                 </View>
                             ) : (
                                 <NoWordsNotice
                                     kind="before-wipe"
                                     colors={colors}
-                                    action={{ label: NO_WORDS_CHECK_FIRST, onPress: () => setMode('protection') }}
+                                    action={{ label: settingsLineWords(NO_WORDS_CHECK_FIRST), onPress: () => setMode('protection') }}
                                 />
                             )}
 
-                            <Text style={styles.label}>TYPE 'WIPE' TO CONFIRM DEVICE SIGN OUT</Text>
+                            <Text style={styles.label}>{t("TYPE '{word}' TO CONFIRM DEVICE SIGN OUT", { word: 'WIPE' })}</Text>
                             <TextInput
                                 style={[styles.input, { textAlign: 'center', fontWeight: 'bold', color: colors.text.heading, borderColor: colors.border.default }]}
                                 value={wipeConfirm}
@@ -2966,7 +2986,7 @@ export default function SettingsScreen() {
                                 placeholderTextColor={colors.text.secondary}
                                 autoCapitalize="characters"
                                 autoCorrect={false}
-                                accessibilityLabel="Type WIPE to confirm sign out"
+                                accessibilityLabel={t('Type {word} to confirm sign out', { word: 'WIPE' })}
                             />
 
                             <Pressable 
@@ -2983,16 +3003,16 @@ export default function SettingsScreen() {
                                 onPress={handleLocalWipe} 
                                 disabled={advancedLoading || wipeConfirm !== 'WIPE'} 
                                 accessibilityRole="button"
-                                accessibilityLabel="Confirm sign out of this device"
+                                accessibilityLabel={t("Confirm sign out of this device")}
                                 accessibilityState={{ disabled: advancedLoading || wipeConfirm !== 'WIPE' }}
                             >
                                 <Text style={[styles.dangerBtnText, { color: theme === 'dark' ? '#000000' : '#ffffff' }]}>
-                                    {advancedLoading ? 'Signing Out...' : '🚪 Confirm Sign Out'}
+                                    {advancedLoading ? t('Signing Out...') : t('🚪 Confirm Sign Out')}
                                 </Text>
                             </Pressable>
 
-                            <Pressable style={styles.backBtn} onPress={() => setWipeType('options')} accessibilityRole="button" accessibilityLabel="Choose another option">
-                                <Text style={styles.backBtnText}>← Choose Another Option</Text>
+                            <Pressable style={styles.backBtn} onPress={() => setWipeType('options')} accessibilityRole="button" accessibilityLabel={t("Choose another option")}>
+                                <Text style={styles.backBtnText}>{t("← Choose Another Option")}</Text>
                             </Pressable>
                         </View>
                     )}
@@ -3011,12 +3031,12 @@ export default function SettingsScreen() {
                             <View style={{ gap: 12, marginTop: 4 }}>
                                 <View style={{ backgroundColor: colors.feedback.danger.bg, borderWidth: 1, borderColor: colors.feedback.danger.border, borderRadius: 12, padding: 12 }}>
                                     <Text style={{ color: colors.feedback.danger.fg, fontSize: 13, lineHeight: 18, fontWeight: 'bold' }}>
-                                        ⚠️ Warning: Irreversible Node Purge
+                                        {t("⚠️ Warning: Irreversible Node Purge")}
                                     </Text>
                                     <Text style={{ color: colors.feedback.danger.fg, fontSize: 13, lineHeight: 18, marginTop: 4 }}>
                                         {deletePlan
-                                            ? `This will permanently delete your profile, listings, and messages at ${deletePlan.hereName}.`
-                                            : 'This will permanently delete your profile, listings, and messages at this community.'}
+                                            ? t('This will permanently delete your profile, listings, and messages at {here}.', { here: deletePlan.hereName })
+                                            : t('This will permanently delete your profile, listings, and messages at this community.')}
                                     </Text>
                                 </View>
 
@@ -3024,53 +3044,53 @@ export default function SettingsScreen() {
                                 {!deletePlan && !deletePlanError && (
                                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }} accessibilityLiveRegion="polite">
                                         <ActivityIndicator size="small" color={colors.text.secondary} />
-                                        <Text style={[styles.infoText, { flex: 1 }]}>{DELETE_CHECKING_LINE}</Text>
+                                        <Text style={[styles.infoText, { flex: 1 }]}>{settingsLineWords(DELETE_CHECKING_LINE)}</Text>
                                     </View>
                                 )}
                                 {deletePlanError && (
                                     <View style={{ gap: 8 }}>
                                         <Text style={{ color: colors.feedback.danger.fg, fontSize: 13, lineHeight: 18 }} accessibilityLiveRegion="polite">
-                                            {deletePlanFailedLine(deletePlanError)}
+                                            {deletePlanFailedWords(deletePlanError)}
                                         </Text>
-                                        <Pressable style={styles.backBtn} onPress={askDeletePlan} accessibilityRole="button" accessibilityLabel="Check your other communities again">
-                                            <Text style={styles.backBtnText}>Try Again</Text>
+                                        <Pressable style={styles.backBtn} onPress={askDeletePlan} accessibilityRole="button" accessibilityLabel={t("Check your other communities again")}>
+                                            <Text style={styles.backBtnText}>{t("Try Again")}</Text>
                                         </Pressable>
                                     </View>
                                 )}
                                 {deletePlan?.kind === 'this-one' && (
                                     <View style={{ backgroundColor: colors.feedback.info.bg, borderWidth: 1, borderColor: colors.feedback.info.border, borderRadius: 12, padding: 12, gap: 6 }}>
                                         <Text style={{ color: colors.text.body, fontSize: 13, lineHeight: 18 }}>
-                                            🔑 {keepsKeyLine(deletePlan, words)}
+                                            🔑 {keepsKeyWords(deletePlan, words)}
                                         </Text>
-                                        <Text style={{ color: colors.text.secondary, fontSize: 13, lineHeight: 18 }}>{SIGN_OUT_INSTEAD_LINE}</Text>
+                                        <Text style={{ color: colors.text.secondary, fontSize: 13, lineHeight: 18 }}>{settingsLineWords(SIGN_OUT_INSTEAD_LINE)}</Text>
                                     </View>
                                 )}
                                 {deletePlan?.kind === 'last' && (words ? (
                                     <View style={{ backgroundColor: colors.feedback.warning.bg, borderWidth: 1, borderColor: colors.feedback.warning.border, borderRadius: 12, padding: 12, gap: 8 }}>
                                         <Text style={{ color: colors.feedback.warning.fg, fontSize: 13, lineHeight: 18 }}>
-                                            {lastCommunityLine(deletePlan, true)}
+                                            {lastCommunityWords(deletePlan, true, hasVault())}
                                         </Text>
                                         <Pressable
                                             style={{ backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.feedback.warning.border, padding: 10, borderRadius: 8, alignItems: 'center', minHeight: 44, justifyContent: 'center' }}
                                             onPress={() => { setSeedConfirm(''); setSeedVisible(false); setMode('seed'); }}
                                             accessibilityRole="button"
-                                            accessibilityLabel="View recovery words first"
+                                            accessibilityLabel={t("View recovery words first")}
                                         >
-                                            <Text style={{ color: colors.feedback.warning.fg, fontSize: 13, fontWeight: '700' }}>🔑 View Recovery Words First</Text>
+                                            <Text style={{ color: colors.feedback.warning.fg, fontSize: 13, fontWeight: '700' }}>{t("🔑 View Recovery Words First")}</Text>
                                         </Pressable>
                                     </View>
                                 ) : (
                                     <View style={{ gap: 8 }}>
-                                        <Text style={styles.infoText}>{lastCommunityLine(deletePlan, false)}</Text>
+                                        <Text style={styles.infoText}>{lastCommunityWords(deletePlan, false, hasVault())}</Text>
                                         <NoWordsNotice
                                             kind="before-wipe"
                                             colors={colors}
-                                            action={{ label: NO_WORDS_CHECK_FIRST, onPress: () => setMode('protection') }}
+                                            action={{ label: settingsLineWords(NO_WORDS_CHECK_FIRST), onPress: () => setMode('protection') }}
                                         />
                                     </View>
                                 ))}
 
-                                <Text style={styles.label}>TYPE 'DELETE' OR '{nodeCallsign || identity?.callsign || 'CALLSIGN'}' TO CONFIRM</Text>
+                                <Text style={styles.label}>{t("TYPE '{word}' OR '{name}' TO CONFIRM", { word: 'DELETE', name: nodeCallsign || identity?.callsign || 'CALLSIGN' })}</Text>
                                 <TextInput
                                     style={[styles.input, { textAlign: 'center', fontWeight: 'bold', color: colors.feedback.danger.fg, borderColor: colors.feedback.danger.border }]}
                                     value={purgeConfirm}
@@ -3079,7 +3099,7 @@ export default function SettingsScreen() {
                                     placeholderTextColor={colors.text.secondary}
                                     autoCapitalize="none"
                                     autoCorrect={false}
-                                    accessibilityLabel="Type DELETE or your callsign to confirm permanent node purge"
+                                    accessibilityLabel={t('Type {word} or your callsign to confirm permanent node purge', { word: 'DELETE' })}
                                 />
 
                                 <Pressable 
@@ -3091,19 +3111,19 @@ export default function SettingsScreen() {
                                     onPress={handleNodePurge}
                                     disabled={purgeBlocked}
                                     accessibilityRole="button"
-                                    accessibilityLabel="Permanently purge account from node"
+                                    accessibilityLabel={t("Permanently purge account from node")}
                                     accessibilityHint={deletePlan?.kind === 'this-one'
-                                        ? 'Irreversibly deletes account data at this community; this phone keeps your key for your other communities'
-                                        : 'Irreversibly deletes account data from the community node and wipes this phone'}
+                                        ? t('Irreversibly deletes account data at this community; this phone keeps your key for your other communities')
+                                        : t('Irreversibly deletes account data from the community node and wipes this phone')}
                                     accessibilityState={{ disabled: purgeBlocked }}
                                 >
                                     <Text style={styles.dangerBtnText}>
-                                        {advancedLoading ? 'Purging Account...' : '🔥 Permanently Purge Account'}
+                                        {advancedLoading ? t('Purging Account...') : t('🔥 Permanently Purge Account')}
                                     </Text>
                                 </Pressable>
 
-                                <Pressable style={styles.backBtn} onPress={() => setWipeType('options')} accessibilityRole="button" accessibilityLabel="Choose another option">
-                                    <Text style={styles.backBtnText}>← Choose Another Option</Text>
+                                <Pressable style={styles.backBtn} onPress={() => setWipeType('options')} accessibilityRole="button" accessibilityLabel={t("Choose another option")}>
+                                    <Text style={styles.backBtnText}>{t("← Choose Another Option")}</Text>
                                 </Pressable>
                             </View>
                         );
@@ -3130,11 +3150,11 @@ export default function SettingsScreen() {
                         <ActivityIndicator size="large" color={colors.brand.primary} style={{ marginBottom: 16 }} />
                         
                         <Text style={{ fontSize: 18, fontWeight: 'bold', color: colors.text.heading, textAlign: 'center', marginBottom: 8 }}>
-                            Rebuilding Database
+                            {t("Rebuilding Database")}
                         </Text>
                         
                         <Text style={{ fontSize: 13, color: colors.brand.primary, fontWeight: 'bold', textAlign: 'center', marginBottom: 16 }}>
-                            Step {resyncProgressStep} of {resyncTotalSteps} ({Math.round((resyncProgressStep / resyncTotalSteps) * 100)}%)
+                            {t('Step {step} of {total} ({percent}%)', { step: resyncProgressStep, total: resyncTotalSteps, percent: Math.round((resyncProgressStep / resyncTotalSteps) * 100) })}
                         </Text>
 
                         {/* Progress Bar Container */}
@@ -3143,11 +3163,11 @@ export default function SettingsScreen() {
                         </View>
 
                         <Text style={{ fontSize: 12, color: colors.text.muted, textAlign: 'center', lineHeight: 18 }}>
-                            {resyncProgressStage}
+                            {settingsLineWords(resyncProgressStage)}
                         </Text>
 
                         <Text style={{ fontSize: 11, color: colors.text.secondary, textAlign: 'center', marginTop: 12, fontStyle: 'italic' }}>
-                            Restoring members, posts, deals, and ratings. Please do not close the app.
+                            {t("Restoring members, posts, deals, and ratings. Please do not close the app.")}
                         </Text>
                     </View>
                 </View>
@@ -3158,8 +3178,8 @@ export default function SettingsScreen() {
                 <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }}>
                     <View style={{ backgroundColor: colors.surface.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, maxHeight: '80%', borderWidth: 1, borderColor: colors.border.default }}>
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                            <Text style={{ fontSize: 18, fontWeight: 'bold', color: colors.text.heading }}>🚫 Blocked Users</Text>
-                            <Pressable accessibilityRole="button" accessibilityLabel="Close blocked users modal" onPress={() => setShowBlockedModal(false)} style={{ padding: 4 }}>
+                            <Text style={{ fontSize: 18, fontWeight: 'bold', color: colors.text.heading }}>{t("🚫 Blocked Users")}</Text>
+                            <Pressable accessibilityRole="button" accessibilityLabel={t("Close blocked users modal")} onPress={() => setShowBlockedModal(false)} style={{ padding: 4 }}>
                                 <Text style={{ fontSize: 18, color: colors.text.muted, fontWeight: 'bold' }}>✕</Text>
                             </Pressable>
                         </View>
@@ -3168,7 +3188,7 @@ export default function SettingsScreen() {
                             <ActivityIndicator size="large" color={colors.brand.primary} style={{ marginVertical: 32 }} />
                         ) : blockedUsersList.length === 0 ? (
                             <View style={{ alignItems: 'center', paddingVertical: 32 }}>
-                                <Text style={{ fontSize: 14, color: colors.text.secondary }}>You currently have no blocked users.</Text>
+                                <Text style={{ fontSize: 14, color: colors.text.secondary }}>{t("You currently have no blocked users.")}</Text>
                             </View>
                         ) : (
                             <>
@@ -3192,7 +3212,7 @@ export default function SettingsScreen() {
                                                         setBlockedUsersList(prev => prev.filter(u => u.pubkey !== item.pubkey));
                                                     }}
                                                 >
-                                                    <Text style={{ color: colors.feedback.danger.fg, fontWeight: '700', fontSize: 12 }}>Unblock</Text>
+                                                    <Text style={{ color: colors.feedback.danger.fg, fontWeight: '700', fontSize: 12 }}>{t("Unblock")}</Text>
                                                 </Pressable>
                                             </View>
                                             {identity?.publicKey && (
@@ -3206,10 +3226,10 @@ export default function SettingsScreen() {
                                     accessibilityRole="button"
                                     style={{ backgroundColor: colors.surface.app, paddingVertical: 12, borderRadius: 12, alignItems: 'center', borderWidth: 1, borderColor: colors.feedback.danger.border, marginBottom: 8 }}
                                     onPress={async () => {
-                                        Alert.alert('Unblock All', 'Are you sure you want to unblock all users?', [
-                                            { text: 'Cancel', style: 'cancel' },
+                                        Alert.alert(t('Unblock All'), t('Are you sure you want to unblock all users?'), [
+                                            { text: t('Cancel'), style: 'cancel' },
                                             {
-                                                text: 'Unblock All',
+                                                text: t('Unblock All'),
                                                 style: 'destructive',
                                                 onPress: async () => {
                                                     await clearBlocklist();
@@ -3219,7 +3239,7 @@ export default function SettingsScreen() {
                                         ]);
                                     }}
                                 >
-                                    <Text style={{ color: colors.feedback.danger.fg, fontWeight: '700', fontSize: 14 }}>Unblock All</Text>
+                                    <Text style={{ color: colors.feedback.danger.fg, fontWeight: '700', fontSize: 14 }}>{t("Unblock All")}</Text>
                                 </Pressable>
                             </>
                         )}

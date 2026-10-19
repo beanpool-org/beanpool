@@ -10,6 +10,38 @@ import { useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { signedGet, signedRequestWithMethod } from '../utils/db';
 import { ConsentText } from './ConsentText';
 import { readKnownConsent, saveKnownConsent, shouldOfferConsent, showsConsentCard, canWithdrawConsent, consentHeading, type KnownConsent } from '../utils/known-consent';
+import { formatDate, t, word, type WordKey } from '@beanpool/core';
+
+/**
+ * utils/known-consent.ts's heading and refusals, and the card's own notes after Agree and Withdraw, by their English:
+ * shown in the member's language where the card draws them. A community's own refusal is shown as it sent it.
+ * utils/__tests__/settings-words-render.test.ts holds known-consent.ts's sentences to this table.
+ */
+export const CONSENT_LINES: Readonly<Record<string, WordKey>> = {
+    'Your community changed what its admins can see': word('Your community changed what its admins can see'),
+    "What this community's admins can see": word("What this community's admins can see"),
+    'Not saved: the community could not be reached.': word('Not saved: the community could not be reached.'),
+    'Not saved. Try again later.': word('Not saved. Try again later.'),
+    'Saved. You can take it back here at any time.': word('Saved. You can take it back here at any time.'),
+    "Withdrawn. From now on the admins don't see your balance.": word("Withdrawn. From now on the admins don't see your balance."),
+};
+
+/** One of the lines above in the member's language; anything else exactly as given. */
+export function consentLineWords(english: string): string {
+    return Object.prototype.hasOwnProperty.call(CONSENT_LINES, english) ? t(CONSENT_LINES[english]) : english;
+}
+
+/** "You agreed …": with or without the day, and whether to the earlier text; whole sentences per variant. */
+function agreedWords(on: string | null, earlier: boolean): string {
+    if (on) {
+        return earlier
+            ? t("You agreed on {date} to the earlier text. You can take it back at any time: from that moment the admins don't see your balance.", { date: on })
+            : t("You agreed on {date}. You can take it back at any time: from that moment the admins don't see your balance.", { date: on });
+    }
+    return earlier
+        ? t("You agreed to the earlier text. You can take it back at any time: from that moment the admins don't see your balance.")
+        : t("You agreed. You can take it back at any time: from that moment the admins don't see your balance.");
+}
 
 export function KnownConsentCard() {
     const styles = useStyles(makeStyles);
@@ -47,29 +79,29 @@ export function KnownConsentCard() {
     };
     const agree = () => send({ version: consent.version }, 'Saved. You can take it back here at any time.');
     const withdraw = () => send({ withdraw: true }, 'Withdrawn. From now on the admins don\'t see your balance.');
-    const agreedOn = consent.consentedAt ? new Date(consent.consentedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : null;
+    const agreedOn = consent.consentedAt && Number.isFinite(Date.parse(consent.consentedAt)) ? formatDate(new Date(consent.consentedAt), 'day-month-year') : null;
 
     return (
         <View style={styles.card} accessibilityRole="summary" testID="known-consent-card">
-            <Text style={styles.heading} accessibilityRole="header">{offer ? consentHeading(consent) : 'What you agreed the admins can see'}</Text>
+            <Text style={styles.heading} accessibilityRole="header">{offer ? consentLineWords(consentHeading(consent)) : t('What you agreed the admins can see')}</Text>
             <ConsentText text={consent.text} />
-            {agreed && <Text style={styles.body}>You agreed{agreedOn ? ` on ${agreedOn}` : ''}{offer ? ' to the earlier text' : ''}. You can take it back at any time: from that moment the admins don&apos;t see your balance.</Text>}
-            {!agreed && <Text style={styles.body}>Agreeing is up to you. If you don&apos;t, nothing else changes: the admins just never see your balance. You can take it back at any time, here in Settings.</Text>}
-            {note && <Text style={styles.body} accessibilityLiveRegion="polite">{note}</Text>}
+            {agreed && <Text style={styles.body}>{agreedWords(agreedOn, offer)}</Text>}
+            {!agreed && <Text style={styles.body}>{t("Agreeing is up to you. If you don't, nothing else changes: the admins just never see your balance. You can take it back at any time, here in Settings.")}</Text>}
+            {note && <Text style={styles.body} accessibilityLiveRegion="polite">{consentLineWords(note)}</Text>}
             <View style={styles.row}>
                 {offer && (
                     <Pressable style={[styles.button, styles.primary]} onPress={() => { void agree(); }} disabled={busy} accessibilityRole="button" accessibilityState={{ busy }}>
-                        <Text style={styles.primaryText}>{busy ? 'Saving…' : 'I agree'}</Text>
+                        <Text style={styles.primaryText}>{busy ? t('Saving…') : t('I agree')}</Text>
                     </Pressable>
                 )}
                 {agreed && (
                     <Pressable style={styles.button} onPress={() => { void withdraw(); }} disabled={busy} accessibilityRole="button" accessibilityState={{ busy }} testID="known-consent-withdraw">
-                        <Text style={styles.secondaryText}>{busy ? 'Saving…' : 'Withdraw'}</Text>
+                        <Text style={styles.secondaryText}>{busy ? t('Saving…') : t('Withdraw')}</Text>
                     </Pressable>
                 )}
                 {offer && !agreed && (
                     <Pressable style={styles.button} onPress={() => setHidden(true)} accessibilityRole="button">
-                        <Text style={styles.secondaryText}>Not now</Text>
+                        <Text style={styles.secondaryText}>{t('Not now')}</Text>
                     </Pressable>
                 )}
             </View>

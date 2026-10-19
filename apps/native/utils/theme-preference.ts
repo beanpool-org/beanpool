@@ -13,6 +13,8 @@
  * about a choice, and those users start on the default like everyone else.
  */
 
+import { word, type WordKey } from '@beanpool/core';
+
 export type ThemePreference = 'system' | 'light' | 'dark';
 export type ResolvedTheme = 'light' | 'dark';
 
@@ -21,10 +23,11 @@ export const LEGACY_THEME_KEY = 'beanpool_theme_pref';
 /** Set once the 'system' default written by #930 has been moved to light. See loadThemePreference. */
 export const DEFAULT_LIGHT_MIGRATION_KEY = 'beanpool_theme_default_light_v1';
 
-export const THEME_PREFERENCE_OPTIONS: { value: ThemePreference; label: string }[] = [
-    { value: 'system', label: 'Same as phone' },
-    { value: 'light', label: 'Light' },
-    { value: 'dark', label: 'Dark' },
+/** Each choice's name, a word() key: Settings shows it with t(), in the member's language. */
+export const THEME_PREFERENCE_OPTIONS: { value: ThemePreference; label: WordKey }[] = [
+    { value: 'system', label: word('Same as phone') },
+    { value: 'light', label: word('Light', 'appearance') },
+    { value: 'dark', label: word('Dark', 'appearance') },
 ];
 
 export function parseThemePreference(raw: string | null | undefined): ThemePreference | null {

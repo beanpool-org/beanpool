@@ -45,8 +45,8 @@ import {
 import { REKEY_TEXT } from '../rekey-redeem';
 import { claimOutcomeMessage, type ClaimOutcome } from '../node-claim';
 import { NO_OTHER_COMMUNITY_LINE, SIGN_OUT_FROM_SETTINGS_LINE, stillKeptLine, type KeptCommunity } from '../delete-here';
-import { NAMES_COPY, firstSentence } from '../names-list';
-import { DEBT_COPY } from '../names-debts';
+import { NAMES_COPY, UNREACHABLE, firstSentence } from '../names-list';
+import { DEBT_COPY, DEBT_UNREACHABLE, SETTLE_UNANSWERED } from '../names-debts';
 import { HEALTH_COPY } from '../community-health';
 import {
     agentLinesWords, claimOutcomeWords, computerLinesWords, confirmDigitsWords, confirmedByWords, digitsDoneWords, keyLineWords, knownKeyLines,
@@ -77,6 +77,13 @@ function writtenIn(file: string, english: string): boolean {
 const HOST = 'standby.riverbend.example';
 const GROUP_A = 'Riverbend Garden';
 const GROUP_B = 'Tool Library';
+
+/** The names list's refusals names-list.ts writes inline (not exported): the test below holds each to that file. */
+const NAMES_LIST_INLINE = [
+    'This phone couldn’t keep the names list’s keys. Nothing was sent. Try again.',
+    'This phone couldn’t read the names list’s keys just now. Nothing was changed. Try again.',
+    'There is no new key to make here.', 'There is no key history to follow here.',
+];
 
 /** Every sentence key-lines.ts knows whole, from the files that write it. */
 const WHOLE: string[] = [
@@ -113,9 +120,9 @@ const WHOLE: string[] = [
     NAMES_COPY.follow, NAMES_COPY.myKeyTitle, NAMES_COPY.myKey, NAMES_COPY.showMyKey, NAMES_COPY.hideMyKey, NAMES_COPY.scanButton, NAMES_COPY.stopScan,
     NAMES_COPY.cameraNeeded, NAMES_COPY.codeLabel, NAMES_COPY.compareButton, NAMES_COPY.unreadable, NAMES_COPY.noMatch, NAMES_COPY.self,
     NAMES_COPY.checkNotKept, NAMES_COPY.exportTitle, NAMES_COPY.export, NAMES_COPY.deleteConfirmed, NAMES_COPY.removedConfirmTitle,
-    NAMES_COPY.twoAdminsLabel, NAMES_COPY.twoAdminsHelp,
+    NAMES_COPY.twoAdminsLabel, NAMES_COPY.twoAdminsHelp, UNREACHABLE, ...NAMES_LIST_INLINE,
     DEBT_COPY.workOffTitle, DEBT_COPY.workOffButton, DEBT_COPY.settleTitle, DEBT_COPY.settleButton, DEBT_COPY.forgiveTitle, DEBT_COPY.forgiveButton,
-    DEBT_COPY.sameNameTitle, DEBT_COPY.sameNameAdd,
+    DEBT_COPY.sameNameTitle, DEBT_COPY.sameNameAdd, DEBT_UNREACHABLE, SETTLE_UNANSWERED,
     HEALTH_COPY.totalsHeading, HEALTH_COPY.totalsHint, HEALTH_COPY.totalsMissing, HEALTH_COPY.totalsNotOnThisNode,
 ];
 
@@ -132,6 +139,8 @@ describe('key-lines.ts: the whole sentences it knows', () => {
         expect(unknown).toEqual([]);
         // The ones read from the sources above are still written there.
         for (const line of WHOLE.filter((l) => !knownKeyLines().includes(l))) expect(keyLineWords(line), line).toBe(line);
+        // The names list's inline refusals are still written in names-list.ts.
+        for (const line of NAMES_LIST_INLINE) expect(writtenIn('utils/names-list.ts', line), line).toBe(true);
     });
 
     it('a line it doesn\'t know, a node\'s own, is shown as it came, in any language', () => {

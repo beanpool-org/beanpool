@@ -156,6 +156,12 @@ const FIXED: Readonly<Record<string, WordKey>> = {
     'Revoke this confirmation?': word('Revoke this confirmation?'),
     'Two admins confirm each member': word('Two admins confirm each member'),
     'A confirmation waits until a second admin confirms it too: not the admin who made it, and not the member. Where nobody else could (an admin confirmed in a community of two admins), one admin is enough.': word('A confirmation waits until a second admin confirms it too: not the admin who made it, and not the member. Where nobody else could (an admin confirmed in a community of two admins), one admin is enough.'),
+    // utils/names-list.ts: a signed request with no answer, the list's keys not kept or read, nothing to make or follow.
+    "Couldn't reach your community. Check your connection and try again.": word("Couldn't reach your community. Check your connection and try again."),
+    'This phone couldn’t keep the names list’s keys. Nothing was sent. Try again.': word('This phone couldn’t keep the names list’s keys. Nothing was sent. Try again.'),
+    'This phone couldn’t read the names list’s keys just now. Nothing was changed. Try again.': word('This phone couldn’t read the names list’s keys just now. Nothing was changed. Try again.'),
+    'There is no new key to make here.': word('There is no new key to make here.'),
+    'There is no key history to follow here.': word('There is no key history to follow here.'),
     // utils/names-debts.ts DEBT_COPY: the titles and buttons (the sentences with an amount in them stay as written).
     'Confirm them to work it off?': word('Confirm them to work it off?'),
     'Confirm to work it off': word('Confirm to work it off'),
@@ -165,6 +171,9 @@ const FIXED: Readonly<Record<string, WordKey>> = {
     'Start the Decision': word('Start the Decision'),
     'This name has an open debt': word('This name has an open debt'),
     'Add anyway': word('Add anyway'),
+    // utils/names-debts.ts: no answer from the server (DEBT_UNREACHABLE), and a settle whose answer was lost (SETTLE_UNANSWERED).
+    'Your community’s server didn’t answer. Nothing was changed. Try again when you have signal.': word('Your community’s server didn’t answer. Nothing was changed. Try again when you have signal.'),
+    'Your community’s server didn’t answer, so this debt may have been settled. Open the entry again to see before you settle it again.': word('Your community’s server didn’t answer, so this debt may have been settled. Open the entry again to see before you settle it again.'),
     // utils/community-health.ts HEALTH_COPY: the totals' heading and why they're missing.
     'THE WHOLE COMMUNITY': word('THE WHOLE COMMUNITY'),
     'Any member may know these. Nobody’s own balance or trades are in them.': word('Any member may know these. Nobody’s own balance or trades are in them.'),

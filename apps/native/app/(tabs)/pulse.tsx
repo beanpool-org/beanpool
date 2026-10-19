@@ -26,6 +26,7 @@ import {
     RefreshControl,
     Animated,
     ScrollView,
+    useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -69,6 +70,9 @@ export default function PulseScreen() {
     const { colors, theme } = useTheme();
     const { identity } = useIdentity();
     const styles = useStyles(makeStyles);
+    // The rule the feed card's header uses: under 360 dp of room once text is scaled, the lane names need the icons' room.
+    const { width: windowWidth, fontScale } = useWindowDimensions();
+    const compactLanes = windowWidth / fontScale < 360;
     const [lane, setLane] = useState<LaneId>('neighbours');
     const [items, setItems] = useState<PulseFeedItem[]>([]);
     const [selectedCategory, setSelectedCategory] = useState<ChannelCategory | 'all'>('all');
@@ -399,17 +403,26 @@ export default function PulseScreen() {
                                 accessibilityState={{ selected: active }}
                                 accessibilityLabel={laneSpoken(l.id, l.count)}
                             >
+                                {/* A third of the bar each: a longer name in another language shrinks to fit rather than
+                                    being cut. On a narrow, text-scaled screen the icon gives the name its room, as the
+                                    card's category pill does. */}
                                 <Text
                                     style={[styles.laneTabText, active && styles.laneTabTextActive]}
                                     numberOfLines={1}
                                     ellipsizeMode="tail"
+                                    adjustsFontSizeToFit
+                                    minimumFontScale={0.5}
                                 >
-                                    {l.icon}  {name}
+                                    {compactLanes ? name : `${l.icon}  ${name}`}
                                 </Text>
+                                {/* On the tab's corner, not beside the name: in the row it took the name's room at 320 dp
+                                    (as Talk's switch learned). */}
                                 {l.count > 0 ? (
-                                    <Text style={[styles.laneCount, active && styles.laneCountActive]}>
-                                        {formatNumber(l.count)}
-                                    </Text>
+                                    <View style={styles.laneCount} pointerEvents="none">
+                                        <Text style={[styles.laneCountText, active && styles.laneCountActive]} maxFontSizeMultiplier={1.1}>
+                                            {formatNumber(l.count)}
+                                        </Text>
+                                    </View>
                                 ) : null}
                             </Pressable>
                         );
@@ -599,8 +612,8 @@ const makeStyles = ({ colors, theme }: { colors: any; theme: string }) =>
             flexDirection: 'row',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: 6,
             paddingVertical: 9,
+            paddingHorizontal: 4,
             minHeight: 44,
             borderRadius: 9,
         },
@@ -622,10 +635,14 @@ const makeStyles = ({ colors, theme }: { colors: any; theme: string }) =>
             fontWeight: '800',
         },
         laneCount: {
-            fontSize: 11,
+            position: 'absolute',
+            top: -2,
+            right: 3,
+        },
+        laneCountText: {
+            fontSize: 10,
             fontWeight: '700',
             color: colors.text.muted,
-            overflow: 'hidden',
         },
         laneCountActive: {
             color: colors.accent.primary,

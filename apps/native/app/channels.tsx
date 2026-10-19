@@ -451,7 +451,8 @@ export default function ChannelsScreen() {
     return (
         <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
             <View style={styles.header}>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                {/* Wraps rather than running past the edge when a longer language meets 320dp and large text. */}
+                <View style={styles.headerRow}>
                     <Pressable
                         onPress={() => router.back()}
                         style={styles.backBtn}
@@ -816,6 +817,7 @@ const makeStyles = ({ colors }: { colors: any }) => StyleSheet.create({
         paddingHorizontal: 16, paddingVertical: 12,
         borderBottomWidth: 1, borderBottomColor: colors.border.default,
     },
+    headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 },
     backBtn: { paddingVertical: 4, alignSelf: 'flex-start' },
     backText: { color: colors.text.link, fontSize: 16 },
     feedLinkBtn: {

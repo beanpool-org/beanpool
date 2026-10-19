@@ -361,7 +361,8 @@ export default function PulseIntakeScreen() {
                         <Text style={styles.backText}>{t('Back')}</Text>
                     </Pressable>
 
-                    <Text style={styles.headerTitle} numberOfLines={1}>
+                    {/* Shrinks between Back and the spacer rather than pushing past the edge in a longer language. */}
+                    <Text style={styles.headerTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
                         {t('Add to Pulse')}
                     </Text>
                     <View style={styles.headerSpacer} />
@@ -634,6 +635,8 @@ export const makeStyles = ({ colors, theme }: { colors: typeof lightColors; them
             fontSize: 17,
             fontWeight: '700',
             color: colors.text.heading,
+            flexShrink: 1,
+            textAlign: 'center',
         },
         headerSpacer: {
             width: 50,

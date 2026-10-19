@@ -762,7 +762,7 @@ export default function NamesListScreen() {
                     </View>
                 ) : <Text style={styles.hint}>{say(mode.totalsMissing)}</Text>}
                 {mode.refused ? (
-                    <View style={styles.warn} accessibilityLiveRegion="polite"><Text style={styles.warnText}>{mode.refused}</Text></View>
+                    <View style={styles.warn} accessibilityLiveRegion="polite"><Text style={styles.warnText}>{say(mode.refused)}</Text></View>
                 ) : null}
                 {mode.body ? (
                     <>

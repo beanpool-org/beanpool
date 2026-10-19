@@ -142,9 +142,10 @@ vi.mock('../names-list', async (importOriginal) => {
         openEntries: () => ENTRIES,
         confirmableMembers: () => MEMBERS,
         unkeptRemovalsOf: () => [],
-        fetchHealthSummary: async () => ({ ok: false, status: 0, code: null, message: 'Could not reach the server.' }),
-        fetchHealthExceptions: async () => ({ ok: false, status: 0, code: null, message: 'Could not reach the server.' }),
-        fetchHealthLog: async () => ({ ok: false, status: 0, code: null, message: 'Could not reach the server.' }),
+        // Community health got no answer: names-list.ts call()'s own words for that.
+        fetchHealthSummary: async () => ({ ok: false, status: 0, code: null, message: real.UNREACHABLE }),
+        fetchHealthExceptions: async () => ({ ok: false, status: 0, code: null, message: real.UNREACHABLE }),
+        fetchHealthLog: async () => ({ ok: false, status: 0, code: null, message: real.UNREACHABLE }),
     };
 });
 vi.mock('../names-debts', async (importOriginal) => ({ ...(await importOriginal<typeof import('../names-debts')>()), fetchNamesDebts: async () => ({ ok: true, value: [] }) }));
@@ -174,8 +175,8 @@ import { pseudoLocalise, setLanguage, type UiLang } from '@beanpool/core';
 import { LanguageProvider } from '../../components/LanguageProvider';
 import NamesListScreen from '../../app/names-list';
 import ClaimCommunityScreen from '../../app/claim-community';
-import { NAMES_COPY } from '../names-list';
-import { HEALTH_COPY, exceptionsFailureText, healthLogSections } from '../community-health';
+import { NAMES_COPY, UNREACHABLE } from '../names-list';
+import { HEALTH_COPY, healthLogSections } from '../community-health';
 import { bypassing, unfit } from './key-words-harness';
 
 /** Callsigns, what admins typed, a community's name and address, codes: shown as written. */
@@ -277,13 +278,14 @@ describe('the names list in the pseudo-locale', () => {
         expect(bypassing(host, [...WRITTEN, LOCKED], alerts.said)).toEqual([]);
     });
 
-    it('Community health: its own words through t(); the rows community-health.ts writes stay English, named here', async () => {
+    it('Community health: its own words through t(), and no answer in them too; the rows community-health.ts writes stay English, named here', async () => {
         await renderIn('xx', NamesListScreen);
         await click(buttonWith('Community health'), 'Community health');
         expect(host.textContent).toContain(pseudoLocalise(HEALTH_COPY.totalsHeading));
-        const unreachable = { ok: false as const, status: 0, code: null, message: 'Could not reach the server.' };
+        // The exceptions got no answer: the banner says so in the member's language (exceptionsFailureText gives UNREACHABLE).
+        expect(host.textContent).toContain(pseudoLocalise(UNREACHABLE));
         const sections = healthLogSections(null, 'unreadable');
-        const english = [exceptionsFailureText(unreachable)!, ...[sections.balance, sections.trades].flatMap((s) => [s.heading, s.hint, s.empty])];
+        const english = [sections.balance, sections.trades].flatMap((s) => [s.heading, s.hint, s.empty]);
         expect(bypassing(host, [...WRITTEN, LOCKED, ...english], alerts.said)).toEqual([]);
     });
 });

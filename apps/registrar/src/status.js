@@ -11,13 +11,16 @@
 // of them and ended at the first answer. The registrar's own line is its checks running, a tick every 5 minutes
 // (WATCH_CRON): as many missed in a row are an incident, and its share is the ticks that ran of the slots since its
 // first. The numbers come from D1 (watch_days, migration 0012), counted again from watch_log at every tick, so a tick
-// that failed loses nothing: the next one catches up.
+// that failed loses nothing: the next one catches up. So do the incidents: one whose first or last tick lost its write
+// is derived from watch_log by the next (writeStatus).
 //
 // D1: a watch tick already spends most of the 50 queries Workers Free allows one invocation (38 with our five servers,
 // about 50 on a tick that raises or clears an alert), so this runs after the alerts and the daily line and spends 2 on a
-// quiet tick; 1 more when an incident begins or ends, once on its first tick, and once a day to prune. On a tick past the
-// budget what is refused is this, and status.json is one tick older. KV: one write a tick, 288 a day (Workers Free
-// allows 1,000). With no STATUS binding nothing here runs and the GET answers 404.
+// quiet tick; 1 more on a tick where an incident begins or ends (however many), on its first tick, on the tick after a
+// lost write or a slot with no tick (with KV refusing every write, every other tick), and once a day to prune. On a
+// tick past the budget what is refused is this, and status.json is one tick older. KV: one read and one write a tick,
+// 288 a day each (Workers Free allows 100,000 reads and 1,000 writes). With no STATUS binding nothing here runs and the
+// GET answers 404.
 
 export const STATUS_KEY = 'status.json';
 export const STATUS_WINDOW_DAYS = 90;
@@ -29,6 +32,7 @@ const TICK_S = 300;
 const DAY_S = 86400;
 const MARK = 'status:';
 const SINCE = 'status:since';
+const DERIVED = 'status:derived';               // since: the last tick the incidents were derived from watch_log
 const INCIDENT = 'status:incident:';
 
 const dayOf = (s) => new Date(s * 1000).toISOString().slice(0, 10);
@@ -75,6 +79,9 @@ const published = (i) => (i?.began ? { began_at: i.began, ended_at: i.ended, why
 // tick's first) and whether its down condition holds. Returns what it wrote, or null with no STATUS binding.
 export async function writeStatus(env, { targets, recent, now, missedToRaise, keepS }) {
     if (!env.STATUS || typeof env.STATUS.put !== 'function') return null;
+    // The tick the last status.json was written at: every incident up to it was written before it was. A KV read, not D1.
+    let wroteAt = null;
+    try { wroteAt = Number(JSON.parse((await env.STATUS.get(STATUS_KEY)) || 'null')?.at) || null; } catch { /* as if never written */ }
     const shown = statusServers(env, targets);
     // The registrar's ticks are counted on the servers shown and the first watched (each tick looks at every one).
     const counted = JSON.stringify([...new Set([targets[0]?.name, ...shown.map((t) => t.name)].filter(Boolean))]);
@@ -100,69 +107,71 @@ export async function writeStatus(env, { targets, recent, now, missedToRaise, ke
         .bind(dayOf(windowS), JSON.stringify([SELF, ...shown.map((t) => t.name)])).all()).results || [];
     const days = new Map();
     const marks = new Map();
-    let since = null, first = null;
+    let since = null, first = null, derived = null;
     for (const r of read) {
         if (r.kind === 'day') days.set(r.k, { looks: Number(r.a) || 0, ok: Number(r.b) || 0, first: r.c });
         else if (r.kind === 'mark' && r.k === SINCE) since = Number(r.a) || null;
+        else if (r.kind === 'mark' && r.k === DERIVED) derived = Number(r.a) || null;
         else if (r.kind === 'mark' && r.k.startsWith(INCIDENT)) marks.set(r.k.slice(INCIDENT.length), incidentFrom({ since: r.a, value: r.c }));
         else if (r.kind === 'first') first = Number(r.a) || null;
     }
-    // The registrar's line starts at its first tick counted. With that mark, once: the last incident already in
-    // watch_log of each server shown (its last run of missedToRaise failed looks or more, from the first of them to the
-    // next answer) and of the registrar (its last missedToRaise slots or more with no tick), by the rules below, so an
-    // outage the share counts is named too, never "no incident since" over it. One statement: refused, the next tick
-    // tries it again.
-    if (!since && first) {
-        since = Math.max(first, fromS);
-        const seeded = (await env.DB.prepare(`WITH looked AS (SELECT id, target, ok, SUM(ok) OVER (PARTITION BY target ORDER BY id) AS n
-                    FROM watch_log WHERE target IN (SELECT value FROM json_each(?))),
+
+    // When the incidents are written. The registrar's line starts at its first tick counted; with that mark, once,
+    // they are named from all of watch_log, so an outage the share counts is named too, never "no incident since" over
+    // it. After, whenever one may have begun or ended: the registrar's ticks missed since the one before (the newest look
+    // before this tick's, of any server), a server shown down and none open, or one open with either of its two newest
+    // looks answered. And whenever the incidents are not known written through the slot before this tick's — the last
+    // status.json (written after them) and the last time they were derived are both in an older slot: a tick's write was
+    // lost, refused past D1's budget on the very tick that raised or cleared an alert, or by KV — they are named again
+    // from watch_log from there, so what a lost write would have begun or ended is never lost. By the clock, not by
+    // watch_log: the tick before's looks, or this tick's, may be lost too (a D1 hiccup), and a tick before known only
+    // from them would take a write lost before it as written. After a slot with no tick that one query finds nothing.
+    const prev = Math.max(0, ...[...recent.values()].map((l) => (l.rows?.[0]?.ran_at === now ? l.rows[1]?.ran_at ?? 0 : 0)));
+    const through = Math.max(wroteAt ?? 0, derived ?? 0);
+    const seed = !since && !!first;
+    if (seed) since = Math.max(first, fromS);
+    const lost = !seed && !!since && slot(now) - 1 > slot(through);
+    const missed = !!prev && !!since && prev >= since && slot(now) - slot(prev) - 1 >= missedToRaise;
+    const changed = shown.some((t) => {
+        const l = recent.get(t.name), m = marks.get(t.name);
+        const open = !!m?.began && m.ended === null;
+        return !!l && ((l.down && !open) || (open && !!l.rows?.some((r) => r.ok)));
+    });
+    // One statement, the same rule for each: a server shown, its last run of missedToRaise failed looks or more after
+    // its last answer at or before `from` that is not inside its open incident (else the run that began it is never
+    // looked at, and it stays open while the server answers: review r4309810870) (the first of them to the next answer:
+    // the open incident it was already in is kept, begun as it was); the registrar, its last missedToRaise slots or more with no tick, from the tick at or
+    // before `from`. Refused, nothing is marked and the next tick derives it again.
+    if (seed || lost || missed || changed) {
+        const from = seed ? 0 : lost ? through : prev || through;
+        const rows = (await env.DB.prepare(`WITH b AS (SELECT j.value AS target, COALESCE((SELECT id FROM watch_log
+                        WHERE target = j.value AND ok = 1 AND ran_at <= ? AND NOT EXISTS (SELECT 1 FROM watch_marks m
+                            WHERE m.key = '${INCIDENT}' || j.value AND json_extract(m.value, '$.ended') IS NULL AND m.since <= watch_log.ran_at)
+                        ORDER BY ran_at DESC LIMIT 1), 0) AS lo FROM json_each(?) j),
+                looked AS (SELECT id, target, ok, SUM(ok) OVER (PARTITION BY target ORDER BY id) AS n
+                    FROM (SELECT w.id, w.target, w.ok FROM b JOIN watch_log w ON w.target = b.target AND w.id > b.lo)),
                 runs AS (SELECT target, MIN(id) AS id, COUNT(*) AS failed FROM looked WHERE ok = 0 GROUP BY target, n),
                 last AS (SELECT target, MAX(id) AS id FROM runs WHERE failed >= ? GROUP BY target),
-                ticks AS (SELECT ran_at, LAG(ran_at) OVER (ORDER BY ran_at) AS prev FROM (SELECT DISTINCT ran_at FROM watch_log))
+                found AS (SELECT l.target, w.ran_at, w.status, m.since AS was, m.value AS was_value,
+                        m.since < w.ran_at AND json_extract(m.value, '$.ended') IS NULL AND NOT EXISTS (SELECT 1 FROM watch_log x
+                            WHERE x.target = l.target AND x.ok = 1 AND x.ran_at > m.since AND x.ran_at < w.ran_at) AS kept
+                    FROM last l JOIN watch_log w ON w.id = l.id LEFT JOIN watch_marks m ON m.key = '${INCIDENT}' || l.target),
+                ticks AS (SELECT ran_at, LAG(ran_at) OVER (ORDER BY ran_at) AS prev FROM (SELECT DISTINCT ran_at FROM watch_log
+                    WHERE ran_at >= COALESCE((SELECT MAX(ran_at) FROM watch_log WHERE ran_at <= ?), 0)))
             INSERT INTO watch_marks (key, since, value)
-            SELECT ?, ?, NULL WHERE true
-            UNION ALL SELECT '${INCIDENT}' || l.target, w.ran_at, json_object('ended',
-                    (SELECT MIN(ran_at) FROM watch_log WHERE target = l.target AND ok = 1 AND id > l.id), 'status', w.status)
-                FROM last l JOIN watch_log w ON w.id = l.id WHERE true
+            SELECT '${SINCE}', ?, NULL WHERE ?
+            UNION ALL SELECT '${DERIVED}', ?, NULL WHERE true
+            UNION ALL SELECT '${INCIDENT}' || target, CASE WHEN kept THEN was ELSE ran_at END, json_object('ended',
+                    (SELECT MIN(x.ran_at) FROM watch_log x WHERE x.target = found.target AND x.ok = 1 AND x.ran_at > found.ran_at),
+                    'status', CASE WHEN kept THEN json_extract(was_value, '$.status') ELSE status END)
+                FROM found WHERE true
             UNION ALL SELECT * FROM (SELECT '${INCIDENT}${SELF_NAME}', prev + ${TICK_S}, json_object('ended', ran_at, 'status', 'checks-missed')
                 FROM ticks WHERE (ran_at + 30) / ${TICK_S} - (prev + 30) / ${TICK_S} - 1 >= ? ORDER BY ran_at DESC LIMIT 1) WHERE true
-            ON CONFLICT (key) DO UPDATE SET since = excluded.since, value = excluded.value WHERE key <> '${SINCE}'
+            ON CONFLICT (key) DO UPDATE SET since = excluded.since, value = excluded.value
+                WHERE key <> '${SINCE}' AND (key = '${DERIVED}' OR excluded.since >= watch_marks.since)
             RETURNING key, since, value`)
-            .bind(JSON.stringify(shown.map((t) => t.name)), missedToRaise, SINCE, since, missedToRaise).all()).results || [];
-        for (const r of seeded) if (r.key.startsWith(INCIDENT)) marks.set(r.key.slice(INCIDENT.length), incidentFrom(r));
-    }
-
-    // The registrar: ticks missed since the one before (the newest look before this tick's, of any server).
-    const prev = Math.max(0, ...[...recent.values()].map((l) => (l.rows?.[0]?.ran_at === now ? l.rows[1]?.ran_at ?? 0 : 0)));
-    if (prev && since && prev >= since && slot(now) - slot(prev) - 1 >= missedToRaise) {
-        const i = { began: prev + TICK_S, ended: now, status: 'checks-missed' };
-        await env.DB.prepare(`INSERT INTO watch_marks (key, since, value) VALUES (?, ?, ?)
-            ON CONFLICT (key) DO UPDATE SET since = excluded.since, value = excluded.value`)
-            .bind(`${INCIDENT}${SELF_NAME}`, i.began, JSON.stringify({ ended: i.ended, status: i.status })).run();
-        marks.set(SELF_NAME, i);
-    }
-
-    // A server shown: an incident begins when it is down (from its first failed look since it last answered) and ends
-    // at its first answer after: either of its two newest looks, so an answer on a tick whose status write was refused
-    // still ends it when the next look fails.
-    for (const t of shown) {
-        const l = recent.get(t.name);
-        if (!l) continue;
-        const open = marks.get(t.name)?.began && marks.get(t.name).ended === null;
-        let row = null;
-        if (l.down && !open) {
-            row = await env.DB.prepare(`INSERT INTO watch_marks (key, since, value)
-                SELECT ?, ran_at, json_object('ended', NULL, 'status', status) FROM watch_log
-                WHERE target = ? AND id > COALESCE((SELECT MAX(id) FROM watch_log WHERE target = ? AND ok = 1), 0) ORDER BY id LIMIT 1
-                ON CONFLICT (key) DO UPDATE SET since = excluded.since, value = excluded.value RETURNING since, value`)
-                .bind(`${INCIDENT}${t.name}`, t.name, t.name).first();
-        } else if (open && l.rows?.some((r) => r.ok)) {
-            row = await env.DB.prepare(`UPDATE watch_marks SET value = json_object('ended',
-                    COALESCE((SELECT MIN(ran_at) FROM watch_log WHERE target = ? AND ok = 1 AND ran_at > watch_marks.since), ?),
-                    'status', json_extract(value, '$.status'))
-                WHERE key = ? RETURNING since, value`).bind(t.name, now, `${INCIDENT}${t.name}`).first();
-        }
-        if (row) marks.set(t.name, incidentFrom(row));
+            .bind(from, JSON.stringify(shown.map((t) => t.name)), missedToRaise, from, since, seed ? 1 : 0, now, missedToRaise).all()).results || [];
+        for (const r of rows) if (r.key.startsWith(INCIDENT)) marks.set(r.key.slice(INCIDENT.length), incidentFrom(r));
     }
 
     const servers = shown.map((t) => {

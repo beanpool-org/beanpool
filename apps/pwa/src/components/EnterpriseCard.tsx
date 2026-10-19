@@ -3,51 +3,65 @@
  * preview (ShowcasePreviews CommonsPreview): the same card fed the sample, `sample` adding the 🏘️ Local community pill.
  */
 import { useState } from 'react';
+import { formatNumber, t, tn } from '@beanpool/core';
 import type { Treasury } from '../lib/api';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { pledgeClosedLine } from '../lib/enterprise-pledge';
 import { LocalCommunityPill } from './LocalCommunityMark';
+import { Sentence } from './Sentence';
 
 /** Energy Balance sentence (docs/the-commons.md §2.2). */
 function energySentence(energyBalance: number): string {
     const beans = Math.round(Math.abs(energyBalance) * 100) / 100;
-    if (beans === 0) return 'Square — nothing owed either way';
+    if (beans === 0) return t('Square — nothing owed either way');
     return energyBalance > 0
-        ? `We owe them ${beans} bean${beans === 1 ? '' : 's'} of work`
-        : `They owe us ${beans} bean${beans === 1 ? '' : 's'} of work`;
+        ? tn(beans, 'We owe them {n} bean of work', 'We owe them {n} beans of work')
+        : tn(beans, 'They owe us {n} bean of work', 'They owe us {n} beans of work');
 }
 
-function getDaysRemaining(deadline: string | null | undefined) {
+function getDaysRemaining(deadline: string | null | undefined): { text: string; expired: boolean } | null {
     if (!deadline) return null;
     const diff = new Date(deadline).getTime() - new Date().getTime();
     const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
-    if (days < 0) return 'Expired';
-    if (days === 0) return 'Ends today';
-    return `${days} days left`;
+    if (days < 0) return { text: t('Expired'), expired: true };
+    if (days === 0) return { text: t('Ends today'), expired: false };
+    return { text: tn(days, '{n} days left', '{n} days left'), expired: false };
 }
 
-export function EnterpriseCard({ treasury: t, onOpen, sample = false }: { treasury: Treasury; onOpen?: (publicKey: string) => void; sample?: boolean }) {
+export function EnterpriseCard({ treasury, onOpen, sample = false }: { treasury: Treasury; onOpen?: (publicKey: string) => void; sample?: boolean }) {
     // Avatar URLs that failed to load; the card shows the no-avatar placeholder instead of alt text.
     const [failedAvatars, setFailedAvatars] = useState<ReadonlySet<string>>(() => new Set());
-    const hasGoal = t.goalAmount != null && t.goalAmount > 0;
-    const currentRaised = t.currentAmount != null ? t.currentAmount : Math.max(0, t.balance);
-    const goal = t.goalAmount || 1;
+    const hasGoal = treasury.goalAmount != null && treasury.goalAmount > 0;
+    const currentRaised = treasury.currentAmount != null ? treasury.currentAmount : Math.max(0, treasury.balance);
+    const goal = treasury.goalAmount || 1;
     const progress = Math.min(100, (currentRaised / goal) * 100);
-    const isFunded = hasGoal && (currentRaised >= goal || t.status === 'funded' || t.status === 'completed');
-    const daysRemaining = getDaysRemaining(t.deadlineAt);
-    const resolvedAvatar = resolveAvatarUrl(t.avatar || t.avatarUrl);
+    const isFunded = hasGoal && (currentRaised >= goal || treasury.status === 'funded' || treasury.status === 'completed');
+    const daysRemaining = getDaysRemaining(treasury.deadlineAt);
+    const resolvedAvatar = resolveAvatarUrl(treasury.avatar || treasury.avatarUrl);
     const avatarSrc = resolvedAvatar && !failedAvatars.has(resolvedAvatar) ? resolvedAvatar : null;
+    // The line under the name: its handle and two facts, each whole in the member's language.
+    const liveOffers = treasury.liveOffers ?? 0;
+    const stateText = treasury.status === 'completed'
+        ? t('Completed · Closed')
+        : treasury.status === 'winding_up'
+            ? t('Winding up')
+            : treasury.paused
+                ? t('Paused for season')
+                : tn(liveOffers, '{n} live offer', '{n} live offers');
+    const keeperCount = treasury.keepers?.length ?? 0;
+    const keeperText = keeperCount > 0 ? tn(keeperCount, '{n} keeper', '{n} keepers') : null;
+    const meta = [treasury.callsign ? `@${treasury.callsign}` : null, stateText, keeperText].filter(Boolean).join(' · ');
 
     return (
         <div
             role="button"
             tabIndex={0}
             data-testid={sample ? 'sample-enterprise-card' : undefined}
-            onClick={() => onOpen?.(t.publicKey)}
+            onClick={() => onOpen?.(treasury.publicKey)}
             onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault();
-                    onOpen?.(t.publicKey);
+                    onOpen?.(treasury.publicKey);
                 }
             }}
             className="bg-nature-900 border border-nature-800 hover:border-emerald-500/50 focus:outline-none focus:ring-2 focus:ring-emerald-500 rounded-2xl p-5 transition-all cursor-pointer shadow-sm hover:shadow-md flex flex-col justify-between group"
@@ -61,7 +75,7 @@ export function EnterpriseCard({ treasury: t, onOpen, sample = false }: { treasu
                         {avatarSrc ? (
                             <img
                                 src={avatarSrc}
-                                alt={t.name}
+                                alt={treasury.name}
                                 onError={() => setFailedAvatars(prev => new Set(prev).add(avatarSrc))}
                                 className="w-full h-full object-cover"
                             />
@@ -74,68 +88,60 @@ export function EnterpriseCard({ treasury: t, onOpen, sample = false }: { treasu
                             {/* The sample's whole name, wrapped: at 320 px with 1.3x text one line held "Example …". A local card keeps
                                 its one cut line, as before (review opus-2063-confirm1 NB1). */}
                             <h3 className={`font-bold text-base text-white group-hover:text-emerald-400 transition-colors ${sample ? 'break-words min-w-0' : 'truncate'}`}>
-                                {t.name}
+                                {treasury.name}
                             </h3>
-                            {t.paused && t.status !== 'winding_up' && t.status !== 'completed' && (
+                            {treasury.paused && treasury.status !== 'winding_up' && treasury.status !== 'completed' && (
                                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-amber-500/20 text-amber-400 border-amber-500/40">
-                                    ⏸️ Paused
+                                    {t('⏸️ Paused')}
                                 </span>
                             )}
-                            {t.status === 'winding_up' && (
+                            {treasury.status === 'winding_up' && (
                                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-rose-500/20 text-rose-400 border-rose-500/40">
-                                    ⏳ Winding up
+                                    {t('⏳ Winding up')}
                                 </span>
                             )}
-                            {t.status === 'completed' && (
+                            {treasury.status === 'completed' && (
                                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-stone-700 text-stone-300 border-stone-600">
-                                    Closed
+                                    {t('Closed', undefined, 'an enterprise')}
                                 </span>
                             )}
                             {isFunded ? (
                                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-emerald-950/50 text-emerald-300 border-emerald-800/60">
-                                    🎉 Funded
+                                    {t('🎉 Funded')}
                                 </span>
-                            ) : hasGoal || t.lifecycle === 'bounded' ? (
+                            ) : hasGoal || treasury.lifecycle === 'bounded' ? (
                                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-amber-950/50 text-amber-300 border-amber-800/60">
-                                    🌱 Project
+                                    {t('🌱 Project')}
                                 </span>
                             ) : (
                                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-blue-950/50 text-blue-300 border-blue-800/60">
-                                    🏛️ Enterprise
+                                    {t('🏛️ Enterprise')}
                                 </span>
                             )}
                         </div>
                         <p className="text-xs text-nature-400 mt-0.5">
-                            {t.callsign ? `@${t.callsign} · ` : ''}
-                            {t.status === 'completed'
-                                ? 'Completed · Closed'
-                                : t.status === 'winding_up'
-                                    ? 'Winding up'
-                                    : t.paused
-                                        ? 'Paused for season'
-                                        : `${t.liveOffers ?? 0} live offer${(t.liveOffers ?? 0) === 1 ? '' : 's'}`}
-                            {t.keepers && t.keepers.length > 0 ? ` · ${t.keepers.length} keeper${t.keepers.length === 1 ? '' : 's'}` : ''}
+                            {meta}
                         </p>
                     </div>
                 </div>
 
-                {/* Purpose statement (docs/the-commons.md §2.1) */}
+                {/* Purpose statement (docs/the-commons.md §2.1): the keepers' own words, shown as written. */}
                 <p className="text-xs text-nature-300 line-clamp-2 leading-relaxed">
-                    {t.purpose || t.description || 'Community enterprise'}
+                    {treasury.purpose || treasury.description || t('Community enterprise')}
                 </p>
 
                 {/* Energy Balance sentence (docs/the-commons.md §2.2) */}
-                {t.balance != null && (
+                {treasury.balance != null && (
                     <p className="text-[11px] text-nature-400 italic">
-                        {energySentence(t.balance)}
+                        {energySentence(treasury.balance)}
                     </p>
                 )}
 
                 {/* Financial Ceiling indicator if surplus exists */}
-                {t.earnedSurplus != null && t.earnedSurplus > 0 && (
+                {treasury.earnedSurplus != null && treasury.earnedSurplus > 0 && (
                     <div className="flex items-center gap-1 text-[11px] text-emerald-400">
                         <span>📈</span>
-                        <span>Earned Surplus: {t.earnedSurplus} 🫘</span>
+                        <span>{t('Earned Surplus: {amount} 🫘', { amount: treasury.earnedSurplus })}</span>
                     </div>
                 )}
             </div>
@@ -145,16 +151,16 @@ export function EnterpriseCard({ treasury: t, onOpen, sample = false }: { treasu
                 <div className="flex justify-between items-center text-xs">
                     <div>
                         <div className="text-[10px] font-bold uppercase tracking-wider text-nature-400">
-                            Balance
+                            {t('Balance')}
                         </div>
-                        {t.balance < 0 && (
+                        {treasury.balance < 0 && (
                             <div className="text-[11px] font-bold text-amber-400">
-                                in deficit (keepers eat last)
+                                {t('in deficit (keepers eat last)')}
                             </div>
                         )}
                     </div>
-                    <div className={`font-black text-sm ${t.balance < 0 ? 'text-amber-400' : 'text-emerald-400'}`}>
-                        {t.balance} 🫘
+                    <div className={`font-black text-sm ${treasury.balance < 0 ? 'text-amber-400' : 'text-emerald-400'}`}>
+                        {formatNumber(treasury.balance)} 🫘
                     </div>
                 </div>
 
@@ -162,12 +168,16 @@ export function EnterpriseCard({ treasury: t, onOpen, sample = false }: { treasu
                 {hasGoal && (
                     <div className="space-y-1.5 pt-1">
                         <div className="flex justify-between items-end text-xs">
-                            <span className={`font-bold ${isFunded ? 'text-emerald-400' : 'text-white'}`}>
-                                {currentRaised} 🫘 <span className="font-normal text-nature-400">raised of {t.goalAmount} 🫘</span>
+                            {/* One sentence for the translator: the amount raised is its bold part. */}
+                            <span className="font-normal text-nature-400">
+                                <Sentence
+                                    text={t('{amount} raised of {goal} 🫘', { goal: treasury.goalAmount ?? 0 })}
+                                    parts={{ amount: <span className={`font-bold ${isFunded ? 'text-emerald-400' : 'text-white'}`}>{formatNumber(currentRaised)} 🫘</span> }}
+                                />
                             </span>
                             {daysRemaining && (
-                                <span className={`text-[11px] font-bold ${daysRemaining === 'Expired' ? 'text-red-400' : 'text-nature-400'}`}>
-                                    ⏳ {daysRemaining}
+                                <span className={`text-[11px] font-bold ${daysRemaining.expired ? 'text-red-400' : 'text-nature-400'}`}>
+                                    ⏳ {daysRemaining.text}
                                 </span>
                             )}
                         </div>
@@ -179,12 +189,12 @@ export function EnterpriseCard({ treasury: t, onOpen, sample = false }: { treasu
                         </div>
 
                         {/* Primary CTA if has goal, not funded, and the enterprise still takes pledges */}
-                        {!isFunded && !pledgeClosedLine(t.status) && (
+                        {!isFunded && !pledgeClosedLine(treasury.status) && (
                             <div
                                 aria-hidden="true"
                                 className="w-full mt-2 py-2 px-3 rounded-xl bg-bp-commit-fill text-bp-commit-on font-bold text-xs shadow-sm flex items-center justify-center gap-1.5 pointer-events-none"
                             >
-                                <span>🌱</span> Pledge Beans
+                                <span>🌱</span> {t('Pledge Beans')}
                             </div>
                         )}
                     </div>

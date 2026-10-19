@@ -38,6 +38,9 @@ export function outsideBrackets(text: string | null | undefined, others: readonl
     return /\p{L}/u.test(rest);
 }
 
+/** The elements a sentence's bold or emphasised part is drawn in. */
+const BOLD_PARTS = new Set(['STRONG', 'B', 'EM', 'I']);
+
 const READ_ATTRIBUTES = [['aria-label', 'label'], ['title', 'title'], ['placeholder', 'placeholder'], ['alt', 'alt'], ['aria-description', 'description']] as const;
 
 export interface BypassOptions {
@@ -58,7 +61,11 @@ export function bypassing(root: ParentNode = document.body, { others = [], said 
     for (let n = walker.nextNode(); n; n = walker.nextNode()) {
         const parent = n.parentElement;
         if (parent && (parent.tagName === 'SCRIPT' || parent.tagName === 'STYLE' || parent.tagName === 'TEXTAREA')) continue;
-        const whole = parent?.textContent ?? n.nodeValue;
+        // A bold part of a sentence (BoldWords, Sentence: "Use **Approximate** to round") is read with its sentence: in
+        // xx the bracket is around the whole sentence, not around the bold word inside it.
+        let reader = parent;
+        while (reader && BOLD_PARTS.has(reader.tagName) && reader.parentElement) reader = reader.parentElement;
+        const whole = reader?.textContent ?? n.nodeValue;
         if (outsideBrackets(whole, others)) out.add(`text: ${JSON.stringify(whole)}`);
     }
     const elements = root instanceof Element ? [root, ...Array.from(root.querySelectorAll('*'))] : Array.from(root.querySelectorAll('*'));

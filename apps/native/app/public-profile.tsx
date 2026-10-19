@@ -30,6 +30,7 @@ import { beansOn, membersByKey } from '../utils/node-profile';
 import { meetingTips } from '../utils/market-global';
 import { TIER_WORDS } from '../utils/trust-tier';
 import { Sentence } from '../components/Sentence';
+import { signedRequestWords } from '../components/signed-request-lines';
 
 
 
@@ -643,8 +644,8 @@ export default function PublicProfileScreen() {
             // With no name of the voucher's own, the badge says "Vouched by a sponsor" (as it always has) in its own words.
             else setTrust((cur: any) => cur ? { ...cur, elderVouch: identity?.callsign ? { callsign: identity.callsign } : { sponsor: true } } : cur);
         } catch (e: any) {
-            // The node's own words as it sent them (slice S4).
-            Alert.alert(t('Could not vouch'), e?.message || t('Please try again.'));
+            // The node's own words as it sent them (slice S4); the phone's own (utils/db.ts _signedRequest) in the member's language.
+            Alert.alert(t('Could not vouch'), e?.message ? signedRequestWords(e.message) : t('Please try again.'));
         } finally {
             setVouching(false);
         }

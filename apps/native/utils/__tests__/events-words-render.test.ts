@@ -125,6 +125,7 @@ import { reminderChoiceWords } from '../../components/EventExtras';
 import { formatReminderChoice } from '../event-extras';
 import { UNSIGNABLE_RSVP_MESSAGE } from '../events';
 import { eventLineWords } from '../../components/event-lines';
+import { signedRequestWords } from '../../components/signed-request-lines';
 import { bypassing, bracketed, unfit } from './profile-events-words-harness';
 
 /** What members wrote: the event's title, text, place and note, names, a group's name. */
@@ -346,6 +347,9 @@ describe('an event\'s page in the pseudo-locale: every word came through t() (wo
         for (const s of [...fixed, ...filled]) expect(eventLineWords(s), s).toBe(s);
         setLanguage('xx');
         for (const s of fixed) expect(eventLineWords(s), s).toBe(xx(s));
+        // _signedRequest's own table, as the profile's vouch reads it.
+        for (const s of thrown(signed)) expect(signedRequestWords(s), s).toBe(xx(s));
+        expect(signedRequestWords(filled[1])).toBe(xx('Server returned {status}').replace('{status}', '502'));
         expect(eventLineWords(filled[0])).toBe(xx('Offline or anchor node unreachable: {reason}').replace('{reason}', xx('Failed to remove post on Node')));
         expect(eventLineWords(filled[1])).toBe(xx('Server returned {status}').replace('{status}', '502'));
         // A node's own words, or the platform's, exactly as given (slice S4); inside db.ts's sentence, that sentence is worded.

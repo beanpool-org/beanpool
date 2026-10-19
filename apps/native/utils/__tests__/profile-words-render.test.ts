@@ -70,6 +70,7 @@ const data = vi.hoisted(() => ({
     friends: [] as unknown[],
     trust: null as null | Record<string, unknown>,
     vouched: [] as unknown[],
+    vouchError: null as null | Error,
 }));
 vi.mock('../db', () => ({
     getMemberProfile: vi.fn(async (k: string) => data.profiles[k] ?? null),
@@ -79,7 +80,7 @@ vi.mock('../db', () => ({
     getRatingsGiven: vi.fn(async () => data.given),
     getFriendsLocal: vi.fn(async () => data.friends),
     getTrustProfile: vi.fn(async () => data.trust),
-    vouchMember: vi.fn(async (...a: unknown[]) => { data.vouched.push(a); }),
+    vouchMember: vi.fn(async (...a: unknown[]) => { if (data.vouchError) throw data.vouchError; data.vouched.push(a); }),
     updateMemberProfile: vi.fn(async () => undefined),
 }));
 vi.mock('../blocklist', () => ({ blockUser: vi.fn(async () => undefined) }));
@@ -163,6 +164,7 @@ beforeEach(() => {
     data.friends = [{}, {}];
     data.trust = TRUST();
     data.vouched.length = 0;
+    data.vouchError = null;
 });
 afterEach(() => { act(() => root.unmount()); host.remove(); setLanguage('en'); });
 
@@ -283,6 +285,30 @@ describe('another member\'s profile in the pseudo-locale: every word came throug
         await click(nudge, 'Nudge');
         expect(nav.pushed).toEqual([{ pathname: `/chat/${KOFI}`, params: { prefill: xx('Hey {name}! Take the 60-second working style quiz on your profile so we can see how we work best together! ⚡').replace('{name}', 'Kofi') } }]);
         expect(bypassing(host, [...NODE_WORDS, ...MEMBERS], said())).toEqual([]);
+    });
+
+    it("a vouch the phone couldn't send: _signedRequest's sentences in the member's language, the node's words as given", async () => {
+        data.balance = { ...data.balance!, canVouch: true };
+        nav.params = { publicKey: KOFI, callsign: 'Kofi' };
+        const cases: Array<[string, string]> = [
+            ['You are off-grid. Please connect to a BeanPool Node to perform this action.', xx('You are off-grid. Please connect to a BeanPool Node to perform this action.')],
+            ['No identity found. You must be logged in.', xx('No identity found. You must be logged in.')],
+            ['Network request failed. You must be connected to a node.', xx('Network request failed. You must be connected to a node.')],
+            ['Server returned 502', xx('Server returned {status}').replace('{status}', '502')],
+            ['You have already vouched for this member.', 'You have already vouched for this member.'],
+        ];
+        await renderIn('xx');
+        for (const [thrown, body] of cases) {
+            data.vouchError = new Error(thrown);
+            alerts.said.length = 0;
+            await click(button('🤝 Vouch for Member'), 'Vouch');
+            alerts.said.length = 0;
+            await act(async () => { await alerts.buttons[1].onPress?.(); });
+            await settle();
+            expect(said(), thrown).toEqual([xx('Could not vouch'), body]);
+        }
+        expect(data.vouched).toEqual([]);
+        expect(bypassing(host, [...NODE_WORDS, ...MEMBERS], said().slice(0, -1))).toEqual([]);
     });
 
     it('a member with no name and no card, and an elder\'s vouch with no name: every sentence has its own words in place of the name', async () => {

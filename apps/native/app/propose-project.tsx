@@ -25,7 +25,7 @@ export default function ProposeProjectModal() {
         header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.border.default, backgroundColor: theme === 'dark' ? colors.surface.card : colors.text.heading },
         backButton: { width: 40, height: 40, justifyContent: 'center', alignItems: 'flex-start' },
         // In capitals by inCapitalsOf (the language's way), never a textTransform (the phone's).
-        headerTitle: { fontSize: 16, fontWeight: 'bold', color: colors.brand.primary, letterSpacing: 0.5 },
+        headerTitle: { flexShrink: 1, textAlign: 'center', fontSize: 16, fontWeight: 'bold', color: colors.brand.primary, letterSpacing: 0.5 },
         infoBox: { flexDirection: 'row', backgroundColor: theme === 'dark' ? colors.brand.tint : palette.emerald50, padding: 16, borderRadius: 12, marginBottom: 20, borderWidth: 1, borderColor: theme === 'dark' ? colors.brand.primary : palette.emerald200 },
         infoText: { flex: 1, fontSize: 13, color: theme === 'dark' ? colors.text.body : palette.emerald800, lineHeight: 19 },
         scroll: { padding: 20 },

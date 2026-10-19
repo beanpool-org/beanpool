@@ -167,6 +167,7 @@ export function ProposeDecisionModal({
             borderBottomColor: colors.border.default,
         },
         headerTitle: {
+            flexShrink: 1,
             fontSize: 18,
             fontWeight: '800',
             color: colors.text.heading,
@@ -209,6 +210,8 @@ export function ProposeDecisionModal({
             borderColor: colors.brand.primary,
         },
         segmentText: {
+            flexShrink: 1,
+            textAlign: 'center',
             fontSize: 13,
             fontWeight: '700',
             color: colors.text.secondary,

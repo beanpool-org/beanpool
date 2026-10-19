@@ -154,13 +154,16 @@ export function DecideSection({
             gap: 10,
             marginBottom: 16,
         },
+        // The Commons switch's shape (app/(tabs)/projects.tsx): the icon above the words and the count in the corner, so a
+        // longer language's words have the whole half at 320 dp and 1.3x text, not what an icon and a count beside them leave.
         viewTab: {
             flex: 1,
-            flexDirection: 'row',
+            minWidth: 0,
+            minHeight: 56,
             alignItems: 'center',
             justifyContent: 'center',
-            gap: 6,
-            paddingVertical: 10,
+            gap: 2,
+            paddingVertical: 8,
             paddingHorizontal: 12,
             borderRadius: 14,
             backgroundColor: colors.surface.card,
@@ -171,7 +174,10 @@ export function DecideSection({
             backgroundColor: colors.brand.tint,
             borderColor: colors.brand.primary,
         },
+        // Shrinks onto two lines in its half rather than past the edge (a longer language's "Decisions History").
         viewTabText: {
+            flexShrink: 1,
+            textAlign: 'center',
             fontSize: 13,
             fontWeight: '700',
             color: colors.text.secondary,
@@ -180,6 +186,9 @@ export function DecideSection({
             color: colors.brand.primary,
         },
         badgePill: {
+            position: 'absolute',
+            top: 4,
+            right: 6,
             paddingHorizontal: 6,
             paddingVertical: 2,
             borderRadius: 10,
@@ -493,6 +502,7 @@ export function DecideSection({
             justifyContent: 'center',
         },
         qvLabel: {
+            flexShrink: 1,
             fontSize: 12,
             color: colors.text.heading,
             fontWeight: '700',
@@ -530,8 +540,10 @@ export function DecideSection({
         statusTextFailed: { color: palette.red700, fontWeight: '800', fontSize: 11 },
         statusTextVoid: { color: palette.amber800, fontWeight: '800', fontSize: 11 },
         statusTextGrace: { color: palette.indigo700, fontWeight: '800', fontSize: 11 },
+        // Wraps: four filters in a longer language are wider than 320 dp.
         filterRow: {
             flexDirection: 'row',
+            flexWrap: 'wrap',
             gap: 6,
             marginBottom: 12,
         },
@@ -636,7 +648,7 @@ export function DecideSection({
                         size={16}
                         color={activeView === 'open' ? colors.brand.primary : colors.text.secondary}
                     />
-                    <Text style={[styles.viewTabText, activeView === 'open' && styles.viewTabTextActive]}>
+                    <Text style={[styles.viewTabText, activeView === 'open' && styles.viewTabTextActive]} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.7}>
                         {t('Open Decisions')}
                     </Text>
                     {openDecisions.length > 0 && (
@@ -658,7 +670,7 @@ export function DecideSection({
                         size={16}
                         color={activeView === 'history' ? colors.brand.primary : colors.text.secondary}
                     />
-                    <Text style={[styles.viewTabText, activeView === 'history' && styles.viewTabTextActive]}>
+                    <Text style={[styles.viewTabText, activeView === 'history' && styles.viewTabTextActive]} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.7}>
                         {t('Decisions History')}
                     </Text>
                 </Pressable>

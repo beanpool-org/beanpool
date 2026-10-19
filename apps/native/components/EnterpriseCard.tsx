@@ -58,7 +58,8 @@ export const commonsCardStyles = ({ theme, colors }: Pick<ThemeContextType, 'the
     deficitWarning: { fontSize: 10, color: colors.feedback.warning.fg, fontWeight: '700', marginTop: 1 },
 
     progressSection: { marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: colors.border.default },
-    progressHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 6 },
+    // Wraps: a longer language's "raised" and "Goal" don't fit side by side at 320 dp.
+    progressHeader: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'flex-end', columnGap: 8, marginBottom: 6 },
     currentText: { fontSize: 13, fontWeight: 'bold', color: colors.text.body },
     currentTextFunded: { color: colors.brand.primary },
     goalText: { fontSize: 12, color: colors.text.secondary, fontWeight: '500' },
@@ -164,7 +165,7 @@ export function EnterpriseCard({ item, sample = false }: { item: TreasurySummary
 
                 {/* Financial summary row */}
                 <View style={styles.financeRow}>
-                    <View>
+                    <View style={{ flexShrink: 1 }}>
                         <Text style={styles.financeLabel}>{inCapitalsOf(t('Enterprise Balance'))}</Text>
                         {item.balance < 0 && (
                             <Text style={styles.deficitWarning}>{t('in deficit (keepers eat last)')}</Text>

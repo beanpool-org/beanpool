@@ -410,8 +410,9 @@ export default function ProjectsScreen() {
                         </Text>
                     )}
 
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 8, borderTopWidth: 1, borderTopColor: colors.border.default }}>
-                        <Text style={{ fontSize: 11, color: colors.text.muted, flex: 1, marginRight: 8 }} numberOfLines={1}>
+                    {/* Wraps: in a longer language "View Details" goes under the join policy rather than cutting it. */}
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', columnGap: 8, rowGap: 4, paddingTop: 8, borderTopWidth: 1, borderTopColor: colors.border.default }}>
+                        <Text style={{ fontSize: 11, color: colors.text.muted, flexShrink: 1 }} numberOfLines={2}>
                             {t('Join policy: {policy}', { policy: named(JOIN_POLICY_WORDS, item.joinPolicy, item.joinPolicy.replace(/_/g, ' ')) })}
                         </Text>
                         <Text style={{ fontSize: 12, fontWeight: '700', color: colors.brand.primary, flexShrink: 0 }} numberOfLines={1}>{t('View Details →')}</Text>
@@ -469,7 +470,7 @@ export default function ProjectsScreen() {
                         {showsBeans && (
                         <View style={styles.statCardRow}>
                             <View style={styles.statCard}>
-                                <Text style={styles.statCardLabel} numberOfLines={2}>{inCapitalsOf(t('Commons Pool'))}</Text>
+                                <Text style={styles.statCardLabel} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.75}>{inCapitalsOf(t('Commons Pool'))}</Text>
                                 <View style={styles.statCardValueRow}>
                                     <CurrencyDisplay amount={formatNumber(balanceState.commons || 0, 2)} style={styles.statCardAmount} />
                                 </View>
@@ -478,7 +479,7 @@ export default function ProjectsScreen() {
                             <View style={styles.statCard} testID="voice-credits-card">
                                 {/* Half-width card: at 320dp and 1.3x text the label has ~110dp, room for two short words.
                                     What the credits are for goes in the hint, which wraps freely. */}
-                                <Text style={styles.statCardLabel} numberOfLines={2}>{inCapitalsOf(t('Voice credits'))}</Text>
+                                <Text style={styles.statCardLabel} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.75}>{inCapitalsOf(t('Voice credits'))}</Text>
                                 <Text style={styles.statCardAmount} numberOfLines={1}>{formatNumber(Math.floor(myPoolVoting?.voiceCredits ?? 0))}</Text>
                                 <Text style={styles.statCardHint}>
                                     {myPoolVoting && !myPoolVoting.hasCompletedTrade

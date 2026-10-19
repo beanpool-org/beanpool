@@ -172,9 +172,9 @@ export function NewPollModal({ visible, onClose, onSuccess }: NewPollModalProps)
                             accessibilityRole="button"
                             accessibilityLabel={t('Cancel')}
                         >
-                            <Text style={styles.cancelText} numberOfLines={1}>{t('Cancel')}</Text>
+                            <Text style={styles.cancelText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Cancel')}</Text>
                         </Pressable>
-                        <Text style={styles.headerTitle} numberOfLines={1}>{t('New Community Poll')}</Text>
+                        <Text style={styles.headerTitle} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.6}>{t('New Community Poll')}</Text>
                         <Pressable
                             onPress={handleCreatePoll}
                             disabled={submitting}
@@ -188,7 +188,7 @@ export function NewPollModal({ visible, onClose, onSuccess }: NewPollModalProps)
                             {submitting ? (
                                 <ActivityIndicator size="small" color="#fff" />
                             ) : (
-                                <Text style={styles.postText} numberOfLines={1}>{t('Create')}</Text>
+                                <Text style={styles.postText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Create')}</Text>
                             )}
                         </Pressable>
                     </View>
@@ -348,7 +348,8 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
             borderBottomWidth: 1,
             borderBottomColor: theme === 'dark' ? '#374151' : '#e5e7eb',
         },
-        // At 320 wide and 1.3x text the title pushed Create off the right edge; it now shrinks instead.
+        // At 320 wide and 1.3x text the title pushed Create off the right edge; it now shrinks instead, onto two lines in a
+        // longer language, and Cancel and Create shrink too.
         headerTitle: {
             flex: 1,
             textAlign: 'center',
@@ -433,8 +434,10 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
             minHeight: 70,
             textAlignVertical: 'top',
         },
+        // Wraps: the label and "+ Add Option" in a longer language are wider than 320 dp.
         optionsHeaderRow: {
             flexDirection: 'row',
+            flexWrap: 'wrap',
             justifyContent: 'space-between',
             alignItems: 'center',
             marginBottom: 6,

@@ -138,6 +138,8 @@ describe('words', () => {
         expect(parseBeans('12,5')).toBe(12.5);
         expect(parseBeans('1.001')).toBeNull();
         expect(parseBeans('0')).toBeNull();
+        // Could be a thousand or one (#2202): refused, never read as either.
+        expect(parseBeans('1,000')).toBeNull();
         expect(debtCodeOk('f'.repeat(32))).toBe(true);
         expect(debtCodeOk('g'.repeat(32))).toBe(false);
     });

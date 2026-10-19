@@ -3,6 +3,7 @@ import {
     beansAmount, beansHeld, wageNoteWords, payOutSplit, payOutFeeWords, checkPayOutAmount, scopedEffectsFor, scopedEffectLabel, rollChoices,
     scopedEffectWords, scopedTallyWords, scopedOutcomeWords, scopedClosesWords, type RollPerson,
 } from '../scoped-decision';
+import { setLanguage } from '../words';
 
 const roll: RollPerson[] = [
     { pubkey: 'ann', name: 'Ann', role: 'lead' }, { pubkey: 'bob', name: 'Bob', role: 'keeper' }, { pubkey: 'cat', name: 'Cat', role: 'keeper' },
@@ -41,6 +42,19 @@ describe("an enterprise's keepers' vote, as the apps show it", () => {
         expect(checkPayOutAmount('1.005', 120)).toHaveProperty('error');
         expect(checkPayOutAmount('abc', 120)).toHaveProperty('error');
         expect(checkPayOutAmount('5', -10)).toHaveProperty('error');
+        // Could be a thousand or one (#2202): refused, in words that say why.
+        expect(checkPayOutAmount('1,000', 2000)).toEqual({ error: 'Type the amount without thousands separators, like 1000.5.' });
+    });
+
+    it("the amount in the member's language (#2202): fr \"12,5\" is 12.5", () => {
+        setLanguage('fr');
+        try {
+            expect(checkPayOutAmount('12,5', 120)).toEqual({ amount: 12.5 });
+            expect(checkPayOutAmount('12.5', 120)).toEqual({ amount: 12.5 });
+            expect(checkPayOutAmount('1.000', 2000)).toHaveProperty('error');
+        } finally {
+            setLanguage('en');
+        }
     });
 
     it('what it holds, rounded down to cents, as the node counts what it can pay (review opus-1767 N8)', () => {

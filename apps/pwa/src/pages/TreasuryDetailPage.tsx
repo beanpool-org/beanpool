@@ -25,7 +25,7 @@ import { resolveAvatarUrl } from '../lib/avatar';
 import { ACCOUNT_DELETED_TEXT, blankedWithAccount } from '../lib/chat-tombstone';
 import { MARKETPLACE_CATEGORIES } from '../lib/marketplace';
 import { pledgeClosedLine } from '../lib/enterprise-pledge';
-import { groupKindLine, isSampleId, isWholeCents, keeperWords, t } from '@beanpool/core';
+import { formatNumber, groupKindLine, isSampleId, isWholeCents, keeperWords, t, amountRefusalWords, ANY_DECIMALS, isAmbiguousAmount, parseAmount } from '@beanpool/core';
 import { ReportModal } from '../components/ReportModal';
 import { EnterpriseDecisions } from '../components/EnterpriseDecisions';
 import { EnterpriseLocationPicker } from '../components/EnterpriseLocationPicker';
@@ -330,7 +330,14 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
     const handlePledge = async (e: React.FormEvent) => {
         e.preventDefault();
         if (pledging) return;
-        const amt = Number(pledgeAmount);
+        // The language's decimal mark (core parseAmount): fr "12,5" is 12.5; "1.000", which could be a thousand, is refused
+        // in words that say so. The cents guard below decides the decimals, as before.
+        const read = parseAmount(pledgeAmount, undefined, ANY_DECIMALS);
+        if (!read.ok && isAmbiguousAmount(read.refusal)) {
+            setActionFeedback({ type: 'error', message: amountRefusalWords(read.refusal) });
+            return;
+        }
+        const amt = read.ok ? read.value : NaN;
         if (isNaN(amt) || amt <= 0) {
             setActionFeedback({ type: 'error', message: 'Please enter a positive amount of Beans to pledge.' });
             return;
@@ -601,7 +608,13 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
 
     const handleSweep = async (e: React.FormEvent) => {
         e.preventDefault();
-        const amt = Number(sweepAmount);
+        // The language's decimal mark (core parseAmount), as the pledge reads it; the node's cents rule decides the decimals.
+        const read = parseAmount(sweepAmount, undefined, ANY_DECIMALS);
+        if (!read.ok && isAmbiguousAmount(read.refusal)) {
+            setActionFeedback({ type: 'error', message: amountRefusalWords(read.refusal) });
+            return;
+        }
+        const amt = read.ok ? read.value : NaN;
         const bal = detail?.balance ?? 0;
         if (isNaN(amt) || amt <= 0) {
             setActionFeedback({ type: 'error', message: 'Please enter a positive amount of Beans to sweep.' });
@@ -659,9 +672,15 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
     const handleCompleteDeal = async (txId: string, postTitle?: string, credits?: number, priceType?: string, initialHours?: number) => {
         let finalHours: number | undefined;
         if (priceType && priceType !== 'fixed') {
-            const input = window.prompt(`Enter hours worked for "${postTitle || 'deal'}":`, initialHours ? String(initialHours) : '1');
+            // The hours as typed, in the language's decimal mark (core parseAmount): fr "2,5" is 2.5, any decimals, as before.
+            const input = window.prompt(`Enter hours worked for "${postTitle || 'deal'}":`, initialHours ? formatNumber(initialHours) : '1');
             if (input === null) return;
-            const parsed = Number(input);
+            const read = parseAmount(input, undefined, ANY_DECIMALS);
+            if (!read.ok && isAmbiguousAmount(read.refusal)) {
+                alert(amountRefusalWords(read.refusal));
+                return;
+            }
+            const parsed = read.ok ? read.value : NaN;
             if (isNaN(parsed) || parsed <= 0) {
                 alert('Please enter a valid positive number of hours.');
                 return;
@@ -705,9 +724,15 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
 
     const handleCreatePost = async (e: React.FormEvent) => {
         e.preventDefault();
-        const creditsNum = Number(postCredits);
+        // The price in the language's decimal mark (core parseAmount): fr "12,5" is 12.5, any decimals, as before.
+        const creditsRead = parseAmount(postCredits, undefined, ANY_DECIMALS);
+        const creditsNum = creditsRead.ok ? creditsRead.value : NaN;
         if (!postTitle.trim()) {
             setPostError('Title is required');
+            return;
+        }
+        if (!creditsRead.ok && isAmbiguousAmount(creditsRead.refusal)) {
+            setPostError(amountRefusalWords(creditsRead.refusal));
             return;
         }
         if (isNaN(creditsNum) || creditsNum <= 0) {
@@ -1073,10 +1098,10 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                     Back this initiative
                                                 </div>
                                                 <div className="flex gap-2">
+                                                    {/* Text, not type="number": a number box reads "12,5" by the browser's language, not the member's (#2202). */}
                                                     <input
-                                                        type="number"
-                                                        min="1"
-                                                        step="1"
+                                                        type="text"
+                                                        inputMode="decimal"
                                                         placeholder="Amount (🫘)"
                                                         value={pledgeAmount}
                                                         onChange={(e) => setPledgeAmount(e.target.value)}
@@ -1269,10 +1294,10 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                     </div>
                                 ) : (
                                     <form onSubmit={handleSweep} className="flex gap-2 items-center pt-2">
+                                        {/* Text, not type="number": a number box reads "12,5" by the browser's language, not the member's (#2202). */}
                                         <input
-                                            type="number"
-                                            min="1"
-                                            step="1"
+                                            type="text"
+                                            inputMode="decimal"
                                             placeholder="Sweep surplus…"
                                             value={sweepAmount}
                                             onChange={(e) => setSweepAmount(e.target.value)}
@@ -2490,10 +2515,10 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                 <label className="block text-xs font-bold text-nature-600 dark:text-nature-400 uppercase tracking-wider mb-1">
                                     Credits (🫘 Beans)
                                 </label>
+                                {/* Text, not type="number": a number box reads "12,5" by the browser's language, not the member's (#2202). */}
                                 <input
-                                    type="number"
-                                    min="1"
-                                    step="1"
+                                    type="text"
+                                    inputMode="decimal"
                                     required
                                     placeholder="20"
                                     value={postCredits}

@@ -15,7 +15,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CurrencyDisplay } from '../components/CurrencyDisplay';
 import { palette } from '../constants/colors';
 import { useTheme, useStyles } from './ThemeContext';
-import { formatDate, inCapitalsOf, t } from '@beanpool/core';
+import { amountRefusalWords, ANY_DECIMALS, formatDate, formatNumber, inCapitalsOf, isAmbiguousAmount, parseAmount, t } from '@beanpool/core';
 import { Sentence } from '../components/Sentence';
 
 export default function ProposeProjectModal() {
@@ -80,12 +80,17 @@ export default function ProposeProjectModal() {
         const errors = new Set<string>();
         if (!title.trim() || title.trim().length < 2) errors.add('title');
         if (!description.trim()) errors.add('description');
+        // The goal in the language's decimal mark (core parseAmount): fr "12,5" is read, not refused; "1.000", which could be
+        // a thousand, is refused in words that say so. Whole Beans are sent, as parseInt sent them.
+        const goal = parseAmount(goalAmount, undefined, ANY_DECIMALS);
+        const goalValue = goal.ok ? goal.value : NaN;
         if (lifecycle === 'bounded') {
-            if (!goalAmount.trim() || isNaN(Number(goalAmount)) || Number(goalAmount) <= 0) errors.add('goalAmount');
+            if (!goalAmount.trim() || isNaN(goalValue) || goalValue <= 0) errors.add('goalAmount');
         }
         setValidationErrors(errors);
         if (errors.size > 0) {
-            setValidationToast(t('⚠️ Please complete all required fields'));
+            const goalWhy = lifecycle === 'bounded' && !goal.ok && isAmbiguousAmount(goal.refusal) ? amountRefusalWords(goal.refusal) : null;
+            setValidationToast(goalWhy ?? t('⚠️ Please complete all required fields'));
             setTimeout(() => setValidationToast(''), 3000);
             return;
         }
@@ -103,7 +108,7 @@ export default function ProposeProjectModal() {
                 purpose: description.trim(),
                 description: description.trim(),
                 lifecycle,
-                goalAmount: lifecycle === 'bounded' ? (parseInt(goalAmount, 10) || 0) : null,
+                goalAmount: lifecycle === 'bounded' ? (Math.trunc(goalValue) || 0) : null,
                 deadlineAt: parsedDeadline,
                 photos,
                 avatar: photos.length > 0 ? photos[0] : undefined,
@@ -220,7 +225,7 @@ export default function ProposeProjectModal() {
                                 <TextInput
                                     accessibilityLabel={t('Funding goal amount')}
                                     style={[styles.input, styles.priceInput, fieldBorder('goalAmount')]}
-                                    placeholder="0"
+                                    placeholder={formatNumber(0)}
                                     placeholderTextColor={colors.text.muted}
                                     keyboardType="numeric"
                                     value={goalAmount}

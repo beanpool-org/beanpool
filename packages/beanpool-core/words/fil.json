@@ -2,7 +2,7 @@
   "_meta": {
     "language": "fil",
     "name": "Filipino",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-19",
@@ -325,5 +325,44 @@
   "{n} of these {count} from a new or 12-word account|{n} of these {count} from new or 12-word accounts": {
     "one": "{n} sa {count} na ito ay mula sa isang bago o 12-salitang account",
     "other": "{n} sa {count} na ito ay mula sa mga bago o 12-salitang account"
-  }
+  },
+  "updates itself": "kusang nag-a-update",
+  "a tap per post": "isang tap bawat post",
+  "shows as a card": "ipinapakita bilang card",
+  "youtube.com/@you": "youtube.com/@pangalanmo",
+  "@yourhandle": "@pangalanmo",
+  "soundcloud.com/you": "soundcloud.com/pangalanmo",
+  "yoursite.com": "sitemo.com",
+  "facebook.com/yourpage": "facebook.com/pahinamo",
+  "yourblog.com/feed": "blogmo.com/feed",
+  "Community": "Komunidad",
+  "Food & growing": "Pagkain & pagtatanim",
+  "Making & craft": "Paggawa & craft",
+  "Repair & reuse": "Pag-aayos & muling paggamit",
+  "Art & music": "Sining & musika",
+  "Business": "Negosyo",
+  "Other": "Iba pa",
+  "Website": "Website",
+  "Blog / RSS": "Blog / RSS",
+  "Link": "Link",
+  "Idea": "Ideya",
+  "Problem": "Problema",
+  "This goes to the BeanPool project team, not to your community. Don't include personal details.": "Mapupunta ito sa team ng proyekto ng BeanPool, hindi sa iyong komunidad. Huwag magsama ng mga personal na detalye.",
+  "Thank you — your suggestion has reached the BeanPool project team.": "Salamat — nakarating na ang iyong mungkahi sa team ng proyekto ng BeanPool.",
+  "Please write at least {n} characters.|Please write at least {n} characters.": {
+    "one": "Pakisulat ng hindi bababa sa {n} character.",
+    "other": "Pakisulat ng hindi bababa sa {n} character."
+  },
+  "Please keep it under {n} characters ({count} now).|Please keep it under {n} characters ({count} now).": {
+    "one": "Pakipanatili itong mas mababa sa {n} character ({count} na ngayon).",
+    "other": "Pakipanatili itong mas mababa sa {n} character ({count} na ngayon)."
+  },
+  "Couldn't reach the BeanPool project just now. Your text is still here — please try again later.": "Hindi maabot ang proyekto ng BeanPool ngayon lang. Narito pa rin ang iyong teksto — pakisubukan muli mamaya.",
+  "Please keep the community name under {n} characters.|Please keep the community name under {n} characters.": {
+    "one": "Pakipanatiling mas mababa sa {n} character ang pangalan ng komunidad.",
+    "other": "Pakipanatiling mas mababa sa {n} character ang pangalan ng komunidad."
+  },
+  "Too many suggestions from your connection recently. Please try again later — your text is still here.": "Masyadong maraming mungkahi mula sa iyong koneksyon kamakailan. Pakisubukan muli mamaya — narito pa rin ang iyong teksto.",
+  "This poll is shown at your area (about 10 km around it) to everyone who can read it.": "Ipinapakita ang poll na ito sa iyong lugar (humigit-kumulang 10 km sa palibot nito) sa lahat ng makakabasa nito.",
+  "You haven't set your area, so members nearby won't see this poll in their list; they can still find it by searching. Set it in Settings → Your area to show it near you.": "Hindi mo pa naitatakda ang iyong lugar, kaya hindi makikita ng mga kalapit na miyembro ang poll na ito sa kanilang listahan; mahahanap pa rin nila ito sa pamamagitan ng paghahanap. Itakda ito sa Mga Setting → Iyong lugar para maipakita ito malapit sa iyo."
 }

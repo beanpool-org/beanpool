@@ -2,7 +2,7 @@
   "_meta": {
     "language": "id",
     "name": "Indonesian",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-19",
@@ -304,5 +304,41 @@
   },
   "{n} of these {count} from a new or 12-word account|{n} of these {count} from new or 12-word accounts": {
     "other": "{n} dari {count} ini berasal dari akun baru atau 12 kata"
-  }
+  },
+  "updates itself": "memperbarui sendiri",
+  "a tap per post": "sekali ketuk per postingan",
+  "shows as a card": "tampil sebagai kartu",
+  "youtube.com/@you": "youtube.com/@namamu",
+  "@yourhandle": "@namamu",
+  "soundcloud.com/you": "soundcloud.com/namamu",
+  "yoursite.com": "situsmu.com",
+  "facebook.com/yourpage": "facebook.com/halamanmu",
+  "yourblog.com/feed": "blogmu.com/feed",
+  "Community": "Komunitas",
+  "Food & growing": "Makanan & bercocok tanam",
+  "Making & craft": "Kreasi & kerajinan",
+  "Repair & reuse": "Perbaikan & pakai ulang",
+  "Art & music": "Seni & musik",
+  "Business": "Bisnis",
+  "Other": "Lainnya",
+  "Website": "Situs web",
+  "Blog / RSS": "Blog / RSS",
+  "Link": "Tautan",
+  "Idea": "Ide",
+  "Problem": "Masalah",
+  "This goes to the BeanPool project team, not to your community. Don't include personal details.": "Ini dikirim ke tim proyek BeanPool, bukan ke komunitasmu. Jangan sertakan data pribadi.",
+  "Thank you — your suggestion has reached the BeanPool project team.": "Terima kasih — saranmu sudah sampai ke tim proyek BeanPool.",
+  "Please write at least {n} characters.|Please write at least {n} characters.": {
+    "other": "Silakan tulis setidaknya {n} karakter."
+  },
+  "Please keep it under {n} characters ({count} now).|Please keep it under {n} characters ({count} now).": {
+    "other": "Silakan batasi di bawah {n} karakter (saat ini {count})."
+  },
+  "Couldn't reach the BeanPool project just now. Your text is still here — please try again later.": "Tidak bisa menjangkau proyek BeanPool baru saja. Teksmu masih ada di sini — silakan coba lagi nanti.",
+  "Please keep the community name under {n} characters.|Please keep the community name under {n} characters.": {
+    "other": "Silakan batasi nama komunitas di bawah {n} karakter."
+  },
+  "Too many suggestions from your connection recently. Please try again later — your text is still here.": "Terlalu banyak saran dari koneksimu baru-baru ini. Silakan coba lagi nanti — teksmu masih ada di sini.",
+  "This poll is shown at your area (about 10 km around it) to everyone who can read it.": "Jajak pendapat ini ditampilkan di wilayahmu (sekitar 10 km di sekitarnya) kepada semua orang yang dapat membacanya.",
+  "You haven't set your area, so members nearby won't see this poll in their list; they can still find it by searching. Set it in Settings → Your area to show it near you.": "Kamu belum mengatur wilayahmu, jadi anggota di sekitarmu tidak akan melihat jajak pendapat ini di daftar mereka; mereka masih bisa menemukannya lewat pencarian. Atur di Pengaturan → Wilayahmu untuk menampilkannya di dekatmu."
 }

@@ -2114,7 +2114,7 @@ export default function TreasuryDetailScreen() {
                                 value={hourlyDealHours}
                                 onChangeText={setHourlyDealHours}
                                 keyboardType="numeric"
-                                placeholder={t('e.g. {example}', { example: formatNumber(2.5) })}
+                                placeholder={t('e.g. 2.5')}
                                 placeholderTextColor={colors.text.muted}
                                 autoFocus
                             />
@@ -2130,7 +2130,9 @@ export default function TreasuryDetailScreen() {
                                     style={{ flex: 1, minHeight: 44, justifyContent: 'center', alignItems: 'center', borderRadius: 10, backgroundColor: colors.feedback.success.solid, paddingHorizontal: 8 }}
                                     accessibilityRole="button"
                                     onPress={async () => {
-                                        const parsed = Number(hourlyDealHours);
+                                        // A decimal comma as the example shows it in comma languages ("ex. 2,5"), and as a comma
+                                        // phone's decimal pad types it.
+                                        const parsed = Number(hourlyDealHours.trim().replace(',', '.'));
                                         if (isNaN(parsed) || parsed <= 0) {
                                             Alert.alert(t('Invalid Hours'), t('Please enter a valid positive number of hours.'));
                                             return;

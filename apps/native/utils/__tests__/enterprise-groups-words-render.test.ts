@@ -776,4 +776,24 @@ describe('the enterprise page follows a language picked in Settings', () => {
         expect(spanWith('LİDER')).not.toBeNull();
         expect(host.textContent).not.toContain('LIDER');
     });
+
+    it('the hours box in French: its example is the translator\'s, and Release Payment takes the hours as the example writes them, decimal comma and all', async () => {
+        const paid: unknown[][] = [];
+        const answers = community({ treasuryComplete: { ok: true } });
+        net.answer = (name, args) => { if (name === 'treasuryComplete') paid.push(args); return answers(name, args); };
+        await renderIn('fr');
+        await click(buttonWith('Release Payment (30 🫘)'), 'Release Payment');
+        const hours = host.querySelector('[data-modal] input') as HTMLInputElement | null;
+        expect(fr['e.g. 2.5']).toBe('ex. 2,5');
+        expect(hours?.getAttribute('placeholder')).toBe(fr['e.g. 2.5']);
+        await act(async () => {
+            Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(hours, '2,5');
+            hours!.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        await settle(2);
+        await click(Array.from(host.querySelectorAll('[data-modal] button')).find((b) => b.textContent === 'Release Payment'), 'Release Payment (the box)');
+        expect(alerts.said).not.toContain('Invalid Hours');
+        expect(paid).toEqual([[ENT, 'd2', 2.5]]);
+        expect(alerts.said).toContain('Payment Released ✅');
+    });
 });

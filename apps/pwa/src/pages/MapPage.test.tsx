@@ -5,7 +5,7 @@ import { MapPage, resetSavedMapView } from './MapPage';
 import type { BeanPoolIdentity } from '../lib/identity';
 import * as api from '../lib/api';
 import L from 'leaflet';
-import { livePostChange } from '@beanpool/core';
+import { livePostChange, pseudoLocalise, setLanguage, zoneLabelFor } from '@beanpool/core';
 import { routeLivePostChange, resetLivePostsForTest } from '../lib/live-posts';
 import { resetCommunityInfoOnce } from '../lib/visitor-lobby-gate';
 import { getProfileStatus } from '../lib/profile-status';
@@ -2088,6 +2088,36 @@ describe('Event times in the form (DESIGN-event-times §3, slice 2)', () => {
         fireEvent.change(within(panel).getByLabelText(/^Starts/i), { target: { value: '2030-10-19T21:00' } });
         await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: 'Save changes' })); });
         expect(update).toHaveBeenCalledWith('ev-lagos', mockIdentity.publicKey, { eventStartLocal: '2030-10-19T21:00', eventEndLocal: '2030-10-19T22:50' });
+    });
+
+    it("in the member's language: the line names the zone in it, and the picker names each place with no word for time", async () => {
+        // An event in Kolkata, a zone the node's list (Sydney, Lagos, Accra) leaves out: its entry is the one this form named.
+        const hosted: any = {
+            id: 'ev-kolkata', type: 'event', category: 'community', title: 'Working bee', description: '', credits: 0, priceType: 'fixed',
+            authorPublicKey: mockIdentity.publicKey, authorCallsign: 'Alice', createdAt: '2026-09-01T00:00:00.000Z', active: true,
+            status: 'active', repeatable: false, lat: 22.57, lng: 88.36, eventPlaceName: 'The hall', eventState: 'scheduled',
+            eventStartAt: '2030-10-19T15:20:00.000Z', eventEndAt: '2030-10-19T17:20:00.000Z',
+            eventStartLocal: '2030-10-19T20:50', eventEndLocal: '2030-10-19T22:50', eventTz: 'Asia/Kolkata', eventOnline: false,
+            audienceScope: 'public', photos: [], eventRsvps: [],
+        };
+        vi.spyOn(api, 'getMarketplacePosts').mockImplementation(async (filter?: any) => (filter?.id === hosted.id ? [hosted] : []) as any);
+        setLanguage('xx');
+        try {
+            let view: ReturnType<typeof render> | undefined;
+            await act(async () => {
+                view = render(<MapPage identity={mockIdentity} editEventPostId={hosted.id} onEditEventHandled={vi.fn()} onNavigate={vi.fn()} />);
+            });
+            const panel = await view!.findByTestId('map-new-post-panel');
+            expect(within(panel).getByTestId('event-zone-line').querySelector('strong')?.textContent).toBe(zoneLabelFor('Asia/Kolkata', 330));
+            await act(async () => { fireEvent.click(within(panel).getByTestId('event-zone-change')); });
+            const select = await within(panel).findByTestId('event-zone-select') as HTMLSelectElement;
+            const entry = (place: string, offset: string) => pseudoLocalise('{place} ({offset})').replace('{place}', place).replace('{offset}', offset);
+            expect(Array.from(select.options).map(o => o.textContent)).toEqual([
+                entry('Accra', 'UTC'), entry('Kolkata', 'UTC+5:30'), entry('Lagos', 'UTC+1'), entry('Sydney', 'UTC+11'),
+            ]);
+        } finally {
+            setLanguage('en');
+        }
     });
 });
 

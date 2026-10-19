@@ -2,7 +2,7 @@
   "_meta": {
     "language": "zh-Hant",
     "name": "Chinese (Traditional)",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-19",
@@ -639,5 +639,13 @@
   "I thrive in spontaneous, novel settings": "我在充滿變數、不拘一格的新環境裡如魚得水",
   "I am patient with different paces and value keeping the community atmosphere harmonious.": "我對大家不同的節奏很有耐心，格外珍視社群融洽和諧的氛圍。",
   "I push for faster progress when needed": "必要時我會力促大家加快進度",
-  "I push for higher standards when needed": "必要時我會嚴格要求更高的交付標準"
+  "I push for higher standards when needed": "必要時我會嚴格要求更高的交付標準",
+  "Type an amount.": "輸入金額。",
+  "The amount can’t be below 0.": "金額不能小於 0。",
+  "Type the amount without thousands separators, like {example}.": "輸入不含千分位符號的金額，例如 {example}。",
+  "Type one decimal mark at most, like {example}.": "最多輸入一個小數點，例如 {example}。",
+  "Type at most {n} decimal, like {example}.|Type at most {n} decimals, like {example}.": {
+    "other": "最多輸入 {n} 位小數，例如 {example}。"
+  },
+  "Type the amount as a number, like {example}.": "請以數字形式輸入金額，例如 {example}。"
 }

@@ -1250,10 +1250,10 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                         {/* Balance Card */}
                         <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-6 shadow-sm">
                             <div className="text-xs font-bold uppercase tracking-wider text-nature-500 dark:text-nature-400">
-                                {kw.Kind} Balance
+                                {project ? t('Project Balance') : t('Enterprise Balance')}
                             </div>
                             <div className={`text-4xl font-black mt-2 ${balance < 0 ? 'text-amber-500 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
-                                {balance} 🫘
+                                {formatNumber(balance)} 🫘
                             </div>
 
                             {balance < 0 && (
@@ -1262,7 +1262,9 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                     aria-live="polite"
                                     className="mt-3 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 text-amber-800 dark:text-amber-300 text-xs font-semibold leading-relaxed"
                                 >
-                                    ⚠️ In Deficit: This {kw.kind} is currently in deficit ({balance} 🫘). Credit buys inputs and supplies, but {kw.keepers} can only be paid from profit. {kw.Keepers} cannot be paid while the {kw.kind} is in deficit.
+                                    {project
+                                        ? t('⚠️ In Deficit: This project is currently in deficit ({amount} 🫘). Credit buys inputs and supplies, but collaborators can only be paid from profit. Collaborators cannot be paid while the project is in deficit.', { amount: formatNumber(balance) })
+                                        : t('⚠️ In Deficit: This enterprise is currently in deficit ({amount} 🫘). Credit buys inputs and supplies, but keepers can only be paid from profit. Keepers cannot be paid while the enterprise is in deficit.', { amount: formatNumber(balance) })}
                                 </div>
                             )}
 
@@ -1271,34 +1273,34 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                             <div className="grid grid-cols-[repeat(auto-fit,minmax(8rem,1fr))] gap-3 mt-5 pt-5 border-t border-nature-100 dark:border-nature-800" data-testid="enterprise-balance-tiles">
                                 <div className="bg-nature-50 dark:bg-nature-800/50 rounded-xl p-3 border border-nature-200/60 dark:border-nature-700/50">
                                     <div className="text-[11px] font-bold uppercase tracking-wide text-nature-500 dark:text-nature-300">
-                                        Credit Line
+                                        {t('Credit Line')}
                                     </div>
                                     <div className="text-lg font-extrabold text-nature-900 dark:text-white mt-1">
-                                        {detail.creditLine ?? 0} 🫘
+                                        {formatNumber(detail.creditLine ?? 0)} 🫘
                                     </div>
                                 </div>
                                 <div className="bg-nature-50 dark:bg-nature-800/50 rounded-xl p-3 border border-nature-200/60 dark:border-nature-700/50">
                                     <div className="text-[11px] font-bold uppercase tracking-wide text-nature-500 dark:text-nature-300">
-                                        Live Offers
+                                        {t('Live Offers')}
                                     </div>
                                     <div className="text-lg font-extrabold text-nature-900 dark:text-white mt-1">
-                                        {detail.liveOffers ?? 0}
+                                        {formatNumber(detail.liveOffers ?? 0)}
                                     </div>
                                 </div>
                                 <div className="bg-nature-50 dark:bg-nature-800/50 rounded-xl p-3 border border-nature-200/60 dark:border-nature-700/50">
                                     <div className="text-[11px] font-bold uppercase tracking-wide text-nature-500 dark:text-nature-300">
-                                        Earned Surplus
+                                        {t('Earned Surplus')}
                                     </div>
                                     <div className="text-lg font-extrabold text-nature-900 dark:text-white mt-1">
-                                        {detail.earnedSurplus ?? 0} 🫘
+                                        {formatNumber(detail.earnedSurplus ?? 0)} 🫘
                                     </div>
                                 </div>
                                 <div className="bg-nature-50 dark:bg-nature-800/50 rounded-xl p-3 border border-nature-200/60 dark:border-nature-700/50">
                                     <div className="text-[11px] font-bold uppercase tracking-wide text-nature-500 dark:text-nature-300">
-                                        Capital Ceiling
+                                        {t('Capital Ceiling')}
                                     </div>
                                     <div className="text-lg font-extrabold text-nature-900 dark:text-white mt-1">
-                                        {detail.workingCapitalCeiling != null ? `${detail.workingCapitalCeiling} 🫘` : 'Uncapped'}
+                                        {detail.workingCapitalCeiling != null ? `${formatNumber(detail.workingCapitalCeiling)} 🫘` : t('Uncapped')}
                                     </div>
                                 </div>
                             </div>
@@ -1307,14 +1309,16 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                 <div className="mt-4 p-3.5 rounded-xl bg-nature-50 dark:bg-nature-800/50 border border-nature-200 dark:border-nature-700">
                                     <div className="flex justify-between items-center text-xs">
                                         <span className="font-bold uppercase tracking-wider text-nature-500 dark:text-nature-300">
-                                            Pending Wage Claims ({pendingClaims.length})
+                                            {t('Pending Wage Claims ({n})', { n: pendingClaims.length })}
                                         </span>
                                         <span className="font-black text-amber-500 dark:text-amber-400 text-sm">
-                                            {pendingClaimsTotal} 🫘
+                                            {formatNumber(pendingClaimsTotal)} 🫘
                                         </span>
                                     </div>
                                     <p className="text-xs text-nature-500 dark:text-nature-300 mt-1 leading-relaxed">
-                                        Deferred until the {kw.kind} earns sufficient trading profit. Paid automatically from future sales.
+                                        {project
+                                            ? t('Deferred until the project earns sufficient trading profit. Paid automatically from future sales.')
+                                            : t('Deferred until the enterprise earns sufficient trading profit. Paid automatically from future sales.')}
                                     </p>
                                 </div>
                             )}
@@ -1332,7 +1336,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                     onClick={() => setActionFeedback(null)}
                                     className="text-xs opacity-70 hover:opacity-100 font-bold ml-2"
                                 >
-                                    Dismiss
+                                    {t('Dismiss')}
                                 </button>
                             </div>
                         )}
@@ -1349,7 +1353,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                 <div className="flex items-center gap-2">
                                     <span className="text-lg" aria-hidden="true">🛡️</span>
                                     <div className="text-xs font-black uppercase tracking-widest text-emerald-700 dark:text-emerald-400">
-                                        Operator Controls
+                                        {t('Operator Controls')}
                                     </div>
                                 </div>
 
@@ -1371,7 +1375,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                 }}
                                                 className="py-3 px-4 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-bold text-sm shadow-sm transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                                             >
-                                                <span>🏷️</span> Post Offer
+                                                <span>🏷️</span> {t('Post Offer')}
                                             </button>
                                             <button
                                                 type="button"
@@ -1383,23 +1387,23 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                 }}
                                                 className="py-3 px-4 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-bold text-sm shadow-sm transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                                             >
-                                                <span>🤝</span> Post Need
+                                                <span>🤝</span> {t('Post Need')}
                                             </button>
                                         </>
                                     )}
                                     {detail.paused && detail.status !== 'winding_up' && detail.status !== 'completed' && (
                                         <div className="col-span-2 text-center text-xs font-semibold text-amber-800 dark:text-amber-300 bg-amber-100/60 dark:bg-amber-950/40 p-2 rounded-lg">
-                                            Paused for the season — posting new listings is disabled.
+                                            {t('Paused for the season — posting new listings is disabled.')}
                                         </div>
                                     )}
                                     {detail.status === 'winding_up' && (
                                         <div className="col-span-2 text-center text-xs font-semibold text-rose-800 dark:text-rose-300 bg-rose-100/60 dark:bg-rose-950/40 p-2 rounded-lg">
-                                            Winding up — posting new listings is disabled.
+                                            {t('Winding up — posting new listings is disabled.')}
                                         </div>
                                     )}
                                     {detail.status === 'completed' && (
                                         <div className="col-span-2 text-center text-xs font-semibold text-stone-600 dark:text-stone-400 bg-stone-100 dark:bg-stone-800 p-2 rounded-lg">
-                                            {kw.Kind} closed permanently.
+                                            {project ? t('Project closed permanently.') : t('Enterprise closed permanently.')}
                                         </div>
                                     )}
                                 </div>
@@ -1415,7 +1419,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                         <input
                                             type="text"
                                             inputMode="decimal"
-                                            placeholder="Sweep surplus…"
+                                            placeholder={t('Sweep surplus…')}
                                             value={sweepAmount}
                                             onChange={(e) => setSweepAmount(e.target.value)}
                                             className="flex-1 bg-white dark:bg-nature-900 border border-nature-300 dark:border-nature-700 rounded-xl px-4 py-2.5 text-sm font-bold text-nature-900 dark:text-white placeholder-nature-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
@@ -1425,7 +1429,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                             disabled={sweeping || balance <= 0 || !sweepAmount}
                                             className="py-2.5 px-4 rounded-xl border border-emerald-600 dark:border-emerald-500 bg-white dark:bg-nature-900 text-emerald-700 dark:text-emerald-400 font-extrabold text-sm disabled:opacity-40 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition-colors shrink-0"
                                         >
-                                            {sweeping ? 'Sweeping…' : 'To Commons 🌱'}
+                                            {sweeping ? t('Sweeping…') : t('To Commons 🌱')}
                                         </button>
                                     </form>
                                 )}
@@ -1437,12 +1441,13 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                             <div className="min-w-0">
                                                 <div className="text-xs font-black uppercase tracking-wider text-emerald-800 dark:text-emerald-400 flex items-center gap-1.5">
                                                     <span>📍</span>
-                                                    <span>Map Pin</span>
+                                                    <span>{t('Map Pin')}</span>
                                                 </div>
                                                 <div className="text-xs text-nature-600 dark:text-nature-400 mt-0.5 break-words">
+                                                    {/* Coordinates keep their dot in every language: a comma decimal would run into the comma between them. */}
                                                     {hasMapPin
-                                                        ? `On the map at ${Number(detail.lat).toFixed(3)}, ${Number(detail.lng).toFixed(3)}`
-                                                        : 'Not on the map'}
+                                                        ? t('On the map at {lat}, {lng}', { lat: Number(detail.lat).toFixed(3), lng: Number(detail.lng).toFixed(3) })
+                                                        : t('Not on the map')}
                                                 </div>
                                             </div>
                                             {!showLocationPicker && (
@@ -1451,7 +1456,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                     onClick={() => setShowLocationPicker(true)}
                                                     className="min-h-[44px] py-2 px-3 rounded-lg border border-emerald-600 dark:border-emerald-500 bg-white dark:bg-nature-900 text-emerald-700 dark:text-emerald-400 font-bold text-xs hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition-colors"
                                                 >
-                                                    {hasMapPin ? 'Move or clear map pin' : 'Set map pin'}
+                                                    {hasMapPin ? t('Move or clear map pin') : t('Set map pin')}
                                                 </button>
                                             )}
                                         </div>
@@ -1469,7 +1474,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                 {!isEffectivePreview && pendingBids.length > 0 && (
                                     <div className="pt-4 border-t border-emerald-500/20 space-y-3">
                                         <div className="text-xs font-black uppercase tracking-wider text-emerald-800 dark:text-emerald-400 flex items-center justify-between">
-                                            <span>Pending Bids on Needs</span>
+                                            <span>{t('Pending Bids on Needs')}</span>
                                             <span className="bg-bp-chip-ok-tint text-bp-chip-ok-ink px-2 py-0.5 rounded-full text-[11px]">
                                                 {pendingBids.length}
                                             </span>
@@ -1485,11 +1490,11 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                             {b.post_title}
                                                         </div>
                                                         <span className="text-emerald-600 dark:text-emerald-400 font-black text-sm shrink-0">
-                                                            {b.credits} 🫘
+                                                            {formatNumber(b.credits)} 🫘
                                                         </span>
                                                     </div>
                                                     <div className="text-xs text-nature-500 dark:text-nature-400">
-                                                        Bidder: <strong className="text-nature-800 dark:text-nature-200">{b.peer_callsign || 'Member'}</strong>
+                                                        <Sentence text={t('Bidder: {name}')} parts={{ name: <strong className="text-nature-800 dark:text-nature-200">{b.peer_callsign || t('Member')}</strong> }} />
                                                     </div>
                                                     <div className="flex gap-2 pt-1">
                                                         <button
@@ -1498,7 +1503,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                             onClick={() => handleApproveBid(b.id)}
                                                             className="flex-1 min-h-[44px] py-2 px-3 rounded-lg bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-bold text-xs shadow-sm transition-all disabled:opacity-50 flex items-center justify-center"
                                                         >
-                                                            {actionState?.id === b.id && actionState?.type === 'approve' ? 'Approving…' : `Approve Bid (${b.credits} 🫘)`}
+                                                            {actionState?.id === b.id && actionState?.type === 'approve' ? t('Approving…') : t('Approve Bid ({amount} 🫘)', { amount: formatNumber(b.credits) })}
                                                         </button>
                                                         <button
                                                             type="button"
@@ -1506,7 +1511,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                             onClick={() => handleRejectBid(b.id)}
                                                             className="min-h-[44px] py-2 px-3 rounded-lg border border-red-300 dark:border-red-800/80 bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-300 font-bold text-xs hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors disabled:opacity-50 flex items-center justify-center"
                                                         >
-                                                            {actionState?.id === b.id && actionState?.type === 'reject' ? 'Declining…' : 'Decline'}
+                                                            {actionState?.id === b.id && actionState?.type === 'reject' ? t('Declining…') : t('Decline')}
                                                         </button>
                                                     </div>
                                                 </div>
@@ -1519,7 +1524,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                 {!isEffectivePreview && activeDeals.length > 0 && (
                                     <div className="pt-4 border-t border-emerald-500/20 space-y-3">
                                         <div className="text-xs font-black uppercase tracking-wider text-emerald-800 dark:text-emerald-400 flex items-center justify-between">
-                                            <span>Active Deals</span>
+                                            <span>{t('Active Deals')}</span>
                                             <span className="bg-bp-chip-ok-tint text-bp-chip-ok-ink px-2 py-0.5 rounded-full text-[11px]">
                                                 {activeDeals.length}
                                             </span>
@@ -1535,11 +1540,14 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                             {d.post_title}
                                                         </div>
                                                         <span className="text-emerald-600 dark:text-emerald-400 font-black text-sm shrink-0">
-                                                            {d.credits} 🫘 in escrow
+                                                            {t('{amount} 🫘 in escrow', { amount: formatNumber(d.credits) })}
                                                         </span>
                                                     </div>
                                                     <div className="text-xs text-nature-500 dark:text-nature-400">
-                                                        {d.action_required === 'fulfill' ? 'Customer' : 'Worker'}: <strong className="text-nature-800 dark:text-nature-200">{d.peer_callsign || 'Member'}</strong>
+                                                        <Sentence
+                                                            text={d.action_required === 'fulfill' ? t('Customer: {name}') : t('Worker: {name}')}
+                                                            parts={{ name: <strong className="text-nature-800 dark:text-nature-200">{d.peer_callsign || t('Member')}</strong> }}
+                                                        />
                                                     </div>
                                                     <div className="pt-1">
                                                         {d.action_required === 'fulfill' ? (
@@ -1547,7 +1555,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                                 onClick={() => onNavigatePost?.(d.post_id)}
                                                                 className="w-full min-h-[44px] py-2.5 px-4 rounded-lg bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 font-bold text-xs text-center flex items-center justify-center cursor-pointer hover:bg-nature-200 dark:hover:bg-nature-700 dark:hover:text-nature-200 transition-colors"
                                                             >
-                                                                Fulfill Deal · Awaiting Customer Release
+                                                                {t('Fulfill Deal · Awaiting Customer Release')}
                                                             </div>
                                                         ) : (
                                                             <button
@@ -1556,7 +1564,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                                 onClick={() => handleCompleteDeal(d.id, d.post_title, d.credits, d.price_type, d.hours)}
                                                                 className="w-full min-h-[44px] py-2.5 px-4 rounded-lg bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-extrabold text-xs shadow-sm transition-all disabled:opacity-50 flex items-center justify-center"
                                                             >
-                                                                {actionState?.id === d.id && actionState?.type === 'complete' ? 'Releasing…' : `Release Payment (${d.credits} 🫘)`}
+                                                                {actionState?.id === d.id && actionState?.type === 'complete' ? t('Releasing…') : t('Release Payment ({amount} 🫘)', { amount: formatNumber(d.credits) })}
                                                             </button>
                                                         )}
                                                     </div>
@@ -1571,7 +1579,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                     <div className="pt-4 border-t border-emerald-500/20 space-y-3">
                                         <div className="text-xs font-black uppercase tracking-wider text-emerald-800 dark:text-emerald-400 flex items-center gap-1.5">
                                             <span>🌿</span>
-                                            <span>Season & Lifecycle Controls</span>
+                                            <span>{t('Season & Lifecycle Controls')}</span>
                                         </div>
 
                                         {isEffectivePreview ? (
@@ -1586,10 +1594,16 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                     <div className="p-4 rounded-xl border-2 border-amber-400 dark:border-amber-600 bg-amber-50 dark:bg-amber-950/50 space-y-3">
                                                         <div className="font-bold text-sm text-amber-950 dark:text-amber-100 flex items-center gap-2">
                                                             <span>❄️</span>
-                                                            <span>Confirm Pause for Season</span>
+                                                            <span>{t('Confirm Pause for Season')}</span>
                                                         </div>
                                                         <p className="text-xs text-amber-900 dark:text-amber-200 leading-relaxed font-medium">
-                                                            Pausing for the season holds your credit floor at {heldCredit} beans{pauseDateFormatted ? ` until ${pauseDateFormatted}` : ' for up to 90 days'} and pauses active listings so members cannot buy. Any {kw.keeper} can resume at any time.
+                                                            {project
+                                                                ? (pauseDateFormatted
+                                                                    ? tn(heldCredit, 'Pausing for the season holds your credit floor at {n} beans until {date} and pauses active listings so members cannot buy. Any collaborator can resume at any time.', 'Pausing for the season holds your credit floor at {n} beans until {date} and pauses active listings so members cannot buy. Any collaborator can resume at any time.', { date: pauseDateFormatted })
+                                                                    : tn(heldCredit, 'Pausing for the season holds your credit floor at {n} beans for up to 90 days and pauses active listings so members cannot buy. Any collaborator can resume at any time.', 'Pausing for the season holds your credit floor at {n} beans for up to 90 days and pauses active listings so members cannot buy. Any collaborator can resume at any time.'))
+                                                                : (pauseDateFormatted
+                                                                    ? tn(heldCredit, 'Pausing for the season holds your credit floor at {n} beans until {date} and pauses active listings so members cannot buy. Any keeper can resume at any time.', 'Pausing for the season holds your credit floor at {n} beans until {date} and pauses active listings so members cannot buy. Any keeper can resume at any time.', { date: pauseDateFormatted })
+                                                                    : tn(heldCredit, 'Pausing for the season holds your credit floor at {n} beans for up to 90 days and pauses active listings so members cannot buy. Any keeper can resume at any time.', 'Pausing for the season holds your credit floor at {n} beans for up to 90 days and pauses active listings so members cannot buy. Any keeper can resume at any time.'))}
                                                         </p>
                                                         <div className="flex gap-2 pt-1">
                                                             <button
@@ -1598,7 +1612,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                                 onClick={handlePause}
                                                                 className="flex-1 py-2 px-3 rounded-lg bg-bp-gold-fill hover:bg-bp-gold-hover text-bp-gold-on font-bold text-xs shadow-sm transition-all disabled:opacity-50"
                                                             >
-                                                                {lifecycleActionLoading ? 'Pausing…' : 'Confirm Season Pause'}
+                                                                {lifecycleActionLoading ? t('Pausing…') : t('Confirm Season Pause')}
                                                             </button>
                                                             <button
                                                                 type="button"
@@ -1606,7 +1620,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                                 onClick={() => setConfirmingPause(false)}
                                                                 className="py-2 px-3 rounded-lg border border-nature-300 dark:border-nature-700 text-nature-700 dark:text-nature-300 text-xs font-semibold hover:bg-nature-100 dark:hover:bg-nature-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                                             >
-                                                                Cancel
+                                                                {t('Cancel')}
                                                             </button>
                                                         </div>
                                                     </div>
@@ -1616,10 +1630,10 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                     <div className="p-4 rounded-xl border-2 border-emerald-500/40 bg-emerald-50/60 dark:bg-emerald-950/40 space-y-3">
                                                         <div className="font-bold text-sm text-emerald-950 dark:text-emerald-100 flex items-center gap-2">
                                                             <span>▶️</span>
-                                                            <span>Confirm Resume {kw.Kind}</span>
+                                                            <span>{project ? t('Confirm Resume Project') : t('Confirm Resume Enterprise')}</span>
                                                         </div>
                                                         <p className="text-xs text-emerald-900 dark:text-emerald-200 leading-relaxed font-medium">
-                                                            Resuming reactivates all listings and restores the credit floor to normal daily calculation.
+                                                            {t('Resuming reactivates all listings and restores the credit floor to normal daily calculation.')}
                                                         </p>
                                                         <div className="flex gap-2 pt-1">
                                                             <button
@@ -1628,7 +1642,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                                 onClick={handleResume}
                                                                 className="flex-1 py-2 px-3 rounded-lg bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-bold text-xs shadow-sm transition-all disabled:opacity-50"
                                                             >
-                                                                {lifecycleActionLoading ? 'Resuming…' : 'Confirm Resume'}
+                                                                {lifecycleActionLoading ? t('Resuming…') : t('Confirm Resume')}
                                                             </button>
                                                             <button
                                                                 type="button"
@@ -1636,7 +1650,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                                 onClick={() => setConfirmingResume(false)}
                                                                 className="py-2 px-3 rounded-lg border border-nature-300 dark:border-nature-700 text-nature-700 dark:text-nature-300 text-xs font-semibold hover:bg-nature-100 dark:hover:bg-nature-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                                             >
-                                                                Cancel
+                                                                {t('Cancel')}
                                                             </button>
                                                         </div>
                                                     </div>
@@ -1646,14 +1660,19 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                     <div className="p-4 rounded-xl border-2 border-red-400 dark:border-red-600 bg-red-50 dark:bg-red-950/50 space-y-3">
                                                         <div className="font-bold text-sm text-red-950 dark:text-red-100 flex items-center gap-2">
                                                             <span>⚠️</span>
-                                                            <span>Start {kw.Kind} Wind-Up</span>
+                                                            <span>{project ? t('Start Project Wind-Up') : t('Start Enterprise Wind-Up')}</span>
                                                         </div>
                                                         <p className="text-xs text-red-900 dark:text-red-200 leading-relaxed font-semibold">
-                                                            Winding up returns {Math.max(0, balance).toFixed(2)} beans to the Commons, releases {keeperCount} {keeperCount === 1 ? kw.keeper : kw.keepers}, and closes {name} for good. Any {kw.keeper} can stop this for the next 7 days.
+                                                            {project
+                                                                ? tn(keeperCount, 'Winding up returns {amount} beans to the Commons, releases {n} collaborator, and closes {name} for good. Any collaborator can stop this for the next 7 days.', 'Winding up returns {amount} beans to the Commons, releases {n} collaborators, and closes {name} for good. Any collaborator can stop this for the next 7 days.', { amount: formatNumber(Math.max(0, balance), 2), name })
+                                                                : tn(keeperCount, 'Winding up returns {amount} beans to the Commons, releases {n} keeper, and closes {name} for good. Any keeper can stop this for the next 7 days.', 'Winding up returns {amount} beans to the Commons, releases {n} keepers, and closes {name} for good. Any keeper can stop this for the next 7 days.', { amount: formatNumber(Math.max(0, balance), 2), name })}
                                                         </p>
                                                         {balance < 0 && (
                                                             <p className="text-xs text-amber-700 dark:text-amber-400 font-bold">
-                                                                ⚠️ Cannot wind up {kw.kind === 'project' ? 'a project' : 'an enterprise'} in deficit ({balance} 🫘). Debt must be resolved or written off first.
+                                                                <span aria-hidden="true">⚠️ </span>
+                                                                {project
+                                                                    ? t('Cannot wind up a project in deficit ({amount} 🫘). Debt must be resolved or written off first.', { amount: formatNumber(balance) })
+                                                                    : t('Cannot wind up an enterprise in deficit ({amount} 🫘). Debt must be resolved or written off first.', { amount: formatNumber(balance) })}
                                                             </p>
                                                         )}
                                                         <div className="flex gap-2 pt-1">
@@ -1663,7 +1682,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                                 onClick={handleInitiateWindUp}
                                                                 className="flex-1 py-2 px-3 rounded-lg bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on font-bold text-xs shadow-sm transition-all disabled:opacity-50"
                                                             >
-                                                                {lifecycleActionLoading ? 'Starting Wind-Up…' : 'Confirm Start Wind-Up'}
+                                                                {lifecycleActionLoading ? t('Starting Wind-Up…') : t('Confirm Start Wind-Up')}
                                                             </button>
                                                             <button
                                                                 type="button"
@@ -1671,7 +1690,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                                 onClick={() => setConfirmingWindUp(false)}
                                                                 className="py-2 px-3 rounded-lg border border-nature-300 dark:border-nature-700 text-nature-700 dark:text-nature-300 text-xs font-semibold hover:bg-nature-100 dark:hover:bg-nature-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                                             >
-                                                                Cancel
+                                                                {t('Cancel')}
                                                             </button>
                                                         </div>
                                                     </div>
@@ -1681,10 +1700,12 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                     <div className="p-4 rounded-xl border-2 border-emerald-500/40 bg-emerald-50/60 dark:bg-emerald-950/40 space-y-3">
                                                         <div className="font-bold text-sm text-emerald-950 dark:text-emerald-100 flex items-center gap-2">
                                                             <span>🛑</span>
-                                                            <span>Stop {kw.Kind} Wind-Up</span>
+                                                            <span>{project ? t('Stop Project Wind-Up') : t('Stop Enterprise Wind-Up')}</span>
                                                         </div>
                                                         <p className="text-xs text-emerald-900 dark:text-emerald-200 leading-relaxed font-medium">
-                                                            Cancelling wind-up restores {name} to active status immediately. {kw.Keepers} remain appointed and listings can resume.
+                                                            {project
+                                                                ? t('Cancelling wind-up restores {name} to active status immediately. Collaborators remain appointed and listings can resume.', { name })
+                                                                : t('Cancelling wind-up restores {name} to active status immediately. Keepers remain appointed and listings can resume.', { name })}
                                                         </p>
                                                         <div className="flex gap-2 pt-1">
                                                             <button
@@ -1693,7 +1714,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                                 onClick={handleCancelWindUp}
                                                                 className="flex-1 py-2 px-3 rounded-lg bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-bold text-xs shadow-sm transition-all disabled:opacity-50"
                                                             >
-                                                                {lifecycleActionLoading ? 'Stopping Wind-Up…' : 'Confirm Stop Wind-Up'}
+                                                                {lifecycleActionLoading ? t('Stopping Wind-Up…') : t('Confirm Stop Wind-Up')}
                                                             </button>
                                                             <button
                                                                 type="button"
@@ -1701,7 +1722,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                                 onClick={() => setConfirmingCancelWindUp(false)}
                                                                 className="py-2 px-3 rounded-lg border border-nature-300 dark:border-nature-700 text-nature-700 dark:text-nature-300 text-xs font-semibold hover:bg-nature-100 dark:hover:bg-nature-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                                             >
-                                                                Keep Winding Up
+                                                                {t('Keep Winding Up')}
                                                             </button>
                                                         </div>
                                                     </div>
@@ -1711,10 +1732,13 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                     <div className="p-4 rounded-xl border-2 border-red-400 dark:border-red-600 bg-red-50 dark:bg-red-950/50 space-y-3">
                                                         <div className="font-bold text-sm text-red-950 dark:text-red-100 flex items-center gap-2">
                                                             <span>🏁</span>
-                                                            <span>Finalise {kw.Kind} Wind-Up</span>
+                                                            <span>{project ? t('Finalise Project Wind-Up') : t('Finalise Enterprise Wind-Up')}</span>
                                                         </div>
                                                         <p className="text-xs text-red-900 dark:text-red-200 leading-relaxed font-semibold">
-                                                            The 7-day grace period has elapsed. Finalising sweeps {Math.max(0, balance).toFixed(2)} beans to the Commons, releases all {kw.keepers}, and closes {name} for good.
+                                                            {/* {n} is the amount, to the cent as before ("12.50"); the count only picks the form. */}
+                                                            {project
+                                                                ? tn(Math.max(0, balance), 'The 7-day grace period has elapsed. Finalising sweeps {n} beans to the Commons, releases all collaborators, and closes {name} for good.', 'The 7-day grace period has elapsed. Finalising sweeps {n} beans to the Commons, releases all collaborators, and closes {name} for good.', { n: formatNumber(Math.max(0, balance), 2), name })
+                                                                : tn(Math.max(0, balance), 'The 7-day grace period has elapsed. Finalising sweeps {n} beans to the Commons, releases all keepers, and closes {name} for good.', 'The 7-day grace period has elapsed. Finalising sweeps {n} beans to the Commons, releases all keepers, and closes {name} for good.', { n: formatNumber(Math.max(0, balance), 2), name })}
                                                         </p>
                                                         <div className="flex gap-2 pt-1">
                                                             <button
@@ -1723,7 +1747,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                                 onClick={handleFinaliseWindUp}
                                                                 className="flex-1 py-2 px-3 rounded-lg bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on font-bold text-xs shadow-sm transition-all disabled:opacity-50"
                                                             >
-                                                                {lifecycleActionLoading ? 'Finalising…' : 'Finalise Wind-Up'}
+                                                                {lifecycleActionLoading ? t('Finalising…') : t('Finalise Wind-Up')}
                                                             </button>
                                                             <button
                                                                 type="button"
@@ -1731,7 +1755,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                                 onClick={() => setConfirmingFinaliseWindUp(false)}
                                                                 className="py-2 px-3 rounded-lg border border-nature-300 dark:border-nature-700 text-nature-700 dark:text-nature-300 text-xs font-semibold hover:bg-nature-100 dark:hover:bg-nature-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                                             >
-                                                                Cancel
+                                                                {t('Cancel')}
                                                             </button>
                                                         </div>
                                                     </div>
@@ -1747,7 +1771,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                                     onClick={() => setConfirmingResume(true)}
                                                                     className="py-2.5 px-3 rounded-xl border border-emerald-600 dark:border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 font-bold text-xs shadow-xs hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors flex items-center justify-center gap-1.5"
                                                                 >
-                                                                    <span>▶️</span> Resume {kw.Kind}
+                                                                    <span>▶️</span> {project ? t('Resume Project') : t('Resume Enterprise')}
                                                                 </button>
                                                             ) : (
                                                                 <button
@@ -1755,7 +1779,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                                     onClick={() => setConfirmingPause(true)}
                                                                     className="py-2.5 px-3 rounded-xl border border-amber-500 dark:border-amber-600 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 font-bold text-xs shadow-xs hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-colors flex items-center justify-center gap-1.5"
                                                                 >
-                                                                    <span>❄️</span> Pause for Season
+                                                                    <span>❄️</span> {t('Pause for Season')}
                                                                 </button>
                                                             )
                                                         )}
@@ -1767,7 +1791,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                                     onClick={() => setConfirmingCancelWindUp(true)}
                                                                     className="py-2.5 px-3 rounded-xl border border-emerald-600 dark:border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 font-bold text-xs shadow-xs hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors flex items-center justify-center gap-1.5"
                                                                 >
-                                                                    <span>🛑</span> Stop Wind-Up
+                                                                    <span>🛑</span> {t('Stop Wind-Up')}
                                                                 </button>
                                                                 {windUpGraceEnded && (
                                                                     <button
@@ -1775,7 +1799,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                                         onClick={() => setConfirmingFinaliseWindUp(true)}
                                                                         className="py-2.5 px-3 rounded-xl border border-bp-danger-fill bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-1.5"
                                                                     >
-                                                                        <span>🏁</span> Finalise Wind-Up
+                                                                        <span>🏁</span> {t('Finalise Wind-Up')}
                                                                     </button>
                                                                 )}
                                                             </>
@@ -1785,7 +1809,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                                 onClick={() => setConfirmingWindUp(true)}
                                                                 className="py-2.5 px-3 rounded-xl border border-red-300 dark:border-red-900/60 bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-400 font-bold text-xs shadow-xs hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors flex items-center justify-center gap-1.5"
                                                             >
-                                                                <span>⚠️</span> Start Wind-Up
+                                                                <span>⚠️</span> {t('Start Wind-Up')}
                                                             </button>
                                                         )}
                                                     </div>
@@ -1804,7 +1828,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                             className="w-full py-2.5 px-4 rounded-xl border border-red-300 dark:border-red-800/80 bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 font-bold text-xs hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
                                         >
                                             <span aria-hidden="true">🛑</span>
-                                            {cancelling ? 'Cancelling & Refunding Backers…' : 'Cancel Initiative & Refund Escrow'}
+                                            {cancelling ? t('Cancelling & Refunding Backers…') : t('Cancel Initiative & Refund Escrow')}
                                         </button>
                                     </div>
                                 )}

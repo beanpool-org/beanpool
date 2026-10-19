@@ -2,7 +2,7 @@
   "_meta": {
     "language": "tr",
     "name": "Turkish",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-19",
@@ -672,5 +672,14 @@
   "I thrive in spontaneous, novel settings": "Kendiliğinden gelişen, yenilikçi ortamlarda verimliyimdir",
   "I am patient with different paces and value keeping the community atmosphere harmonious.": "Farklı çalışma tempolarına karşı sabırlıyımdır ve grup içindeki huzuru korumaya önem veririm.",
   "I push for faster progress when needed": "Gerektiğinde işlerin hızlanması için bastırırım",
-  "I push for higher standards when needed": "Gerektiğinde standartların yükselmesi için bastırırım"
+  "I push for higher standards when needed": "Gerektiğinde standartların yükselmesi için bastırırım",
+  "Type an amount.": "Bir tutar girin.",
+  "The amount can’t be below 0.": "Tutar 0'dan küçük olamaz.",
+  "Type the amount without thousands separators, like {example}.": "Tutarı {example} gibi binlik ayırıcı olmadan girin.",
+  "Type one decimal mark at most, like {example}.": "{example} gibi en fazla bir ondalık işareti girin.",
+  "Type at most {n} decimal, like {example}.|Type at most {n} decimals, like {example}.": {
+    "one": "{example} gibi en fazla {n} ondalık basamak girin.",
+    "other": "{example} gibi en fazla {n} ondalık basamak girin."
+  },
+  "Type the amount as a number, like {example}.": "Tutarı {example} gibi bir sayı olarak girin."
 }

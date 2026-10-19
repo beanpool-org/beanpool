@@ -52,10 +52,13 @@ import { EVENT_ACCENT } from './EventCard';
 import { palette } from '../constants/colors';
 import { AddressSearch } from './AddressSearch';
 import { placeNameAfterPick } from '../utils/address-search';
-import { deviceLocalClock, looksLikeStreetAddress, PLACE_WORDS, t, tn, zoneLabelFor, type AddressResult, repeatRefusalText, type RepeatChoiceKey } from '@beanpool/core';
+import { deviceLocalClock, formatDate, looksLikeStreetAddress, PLACE_WORDS, t, tn, zoneLabelFor, type AddressResult, repeatRefusalText, type RepeatChoiceKey } from '@beanpool/core';
 import { EventRepeatFields } from './EventRepeatFields';
 import { onlineEventsOn } from '../utils/node-profile';
 import { readsOwn } from '../utils/reads-own';
+
+/** Marked in utils/events.ts, translated here where they are shown. */
+const LINES = { pinWarning: EVENT_PIN_WARNING, pinHint: EVENT_PIN_HINT };
 
 // Mullumbimby, as the radius picker uses, until the member's own location is known.
 const DEFAULT_REGION = { latitude: -28.5523, longitude: 153.4991, latitudeDelta: 0.02, longitudeDelta: 0.02 };
@@ -206,7 +209,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
                 const treasuriesMap = new Map((treasuries || []).map(t => [t.publicKey, t.name]));
                 setEnterprises(keeperOf.map(pk => ({
                     publicKey: pk,
-                    name: treasuriesMap.get(pk) || 'Enterprise',
+                    name: treasuriesMap.get(pk) || t('Enterprise'),
                 })));
             })
             .catch(() => {});
@@ -226,7 +229,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
     }, [visible, identity?.publicKey]);
 
     const hostOptions: HostOption[] = [
-        { key: 'me', label: 'Me', authorPubkey: identity?.publicKey || '', groupId: null },
+        { key: 'me', label: t('Me', undefined, 'post as'), authorPubkey: identity?.publicKey || '', groupId: null },
         ...enterprises.map(e => ({ key: `ent:${e.publicKey}`, label: e.name, authorPubkey: e.publicKey, groupId: null })),
         ...memberGroups.filter(g => g.convenor).map(g => ({ key: `grp:${g.id}`, label: g.name, authorPubkey: identity?.publicKey || '', groupId: g.id })),
     ];
@@ -266,9 +269,9 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
         setApproximate(false); exactPin.current = null;
         setAudienceGroupId(prefill.groupId);
         const copied: HostOption | null = prefill.enterprisePubkey
-            ? { key: `ent:${prefill.enterprisePubkey}`, label: 'Enterprise', authorPubkey: prefill.enterprisePubkey, groupId: null }
+            ? { key: `ent:${prefill.enterprisePubkey}`, label: t('Enterprise'), authorPubkey: prefill.enterprisePubkey, groupId: null }
             : prefill.groupId
-                ? { key: `grp:${prefill.groupId}`, label: 'Group', authorPubkey: identity?.publicKey || '', groupId: prefill.groupId }
+                ? { key: `grp:${prefill.groupId}`, label: t('Group'), authorPubkey: identity?.publicKey || '', groupId: prefill.groupId }
                 : null;
         setCopiedHost(copied);
         setHostKey(copied?.key ?? 'me');
@@ -422,9 +425,9 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
             if (status !== 'granted' && canAskAgain) {
                 status = (await Location.requestForegroundPermissionsAsync()).status;
             } else if (status !== 'granted') {
-                Alert.alert('Location is off', 'Allow location in settings, or tap the map to place the pin.', [
-                    { text: 'Cancel', style: 'cancel' },
-                    { text: 'Open Settings', onPress: () => Linking.openSettings() },
+                Alert.alert(t('Location is off'), t('Allow location in settings, or tap the map to place the pin.'), [
+                    { text: t('Cancel'), style: 'cancel' },
+                    { text: t('Open Settings'), onPress: () => Linking.openSettings() },
                 ]);
                 return;
             }
@@ -433,7 +436,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
             placePin(loc.coords.latitude, loc.coords.longitude);
             centreMap(loc.coords.latitude, loc.coords.longitude);
         } catch {
-            Alert.alert('Location unavailable', 'Tap the map to place the pin instead.');
+            Alert.alert(t('Location unavailable'), t('Tap the map to place the pin instead.'));
         }
     };
 
@@ -467,7 +470,8 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
             );
             if (out.base64) setPhoto(`data:image/jpeg;base64,${out.base64}`);
         } catch (e: any) {
-            Alert.alert('Photo not added', e?.message || 'Could not open your photos.');
+            // The phone's own words when it gave some.
+            Alert.alert(t('Photo not added'), e?.message || t('Could not open your photos.'));
         }
     };
 
@@ -482,7 +486,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
         Keyboard.dismiss();
         if (!editOf || !editCheck) return;
         if (!editCheck.ok) {
-            Alert.alert('Almost there', editCheck.error);
+            Alert.alert(t('Almost there'), editCheck.error);
             return;
         }
         if (Object.keys(editCheck.patch).length === 0) {
@@ -504,7 +508,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
             onClose();
         } catch (err: any) {
             // A repeating event's refusals are the node's own sentences, in the member's language (DESIGN-event-times §8).
-            Alert.alert('Event not saved', repeatRefusalText(err?.message) || 'The node did not accept the change.');
+            Alert.alert(t('Event not saved'), repeatRefusalText(err?.message) || t('The node did not accept the change.'));
         } finally {
             setSubmitting(false);
         }
@@ -513,7 +517,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
     const handleCreate = async () => {
         Keyboard.dismiss();
         if (!identity?.publicKey) {
-            Alert.alert('Error', 'No member identity found. Please set up your profile.');
+            Alert.alert(t('Error'), t('No member identity found. Please set up your profile.'));
             return;
         }
         let tz = zone.tz;
@@ -538,7 +542,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
             hostLetsIn, repeat, repeatUntil,
         });
         if (!built.ok) {
-            Alert.alert('Almost there', built.error);
+            Alert.alert(t('Almost there'), built.error);
             return;
         }
         setSubmitting(true);
@@ -556,7 +560,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
             onSuccess?.();
             onClose();
         } catch (err: any) {
-            Alert.alert('Event not created', repeatRefusalText(err?.message) || 'The node did not accept the event.');
+            Alert.alert(t('Event not created'), repeatRefusalText(err?.message) || t('The node did not accept the event.'));
         } finally {
             setSubmitting(false);
         }
@@ -570,7 +574,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
                     style={[styles.input, styles.dateBtn]}
                     onPress={() => openPicker(field)}
                     accessibilityRole="button"
-                    accessibilityLabel={value ? `${label}: ${formatPickerValue(value)}. Change` : `${label}: ${placeholder}`}
+                    accessibilityLabel={value ? t('{label}: {value}. Change', { label, value: formatPickerValue(value) }) : t('{label}: {placeholder}', { label, placeholder })}
                 >
                     <Text style={[styles.dateText, !value && { color: colors.text.muted }]} numberOfLines={1}>
                         {value ? formatPickerValue(value) : placeholder}
@@ -581,9 +585,9 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
                         onPress={() => setEnd(null)}
                         style={styles.clearBtn}
                         accessibilityRole="button"
-                        accessibilityLabel="Clear end time"
+                        accessibilityLabel={t('Clear end time')}
                     >
-                        <Text style={styles.clearText}>Clear</Text>
+                        <Text style={styles.clearText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Clear')}</Text>
                     </Pressable>
                 )}
             </View>
@@ -602,9 +606,9 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
                             style={styles.doneBtn}
                             onPress={() => { commit(picker.field, picker.draft); setPicker(null); }}
                             accessibilityRole="button"
-                            accessibilityLabel="Done"
+                            accessibilityLabel={t('Done')}
                         >
-                            <Text style={styles.doneText}>Done</Text>
+                            <Text style={styles.doneText}>{t('Done')}</Text>
                         </Pressable>
                     )}
                 </View>
@@ -630,44 +634,44 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
             <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
                 <View style={styles.container}>
                     <View style={[styles.header, { paddingTop: HEADER_PAD_TOP + topInset }]}>
-                        <Pressable onPress={onClose} hitSlop={12} style={styles.headerBtn} accessibilityRole="button" accessibilityLabel="Cancel">
-                            <Text style={styles.cancelText} numberOfLines={1}>Cancel</Text>
+                        <Pressable onPress={onClose} hitSlop={12} style={styles.headerBtn} accessibilityRole="button" accessibilityLabel={t('Cancel')}>
+                            <Text style={styles.cancelText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Cancel')}</Text>
                         </Pressable>
-                        <Text style={styles.headerTitle} numberOfLines={1}>{editOf ? 'Edit Event' : isCopy ? 'Copy Event' : 'New Event'}</Text>
+                        <Text style={styles.headerTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{editOf ? t('Edit Event') : isCopy ? t('Copy Event') : t('New Event')}</Text>
                         <Pressable
                             onPress={editOf ? handleSave : handleCreate}
                             disabled={submitting}
                             style={[styles.postBtn, submitting && { opacity: 0.5 }]}
                             accessibilityRole="button"
-                            accessibilityLabel={editOf ? (submitting ? 'Saving event' : 'Save changes') : (submitting ? 'Creating event' : 'Create event')}
-                            accessibilityHint={editOf ? 'Saves changes to this event' : isCopy ? 'Creates a copy of this event' : 'Publishes your new event to the Market feed'}
+                            accessibilityLabel={editOf ? (submitting ? t('Saving event') : t('Save changes')) : (submitting ? t('Creating event') : t('Create event'))}
+                            accessibilityHint={editOf ? t('Saves changes to this event') : isCopy ? t('Creates a copy of this event') : t('Publishes your new event to the Market feed')}
                             accessibilityState={{ disabled: submitting, busy: submitting }}
                         >
-                            {submitting ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.postText} numberOfLines={1}>{editOf ? 'Save' : 'Create'}</Text>}
+                            {submitting ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.postText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{editOf ? t('Save') : t('Create')}</Text>}
                         </Pressable>
                     </View>
 
                     <ScrollView ref={scrollRef} style={styles.body} contentContainerStyle={{ paddingBottom: 48 }} keyboardShouldPersistTaps="handled">
                         <View style={styles.field}>
-                            <Text style={styles.label}>TITLE *</Text>
+                            <Text style={styles.label}>{t('TITLE *')}</Text>
                             <TextInput
                                 style={styles.input}
-                                placeholder="e.g. Working bee at the hall"
+                                placeholder={t('e.g. Working bee at the hall')}
                                 placeholderTextColor={colors.text.muted}
                                 value={title}
                                 onChangeText={setTitle}
                                 maxLength={EVENT_TITLE_MAX}
-                                accessibilityLabel="Event title"
+                                accessibilityLabel={t('Event title')}
                             />
                         </View>
 
                         {isCopy && (
                             <Text style={styles.copyNote}>
-                                Copied from your last one. Pick the new date and time. The photo is not copied — add one again if you want.
+                                {t('Copied from your last one. Pick the new date and time. The photo is not copied — add one again if you want.')}
                             </Text>
                         )}
-                        {dateRow('start', 'STARTS *', start, 'Pick a date and time')}
-                        {dateRow('end', 'ENDS (OPTIONAL)', end, start ? `2 hours after start (${formatPickerValue(defaultEventEnd(start)).split(', ')[1]})` : '2 hours after start if blank')}
+                        {dateRow('start', t('STARTS *'), start, t('Pick a date and time'))}
+                        {dateRow('end', t('ENDS (OPTIONAL)'), end, start ? t('2 hours after start ({time})', { time: formatDate(defaultEventEnd(start), 'time') }) : t('2 hours after start if blank'))}
                         {zoneLine && (
                             <View style={styles.zoneLine} accessibilityLiveRegion="polite">
                                 <Text style={styles.zoneText}>
@@ -761,15 +765,15 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
                             </View>
                         ) : (<>
                         <View style={styles.field}>
-                            <Text style={styles.label}>PLACE NAME *</Text>
+                            <Text style={styles.label}>{t('PLACE NAME *')}</Text>
                             <TextInput
                                 style={styles.input}
-                                placeholder="e.g. The old bowls club"
+                                placeholder={t('e.g. The old bowls club')}
                                 placeholderTextColor={colors.text.muted}
                                 value={placeName}
                                 onChangeText={setPlaceName}
                                 maxLength={EVENT_PLACE_NAME_MAX}
-                                accessibilityLabel="Place name"
+                                accessibilityLabel={t('Place name')}
                             />
                             {/* Where anyone can join, the place name is the one place everyone who can see the event reads
                                 (DESIGN-global-member-privacy-fable.md §4); a typed street address gets a gentle nudge. */}
@@ -781,7 +785,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
                         </View>
 
                         <View style={styles.field} onLayout={(e) => { addressY.current = e.nativeEvent.layout.y; }}>
-                            <Text style={styles.label}>FIND AN ADDRESS</Text>
+                            <Text style={styles.label}>{t('FIND AN ADDRESS')}</Text>
                             <AddressSearch
                                 accent={EVENT_ACCENT}
                                 onPick={pickAddress}
@@ -790,7 +794,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
                         </View>
 
                         <View style={styles.field}>
-                            <Text style={styles.label}>PIN ON THE MAP *</Text>
+                            <Text style={styles.label}>{t('PIN ON THE MAP *')}</Text>
                             <View style={styles.mapBox}>
                                 {HAS_MAPS_KEY ? (
                                     <MapView
@@ -813,30 +817,35 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
                                     </MapView>
                                 ) : (
                                     <View style={[StyleSheet.absoluteFill, styles.mapFallback]}>
-                                        <Text style={styles.helper}>The map is not available in this build. Use your location.</Text>
+                                        <Text style={styles.helper}>{t('The map is not available in this build. Use your location.')}</Text>
                                     </View>
                                 )}
                             </View>
                             <Text style={styles.helper} numberOfLines={2}>
-                                {pin ? `${approximate ? 'Approximate pin' : 'Exact pin'} · ${pin.lat.toFixed(approximate ? 3 : 5)}, ${pin.lng.toFixed(approximate ? 3 : 5)}` : 'Tap the map to place the pin.'}
+                                {/* The coordinates as a map writes them (a dot, every language): a place's code, not a number to read. */}
+                                {pin
+                                    ? (approximate
+                                        ? t('Approximate pin · {lat}, {lng}', { lat: pin.lat.toFixed(3), lng: pin.lng.toFixed(3) })
+                                        : t('Exact pin · {lat}, {lng}', { lat: pin.lat.toFixed(5), lng: pin.lng.toFixed(5) }))
+                                    : t('Tap the map to place the pin.')}
                             </Text>
                             <View style={styles.pinActions}>
-                                <Pressable onPress={placePinAtMyLocation} style={styles.secondaryBtn} accessibilityRole="button" accessibilityLabel="Use my location for the pin">
-                                    <Text style={styles.secondaryText} numberOfLines={1}>📍 Use my location</Text>
+                                <Pressable onPress={placePinAtMyLocation} style={styles.secondaryBtn} accessibilityRole="button" accessibilityLabel={t('Use my location for the pin')}>
+                                    <Text style={styles.secondaryText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('📍 Use my location')}</Text>
                                 </Pressable>
                             </View>
                             <View style={styles.warningBox}>
-                                <Text style={styles.warningTitle}>{EVENT_PIN_WARNING}</Text>
-                                <Text style={styles.warningBody}>{EVENT_PIN_HINT}</Text>
+                                <Text style={styles.warningTitle}>{t(LINES.pinWarning)}</Text>
+                                <Text style={styles.warningBody}>{t(LINES.pinHint)}</Text>
                                 <Pressable
                                     onPress={makeApproximate}
                                     disabled={!pin || approximate}
                                     style={[styles.secondaryBtn, styles.approxBtn, (!pin || approximate) && styles.secondaryBtnDisabled]}
                                     accessibilityRole="button"
-                                    accessibilityLabel="Approximate the pin to about 100 metres"
+                                    accessibilityLabel={t('Approximate the pin to about 100 metres')}
                                     accessibilityState={{ disabled: !pin || approximate, selected: approximate }}
                                 >
-                                    <Text style={[styles.secondaryText, (!pin || approximate) && styles.secondaryTextDisabled]} numberOfLines={1}>{approximate ? 'Approximate ✓' : 'Approximate (~100 m)'}</Text>
+                                    <Text style={[styles.secondaryText, (!pin || approximate) && styles.secondaryTextDisabled]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{approximate ? t('Approximate ✓') : t('Approximate (~100 m)')}</Text>
                                 </Pressable>
                                 {approximate && exactPin.current && (
                                     <Pressable
@@ -846,7 +855,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
                                         accessibilityLabel={t('Use the exact spot')}
                                         testID="event-pin-exact"
                                     >
-                                        <Text style={styles.secondaryText} numberOfLines={1}>{t('Use the exact spot')}</Text>
+                                        <Text style={styles.secondaryText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Use the exact spot')}</Text>
                                     </Pressable>
                                 )}
                             </View>
@@ -854,41 +863,41 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
                         </>)}
 
                         <View style={styles.field}>
-                            <Text style={styles.label}>DESCRIPTION</Text>
+                            <Text style={styles.label}>{t('DESCRIPTION')}</Text>
                             <TextInput
                                 style={[styles.input, styles.textArea]}
-                                placeholder="What is happening, and who is it for?"
+                                placeholder={t('What is happening, and who is it for?')}
                                 placeholderTextColor={colors.text.muted}
                                 value={description}
                                 onChangeText={setDescription}
                                 multiline
-                                accessibilityLabel="Description"
+                                accessibilityLabel={t('Description')}
                             />
                         </View>
 
                         <View style={styles.field}>
-                            <Text style={styles.label}>PHOTO (OPTIONAL)</Text>
+                            <Text style={styles.label}>{t('PHOTO (OPTIONAL)')}</Text>
                             <View style={styles.photoRow}>
                                 {photo ? (
-                                    <Image source={{ uri: photo }} style={styles.photo} contentFit="cover" accessibilityLabel="Event photo" />
+                                    <Image source={{ uri: photo }} style={styles.photo} contentFit="cover" accessibilityLabel={t('Event photo')} />
                                 ) : null}
-                                <Pressable onPress={photo ? () => setPhoto(null) : pickPhoto} style={styles.secondaryBtn} accessibilityRole="button" accessibilityLabel={photo ? 'Remove photo' : 'Add a photo'}>
-                                    <Text style={styles.secondaryText} numberOfLines={1}>{photo ? 'Remove photo' : '📷 Add a photo'}</Text>
+                                <Pressable onPress={photo ? () => setPhoto(null) : pickPhoto} style={styles.secondaryBtn} accessibilityRole="button" accessibilityLabel={photo ? t('Remove photo') : t('Add a photo')}>
+                                    <Text style={styles.secondaryText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{photo ? t('Remove photo') : t('📷 Add a photo')}</Text>
                                 </Pressable>
                             </View>
                         </View>
 
                         <View style={styles.field}>
-                            <Text style={styles.label}>NOTE FOR PEOPLE WHO ARE GOING</Text>
+                            <Text style={styles.label}>{t('NOTE FOR PEOPLE WHO ARE GOING')}</Text>
                             <TextInput
                                 style={[styles.input, styles.textArea]}
-                                placeholder="Gate code, parking, what to bring"
+                                placeholder={t('Gate code, parking, what to bring')}
                                 placeholderTextColor={colors.text.muted}
                                 value={note}
                                 onChangeText={setNote}
                                 multiline
                                 maxLength={EVENT_PRIVATE_NOTE_MAX}
-                                accessibilityLabel="Note for people who are going"
+                                accessibilityLabel={t('Note for people who are going')}
                             />
                             <Text style={styles.helper} testID="event-note-helper">{privateNoteHelper(hostLetsIn, openMembership)}</Text>
                             <Pressable
@@ -915,20 +924,20 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
 
                         {editOf && editCheck?.ok && editCheck.notifies && (
                             <View style={styles.warningBox} accessibilityLiveRegion="polite">
-                                <Text style={styles.warningTitle}>You changed the time or place.</Text>
-                                <Text style={styles.warningBody}>The event will show UPDATED and everyone going will be told.</Text>
+                                <Text style={styles.warningTitle}>{t('You changed the time or place.')}</Text>
+                                <Text style={styles.warningBody}>{t('The event will show UPDATED and everyone going will be told.')}</Text>
                             </View>
                         )}
 
                         {editOf ? (
                             <View style={styles.field}>
-                                <Text style={styles.label}>WHO CAN SEE IT</Text>
-                                <Text style={styles.helper}>{editOf.audienceLabel} Who can see it and who hosts it stay as they are.</Text>
+                                <Text style={styles.label}>{t('WHO CAN SEE IT')}</Text>
+                                <Text style={styles.helper}>{t('{audience} Who can see it and who hosts it stay as they are.', { audience: editOf.audienceLabel })}</Text>
                             </View>
                         ) : (<>
                         {hostOptions.length > 1 && (
                             <View style={styles.field}>
-                                <Text style={styles.label}>POST AS</Text>
+                                <Text style={styles.label}>{t('POST AS')}</Text>
                                 <View style={styles.chipWrap}>
                                     {hostOptions.map(h => chip(h.key, h.label, h.key === host.key, () => {
                                         setHostKey(h.key);
@@ -939,14 +948,14 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
                         )}
 
                         <View style={styles.field}>
-                            <Text style={styles.label}>WHO CAN SEE IT</Text>
+                            <Text style={styles.label}>{t('WHO CAN SEE IT')}</Text>
                             {host.groupId ? (
-                                <Text style={styles.helper}>🔒 Only {host.label} members, because the group is hosting.</Text>
+                                <Text style={styles.helper}>{t('🔒 Only {name} members, because the group is hosting.', { name: host.label })}</Text>
                             ) : enterpriseHosts ? (
-                                <Text style={styles.helper}>{host.label} hosts for the whole community, so this event is not group-only.</Text>
+                                <Text style={styles.helper}>{t('{name} hosts for the whole community, so this event is not group-only.', { name: host.label })}</Text>
                             ) : (
                                 <View style={styles.chipWrap}>
-                                    {chip('public', 'This community', audienceGroupId === null, () => setAudienceGroupId(null))}
+                                    {chip('public', t('This community'), audienceGroupId === null, () => setAudienceGroupId(null))}
                                     {memberGroups.map(g => chip(g.id, `🔒 ${g.name}`, audienceGroupId === g.id, () => setAudienceGroupId(g.id)))}
                                 </View>
                             )}

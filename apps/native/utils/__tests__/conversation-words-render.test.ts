@@ -335,6 +335,21 @@ describe('a direct message in the pseudo-locale: every word came through t() (wo
     });
 });
 
+describe('the admin page\'s message in a direct message, in the pseudo-locale (#2179 review)', () => {
+    it('its words as written, even word for word a sentence BeanPool writes; the note under it in the member\'s language', async () => {
+        const note = "From your community's admins. Not a private message: the community's server can read it.";
+        const admins = { id: 'mA', senderId: 'kofi-key', text: 'Keep them locked', type: 'text', unattributed: true, quoteFrom: 'admins', integrityNote: note, rawTimestamp: iso(now - 30_000), timestamp: '' };
+        net.answer = node({ getMessages: [...DM_MESSAGES, admins] });
+        await renderIn('xx');
+        const line = Array.from(host.querySelectorAll('[data-testid="dm-line-unattributed"]')).find((l) => l.textContent?.includes(pseudoLocalise(note)));
+        expect(line, 'the admins\' line').toBeTruthy();
+        expect(line!.textContent).toContain('Keep them locked');
+        expect(line!.textContent).not.toContain(pseudoLocalise('Keep them locked'));
+        // A line that didn't open is still BeanPool's stand-in, in the member's language.
+        expect(host.textContent).toContain(pseudoLocalise(DM_LINE_NOT_VERIFIED_TEXT));
+    });
+});
+
 describe('a group\'s chat and an event\'s chat in the pseudo-locale', () => {
     it('a new group: the owner header, the invite prompt, the node\'s system line as it sent it, the composer and its notice', async () => {
         route.now = { view: 'group', screenId: 'g1' };

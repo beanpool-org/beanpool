@@ -181,13 +181,19 @@ const DAY = 24 * 60 * 60 * 1000;
 const now = Date.now();
 const iso = (ms: number) => new Date(ms).toISOString();
 
-/** The conversation list as utils/db getConversations gives it: the English its lower layers write is in it. */
+/**
+ * The conversation list as utils/db getConversations gives it: the English its lower layers write is in it, marked
+ * `lastMessageFromApp`; a member's words are not, even word for word a sentence BeanPool writes (Una's).
+ */
+/** A member's DM that is word for word one of the sentences chat-line-words.ts translates. */
+const MEMBER_WRITES_A_TABLE_SENTENCE = 'Keep them locked';
 const CONVERSATIONS = [
-    { id: 'c-kofi', type: 'dm', peer: 'Kofi', peerPubkey: 'kofi-key', keyChanged: true, lastMessage: 'Started conversation', rawTimestamp: iso(now - 60_000), unread: 2 },
-    { id: 'c-mia', type: 'dm', peer: 'Mia', peerPubkey: 'mia-key', postId: 'p-ladder', postTitle: 'Borrow a long ladder', postStatus: 'pending', lastMessage: 'see you at the hall', rawTimestamp: iso(now - 3 * DAY), unread: 0 },
-    { id: 'c-zoe', type: 'dm', peer: 'Zoe', peerPubkey: 'zoe-key', postId: 'p-maths', postTitle: 'Maths tutoring', postStatus: 'completed', lastMessage: 'thanks!', rawTimestamp: iso(now - 20 * DAY), unread: 0 },
-    { id: 'c-ivo', type: 'dm', peer: 'Ivo', peerPubkey: 'ivo-key', postId: 'p-eggs', postTitle: 'Duck eggs', postStatus: 'active', lastMessage: '5 Beans held in trust.', rawTimestamp: iso(now - 2 * DAY), unread: 0 },
-    { id: 'c-ola', type: 'dm', peer: 'Ola', peerPubkey: 'ola-key', lastMessage: 'Notice: 🔒 Encrypted message', rawTimestamp: null, unread: 0 },
+    { id: 'c-kofi', type: 'dm', peer: 'Kofi', peerPubkey: 'kofi-key', keyChanged: true, lastMessage: 'Started conversation', lastMessageFromApp: true, rawTimestamp: iso(now - 60_000), unread: 2 },
+    { id: 'c-mia', type: 'dm', peer: 'Mia', peerPubkey: 'mia-key', postId: 'p-ladder', postTitle: 'Borrow a long ladder', postStatus: 'pending', lastMessage: 'see you at the hall', lastMessageFromApp: false, rawTimestamp: iso(now - 3 * DAY), unread: 0 },
+    { id: 'c-zoe', type: 'dm', peer: 'Zoe', peerPubkey: 'zoe-key', postId: 'p-maths', postTitle: 'Maths tutoring', postStatus: 'completed', lastMessage: 'thanks!', lastMessageFromApp: false, rawTimestamp: iso(now - 20 * DAY), unread: 0 },
+    { id: 'c-ivo', type: 'dm', peer: 'Ivo', peerPubkey: 'ivo-key', postId: 'p-eggs', postTitle: 'Duck eggs', postStatus: 'active', lastMessage: '5 Beans held in trust.', lastMessageFromApp: true, rawTimestamp: iso(now - 2 * DAY), unread: 0 },
+    { id: 'c-ola', type: 'dm', peer: 'Ola', peerPubkey: 'ola-key', lastMessage: 'Notice: 🔒 Encrypted message', lastMessageFromApp: true, rawTimestamp: null, unread: 0 },
+    { id: 'c-una', type: 'dm', peer: 'Una', peerPubkey: 'una-key', lastMessage: MEMBER_WRITES_A_TABLE_SENTENCE, lastMessageFromApp: false, rawTimestamp: iso(now - 4 * DAY), unread: 0 },
 ];
 /** Two deals waiting on the member: a release in Mia's chat and a review in Zoe's. */
 const DEALS = [
@@ -230,7 +236,7 @@ const CLOSED_WORDS = 'We take no requests here';
 
 /** Everything members and the community wrote: shown as written, in every language. */
 const OTHERS = [
-    ...CONVERSATIONS.flatMap((c: any) => [c.peer, c.postTitle]), 'see you at the hall', 'thanks!',
+    ...CONVERSATIONS.flatMap((c: any) => [c.peer, c.postTitle]), 'see you at the hall', 'thanks!', MEMBER_WRITES_A_TABLE_SENTENCE,
     ...DEALS.flatMap((d: any) => [d.postTitle, d.peerCallsign]),
     ...YOUR_GROUPS.flatMap((g: any) => [g.name, g.lastMessage?.text, g.lastMessage?.authorCallsign]),
     ...FRIENDS.map((f) => f.callsign), ...MEMBERS.map((m) => m.callsign), ...ADDED_YOU.map((a) => a.callsign),
@@ -338,6 +344,9 @@ describe('Talk in the pseudo-locale: every word on it came through t() (words S3
         expect(host.textContent).toContain(pseudoLocalise('Started conversation'));
         expect(host.textContent).toContain(pseudoLocalise('{n} Beans held in trust.').replace('{n}', '5'));
         expect(host.textContent).toContain(pseudoLocalise('Notice: {text}').replace('{text}', pseudoLocalise('🔒 Encrypted message')));
+        // A member's words are shown as they wrote them, even word for word a sentence BeanPool writes (#2179 review).
+        expect(host.textContent).toContain(MEMBER_WRITES_A_TABLE_SENTENCE);
+        expect(host.textContent).not.toContain(pseudoLocalise(MEMBER_WRITES_A_TABLE_SENTENCE));
         expect(bracketed()).toBeGreaterThan(15);
         expect(bypassing()).toEqual([]);
     });

@@ -30,7 +30,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import { CATEGORIES, type ChannelCategory } from '@beanpool/core';
+import { CATEGORIES, formatNumber, t, tn, word, type ChannelCategory, type WordKey } from '@beanpool/core';
 import { useIdentity } from '../IdentityContext';
 import { useTheme, useStyles } from '../ThemeContext';
 import {
@@ -41,16 +41,35 @@ import {
     type PulseFeedItem,
 } from '../../utils/pulse';
 import { PulseFeedCard } from '../../components/PulseFeedCard';
+import { pulseLineWords } from '../../components/pulse-lines';
 import { pulseVideoViewabilityChanged } from '../../utils/pulse-video-player';
 import { anchorUrl } from '../../utils/node-post';
 import { PageTitle, useTabRetapScrollTop } from '../../components/PageTitle';
 import { useQuickReturn, QuickReturnBlock } from '../../components/QuickReturn';
 
+type LaneId = 'neighbours' | 'local' | 'learn';
+
+/** Each lane's name on the switch, shown through t(). */
+const LANE_NAMES: Record<LaneId, WordKey> = {
+    neighbours: word('Neighbours'),
+    local: word('Local'),
+    learn: word('Learn'),
+};
+
+/** What a screen reader says for a lane: its name, and how many items it holds when it holds any. Whole sentences. */
+function laneSpoken(id: LaneId, count: number): string {
+    switch (id) {
+        case 'neighbours': return count > 0 ? tn(count, 'Neighbours feed, {n} item', 'Neighbours feed, {n} items') : t('Neighbours feed');
+        case 'local': return count > 0 ? tn(count, 'Local feed, {n} item', 'Local feed, {n} items') : t('Local feed');
+        case 'learn': return count > 0 ? tn(count, 'Learn feed, {n} item', 'Learn feed, {n} items') : t('Learn feed');
+    }
+}
+
 export default function PulseScreen() {
     const { colors, theme } = useTheme();
     const { identity } = useIdentity();
     const styles = useStyles(makeStyles);
-    const [lane, setLane] = useState<'neighbours' | 'local' | 'learn'>('neighbours');
+    const [lane, setLane] = useState<LaneId>('neighbours');
     const [items, setItems] = useState<PulseFeedItem[]>([]);
     const [selectedCategory, setSelectedCategory] = useState<ChannelCategory | 'all'>('all');
     const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -138,7 +157,8 @@ export default function PulseScreen() {
             setNextCursor(res.nextCursor);
         } catch (e: any) {
             if (activeCategoryRef.current === category && activeLaneRef.current === currentLane) {
-                setError(e?.message || 'Could not load community feed.');
+                // utils/pulse.ts writes English (it signs requests): its sentences are translated here.
+                setError(e?.message ? pulseLineWords(e.message) : t('Could not load community feed.'));
             }
         } finally {
             if (activeCategoryRef.current === category && activeLaneRef.current === currentLane) {
@@ -222,7 +242,7 @@ export default function PulseScreen() {
                 });
                 return updated;
             });
-            setError(e?.message || 'Could not hide that item.');
+            setError(e?.message ? pulseLineWords(e.message) : t('Could not hide that item.'));
         }
     };
 
@@ -233,9 +253,9 @@ export default function PulseScreen() {
             return (
                 <View style={styles.emptyContainer}>
                     <Text style={styles.emptyIcon}>📚</Text>
-                    <Text style={styles.emptyTitle}>No learning guides yet</Text>
+                    <Text style={styles.emptyTitle}>{t('No learning guides yet')}</Text>
                     <Text style={styles.emptyBody}>
-                        Curated guides and reflections will appear here.
+                        {t('Curated guides and reflections will appear here.')}
                     </Text>
                 </View>
             );
@@ -245,17 +265,17 @@ export default function PulseScreen() {
             return (
                 <View style={styles.emptyContainer}>
                     <Text style={styles.emptyIcon}>🔍</Text>
-                    <Text style={styles.emptyTitle}>No posts in this category yet</Text>
+                    <Text style={styles.emptyTitle}>{t('No posts in this category yet')}</Text>
                     <Text style={styles.emptyBody}>
-                        Try selecting "All" or check another category to see what neighbours have posted.
+                        {t('Try selecting "All" or check another category to see what neighbours have posted.')}
                     </Text>
                     <Pressable
                         onPress={() => setSelectedCategory('all')}
                         style={styles.emptyBtn}
                         accessibilityRole="button"
-                        accessibilityLabel="Show all categories"
+                        accessibilityLabel={t('Show all categories')}
                     >
-                        <Text style={styles.emptyBtnText}>Show all categories</Text>
+                        <Text style={styles.emptyBtnText}>{t('Show all categories')}</Text>
                     </Pressable>
                 </View>
             );
@@ -264,18 +284,17 @@ export default function PulseScreen() {
         return (
             <View style={styles.emptyContainer}>
                 <Text style={styles.emptyIcon}>🗞️</Text>
-                <Text style={styles.emptyTitle}>The Pulse is quiet right now</Text>
+                <Text style={styles.emptyTitle}>{t('The Pulse is quiet right now')}</Text>
                 <Text style={styles.emptyBody}>
-                    Items from neighbours' YouTube channels and blogs appear here automatically once syndicated.
-                    As more members connect their channels, this feed will fill up.
+                    {t("Items from neighbours' YouTube channels and blogs appear here automatically once syndicated. As more members connect their channels, this feed will fill up.")}
                 </Text>
                 <Pressable
                     onPress={() => router.push('/channels')}
                     style={styles.emptyPrimaryBtn}
                     accessibilityRole="button"
-                    accessibilityLabel="Connect your channels"
+                    accessibilityLabel={t('Connect your channels')}
                 >
-                    <Text style={styles.emptyPrimaryBtnText}>+ Connect your channels</Text>
+                    <Text style={styles.emptyPrimaryBtnText}>{t('+ Connect your channels')}</Text>
                 </Pressable>
             </View>
         );
@@ -286,7 +305,7 @@ export default function PulseScreen() {
         return (
             <View style={styles.footerLoader}>
                 <ActivityIndicator size="small" color={colors.brand.primary} />
-                <Text style={styles.footerLoaderText}>Loading more posts…</Text>
+                <Text style={styles.footerLoaderText}>{t('Loading more posts…')}</Text>
             </View>
         );
     };
@@ -299,9 +318,9 @@ export default function PulseScreen() {
                 onPress={() => loadFeed(false, lane, selectedCategory)}
                 style={styles.retryBtn}
                 accessibilityRole="button"
-                accessibilityLabel="Retry loading feed"
+                accessibilityLabel={t('Retry loading feed')}
             >
-                <Text style={styles.retryBtnText}>Retry</Text>
+                <Text style={styles.retryBtnText}>{t('Retry')}</Text>
             </Pressable>
         </View>
     ) : null;
@@ -315,14 +334,14 @@ export default function PulseScreen() {
             <View style={{ flex: 1, overflow: 'hidden' }}>
             {/* + Channels rides on the title's line rather than costing a row of its own. */}
             <QuickReturnBlock qr={qr} title={<>
-                <PageTitle title="Pulse" testID="page-title-pulse" right={
+                <PageTitle title={t('Pulse')} testID="page-title-pulse" right={
                     <Pressable
                         onPress={() => router.push('/channels')}
                         style={styles.channelsBtn}
                         accessibilityRole="button"
-                        accessibilityLabel="Manage your channels"
+                        accessibilityLabel={t('Manage your channels')}
                     >
-                        <Text style={styles.channelsBtnText}>+ Channels</Text>
+                        <Text style={styles.channelsBtnText}>{t('+ Channels')}</Text>
                     </Pressable>
                 } />
                 {/* Back and the subtitle belong to the title: they go with it and do not come back with the
@@ -337,10 +356,10 @@ export default function PulseScreen() {
                                 onPress={() => router.back()}
                                 style={styles.backBtn}
                                 accessibilityRole="button"
-                                accessibilityLabel="Go back"
+                                accessibilityLabel={t('Go back')}
                                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                             >
-                                <Text style={styles.backText}>‹ Back</Text>
+                                <Text style={styles.backText}>{t('‹ Back')}</Text>
                             </Pressable>
                     </View>
                     )}
@@ -349,10 +368,10 @@ export default function PulseScreen() {
                     <View style={[styles.titleRow, !router.canGoBack() && { marginTop: 0 }]}>
                         <Text style={styles.subtitle}>
                             {activeLane === 'learn'
-                                ? 'How BeanPool works and daily reflections'
+                                ? t('How BeanPool works and daily reflections')
                                 : activeLane === 'local'
-                                ? 'News and notices from around the shire'
-                                : 'What your neighbours are creating and sharing'}
+                                ? t('News and notices from around the shire')
+                                : t('What your neighbours are creating and sharing')}
                         </Text>
                     </View>
                 </View>
@@ -362,11 +381,12 @@ export default function PulseScreen() {
                 {/* Lane switch */}
                 <View style={styles.laneBar}>
                     {([
-                        { id: 'neighbours' as const, label: 'Neighbours', icon: '\u{1F465}', count: activeLane === 'learn' ? 0 : neighbourItems.length },
-                        ...(localLaneAvailable ? [{ id: 'local' as const, label: 'Local', icon: '\u{1F4F0}', count: localItems.length }] : []),
-                        { id: 'learn' as const, label: 'Learn', icon: '📚', count: activeLane === 'learn' ? items.length : 0 },
+                        { id: 'neighbours' as const, icon: '\u{1F465}', count: activeLane === 'learn' ? 0 : neighbourItems.length },
+                        ...(localLaneAvailable ? [{ id: 'local' as const, icon: '\u{1F4F0}', count: localItems.length }] : []),
+                        { id: 'learn' as const, icon: '📚', count: activeLane === 'learn' ? items.length : 0 },
                     ]).map(l => {
                         const active = activeLane === l.id;
+                        const name = t(LANE_NAMES[l.id]);
                         return (
                             <Pressable
                                 key={l.id}
@@ -377,18 +397,18 @@ export default function PulseScreen() {
                                 style={[styles.laneTab, active && styles.laneTabActive]}
                                 accessibilityRole="radio"
                                 accessibilityState={{ selected: active }}
-                                accessibilityLabel={l.count > 0 ? `${l.label} feed, ${l.count} items` : `${l.label} feed`}
+                                accessibilityLabel={laneSpoken(l.id, l.count)}
                             >
                                 <Text
                                     style={[styles.laneTabText, active && styles.laneTabTextActive]}
                                     numberOfLines={1}
                                     ellipsizeMode="tail"
                                 >
-                                    {l.icon}  {l.label}
+                                    {l.icon}  {name}
                                 </Text>
                                 {l.count > 0 ? (
                                     <Text style={[styles.laneCount, active && styles.laneCountActive]}>
-                                        {l.count}
+                                        {formatNumber(l.count)}
                                     </Text>
                                 ) : null}
                             </Pressable>
@@ -412,7 +432,7 @@ export default function PulseScreen() {
                         ]}
                         accessibilityRole="radio"
                         accessibilityState={{ selected: selectedCategory === 'all' }}
-                        accessibilityLabel="All categories"
+                        accessibilityLabel={t('All categories')}
                         hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
                     >
                         <Text
@@ -421,7 +441,7 @@ export default function PulseScreen() {
                                 selectedCategory === 'all' && styles.categoryChipTextActive,
                             ]}
                         >
-                            🌐 All
+                            {t('🌐 All')}
                         </Text>
                     </Pressable>
 
@@ -437,7 +457,7 @@ export default function PulseScreen() {
                                 ]}
                                 accessibilityRole="radio"
                                 accessibilityState={{ selected: active }}
-                                accessibilityLabel={c.label}
+                                accessibilityLabel={t(c.label)}
                                 hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
                             >
                                 <Text
@@ -446,7 +466,7 @@ export default function PulseScreen() {
                                         active && styles.categoryChipTextActive,
                                     ]}
                                 >
-                                    {c.icon} {c.label}
+                                    {t('{emoji} {label}', { emoji: c.icon, label: t(c.label) })}
                                 </Text>
                             </Pressable>
                         );
@@ -459,7 +479,7 @@ export default function PulseScreen() {
             {loading && !refreshing ? (
                 <View style={[styles.centerLoader, { paddingTop: qr.listInset }]}>
                     <ActivityIndicator size="large" color={colors.brand.primary} />
-                    <Text style={styles.loaderText}>Loading community feed…</Text>
+                    <Text style={styles.loaderText}>{t('Loading community feed…')}</Text>
                 </View>
             ) : (
                 <Animated.FlatList

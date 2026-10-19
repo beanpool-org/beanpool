@@ -425,7 +425,7 @@ describe('the move card', () => {
 
     it('the card offers "Remove it instead" on a move, behind a confirm that warns a phone with no 12 words', () => {
         const card = fs.readFileSync(path.resolve(__dirname, '../../components/VaultMoveCard.tsx'), 'utf8');
-        expect(card).toMatch(/removeButton: 'Remove it instead'/);
+        expect(card).toMatch(/removeButton: word\('Remove it instead'\)/);
         expect(card).toMatch(/\{move && \([\s\S]*?Alert\.alert\([\s\S]*?style: 'destructive'[\s\S]*?removeInstead\(identity, offer\)/);
         expect(card).toMatch(/VAULT_MOVE_COPY\.removeBody\(name, hasMnemonic\(identity\)\)/);
         expect(card).toMatch(/This phone has no 12 words: if you lose it after this, nothing brings your account back\./);

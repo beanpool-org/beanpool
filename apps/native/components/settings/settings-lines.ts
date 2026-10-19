@@ -5,8 +5,10 @@
  * (signs the delete, removes the vault's copies), utils/names-list.ts (the names list's keys), utils/vault.ts and
  * utils/add-words.ts (on the 12 words' key path), utils/no-words-copy.ts (what is said about the 12 words),
  * utils/LocalAuth.ts (App Lock), utils/node-url.ts (which addresses the key signs for), utils/member-area.ts (signs the
- * area read), services/pillar-sync.ts's progress lines. Settings translates their sentences here, by the exact English
- * (the key IS the English), and builds the delete's sentences again from the same plan, word for word in English.
+ * area read), utils/break-glass.ts and utils/sign-out-everywhere.ts (signed admin requests), utils/node-role.ts (re-exported
+ * by the signing node-admin.ts), services/pillar-sync.ts's progress lines. Settings translates their sentences here, by
+ * the exact English (the key IS the English), and builds the sentences that carry a name or a plan again, word for word
+ * in English.
  * Nothing here imports those files: utils/__tests__/settings-lines.test.ts holds every sentence to the constant or
  * builder it stands for, so a sentence changed there fails a test rather than quietly showing English.
  *
@@ -14,6 +16,7 @@
  */
 import { t, tn, word, type WordKey } from '@beanpool/core';
 import type { DeleteOutcome, DeletePlan, KeptCommunity } from '../../utils/delete-here';
+import type { ManageRole } from '../../utils/node-role';
 
 /** Whole sentences, by their English. */
 const FIXED: Readonly<Record<string, WordKey>> = {
@@ -81,6 +84,16 @@ const FIXED: Readonly<Record<string, WordKey>> = {
     'A restore of this account is already waiting on another phone. It goes through there, or you can use your 12 words here.': word('A restore of this account is already waiting on another phone. It goes through there, or you can use your 12 words here.'),
     // utils/keeper-enrolment.ts disconnectSsoKeeper: no community set on this phone.
     'No node configured.': word('No node configured.'),
+    // utils/break-glass.ts issueBreakGlassCode: why no code was made.
+    'Set a screen lock on this phone first: a break-glass code is only shown behind it.': word('Set a screen lock on this phone first: a break-glass code is only shown behind it.'),
+    'The phone was not unlocked, so no code was made.': word('The phone was not unlocked, so no code was made.'),
+    'Could not reach the community. No code was made.': word('Could not reach the community. No code was made.'),
+    'A break-glass code is already being made.': word('A break-glass code is already being made.'),
+    // utils/sign-out-everywhere.ts: why it didn't sign out, and signOutEverywhereDone's two answers.
+    'Could not reach the community, so you may still be signed in elsewhere. Try again when you are online.': word('Could not reach the community, so you may still be signed in elsewhere. Try again when you are online.'),
+    'Already signing you out everywhere.': word('Already signing you out everywhere.'),
+    'Every Settings sign-in of yours has ended. Your break-glass code no longer works: make a new one with Break-glass code. Automation tokens still work: check them with Manage, under Access & Security.': word('Every Settings sign-in of yours has ended. Your break-glass code no longer works: make a new one with Break-glass code. Automation tokens still work: check them with Manage, under Access & Security.'),
+    'Every Settings sign-in of yours has ended.': word('Every Settings sign-in of yours has ended.'),
 };
 
 /** Sentences with a number in them, by their English pattern. */
@@ -98,6 +111,15 @@ const FILLED: ReadonlyArray<{ pattern: RegExp; words: (m: RegExpMatchArray) => s
     {
         pattern: /^BeanPool's key vault couldn't do that \((\d+)\)\. Try again later\. Your 12 words work any time\.$/,
         words: (m) => t("BeanPool's key vault couldn't do that ({status}). Try again later. Your 12 words work any time.", { status: m[1] }),
+    },
+    // utils/sign-out-everywhere.ts and utils/break-glass.ts: a community's refusal with no words of its own, by its status.
+    {
+        pattern: /^The community did not sign you out \((\d+)\)\.$/,
+        words: (m) => t('The community did not sign you out ({status}).', { status: m[1] }),
+    },
+    {
+        pattern: /^The community said no \((\d+)\)\.$/,
+        words: (m) => t('The community said no ({status}).', { status: m[1] }),
     },
 ];
 
@@ -180,6 +202,38 @@ export function deleteFailedWords(reason: string, hasWords: boolean): string {
 /** delete-here.ts deletePlanFailedLine: the other communities couldn't be asked; nothing has been deleted. */
 export function deletePlanFailedWords(reason: string): string {
     return t("Couldn't check your other communities on this phone ({reason}). Nothing has been deleted. Try again.", { reason });
+}
+
+// ── Community admin: utils/node-role.ts's labels, LocalAuth.ts's and sign-out-everywhere.ts's sentences with a name ──
+
+/** node-role.ts manageLabel: the button that opens the community's Settings. */
+export function manageLabelWords(role: ManageRole, communityName: string): string {
+    return role === 'moderator' ? t('Moderate {name}', { name: communityName }) : t('Manage {name}', { name: communityName });
+}
+
+/** node-role.ts manageSubtitle: the line under it. */
+export function manageSubtitleWords(role: ManageRole): string {
+    if (role === 'moderator') return t("You're a moderator · opens the reports to review, signed in as you");
+    return role === 'owner'
+        ? t("You're an owner · opens the node's settings, signed in as you")
+        : t("You're an admin · opens the node's settings, signed in as you");
+}
+
+/** node-role.ts computerSigninLabel: the row that signs a computer's browser into the community's Settings. */
+export function computerSigninLabelWords(role: ManageRole): string {
+    return role === 'moderator' ? t('Moderate this community from a computer') : t('Manage this community from a computer');
+}
+
+/** LocalAuth.ts APP_LOCK_ON_FOR_ROLE: App Lock was turned on for someone who helps run the community. */
+export function appLockOnForRoleWords(communityName: string): string {
+    return t("App Lock is on. You help run {name}, so BeanPool now asks for your phone's own lock (fingerprint, face or PIN) when it opens. Your phone's lock is what keeps your role safe if someone else picks it up. You can turn it off in Settings → App Lock.", { name: communityName });
+}
+
+/** sign-out-everywhere.ts signOutEverywhereWarning: what Sign out everywhere ends; an owner's also retires the code. */
+export function signOutEverywhereWarningWords(communityName: string, isOwner: boolean): string {
+    return isOwner
+        ? t("This signs you out of {name}'s Settings on every computer and phone, and retires your break-glass code. Your key stays on this phone: Manage signs you in again. Automation tokens keep working: press Manage, then Automation tokens under Access & Security, and revoke any you didn't make.", { name: communityName })
+        : t("This signs you out of {name}'s Settings on every computer and phone. Your key stays on this phone: Manage signs you in again.", { name: communityName });
 }
 
 // ── Event reminders: utils/event-extras.ts reminderOffsetLabel's offsets, as "… before" ─────────────────────────

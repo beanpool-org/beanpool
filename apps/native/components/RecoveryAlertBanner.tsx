@@ -28,28 +28,49 @@ import { withJitter } from '../utils/jitter';
 import { useIdentity } from '../app/IdentityContext';
 import { authenticateUser } from '../utils/LocalAuth';
 import { SSO_PROVIDER_NAMES } from '../utils/sso-providers';
-import { t } from '@beanpool/core';
+import { formatDate, t, tn, word } from '@beanpool/core';
+import { settingsLineWords } from './settings/settings-lines';
 import {
-    approvedHolds, approveVaultHold, forgetEndedApprovals, hasVault, holdAnswerIsFinal, holdEndsText, stopVaultHold, vaultCopyKnowledge,
+    approvedHolds, approveVaultHold, forgetEndedApprovals, hasVault, holdAnswerIsFinal, stopVaultHold, vaultCopyKnowledge,
     vaultStatus,
     type VaultHold,
 } from '../utils/vault';
 import { VAULT_WORDS } from '../utils/vault-words';
 
+/** A moment as the banner says it: "19 Oct, 14:05" (core's formatDate; it was the device's own date and clock). */
+function momentWords(d: Date): string {
+    return t('{date}, {time}', { date: formatDate(d, 'day-month'), time: formatDate(d, 'time') });
+}
+
+/**
+ * utils/vault.ts holdEndsText, in the member's language (vault.ts is on the 12 words' key path and never reaches the words
+ * layer): "in about 5 hours (Thu 15:40)", "in a few minutes", or "any moment now". The day and time through core's
+ * formatDate (holdEndsText writes the device's own).
+ */
+export function holdEndsWords(releaseAt: number, now: number = Date.now()): string {
+    const left = releaseAt - now;
+    if (left <= 60_000) return t('any moment now');
+    if (left < 60 * 60_000) return t('in a few minutes');
+    const hours = Math.round(left / (60 * 60_000));
+    const end = new Date(releaseAt);
+    const at = t('{day} {time}', { day: formatDate(end, 'weekday'), time: formatDate(end, 'time') });
+    return tn(hours, 'in about {n} hour ({at})', 'in about {n} hours ({at})', { at });
+}
+
 export const RECOVERY_ALERT_COPY = {
     /** The title over a final answer to a Stop or "Yes, it's me" (utils/vault.ts `holdAnswerIsFinal`). */
     finalTitle: (e: unknown) => {
         const code = (e as { code?: string } | null)?.code;
-        return code === 'collected' ? 'Already gone through' : code === 'stopped' ? 'Already stopped' : 'No longer waiting';
+        return code === 'collected' ? t('Already gone through') : code === 'stopped' ? t('Already stopped') : t('No longer waiting');
     },
     /** The words under it: the error's own, or for `collected` the same sentence in the member's language (vault-words.ts). */
-    finalBody: (e: unknown) => ((e as { code?: string } | null)?.code === 'collected' ? t(VAULT_WORDS.holdCollected) : (e as Error).message),
+    finalBody: (e: unknown) => ((e as { code?: string } | null)?.code === 'collected' ? t(VAULT_WORDS.holdCollected) : settingsLineWords((e as Error).message)),
     /** After Stop It Now, in the community's own count of what is still live (stopEveryRecoverySession). */
-    stoppedTitle: (left: number) => (left === 0 ? '✅ Recovery Stopped' : 'Not all stopped'),
+    stoppedTitle: (left: number) => (left === 0 ? t('✅ Recovery Stopped') : t('Not all stopped')),
     stoppedBody: (left: number) => (left === 0
-        ? 'All active recovery sessions have been cancelled.'
-        : `${left} recovery session${left === 1 ? ' is' : 's are'} still active. Tap Stop It Now again.`),
-    approvedTitle: 'Let through',
+        ? t('All active recovery sessions have been cancelled.')
+        : tn(left, '{n} recovery session is still active. Tap Stop It Now again.', '{n} recovery sessions are still active. Tap Stop It Now again.')),
+    approvedTitle: word('Let through'),
     approvedBody: (name: string) => t('You let the restore with {name} through. Your other phone gets your account the next time it checks.', { name }),
 } as const;
 
@@ -193,13 +214,12 @@ export function RecoveryAlertBanner({ onStopSuccess }: RecoveryAlertBannerProps 
 
     const handleStopIt = useCallback(async () => {
         Alert.alert(
-            '🛑 Stop Recovery Attempt',
-            'This will cancel all active recovery sessions, preventing any further fragment releases.\n\n'
-            + 'Do this only if you did NOT start this recovery.',
+            t('🛑 Stop Recovery Attempt'),
+            t('This will cancel all active recovery sessions, preventing any further fragment releases.\n\nDo this only if you did NOT start this recovery.'),
             [
-                { text: 'Keep Watching', style: 'cancel' },
+                { text: t('Keep Watching'), style: 'cancel' },
                 {
-                    text: 'Stop It Now',
+                    text: t('Stop It Now'),
                     style: 'destructive',
                     onPress: async () => {
                         setStopping(true);
@@ -217,7 +237,7 @@ export function RecoveryAlertBanner({ onStopSuccess }: RecoveryAlertBannerProps 
                             }
                             Alert.alert(RECOVERY_ALERT_COPY.stoppedTitle(left), RECOVERY_ALERT_COPY.stoppedBody(left));
                         } catch (e) {
-                            Alert.alert('Error', 'Failed to stop recovery. Please try again.');
+                            Alert.alert(t('Error'), t('Failed to stop recovery. Please try again.'));
                         } finally {
                             setStopping(false);
                         }
@@ -231,12 +251,12 @@ export function RecoveryAlertBanner({ onStopSuccess }: RecoveryAlertBannerProps 
         if (!identity) return;
         const name = SSO_PROVIDER_NAMES[hold.provider];
         Alert.alert(
-            'Stop it?',
-            `The restore with ${name} won't go through, and whoever started it gets nothing. If it was you after all, use your 12 words on that phone.`,
+            t('Stop it?'),
+            t("The restore with {name} won't go through, and whoever started it gets nothing. If it was you after all, use your 12 words on that phone.", { name }),
             [
-                { text: 'Keep waiting', style: 'cancel' },
+                { text: t('Keep waiting'), style: 'cancel' },
                 {
-                    text: 'Stop it',
+                    text: t('Stop it'),
                     style: 'destructive',
                     onPress: async () => {
                         setBusyHold(hold.holdId);
@@ -244,11 +264,11 @@ export function RecoveryAlertBanner({ onStopSuccess }: RecoveryAlertBannerProps 
                             await stopVaultHold(identity, hold.holdId);
                             setHolds(h => h.filter(x => x.holdId !== hold.holdId));
                             onStopSuccess?.();
-                            Alert.alert('Stopped', `The restore with ${name} won't go through. To be safe, check that your ${name} account's password is one only you know.`);
+                            Alert.alert(t('Stopped'), t("The restore with {name} won't go through. To be safe, check that your {name} account's password is one only you know.", { name }));
                         } catch (e) {
                             // Too late (collected), already stopped, or gone: a final answer, never "try again".
                             if (holdAnswerIsFinal(e)) Alert.alert(RECOVERY_ALERT_COPY.finalTitle(e), RECOVERY_ALERT_COPY.finalBody(e));
-                            else Alert.alert('Not stopped', `${(e as Error).message} Try again.`);
+                            else Alert.alert(t('Not stopped'), t('{reason} Try again.', { reason: settingsLineWords((e as Error).message) }));
                             void fetchHolds();
                         } finally {
                             setBusyHold(null);
@@ -263,23 +283,23 @@ export function RecoveryAlertBanner({ onStopSuccess }: RecoveryAlertBannerProps 
         if (!identity) return;
         const name = SSO_PROVIDER_NAMES[hold.provider];
         Alert.alert(
-            'Was it you?',
+            t('Was it you?'),
             t('Only if you started getting back into BeanPool with {name} on another phone yourself. Your account goes there now.', { name }),
             [
-                { text: 'Cancel', style: 'cancel' },
+                { text: t('Cancel'), style: 'cancel' },
                 {
-                    text: "Yes, it's me",
+                    text: t("Yes, it's me"),
                     onPress: async () => {
                         // It hands the account to another device: the phone's lock first, as linking a sign-in asks.
-                        if (!(await authenticateUser("Confirm it's you to let your account through to your other device."))) return;
+                        if (!(await authenticateUser(t("Confirm it's you to let your account through to your other device.")))) return;
                         setBusyHold(hold.holdId);
                         try {
                             await approveVaultHold(identity, hold.holdId);
                             setApproved(a => [...a, hold.holdId]);
-                            Alert.alert('Let through', t('Your other phone gets your account the next time it checks, in about a minute.'));
+                            Alert.alert(t('Let through'), t('Your other phone gets your account the next time it checks, in about a minute.'));
                         } catch (e) {
                             if (holdAnswerIsFinal(e)) Alert.alert(RECOVERY_ALERT_COPY.finalTitle(e), RECOVERY_ALERT_COPY.finalBody(e));
-                            else Alert.alert('Not let through', `${(e as Error).message} Try again.`);
+                            else Alert.alert(t('Not let through'), t('{reason} Try again.', { reason: settingsLineWords((e as Error).message) }));
                             void fetchHolds();
                         } finally {
                             setBusyHold(null);
@@ -301,7 +321,7 @@ export function RecoveryAlertBanner({ onStopSuccess }: RecoveryAlertBannerProps 
                     // Let through from here: nothing left to answer, so no Stop and no "Yes, it's me" again.
                     return (
                         <View key={hold.holdId} style={styles.approved} accessibilityLiveRegion="polite">
-                            <Text style={styles.approvedTitle} accessibilityRole="header">{RECOVERY_ALERT_COPY.approvedTitle}</Text>
+                            <Text style={styles.approvedTitle} accessibilityRole="header">{t(RECOVERY_ALERT_COPY.approvedTitle)}</Text>
                             <Text style={styles.approvedBody}>{RECOVERY_ALERT_COPY.approvedBody(name)}</Text>
                         </View>
                     );
@@ -310,13 +330,13 @@ export function RecoveryAlertBanner({ onStopSuccess }: RecoveryAlertBannerProps 
                     <View key={hold.holdId} style={styles.container} accessibilityLiveRegion="assertive">
                         <View style={styles.header}>
                             <Text style={styles.icon} importantForAccessibility="no" accessibilityElementsHidden={true}>🚨</Text>
-                            <Text style={styles.title} accessibilityRole="header">Someone is getting back into your account</Text>
+                            <Text style={styles.title} accessibilityRole="header">{t('Someone is getting back into your account')}</Text>
                         </View>
                         <Text style={styles.body}>
-                            Someone used {name} to get back into your BeanPool account on another device. It goes through {holdEndsText(hold.releaseAt)} unless you stop it.
+                            {t('Someone used {name} to get back into your BeanPool account on another device. It goes through {when} unless you stop it.', { name, when: holdEndsWords(hold.releaseAt) })}
                         </Text>
                         <Text style={styles.detail}>
-                            Started {new Date(hold.openedAt).toLocaleString()}
+                            {t('Started {when}', { when: momentWords(new Date(hold.openedAt)) })}
                         </Text>
                         <TouchableOpacity
                             style={styles.stopButton}
@@ -325,11 +345,11 @@ export function RecoveryAlertBanner({ onStopSuccess }: RecoveryAlertBannerProps 
                             activeOpacity={0.7}
                             accessibilityRole="button"
                             // The visible text, so a speech-control user saying "tap Stop" hits it (WCAG 2.5.3).
-                            accessibilityLabel={busy ? 'Working' : 'Stop'}
-                            accessibilityHint={`Stops the restore with ${name}`}
+                            accessibilityLabel={busy ? t('Working') : t('Stop')}
+                            accessibilityHint={t('Stops the restore with {name}', { name })}
                             accessibilityState={{ disabled: busy, busy }}
                         >
-                            {busy ? <ActivityIndicator size="small" color={palette.white} /> : <Text style={styles.stopButtonText}>🛑 Stop</Text>}
+                            {busy ? <ActivityIndicator size="small" color={palette.white} /> : <Text style={styles.stopButtonText}>{t('🛑 Stop')}</Text>}
                         </TouchableOpacity>
                         <TouchableOpacity
                             style={styles.itsMeButton}
@@ -337,11 +357,11 @@ export function RecoveryAlertBanner({ onStopSuccess }: RecoveryAlertBannerProps 
                             disabled={busy}
                             activeOpacity={0.7}
                             accessibilityRole="button"
-                            accessibilityLabel="Yes, it's me"
-                            accessibilityHint="Lets your account through to your other device now"
+                            accessibilityLabel={t("Yes, it's me")}
+                            accessibilityHint={t('Lets your account through to your other device now')}
                             accessibilityState={{ disabled: busy }}
                         >
-                            <Text style={styles.itsMeButtonText}>Yes, it's me</Text>
+                            <Text style={styles.itsMeButtonText}>{t("Yes, it's me")}</Text>
                         </TouchableOpacity>
                     </View>
                 );
@@ -351,15 +371,15 @@ export function RecoveryAlertBanner({ onStopSuccess }: RecoveryAlertBannerProps 
                 <View style={styles.container} accessibilityLiveRegion="assertive">
                     <View style={styles.header}>
                         <Text style={styles.icon} importantForAccessibility="no" accessibilityElementsHidden={true}>🚨</Text>
-                        <Text style={styles.title} accessibilityRole="header">Someone is recovering your account</Text>
+                        <Text style={styles.title} accessibilityRole="header">{t('Someone is recovering your account')}</Text>
                     </View>
                     <Text style={styles.body}>
-                        A device is trying to restore access to your account.
-                        If this is not you, stop it immediately.
+                        {t('A device is trying to restore access to your account. If this is not you, stop it immediately.')}
                     </Text>
                     <Text style={styles.detail}>
-                        {liveCount} active session{liveCount > 1 ? 's' : ''}
-                        {sessions[0].startedAt ? ` • Started ${new Date(sessions[0].startedAt).toLocaleString()}` : ''}
+                        {sessions[0].startedAt
+                            ? tn(liveCount, '{n} active session • Started {when}', '{n} active sessions • Started {when}', { when: momentWords(new Date(sessions[0].startedAt)) })
+                            : tn(liveCount, '{n} active session', '{n} active sessions')}
                     </Text>
                     <TouchableOpacity
                         style={styles.stopButton}
@@ -369,14 +389,14 @@ export function RecoveryAlertBanner({ onStopSuccess }: RecoveryAlertBannerProps 
                         accessibilityRole="button"
                         // Must be the VISIBLE text: this is the emergency control, and a speech-
                         // control user saying "tap Stop It Now" has to hit it (WCAG 2.5.3).
-                        accessibilityLabel={stopping ? 'Stopping recovery' : 'Stop It Now'}
-                        accessibilityHint="Cancels active recovery sessions"
+                        accessibilityLabel={stopping ? t('Stopping recovery') : t('Stop It Now')}
+                        accessibilityHint={t('Cancels active recovery sessions')}
                         accessibilityState={{ disabled: stopping, busy: stopping }}
                     >
                         {stopping ? (
                             <ActivityIndicator size="small" color={palette.white} />
                         ) : (
-                            <Text style={styles.stopButtonText}>🛑 Stop It Now</Text>
+                            <Text style={styles.stopButtonText}>{t('🛑 Stop It Now')}</Text>
                         )}
                     </TouchableOpacity>
                 </View>

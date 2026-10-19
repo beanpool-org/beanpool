@@ -435,7 +435,7 @@ describe("every way the account leaves this phone, or comes off it, asks the pho
         const s = code(fs.readFileSync(path.resolve(ROOT, 'components/RecoveryAlertBanner.tsx'), 'utf-8'));
         expect(s).toContain("import { authenticateUser } from '../utils/LocalAuth';");
         const body = slice(s, 'const handleApproveHold = useCallback((hold: VaultHold) => {', '}, [identity, fetchHolds]);');
-        const asked = body.indexOf("if (!(await authenticateUser(\"Confirm it's you to let your account through to your other device.\"))) return;");
+        const asked = body.indexOf("if (!(await authenticateUser(t(\"Confirm it's you to let your account through to your other device.\")))) return;");
         expect(asked).toBeGreaterThan(-1);
         expect(body.indexOf('await approveVaultHold(identity, hold.holdId);')).toBeGreaterThan(asked);
     });

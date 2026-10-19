@@ -42,9 +42,12 @@ import {
     NO_WORDS_CHECK_FIRST, NO_WORDS_CONNECT, NO_WORDS_MENU, NO_WORDS_SIGN_OUT_ALERT, NO_WORDS_VIEW_LINE, VIEW_WORDS_MENU, noWordsBeforeWipe,
 } from '../no-words-copy';
 import { REMINDER_OFFSETS, reminderOffsetLabel } from '../event-extras';
+import { APP_LOCK_ON_FOR_ROLE } from '../LocalAuth';
+import { computerSigninLabel, manageLabel, manageSubtitle } from '../node-role';
+import { signOutEverywhereDone, signOutEverywhereWarning } from '../sign-out-everywhere';
 import {
-    deleteFailedWords, deletePlanFailedWords, deletedButWords, keepsKeyWords, lastCommunityWords, listNameWords, reminderBeforeWords,
-    settingsLineWords, vaultCopyStaysWords,
+    appLockOnForRoleWords, computerSigninLabelWords, deleteFailedWords, deletePlanFailedWords, deletedButWords, keepsKeyWords, lastCommunityWords,
+    listNameWords, manageLabelWords, manageSubtitleWords, reminderBeforeWords, settingsLineWords, signOutEverywhereWarningWords, vaultCopyStaysWords,
 } from '../../components/settings/settings-lines';
 
 afterEach(() => setLanguage('en'));
@@ -202,6 +205,43 @@ describe('Account Deletion\'s sentences, built again from the same plan', () => 
         }
         expect(deletePlanFailedWords('disk full')).toBe(deletePlanFailedLine('disk full'));
         expect(outsideBrackets(inXx(() => deletePlanFailedWords('disk full')), NAMES)).toBe('');
+    });
+});
+
+describe('Community admin\'s sentences (NodeAdminEntry)', () => {
+    it('node-role.ts\'s labels, LocalAuth.ts\'s App Lock line and sign-out-everywhere.ts\'s warning: the same English, every word through t()', () => {
+        for (const role of ['owner', 'admin', 'moderator'] as const) {
+            expect(manageLabelWords(role, 'Mullum')).toBe(manageLabel(role, 'Mullum'));
+            expect(manageSubtitleWords(role)).toBe(manageSubtitle(role));
+            expect(computerSigninLabelWords(role)).toBe(computerSigninLabel(role));
+            expect(outsideBrackets(inXx(() => manageLabelWords(role, 'Mullum')), ['Mullum'])).toBe('');
+            expect(outsideBrackets(inXx(() => manageSubtitleWords(role)))).toBe('');
+            expect(outsideBrackets(inXx(() => computerSigninLabelWords(role)))).toBe('');
+        }
+        expect(appLockOnForRoleWords('Mullum')).toBe(APP_LOCK_ON_FOR_ROLE('Mullum'));
+        expect(outsideBrackets(inXx(() => appLockOnForRoleWords('Mullum')), ['Mullum'])).toBe('');
+        for (const owner of [true, false]) {
+            expect(signOutEverywhereWarningWords('Mullum', owner)).toBe(signOutEverywhereWarning('Mullum', owner));
+            expect(outsideBrackets(inXx(() => signOutEverywhereWarningWords('Mullum', owner)), ['Mullum'])).toBe('');
+        }
+    });
+
+    it('break-glass.ts\'s and sign-out-everywhere.ts\'s own refusals, and what Sign out everywhere says it did', () => {
+        const breakGlass = joined('utils/break-glass.ts');
+        const signOut = joined('utils/sign-out-everywhere.ts');
+        const fixed = [...breakGlass.matchAll(/message: '([^']+)'/g), ...signOut.matchAll(/message: '([^']+)'/g)].map((m) => m[1]);
+        expect(fixed).toHaveLength(6);
+        for (const english of [...fixed, signOutEverywhereDone({ breakGlassCodeRetired: true }), signOutEverywhereDone({ breakGlassCodeRetired: false })]) {
+            expect(settingsLineWords(english), english).toBe(english);
+            expect(outsideBrackets(inXx(() => settingsLineWords(english))), english).toBe('');
+        }
+        // A refusal with only its status, by the source's template.
+        expect(signOut).toContain('`The community did not sign you out (${res.status}).`');
+        expect(breakGlass).toContain('`The community said no (${res.status}).`');
+        for (const said of ['The community did not sign you out (403).', 'The community said no (409).']) {
+            expect(settingsLineWords(said)).toBe(said);
+            expect(outsideBrackets(inXx(() => settingsLineWords(said)))).toBe('');
+        }
     });
 });
 

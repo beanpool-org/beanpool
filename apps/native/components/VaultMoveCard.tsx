@@ -16,33 +16,31 @@ import { useIdentity } from '../app/IdentityContext';
 import { useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { anchorUrl as getAnchorUrl } from '../utils/node-post';
 import { SSO_PROVIDER_NAMES } from '../utils/sso-providers';
-import { t } from '@beanpool/core';
+import { t, word } from '@beanpool/core';
 import { finishMove, moveLater, removeInstead, vaultMoveOffer, type VaultMoveOffer } from '../utils/vault-move';
 import { hasMnemonic } from '../utils/identity';
 import type { KeeperEnrolmentResult } from '../utils/keeper-enrolment';
 import { SsoEnrolSheet } from './SsoEnrolSheet';
 
 export const VAULT_MOVE_COPY = {
-    moveTitle: (name: string) => `Move your ${name} recovery to BeanPool's key vault`,
-    moveBody: (name: string) => `One sign-in. Today your community keeps the copy of your account that ${name} opens. `
-        + "BeanPool's key vault keeps it instead, for every community, and your community's copy is removed.",
-    moveButton: 'Move it',
-    retryTitle: (name: string) => `Link your ${name} sign-in`,
-    retryBody: (name: string) => `You tried to link ${name} while BeanPool's key vault was paused, so it isn't linked yet. `
-        + 'It takes one sign-in.',
-    retryButton: 'Link it',
-    later: 'Not now',
-    removeButton: 'Remove it instead',
-    removeTitle: (name: string) => `Remove your ${name} recovery?`,
+    moveTitle: (name: string) => t("Move your {name} recovery to BeanPool's key vault", { name }),
+    moveBody: (name: string) => t("One sign-in. Today your community keeps the copy of your account that {name} opens. BeanPool's key vault keeps it instead, for every community, and your community's copy is removed.", { name }),
+    moveButton: word('Move it'),
+    retryTitle: (name: string) => t('Link your {name} sign-in', { name }),
+    retryBody: (name: string) => t("You tried to link {name} while BeanPool's key vault was paused, so it isn't linked yet. It takes one sign-in.", { name }),
+    retryButton: word('Link it'),
+    later: word('Not now'),
+    removeButton: word('Remove it instead'),
+    removeTitle: (name: string) => t('Remove your {name} recovery?', { name }),
     // Only this community's copy goes: another community may still keep one for the same sign-in from before the vault
     // (or the global community, from a web-app join), so the words say which ways back close, never that none is left.
     removeBody: (name: string, hasWords: boolean) => (hasWords
         ? t("Your community's copy of your account for {name} is deleted, and none is kept at BeanPool's key vault. {name} won't bring your account back through your community or the key vault until you link it again. Your 12 words work any time.", { name })
         : t("Your community's copy of your account for {name} is deleted, and none is kept at BeanPool's key vault. {name} won't bring your account back through your community or the key vault until you link it again. This phone has no 12 words: if you lose it after this, nothing brings your account back.", { name })),
-    removeConfirm: 'Remove it',
-    removeCancel: 'Keep it',
-    removeFailedTitle: 'Not removed yet',
-    removedFailed: "Your community didn't answer, so the copy is still there. The app tries again the next time you open Settings.",
+    removeConfirm: word('Remove it'),
+    removeCancel: word('Keep it'),
+    removeFailedTitle: word('Not removed yet'),
+    removedFailed: word("Your community didn't answer, so the copy is still there. The app tries again the next time you open Settings."),
 } as const;
 
 export function VaultMoveCard({ onMoved }: { onMoved?: (result: KeeperEnrolmentResult | null) => void }) {
@@ -72,7 +70,7 @@ export function VaultMoveCard({ onMoved }: { onMoved?: (result: KeeperEnrolmentR
             <Text style={styles.title} accessibilityRole="header">{move ? VAULT_MOVE_COPY.moveTitle(name) : VAULT_MOVE_COPY.retryTitle(name)}</Text>
             <Text style={styles.body}>{move ? VAULT_MOVE_COPY.moveBody(name) : VAULT_MOVE_COPY.retryBody(name)}</Text>
             <Pressable style={styles.primary} onPress={() => setSheetOpen(true)} accessibilityRole="button">
-                <Text style={styles.primaryText}>{move ? VAULT_MOVE_COPY.moveButton : VAULT_MOVE_COPY.retryButton}</Text>
+                <Text style={styles.primaryText}>{move ? t(VAULT_MOVE_COPY.moveButton) : t(VAULT_MOVE_COPY.retryButton)}</Text>
             </Pressable>
             <Pressable
                 style={styles.secondary}
@@ -82,7 +80,7 @@ export function VaultMoveCard({ onMoved }: { onMoved?: (result: KeeperEnrolmentR
                 }}
                 accessibilityRole="button"
             >
-                <Text style={styles.secondaryText}>{VAULT_MOVE_COPY.later}</Text>
+                <Text style={styles.secondaryText}>{t(VAULT_MOVE_COPY.later)}</Text>
             </Pressable>
             {move && (
                 <Pressable
@@ -91,14 +89,14 @@ export function VaultMoveCard({ onMoved }: { onMoved?: (result: KeeperEnrolmentR
                         VAULT_MOVE_COPY.removeTitle(name),
                         VAULT_MOVE_COPY.removeBody(name, hasMnemonic(identity)),
                         [
-                            { text: VAULT_MOVE_COPY.removeCancel, style: 'cancel' },
+                            { text: t(VAULT_MOVE_COPY.removeCancel), style: 'cancel' },
                             {
-                                text: VAULT_MOVE_COPY.removeConfirm,
+                                text: t(VAULT_MOVE_COPY.removeConfirm),
                                 style: 'destructive',
                                 onPress: async () => {
                                     const gone = await removeInstead(identity, offer);
                                     setOffer(null);
-                                    if (!gone) Alert.alert(VAULT_MOVE_COPY.removeFailedTitle, VAULT_MOVE_COPY.removedFailed);
+                                    if (!gone) Alert.alert(t(VAULT_MOVE_COPY.removeFailedTitle), t(VAULT_MOVE_COPY.removedFailed));
                                     onMoved?.(null);
                                 },
                             },
@@ -106,7 +104,7 @@ export function VaultMoveCard({ onMoved }: { onMoved?: (result: KeeperEnrolmentR
                     )}
                     accessibilityRole="button"
                 >
-                    <Text style={styles.secondaryText}>{VAULT_MOVE_COPY.removeButton}</Text>
+                    <Text style={styles.secondaryText}>{t(VAULT_MOVE_COPY.removeButton)}</Text>
                 </Pressable>
             )}
             <SsoEnrolSheet

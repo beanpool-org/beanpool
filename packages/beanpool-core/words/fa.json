@@ -2,7 +2,7 @@
   "_meta": {
     "language": "fa",
     "name": "Persian",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-19",
@@ -364,5 +364,106 @@
   },
   "Too many suggestions from your connection recently. Please try again later — your text is still here.": "اخیراً پیشنهادهای بسیار زیادی از طرف اتصال شما ارسال شده است. لطفاً بعداً دوباره امتحان کنید — متن شما همچنان اینجاست.",
   "This poll is shown at your area (about 10 km around it) to everyone who can read it.": "این نظرسنجی در منطقه شما (حدود ۱۰ کیلومتر در اطراف آن) برای همه کسانی که می‌توانند آن را بخوانند نمایش داده می‌شود.",
-  "You haven't set your area, so members nearby won't see this poll in their list; they can still find it by searching. Set it in Settings → Your area to show it near you.": "شما منطقه خود را تنظیم نکرده‌اید، بنابراین اعضای نزدیک این نظرسنجی را در فهرست خود نخواهند دید؛ آنها همچنان می‌توانند آن را با جستجو پیدا کنند. برای نمایش در نزدیکی خود، آن را در تنظیمات ← منطقه شما تنظیم کنید."
+  "You haven't set your area, so members nearby won't see this poll in their list; they can still find it by searching. Set it in Settings → Your area to show it near you.": "شما منطقه خود را تنظیم نکرده‌اید، بنابراین اعضای نزدیک این نظرسنجی را در فهرست خود نخواهند دید؛ آنها همچنان می‌توانند آن را با جستجو پیدا کنند. برای نمایش در نزدیکی خود، آن را در تنظیمات ← منطقه شما تنظیم کنید.",
+  "Project · A leader, a goal, an end date": "پروژه · یک رهبر، یک هدف، یک تاریخ پایان",
+  "Enterprise · Run by its keepers": "طرح تجاری · اداره‌شده توسط مدیرانش",
+  "Lead convenor\u0004group role": "هماهنگ‌کننده ارشد",
+  "Convenor\u0004group role": "هماهنگ‌کننده",
+  "Member\u0004group role": "عضو",
+  "Observer\u0004group role": "ناظر",
+  "Make one of the observers a member first, then hand the lead to them.": "ابتدا یکی از ناظران را به عضو تبدیل کنید، سپس مسئولیت اصلی را به او واگذار نمایید.",
+  "{name} receives {n} Beans. The 1.5% trade fee ({fee} Beans) goes to the Commons.|{name} receives {n} Beans. The 1.5% trade fee ({fee} Beans) goes to the Commons.": {
+    "one": "{name} {n} لوبیا دریافت می‌کند. ۱.۵٪ کارمزد مبادله ({fee} لوبیا) به مشاع می‌رود.",
+    "other": "{name} {n} لوبیا دریافت می‌کند. ۱.۵٪ کارمزد مبادله ({fee} لوبیا) به مشاع می‌رود."
+  },
+  "Enter an amount in Beans, like 40 or 12.50.": "مبلغی به لوبیا وارد کنید، مانند ۴۰ یا ۱۲.۵۰.",
+  "The amount must be more than 0 Beans.": "مبلغ باید بیشتر از ۰ لوبیا باشد.",
+  "The enterprise holds {n} Beans, so it can't pay more than that.|The enterprise holds {n} Beans, so it can't pay more than that.": {
+    "one": "این طرح تجاری {n} لوبیا دارد، بنابراین نمی‌تواند بیش از آن پرداخت کند.",
+    "other": "این طرح تجاری {n} لوبیا دارد، بنابراین نمی‌تواند بیش از آن پرداخت کند."
+  },
+  "Paying a keeper is a wage, and a wage comes only out of what the enterprise has earned above its costs (its earned surplus): {n} Beans now.|Paying a keeper is a wage, and a wage comes only out of what the enterprise has earned above its costs (its earned surplus): {n} Beans now.": {
+    "one": "پرداخت به مدیر دستمزد است و دستمزد فقط از درآمد مازاد بر هزینه‌های طرح تجاری پرداخت می‌شود (مازاد کسب‌شده): اکنون {n} لوبیا.",
+    "other": "پرداخت به مدیر دستمزد است و دستمزد فقط از درآمد مازاد بر هزینه‌های طرح تجاری پرداخت می‌شود (مازاد کسب‌شده): اکنون {n} لوبیا."
+  },
+  "Paying a keeper is a wage: only out of what the project has earned.": "پرداخت به مدیر دستمزد است: فقط از درآمدی که پروژه به دست آورده است.",
+  "Paying a keeper is a wage: only out of what the enterprise has earned.": "پرداخت به مدیر دستمزد است: فقط از درآمدی که طرح تجاری به دست آورده است.",
+  "Paying a keeper is a wage: only out of what the project has earned above its costs, {n} Beans now.|Paying a keeper is a wage: only out of what the project has earned above its costs, {n} Beans now.": {
+    "one": "پرداخت به مدیر دستمزد است: فقط از درآمد مازاد بر هزینه‌های پروژه پرداخت می‌شود، اکنون {n} لوبیا.",
+    "other": "پرداخت به مدیر دستمزد است: فقط از درآمد مازاد بر هزینه‌های پروژه پرداخت می‌شود، اکنون {n} لوبیا."
+  },
+  "Paying a keeper is a wage: only out of what the enterprise has earned above its costs, {n} Beans now.|Paying a keeper is a wage: only out of what the enterprise has earned above its costs, {n} Beans now.": {
+    "one": "پرداخت به مدیر دستمزد است: فقط از درآمد مازاد بر هزینه‌های طرح تجاری پرداخت می‌شود، اکنون {n} لوبیا.",
+    "other": "پرداخت به مدیر دستمزد است: فقط از درآمد مازاد بر هزینه‌های طرح تجاری پرداخت می‌شود، اکنون {n} لوبیا."
+  },
+  "Pay Beans out": "پرداخت لوبیا",
+  "Remove a collaborator": "حذف یک همکار",
+  "Remove a keeper": "حذف یک مدیر",
+  "Make another keeper the lead": "انتخاب مدیری دیگر به عنوان مدیر ارشد",
+  "You're not in this group now, but you were when these votes opened, so you can still vote on them.": "شما اکنون در این گروه نیستید، اما هنگام آغاز این رأی‌گیری‌ها حضور داشتید، بنابراین همچنان می‌توانید در آن‌ها رأی دهید.",
+  "You're not in this group now. These are the votes you were part of.": "شما اکنون در این گروه نیستید. این‌ها رأی‌گیری‌هایی هستند که در آن‌ها حضور داشتید.",
+  "someone in the group": "فردی در گروه",
+  "someone": "فردی",
+  "Pay {n} Beans to {name}|Pay {n} Beans to {name}": {
+    "one": "پرداخت {n} لوبیا به {name}",
+    "other": "پرداخت {n} لوبیا به {name}"
+  },
+  "Remove {name} as a collaborator": "حذف {name} از همکاری",
+  "Remove {name} as a keeper": "حذف {name} از مدیریت",
+  "Make {name} the leader": "انتخاب {name} به عنوان رهبر",
+  "Make {name} the lead keeper": "انتخاب {name} به عنوان مدیر ارشد",
+  "Make {name} the lead convenor": "انتخاب {name} به عنوان هماهنگ‌کننده ارشد",
+  "Make {name} a convenor": "انتخاب {name} به عنوان هماهنگ‌کننده",
+  "Make {name} a member, no longer a convenor": "تبدیل {name} به عضو عادی، پایان هماهنگ‌کنندگی",
+  "Remove {name} from the group": "حذف {name} از گروه",
+  "Change who can join: {policy}": "تغییر شرایط عضویت: {policy}",
+  "Close the group. Its chat stays to read.": "بستن گروه. گفتگوها برای خواندن باقی می‌مانند.",
+  "A vote": "یک رأی‌گیری",
+  "{voted} of {roll} has voted. {quorum} must vote. Yes and No show when it closes.": "{voted} از {roll} رأی داده‌اند. {quorum} نفر باید رأی دهند. موافق و مخالف پس از پایان نمایش داده می‌شوند.",
+  "{n} of {roll} have voted. {quorum} must vote. Yes and No show when it closes.|{n} of {roll} have voted. {quorum} must vote. Yes and No show when it closes.": {
+    "one": "{n} از {roll} رأی داده است. {quorum} نفر باید رأی دهند. موافق و مخالف پس از پایان نمایش داده می‌شوند.",
+    "other": "{n} از {roll} رأی داده‌اند. {quorum} نفر باید رأی دهند. موافق و مخالف پس از پایان نمایش داده می‌شوند."
+  },
+  "Yes {yes} · No {no}. {voted} of {roll} voted.": "موافق {yes} · مخالف {no}. {voted} از {roll} رأی دادند.",
+  "Open\u0004a vote": "باز",
+  "Passed and carried out": "تصویب و اجرا شد",
+  "Passed": "تصویب شد",
+  "Did not pass": "تصویب نشد",
+  "Not enough people voted": "تعداد رأی‌دهندگان به حد نصاب نرسید",
+  "Not enough keepers voted": "تعداد مدیران رأی‌دهنده به حد نصاب نرسید",
+  "Passed, but not carried out: {reason}": "تصویب شد، اما اجرا نشد: {reason}",
+  "Passed, but not carried out": "تصویب شد، اما اجرا نشد",
+  "Passed, but there was nothing to do: {reason}": "تصویب شد، اما کاری برای انجام وجود نداشت: {reason}",
+  "Passed, but there was nothing to do": "تصویب شد، اما کاری برای انجام وجود نداشت",
+  "Closed\u0004a vote": "بسته شد",
+  "closing now": "در حال بسته شدن",
+  "closes in {n} day|closes in {n} days": {
+    "one": "تا {n} روز دیگر بسته می‌شود",
+    "other": "تا {n} روز دیگر بسته می‌شود"
+  },
+  "closes in {n} hour|closes in {n} hours": {
+    "one": "تا {n} ساعت دیگر بسته می‌شود",
+    "other": "تا {n} ساعت دیگر بسته می‌شود"
+  },
+  "closes within the hour": "طی یک ساعت آینده بسته می‌شود",
+  "Nobody sees who voted how. In a very small group, though, the result and who has voted can show it.": "هیچ‌کس نمی‌بیند چه کسی چه رأیی داده است. با این حال، در یک گروه بسیار کوچک، نتیجه و اسامی رأی‌دهندگان ممکن است آن را مشخص کند.",
+  "anyone can join": "هر کسی می‌تواند عضو شود",
+  "people ask, and a convenor lets them in": "افراد درخواست می‌دهند و هماهنگ‌کننده آن‌ها را می‌پذیرد",
+  "by invitation only": "فقط با دعوت",
+  "a new rule": "یک قانون جدید",
+  "Choose a new lead convenor": "انتخاب هماهنگ‌کننده ارشد جدید",
+  "Make someone a convenor": "انتخاب فردی به عنوان هماهنگ‌کننده",
+  "Make a convenor a member": "تبدیل هماهنگ‌کننده به عضو عادی",
+  "Remove someone": "حذف یک فرد",
+  "Change who can join": "تغییر شرایط عضویت",
+  "Close the group": "بستن گروه",
+  "Who should lead?": "چه کسی باید رهبری کند؟",
+  "Who should be a convenor?": "چه کسی باید هماهنگ‌کننده باشد؟",
+  "Which convenor?": "کدام هماهنگ‌کننده؟",
+  "Remove whom?": "چه کسی حذف شود؟",
+  "Open: anyone can join": "عمومی: هر کسی می‌تواند عضو شود",
+  "Ask to join": "درخواست عضویت",
+  "Invite only": "فقط با دعوت",
+  "The group was closed by its members’ vote. Its chat stays to read.": "گروه با رأی اعضایش بسته شد. گفتگوی آن برای خواندن باقی می‌ماند.",
+  "Votes among the group's members and convenors; observers watch. More than half must vote. 7 days, or sooner once the answer can't change.": "رأی‌گیری میان اعضا و هماهنگ‌کنندگان گروه؛ ناظران نظاره‌گرند. بیش از نیمی از افراد باید رأی دهند. ۷ روز، یا به محض قطعی شدن نتیجه زودتر به پایان می‌رسد."
 }

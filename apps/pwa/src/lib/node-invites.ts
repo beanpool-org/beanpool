@@ -3,8 +3,13 @@
  * server). Off on the global node (Marty, 2026-10-01): anyone joins it with a sign-in, one sign-in one member, and the
  * server refuses every invite there. Only a node that says outright it makes none makes none: every node before the
  * switch took them. Where they are off the Invites page offers the community's plain link to share, and nothing else.
+ *
+ * Its sentences are in the member's language (words S3, web sweep W4), with the phone's keys (utils/invite-entries.ts):
+ * the functions answer through t(); the constants are word() keys, the English the node's own words are told apart
+ * from, translated where they are shown (INVITE_WORDS). Nothing here handles a key or a signature.
  */
 
+import { t, word } from '@beanpool/core';
 import type { CommunityInfo } from './api';
 
 export function invitesOn(info: CommunityInfo | null | undefined): boolean {
@@ -13,11 +18,19 @@ export function invitesOn(info: CommunityInfo | null | undefined): boolean {
 
 /** What the share sends: the community's plain address, which opens its front door. No code rides along. */
 export function communityLinkText(origin: string): string {
-    return `Join me on BeanPool: ${origin.trim().replace(/\/+$/, '')}`;
+    return t('Join me on BeanPool: {url}', { url: origin.trim().replace(/\/+$/, '') });
 }
 
+/** The sentences below that are said where the node's own words are missing: marked here, translated where shown. */
+export const INVITE_WORDS = {
+    offFallback: word('This community doesn’t use invites: anyone joins it with a sign-in in the BeanPool app. To bring someone here, share its link.'),
+    adminsOnlyFallback: word('In this community only its admins invite people. Ask an admin to bring them in.'),
+    memberTicketRefused: word('This invite was made by a member, and in this community only its admins bring people in now. Ask an admin for a fresh invite.'),
+    offlineAdminsOnly: word('You’re offline, and in this community only its admins invite people. Try again when you’re back online.'),
+} as const;
+
 /** Said where the node's own words are missing. */
-export const INVITES_OFF_FALLBACK = 'This community doesn’t use invites: anyone joins it with a sign-in in the BeanPool app. To bring someone here, share its link.';
+export const INVITES_OFF_FALLBACK = INVITE_WORDS.offFallback;
 
 /**
  * The node's words when it refused a generate because it takes no invites (404 `feature_off`, as `request` throws it in
@@ -73,22 +86,22 @@ export function mayMakeOfflineTicket(info: CommunityInfo | null | undefined, rol
 }
 
 /** Said where the node's own words are missing. */
-export const ADMINS_ONLY_FALLBACK = 'In this community only its admins invite people. Ask an admin to bring them in.';
+export const ADMINS_ONLY_FALLBACK = INVITE_WORDS.adminsOnlyFallback;
 
 /**
  * The join's pre-flight (GET /api/invite/check, reason `admins_only`): an offline ticket a member made, where only the
  * community's admins bring people in now. The node refuses it at the join too (config/door.ts on the server).
  */
-export const MEMBER_TICKET_REFUSED_TEXT = 'This invite was made by a member, and in this community only its admins bring people in now. Ask an admin for a fresh invite.';
+export const MEMBER_TICKET_REFUSED_TEXT = INVITE_WORDS.memberTicketRefused;
 
 /** Why no offline ticket was made where only admins invite and the node couldn't be reached to ask who this member is. */
-export const OFFLINE_ADMINS_ONLY_TEXT = 'You’re offline, and in this community only its admins invite people. Try again when you’re back online.';
+export const OFFLINE_ADMINS_ONLY_TEXT = INVITE_WORDS.offlineAdminsOnly;
 
 /** What a member who may not invite sees in place of "Invite Someone". `knocks`: the community takes requests to join. */
 export function adminsOnlyText(knocks: boolean): string {
     return knocks
-        ? 'In this community only its admins invite people. Share its link: in the BeanPool app they can ask to join, and an admin will answer. Or ask an admin to invite them.'
-        : 'In this community only its admins invite people. Ask an admin to invite them.';
+        ? t('In this community only its admins invite people. Share its link: in the BeanPool app they can ask to join, and an admin will answer. Or ask an admin to invite them.')
+        : t('In this community only its admins invite people. Ask an admin to invite them.');
 }
 
 /**

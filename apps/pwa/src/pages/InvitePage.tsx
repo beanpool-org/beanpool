@@ -18,11 +18,22 @@ import { communityInfoOnce } from '../lib/visitor-lobby-gate';
 import { marked, modeFor, readsOwn, useReaderFeatures } from '../lib/features';
 import { LocalCommunityAction, LocalCommunityLine, LocalCommunityStrip, type LocalCommunityWays } from '../components/LocalCommunityMark';
 import { SampleHeader, sampleInvites, sampleInviteTree } from '../components/ShowcasePreviews';
-import { LOCAL_COMMUNITY_LINES, t } from '@beanpool/core';
+import { LOCAL_COMMUNITY_LINES, formatDate, t, tn } from '@beanpool/core';
 import {
     communityLinkText, invitesOn, invitesOffRefusal, onlyAdminsInvite, takesKnocks, readInviteRole, mayInviteHere, mayMakeOfflineTicket,
-    adminsOnlyText, adminsOnlyRefusal, OFFLINE_ADMINS_ONLY_TEXT, type InviteRole,
+    adminsOnlyText, adminsOnlyRefusal, OFFLINE_ADMINS_ONLY_TEXT, INVITE_WORDS, type InviteRole,
 } from '../lib/node-invites';
+
+/** A refusal as the page shows it: lib/node-invites.ts's own fallback in the member's language, the node's words as they came. */
+function refusalWords(said: string): string {
+    if (said === INVITE_WORDS.offFallback) return t(INVITE_WORDS.offFallback);
+    if (said === INVITE_WORDS.adminsOnlyFallback) return t(INVITE_WORDS.adminsOnlyFallback);
+    if (said === INVITE_WORDS.offlineAdminsOnly) return t(INVITE_WORDS.offlineAdminsOnly);
+    return said;
+}
+
+/** A date on an invite or in the tree, as the phone's Invites says it ("20 Oct 2026"; it was the browser's own). */
+const dayWords = (iso: string) => formatDate(new Date(iso), 'day-month-year');
 import { QRCodeSVG } from 'qrcode.react';
 
 const QRCodeSVGComponent = QRCodeSVG as any;
@@ -233,7 +244,7 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
             setInvites(prev => [inviteObj, ...prev]);
             
         } catch (err: any) {
-            alert(err.message || 'Failed to generate offline ticket');
+            alert(err.message || t('Failed to generate offline ticket'));
         } finally {
             setGenerating(false);
         }
@@ -267,10 +278,10 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
         const namePhrase = invite?.intendedFor ? `Hey ${invite.intendedFor}, ` : '';
         
         const inviteUrl = `${window.location.origin}/?invite=${code}`;
-        const messageText = `Join my BeanPool community node: ${inviteUrl}`;
+        const messageText = t('Join my BeanPool community node: {url}', { url: inviteUrl });
         
         const shareData = {
-            title: 'Join BeanPool Node',
+            title: t('Join BeanPool Node'),
             text: messageText,
         };
         
@@ -311,18 +322,18 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
                                 ? 'bg-emerald-100 border-emerald-500 text-emerald-700 dark:bg-emerald-900/50 dark:border-emerald-500 dark:text-emerald-400'
                                 : 'bg-white dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-900 dark:text-white hover:bg-nature-50 dark:hover:bg-nature-700'
                         }`}
-                        aria-label="Copy this community's link"
-                        title="Copy this community's link"
+                        aria-label={t("Copy this community's link")}
+                        title={t("Copy this community's link")}
                     >
-                        {copied ? '✓ Copied!' : '📋 Copy'}
+                        {copied ? t('✓ Copied!') : t('📋 Copy')}
                     </button>
                     <button
                         onClick={handleShareLink}
                         className="py-3 px-6 rounded-xl border-none bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on text-[14px] font-bold cursor-pointer shadow-sm transition-all"
-                        aria-label="Share this community's link"
-                        title="Share this community's link"
+                        aria-label={t("Share this community's link")}
+                        title={t("Share this community's link")}
                     >
-                        📤 Share
+                        {t('📤 Share')}
                     </button>
                 </div>
             </>
@@ -330,7 +341,7 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
     };
 
     const bringSomeoneHere = (withLine: boolean) => {
-        const desc = refused ?? (
+        const desc = refused !== null ? refusalWords(refused) : (
             nodeInfo?.features?.wordsDoor === false
                 ? t("This community doesn’t use invites. Anyone can join it with a sign-in, so just share its link.")
                 : t("This community doesn’t use invites. Anyone can join it with 12 words or a sign-in, so just share its link.")
@@ -380,7 +391,7 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
                             : 'bg-oat-100 dark:bg-nature-800 text-nature-600 dark:text-nature-200 hover:bg-oat-200 dark:hover:bg-nature-700'
                     }`}
                 >
-                    🎟️ Invites
+                    {t('🎟️ Invites')}
                 </button>
                 <button 
                     onClick={() => setActiveSection('tree')} 
@@ -390,7 +401,7 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
                             : 'bg-oat-100 dark:bg-nature-800 text-nature-600 dark:text-nature-200 hover:bg-oat-200 dark:hover:bg-nature-700'
                     }`}
                 >
-                    🌳 Tree
+                    {t('🌳 Tree')}
                 </button>
             </div>
 
@@ -402,25 +413,25 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
                         // codes they already made (below) and the Tree stay.
                         <div className="mb-6">
                             <h2 className="text-xl font-bold mb-2 text-nature-950 dark:text-white flex items-center gap-2">
-                                📤 Bring someone here
+                                {t('📤 Bring someone here')}
                             </h2>
                             <p className="text-nature-500 dark:text-nature-400 text-[14px] mb-5 leading-relaxed">
-                                {adminsRefused ?? adminsOnlyText(takesKnocks(nodeInfo))}
+                                {adminsRefused !== null ? refusalWords(adminsRefused) : adminsOnlyText(takesKnocks(nodeInfo))}
                             </p>
                             {takesKnocks(nodeInfo) && linkActions()}
                         </div>
                     ) : (
                         <>
                     <h2 className="text-xl font-bold mb-2 text-nature-950 dark:text-white flex items-center gap-2">
-                        🎟️ Invite Someone
+                        {t('🎟️ Invite Someone')}
                     </h2>
                     <p className="text-nature-500 dark:text-nature-400 text-[14px] mb-6 leading-relaxed">
-                        Each invite code is single-use and valid for 30 days. Generate a new cryptographic voucher for each person you invite.
+                        {t('Each invite code is single-use and valid for 30 days. Generate a new cryptographic voucher for each person you invite.')}
                     </p>
 
                     <input
                         type="text"
-                        placeholder="Who is this invite for? (For your records)"
+                        placeholder={t('Who is this invite for? (For your records)')}
                         value={intendedFor}
                         onChange={e => setIntendedFor(e.target.value)}
                         className="w-full p-4 rounded-xl border border-nature-200 dark:border-nature-500 bg-white dark:bg-nature-900 text-nature-950 dark:text-white text-[15px] font-medium mb-4 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none shadow-sm transition-all"
@@ -438,16 +449,16 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
                                     : 'bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on hover:shadow-lg'
                             }`}
                         >
-                            {generating ? 'Generating...' : '✨ Generate New Invite'}
+                            {generating ? t('Generating...') : t('✨ Generate New Invite')}
                         </button>
                     )}
                     {notice && (
-                        <p role="alert" className="text-amber-700 dark:text-amber-400 text-[14px] -mt-3 mb-6 leading-relaxed">{notice}</p>
+                        <p role="alert" className="text-amber-700 dark:text-amber-400 text-[14px] -mt-3 mb-6 leading-relaxed">{refusalWords(notice)}</p>
                     )}
 
                     {newCode && showQR && (
                         <div className="bg-oat-50 dark:bg-nature-950 border-2 border-emerald-500 rounded-2xl p-6 text-center mb-6 shadow-md transition-all" data-testid={isPreview ? 'invite-qr-card' : undefined}>
-                            <p className="text-nature-600 dark:text-nature-400 text-[14px] font-medium mb-3">Share this code with someone you trust</p>
+                            <p className="text-nature-600 dark:text-nature-400 text-[14px] font-medium mb-3">{t('Share this code with someone you trust')}</p>
                             <p className={`font-mono font-bold text-nature-950 dark:text-white break-all mb-4 ${isPreview ? 'text-base sm:text-xl tracking-wider sm:tracking-widest' : 'text-xl tracking-widest'}`} title={newCode}>
                                 {newCode.length > 20 ? `${newCode.substring(0, 16)}...` : newCode.toUpperCase()}
                             </p>
@@ -466,10 +477,10 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
                                                 ? 'bg-emerald-100 border-emerald-500 text-emerald-700 dark:bg-emerald-900/50 dark:border-emerald-500 dark:text-emerald-400' 
                                                 : 'bg-white dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-900 dark:text-white hover:bg-nature-50 dark:hover:bg-nature-700'
                                         }`}
-                                        aria-label="Copy invite link"
-                                        title="Copy invite link"
+                                        aria-label={t('Copy invite link')}
+                                        title={t('Copy invite link')}
                                     >
-                                        {copied ? '✓ Copied!' : '📋 Copy'}
+                                        {copied ? t('✓ Copied!') : t('📋 Copy')}
                                     </button>
                                 )}
                                 {isPreview ? (
@@ -478,10 +489,10 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
                                     <button 
                                         onClick={() => newCode && handleShare(newCode)} 
                                         className="py-3 px-6 rounded-xl border-none bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on text-[14px] font-bold cursor-pointer shadow-sm transition-all"
-                                        aria-label="Share invite link"
-                                        title="Share invite link"
+                                        aria-label={t('Share invite link')}
+                                        title={t('Share invite link')}
                                     >
-                                        📤 Share
+                                        {t('📤 Share')}
                                     </button>
                                 )}
                             </div>
@@ -492,10 +503,10 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
 
                     {unusedInvites.length > 0 && (
                         <div className="mb-6">
-                            <h3 className="text-[13px] font-bold text-nature-500 dark:text-nature-400 mb-3 uppercase tracking-wider">⏳ Pending ({unusedInvites.length})</h3>
+                            <h3 className="text-[13px] font-bold text-nature-500 dark:text-nature-400 mb-3 uppercase tracking-wider">{t('⏳ Pending ({count})', { count: unusedInvites.length })}</h3>
                             {adminsOnly && (
                                 <p className="text-nature-500 dark:text-nature-400 text-[13px] mb-3 leading-relaxed">
-                                    Codes you made earlier still work until they lapse, 30 days after they were made.
+                                    {t('Codes you made earlier still work until they lapse, 30 days after they were made.')}
                                 </p>
                             )}
                             {unusedInvites.map(inv => (
@@ -504,7 +515,7 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
                                         <div className="flex flex-col gap-1">
                                             {inv.intendedFor && (
                                                 <span className="text-[13px] font-bold text-nature-600 dark:text-nature-400">
-                                                    For: {inv.intendedFor}
+                                                    {t('For: {name}', { name: inv.intendedFor })}
                                                 </span>
                                             )}
                                             <span className="font-mono text-[14px] font-bold tracking-wider text-nature-950 dark:text-white break-all" title={inv.code}>
@@ -516,8 +527,8 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
                                                 <button 
                                                     onClick={() => { setNewCode(inv.code); setShowQR(prev => newCode === inv.code ? !prev : true); }}
                                                     className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center p-2 rounded-lg bg-oat-50 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 text-nature-600 dark:text-nature-300 hover:bg-oat-100 dark:hover:bg-nature-700 dark:hover:text-nature-200 cursor-pointer transition-colors shadow-sm"
-                                                    aria-label="Show QR code"
-                                                    title="Show QR code"
+                                                    aria-label={t('Show QR code')}
+                                                    title={t('Show QR code')}
                                                 >
                                                     📱
                                                 </button>
@@ -527,16 +538,16 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
                                                     <button 
                                                         onClick={() => handleCopyProxy(inv.code)} 
                                                         className="p-2 rounded-lg bg-oat-50 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 text-nature-600 dark:text-nature-300 hover:bg-oat-100 dark:hover:bg-nature-700 dark:hover:text-nature-200 cursor-pointer transition-colors shadow-sm"
-                                                        aria-label="Copy invite link"
-                                                        title="Copy invite link"
+                                                        aria-label={t('Copy invite link')}
+                                                        title={t('Copy invite link')}
                                                     >
                                                         📋
                                                     </button>
                                                     <button 
                                                         onClick={() => handleShare(inv.code)} 
                                                         className="p-2 rounded-lg bg-bp-commit-fill hover:bg-bp-commit-hover border-none text-bp-commit-on cursor-pointer shadow-sm transition-colors"
-                                                        aria-label="Share invite link"
-                                                        title="Share invite link"
+                                                        aria-label={t('Share invite link')}
+                                                        title={t('Share invite link')}
                                                     >
                                                         📤
                                                     </button>
@@ -551,7 +562,7 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
                                         </div>
                                     )}
                                     <p className="text-nature-400 dark:text-nature-400 text-[11px] font-semibold mt-2 uppercase tracking-wide">
-                                        Created {new Date(inv.createdAt).toLocaleDateString()}
+                                        {t('Created {date}', { date: dayWords(inv.createdAt) })}
                                     </p>
                                 </div>
                             ))}
@@ -560,13 +571,13 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
 
                     {usedInvites.length > 0 && (
                         <div>
-                            <h3 className="text-[13px] font-bold text-nature-500 dark:text-nature-400 mb-3 uppercase tracking-wider mt-6">✅ Redeemed ({usedInvites.length})</h3>
+                            <h3 className="text-[13px] font-bold text-nature-500 dark:text-nature-400 mb-3 uppercase tracking-wider mt-6">{t('✅ Redeemed ({count})', { count: usedInvites.length })}</h3>
                             {usedInvites.map(inv => (
                                 <div key={inv.code} className="bg-oat-50 dark:bg-nature-950 border border-nature-200 dark:border-nature-800 rounded-xl p-4 mb-3 opacity-70">
                                     <div className="flex flex-col gap-1">
                                         {inv.intendedFor && (
                                             <span className="text-[13px] text-nature-500 dark:text-nature-300 font-medium">
-                                                For: {inv.intendedFor}
+                                                {t('For: {name}', { name: inv.intendedFor })}
                                             </span>
                                         )}
                                         <span className="font-mono text-[13px] text-nature-500 dark:text-nature-300 line-through break-all" title={inv.code}>
@@ -574,7 +585,7 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
                                         </span>
                                     </div>
                                     <p className="text-nature-400 dark:text-nature-300 text-[11px] font-semibold mt-2 uppercase tracking-wide">
-                                        Used {inv.usedAt ? new Date(inv.usedAt).toLocaleDateString() : ''}
+                                        {inv.usedAt ? t('Used {date}', { date: dayWords(inv.usedAt) }) : t('Used')}
                                     </p>
                                 </div>
                             ))}
@@ -587,16 +598,16 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
             {activeSection === 'tree' && (
                 <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
                     <h2 className="text-xl font-bold mb-2 text-nature-950 dark:text-white flex items-center gap-2">
-                        🌳 Community Tree
+                        {t('🌳 Community Tree')}
                     </h2>
                     <p className="text-nature-500 dark:text-nature-400 text-[14px] mb-6 leading-relaxed">
-                        Who invited whom. The tree shows how your community grows.
+                        {t('Who invited whom. The tree shows how your community grows.')}
                     </p>
 
                     {tree.length === 0 ? (
                         <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-8 text-center text-nature-500 dark:text-nature-400 shadow-sm">
                             <p className="text-4xl mb-3">🌱</p>
-                            <p className="font-medium">No members yet. Generate an invite to start growing!</p>
+                            <p className="font-medium">{t('No members yet. Generate an invite to start growing!')}</p>
                         </div>
                     ) : (
                         <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-4 shadow-sm" data-testid={isPreview ? 'invite-tree' : undefined}>
@@ -624,7 +635,7 @@ function TreeNodeView({ node, depth, identity }: { node: TreeNode; depth: number
     const [expanded, setExpanded] = useState(depth < 2);
     const isMe = node.publicKey === identity.publicKey;
     const hasChildren = node.children.length > 0;
-    const joinDate = new Date(node.joinedAt).toLocaleDateString();
+    const joinDate = dayWords(node.joinedAt);
 
     return (
         <div className={`${depth > 0 ? 'ml-5' : 'ml-0'}`}>
@@ -658,13 +669,14 @@ function TreeNodeView({ node, depth, identity }: { node: TreeNode; depth: number
                         </span>
                         {isMe && (
                             <span className="text-[10px] font-bold uppercase tracking-wider bg-bp-chip-ok-tint text-bp-chip-ok-ink px-1.5 py-0.5 rounded-md border border-transparent">
-                                you
+                                {t('you')}
                             </span>
                         )}
                     </div>
                     <span className="text-[11px] font-medium text-nature-500 dark:text-nature-400 block mt-0.5">
-                        Joined {joinDate}
-                        {hasChildren && ` · ${node.children.length} invite${node.children.length !== 1 ? 's' : ''}`}
+                        {hasChildren
+                            ? tn(node.children.length, 'Joined {date} · {n} invite', 'Joined {date} · {n} invites', { date: joinDate })
+                            : t('Joined {date}', { date: joinDate })}
                     </span>
                 </div>
             </div>

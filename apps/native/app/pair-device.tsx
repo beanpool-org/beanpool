@@ -287,17 +287,22 @@ export default function PairDeviceScreen() {
                 padding: 14,
                 marginBottom: 20,
             },
+            // At 320 dp and 1.3x text a longer language's label and the value share the row: each wraps in its part.
             infoRow: {
                 flexDirection: 'row',
                 justifyContent: 'space-between',
+                gap: 12,
                 marginBottom: 8,
             },
             infoLabel: {
+                flexShrink: 1,
                 fontSize: 13,
                 color: colors.text.secondary,
                 fontWeight: '600',
             },
             infoValue: {
+                flexShrink: 1,
+                textAlign: 'right',
                 fontSize: 13,
                 color: colors.text.heading,
                 fontWeight: '700',

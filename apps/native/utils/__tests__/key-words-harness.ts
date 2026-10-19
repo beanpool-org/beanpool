@@ -108,13 +108,16 @@ export const widestWord = (text: string) => text.split(/[\s\u200B~]+/).reduce((a
 const fontOf = (el: Element): number => { for (let e: Element | null = el; e; e = e.parentElement) { const f = e.getAttribute('data-font'); if (f) return Number(f); } return 14; };
 
 /**
- * What doesn't fit `column` dp at 1.3×: a word wider than the column, and a text beside something in a row that neither
- * wraps, takes the room left (flex) nor gives way (flexShrink).
+ * What doesn't fit `column` dp at 1.3×: a word wider than the column (`written`, a name or an address, is left out), and a
+ * text beside something in a row that neither wraps, takes the room left (flex) nor gives way (flexShrink).
  */
-export function unfit(host: Element, column: number): string[] {
+export function unfit(host: Element, column: number, written: readonly string[] = []): string[] {
     const out: string[] = [];
     for (const span of Array.from(host.querySelectorAll('span')).filter((s) => s.children.length === 0 && /\p{L}/u.test(s.textContent ?? ''))) {
-        const word = widestWord(span.textContent ?? '');
+        // What members and servers wrote (a long address, say) isn't ours to fit: only the words around it are measured.
+        let text = span.textContent ?? '';
+        for (const w of written) text = text.split(w).join(' ');
+        const word = widestWord(text);
         const px = fontOf(span) * SCALE;
         if (widthOf(word, px) > column) out.push(`${word} (${Math.round(widthOf(word, px))} > ${column})`);
         const row = span.parentElement;

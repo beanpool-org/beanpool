@@ -2635,9 +2635,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     {!isVisitor && (<>
                     <button
                         onClick={() => setShowDealsModal(true)}
-                        className="h-9 px-3 rounded-full border border-amber-300 dark:border-amber-700 bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-400 text-xs font-black whitespace-nowrap shadow-sm transition-all flex items-center gap-1.5 hover:bg-amber-200 dark:hover:bg-amber-900/60 hover:shadow-md cursor-pointer"
+                        className="min-h-9 min-w-0 px-3 py-1 rounded-full border border-amber-300 dark:border-amber-700 bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-400 text-xs font-black leading-tight shadow-sm transition-all flex items-center gap-1.5 hover:bg-amber-200 dark:hover:bg-amber-900/60 hover:shadow-md cursor-pointer"
                     >
-                        {t('🤝 My Deals')}
+                        {/* A longer language wraps inside the pill rather than pushing the view toggle off a 320 px screen. */}
+                        <span className="min-w-0 break-words text-center">{t('🤝 My Deals')}</span>
                         {pendingDealsCount > 0 && (
                             <span className="bg-bp-danger-fill text-bp-danger-on text-[9px] font-black px-1.5 py-0.5 rounded-full shadow-sm">
                                 {pendingDealsCount}
@@ -2815,7 +2816,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         }`}
                     >
                         {(MARKETPLACE_CATEGORIES_BY_ID.get(categoryFilter)?.emoji) || '🏷️'}
-                        <span className="truncate">
+                        <span className="min-w-0 break-words text-center leading-tight">
                             {categoryFilter !== 'all' ? (filterCategory ? t(filterCategory.label) : undefined) : t('Category')}
                         </span>
                         {categoryFilter !== 'all' ? (
@@ -2844,7 +2845,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         }`}
                     >
                         <span>📍</span>
-                        <span className="truncate">
+                        <span className="min-w-0 break-words text-center leading-tight">
                             {radiusSettings ? (radiusSettings.radiusKm < 1 ? t('{n}m', { n: Math.round(radiusSettings.radiusKm * 1000) }) : t('{n}km', { n: radiusSettings.radiusKm })) : t('Distance')}
                         </span>
                         {radiusSettings ? (

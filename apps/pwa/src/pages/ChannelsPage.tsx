@@ -203,14 +203,14 @@ export function ChannelsPage({ identity, onBack, onViewFeed, onSharePost }: Prop
                     {t('‹ Back')}
                 </button>
 
-                <h2 className="text-lg sm:text-xl font-extrabold text-nature-950 dark:text-white m-0 tracking-tight text-center flex-1">
+                <h2 className="text-lg sm:text-xl font-extrabold text-nature-950 dark:text-white m-0 tracking-tight text-center flex-1 min-w-0 break-words">
                     {t('Channels & Showcase')}
                 </h2>
 
                 <button
                     type="button"
                     onClick={onViewFeed}
-                    className="text-xs sm:text-sm font-bold text-terra-600 dark:text-terra-400 hover:text-terra-700 dark:hover:text-terra-300 bg-transparent border-none cursor-pointer p-1 transition-colors whitespace-nowrap"
+                    className="text-xs sm:text-sm font-bold text-terra-600 dark:text-terra-400 hover:text-terra-700 dark:hover:text-terra-300 bg-transparent border-none cursor-pointer p-1 transition-colors min-w-0 text-right break-words"
                     aria-label={t('View The Pulse community feed')}
                 >
                     {t('View Feed ↗')}
@@ -313,7 +313,7 @@ export function ChannelsPage({ identity, onBack, onViewFeed, onSharePost }: Prop
                                     </div>
 
                                     {/* Category row & picker */}
-                                    <div className="flex items-center justify-between py-2 border-t border-nature-100 dark:border-nature-800/60">
+                                    <div className="flex flex-wrap items-center justify-between gap-2 py-2 border-t border-nature-100 dark:border-nature-800/60">
                                         <span className="text-xs sm:text-sm font-semibold text-nature-800 dark:text-nature-200 flex items-center gap-1">
                                             <span>{categoryMeta(channel.category).icon}</span>
                                             <span>{t(categoryMeta(channel.category).label)}</span>
@@ -321,7 +321,7 @@ export function ChannelsPage({ identity, onBack, onViewFeed, onSharePost }: Prop
                                         <button
                                             type="button"
                                             onClick={() => setEditingId(editingId === channel.id ? null : channel.id)}
-                                            className="text-xs font-semibold px-2.5 py-1 rounded-lg border border-nature-200 dark:border-nature-700 bg-nature-50 dark:bg-nature-800 text-nature-700 dark:text-nature-300 hover:bg-nature-100 dark:hover:bg-nature-700 dark:hover:text-nature-200 cursor-pointer transition-colors"
+                                            className="ml-auto text-xs font-semibold px-2.5 py-1 rounded-lg border border-nature-200 dark:border-nature-700 bg-nature-50 dark:bg-nature-800 text-nature-700 dark:text-nature-300 hover:bg-nature-100 dark:hover:bg-nature-700 dark:hover:text-nature-200 cursor-pointer transition-colors"
                                         >
                                             {editingId === channel.id ? t('Done') : t('Change category')}
                                         </button>

@@ -287,7 +287,7 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                             return (
                                 <div
                                     key={item.id}
-                                    className={`relative isolate flex items-center gap-3 p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200/80 dark:border-zinc-800 transition-all ${
+                                    className={`relative isolate flex flex-wrap items-center gap-3 p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200/80 dark:border-zinc-800 transition-all ${
                                         onSelectOfferItem
                                             ? 'cursor-pointer hover:border-emerald-500/50 hover:bg-zinc-100/80 dark:hover:bg-zinc-800/80 active:scale-[0.99]'
                                             : ''
@@ -323,8 +323,9 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                                         )}
                                     </div>
 
-                                    {/* Description */}
-                                    <div className="flex-1 min-w-0">
+                                    {/* Description: at least 6rem wide; below that the price moves under it (at 320 px with 1.3x
+                                        text the price took the whole row and left the name 0 px wide, in English too). */}
+                                    <div className="flex-1 min-w-[6rem]">
                                         <div className="flex items-center gap-2">
                                             <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 truncate">{item.name}</h3>
                                             {/* relative z-10 for the same reason as the Report button: the select overlay is a
@@ -344,7 +345,7 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                                     </div>
 
                                     {/* Price & Actions */}
-                                    <div className="flex flex-col items-end flex-shrink-0">
+                                    <div className="flex flex-col items-end flex-shrink-0 ml-auto">
                                         <div className="flex items-center gap-1 bg-bp-chip-ok-tint text-bp-chip-ok-ink px-2.5 py-1 rounded-lg border border-transparent text-xs font-bold">
                                             {/* The bean and the number are drawn; a screen reader hears the price as one sentence. */}
                                             <span><span aria-hidden="true">🫘 {formatNumber(effectivePrice)}</span><span className="sr-only">{beansWords(effectivePrice)}</span></span>

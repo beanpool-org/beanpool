@@ -236,11 +236,11 @@ export function PulsePage({ identity, onOpenProfile }: Props) {
         <div className="max-w-2xl mx-auto p-4 sm:p-6 pb-24 min-h-full">
             {/* Header: Title, subtitle, refresh & channels actions */}
             <div className="mb-4">
-                <div className="flex items-center justify-between gap-3 mb-1">
-                    <h1 className="text-xl sm:text-2xl font-black text-nature-950 dark:text-white m-0 tracking-tight">
+                <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 mb-1">
+                    <h1 className="text-xl sm:text-2xl font-black text-nature-950 dark:text-white m-0 tracking-tight min-w-0 break-words">
                         {t('The Pulse')}
                     </h1>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 ml-auto">
                         <button
                             type="button"
                             onClick={() => void handleRefresh()}
@@ -274,14 +274,14 @@ export function PulsePage({ identity, onOpenProfile }: Props) {
                     <button
                         type="button"
                         onClick={() => setLane('neighbours')}
-                        className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer border-none ${
+                        className={`flex-1 min-w-0 flex items-center justify-center gap-1.5 py-2 px-2 sm:px-3 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer border-none ${
                             activeLane === 'neighbours'
                                 ? 'bg-white dark:bg-nature-800 text-nature-950 dark:text-white shadow-sm'
                                 : 'bg-transparent text-nature-500 dark:text-nature-400 hover:text-nature-900 dark:hover:text-white'
                         }`}
                         aria-pressed={activeLane === 'neighbours'}
                     >
-                        <span><span aria-hidden="true">👥</span> {t('Neighbours')}</span>
+                        <span className="min-w-0 break-words text-center"><span aria-hidden="true">👥</span> {t('Neighbours')}</span>
                         {neighbourItems.length > 0 && (
                             <span className="text-[10px] font-extrabold px-1.5 py-0.2 rounded-full bg-nature-200 dark:bg-nature-700 text-nature-700 dark:text-nature-200">
                                 {neighbourItems.length}
@@ -291,14 +291,14 @@ export function PulsePage({ identity, onOpenProfile }: Props) {
                     <button
                         type="button"
                         onClick={() => setLane('local')}
-                        className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer border-none ${
+                        className={`flex-1 min-w-0 flex items-center justify-center gap-1.5 py-2 px-2 sm:px-3 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer border-none ${
                             activeLane === 'local'
                                 ? 'bg-white dark:bg-nature-800 text-nature-950 dark:text-white shadow-sm'
                                 : 'bg-transparent text-nature-500 dark:text-nature-400 hover:text-nature-900 dark:hover:text-white'
                         }`}
                         aria-pressed={activeLane === 'local'}
                     >
-                        <span><span aria-hidden="true">📰</span> {t('Local')}</span>
+                        <span className="min-w-0 break-words text-center"><span aria-hidden="true">📰</span> {t('Local')}</span>
                         {localItems.length > 0 && (
                             <span className="text-[10px] font-extrabold px-1.5 py-0.2 rounded-full bg-nature-200 dark:bg-nature-700 text-nature-700 dark:text-nature-200">
                                 {localItems.length}

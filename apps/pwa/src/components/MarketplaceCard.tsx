@@ -130,7 +130,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                         <h3 dir="auto" className="font-extrabold text-sm text-nature-950 dark:text-white truncate">
                             {post.title}
                         </h3>
-                        <span className="text-[10px] text-nature-500 truncate flex items-center gap-1 flex-wrap">
+                        <span className="text-[10px] text-nature-500 flex items-center gap-1 flex-wrap min-w-0 break-words">
                             {/* One sentence per variant, as the phone's byLine: the name is the member's, the Elder mark
                                 and the blue "(You)" are parts of it wherever the language puts them. */}
                             {isOwnPost ? (
@@ -141,12 +141,12 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                             ) : elderCard ? t('by {name} ⛰️', { name: authorName }) : t('by {name}', { name: authorName })}
                             {distanceTag}
                             {foundingChip && (
-                                <span className="text-[8px] font-black tracking-wider px-1.5 py-0.5 rounded bg-bp-chip-ok-tint text-bp-chip-ok-ink border border-transparent shrink-0">
+                                <span className="text-[8px] font-black tracking-wider px-1.5 py-0.5 rounded bg-bp-chip-ok-tint text-bp-chip-ok-ink border border-transparent min-w-0 max-w-full whitespace-normal break-words">
                                     {t('🌱 FOUNDING')}
                                 </span>
                             )}
                             {groupScopeBadge && (
-                                <span className="text-[8px] font-black tracking-wider px-1.5 py-0.5 rounded bg-bp-chip-ok-tint text-bp-chip-ok-ink border border-transparent shrink-0">
+                                <span className="text-[8px] font-black tracking-wider px-1.5 py-0.5 rounded bg-bp-chip-ok-tint text-bp-chip-ok-ink border border-transparent min-w-0 max-w-full whitespace-normal break-words">
                                     {groupScopeBadge}
                                 </span>
                             )}
@@ -154,7 +154,9 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                     </div>
                 </div>
 
-                <div className="flex items-center gap-2 ml-3 flex-shrink-0">
+                {/* The price and the type pill: side by side while there is room; on a narrow screen (320 px, 1.3x text) or
+                    in a longer language the pill drops under the price, so the title keeps its width. */}
+                <div className="flex flex-wrap items-center justify-end gap-x-2 gap-y-1 ml-3 max-w-[45%]">
                     {/* Compact Price */}
                     {showPrice && (
                         <span className="font-black text-sm text-nature-950 dark:text-white flex items-center">
@@ -345,7 +347,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                     {pausedPill && <div className="mt-1">{pausedPill}</div>}
                     {groupScopeBadge && (
                         <div className="mt-1">
-                            <span className="text-[9px] font-black tracking-wider px-1.5 py-0.5 rounded bg-bp-chip-ok-tint text-bp-chip-ok-ink border border-transparent block truncate">
+                            <span className="text-[9px] font-black tracking-wider px-1.5 py-0.5 rounded bg-bp-chip-ok-tint text-bp-chip-ok-ink border border-transparent block break-words">
                                 {groupScopeBadge}
                             </span>
                         </div>

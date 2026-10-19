@@ -257,8 +257,8 @@ export function EventChat({ postId, identity, onBack, onOpenEvent, refreshMs = 1
                                         </div>
                                     )}
                                     <div className="flex-1 min-w-0">
-                                        <div className="flex items-baseline gap-2 min-w-0">
-                                            <span className="flex-1 min-w-0 truncate text-sm font-bold text-nature-900 dark:text-white">{author}</span>
+                                        <div className="flex flex-wrap items-baseline gap-x-2 min-w-0">
+                                            <span className="flex-1 min-w-[5rem] truncate text-sm font-bold text-nature-900 dark:text-white">{author}</span>
                                             <span className="flex-shrink-0 text-[11px] text-nature-400">{formatTime(m.timestamp)}</span>
                                         </div>
                                         <p dir="auto" className={`m-0 mt-1 text-sm leading-relaxed whitespace-pre-wrap break-words ${isRemoved ? 'italic text-nature-400 dark:text-nature-400' : 'text-nature-800 dark:text-nature-200'}`}>
@@ -389,7 +389,7 @@ function ChatHeader({ title, onBack, onOpenEvent }: { title: string; onBack?: ()
                     type="button"
                     data-testid="event-chat-open-event"
                     onClick={onOpenEvent}
-                    className="flex-shrink-0 min-h-[48px] px-3 rounded-xl border border-violet-300 dark:border-violet-800 bg-transparent text-sm font-bold text-violet-800 dark:text-violet-200 cursor-pointer"
+                    className="min-w-0 max-w-[40%] min-h-[48px] px-3 rounded-xl border border-violet-300 dark:border-violet-800 bg-transparent text-sm font-bold leading-tight break-words text-violet-800 dark:text-violet-200 cursor-pointer"
                 >
                     {t('View event')}
                 </button>

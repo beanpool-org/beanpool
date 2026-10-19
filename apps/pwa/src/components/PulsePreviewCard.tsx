@@ -147,7 +147,8 @@ export function PulsePreviewCard({
                         <div className="text-xs sm:text-sm font-semibold text-nature-900 dark:text-white">
                             {t('Publish to Pulse')}
                         </div>
-                        <div className="text-[11px] sm:text-xs text-nature-500 dark:text-nature-400 truncate">
+                        {/* Wraps rather than cut: at 320 px with 1.3x text even the English ran past its column. */}
+                        <div className="text-[11px] sm:text-xs text-nature-500 dark:text-nature-400 break-words">
                             {isOptedIn ? t('Will be shared with your local community') : t('Excluded from this publish')}
                         </div>
                     </div>

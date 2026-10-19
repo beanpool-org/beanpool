@@ -302,7 +302,7 @@ describe('Talk follows a language switch live (Settings → Language, the first 
         expect(screen.getByText('14 Oct 2026')).toBeInTheDocument();
 
         await act(async () => { expect(await chooseAndShowLanguage('ru')).toBe(true); });
-        const threeMembers = (ruWords as Record<string, Record<string, string>>)['{n} member|{n} members'].few.replace('{n}', '3');
+        const threeMembers = (ruWords as unknown as Record<string, Record<string, string>>)['{n} member|{n} members'].few.replace('{n}', '3');
         expect(threeMembers).not.toBe('3 members');
         expect(screen.getAllByText(threeMembers).length).toBeGreaterThan(0);
         expect(screen.queryByText('3 members')).toBeNull();

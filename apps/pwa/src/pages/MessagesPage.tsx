@@ -1532,12 +1532,13 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         {t('Drop the picture to send it')}
                     </div>
                 )}
-                {/* Chat header */}
+                {/* Chat header. Report and Block move under the name when both can't sit beside it (at 320 px with 1.3x text
+                    the name was cut to its first letter, and to nothing in a longer language). */}
                 <div style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', rowGap: '0.5rem',
                     padding: '0.75rem 1rem', borderBottom: '1px solid var(--border-primary)',
                 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: 0, flex: '1 1 auto' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: 'min(100%, 10rem)', flex: '1 1 auto' }}>
                         <button
                             onClick={() => {
                                 setActiveConv(null);
@@ -1701,11 +1702,12 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             borderBottom: `1px solid ${isBuyer ? 'rgba(16, 185, 129, 0.3)' : 'rgba(245, 158, 11, 0.3)'}`,
                             padding: '0.75rem 1rem',
                             display: 'flex',
+                            flexWrap: 'wrap',
                             alignItems: 'center',
                             justifyContent: 'space-between',
                             gap: '0.75rem'
                         }}>
-                            <div>
+                            <div style={{ flex: '1 1 10rem', minWidth: 0 }}>
                                 <div style={{ fontWeight: 'bold', fontSize: '0.85rem', color: isBuyer ? 'var(--bp-ink-success)' : 'var(--bp-ink-warning)' }}>
                                     {tn(pendingTx.credits, '🔒 Trust Hold: {n} Beans', '🔒 Trust Hold: {n} Beans')}
                                 </div>
@@ -1714,7 +1716,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                 </div>
                             </div>
                             {isBuyer ? (
-                                <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: '0.5rem', marginLeft: 'auto', maxWidth: '100%' }}>
                                     <button
                                         onClick={() => handleReleaseCredits(pendingTx.id, pendingTx.credits)}
                                         disabled={actionLoading}
@@ -2760,9 +2762,11 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                     <div style={{ fontWeight: (conv.unreadCount || 0) > 0 ? 700 : 600, fontSize: '0.95rem' }}>
                                         {getConversationTitle(conv)}
                                     </div>
+                                    {/* The listing's title, then its status: the status drops under the title rather than squeezing it
+                                        (a longer language's status at 320 px left the title a few pixels wide). */}
                                     {conv.postTitle && (
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.15rem' }}>
-                                            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', columnGap: '0.5rem', rowGap: '0.15rem', marginTop: '0.15rem' }}>
+                                            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, maxWidth: '100%' }}>
                                                 {conv.postTitle}
                                             </div>
                                             {conv.postStatus && (

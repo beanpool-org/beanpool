@@ -151,8 +151,10 @@ function usePrefersReducedMotion(): boolean {
     return reduced;
 }
 
+// `relative`: the chip holds its screen-reader line (sr-only, absolutely placed), so the strip's own scroller clips it;
+// otherwise a chip scrolled past the strip's end widened the whole page (measured at 320 px: 512 px wide).
 const PULSE_CHIP_SHELL =
-    'flex-shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-white dark:bg-zinc-800 ' +
+    'relative flex-shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-white dark:bg-zinc-800 ' +
     'border border-zinc-200/60 dark:border-zinc-700/60 text-[11px] text-zinc-700 dark:text-zinc-300 font-medium';
 
 /**

@@ -304,13 +304,13 @@ export function MyDealsModal({
                             <button
                                 key={tab.id}
                                 onClick={() => setDealsTab(tab.id)}
-                                className={`flex-1 flex gap-2 justify-center items-center py-2 text-sm font-bold rounded-lg transition-all ${preview ? 'min-h-[44px] ' : ''}${
+                                className={`flex-1 min-w-0 flex gap-2 justify-center items-center px-1 py-2 text-sm font-bold leading-tight rounded-lg transition-all ${preview ? 'min-h-[44px] ' : ''}${
                                     dealsTab === tab.id
                                         ? 'bg-white dark:bg-nature-900 text-nature-900 dark:text-white shadow-sm'
                                         : 'text-nature-500 hover:text-nature-700 dark:text-nature-300 dark:hover:text-nature-300'
                                 }`}
                             >
-                                <span>{tab.label}</span>
+                                <span className="min-w-0 break-words text-center">{tab.label}</span>
                                 {tab.badge && tab.badge > 0 ? (
                                     <span className="bg-bp-danger-fill text-bp-danger-on text-[10px] font-black px-1.5 py-0.5 rounded-full shadow-sm">
                                         {tab.badge}
@@ -322,7 +322,7 @@ export function MyDealsModal({
 
                     {/* History sub-filter */}
                     {dealsTab === 'history' && (
-                        <div className="flex justify-center gap-2 mt-3">
+                        <div className="flex flex-wrap justify-center gap-2 mt-3">
                             {[{ id: 'all' as const, label: t('All') }, { id: 'buying' as const, label: t('Received') }, { id: 'selling' as const, label: t('Given') }].map(f => (
                                 <button
                                     key={f.id}
@@ -437,8 +437,8 @@ export function MyDealsModal({
                                                         </div>
                                                     )}
                                                     <div className="flex-1 min-w-0">
-                                                        <div className="flex justify-between items-start mb-1">
-                                                            <div className="flex items-center gap-2">
+                                                        <div className="flex flex-wrap justify-between items-start gap-x-2 gap-y-1 mb-1">
+                                                            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 min-w-0">
                                                                 <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${
                                                                     isCompleted ? 'bg-bp-chip-ok-tint text-bp-chip-ok-ink'
                                                                     : isPending ? 'bg-bp-chip-warn-tint text-bp-chip-warn-ink'
@@ -450,7 +450,7 @@ export function MyDealsModal({
                                                                     {dealDate(item.createdAt)}
                                                                 </span>
                                                             </div>
-                                                            <div className="flex items-center">
+                                                            <div className="flex items-center shrink-0 whitespace-nowrap ml-auto">
                                                                 <span className={`font-black text-sm ${isBuyer ? 'text-red-500 dark:text-red-300' : 'text-emerald-500 dark:text-emerald-400'}`}>
                                                                     {isBuyer ? '- ' : '+ '}{beans(item.credits)}
                                                                 </span>
@@ -661,7 +661,7 @@ export function MyDealsModal({
                                                     </div>
                                                 )}
                                                 <div className="flex-1 min-w-0 flex flex-col justify-center">
-                                                    <div className="flex justify-between items-start mb-1">
+                                                    <div className="flex flex-wrap justify-between items-start gap-x-2 gap-y-1 mb-1">
                                                         <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${
                                                             item.type === 'offer' ? 'bg-bp-chip-ok-tint text-bp-chip-ok-ink'
                                                             : 'bg-nature-200 text-nature-700 dark:bg-nature-800 dark:text-nature-300'

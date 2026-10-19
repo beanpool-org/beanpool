@@ -113,12 +113,13 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onDelete, onOpenPro
             className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl mb-4 overflow-hidden shadow-sm hover:shadow-md transition-shadow duration-200"
             aria-label={t('{title} by {name} on {platform}', { title: item.title || t('Community post'), name: authorName, platform: platName })}
         >
-            {/* Header: Neighbour details + Category + Owner actions */}
-            <div className="flex items-center justify-between p-3 sm:p-3.5 gap-2 border-b border-nature-100 dark:border-nature-800/60">
+            {/* Header: Neighbour details + Category + Owner actions. When a longer language's Hide and Delete can't sit
+                beside the name, they move to a line of their own (and wrap there) rather than past the card's edge. */}
+            <div className="flex flex-wrap items-center justify-between p-3 sm:p-3.5 gap-2 border-b border-nature-100 dark:border-nature-800/60">
                 <button
                     type="button"
                     onClick={handleAuthorClick}
-                    className="flex items-center gap-2.5 min-w-0 flex-1 text-left bg-transparent border-none p-1 -m-1 rounded-lg cursor-pointer group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terra-500"
+                    className="flex items-center gap-2.5 min-w-[9rem] flex-1 text-left bg-transparent border-none p-1 -m-1 rounded-lg cursor-pointer group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terra-500"
                     aria-label={t("View {name}'s public profile", { name: authorName })}
                 >
                     <div className="w-9 h-9 rounded-full overflow-hidden bg-oat-100 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 flex items-center justify-center shrink-0">
@@ -145,16 +146,16 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onDelete, onOpenPro
                                 </span>
                             )}
                         </div>
-                        <div className="flex items-center gap-1 text-xs text-nature-500 dark:text-nature-400 mt-0.5 truncate">
+                        <div className="flex flex-wrap items-center gap-x-1 text-xs text-nature-500 dark:text-nature-400 mt-0.5 min-w-0">
                             <span className={isOfficialSource(item) ? "font-bold text-terra-600 dark:text-terra-400" : "font-medium"}>
                                 {isOfficialSource(item) ? t('\u{1F4F0} Local source') : `${platMeta.icon} ${platName}`}
                             </span>
-                            {timeAgo && <span className="shrink-0">· {timeAgo}</span>}
+                            {timeAgo && <span className="shrink-0 whitespace-nowrap">· {timeAgo}</span>}
                         </div>
                     </div>
                 </button>
 
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex flex-wrap items-center justify-end gap-2 ml-auto max-w-full">
                     <span
                         className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 border border-nature-200 dark:border-nature-700"
                         title={t('Category: {category}', { category: t(catMeta.label) })}

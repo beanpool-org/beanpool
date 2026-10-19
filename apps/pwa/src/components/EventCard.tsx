@@ -313,8 +313,9 @@ export function EventCard({ post, identity, distanceKm, viewMode = 'grid', onOpe
                     <span aria-hidden="true">{p.eventOnline ? '🌐 ' : '📍 '}</span>{place}
                 </span>
             )}
+            {/* The counts wrap rather than cut: "interested" is the longest word on the card in most languages. */}
             {countsLine(p) && (
-                <span className="block w-full truncate text-sm font-semibold text-nature-600 dark:text-nature-300">
+                <span className="block w-full break-words text-sm font-semibold text-nature-600 dark:text-nature-300">
                     <span aria-hidden="true">👥 </span>{countsLine(p)}
                 </span>
             )}

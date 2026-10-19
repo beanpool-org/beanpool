@@ -4,7 +4,7 @@
  */
 
 import { AREA_STEP_WORDS, LANGS, describeArea, formatNumber, isLang, t, tn } from '@beanpool/core';
-import { AreaStep } from '../components/AreaStep';
+import { AreaStep, areaFailureWords } from '../components/AreaStep';
 import { readMyArea, recallAreaPlace, rememberAreaPlace, senderForMe, useNearbyLimits, writeArea, type MemberArea } from '../lib/member-area';
 import { useState, useEffect, useRef } from 'react';
 import { type BeanPoolIdentity, wipeIdentity, getMnemonic, hasMnemonic, seedViewedKey } from '../lib/identity';
@@ -191,7 +191,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
         setAreaError(null);
         const result = await writeArea(senderForMe, null);
         setAreaClearing(false);
-        if (!result.ok) { setAreaError(result.error); return; }
+        if (!result.ok) { setAreaError(areaFailureWords(result.error)); return; }
         rememberAreaPlace(null);
         setMyArea(null);
     };

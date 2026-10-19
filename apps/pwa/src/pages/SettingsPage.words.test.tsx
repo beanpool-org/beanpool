@@ -14,13 +14,14 @@
  */
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { t } from '@beanpool/core';
+import { AREA_STEP_WORDS, AREA_TOWN_SEARCH_WORDS, NOMINATIM_SEARCH_URL, t } from '@beanpool/core';
 import { SettingsPage } from './SettingsPage';
 import { NO_WORDS_HERE } from '../components/SignInRecoveryLine';
 import { WEB_DELETE_CARD_LINE, WEB_DELETE_CHECKING_LINE, WEB_VAULT_COPY_LINE, webLastCommunityLine } from '../lib/delete-here';
 import { WEB_COPY_CLEARS_LINE } from '../lib/words-clipboard';
 import { KIT_WEB_LABEL } from '../lib/recovery-kit';
 import * as api from '../lib/api';
+import { readMyArea, useNearbyLimits } from '../lib/member-area';
 import { backToEnglish, bracketed, showIn, xx } from '../words-xx.test-support';
 import { AS_WRITTEN, LANGUAGE_LIST, LanguageRoot, bypassing, guideStrings } from '../words-w3.test-support';
 import ruWords from '../../words/ru.json';
@@ -44,6 +45,11 @@ vi.mock('../lib/blocklist', async () => {
     const actual = await vi.importActual('../lib/blocklist');
     return { ...actual, loadBlocklist: vi.fn(async () => ['blocked-pk-0000000000000000']), getBlocklistFullNote: vi.fn(() => null) };
 });
+// Your area draws only on a community that syncs listings by area: the row and its screen once the limits are answered.
+vi.mock('../lib/member-area', async () => {
+    const actual = await vi.importActual('../lib/member-area');
+    return { ...actual, useNearbyLimits: vi.fn(() => null), readMyArea: vi.fn(async () => null) };
+});
 
 const WORDS = ['abandon', 'ability', 'able', 'about', 'above', 'absent', 'absorb', 'abstract', 'absurd', 'abuse', 'access', 'accident'];
 const identity: any = { publicKey: 'me-pk', privateKey: 'priv-key-hex', callsign: 'Kim', mnemonic: WORDS };
@@ -64,6 +70,8 @@ beforeEach(() => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 404 })));
     vi.spyOn(window, 'alert').mockImplementation((m?: unknown) => { said.push(String(m)); });
     vi.spyOn(window, 'confirm').mockImplementation((m?: string) => { said.push(String(m)); return false; });
+    vi.mocked(useNearbyLimits).mockReturnValue(null);
+    vi.mocked(readMyArea).mockResolvedValue(null);
     vi.mocked(api.getMemberProfile).mockImplementation(async (pk: string) => (pk === 'blocked-pk-0000000000000000'
         ? { publicKey: pk, callsign: 'Blocked Bea', avatar: null, bio: '', contact: null } as any
         : { publicKey: 'me-pk', callsign: 'Kim', avatar: null, bio: 'Grows beans by the river', contact: null } as any));
@@ -150,6 +158,46 @@ describe('Settings in the pseudo-locale: every word on it came through t() (word
         await tap('Also remove from friends');
         expect(said.at(-1)).toBe(xx('Remove {name} from your friends? They stay blocked. They can notice a removal.').replace('{name}', 'Blocked Bea'));
         await tap('Unblock All');
+        expect(unwrapped()).toEqual([]);
+    });
+
+    it('Your area: the screen, a failed reading, and its town box with a match and with the search down', async () => {
+        const BYRON = { lat: '-28.6474', lon: '153.6120', display_name: 'Byron Bay, Byron Shire Council, New South Wales, Australia', name: 'Byron Bay', type: 'town' };
+        let nominatimDown = false;
+        vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+            if (!String(url).startsWith(NOMINATIM_SEARCH_URL)) return new Response('{}', { status: 404 });
+            if (nominatimDown) throw new TypeError('Failed to fetch');
+            return new Response(JSON.stringify([BYRON]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+        }));
+        vi.mocked(useNearbyLimits).mockReturnValue({ radiusKm: 100, max: 300 });
+        vi.mocked(readMyArea).mockResolvedValue({ lat: -28.6, lng: 153.6 });
+        await showIn('xx');
+        renderSettings();
+        await tap('Your area');
+        const area = await screen.findByTestId('settings-area');
+        expect(within(area).getByText(xx(AREA_STEP_WORDS.privacy))).toBeInTheDocument();
+        expect(within(area).getByText(xx(AREA_STEP_WORDS.later))).toBeInTheDocument();
+        expect(within(area).getByRole('button', { name: `📍 ${xx(AREA_STEP_WORDS.useLocation)}` })).toBeInTheDocument();
+        expect(unwrapped()).toEqual([]);
+        // jsdom has no geolocation: the browser can't share a location.
+        fireEvent.click(within(area).getByTestId('area-use-location'));
+        expect(await within(area).findByRole('alert')).toHaveTextContent(xx("This browser can't share a location. Type a town instead, or skip for now."));
+        expect(unwrapped()).toEqual([]);
+        fireEvent.click(within(area).getByTestId('area-type-town'));
+        const box = within(area).getByLabelText(xx(AREA_TOWN_SEARCH_WORDS.label)) as HTMLInputElement;
+        expect(box).toHaveAttribute('placeholder', xx(AREA_TOWN_SEARCH_WORDS.placeholder));
+        fireEvent.change(box, { target: { value: 'Byron' } });
+        fireEvent.keyDown(box, { key: 'Enter' });
+        expect(await within(area).findByRole('option', { name: xx('Choose {place}').replace('{place}', BYRON.display_name) })).toBeInTheDocument();
+        expect(unwrapped([BYRON.display_name, BYRON.name])).toEqual([]);
+        // A fresh box (the lookup's 1 s floor is per box), with the search down.
+        nominatimDown = true;
+        fireEvent.click(within(area).getByTestId('area-type-town'));
+        fireEvent.click(within(area).getByTestId('area-type-town'));
+        const again = within(area).getByLabelText(xx(AREA_TOWN_SEARCH_WORDS.label)) as HTMLInputElement;
+        fireEvent.change(again, { target: { value: 'Byron' } });
+        fireEvent.keyDown(again, { key: 'Enter' });
+        expect(await within(area).findByText(xx(AREA_TOWN_SEARCH_WORDS.unavailable))).toBeInTheDocument();
         expect(unwrapped()).toEqual([]);
     });
 

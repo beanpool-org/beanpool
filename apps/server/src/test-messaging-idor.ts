@@ -119,6 +119,10 @@ async function main() {
     const msgId = (db.prepare("SELECT id FROM messages WHERE conversation_id=? LIMIT 1").get(conv.id) as any)?.id;
     if (!msgId) throw new Error('setup: failed to find message id');
 
+    const reactSpoofed = await signedFetch('POST', '/api/messages/react', A,
+        { messageId: msgId, authorPubkey: B.pubKeyHex, emoji: '👍' });
+    assert(reactSpoofed.status === 403, `reactions: spoofed authorPubkey is DENIED (got ${reactSpoofed.status} ${reactSpoofed.error ?? ''})`);
+
     const reactA = await signedFetch('POST', '/api/messages/react', A,
         { messageId: msgId, authorPubkey: A.pubKeyHex, emoji: '👍' });
     assert(reactA.status === 200, `reactions: participant A can react (got ${reactA.status})`);

@@ -220,3 +220,8 @@ These were reviewed and **CLOSED, not merged**: their branches had ~260-file dri
 **Vulnerability:** `GET /api/messages/:conversationId` in `apps/server/src/routes/messaging.ts` gated the non-participant authorization check behind `ENFORCE_READ_AUTH`. When `ENFORCE_READ_AUTH` was disabled or unconfigured, any caller could fetch private conversation metadata and messages by conversation ID.
 **Learning:** Private resources like direct message conversations must enforce participant authorization (`conv.participants.includes(actor)`) unconditionally, regardless of server-level public read settings (`ENFORCE_READ_AUTH`).
 **Prevention:** Check `!conv.participants.includes(ctx.state.actor)` directly without checking `ENFORCE_READ_AUTH` so non-participants are always denied access (403).
+
+## 2026-10-18 - [Sentinel] Enforce authorPubkey validation on message reactions
+**Vulnerability:** `POST /api/messages/react` in `apps/server/src/routes/messaging.ts` allowed an authenticated caller to pass a spoofed `authorPubkey` in the request body without checking if it matched the authenticated request signer (`actor`).
+**Learning:** Mutating routes accepting an `authorPubkey` (or similar identity parameter) in the request body must explicitly verify `if (authorPubkey && authorPubkey !== actor)` and reject mismatches with HTTP 403.
+**Prevention:** Always ensure request body identity fields match `ctx.state.actor` in Koa route handlers.

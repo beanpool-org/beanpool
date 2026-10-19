@@ -668,6 +668,11 @@ router.post('/api/messages/react', async (ctx) => {
         ctx.body = { error: 'A signed request is required' };
         return;
     }
+    if (authorPubkey && authorPubkey !== actor) {
+        ctx.status = 403;
+        ctx.body = { error: 'authorPubkey must match authenticated signer' };
+        return;
+    }
     if (!isVisitorsDirectLine(messageId, actor) && !membersOnlyHere(ctx)) return; // who reacted, by key, as edit's answer
     if (!messageId || !emoji || typeof emoji !== 'string' || !emoji.trim() || emoji.length > 32) {
         ctx.status = 400;

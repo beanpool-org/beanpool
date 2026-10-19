@@ -4,13 +4,15 @@ import { palette } from '../constants/colors';
 import { useTheme, useStyles } from '../app/ThemeContext';
 
 import { CATEGORY_META } from '../constants/categories';
+import { t, word, type WordKey } from '@beanpool/core';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-const CATEGORIES = Object.entries(CATEGORY_META).map(([id, m]) => ({
+/** Each category's words marked here (core word() keys), translated where the tile is drawn. */
+const CATEGORIES: Array<{ id: string; emoji: string; label: WordKey }> = Object.entries(CATEGORY_META).map(([id, m]) => ({
     id,
     emoji: m.emoji,
-    label: id === 'all' ? 'All' : m.label,
+    label: id === 'all' ? word('All') : m.label,
 }));
 
 // Grid: 4 columns
@@ -94,12 +96,12 @@ export function CategoryPickerSheet({ visible, selected, onSelect, onClose }: Ca
 
     return (
         <Modal visible={visible} transparent animationType="slide">
-            <Pressable style={styles.overlay} accessibilityRole="button" accessibilityLabel="Close category picker" onPress={onClose}>
+            <Pressable style={styles.overlay} accessibilityRole="button" accessibilityLabel={t('Close category picker')} onPress={onClose}>
                 <Pressable style={styles.sheet} onPress={e => e.stopPropagation()}>
                     {/* Handle bar */}
                     <View style={styles.handleBar} />
 
-                    <Text style={styles.title}>Category</Text>
+                    <Text style={styles.title}>{t('Category')}</Text>
 
                     <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.grid}>
                         {CATEGORIES.map(cat => {
@@ -109,13 +111,13 @@ export function CategoryPickerSheet({ visible, selected, onSelect, onClose }: Ca
                                     key={cat.id}
                                     style={[styles.item, isActive && styles.itemActive]}
                                     accessibilityRole="button"
-                                    accessibilityLabel={cat.label}
+                                    accessibilityLabel={t(cat.label)}
                                     accessibilityState={{ selected: isActive }}
                                     onPress={() => { onSelect(cat.id); onClose(); }}
                                 >
                                     <Text style={styles.itemEmoji}>{cat.emoji}</Text>
-                                    <Text style={[styles.itemLabel, isActive && styles.itemLabelActive]} numberOfLines={1}>
-                                        {cat.label}
+                                    <Text style={[styles.itemLabel, isActive && styles.itemLabelActive]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+                                        {t(cat.label)}
                                     </Text>
                                 </Pressable>
                             );

@@ -28,7 +28,7 @@ import {
     successionDeadlineText, myChoice, successionHeading, successionExplainer, type KeeperChangeLite,
 } from '../utils/keeper-governance';
 import { decodeBase64, decodeUtf8 } from '../utils/crypto';
-import { formatDate, formatNumber, groupKindLine, isWholeCents, keeperWords, t, tn, isSampleId } from '@beanpool/core';
+import { formatDate, formatNumber, groupKindLine, inCapitalsOf, isWholeCents, keeperWords, t, tn, isSampleId } from '@beanpool/core';
 import { loadIdentity } from '../utils/identity';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { EnterpriseDecisions } from '../components/EnterpriseDecisions';
@@ -163,7 +163,7 @@ export default function TreasuryDetailScreen() {
         subtitle: { fontSize: 13, color: colors.text.secondary, marginTop: 2 },
 
         purposeCard: { backgroundColor: colors.surface.card, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: colors.border.default, marginBottom: 16 },
-        purposeLabel: { fontSize: 10, fontWeight: '800', color: colors.text.secondary, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 6 },
+        purposeLabel: { fontSize: 10, fontWeight: '800', color: colors.text.secondary, letterSpacing: 1, marginBottom: 6 },
         purposeText: { fontSize: 14, color: colors.text.body, lineHeight: 21 },
 
         progressCard: { backgroundColor: colors.surface.card, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: colors.border.default, marginBottom: 16 },
@@ -185,12 +185,12 @@ export default function TreasuryDetailScreen() {
         pledgeButtonText: { color: colors.text.inverse, fontWeight: '800', fontSize: 13, letterSpacing: 0.5 },
 
         keepersCard: { backgroundColor: colors.surface.card, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: colors.border.default, marginBottom: 16 },
-        keepersLabel: { fontSize: 10, fontWeight: '800', color: colors.text.secondary, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8 },
+        keepersLabel: { fontSize: 10, fontWeight: '800', color: colors.text.secondary, letterSpacing: 1, marginBottom: 8 },
         keepersList: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
         keeperChip: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: colors.surface.app, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, borderWidth: 1, borderColor: colors.border.default },
         keeperChipSuspended: { opacity: 0.6 },
         keeperCallsign: { fontSize: 13, fontWeight: '700', color: colors.text.heading },
-        leadKeeperBadge: { backgroundColor: colors.feedback.warning.bg, color: colors.feedback.warning.fg, fontSize: 10, fontWeight: '800', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, overflow: 'hidden', textTransform: 'uppercase', letterSpacing: 0.5 },
+        leadKeeperBadge: { backgroundColor: colors.feedback.warning.bg, color: colors.feedback.warning.fg, fontSize: 10, fontWeight: '800', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, overflow: 'hidden', letterSpacing: 0.5 },
         keeperBadge: { backgroundColor: colors.surface.subtle, color: colors.text.secondary, fontSize: 10, fontWeight: '700', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, overflow: 'hidden' },
         backingText: { fontSize: 11, fontWeight: '700', color: colors.brand.primary },
 
@@ -210,7 +210,7 @@ export default function TreasuryDetailScreen() {
 
         // Pending Requests Review (for Lead / Sole / Admin)
         requestsCard: { backgroundColor: colors.feedback.warning.bg, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: colors.feedback.warning.border, marginBottom: 16 },
-        requestsTitle: { fontSize: 12, fontWeight: '800', color: colors.feedback.warning.fg, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 },
+        requestsTitle: { fontSize: 12, fontWeight: '800', color: colors.feedback.warning.fg, letterSpacing: 0.5, marginBottom: 10 },
         // Name and pledge stacked above a full-width button row: side by side, the two buttons left the name
         // ~65dp at 320dp + 1.3x font, breaking it mid-word and wrapping the pledge onto three lines.
         requestRow: { backgroundColor: colors.surface.card, borderRadius: 12, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: colors.border.default },
@@ -247,16 +247,16 @@ export default function TreasuryDetailScreen() {
 
 
         balanceCard: { backgroundColor: colors.surface.card, borderRadius: 16, padding: 18, borderWidth: 1, borderColor: colors.border.default, marginBottom: 16 },
-        balanceLabel: { fontSize: 11, color: colors.text.secondary, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
+        balanceLabel: { fontSize: 11, color: colors.text.secondary, fontWeight: '700', letterSpacing: 0.5 },
         balanceValue: { fontSize: 34, fontWeight: '900', letterSpacing: -1, marginTop: 4 },
         balancePos: { color: colors.brand.primary },
         balanceNeg: { color: colors.feedback.warning.fg },
         balanceMetaRow: { flexDirection: 'row', marginTop: 14, gap: 12 },
         metaBox: { flex: 1, backgroundColor: colors.surface.app, borderRadius: 12, padding: 10, borderWidth: 1, borderColor: colors.border.default },
-        metaLabel: { fontSize: 10, color: colors.text.secondary, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.4 },
+        metaLabel: { fontSize: 10, color: colors.text.secondary, fontWeight: '700', letterSpacing: 0.4 },
         metaValue: { fontSize: 16, fontWeight: '800', color: colors.text.heading, marginTop: 3 },
 
-        sectionLabel: { fontSize: 11, color: colors.text.secondary, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8, marginTop: 8 },
+        sectionLabel: { fontSize: 11, color: colors.text.secondary, fontWeight: '700', letterSpacing: 0.5, marginBottom: 8, marginTop: 8 },
 
         opPanel: { backgroundColor: colors.brand.tint, borderRadius: 16, padding: 14, borderWidth: 1, borderColor: colors.brand.primary, marginBottom: 16 },
         opTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 },
@@ -280,7 +280,7 @@ export default function TreasuryDetailScreen() {
         typeBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8 },
         typeBadgeOffer: { backgroundColor: colors.brand.tint },
         typeBadgeNeed: { backgroundColor: colors.surface.subtle },
-        typeBadgeText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase' },
+        typeBadgeText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
         recurBadge: { flexDirection: 'row', alignItems: 'center', gap: 3 },
         recurText: { fontSize: 10, color: colors.text.secondary, fontWeight: '700' },
         listingTitle: { fontSize: 15, fontWeight: '700', color: colors.text.heading, flex: 1 },
@@ -320,7 +320,7 @@ export default function TreasuryDetailScreen() {
         bannerWindingUp: { backgroundColor: colors.feedback.danger.bg, borderColor: colors.feedback.danger.solid },
         bannerCompleted: { backgroundColor: colors.surface.subtle, borderColor: colors.border.strong },
         bannerLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-        bannerLabel: { flex: 1, fontSize: 11, fontWeight: '900', letterSpacing: 0.8, textTransform: 'uppercase' },
+        bannerLabel: { flex: 1, fontSize: 11, fontWeight: '900', letterSpacing: 0.8 },
         bannerHeadline: { fontSize: 15, fontWeight: '800', lineHeight: 20 },
         bannerBody: { fontSize: 12, lineHeight: 17 },
         bannerWarning: { fontSize: 12, fontWeight: '700', lineHeight: 17, paddingTop: 6, marginTop: 2, borderTopWidth: 1 },
@@ -340,7 +340,7 @@ export default function TreasuryDetailScreen() {
 
         // Income & Spend (P&L)
         plCard: { backgroundColor: colors.surface.card, borderRadius: 16, padding: 14, borderWidth: 1, borderColor: colors.border.default, marginBottom: 16 },
-        plTitle: { fontSize: 11, fontWeight: '800', color: colors.text.secondary, letterSpacing: 0.8, textTransform: 'uppercase' },
+        plTitle: { fontSize: 11, fontWeight: '800', color: colors.text.secondary, letterSpacing: 0.8 },
         plSubtitle: { fontSize: 12, color: colors.text.secondary, marginTop: 2, marginBottom: 10 },
         periodStrip: { flexDirection: 'row', backgroundColor: colors.surface.subtle, borderRadius: 12, padding: 3, marginBottom: 12 },
         periodTab: { flex: 1, minWidth: 0, minHeight: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 9, paddingHorizontal: 2 },
@@ -349,7 +349,7 @@ export default function TreasuryDetailScreen() {
         periodTabTextActive: { color: colors.text.heading, fontWeight: '800' },
         plSummaryRow: { flexDirection: 'row', gap: 8, marginBottom: 8 },
         plBox: { flex: 1, minWidth: 0, borderRadius: 12, padding: 10, borderWidth: 1 },
-        plBoxLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase' },
+        plBoxLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
         plBoxValue: { fontSize: 16, fontWeight: '900', marginTop: 3 },
         plFeeNote: { fontSize: 12, color: colors.text.muted, marginBottom: 10 },
         ledgerRow: { paddingVertical: 10, borderTopWidth: 1, borderTopColor: colors.border.default, gap: 2 },
@@ -994,7 +994,7 @@ export default function TreasuryDetailScreen() {
                                 >
                                     <View style={styles.bannerLabelRow}>
                                         <Text style={{ fontSize: 16 }} accessibilityElementsHidden importantForAccessibility="no">{emoji}</Text>
-                                        <Text style={[styles.bannerLabel, { color: tone.fg }]}>{banner.label}</Text>
+                                        <Text style={[styles.bannerLabel, { color: tone.fg }]}>{inCapitalsOf(banner.label)}</Text>
                                     </View>
                                     <Text style={[styles.bannerHeadline, { color: tone.fg }]}>{banner.headline}</Text>
                                     <Text style={[styles.bannerBody, { color: tone.fg }]}>{banner.body}</Text>
@@ -1011,7 +1011,7 @@ export default function TreasuryDetailScreen() {
                         {/* Purpose Statement (docs/the-commons.md §2.1) */}
                         {!!detail?.purpose && (
                             <View style={styles.purposeCard}>
-                                <Text style={styles.purposeLabel}>{t('PURPOSE')}</Text>
+                                <Text style={styles.purposeLabel}>{inCapitalsOf(t('PURPOSE'))}</Text>
                                 <Text style={styles.purposeText}>{detail.purpose}</Text>
                             </View>
                         )}
@@ -1061,7 +1061,7 @@ export default function TreasuryDetailScreen() {
                                     {isEffectivePreview ? (
                                         <View style={styles.pledgeBox} testID="pledge-preview">
                                             <Text style={[styles.sectionLabel, { marginBottom: 8 }]}>
-                                                {t('Back this initiative')}
+                                                {inCapitalsOf(t('Back this initiative'))}
                                             </Text>
                                             <LocalCommunityMark variant="action" feature="enterprises" label={t('Pledge')} />
                                         </View>
@@ -1116,9 +1116,9 @@ export default function TreasuryDetailScreen() {
                         {!isEffectivePreview && isLeadOrSoleKeeperOrAdmin && keeperRequests.length > 0 && (
                             <View style={styles.requestsCard}>
                                 <Text style={styles.requestsTitle}>
-                                    {project
+                                    {inCapitalsOf(project
                                         ? t('PENDING COLLABORATOR REQUESTS ({n})', { n: keeperRequests.length })
-                                        : t('PENDING KEEPER REQUESTS ({n})', { n: keeperRequests.length })}
+                                        : t('PENDING KEEPER REQUESTS ({n})', { n: keeperRequests.length }))}
                                 </Text>
                                 {keeperRequests.map((req: any) => (
                                     <View key={req.id} style={styles.requestRow}>
@@ -1172,9 +1172,9 @@ export default function TreasuryDetailScreen() {
                         {!isEffectivePreview && keeperChanges.length > 0 && (
                             <View style={styles.requestsCard}>
                                 <Text style={styles.requestsTitle}>
-                                    {project
+                                    {inCapitalsOf(project
                                         ? t('COLLABORATOR CHANGES WAITING ({n})', { n: keeperChanges.length })
-                                        : t('KEEPER CHANGES WAITING ({n})', { n: keeperChanges.length })}
+                                        : t('KEEPER CHANGES WAITING ({n})', { n: keeperChanges.length }))}
                                 </Text>
                                 {keeperChanges.map((c) => (
                                     <View key={c.id} style={styles.requestRow}>
@@ -1310,9 +1310,9 @@ export default function TreasuryDetailScreen() {
                                     </Text>
 
                                     <Text style={[styles.sectionLabel, { marginBottom: 6 }]}>
-                                        {project
+                                        {inCapitalsOf(project
                                             ? t('Back this project with your standing: 0 … {n}', { n: availableToBack })
-                                            : t('Back this enterprise with your standing: 0 … {n}', { n: availableToBack })}
+                                            : t('Back this enterprise with your standing: 0 … {n}', { n: availableToBack }))}
                                     </Text>
                                     <View style={styles.joinInputRow}>
                                         <TextInput
@@ -1359,9 +1359,9 @@ export default function TreasuryDetailScreen() {
                         {detail?.keepers && detail.keepers.length > 0 && (
                             <View style={styles.keepersCard}>
                                 <Text style={styles.keepersLabel}>
-                                    {project
+                                    {inCapitalsOf(project
                                         ? t('COLLABORATORS ({n})', { n: detail.keepers.length })
-                                        : t('KEEPERS ({n})', { n: detail.keepers.length })}
+                                        : t('KEEPERS ({n})', { n: detail.keepers.length }))}
                                 </Text>
                                 <View style={styles.keepersList}>
                                     {detail.keepers.map((k: any) => {
@@ -1379,8 +1379,9 @@ export default function TreasuryDetailScreen() {
                                                 <MaterialCommunityIcons name="shield-account" size={14} color={isSuspended ? colors.text.secondary : colors.brand.primary} />
                                                 <Text style={styles.keeperCallsign}>{k.callsign}</Text>
                                                 {isSuspended && <Text style={styles.keeperBadge}>{t('Suspended')}</Text>}
+                                                {/* The lead's badge in capitals, the language's way. */}
                                                 <Text style={isLead ? styles.leadKeeperBadge : styles.keeperBadge}>
-                                                    {keeperRoleWord(project, isLead)}
+                                                    {isLead ? inCapitalsOf(keeperRoleWord(project, true)) : keeperRoleWord(project, false)}
                                                 </Text>
                                                 {Number(k.backing) > 0 && (
                                                     <Text style={styles.backingText}>+{formatNumber(Number(k.backing))} 🫘</Text>
@@ -1423,25 +1424,25 @@ export default function TreasuryDetailScreen() {
 
                         {/* Balance */}
                         <View style={styles.balanceCard}>
-                            <Text style={styles.balanceLabel}>{t('Balance')}</Text>
+                            <Text style={styles.balanceLabel}>{inCapitalsOf(t('Balance'))}</Text>
                             <Text style={[styles.balanceValue, balance < 0 ? styles.balanceNeg : styles.balancePos]}>{formatNumber(balance)} 🫘</Text>
                             <View style={styles.balanceMetaRow}>
                                 <View style={styles.metaBox}>
-                                    <Text style={styles.metaLabel}>{t('Credit line')}</Text>
+                                    <Text style={styles.metaLabel}>{inCapitalsOf(t('Credit line'))}</Text>
                                     <Text style={styles.metaValue}>{formatNumber(Number(detail.creditLine ?? 0))} 🫘</Text>
                                 </View>
                                 <View style={styles.metaBox}>
-                                    <Text style={styles.metaLabel}>{t('Live offers')}</Text>
+                                    <Text style={styles.metaLabel}>{inCapitalsOf(t('Live offers'))}</Text>
                                     <Text style={styles.metaValue}>{formatNumber(Number(detail.liveOffers ?? 0))}</Text>
                                 </View>
                             </View>
                             <View style={styles.balanceMetaRow}>
                                 <View style={styles.metaBox}>
-                                    <Text style={styles.metaLabel}>{t('Earned surplus')}</Text>
+                                    <Text style={styles.metaLabel}>{inCapitalsOf(t('Earned surplus'))}</Text>
                                     <Text style={styles.metaValue}>{formatNumber(Number(detail.earnedSurplus ?? 0))} 🫘</Text>
                                 </View>
                                 <View style={styles.metaBox}>
-                                    <Text style={styles.metaLabel}>{t('Capital ceiling')}</Text>
+                                    <Text style={styles.metaLabel}>{inCapitalsOf(t('Capital ceiling'))}</Text>
                                     <Text style={styles.metaValue}>{detail.workingCapitalCeiling != null ? `${formatNumber(Number(detail.workingCapitalCeiling))} 🫘` : t('Uncapped')}</Text>
                                 </View>
                             </View>
@@ -1464,8 +1465,8 @@ export default function TreasuryDetailScreen() {
                             {pendingClaims.length > 0 && (
                                 <View style={{ marginTop: 12, padding: 12, backgroundColor: colors.surface.app, borderRadius: 10, borderWidth: 1, borderColor: colors.border.default }}>
                                     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                                        <Text style={{ flex: 1, minWidth: 0, fontSize: 11, color: colors.text.secondary, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.4 }}>
-                                            {t('Pending Wage Claims ({n})', { n: pendingClaims.length })}
+                                        <Text style={{ flex: 1, minWidth: 0, fontSize: 11, color: colors.text.secondary, fontWeight: '700', letterSpacing: 0.4 }}>
+                                            {inCapitalsOf(t('Pending Wage Claims ({n})', { n: pendingClaims.length }))}
                                         </Text>
                                         <Text style={{ flexShrink: 0, fontSize: 13, fontWeight: '800', color: colors.feedback.warning.fg }}>
                                             {formatNumber(pendingClaimsTotal)} 🫘
@@ -1779,7 +1780,7 @@ export default function TreasuryDetailScreen() {
 
                         {/* Income & Spend (P&L) — transparent accounting, visible to every member */}
                         <View style={styles.plCard}>
-                            <Text style={styles.plTitle}>{t('📊 Income & Spend (P&L)')}</Text>
+                            <Text style={styles.plTitle}>{inCapitalsOf(t('📊 Income & Spend (P&L)'))}</Text>
                             <Text style={styles.plSubtitle}>{t('Transparent accounting · visible to every member')}</Text>
 
                             <View style={styles.periodStrip} accessibilityRole="tablist">
@@ -1808,20 +1809,20 @@ export default function TreasuryDetailScreen() {
                                     <>
                                         <View style={styles.plSummaryRow}>
                                             <View style={[styles.plBox, { backgroundColor: colors.feedback.success.bg, borderColor: colors.feedback.success.border }]}>
-                                                <Text style={[styles.plBoxLabel, { color: colors.feedback.success.fg }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Came in')}</Text>
+                                                <Text style={[styles.plBoxLabel, { color: colors.feedback.success.fg }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{inCapitalsOf(t('Came in'))}</Text>
                                                 <Text style={[styles.plBoxValue, { color: colors.feedback.success.fg }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
                                                     {pl.cameIn}
                                                 </Text>
                                             </View>
                                             <View style={[styles.plBox, { backgroundColor: colors.feedback.warning.bg, borderColor: colors.feedback.warning.border }]}>
-                                                <Text style={[styles.plBoxLabel, { color: colors.feedback.warning.fg }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Went out')}</Text>
+                                                <Text style={[styles.plBoxLabel, { color: colors.feedback.warning.fg }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{inCapitalsOf(t('Went out'))}</Text>
                                                 <Text style={[styles.plBoxValue, { color: colors.feedback.warning.fg }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
                                                     {pl.wentOut}
                                                 </Text>
                                             </View>
                                         </View>
                                         <View style={[styles.plBox, { flex: 0, marginBottom: pl.feeNote ? 6 : 10, backgroundColor: colors.surface.app, borderColor: colors.border.default }]}>
-                                            <Text style={[styles.plBoxLabel, { color: colors.text.secondary }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Net change')}</Text>
+                                            <Text style={[styles.plBoxLabel, { color: colors.text.secondary }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{inCapitalsOf(t('Net change'))}</Text>
                                             <Text style={[styles.plBoxValue, { color: pl.netIsPositive ? colors.feedback.success.fg : colors.feedback.warning.fg }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
                                                 {pl.net}
                                             </Text>
@@ -1908,7 +1909,7 @@ export default function TreasuryDetailScreen() {
                         </View>
 
                         {/* Live listings */}
-                        <Text style={styles.sectionLabel}>{t('Listings')}</Text>
+                        <Text style={styles.sectionLabel}>{inCapitalsOf(t('Listings'))}</Text>
                         {posts.length === 0 ? (
                             <Text style={styles.emptyNote}>{t('No live listings yet.')}</Text>
                         ) : posts.map((p) => (
@@ -1922,7 +1923,7 @@ export default function TreasuryDetailScreen() {
                                     <View style={[styles.typeBadge, p.type === 'offer' ? styles.typeBadgeOffer : styles.typeBadgeNeed]}>
                                         {/* The listing's kind (stored lower-case, drawn in capitals): the Market's own badge words. */}
                                         <Text style={[styles.typeBadgeText, { color: p.type === 'offer' ? colors.brand.primary : colors.text.secondary }]}>
-                                            {p.type === 'offer' ? t('OFFER') : p.type === 'need' ? t('NEED') : p.type}
+                                            {p.type === 'offer' ? inCapitalsOf(t('OFFER')) : p.type === 'need' ? inCapitalsOf(t('NEED')) : p.type.toUpperCase()}
                                         </Text>
                                     </View>
                                     {!!p.repeatable && (
@@ -1939,7 +1940,7 @@ export default function TreasuryDetailScreen() {
                         ))}
 
                         {/* Recent activity */}
-                        <Text style={styles.sectionLabel}>{t('Recent activity')}</Text>
+                        <Text style={styles.sectionLabel}>{inCapitalsOf(t('Recent activity'))}</Text>
                         {flow.length === 0 ? (
                             <Text style={styles.emptyNote}>{t('No transactions yet.')}</Text>
                         ) : flow.map((f, i) => (

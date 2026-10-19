@@ -17,7 +17,7 @@ import { useNodeProfile } from '../utils/use-node-profile';
 import { beansOn, showcaseMode } from '../utils/node-profile';
 import { NO_BEANS_EDIT_NOTE } from '../utils/market-global';
 import { LocalCommunityMark } from '../components/showcase/LocalCommunityMark';
-import { LOCAL_COMMUNITY_LINES, t, word, type WordKey } from '@beanpool/core';
+import { LOCAL_COMMUNITY_LINES, inCapitalsOf, t, word, type WordKey } from '@beanpool/core';
 import { groupPostPrice, groupPostPriceInvalid, groupPostMissingFields } from '../utils/beans-off';
 
 const PRICE_TYPES = ['fixed', 'hourly', 'daily', 'weekly', 'monthly'] as const;
@@ -74,7 +74,7 @@ export default function GroupPostScreen() {
             backgroundColor: theme === 'dark' ? colors.surface.card : colors.text.heading,
         },
         backButton: { width: 40, height: 40, justifyContent: 'center', alignItems: 'flex-start' },
-        headerTitle: { fontSize: 16, fontWeight: 'bold', color: colors.brand.primary, letterSpacing: 0.5, textTransform: 'uppercase' },
+        headerTitle: { fontSize: 16, fontWeight: 'bold', color: colors.brand.primary, letterSpacing: 0.5 },
         scroll: { padding: 20 },
         // Plain words audience banner — scope must be unmistakable before posting
         audienceBanner: {
@@ -275,7 +275,7 @@ export default function GroupPostScreen() {
                 >
                     <MaterialCommunityIcons name="arrow-left" size={24} color={colors.text.inverse} />
                 </Pressable>
-                <Text style={[styles.headerTitle, { flexShrink: 1, textAlign: 'center' }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Post to Group')}</Text>
+                <Text style={[styles.headerTitle, { flexShrink: 1, textAlign: 'center' }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{inCapitalsOf(t('Post to Group'))}</Text>
                 <View style={{ width: 40 }} />
             </View>
 

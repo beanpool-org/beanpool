@@ -25,7 +25,7 @@ import {
     type GroupRole,
     type JoinPolicy
 } from '../utils/db';
-import { MAKE_OBSERVER_MEMBER_FIRST, GROUP_CLOSED_NOTE, t, word, type GroupPerson, type WordKey } from '@beanpool/core';
+import { MAKE_OBSERVER_MEMBER_FIRST, GROUP_CLOSED_NOTE, inCapitalsOf, t, word, type GroupPerson, type WordKey } from '@beanpool/core';
 import { MemberAvatar } from './MemberAvatar';
 import { GroupSuccessionPanel } from './GroupSuccessionPanel';
 import { GroupDecisions } from './EnterpriseDecisions';
@@ -199,7 +199,6 @@ export function GroupDetailModal({
             fontSize: 12,
             fontWeight: '800',
             color: colors.text.secondary,
-            textTransform: 'uppercase',
             letterSpacing: 0.5,
             marginBottom: 10,
             marginTop: 16,
@@ -264,7 +263,6 @@ export function GroupDetailModal({
             fontWeight: '800',
             color: colors.brand.primary,
             marginBottom: 10,
-            textTransform: 'uppercase',
             letterSpacing: 0.5,
         },
         // Name on its own line, Approve / Decline on a row beneath: side by side, the two buttons
@@ -784,7 +782,7 @@ export function GroupDetailModal({
                         {/* Convenor Tools Section */}
                         {isConvenor && !closed && (
                             <View style={styles.convenorCard}>
-                                <Text style={styles.convenorTitle}>{t('Convenor Tools')}</Text>
+                                <Text style={styles.convenorTitle}>{inCapitalsOf(t('Convenor Tools'))}</Text>
 
                                 {/* Join Policy Setter */}
                                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
@@ -891,7 +889,7 @@ export function GroupDetailModal({
                         )}
 
                         <Text style={styles.sectionTitle}>
-                            {heading.title}
+                            {inCapitalsOf(heading.title)}
                         </Text>
                         {heading.note && <Text style={styles.description}>{heading.note}</Text>}
 

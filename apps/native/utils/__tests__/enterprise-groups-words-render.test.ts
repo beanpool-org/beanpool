@@ -429,13 +429,14 @@ describe('the enterprise page in the pseudo-locale: every word on it came throug
     it('the banners every member sees: paused (with its warning), winding up (grace over), completed (the discussion read-only)', async () => {
         net.answer = community({ getTreasuryDetail: leadsView({ paused: true, pausedAt: iso(now - 85 * DAY), pauseDaysRemaining: 5, pausedFloorSnapshot: 80 }) });
         await renderIn('xx');
-        expect(host.textContent).toContain(xx('Paused for the season'));
+        // The banner's label in capitals, the language's way (inCapitalsOf; the pseudo-locale takes English's rule).
+        expect(host.textContent).toContain(xx('Paused for the season').toUpperCase());
         expect(host.textContent).toContain(xx('Pause credit floor snapshot expires in {n} days').replace('{n}', '5'));
         expect(bypassing(), 'paused').toEqual([]);
 
         net.answer = community({ getTreasuryDetail: leadsView({ status: 'winding_up', windUpInitiatedBy: KOFI, windUpGraceEndsAt: iso(now - 3600_000) }) });
         await again('xx');
-        expect(host.textContent).toContain(xx('Winding Up'));
+        expect(host.textContent).toContain(xx('Winding Up').toUpperCase());
         expect(host.textContent).toContain(xx('The 7-day grace period has elapsed. Ready to be finalised.'));
         expect(bypassing(), 'winding up').toEqual([]);
 
@@ -571,7 +572,7 @@ describe('a group\'s info sheet in the pseudo-locale: every word on it came thro
         const proposal = { id: 'q1', groupId: 'g1', convenorPubkey: KOFI, convenorCallsign: 'Kofi', candidatePubkey: ME, candidateCallsign: 'Ana', proposerPubkey: ME, proposerCallsign: 'Ana', status: 'active', closedReason: null, createdAt: iso(now - DAY), deadlineAt: iso(now + 13 * DAY), executedAt: null, yesCount: 1, noCount: 0, electorateSize: 3, myVote: null, canVote: true };
         net.answer = groupNode({ fetchGroupDetails: { group: asMember, members: MEMBERS, rosterRefused: false }, fetchGroupSuccession: quietLead({ proposals: [proposal], canPropose: false }) });
         await renderIn('xx', sheet({ group: asMember, myPubkey: MIA }));
-        expect(host.textContent).toContain(xx('Choosing a new lead convenor'));
+        expect(host.textContent).toContain(xx('Choosing a new lead convenor').toUpperCase());
         expect(host.textContent).toContain(xx("{name} hasn't been active for {n} days. The group can choose a new lead.").replace('{name}', 'Kofi').replace('{n}', '34'));
         await click(byLabel(xx('Vote yes to make {name} the lead convenor').replace('{name}', 'Ana')), 'Vote yes');
         expect(bypassing(), 'the vote').toEqual([]);
@@ -618,7 +619,8 @@ describe('a group\'s info sheet in the pseudo-locale: every word on it came thro
         expect(host.textContent).toContain('request to join');
         expect(host.textContent).toContain('Lead convenor: Ana (you). Only the lead can remove or demote a convenor, and nobody can remove the lead.');
         expect(host.textContent).toContain('Pending Requests (1)');
-        expect(host.textContent).toContain('Roster (4)');
+        // In capitals as it has always been shown (inCapitalsOf now, where a textTransform was).
+        expect(host.textContent).toContain('ROSTER (4)');
         expect(host.textContent).toContain('Ana (You)');
         expect(host.textContent).toContain('(key changed)');
         expect(host.textContent).toContain('Not enough people voted');
@@ -687,7 +689,7 @@ describe('the enterprise page and groups at 320 dp with 1.3× text, in the pseud
         }
         const box = (FLOOR - 32 - 28 - 8) / 2 - 20;
         for (const words of ['Came in', 'Went out']) {
-            const label = spanWith(xx(words))!;
+            const label = spanWith(xx(words).toUpperCase())!;
             expect(label.getAttribute('data-lines')).toBe('1');
             expect(widthOf(label.textContent!, 10 * SCALE) * Number(label.getAttribute('data-min-scale')), words).toBeLessThanOrEqual(box);
         }
@@ -708,7 +710,7 @@ describe('the enterprise page and groups at 320 dp with 1.3× text, in the pseud
         params.now = { treasury: ENT, mode: 'offer', name: BAKERY };
         await renderIn('xx', createElement(TreasuryPostScreen));
         // Between the 40 dp close button and its 40 dp spacer, inside 16 dp padding.
-        const title = spanWith(xx('Post an Offer'))!;
+        const title = spanWith(xx('Post an Offer').toUpperCase())!;
         expect(title.getAttribute('data-lines')).toBe('1');
         expect(widthOf(title.textContent!, 16 * SCALE) * Number(title.getAttribute('data-min-scale'))).toBeLessThanOrEqual(FLOOR - 32 - 80);
 
@@ -762,5 +764,16 @@ describe('the enterprise page follows a language picked in Settings', () => {
         // What members wrote stays as written.
         expect(host.textContent).toContain(BAKERY);
         expect(host.textContent).toContain(PURPOSE);
+    });
+
+    it('labels in capitals take the language\'s rule, not the phone\'s: a project\'s leader chip in Turkish reads LİDER', async () => {
+        const tr = JSON.parse(fs.readFileSync(path.join(NATIVE_WORDS, 'tr.json'), 'utf8')) as Record<string, string>;
+        expect(tr['Leader\u0004project role']).toBe('Lider');
+        const project = leadsView({ lifecycle: 'bounded', balance: 40, keepers: [{ publicKey: KOFI, callsign: 'Kofi', role: 'lead' }, { publicKey: ME, callsign: 'Ana', role: 'keeper' }] });
+        net.answer = community({ getTreasuryDetail: project });
+        await renderIn('tr');
+        // Dotted capital İ, as Turkish writes it; a textTransform or toUpperCase() would have drawn "LIDER".
+        expect(spanWith('LİDER')).not.toBeNull();
+        expect(host.textContent).not.toContain('LIDER');
     });
 });

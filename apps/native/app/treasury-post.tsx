@@ -11,7 +11,7 @@ import { treasuryPostOffer, treasuryPostNeed } from '../utils/db';
 import { CategoryPickerSheet } from '../components/CategoryPickerSheet';
 import { categoryEmoji, categoryLabel } from '../constants/categories';
 import { useTheme, useStyles } from './ThemeContext';
-import { t, word, type WordKey } from '@beanpool/core';
+import { inCapitalsOf, t, word, type WordKey } from '@beanpool/core';
 
 // Operator form to post a treasury's Offer (what the enterprise sells, e.g. a dozen eggs) or a
 // Need (a tender the treasury pays for, e.g. tending the flock). Mirrors propose-project.tsx.
@@ -41,7 +41,7 @@ export default function TreasuryPostScreen() {
         container: { flex: 1, backgroundColor: colors.surface.page },
         header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.border.default, backgroundColor: theme === 'dark' ? colors.surface.card : colors.text.heading },
         backButton: { width: 40, height: 40, justifyContent: 'center', alignItems: 'flex-start' },
-        headerTitle: { fontSize: 16, fontWeight: 'bold', color: colors.brand.primary, letterSpacing: 0.5, textTransform: 'uppercase' },
+        headerTitle: { fontSize: 16, fontWeight: 'bold', color: colors.brand.primary, letterSpacing: 0.5 },
         scroll: { padding: 20 },
         infoBox: { flexDirection: 'row', backgroundColor: colors.brand.tint, padding: 14, borderRadius: 12, marginBottom: 24, borderWidth: 1, borderColor: colors.brand.primary },
         infoText: { flex: 1, fontSize: 13, color: colors.text.body, lineHeight: 20 },
@@ -154,7 +154,7 @@ export default function TreasuryPostScreen() {
                 <Pressable onPress={() => router.back()} style={styles.backButton} accessibilityRole="button" accessibilityLabel={t('Close')}>
                     <MaterialCommunityIcons name="close" size={26} color={colors.text.inverse} />
                 </Pressable>
-                <Text style={[styles.headerTitle, { flexShrink: 1, textAlign: 'center' }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{isNeed ? t('Post a Need') : t('Post an Offer')}</Text>
+                <Text style={[styles.headerTitle, { flexShrink: 1, textAlign: 'center' }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{inCapitalsOf(isNeed ? t('Post a Need') : t('Post an Offer'))}</Text>
                 <View style={{ width: 40 }} />
             </View>
 

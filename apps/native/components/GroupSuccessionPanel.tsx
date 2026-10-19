@@ -21,7 +21,7 @@ import {
     type GroupMemberItem,
 } from '../utils/db';
 import { buildSuccessionView, voteConfirmText, type GroupSuccessionData } from '../utils/group-succession';
-import { t } from '@beanpool/core';
+import { inCapitalsOf, t } from '@beanpool/core';
 import { hapticSuccess } from '../utils/haptics';
 
 interface Props {
@@ -65,7 +65,6 @@ export function GroupSuccessionPanel({ groupId, members, myPubkey, onLeadChanged
         heading: {
             fontSize: 12,
             fontWeight: '800',
-            textTransform: 'uppercase',
             letterSpacing: 0.5,
             color: colors.feedback.warning.fg,
         },
@@ -82,7 +81,6 @@ export function GroupSuccessionPanel({ groupId, members, myPubkey, onLeadChanged
         quietHeading: {
             fontSize: 12,
             fontWeight: '700',
-            textTransform: 'uppercase',
             letterSpacing: 0.5,
             color: colors.text.muted,
         },
@@ -202,7 +200,7 @@ export function GroupSuccessionPanel({ groupId, members, myPubkey, onLeadChanged
         if (!view.outcomeLine) return null;
         return (
             <View style={styles.quietCard}>
-                <Text style={styles.quietHeading}>{t('Lead convenor', undefined, 'group role')}</Text>
+                <Text style={styles.quietHeading}>{inCapitalsOf(t('Lead convenor', undefined, 'group role'))}</Text>
                 <Text style={styles.body}>{view.outcomeLine}</Text>
             </View>
         );
@@ -213,7 +211,7 @@ export function GroupSuccessionPanel({ groupId, members, myPubkey, onLeadChanged
 
     return (
         <View style={styles.card} accessibilityLabel={t('Choosing a new lead convenor')}>
-            <Text style={styles.heading}>{t('Choosing a new lead convenor')}</Text>
+            <Text style={styles.heading}>{inCapitalsOf(t('Choosing a new lead convenor'))}</Text>
 
             {view.silenceLine ? <Text style={styles.body}>{view.silenceLine}</Text> : null}
             {/* Who takes part: only people in the group before the lead went quiet. Anyone offered no button reads why. */}

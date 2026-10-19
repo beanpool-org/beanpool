@@ -923,17 +923,17 @@ export default function PublicProfileScreen() {
                                             <View style={styles.synergyHeaderRow}>
                                                 <Text style={styles.synergyEmoji}>{synergy.emoji}</Text>
                                                 <View style={{ flex: 1 }}>
-                                                    <Text style={styles.synergyTitle}>{synergy.title}</Text>
-                                                    <Text style={styles.synergyHeadline}>{synergy.headline}</Text>
+                                                    <Text style={styles.synergyTitle}>{t(synergy.title)}</Text>
+                                                    <Text style={styles.synergyHeadline}>{t(synergy.headline)}</Text>
                                                 </View>
                                             </View>
-                                            <Text style={styles.synergySummary}>{synergy.summary}</Text>
+                                            <Text style={styles.synergySummary}>{t(synergy.summary)}</Text>
 
                                             <View style={styles.synergyStrengthsWrap}>
-                                                {synergy.strengths.map((str: string, idx: number) => (
+                                                {synergy.strengths.map((_str, idx: number) => (
                                                     <View key={idx} style={styles.synergyStrengthRow}>
                                                         <Text style={styles.synergyBullet}>✓</Text>
-                                                        <Text style={styles.synergyStrengthText}>{str}</Text>
+                                                        <Text style={styles.synergyStrengthText}>{t(synergy.strengths[idx])}</Text>
                                                     </View>
                                                 ))}
                                             </View>
@@ -941,7 +941,7 @@ export default function PublicProfileScreen() {
                                             {synergy.collaborationTip && (
                                                 <View style={styles.synergyTipBox}>
                                                     <Text style={styles.synergyTipText}>
-                                                        <Sentence text={t('💡 {label} {tip}', { tip: synergy.collaborationTip })} parts={{ label: <Text style={{ fontWeight: '700' }}>{t('Collaboration tip:')}</Text> }} />
+                                                        <Sentence text={t('💡 {label} {tip}', { tip: t(synergy.collaborationTip) })} parts={{ label: <Text style={{ fontWeight: '700' }}>{t('Collaboration tip:')}</Text> }} />
                                                     </Text>
                                                 </View>
                                             )}
@@ -1215,30 +1215,30 @@ export default function PublicProfileScreen() {
                                 <View style={styles.synergyHeaderRow}>
                                     <Text style={styles.synergyEmoji}>{primary.emoji}</Text>
                                     <View style={{ flex: 1 }}>
-                                        <Text style={styles.synergyTitle}>{primary.name}</Text>
-                                        <Text style={styles.synergyHeadline}>{primary.tagline}</Text>
+                                        <Text style={styles.synergyTitle}>{t(primary.name)}</Text>
+                                        <Text style={styles.synergyHeadline}>{t(primary.tagline)}</Text>
                                     </View>
                                 </View>
-                                <Text style={styles.synergySummary}>{primary.description}</Text>
+                                <Text style={styles.synergySummary}>{t(primary.description)}</Text>
 
                                 {secondary && (
                                     <Text style={styles.synergyHeadline}>
-                                        {t('Secondary rhythm: {emoji} {name}', { emoji: secondary.emoji, name: secondary.name })}
+                                        {t('Secondary rhythm: {emoji} {name}', { emoji: secondary.emoji, name: t(secondary.name) })}
                                     </Text>
                                 )}
 
                                 <View style={styles.synergyStrengthsWrap}>
-                                    {primary.superpowers.map((sp: string, idx: number) => (
+                                    {primary.superpowers.map((_sp, idx: number) => (
                                         <View key={idx} style={styles.synergyStrengthRow}>
                                             <Text style={styles.synergyBullet}>✓</Text>
-                                            <Text style={styles.synergyStrengthText}>{sp}</Text>
+                                            <Text style={styles.synergyStrengthText}>{t(primary.superpowers[idx])}</Text>
                                         </View>
                                     ))}
                                 </View>
 
                                 <View style={styles.synergyTipBox}>
                                     <Text style={styles.synergyTipText}>
-                                        <Sentence text={t('💡 {label} {style}', { style: primary.collaborationStyle })} parts={{ label: <Text style={{ fontWeight: '700' }}>{t('How you work best:')}</Text> }} />
+                                        <Sentence text={t('💡 {label} {style}', { style: t(primary.collaborationStyle) })} parts={{ label: <Text style={{ fontWeight: '700' }}>{t('How you work best:')}</Text> }} />
                                     </Text>
                                 </View>
 

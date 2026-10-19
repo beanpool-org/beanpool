@@ -7,9 +7,9 @@
  *
  * In the pseudo-locale (`xx`: every sentence accented, padded ~35 % and bracketed) any text, screen-reader label, hint or
  * alert with letters outside a bracket bypassed t(). What members wrote is shown as written: a name, a bio, a listing's
- * title, a review's comment; so are the node's own words (the trust verdict, its reasons and tips: slice S4) and the
- * working-style words core's archetypes.ts writes (the welcome sweep, #2206, makes those word() keys; the profile shows
- * them through t() once that lands: listed in the PR).
+ * title, a review's comment; so are the node's own words (the trust verdict, its reasons and tips: slice S4). The
+ * working-style and chemistry words are core archetypes.ts's word() keys (the types since S3j, calculateSynergy since this
+ * sweep), held to the words layer here like every other sentence.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as fs from 'node:fs';
@@ -107,25 +107,11 @@ vi.mock('../../components/showcase/LocalCommunityMark', async () => {
     return { LocalCommunityMark: ({ text }: { text: string }) => h('span', { 'data-testid': 'local-line' }, text) };
 });
 
-import { ARCHETYPES, LOCAL_COMMUNITY_LINES, calculateSynergy, pseudoLocalise, setLanguage, type ArchetypeKey, type UiLang } from '@beanpool/core';
+import { ARCHETYPES, LOCAL_COMMUNITY_LINES, calculateSynergy, pseudoLocalise, setLanguage, type UiLang } from '@beanpool/core';
 import { LanguageProvider, DrawnInLanguage } from '../../components/LanguageProvider';
 import { LanguagePickerSheet } from '../../components/LanguagePicker';
 import PublicProfileScreen from '../../app/public-profile';
 import { bypassing, bracketed, unfit } from './profile-events-words-harness';
-
-/** What core's archetypes.ts writes (the welcome sweep's: shown as written here until it lands). */
-function archetypeWords(...keys: ArchetypeKey[]): string[] {
-    const out: string[] = [];
-    for (const k of keys) {
-        const a = ARCHETYPES[k];
-        out.push(a.name, a.tagline, a.description, a.collaborationStyle, a.communicationTip, ...a.superpowers);
-    }
-    return out;
-}
-function synergyWords(viewer: ArchetypeKey, member: ArchetypeKey): string[] {
-    const s = calculateSynergy(viewer, member);
-    return [s.title, s.headline, s.summary, s.collaborationTip ?? '', ...s.strengths];
-}
 
 /** The node's own words (slice S4) and what members wrote. */
 const NODE_WORDS = ['New & unvouched — take normal precautions', 'New member with no completed trades yet.', 'Meet somewhere public the first time.'];
@@ -281,7 +267,11 @@ describe('another member\'s profile in the pseudo-locale: every word came throug
         expect(host.textContent).toContain(xx('Founding member'));
         expect(host.textContent).toContain(xx('Here since the community began'));
         expect(host.textContent).toContain(xx('Collaboration tip:'));
-        expect(bypassing(host, [...NODE_WORDS, ...MEMBERS, ...synergyWords('spark', 'weaver')], said())).toEqual([]);
+        // The chemistry card's words are core's word() keys (calculateSynergy): bracketed like the rest.
+        const synergy = calculateSynergy('spark', 'weaver');
+        expect(host.textContent).toContain(xx(synergy.title));
+        expect(host.textContent).toContain(xx(synergy.strengths[0]));
+        expect(bypassing(host, [...NODE_WORDS, ...MEMBERS], said())).toEqual([]);
     });
 
     it('the member has taken the quiz and this one hasn\'t: the nudge, its label, and the message it starts in the sender\'s language', async () => {
@@ -367,12 +357,14 @@ describe('the member\'s own profile in the pseudo-locale', () => {
         data.ratings = { average: 0, count: 0, ratings: [] };
         nav.params = { publicKey: OWN };
         await renderIn('xx');
-        expect(host.textContent).toContain(xx('Secondary rhythm: {emoji} {name}').replace('{emoji}', ARCHETYPES.spark.emoji).replace('{name}', ARCHETYPES.spark.name));
+        expect(host.textContent).toContain(xx('Secondary rhythm: {emoji} {name}').replace('{emoji}', ARCHETYPES.spark.emoji).replace('{name}', xx(ARCHETYPES.spark.name)));
+        expect(host.textContent).toContain(xx(ARCHETYPES.weaver.name));
+        expect(host.textContent).toContain(xx(ARCHETYPES.weaver.superpowers[0]));
         expect(host.textContent).toContain(xx('How you work best:'));
         expect(host.textContent).toContain(xx('🧭 More accurate'));
         expect(host.textContent).toContain(xx('🔄 Retake'));
         expect(host.textContent).toContain(xx('No active listings.'));
-        expect(bypassing(host, [...MEMBERS, ...archetypeWords('weaver', 'spark')], said())).toEqual([]);
+        expect(bypassing(host, [...MEMBERS], said())).toEqual([]);
     });
 });
 

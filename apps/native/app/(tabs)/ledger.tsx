@@ -21,7 +21,12 @@ import { TrustBadge, TrustLevel } from '../../components/TrustBadge';
 import { CreditBar } from '../../components/CreditBar';
 import { useTheme, useStyles } from '../ThemeContext';
 import { palette } from '../../constants/colors';
-import { PER_COUNTERPARTY_VOLUME_CAP, PROTOCOL_CONSTANTS, TIER_LEVELS, memberLevel, monthlyCirculation, CIRCULATION_FREE_BEANS, isWholeCents, t, type TierName } from '@beanpool/core';
+import {
+    PER_COUNTERPARTY_VOLUME_CAP, PROTOCOL_CONSTANTS, TIER_LEVELS, memberLevel, monthlyCirculation, CIRCULATION_FREE_BEANS, isWholeCents,
+    t, tn, word, formatDate, formatNumber, type TierName, type WordKey,
+} from '@beanpool/core';
+import { TIER_WORDS } from '../../utils/trust-tier';
+import { richWords } from '../../components/info-content/rich-words';
 import { PageTitle, useCollapsingTitle, useTabRetapScrollTop } from '../../components/PageTitle';
 import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
 import { ledgerItemNote } from '../../utils/ledger-note';
@@ -29,7 +34,7 @@ import { RepaymentCard } from '../../components/RepaymentCard';
 import { useShowcaseModeOnceKnown } from '../../utils/use-reader-features';
 import { LocalCommunityMark, LocalCommunitySheet, ExampleHeader } from '../../components/showcase/LocalCommunityMark';
 import { sampleBalance, sampleEscrowTotal, sampleTransactions, SAMPLE_MEMBER } from '../../components/showcase/sample-screens';
-import { creditLineCard, knownFrozenPartNote, frozenDebitLine, KNOWN_FROZEN_TITLE, KNOWN_FROZEN_BODY } from '../../utils/credit-line-card';
+import { creditLineCard, knownFrozenPartNote, frozenDebitLine, KNOWN_FROZEN } from '../../utils/credit-line-card';
 
 // ── Trust model constants (from @beanpool/core) ──
 // Earned trust is a SATURATING CURVE over qualified, diversity-capped trade VALUE (V):
@@ -54,7 +59,33 @@ function valueForEarned(target: number): number {
 }
 
 // The invite perk: not shown in preview, where inviting is off (global) and its Invites screen says so.
-const INVITE_PERK = 'Invite others to join';
+const INVITE_PERK = word('Invite others to join');
+
+/**
+ * A Ledger row's other side in the member's language: a hold's name from its parts (utils/db.ts getTransactions writes
+ * `peer` in English, with `held` and `projectWallet` beside it), else the member's name or key as it came.
+ */
+function peerWords(item: { peer: string; held?: { title: string | null; counterparty: string | null; toCounterparty: boolean } | null; projectWallet?: boolean }): string {
+    if (item.projectWallet) return t('Project Wallet');
+    const held = item.held;
+    if (!held) return item.peer;
+    if (!held.title) return t('Held in Trust');
+    if (!held.counterparty) return t('Held in Trust: {title}', { title: held.title });
+    return held.toCounterparty
+        ? t('Held in Trust: {title} (to {name})', { title: held.title, name: held.counterparty })
+        : t('Held in Trust: {title} (from {name})', { title: held.title, name: held.counterparty });
+}
+
+/** A day from the node's time ("3 Oct 2026"), in the member's language; null for a time that isn't one. */
+function dayOf(at: string | number | null | undefined): string | null {
+    const d = at != null ? new Date(at) : null;
+    return d && Number.isFinite(d.getTime()) ? formatDate(d, 'day-month-year') : null;
+}
+
+/** When a Ledger row was, from the node's time (`at`); the example rows in preview say it in words already. */
+function rowWhen(item: { at?: string | number | null; timestamp?: string }): string {
+    return dayOf(item.at) ?? item.timestamp ?? '';
+}
 
 export default function LedgerScreen() {
     // Large "Ledger" title above the page's one list; folds away once the list scrolls. The
@@ -78,26 +109,27 @@ export default function LedgerScreen() {
 
     // Tiers are recognition milestones; where each starts comes from @beanpool/core TIER_LEVELS.
     // `min` = the credit backing the floor (vouch + earned + granted); `floor` = the floor on ENTERING
-    // the tier (floors slide continuously between them). Only presentation lives here.
+    // the tier (floors slide continuously between them). Only presentation lives here. The blurbs and perks are word()
+    // keys, put through t() where they are shown.
     const TIERS = useMemo(() => {
-        const look: Record<TierName, { tone: { fg: string; bg: string; border: string }; blurb: string; perks: string[] }> = {
+        const look: Record<TierName, { tone: { fg: string; bg: string; border: string }; blurb: WordKey; perks: WordKey[] }> = {
             Newcomer: { tone: colors.trust.newcomer,
-                blurb: "Welcome. From day one you can browse, trade, receive credits and invite others — your first completed trade (or a community vouch) opens your credit line.",
-                perks: ['Browse & trade the marketplace', 'Receive credits', INVITE_PERK, 'Send credits after first trade (needs positive balance)'] },
+                blurb: word("Welcome. From day one you can browse, trade, receive credits and invite others — your first completed trade (or a community vouch) opens your credit line."),
+                perks: [word('Browse & trade the marketplace'), word('Receive credits'), INVITE_PERK, word('Send credits after first trade (needs positive balance)')] },
             Resident: { tone: colors.trust.resident,
-                blurb: "You've traded real value with the community. Your credit line deepens with every trade — the more value you exchange, the deeper it grows.",
-                perks: ['Credit floor deepens with the value you trade', INVITE_PERK] },
+                blurb: word("You've traded real value with the community. Your credit line deepens with every trade — the more value you exchange, the deeper it grows."),
+                perks: [word('Credit floor deepens with the value you trade'), INVITE_PERK] },
             Steward: { tone: colors.trust.steward,
-                blurb: "A trusted trader with a broad circle of partners. The community recognises you, and your credit line runs deeper still.",
-                perks: ['Credit floor continues deepening', 'Trusted-trader recognition'] },
+                blurb: word("A trusted trader with a broad circle of partners. The community recognises you, and your credit line runs deeper still."),
+                perks: [word('Credit floor continues deepening'), word('Trusted-trader recognition')] },
             Elder: { tone: colors.trust.elder,
-                blurb: "A pillar of the commons — the deepest possible credit line and the community's highest recognition.",
-                perks: ['Credit floor can reach -2000 (the maximum)', 'Recognised as a community Elder'] },
+                blurb: word("A pillar of the commons — the deepest possible credit line and the community's highest recognition."),
+                perks: [word('Credit floor can reach -2000 (the maximum)'), word('Recognised as a community Elder')] },
         };
-        return TIER_LEVELS.map(t => {
-            const { tone, blurb, perks } = look[t.name];
-            return { name: t.name, emoji: t.emoji, color: tone.fg, bg: tone.bg, border: tone.border,
-                min: t.minCredit, floor: CREDIT_BASE_FLOOR - t.minCredit, blurb, perks };
+        return TIER_LEVELS.map(lvl => {
+            const { tone, blurb, perks } = look[lvl.name];
+            return { name: lvl.name, emoji: lvl.emoji, color: tone.fg, bg: tone.bg, border: tone.border,
+                min: lvl.minCredit, floor: CREDIT_BASE_FLOOR - lvl.minCredit, blurb, perks: perks.map(words => ({ words })) };
         });
     }, [colors]);
 
@@ -156,6 +188,8 @@ export default function LedgerScreen() {
     const [memberSearch, setMemberSearch] = useState('');
     const [showMemberPicker, setShowMemberPicker] = useState(false);
 
+    // Labels drawn in capitals are written in capitals in the words themselves (never textTransform, which upper-cases a
+    // translation by the phone's rules, not its language's).
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
         root: { flex: 1, backgroundColor: colors.surface.page },
 
@@ -171,7 +205,7 @@ export default function LedgerScreen() {
         // Big balance — the whole point of this page
         balanceChunk: { alignItems: 'flex-end', paddingLeft: 8 },
         bigBalance: { fontSize: 34, fontWeight: '900', letterSpacing: -1 },
-        balanceWord: { fontSize: 10, fontWeight: '800', color: colors.text.muted, letterSpacing: 1.5, textTransform: 'uppercase', marginTop: 0 },
+        balanceWord: { fontSize: 10, fontWeight: '800', color: colors.text.muted, letterSpacing: 1.5, marginTop: 0 },
 
         pos: { color: colors.brand.primary },
         neg: { color: colors.feedback.danger.fg },
@@ -184,7 +218,7 @@ export default function LedgerScreen() {
 
         // ── Trust Tab ──
         tierHero: { borderRadius: 20, padding: 20, borderWidth: 1, marginBottom: 16 },
-        tierHeroLabel: { fontSize: 10, fontWeight: '800', color: colors.text.secondary, textTransform: 'uppercase', letterSpacing: 1 },
+        tierHeroLabel: { fontSize: 10, fontWeight: '800', color: colors.text.secondary, letterSpacing: 1 },
         tierHeroName: { fontSize: 30, fontWeight: '900', letterSpacing: -0.5 },
         levelBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, borderWidth: 1 },
         levelBadgeText: { fontSize: 13, fontWeight: '800' },
@@ -198,8 +232,9 @@ export default function LedgerScreen() {
         journeyTickMark: { width: 2, height: 14, backgroundColor: colors.border.strong, borderRadius: 1 },
         journeyTickEmoji: { fontSize: 12, marginTop: 2 },
         perksRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 16 },
-        perkPill: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, borderWidth: 1 },
-        perkText: { fontSize: 12, fontWeight: '700' },
+        // A pill longer than the row (a longer language at 1.3x text) wraps its words inside it, never past the edge.
+        perkPill: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, borderWidth: 1, maxWidth: '100%' },
+        perkText: { fontSize: 12, fontWeight: '700', flexShrink: 1 },
 
         // Standing hero
         heroInfo: { position: 'absolute', top: 14, right: 14, zIndex: 2 },
@@ -228,7 +263,7 @@ export default function LedgerScreen() {
         detailNote: { fontSize: 11, color: colors.text.muted, fontStyle: 'italic', marginTop: 8, lineHeight: 16 },
 
         pathCard: { backgroundColor: colors.surface.card, borderRadius: 16, padding: 16, marginBottom: 20, borderWidth: 1, borderColor: colors.border.default, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
-        pathTitle: { fontSize: 13, fontWeight: '700', color: colors.text.heading, marginBottom: 14 },
+        pathTitle: { fontSize: 13, fontWeight: '700', color: colors.text.heading, marginBottom: 14, flexShrink: 1 },
         pathRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-evenly' },
         pathOption: { alignItems: 'center', flex: 1, minWidth: 0 },
         pathNumber: { fontSize: 32, fontWeight: '900', lineHeight: 36 },
@@ -236,14 +271,14 @@ export default function LedgerScreen() {
         pathOr: { fontSize: 11, color: colors.border.strong, fontWeight: '600' },
         pathGap: { fontSize: 18, fontWeight: '900', color: colors.text.heading, marginTop: -6, marginBottom: 6 },
         pathHint: { fontSize: 12, color: colors.text.secondary, lineHeight: 18, marginBottom: 14 },
-        pathLeverTag: { fontSize: 9, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 2 },
+        pathLeverTag: { fontSize: 9, fontWeight: '800', letterSpacing: 0.5, marginTop: 2, textAlign: 'center' },
 
-        sectionLabel: { fontSize: 11, fontWeight: '800', color: colors.text.muted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 },
+        sectionLabel: { fontSize: 11, fontWeight: '800', color: colors.text.muted, letterSpacing: 1, marginBottom: 10 },
 
         achieveRow: { flexDirection: 'row', gap: 10, marginBottom: 24 },
         achieveCard: { flex: 1, backgroundColor: colors.surface.card, borderRadius: 14, padding: 12, borderWidth: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 3, elevation: 1 },
         achieveCount: { fontSize: 24, fontWeight: '900', marginBottom: 1 },
-        achieveLabel: { fontSize: 9, fontWeight: '800', color: colors.text.secondary, textTransform: 'uppercase', letterSpacing: 0.5 },
+        achieveLabel: { fontSize: 9, fontWeight: '800', color: colors.text.secondary, letterSpacing: 0.5 },
         achieveText: { fontSize: 12, fontWeight: '700' },
         achieveBarBg: { height: 5, borderRadius: 3, overflow: 'hidden', marginBottom: 4 },
         achieveBarFill: { height: '100%', borderRadius: 3 },
@@ -289,21 +324,21 @@ export default function LedgerScreen() {
         walletMetric: { flex: 1, alignItems: 'center', paddingVertical: 10, gap: 3 },
         walletMetricDivider: { width: 1, backgroundColor: colors.border.default },
         walletMetricVal: { fontSize: 15, fontWeight: '800', color: colors.text.heading },
-        walletMetricLabel: { fontSize: 10, fontWeight: '700', color: colors.text.muted, textTransform: 'uppercase' as const, letterSpacing: 0.5 },
-        circRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
+        walletMetricLabel: { fontSize: 10, fontWeight: '700', color: colors.text.muted, letterSpacing: 0.5, textAlign: 'center' },
+        circRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4, gap: 8 },
         circNextDate: { fontSize: 12, fontWeight: '700' as const },
-        txnHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8, marginBottom: 4 },
+        txnHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8, marginBottom: 4, gap: 8 },
         exportBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.surface.subtle, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: colors.border.default },
         exportBtnText: { fontSize: 11, color: colors.text.secondary, fontWeight: '700' },
         exportPreviewRow: { marginBottom: 8 },
         circBox: { backgroundColor: colors.feedback.success.bg, borderRadius: 12, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: colors.feedback.success.border },
         circBoxAmber: { backgroundColor: colors.feedback.warning.bg, borderColor: colors.feedback.warning.border },
-        circLabel: { fontSize: 13, fontWeight: '700', color: colors.feedback.success.fg } as any,
+        circLabel: { fontSize: 13, fontWeight: '700', color: colors.feedback.success.fg, flexShrink: 1 } as any,
         circRate: { fontSize: 13, fontWeight: '700', color: colors.feedback.success.fg, fontFamily: 'Courier' } as any,
         sendBtn: { paddingVertical: 16, borderRadius: 14, backgroundColor: colors.action.fab, alignItems: 'center', marginBottom: 12 },
         sendBtnOpen: { backgroundColor: colors.border.strong },
         sendBtnLocked: { backgroundColor: colors.border.default, opacity: 0.7 },
-        sendBtnText: { color: colors.text.inverse, fontSize: 15, fontWeight: '800' },
+        sendBtnText: { color: colors.text.inverse, fontSize: 15, fontWeight: '800', flexShrink: 1, textAlign: 'center' },
         sendForm: { backgroundColor: colors.surface.app, borderRadius: 14, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: colors.border.default },
         recipientRow: { backgroundColor: colors.surface.card, padding: 14, borderRadius: 12, borderWidth: 1, borderColor: colors.border.default, marginBottom: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
         recipientText: { fontSize: 15, fontWeight: '600', color: colors.text.heading },
@@ -315,8 +350,8 @@ export default function LedgerScreen() {
         pickerPk: { fontSize: 11, color: colors.text.muted, fontFamily: 'Courier', marginTop: 2 },
         sendInput: { backgroundColor: colors.surface.card, padding: 14, borderRadius: 12, borderWidth: 1, borderColor: colors.border.default, marginBottom: 10, fontSize: 15, color: colors.text.heading },
         taxBreakdown: { backgroundColor: colors.surface.app, borderRadius: 12, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: colors.border.default },
-        breakdownRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 4 },
-        breakdownLabel: { fontSize: 13, color: colors.text.secondary, fontWeight: '500' },
+        breakdownRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 4, gap: 8 },
+        breakdownLabel: { fontSize: 13, color: colors.text.secondary, fontWeight: '500', flexShrink: 1 },
         breakdownValue: { fontSize: 13, color: colors.text.heading, fontWeight: '700' },
         errBox: { backgroundColor: colors.feedback.danger.bg, borderWidth: 1, borderColor: colors.feedback.danger.border, borderRadius: 10, padding: 10, marginBottom: 10 },
         errText: { color: colors.feedback.danger.fg, fontSize: 13, fontWeight: '700', textAlign: 'center' },
@@ -389,14 +424,14 @@ export default function LedgerScreen() {
             const res = await fetch(`${anchorUrl}/api/ledger/export`);
             if (!res.ok) {
                 const refusal = await res.json().catch(() => null);
-                throw new Error(refusal?.error || 'Export failed');
+                throw new Error(refusal?.error || t('Export failed'));
             }
             const { transactionsCsv } = await res.json();
             const path = `${FileSystem.cacheDirectory}beanpool-my-transactions.csv`;
             await FileSystem.writeAsStringAsync(path, transactionsCsv, { encoding: FileSystem.EncodingType.UTF8 });
-            await Sharing.shareAsync(path, { mimeType: 'text/csv', dialogTitle: 'Export my transactions' });
+            await Sharing.shareAsync(path, { mimeType: 'text/csv', dialogTitle: t('Export my transactions') });
         } catch (e: any) {
-            Alert.alert('Export Failed', e.message || 'Could not export ledger.');
+            Alert.alert(t('Export Failed'), e.message || t('Could not export ledger.'));
         } finally {
             setExporting(false);
         }
@@ -420,13 +455,13 @@ export default function LedgerScreen() {
         if (preview) return;
         if (!sendTo || !sendAmount || !identity?.publicKey) return;
         const amount = parseFloat(sendAmount);
-        if (isNaN(amount) || amount <= 0) { setSendError('Enter a valid amount'); return; }
+        if (isNaN(amount) || amount <= 0) { setSendError(t('Enter a valid amount')); return; }
         // To the cent, as the node takes it (core isWholeCents): 1.234 is refused here, in words, before anything is sent.
         if (!isWholeCents(amount)) { setSendError(t('The amount is a number of Beans above 0, to the cent.')); return; }
         // Sends are positive-balance only — you can only send beans you actually hold. Your credit
         // line (overdraft) is for trading, not for gifting yourself into debt.
         if (amount > balanceState.balance) {
-            setSendError(`You can only send beans you hold — your balance is ${balanceState.balance.toFixed(2)}B.`);
+            setSendError(t('You can only send beans you hold — your balance is {balance}B.', { balance: formatNumber(balanceState.balance, 2) }));
             return;
         }
         setSending(true); setSendError(null); setSendSuccess(false);
@@ -439,7 +474,7 @@ export default function LedgerScreen() {
             setTimeout(() => { setSendSuccess(false); setShowSend(false); }, 1500);
         } catch (e: any) {
             hapticWarning();
-            setSendError(e.message || 'Transfer failed');
+            setSendError(e.message || t('Transfer failed'));
         } finally { setSending(false); }
     };
 
@@ -449,22 +484,22 @@ export default function LedgerScreen() {
         if (!canSend) {
             if (earned <= 0) {
                 Alert.alert(
-                    'First trade required',
-                    'Direct sends are unlocked after your first completed trade on the Marketplace, and require a positive balance.',
-                    [{ text: 'OK' }]
+                    t('First trade required'),
+                    t('Direct sends are unlocked after your first completed trade on the Marketplace, and require a positive balance.'),
+                    [{ text: t('OK') }]
                 );
             } else {
                 Alert.alert(
-                    'Positive balance required',
-                    'You can only send beans you currently hold — direct sends require a positive balance.',
-                    [{ text: 'OK' }]
+                    t('Positive balance required'),
+                    t('You can only send beans you currently hold — direct sends require a positive balance.'),
+                    [{ text: t('OK') }]
                 );
             }
             return;
         }
         const url = await AsyncStorage.getItem('beanpool_anchor_url');
         if (!url) {
-            Alert.alert('Not Connected', 'Connect to a community first.', [{ text: 'Cancel' }, { text: 'Connect', onPress: () => router.push({ pathname: '/(tabs)/settings', params: { section: 'advanced' } }) }]);
+            Alert.alert(t('Not Connected'), t('Connect to a community first.'), [{ text: t('Cancel') }, { text: t('Connect'), onPress: () => router.push({ pathname: '/(tabs)/settings', params: { section: 'advanced' } }) }]);
             return;
         }
         loadMembers();
@@ -533,7 +568,7 @@ export default function LedgerScreen() {
             <View style={[styles.tierHero, { backgroundColor: tier.bg, borderColor: tier.border }]}>
                 <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel="How trust works"
+                    accessibilityLabel={t('How trust works')}
                     hitSlop={8}
                     style={styles.heroInfo}
                     onPress={() => { setTrustInfoTab('levels'); setShowTrustInfo(true); }}
@@ -544,28 +579,28 @@ export default function LedgerScreen() {
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
                     <TrustBadge level={levelKey} size={76} ring ringPct={journeyPct} />
                     <View style={{ flex: 1 }}>
-                        <Text style={styles.tierHeroLabel}>YOUR TRUST LEVEL</Text>
-                        <Text style={[styles.tierHeroName, { color: tier.color }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{tier.name}</Text>
-                        <Text style={styles.heroSub}>Level {tierIdx + 1} of {TIERS.length} · {ec} trust</Text>
+                        <Text style={styles.tierHeroLabel}>{t('YOUR TRUST LEVEL')}</Text>
+                        <Text style={[styles.tierHeroName, { color: tier.color }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t(TIER_WORDS[tier.name])}</Text>
+                        <Text style={styles.heroSub}>{tn(ec, 'Level {level} of {levels} · {n} trust', 'Level {level} of {levels} · {n} trust', { level: tierIdx + 1, levels: TIERS.length })}</Text>
                     </View>
                 </View>
 
                 <View style={styles.heroProgressRow}>
                     {nextTier
-                        ? <Text style={styles.heroProgressText}><Text style={{ fontWeight: '900', color: tier.color }}>{creditsToNext}</Text> more trust to {nextTier.emoji} {nextTier.name}</Text>
-                        : <Text style={[styles.heroProgressText, { color: theme === 'dark' ? palette.amber400 : colors.feedback.warning.fg, fontWeight: '800' }]}>✨ Highest level reached</Text>
+                        ? <Text style={styles.heroProgressText}>{richWords(tn(creditsToNext, '**{n}** more trust to {emoji} {tier}', '**{n}** more trust to {emoji} {tier}', { emoji: nextTier.emoji, tier: t(TIER_WORDS[nextTier.name]) }), { fontWeight: '900', color: tier.color })}</Text>
+                        : <Text style={[styles.heroProgressText, { color: theme === 'dark' ? palette.amber400 : colors.feedback.warning.fg, fontWeight: '800' }]}>{t('✨ Highest level reached')}</Text>
                     }
                 </View>
 
                 {/* Quick actions (in preview Send is the marker's action, as on the Wallet tab) */}
                 <View style={styles.perksRow}>
-                    {preview ? <LocalCommunityMark variant="action" feature="beans" label="Send Beans" /> : <Pressable
+                    {preview ? <LocalCommunityMark variant="action" feature="beans" label={t('Send Beans')} /> : <Pressable
                         accessibilityRole="button"
                         style={[styles.perkPill, { borderColor: canSend ? palette.green200 : colors.border.default, backgroundColor: canSend ? palette.green50 : colors.surface.app }]}
                         onPress={openSend}
                     >
                         <MaterialCommunityIcons name={canSend ? 'send' : 'lock-outline'} size={13} color={canSend ? colors.brand.primary : colors.text.muted} />
-                        <Text style={[styles.perkText, { color: canSend ? colors.brand.primary : colors.text.muted }]}>{canSend ? t('Send Beans') : earned <= 0 ? 'Send (needs 1st trade)' : 'Send (needs +ve balance)'}</Text>
+                        <Text style={[styles.perkText, { color: canSend ? colors.brand.primary : colors.text.muted }]}>{canSend ? t('Send Beans') : earned <= 0 ? t('Send (needs 1st trade)') : t('Send (needs +ve balance)')}</Text>
                     </Pressable>}
                     {/* Not in preview: inviting is off on a node that previews Beans (global), and its Invites screen says so. */}
                     {!preview && <View style={[styles.perkPill, {
@@ -573,7 +608,7 @@ export default function LedgerScreen() {
                         backgroundColor: theme === 'dark' ? colors.feedback.success.bg : palette.green50,
                     }]}>
                         <MaterialCommunityIcons name="check-circle" size={13} color={colors.brand.primary} />
-                        <Text style={[styles.perkText, { color: theme === 'dark' ? colors.feedback.success.fg : colors.brand.dark }]}>Invite Members</Text>
+                        <Text style={[styles.perkText, { color: theme === 'dark' ? colors.feedback.success.fg : colors.brand.dark }]}>{t('Invite Members')}</Text>
                     </View>}
                 </View>
             </View>
@@ -581,23 +616,24 @@ export default function LedgerScreen() {
             {/* ── Medallion shelf: every level at a glance, tap to inspect ── */}
             {/* Levels are merit badges (#1838): one not reached yet keeps its own colours and a dashed edge, something to
                 grow into. Never a lock, never faded or greyed as if it were out of bounds. */}
-            <Text style={styles.sectionLabel}>ALL LEVELS</Text>
+            <Text style={styles.sectionLabel}>{t('ALL LEVELS')}</Text>
             <View style={styles.shelf}>
-                {TIERS.map((t: any, i: number) => {
+                {TIERS.map((lvl, i: number) => {
                     const reached = tierIdx >= i;
                     const isSel = selLevel === i;
                     return (
                         <Pressable
-                            key={t.name}
+                            key={lvl.name}
                             accessibilityRole="button"
                             accessibilityState={{ selected: isSel }}
                             onPress={() => setSelectedLevel(i)}
-                            style={[styles.shelfItem, !reached && !isSel && { borderColor: t.border, borderStyle: 'dashed' }, isSel && { borderColor: t.color, backgroundColor: t.bg }]}
+                            style={[styles.shelfItem, !reached && !isSel && { borderColor: lvl.border, borderStyle: 'dashed' }, isSel && { borderColor: lvl.color, backgroundColor: lvl.bg }]}
                         >
                             <TrustBadge level={LEVEL_KEYS[i]} size={46} ahead={!reached} />
-                            <Text style={[styles.shelfName, { color: t.color }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>{t.name}</Text>
-                            <Text style={styles.shelfState} numberOfLines={1}>
-                                {tierIdx === i ? "You're here" : reached ? 'Reached' : `${t.min} trust`}
+                            <Text style={[styles.shelfName, { color: lvl.color }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>{t(TIER_WORDS[lvl.name])}</Text>
+                            {/* A quarter of the row: a longer language's words take a second line and shrink, never cut short. */}
+                            <Text style={[styles.shelfState, { textAlign: 'center' }]} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.7}>
+                                {tierIdx === i ? t("You're here") : reached ? t('Reached') : tn(lvl.min, '{n} trust', '{n} trust')}
                             </Text>
                         </Pressable>
                     );
@@ -609,45 +645,45 @@ export default function LedgerScreen() {
                 <View style={styles.detailHeader}>
                     <TrustBadge level={LEVEL_KEYS[selLevel]} size={44} ahead={!selReached} />
                     <View style={{ flex: 1 }}>
-                        <Text style={[styles.detailName, { color: sel.color }]}>{sel.name}</Text>
-                        <Text style={styles.shelfState}>Level {selLevel + 1} of {TIERS.length}</Text>
+                        <Text style={[styles.detailName, { color: sel.color }]}>{t(TIER_WORDS[sel.name])}</Text>
+                        <Text style={styles.shelfState}>{t('Level {level} of {levels}', { level: selLevel + 1, levels: TIERS.length })}</Text>
                     </View>
-                    <View style={[styles.detailStatePill, { borderColor: sel.border, borderStyle: selReached ? 'solid' : 'dashed', backgroundColor: sel.bg }]}>
+                    <View style={[styles.detailStatePill, { borderColor: sel.border, borderStyle: selReached ? 'solid' : 'dashed', backgroundColor: sel.bg, flexShrink: 1 }]}>
                         <Text style={[styles.detailStateText, { color: sel.color }]}>
-                            {selCurrent ? "You're here" : selReached ? 'Reached ✓' : selLevel === tierIdx + 1 ? 'Next level' : 'Up ahead'}
+                            {selCurrent ? t("You're here") : selReached ? t('Reached ✓') : selLevel === tierIdx + 1 ? t('Next level') : t('Up ahead')}
                         </Text>
                     </View>
                 </View>
 
-                <Text style={styles.detailBlurb}>{sel.blurb}</Text>
+                <Text style={styles.detailBlurb}>{t(sel.blurb)}</Text>
 
                 {/* Credit floor — show YOUR actual floor when this is your tier; the tier entry floor otherwise */}
                 <View style={styles.detailFloorRow}>
                     <MaterialCommunityIcons name="scale-balance" size={18} color={sel.color} />
                     <View style={{ flex: 1 }}>
                         <Text style={styles.detailFloorLabel}>
-                            {selCurrent ? 'Your current floor' : selReached ? `Floor from this tier` : `Floor starts at`}
+                            {selCurrent ? t('Your current floor') : selReached ? t('Floor from this tier') : t('Floor starts at')}
                         </Text>
                         {selCurrent && (
                             <Text style={{ fontSize: 10, color: colors.text.muted, marginTop: 1 }}>
-                                Grows deeper as you trade more
+                                {t('Grows deeper as you trade more')}
                             </Text>
                         )}
                     </View>
                     <Text style={[styles.detailFloorVal, { color: sel.color }]}>
-                        {selCurrent ? balanceState.floor : sel.floor}
+                        {formatNumber(selCurrent ? balanceState.floor : sel.floor)}
                     </Text>
                 </View>
 
-                {sel.perks.filter((p: string) => !(preview && p === INVITE_PERK)).map((p: string) => (
-                    <View key={p} style={styles.detailPerkRow}>
+                {sel.perks.filter(p => !(preview && p.words === INVITE_PERK)).map(p => (
+                    <View key={p.words} style={styles.detailPerkRow}>
                         <MaterialCommunityIcons name={selReached ? 'check-circle' : 'circle-outline'} size={15} color={selReached ? colors.brand.primary : sel.color} />
-                        <Text style={styles.detailPerkText}>{p}</Text>
+                        <Text style={styles.detailPerkText}>{t(p.words)}</Text>
                     </View>
                 ))}
 
                 {!selReached && selNeeded > 0 && (
-                    <Text style={styles.detailNote}>Reach {sel.min} trust ({selNeeded} to go) from the real value you trade.</Text>
+                    <Text style={styles.detailNote}>{t('Reach {min} trust ({left} to go) from the real value you trade.', { min: sel.min, left: selNeeded })}</Text>
                 )}
                 <Text style={styles.detailNote}>{preview
                     ? t("Levels are merit badges — they don't gate any action. Direct sends require a positive balance and one completed trade. Higher levels mean a deeper credit line and community recognition.")
@@ -664,43 +700,43 @@ export default function LedgerScreen() {
                         setShowTrustInfo(true);
                     }}
                 >
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-                        <Text style={[styles.pathTitle, { marginBottom: 0 }]}>🚀 Reach {nextTier.emoji} {nextTier.name}</Text>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                            <Text style={{ fontSize: 11, fontWeight: '700', color: palette.indigo500 }}>Trust Manual</Text>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, gap: 8 }}>
+                        <Text style={[styles.pathTitle, { marginBottom: 0 }]}>{t('🚀 Reach {emoji} {tier}', { emoji: nextTier.emoji, tier: t(TIER_WORDS[nextTier.name]) })}</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, flexShrink: 1 }}>
+                            <Text style={{ fontSize: 11, fontWeight: '700', color: palette.indigo500, flexShrink: 1 }}>{t('Trust Manual')}</Text>
                             <MaterialCommunityIcons name="information-outline" size={14} color={palette.indigo500} />
                         </View>
                     </View>
-                    <Text style={styles.pathGap}>{creditsToNext} trust to go</Text>
+                    <Text style={styles.pathGap}>{tn(creditsToNext, '{n} trust to go', '{n} trust to go')}</Text>
                     <Text style={styles.pathHint}>
-                        Trust grows with the real value you trade. Trading with someone NEW counts fastest —
-                        value with any one partner is capped, so a wide circle beats repeat trades with the same person.
+                        {t('Trust grows with the real value you trade. Trading with someone NEW counts fastest — value with any one partner is capped, so a wide circle beats repeat trades with the same person.')}
                     </Text>
                     <View style={styles.pathRow}>
                         <View style={styles.pathOption}>
-                            <Text style={[styles.pathNumber, { color: colors.brand.primary }]}>{Number.isFinite(valueToNext) ? `~${valueToNext}` : '—'}</Text>
-                            <Text style={styles.pathLabel} numberOfLines={2}>beans of value to trade</Text>
-                            <Text style={[styles.pathLeverTag, { color: colors.brand.primary }]}>the lever</Text>
+                            <Text style={[styles.pathNumber, { color: colors.brand.primary }]}>{Number.isFinite(valueToNext) ? `~${formatNumber(valueToNext)}` : '—'}</Text>
+                            <Text style={styles.pathLabel} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.75}>{t('beans of value to trade')}</Text>
+                            <Text style={[styles.pathLeverTag, { color: colors.brand.primary }]}>{t('THE LEVER')}</Text>
                         </View>
                         <View style={styles.pathOption}>
-                            <Text style={[styles.pathNumber, { color: palette.blue500 }]}>{partnersToNext || '—'}</Text>
-                            <Text style={styles.pathLabel} numberOfLines={2}>new partners (roughly)</Text>
+                            <Text style={[styles.pathNumber, { color: palette.blue500 }]}>{partnersToNext ? formatNumber(partnersToNext) : '—'}</Text>
+                            <Text style={styles.pathLabel} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.75}>{t('new partners (roughly)')}</Text>
                         </View>
                     </View>
                 </Pressable>
             )}
 
             {/* Achievement cards — the things that actually build trust: value traded, a diverse
-                circle of partners, and your reputation (which scales the earned score). */}
-            <Text style={styles.sectionLabel}>WHAT BUILDS YOUR TRUST</Text>
+                circle of partners, and your reputation (which scales the earned score). A third of the row each: a
+                longer language's label takes a second line and shrinks, never cut short. */}
+            <Text style={styles.sectionLabel}>{t('WHAT BUILDS YOUR TRUST')}</Text>
             <View style={styles.achieveRow}>
                 {[
-                    { icon: '💰', label: 'VALUE TRADED', big: `${qualifiedValue}`, foot: `+${earned} trust`, pct: Math.min(1, qualifiedValue / valueForEarned(ELDER_MIN)), color: colors.brand.primary, trackBg: theme === 'dark' ? 'rgba(34,197,94,0.15)' : palette.green50 },
-                    { icon: '👥', label: 'PARTNERS', big: `${uniquePartners}`, foot: 'diverse = faster', pct: Math.min(1, uniquePartners / 20), color: palette.blue500, trackBg: theme === 'dark' ? 'rgba(59,130,246,0.15)' : palette.blue50 },
-                    { icon: '⭐', label: 'RATING', big: reviewCount > 0 ? avgRating.toFixed(1) : '—', foot: reviewCount > 0 ? `${reviewCount} review${reviewCount === 1 ? '' : 's'}` : 'no reviews yet', pct: reviewCount > 0 ? avgRating / 5 : 1, color: colors.market.need.fg, trackBg: theme === 'dark' ? 'rgba(249,115,22,0.15)' : palette.orange50 },
+                    { icon: '💰', label: t('VALUE TRADED'), big: formatNumber(qualifiedValue), foot: tn(earned, '+{n} trust', '+{n} trust'), pct: Math.min(1, qualifiedValue / valueForEarned(ELDER_MIN)), color: colors.brand.primary, trackBg: theme === 'dark' ? 'rgba(34,197,94,0.15)' : palette.green50 },
+                    { icon: '👥', label: t('PARTNERS'), big: formatNumber(uniquePartners), foot: t('diverse = faster'), pct: Math.min(1, uniquePartners / 20), color: palette.blue500, trackBg: theme === 'dark' ? 'rgba(59,130,246,0.15)' : palette.blue50 },
+                    { icon: '⭐', label: t('RATING'), big: reviewCount > 0 ? formatNumber(avgRating, 1) : '—', foot: reviewCount > 0 ? tn(reviewCount, '{n} review', '{n} reviews') : t('no reviews yet'), pct: reviewCount > 0 ? avgRating / 5 : 1, color: colors.market.need.fg, trackBg: theme === 'dark' ? 'rgba(249,115,22,0.15)' : palette.orange50 },
                 ].map(a => (
                     <Pressable
-                        key={a.label}
+                        key={a.icon}
                         style={[styles.achieveCard, { borderColor: a.color + '30' }]}
                         accessibilityRole="button"
                         onPress={() => {
@@ -710,7 +746,7 @@ export default function LedgerScreen() {
                     >
                         <Text style={{ fontSize: 22, marginBottom: 4 }}>{a.icon}</Text>
                         <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[styles.achieveCount, { color: a.color }]}>{a.big}</Text>
-                        <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={styles.achieveLabel}>{a.label}</Text>
+                        <Text numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.7} style={styles.achieveLabel}>{a.label}</Text>
                         <View style={[styles.achieveBarBg, { backgroundColor: a.trackBg }]}>
                             <View style={[styles.achieveBarFill, { width: `${Math.min(100, a.pct * 100)}%`, backgroundColor: a.color }]} />
                         </View>
@@ -719,7 +755,7 @@ export default function LedgerScreen() {
                 ))}
             </View>
 
-            <Text style={styles.formula}>💡 Trust is a saturating curve over the real value you trade — diverse trades climb fastest, and it levels off near the top so no one runs away. Gifts don't build trust.</Text>
+            <Text style={styles.formula}>{t("💡 Trust is a saturating curve over the real value you trade — diverse trades climb fastest, and it levels off near the top so no one runs away. Gifts don't build trust.")}</Text>
         </View>
         );
     };
@@ -747,7 +783,7 @@ export default function LedgerScreen() {
                     <Pressable
                         testID="bean-sheet-open"
                         accessibilityRole="button"
-                        accessibilityLabel="About your balance"
+                        accessibilityLabel={t('About your balance')}
                         hitSlop={8}
                         style={styles.heroInfo}
                         onPress={() => setShowBalanceInfo(true)}
@@ -755,36 +791,36 @@ export default function LedgerScreen() {
                         <MaterialCommunityIcons name="information-outline" size={18} color={colors.text.muted} />
                     </Pressable>
 
-                    <Text style={styles.tierHeroLabel}>YOUR BALANCE</Text>
+                    <Text style={styles.tierHeroLabel}>{t('YOUR BALANCE')}</Text>
                     <CurrencyDisplay
                         asView
                         style={[styles.walletBigBalance, isPositive ? styles.pos : styles.neg]}
-                        amount={`${isPositive ? '+' : ''}${balanceState.balance.toFixed(1)}`}
+                        amount={`${isPositive ? '+' : ''}${formatNumber(balanceState.balance, 1)}`}
                     />
                     <Text style={styles.heroSub}>
-                        ≈ {(Math.abs(balanceState.balance) / 40).toFixed(1)} hrs of value · Floor {balanceState.floor}
+                        {t('≈ {hours} hrs of value · Floor {floor}', { hours: formatNumber(Math.abs(balanceState.balance) / 40, 1), floor: balanceState.floor })}
                     </Text>
 
                     {/* Key metrics strip */}
                     <View style={styles.walletMetricRow}>
                         <Pressable style={styles.walletMetric} accessibilityRole="button" onPress={() => setShowCommonsInfo(true)}>
                             <MaterialCommunityIcons name="sprout" size={14} color={theme === 'dark' ? palette.amber400 : colors.feedback.warning.fg} />
-                            <CurrencyDisplay asView style={[styles.walletMetricVal, { color: theme === 'dark' ? palette.amber400 : colors.feedback.warning.fg }]} amount={balanceState.commons.toFixed(1)} />
-                            <Text style={styles.walletMetricLabel}>Commons ⓘ</Text>
+                            <CurrencyDisplay asView style={[styles.walletMetricVal, { color: theme === 'dark' ? palette.amber400 : colors.feedback.warning.fg }]} amount={formatNumber(balanceState.commons, 1)} />
+                            <Text style={styles.walletMetricLabel}>{t('COMMONS ⓘ')}</Text>
                         </Pressable>
                         <View style={styles.walletMetricDivider} />
                         <View style={styles.walletMetric}>
                             <MaterialCommunityIcons name="scale-balance" size={14} color={colors.text.secondary} />
-                            <Text style={styles.walletMetricVal}>{balanceState.floor}</Text>
-                            <Text style={styles.walletMetricLabel}>Credit Floor</Text>
+                            <Text style={styles.walletMetricVal}>{formatNumber(balanceState.floor)}</Text>
+                            <Text style={styles.walletMetricLabel}>{t('CREDIT FLOOR')}</Text>
                         </View>
                         {escrowTotal > 0 && (
                             <>
                                 <View style={styles.walletMetricDivider} />
                                 <View style={styles.walletMetric}>
                                     <MaterialCommunityIcons name="lock-clock" size={14} color={colors.feedback.warning.fg} />
-                                    <Text style={[styles.walletMetricVal, { color: colors.feedback.warning.fg }]}>{escrowTotal.toFixed(1)}</Text>
-                                    <Text style={styles.walletMetricLabel}>In Escrow</Text>
+                                    <Text style={[styles.walletMetricVal, { color: colors.feedback.warning.fg }]}>{formatNumber(escrowTotal, 1)}</Text>
+                                    <Text style={styles.walletMetricLabel}>{t('IN ESCROW')}</Text>
                                 </View>
                             </>
                         )}
@@ -795,20 +831,20 @@ export default function LedgerScreen() {
                 {balanceState.balance > 0 && (
                     <Pressable style={[styles.circBox, amber && styles.circBoxAmber]} accessibilityRole="button" onPress={() => setShowCirculationInfo(true)}>
                         <View style={styles.circRow}>
-                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 }}>
                                 <MaterialCommunityIcons name="leaf" size={15} color={amber ? (theme === 'dark' ? palette.amber400 : palette.amber800) : colors.feedback.success.fg} />
-                                <Text style={[styles.circLabel, amber && { color: theme === 'dark' ? palette.amber400 : palette.amber800 }]}>Community Circulation ⓘ</Text>
+                                <Text style={[styles.circLabel, amber && { color: theme === 'dark' ? palette.amber400 : palette.amber800 }]}>{t('Community Circulation ⓘ')}</Text>
                             </View>
                             {monthly > 0 && (
                                 // Two decimals; a sliver over the line shows as <0.01 rather than a zero that reads broken.
-                                <CurrencyDisplay style={[styles.circRate, amber && { color: theme === 'dark' ? palette.amber400 : palette.amber800 }]} amount={monthly < 0.005 ? '<0.01' : monthly.toFixed(2)} />
+                                <CurrencyDisplay style={[styles.circRate, amber && { color: theme === 'dark' ? palette.amber400 : palette.amber800 }]} amount={monthly < 0.005 ? `<${formatNumber(0.01, 2)}` : formatNumber(monthly, 2)} />
                             )}
                         </View>
                         {monthly > 0 ? (
                             <View style={styles.circRow}>
-                                <Text style={{ fontSize: 11, fontWeight: '500', color: colors.text.muted }}>per month → commons pool</Text>
+                                <Text style={{ fontSize: 11, fontWeight: '500', color: colors.text.muted, flexShrink: 1 }}>{t('per month → commons pool')}</Text>
                                 <Text style={[styles.circNextDate, { color: amber ? (theme === 'dark' ? palette.amber400 : palette.amber800) : colors.feedback.success.fg }]}>
-                                    {nextRun.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })} · {daysUntil}d
+                                    {tn(daysUntil, '{date} · {n}d', '{date} · {n}d', { date: formatDate(nextRun, 'day-month') })}
                                 </Text>
                             </View>
                         ) : (
@@ -819,7 +855,7 @@ export default function LedgerScreen() {
                         )}
                         {amber && (
                             <Text style={{ color: theme === 'dark' ? palette.amber400 : colors.feedback.warning.fg, fontSize: 11, marginTop: 6, fontWeight: '600' }}>
-                                ⚠️ Balance above 1000 — consider spending!
+                                {t('⚠️ Balance above 1000 — consider spending!')}
                             </Text>
                         )}
                     </Pressable>
@@ -828,7 +864,7 @@ export default function LedgerScreen() {
                 {/* ── Project Pledges ── */}
                 {pledgeHistory.length > 0 && (
                     <View style={styles.pledgeSection}>
-                        <Text style={styles.sectionLabel}>PROJECT PLEDGES</Text>
+                        <Text style={styles.sectionLabel}>{t('PROJECT PLEDGES')}</Text>
                         {pledgeHistory.map((pl: any) => (
                             <View key={pl.id} style={styles.pledgeRow}>
                                 <View style={[styles.txnIcon, { backgroundColor: colors.brand.fill + '18' }]}>
@@ -836,16 +872,16 @@ export default function LedgerScreen() {
                                 </View>
                                 <View style={{ flex: 1, marginLeft: 10 }}>
                                     <Text style={styles.pledgeName} numberOfLines={1}>{pl.projectTitle}</Text>
-                                    <Text style={styles.pledgeDate}>{new Date(pl.timestamp).toLocaleDateString()}</Text>
+                                    <Text style={styles.pledgeDate}>{dayOf(pl.timestamp) ?? ''}</Text>
                                 </View>
-                                <Text style={styles.pledgeAmt}>-{pl.amount} B</Text>
+                                <Text style={styles.pledgeAmt}>{t('-{amount} B', { amount: pl.amount })}</Text>
                             </View>
                         ))}
                     </View>
                 )}
 
                 {/* ── Send Beans ── (in preview the marker's action: it keeps its place and words, and opens the sheet) */}
-                {preview ? <LocalCommunityMark variant="action" feature="beans" label="Send Beans" /> : <Pressable
+                {preview ? <LocalCommunityMark variant="action" feature="beans" label={t('Send Beans')} /> : <Pressable
                     style={[styles.sendBtn, showSend && styles.sendBtnOpen, !canSend && styles.sendBtnLocked]}
                     accessibilityRole="button"
                     accessibilityLabel={!canSend ? undefined : showSend ? t('Cancel') : t('Send Beans')}
@@ -859,7 +895,7 @@ export default function LedgerScreen() {
                         />
                         <Text style={[styles.sendBtnText, !canSend && { color: colors.text.secondary }]}>
                             {!canSend
-                                ? (earned <= 0 ? 'Send Beans (needs 1 completed trade)' : 'Send Beans (needs positive balance)')
+                                ? (earned <= 0 ? t('Send Beans (needs 1 completed trade)') : t('Send Beans (needs positive balance)'))
                                 : showSend ? t('Cancel') : t('Send Beans')}
                         </Text>
                     </View>
@@ -868,16 +904,16 @@ export default function LedgerScreen() {
                 {showSend && !preview && (
                     <View style={styles.sendForm}>
                         <Pressable style={styles.recipientRow} accessibilityRole="button" onPress={() => setShowMemberPicker(!showMemberPicker)}>
-                            <Text style={[styles.recipientText, !selectedMember && { color: colors.text.muted }]}>{selectedMember?.callsign || 'Select recipient...'}</Text>
+                            <Text style={[styles.recipientText, !selectedMember && { color: colors.text.muted }, { flexShrink: 1 }]}>{selectedMember?.callsign || t('Select recipient...')}</Text>
                             <MaterialCommunityIcons name={showMemberPicker ? 'chevron-up' : 'chevron-down'} size={20} color={colors.text.secondary} />
                         </Pressable>
                         {showMemberPicker && (
                             <View style={styles.pickerBox}>
-                                <TextInput style={styles.pickerSearch} accessibilityLabel="Search members" placeholder="Search members..." placeholderTextColor={colors.text.muted} value={memberSearch} onChangeText={setMemberSearch} autoCapitalize="none" autoCorrect={false} />
+                                <TextInput style={styles.pickerSearch} accessibilityLabel={t('Search members')} placeholder={t('Search members...')} placeholderTextColor={colors.text.muted} value={memberSearch} onChangeText={setMemberSearch} autoCapitalize="none" autoCorrect={false} />
                                 {/* Plain ScrollView — nested FlatList breaks vertical scroll on Android */}
                                 <ScrollView style={{ maxHeight: 180 }} nestedScrollEnabled keyboardShouldPersistTaps="handled">
                                     {filteredMembers.length === 0 ? (
-                                        <Text style={{ padding: 16, color: colors.text.muted, textAlign: 'center', fontSize: 13 }}>No members found</Text>
+                                        <Text style={{ padding: 16, color: colors.text.muted, textAlign: 'center', fontSize: 13 }}>{t('No members found')}</Text>
                                     ) : filteredMembers.map(item => (
                                         <Pressable key={item.publicKey} style={[styles.pickerRow, item.publicKey === sendTo && styles.pickerRowActive]} accessibilityRole="button" accessibilityState={{ selected: item.publicKey === sendTo }} onPress={() => { setSendTo(item.publicKey); setShowMemberPicker(false); setMemberSearch(''); }}>
                                             <Text style={[styles.pickerName, item.publicKey === sendTo && { color: colors.text.inverse }]}>{item.callsign}</Text>
@@ -887,16 +923,16 @@ export default function LedgerScreen() {
                                 </ScrollView>
                             </View>
                         )}
-                        <TextInput style={styles.sendInput} accessibilityLabel="Amount to send" placeholder="Amount" placeholderTextColor={colors.text.muted} keyboardType="numeric" value={sendAmount} onChangeText={setSendAmount} />
-                        <TextInput style={styles.sendInput} accessibilityLabel="Memo" placeholder="Memo (optional)" placeholderTextColor={colors.text.muted} value={sendMemo} onChangeText={setSendMemo} />
+                        <TextInput style={styles.sendInput} accessibilityLabel={t('Amount to send')} placeholder={t('Amount')} placeholderTextColor={colors.text.muted} keyboardType="numeric" value={sendAmount} onChangeText={setSendAmount} />
+                        <TextInput style={styles.sendInput} accessibilityLabel={t('Memo')} placeholder={t('Memo (optional)')} placeholderTextColor={colors.text.muted} value={sendMemo} onChangeText={setSendMemo} />
                         {(() => {
                             const parsedAmount = parseFloat(sendAmount);
                             if (!isNaN(parsedAmount) && parsedAmount > 0) {
                                 return (
                                     <View style={styles.taxBreakdown}>
                                         <View style={styles.breakdownRow}>
-                                            <Text style={styles.breakdownLabel}>Recipient receives:</Text>
-                                            <CurrencyDisplay amount={parsedAmount.toFixed(2)} style={styles.breakdownValue} asView />
+                                            <Text style={styles.breakdownLabel}>{t('Recipient receives:')}</Text>
+                                            <CurrencyDisplay amount={formatNumber(parsedAmount, 2)} style={styles.breakdownValue} asView />
                                         </View>
                                     </View>
                                 );
@@ -904,24 +940,24 @@ export default function LedgerScreen() {
                             return null;
                         })()}
                         {sendError && <View style={styles.errBox}><Text style={styles.errText}>{sendError}</Text></View>}
-                        {sendSuccess && <View style={styles.okBox}><Text style={styles.okText}>✓ Sent!</Text></View>}
+                        {sendSuccess && <View style={styles.okBox}><Text style={styles.okText}>{t('✓ Sent!')}</Text></View>}
                         <Pressable style={[styles.confirmBtn, (sending || !sendTo || !sendAmount) && styles.confirmBtnOff]} accessibilityRole="button" onPress={handleSend} disabled={sending || !sendTo || !sendAmount}>
-                            <Text style={styles.confirmBtnText}>{sending ? 'Sending...' : 'Confirm Transfer'}</Text>
+                            <Text style={styles.confirmBtnText}>{sending ? t('Sending...') : t('Confirm Transfer')}</Text>
                         </Pressable>
                     </View>
                 )}
 
                 <View style={styles.txnHeaderRow}>
-                    <Text style={styles.sectionLabel}>RECENT TRANSACTIONS</Text>
+                    <Text style={[styles.sectionLabel, { flexShrink: 1 }]}>{t('RECENT TRANSACTIONS')}</Text>
                     {!preview && (
-                    <Pressable style={styles.exportBtn} accessibilityRole="button" accessibilityLabel="Export CSV" onPress={handleExport} disabled={exporting}>
+                    <Pressable style={styles.exportBtn} accessibilityRole="button" accessibilityLabel={t('Export CSV')} onPress={handleExport} disabled={exporting}>
                         <MaterialCommunityIcons name="download" size={14} color={colors.text.secondary} />
-                        <Text style={styles.exportBtnText}>{exporting ? 'Exporting…' : 'Export CSV'}</Text>
+                        <Text style={styles.exportBtnText}>{exporting ? t('Exporting…') : t('Export CSV')}</Text>
                     </Pressable>)}
                 </View>
                 {/* In preview Export is the marker's action on a full-width row of its own, like Send Beans: button and pill
                     don't fit beside the heading at 320 dp and 1.3× text. The pill stays, so it never reads as a live export. */}
-                {preview && <View style={styles.exportPreviewRow} testID="ledger-export-row"><LocalCommunityMark variant="action" feature="beans" label="Export CSV" /></View>}
+                {preview && <View style={styles.exportPreviewRow} testID="ledger-export-row"><LocalCommunityMark variant="action" feature="beans" label={t('Export CSV')} /></View>}
             </View>
         );
     };
@@ -940,7 +976,7 @@ export default function LedgerScreen() {
                         style={{ color: colors.accent.primary, fontWeight: '800', textDecorationLine: 'underline' }}
                         onPress={() => router.push({ pathname: '/post/[id]', params: { id: offerId } })}
                     >
-                        View Offer
+                        {t('View Offer')}
                     </Text>
                     {parts[1]}
                 </Text>
@@ -958,9 +994,10 @@ export default function LedgerScreen() {
                     <MaterialCommunityIcons name={isCredit ? 'arrow-bottom-left' : 'arrow-top-right'} size={18} color={isCredit ? colors.brand.primary : colors.feedback.danger.fg} />
                 </View>
                 <View style={{ flex: 1, marginRight: 8 }}>
-                    <Text style={styles.txnPeer}>{item.peer}</Text>
-                    {note.fromBlocked ? <Text style={styles.txnMemoBlocked}>{note.text}</Text> : renderMemoText(note.text)}
-                    <Text style={styles.txnTime}>{item.timestamp}</Text>
+                    <Text style={styles.txnPeer}>{peerWords(item)}</Text>
+                    {/* The neutral line for Beans from someone blocked is core's BLOCKED_BEANS_NOTE, in the member's language. */}
+                    {note.fromBlocked ? <Text style={styles.txnMemoBlocked}>{t('Beans from a member you blocked')}</Text> : renderMemoText(note.text)}
+                    <Text style={styles.txnTime}>{rowWhen(item)}</Text>
                 </View>
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                     <Text style={[styles.txnAmount, isCredit ? styles.pos : styles.neg]}>{isCredit ? '+' : '-'}{item.amount}</Text>
@@ -987,10 +1024,10 @@ export default function LedgerScreen() {
                         <MemberAvatar avatarUrl={preview ? null : avatarUrl} pubkey={preview ? '' : identity?.publicKey || ''} callsign={preview ? SAMPLE_MEMBER : identity?.callsign || 'G'} size={48} />
                     </View>
                     <View>
-                        <Text style={styles.profileName}>{preview ? SAMPLE_MEMBER : identity?.callsign || 'GUEST'}</Text>
+                        <Text style={styles.profileName}>{preview ? SAMPLE_MEMBER : identity?.callsign || t('GUEST')}</Text>
                         <View style={[styles.tierChip, { backgroundColor: tier.bg, borderColor: tier.border }]}>
                             <Text style={styles.tierChipEmoji}>{tier.emoji}</Text>
-                            <Text style={[styles.tierChipText, { color: tier.color }]}>{tier.name}</Text>
+                            <Text style={[styles.tierChipText, { color: tier.color }]}>{t(TIER_WORDS[tier.name])}</Text>
                         </View>
                     </View>
                 </Pressable>
@@ -1000,9 +1037,9 @@ export default function LedgerScreen() {
                     <CurrencyDisplay
                         asView
                         style={[styles.bigBalance, balanceState.balance >= 0 ? styles.pos : styles.neg]}
-                        amount={`${balanceState.balance >= 0 ? '+' : ''}${balanceState.balance.toFixed(1)}`}
+                        amount={`${balanceState.balance >= 0 ? '+' : ''}${formatNumber(balanceState.balance, 1)}`}
                     />
-                    <Text style={styles.balanceWord}>BEANS</Text>
+                    <Text style={styles.balanceWord}>{t('BEANS')}</Text>
                 </Pressable>
             </View>
 
@@ -1013,8 +1050,8 @@ export default function LedgerScreen() {
                     <View testID="ledger-known-frozen" style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10, backgroundColor: colors.feedback.info.bg, borderWidth: 1, borderColor: colors.feedback.info.border, borderRadius: 12, padding: 12 }}>
                         <Text style={{ fontSize: 20 }}>❄️</Text>
                         <View style={{ flex: 1 }}>
-                            <Text style={{ fontSize: 14, fontWeight: '800', color: colors.text.heading }} accessibilityRole="header">{KNOWN_FROZEN_TITLE}</Text>
-                            <Text style={{ fontSize: 12.5, color: colors.text.body, lineHeight: 18, marginTop: 2 }}>{KNOWN_FROZEN_BODY}</Text>
+                            <Text style={{ fontSize: 14, fontWeight: '800', color: colors.text.heading }} accessibilityRole="header">{t(KNOWN_FROZEN.title)}</Text>
+                            <Text style={{ fontSize: 12.5, color: colors.text.body, lineHeight: 18, marginTop: 2 }}>{t(KNOWN_FROZEN.body)}</Text>
                             {frozenDebitLine(balanceState.balance) && (
                                 <Text testID="ledger-frozen-debit" style={{ fontSize: 12.5, fontWeight: '700', color: colors.text.heading, lineHeight: 18, marginTop: 6 }}>{frozenDebitLine(balanceState.balance)}</Text>
                             )}
@@ -1027,9 +1064,9 @@ export default function LedgerScreen() {
                     <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10, backgroundColor: theme === 'dark' ? colors.feedback.success.bg : palette.green50, borderWidth: 1, borderColor: theme === 'dark' ? colors.feedback.success.border : palette.green200, borderRadius: 12, padding: 12 }}>
                         <Text style={{ fontSize: 20 }}>🌱</Text>
                         <View style={{ flex: 1 }}>
-                            <Text style={{ fontSize: 14, fontWeight: '800', color: theme === 'dark' ? colors.feedback.success.fg : colors.brand.dark }}>No credit line yet</Text>
+                            <Text style={{ fontSize: 14, fontWeight: '800', color: theme === 'dark' ? colors.feedback.success.fg : colors.brand.dark }}>{t('No credit line yet')}</Text>
                             <Text style={{ fontSize: 12.5, color: colors.text.body, lineHeight: 18, marginTop: 2 }}>
-                                You can trade right now with the beans you hold. Complete your first trade and your credit line opens automatically — the more value you trade, the deeper it grows. (A community voucher can also give you a starter line.)
+                                {t('You can trade right now with the beans you hold. Complete your first trade and your credit line opens automatically — the more value you trade, the deeper it grows. (A community voucher can also give you a starter line.)')}
                             </Text>
                         </View>
                     </View>
@@ -1037,7 +1074,7 @@ export default function LedgerScreen() {
             ) : (
                 <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel="Credit position — tap to learn how it works"
+                    accessibilityLabel={t('Credit position — tap to learn how it works')}
                     onPress={() => setShowSliderInfo(true)}
                     style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 16, backgroundColor: colors.surface.card, borderBottomWidth: 1, borderBottomColor: colors.border.default }}
                 >
@@ -1049,7 +1086,10 @@ export default function LedgerScreen() {
                     {/* Frozen is the one state the ladder can't fully convey — call it out explicitly. */}
                     {balanceState.frozen && (
                         <Text style={{ fontSize: 11.5, color: colors.feedback.warning.fg, lineHeight: 16, marginTop: 8 }}>
-                            ⚠️  Spending paused — your balance is below what your {balanceState.liveOffers ?? 0} active offer{(balanceState.liveOffers ?? 0) === 1 ? '' : 's'} unlock (−{Math.abs(balanceState.usableFloor ?? balanceState.floor)}). Post an Offer or trade back up to lift it. You can still receive and sell.
+                            {tn(balanceState.liveOffers ?? 0,
+                                '⚠️  Spending paused — your balance is below what your {n} active offer unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.',
+                                '⚠️  Spending paused — your balance is below what your {n} active offers unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.',
+                                { limit: Math.abs(balanceState.usableFloor ?? balanceState.floor) })}
                         </Text>
                     )}
                 </Pressable>
@@ -1062,11 +1102,11 @@ export default function LedgerScreen() {
             <View style={styles.tabBar} onLayout={e => { tabBarY.current = e.nativeEvent.layout.y; }}>
                 <Pressable style={[styles.tab, activeTab === 'trust' && [styles.tabActive, { borderBottomColor: tier.color }]]} accessibilityRole="button" accessibilityState={{ selected: activeTab === 'trust' }} onPress={() => setActiveTab('trust')}>
                     <MaterialCommunityIcons name="shield-star-outline" size={15} color={activeTab === 'trust' ? tier.color : colors.text.muted} />
-                    <Text style={[styles.tabText, activeTab === 'trust' && { color: tier.color, fontWeight: '800' }]}>Levels</Text>
+                    <Text style={[styles.tabText, activeTab === 'trust' && { color: tier.color, fontWeight: '800' }]}>{t('Levels')}</Text>
                 </Pressable>
                 <Pressable testID="ledger-wallet-tab" style={[styles.tab, activeTab === 'financials' && styles.tabActive]} accessibilityRole="button" accessibilityState={{ selected: activeTab === 'financials' }} onPress={() => setActiveTab('financials')}>
                     <MaterialCommunityIcons name="swap-horizontal" size={15} color={activeTab === 'financials' ? colors.brand.primary : colors.text.muted} />
-                    <Text style={[styles.tabText, activeTab === 'financials' && { color: colors.brand.primary, fontWeight: '800' }]}>Wallet</Text>
+                    <Text style={[styles.tabText, activeTab === 'financials' && { color: colors.brand.primary, fontWeight: '800' }]}>{t('Wallet')}</Text>
                 </Pressable>
             </View>
         </View>
@@ -1080,7 +1120,7 @@ export default function LedgerScreen() {
                 style={{ flex: 1 }}
             >
 
-            <PageTitle title="Ledger" collapsed={pageTitle.collapsed} testID="page-title-ledger" />
+            <PageTitle title={t('Ledger')} collapsed={pageTitle.collapsed} testID="page-title-ledger" />
 
             {/* ── Content: one list for both tabs. The header stays mounted across a switch (the repayment card
                  keeps what it read) and the list keeps its place. ── */}
@@ -1098,7 +1138,7 @@ export default function LedgerScreen() {
                 keyboardShouldPersistTaps="handled"
                 contentContainerStyle={{ padding: 16, paddingBottom: keyboardHeight > 0 ? keyboardHeight + 48 : 48 }}
                 showsVerticalScrollIndicator={false}
-                ListEmptyComponent={activeTab === 'financials' ? <Text style={{ textAlign: 'center', color: colors.text.muted, paddingTop: 32, fontSize: 14 }}>No transactions yet.</Text> : null}
+                ListEmptyComponent={activeTab === 'financials' ? <Text style={{ textAlign: 'center', color: colors.text.muted, paddingTop: 32, fontSize: 14 }}>{t('No transactions yet.')}</Text> : null}
             />
 
             </KeyboardAvoidingView>

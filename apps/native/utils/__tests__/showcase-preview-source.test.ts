@@ -64,11 +64,11 @@ describe('the preview sources', () => {
             expect(ledger.slice(at, at + 140), fn).toMatch(/\{\s*if \(preview( \|\| beansMode === undefined)?\) (return;|\{ setSheetOpen\(true\); return; \})/);
         }
         // Send is the marker's action on both tabs: Levels' quick Send and the Wallet's.
-        expect(ledger.match(/\{preview \? <LocalCommunityMark variant="action" feature="beans" label="Send Beans" \/> : <Pressable/g)).toHaveLength(2);
+        expect(ledger.match(/\{preview \? <LocalCommunityMark variant="action" feature="beans" label=\{t\('Send Beans'\)\} \/> : <Pressable/g)).toHaveLength(2);
         // Export: the member's own button only when not in preview, and in preview the marker on a row of its own (it ran off
         // the edge beside the heading at 320 dp: scratch/global-previews-audit/PHONE.md §3 item 3).
         expect(ledger).toMatch(/\{!preview && \(\s*<Pressable style=\{styles\.exportBtn\}/);
-        expect(ledger).toMatch(/\{preview && <View style=\{styles\.exportPreviewRow\} testID="ledger-export-row"><LocalCommunityMark variant="action" feature="beans" label="Export CSV" \/><\/View>\}/);
+        expect(ledger).toMatch(/\{preview && <View style=\{styles\.exportPreviewRow\} testID="ledger-export-row"><LocalCommunityMark variant="action" feature="beans" label=\{t\('Export CSV'\)\} \/><\/View>\}/);
         expect(ledger).toMatch(/\{showSend && !preview && \(/);
         expect(ledger).toMatch(/\{beansMode !== undefined && !preview && <RepaymentCard \/>\}/);
     });

@@ -2,7 +2,7 @@
   "_meta": {
     "language": "zh-Hans",
     "name": "Chinese (Simplified)",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-19",
@@ -340,5 +340,97 @@
   },
   "Too many suggestions from your connection recently. Please try again later — your text is still here.": "你所在的网络连接最近提交了过多建议。请稍后再试 — 你输入的内容仍在这里。",
   "This poll is shown at your area (about 10 km around it) to everyone who can read it.": "此投票会在你所在的区域（周围约 10 公里内）向所有能看到它的成员展示。",
-  "You haven't set your area, so members nearby won't see this poll in their list; they can still find it by searching. Set it in Settings → Your area to show it near you.": "你尚未设置你的区域，因此附近的成员不会在列表中看到此投票；他们仍可通过搜索找到它。在“设置 → 你的区域”中进行设置即可在附近展示。"
+  "You haven't set your area, so members nearby won't see this poll in their list; they can still find it by searching. Set it in Settings → Your area to show it near you.": "你尚未设置你的区域，因此附近的成员不会在列表中看到此投票；他们仍可通过搜索找到它。在“设置 → 你的区域”中进行设置即可在附近展示。",
+  "Project · A leader, a goal, an end date": "项目 · 负责人、筹款目标、截止日期",
+  "Enterprise · Run by its keepers": "企业 · 由其管理者运营",
+  "Lead convenor\u0004group role": "首席召集人",
+  "Convenor\u0004group role": "召集人",
+  "Member\u0004group role": "成员",
+  "Observer\u0004group role": "观察员",
+  "Make one of the observers a member first, then hand the lead to them.": "先将其中一位观察员设为成员，然后再将首席召集人移交给他们。",
+  "{name} receives {n} Beans. The 1.5% trade fee ({fee} Beans) goes to the Commons.|{name} receives {n} Beans. The 1.5% trade fee ({fee} Beans) goes to the Commons.": {
+    "other": "{name} 收到 {n} 豆子。1.5% 的交易手续费（{fee} 豆子）将转入公共资金池。"
+  },
+  "Enter an amount in Beans, like 40 or 12.50.": "输入豆子数额，例如 40 或 12.50。",
+  "The amount must be more than 0 Beans.": "数额必须大于 0 豆子。",
+  "The enterprise holds {n} Beans, so it can't pay more than that.|The enterprise holds {n} Beans, so it can't pay more than that.": {
+    "other": "该企业持有 {n} 豆子，因此支付金额不能超过该数额。"
+  },
+  "Paying a keeper is a wage, and a wage comes only out of what the enterprise has earned above its costs (its earned surplus): {n} Beans now.|Paying a keeper is a wage, and a wage comes only out of what the enterprise has earned above its costs (its earned surplus): {n} Beans now.": {
+    "other": "向管理者付款属于发放报酬，而报酬只能来自企业超出成本的已赚取收益（已赚取盈余）：当前为 {n} 豆子。"
+  },
+  "Paying a keeper is a wage: only out of what the project has earned.": "向管理者付款属于发放报酬：只能来自该项目已赚取的收益。",
+  "Paying a keeper is a wage: only out of what the enterprise has earned.": "向管理者付款属于发放报酬：只能来自该企业已赚取的收益。",
+  "Paying a keeper is a wage: only out of what the project has earned above its costs, {n} Beans now.|Paying a keeper is a wage: only out of what the project has earned above its costs, {n} Beans now.": {
+    "other": "向管理者付款属于发放报酬：只能来自该项目超出成本的已赚取收益，当前为 {n} 豆子。"
+  },
+  "Paying a keeper is a wage: only out of what the enterprise has earned above its costs, {n} Beans now.|Paying a keeper is a wage: only out of what the enterprise has earned above its costs, {n} Beans now.": {
+    "other": "向管理者付款属于发放报酬：只能来自该企业超出成本的已赚取收益，当前为 {n} 豆子。"
+  },
+  "Pay Beans out": "支出豆子",
+  "Remove a collaborator": "移除协作者",
+  "Remove a keeper": "移除管理者",
+  "Make another keeper the lead": "让另一位管理者担任主管理者",
+  "You're not in this group now, but you were when these votes opened, so you can still vote on them.": "你现在已不在该小组中，但在这些投票发起时你仍在组内，因此仍可参与投票。",
+  "You're not in this group now. These are the votes you were part of.": "你现在已不在该小组中。这些是你曾参与的投票。",
+  "someone in the group": "小组中的某人",
+  "someone": "某人",
+  "Pay {n} Beans to {name}|Pay {n} Beans to {name}": {
+    "other": "向 {name} 支付 {n} 豆子"
+  },
+  "Remove {name} as a collaborator": "移除协作者 {name}",
+  "Remove {name} as a keeper": "移除管理者 {name}",
+  "Make {name} the leader": "任命 {name} 为负责人",
+  "Make {name} the lead keeper": "任命 {name} 为主管理者",
+  "Make {name} the lead convenor": "任命 {name} 为首席召集人",
+  "Make {name} a convenor": "任命 {name} 为召集人",
+  "Make {name} a member, no longer a convenor": "将 {name} 设为成员，不再担任召集人",
+  "Remove {name} from the group": "将 {name} 从小组中移除",
+  "Change who can join: {policy}": "修改加入权限：{policy}",
+  "Close the group. Its chat stays to read.": "关闭小组。聊天记录仍可阅读。",
+  "A vote": "一项投票",
+  "{voted} of {roll} has voted. {quorum} must vote. Yes and No show when it closes.": "{roll} 人中已有 {voted} 人投票。须达到 {quorum} 人投票。赞成和反对票数将在投票截止时显示。",
+  "{n} of {roll} have voted. {quorum} must vote. Yes and No show when it closes.|{n} of {roll} have voted. {quorum} must vote. Yes and No show when it closes.": {
+    "other": "{roll} 人中已有 {n} 人投票。须达到 {quorum} 人投票。赞成和反对票数将在投票截止时显示。"
+  },
+  "Yes {yes} · No {no}. {voted} of {roll} voted.": "赞成 {yes} · 反对 {no}。{roll} 人中有 {voted} 人参与了投票。",
+  "Open\u0004a vote": "进行中",
+  "Passed and carried out": "已通过并执行",
+  "Passed": "已通过",
+  "Did not pass": "未通过",
+  "Not enough people voted": "投票人数不足",
+  "Not enough keepers voted": "投票管理者人数不足",
+  "Passed, but not carried out: {reason}": "已通过，但未执行：{reason}",
+  "Passed, but not carried out": "已通过，但未执行",
+  "Passed, but there was nothing to do: {reason}": "已通过，但无需执行操作：{reason}",
+  "Passed, but there was nothing to do": "已通过，但无需执行操作",
+  "Closed\u0004a vote": "已截止",
+  "closing now": "即将截止",
+  "closes in {n} day|closes in {n} days": {
+    "other": "{n} 天后截止"
+  },
+  "closes in {n} hour|closes in {n} hours": {
+    "other": "{n} 小时后截止"
+  },
+  "closes within the hour": "1 小时内截止",
+  "Nobody sees who voted how. In a very small group, though, the result and who has voted can show it.": "没有人能看到谁投了什么票。不过在极小的小组中，投票结果和投票者名单可能会显现出来。",
+  "anyone can join": "任何人都可以加入",
+  "people ask, and a convenor lets them in": "申请加入，由召集人批准",
+  "by invitation only": "仅限邀请",
+  "a new rule": "新规则",
+  "Choose a new lead convenor": "选择新的首席召集人",
+  "Make someone a convenor": "任命某人为召集人",
+  "Make a convenor a member": "将召集人转为成员",
+  "Remove someone": "移除成员",
+  "Change who can join": "修改加入权限",
+  "Close the group": "关闭小组",
+  "Who should lead?": "谁来牵头？",
+  "Who should be a convenor?": "谁来担任召集人？",
+  "Which convenor?": "哪位召集人？",
+  "Remove whom?": "移除谁？",
+  "Open: anyone can join": "公开：任何人都可以加入",
+  "Ask to join": "申请加入",
+  "Invite only": "仅限邀请",
+  "The group was closed by its members’ vote. Its chat stays to read.": "该小组已由成员投票决定关闭。聊天记录仍可阅读。",
+  "Votes among the group's members and convenors; observers watch. More than half must vote. 7 days, or sooner once the answer can't change.": "由小组的成员和召集人参与投票；观察员旁听。必须有超过半数的人投票。期限 7 天，或者一旦结果无法改变便提前截止。"
 }

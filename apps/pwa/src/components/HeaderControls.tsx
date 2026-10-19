@@ -135,8 +135,8 @@ export function HeaderControls({ showSettings, setShowSettings, identityPubkey, 
         }}>
             <button
                 onClick={() => identityPubkey && onOpenProfile(identityPubkey)}
-                aria-label="My profile"
-                title="My profile"
+                aria-label={t('My profile')}
+                title={t('My profile')}
                 data-testid="header-profile"
                 className={`${PILL_BUTTON} text-bp-gold-fill hover:text-bp-gold-hover`}
             >
@@ -147,8 +147,8 @@ export function HeaderControls({ showSettings, setShowSettings, identityPubkey, 
 
             <button
                 onClick={openHelp}
-                aria-label="Help for this screen"
-                title="Help for this screen"
+                aria-label={t('Help for this screen')}
+                title={t('Help for this screen')}
                 data-testid="header-help"
                 className={`${PILL_BUTTON} text-bp-gold-fill hover:text-bp-gold-hover`}
             >
@@ -157,9 +157,9 @@ export function HeaderControls({ showSettings, setShowSettings, identityPubkey, 
 
             <button
                 onClick={() => setShowSettings(!showSettings)}
-                aria-label="Settings"
+                aria-label={t('Settings')}
                 aria-pressed={showSettings}
-                title="Settings"
+                title={t('Settings')}
                 data-testid="header-settings"
                 className={`${PILL_BUTTON} group ${showSettings ? 'text-bp-gold-on' : 'text-bp-gold-fill hover:text-bp-gold-hover'}`}
             >

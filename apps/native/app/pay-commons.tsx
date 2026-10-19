@@ -30,12 +30,14 @@ export default function PayCommonsScreen() {
     const { theme, colors } = useTheme();
     const styles = useStyles(({ colors }) => StyleSheet.create(namesListStyleSpec(colors)));
     const { identity } = useIdentity();
-    const params = useLocalSearchParams<{ code?: string; amount?: string }>();
-    const linkCode = typeof params.code === 'string' ? params.code.trim().toLowerCase() : '';
+    const params = useLocalSearchParams<{ code?: string | string[]; amount?: string | string[] }>();
+    const codeParam = typeof params.code === 'string' ? params.code : Array.isArray(params.code) ? params.code[0] : undefined;
+    const amountParam = typeof params.amount === 'string' ? params.amount : Array.isArray(params.amount) ? params.amount[0] : undefined;
+    const linkCode = typeof codeParam === 'string' ? codeParam.trim().toLowerCase() : '';
     // What was left on the debt when the admin shared the link (a work-off may have lowered it since): for that code only.
-    const linkLeft = linkCode && typeof params.amount === 'string' ? parseBeans(params.amount) : null;
+    const linkLeft = linkCode && typeof amountParam === 'string' ? parseBeans(amountParam) : null;
     const [amount, setAmount] = useState(linkLeft !== null ? String(linkLeft) : '');
-    const [code, setCode] = useState(typeof params.code === 'string' ? params.code : '');
+    const [code, setCode] = useState(typeof codeParam === 'string' ? codeParam : '');
     const [error, setError] = useState<string | null>(null);
     const [paid, setPaid] = useState<{ words: string; ref: string | null } | null>(null);
     const [busy, setBusy] = useState(false);

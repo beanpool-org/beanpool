@@ -162,6 +162,7 @@ const phone = vi.hoisted(() => ({
     enrolment: null as any,
     invite: { valid: true, inviterCallsign: 'Ana', communityName: 'Mullum' } as Record<string, unknown>,
     outgoing: null as any,
+    redeemFails: null as string | null,
 }));
 const door = vi.hoisted(() => ({
     check: { ok: true, profile: { features: {} } } as any,
@@ -190,7 +191,7 @@ vi.mock('../onboarding-state', async (importOriginal) => {
 });
 vi.mock('../db', () => ({
     checkInvite: async () => phone.invite,
-    redeemInvite: async () => ({}),
+    redeemInvite: async () => { if (phone.redeemFails) throw new Error(phone.redeemFails); return {}; },
     updateMemberProfile: async () => {},
     fetchNodeCallsign: async () => 'Sally',
     recordOnboardingEvent: async () => {},
@@ -343,7 +344,7 @@ beforeEach(() => {
     params.now = {};
     clip.has = false; clip.text = '';
     lock.none = true;
-    phone.stored = null; phone.pending = null; phone.enrolment = null; phone.outgoing = null;
+    phone.stored = null; phone.pending = null; phone.enrolment = null; phone.outgoing = null; phone.redeemFails = null;
     phone.invite = { valid: true, inviterCallsign: 'Ana', communityName: 'Mullum' };
     door.check = { ok: true, profile: { features: {} } }; door.answer = null; door.signIn = null; door.cachedFeatures = null;
     vaultState.waiting = null; vaultState.check = null; vaultState.candidates = [];
@@ -490,6 +491,20 @@ describe('the join wizard in the pseudo-locale: every sentence through t(), at 3
         // The way to Recover still shows under the screen's own sentence, in any language (it read the English before).
         button('🔑 Recover an existing account with seed phrase →', 'xx');
         check('Join BeanPool, a spent invite');
+    });
+
+    it("Join BeanPool: the redeem had no answer in time, and the reason is in the member's language too", async () => {
+        // utils/db.ts REDEEM_NO_ANSWER, the failure a member on a slow link gets (PR #2206 review; welcome-lines.test.ts holds it to db.ts).
+        const noAnswer = 'No answer from the community node in time. Check your connection and try again.';
+        phone.redeemFails = noAnswer;
+        await mount('xx');
+        await press('🎟️ Join with an invite', 'xx');
+        await type('Paste your invite link or code', 'BP-ABCD-1234', 'xx');
+        await type('Community name or address (e.g. mullum)', 'mullum', 'xx');
+        await type('Your name or nickname', 'Sally', 'xx');
+        await press('Next →', 'xx');
+        expect(host!.textContent).toContain(pseudoLocalise('Failed to register identity: {reason}').replace('{reason}', pseudoLocalise(noAnswer)));
+        check('Join BeanPool, the redeem with no answer');
     });
 
     it('Your Photo, Safety Backup (words shown, and the Go back? alert) and How it Works', async () => {

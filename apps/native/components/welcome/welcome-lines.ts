@@ -9,7 +9,8 @@
  * (seal the account to a sign-in), utils/join-link.ts (adds a sign-in to the account), utils/no-words-copy.ts (what is
  * said about the 12 words), utils/words-on-screen.ts and utils/words-clipboard.ts (the words on screen and on the
  * clipboard), utils/recovery-kit.ts (the printed words), utils/protection-state.ts (what protects the account, beside the
- * keeper enrolment). Welcome translates their sentences here, by the exact English
+ * keeper enrolment). utils/db.ts redeemInvite (signs the invite's redeem) writes its failures in English too: invite-next.ts
+ * reads them. Welcome translates their sentences here, by the exact English
  * (the key IS the English), and builds the sentences that carry a name, a count or a time again, word for word in
  * English. A sentence not here goes on to Settings' table (components/settings/settings-lines.ts: the key vault's
  * sentences, an unsafe community address), and otherwise shows exactly as it came: a community's own words, a sign-in
@@ -54,6 +55,11 @@ const FIXED: Readonly<Record<string, WordKey>> = {
     'This phone holds a different BeanPool account, so the join was not saved here.': word('This phone holds a different BeanPool account, so the join was not saved here.'),
     // utils/door-work.ts DOOR_WORK_MESSAGES.solverUnavailable.
     "This phone can't finish setting up a 12-words account right now. Try again, or sign in.": word("This phone can't finish setting up a 12-words account right now. Try again, or sign in."),
+    // utils/db.ts redeemInvite: the invite join's redeem with no answer in time (REDEEM_NO_ANSWER), a node that is down (a
+    // page came back in place of its answer), and an answer that didn't say the join was taken.
+    'No answer from the community node in time. Check your connection and try again.': word('No answer from the community node in time. Check your connection and try again.'),
+    'Relay Node Offline: The selected community node is currently unreachable.': word('Relay Node Offline: The selected community node is currently unreachable.'),
+    'The community node did not confirm the invite. Please try again.': word('The community node did not confirm the invite. Please try again.'),
     // utils/sso-recovery.ts recoverAccountWithSso: its progress, and why it stopped.
     'Connecting to node recovery session...': word('Connecting to node recovery session...'),
     'Requesting secure sign-in challenge...': word('Requesting secure sign-in challenge...'),
@@ -199,6 +205,14 @@ const FILLED: ReadonlyArray<{ pattern: RegExp; words: (m: RegExpMatchArray) => s
     { pattern: /^Google could not sign you in: ([\s\S]*)$/, words: (m) => t('Google could not sign you in: {reason}', { reason: m[1] }) },
     { pattern: /^Your node does not accept (\w+) sign-in\.$/, words: (m) => t('Your node does not accept {provider} sign-in.', { provider: m[1] }) },
     { pattern: /^Provider (\w+) is not supported on this device\.$/, words: (m) => t('Provider {provider} is not supported on this device.', { provider: m[1] }) },
+    // utils/db.ts redeemInvite: the node down, by its status, and a refusal with no words of the node's own (any text it sent
+    // instead follows, as it came).
+    {
+        pattern: /^Relay Node Offline: The selected community node is currently unreachable \(HTTP (\d+)\)\.$/,
+        words: (m) => t('Relay Node Offline: The selected community node is currently unreachable (HTTP {status}).', { status: m[1] }),
+    },
+    { pattern: /^Failed to redeem invite \(HTTP (\d+)\)$/, words: (m) => t('Failed to redeem invite (HTTP {status})', { status: m[1] }) },
+    { pattern: /^Failed to redeem invite \(HTTP (\d+)\): ([\s\S]*)$/, words: (m) => t('Failed to redeem invite (HTTP {status}): {reason}', { status: m[1], reason: m[2] }) },
     // utils/keeper-enrolment.ts: the account couldn't be sealed to the sign-in, with why.
     {
         pattern: /^Your account couldn't be locked to this sign-in \(([\s\S]*)\)\. Nothing was linked\.$/,

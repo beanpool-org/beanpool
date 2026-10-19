@@ -34,6 +34,8 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
     default: { getItem: async () => null, setItem: async () => {}, removeItem: async () => {}, getAllKeys: async () => [], multiRemove: async () => {} },
 }));
 vi.mock('expo-secure-store', () => ({ WHEN_UNLOCKED_THIS_DEVICE_ONLY: 6, getItemAsync: async () => null, setItemAsync: async () => {}, deleteItemAsync: async () => {} }));
+vi.mock('expo-sqlite', () => ({ openDatabaseAsync: async () => { throw new Error('no database here'); } }));
+vi.mock('expo-file-system/legacy', () => ({ cacheDirectory: '/tmp/cache/', documentDirectory: '/tmp/docs/' }));
 
 import { setLanguage } from '@beanpool/core';
 import { DOOR_MESSAGES, PRIVATE_PREVIEW_MESSAGE, WORK_MESSAGES, doorMessage, nameCheckMessage, readDoorAnswer, tryAgainIn, type DoorAnswer, type NameCheck } from '../global-join';
@@ -46,6 +48,7 @@ import { COPY_CLEARS_LINE } from '../words-clipboard';
 import { KIT_FAILED_LINE, KIT_PRINT_LABEL, KIT_SAVE_LABEL, KIT_SAVE_WARNING } from '../recovery-kit';
 import { COMMUNITY_RESTORE_NOT_OFFERED, RELEASED_COPY_NOT_OPENED } from '../sso-recovery';
 import { VAULT_MESSAGES } from '../vault';
+import { REDEEM_NO_ANSWER } from '../db';
 import { KEEPER_LABELS } from '../protection-state';
 import { SSO_PROVIDER_NAMES, type SsoProvider } from '../sso-providers';
 import type { KeeperEnrolmentResult } from '../keeper-enrolment';
@@ -61,7 +64,7 @@ const ROOT = path.resolve(__dirname, '../..');
 const SOURCES = [
     'utils/node-profile.ts', 'utils/global-join.ts', 'utils/door-work.ts', 'utils/sso-recovery.ts', 'utils/sso-signin.ts',
     'utils/sso-sheet-connect.ts', 'utils/keeper-enrolment.ts', 'utils/no-words-copy.ts', 'utils/words-on-screen.ts',
-    'utils/words-clipboard.ts', 'utils/recovery-kit.ts', 'utils/protection-state.ts', 'utils/vault.ts',
+    'utils/words-clipboard.ts', 'utils/recovery-kit.ts', 'utils/protection-state.ts', 'utils/vault.ts', 'utils/db.ts',
 ];
 
 /** Every string a source writes: literals, pieces joined with `+` read whole, and templates with `{x}` for each `${…}`. */
@@ -134,6 +137,19 @@ describe('the lower layers\' whole sentences', () => {
             // utils/vault.ts subjectOf: Recover with a sign-in whose token names no account (PR #2206 review).
             "That sign-in didn't say which account it was, so it can't be used. Try again.",
         ]) heldTo(english, () => welcomeLineWords(english));
+    });
+
+    it("the invite join's redeem that failed on the phone's side: no answer in time, a node that is down, no word it took the join", () => {
+        // utils/db.ts redeemInvite, on the join wizard's Next (PR #2206 review): the node's own `error` stays as it came.
+        for (const english of [
+            REDEEM_NO_ANSWER,
+            'Relay Node Offline: The selected community node is currently unreachable.',
+            'The community node did not confirm the invite. Please try again.',
+        ]) {
+            expect(WELCOME_FIXED_LINES, english).toContain(english);
+            heldTo(english, () => welcomeLineWords(english));
+        }
+        expect(inXx(() => welcomeLineWords('Invite code expired'))).toBe('Invite code expired');
     });
 
     it("anything else goes on to Settings' table (the key vault's words), and otherwise shows exactly as it came", () => {
@@ -224,6 +240,10 @@ describe('the sentences with a name, a number or a time in them', () => {
             ['Provider {x} is not supported on this device.', 'Provider facebook is not supported on this device.', ['facebook']],
             ['The global community does not accept {x} sign-in.', 'The global community does not accept apple sign-in.', ['apple']],
             ["Your account couldn't be locked to this sign-in ({x}). Nothing was linked.", "Your account couldn't be locked to this sign-in (no key). Nothing was linked.", ['no key']],
+            // utils/db.ts redeemInvite: the node down, and a refusal without its own words (any text it sent instead after it).
+            ['Relay Node Offline: The selected community node is currently unreachable (HTTP {x}).', 'Relay Node Offline: The selected community node is currently unreachable (HTTP 503).', []],
+            ['Failed to redeem invite (HTTP {x})', 'Failed to redeem invite (HTTP 500)', []],
+            [': [Text] {x}', 'Failed to redeem invite (HTTP 404): [Text] Not Found', ['Not Found']],
         ];
         for (const [template, english, names] of cases) {
             expect(WRITTEN.has(template), `"${template}" is not written in ${SOURCES.join(', ')}`).toBe(true);

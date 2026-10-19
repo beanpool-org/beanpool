@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ta",
     "name": "Tamil",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-19",
@@ -672,5 +672,14 @@
   "I thrive in spontaneous, novel settings": "புதிய சூழல்களில் சிறப்பாகச் செயல்படுகிறேன்",
   "I am patient with different paces and value keeping the community atmosphere harmonious.": "மற்றவர்களின் வேகத்திற்குப் பொறுமை காத்து, சமூக சூழலை இணக்கமாக வைத்திருப்பதை மதிக்கிறேன்.",
   "I push for faster progress when needed": "தேவைப்படும்போது விரைவான முன்னேற்றத்திற்காக உந்துகிறேன்",
-  "I push for higher standards when needed": "தேவைப்படும்போது உயர் தரத்திற்காக வலியுறுத்துகிறேன்"
+  "I push for higher standards when needed": "தேவைப்படும்போது உயர் தரத்திற்காக வலியுறுத்துகிறேன்",
+  "Type an amount.": "ஒரு தொகையை உள்ளிடவும்.",
+  "The amount can’t be below 0.": "தொகை 0-க்குக் குறைவாக இருக்க முடியாது.",
+  "Type the amount without thousands separators, like {example}.": "{example} போன்ற ஆயிரங்களின் பிரிப்பான்கள் இல்லாமல் தொகையை உள்ளிடவும்.",
+  "Type one decimal mark at most, like {example}.": "{example} போன்ற அதிகபட்சம் ஒரு தசமப் புள்ளியை உள்ளிடவும்.",
+  "Type at most {n} decimal, like {example}.|Type at most {n} decimals, like {example}.": {
+    "one": "{example} போன்ற அதிகபட்சம் {n} தசம இலக்கத்தை உள்ளிடவும்.",
+    "other": "{example} போன்ற அதிகபட்சம் {n} தசம இலக்கங்களை உள்ளிடவும்."
+  },
+  "Type the amount as a number, like {example}.": "{example} போன்ற தொகையை ஒரு எண்ணாக உள்ளிடவும்."
 }

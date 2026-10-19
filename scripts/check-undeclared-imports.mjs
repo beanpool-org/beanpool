@@ -64,6 +64,9 @@ const WORKSPACES = [
   },
   {
     path: 'apps/pwa',
+    // Shared test helpers named *.test-support.ts(x) (e.g. words-xx.test-support.ts) are imported only by tests: they may use
+    // devDependencies like any test file.
+    testFilePattern: /(^|\/)[^/]*\.test-support\.tsx?$/,
   },
   {
     // Guarded first, and specifically against the workspace hoisting trap.

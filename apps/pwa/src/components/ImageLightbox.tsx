@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { resolveImageUrl } from '../lib/avatar';
+import { t } from '@beanpool/core';
 
 export interface ImageLightboxProps {
     isOpen: boolean;
@@ -198,16 +199,17 @@ export function ImageLightbox({
     // spinner that the currentIndex effect just re-armed never clears.
     const imageKey = `${currentIndex}-${displayUrl}-${retryKey}`;
 
+    // The title is the member's own (a listing's title, a name), shown as written inside the sentence.
     const altText = title
-        ? `${title} - Photo ${currentIndex + 1} of ${count}`
-        : `Photo ${currentIndex + 1} of ${count}`;
+        ? t('{title} - Photo {n} of {count}', { title, n: currentIndex + 1, count })
+        : t('Photo {n} of {count}', { n: currentIndex + 1, count });
 
     return (
         <div
             ref={dialogRef}
             role="dialog"
             aria-modal="true"
-            aria-label={title ? `Photo viewer: ${title}` : 'Photo viewer'}
+            aria-label={title ? t('Photo viewer: {title}', { title }) : t('Photo viewer')}
             className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/90 dark:bg-black/95 backdrop-blur-sm select-none p-3 sm:p-6 transition-opacity duration-200"
             onClick={(e) => {
                 e.stopPropagation();
@@ -245,7 +247,7 @@ export function ImageLightbox({
                         e.stopPropagation();
                         onClose();
                     }}
-                    aria-label="Close photo viewer"
+                    aria-label={t('Close photo viewer')}
                     className="pointer-events-auto min-w-[44px] min-h-[44px] w-11 h-11 flex items-center justify-center rounded-full bg-black/60 hover:bg-black/80 active:scale-95 text-white border border-white/25 shadow-lg transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                 >
                     <svg
@@ -274,12 +276,12 @@ export function ImageLightbox({
                 {imageStatus === 'loading' && (
                     <div
                         role="status"
-                        aria-label="Loading photo"
+                        aria-label={t('Loading photo')}
                         className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-white/90 z-10"
                     >
                         <div className="w-10 h-10 border-3 border-white/20 border-t-white rounded-full animate-spin" />
                         <span className="text-xs font-medium tracking-wide text-white/75">
-                            Loading photo…
+                            {t('Loading photo…')}
                         </span>
                     </div>
                 )}
@@ -294,10 +296,10 @@ export function ImageLightbox({
                             📷
                         </div>
                         <h3 className="font-extrabold text-base text-white mb-1">
-                            Photo failed to load
+                            {t('Photo failed to load')}
                         </h3>
                         <p className="text-xs text-white/70 mb-4 leading-relaxed">
-                            The image could not be displayed or network connection is slow.
+                            {t('The image could not be displayed or network connection is slow.')}
                         </p>
                         <button
                             type="button"
@@ -307,7 +309,7 @@ export function ImageLightbox({
                             }}
                             className="min-w-[44px] min-h-[44px] px-5 py-2.5 bg-white/20 hover:bg-white/30 active:scale-95 text-white rounded-xl text-xs font-bold transition-all border border-white/20 shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                         >
-                            Retry
+                            {t('Retry')}
                         </button>
                     </div>
                 )}
@@ -358,7 +360,7 @@ export function ImageLightbox({
                             e.stopPropagation();
                             handlePrev();
                         }}
-                        aria-label="Previous photo"
+                        aria-label={t('Previous photo')}
                         className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 min-w-[44px] min-h-[44px] w-11 h-11 flex items-center justify-center rounded-full bg-black/60 hover:bg-black/80 active:scale-95 text-white border border-white/25 shadow-lg transition-all z-20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                     >
                         <svg
@@ -381,7 +383,7 @@ export function ImageLightbox({
                             e.stopPropagation();
                             handleNext();
                         }}
-                        aria-label="Next photo"
+                        aria-label={t('Next photo')}
                         className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 min-w-[44px] min-h-[44px] w-11 h-11 flex items-center justify-center rounded-full bg-black/60 hover:bg-black/80 active:scale-95 text-white border border-white/25 shadow-lg transition-all z-20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                     >
                         <svg
@@ -411,7 +413,7 @@ export function ImageLightbox({
                                         e.stopPropagation();
                                         setCurrentIndex(i);
                                     }}
-                                    aria-label={`Go to photo ${i + 1} of ${count}`}
+                                    aria-label={t('Go to photo {n} of {count}', { n: i + 1, count })}
                                     aria-current={i === currentIndex ? 'true' : undefined}
                                     className={`transition-all duration-200 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white ${
                                         i === currentIndex

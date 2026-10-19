@@ -17,7 +17,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { platformMeta, isWebUrl, type ChannelPlatform } from '@beanpool/core';
+import { platformMeta, platformName, isWebUrl, t, tn, type ChannelPlatform } from '@beanpool/core';
 import {
     type MemberCreatorChannel,
     type PostCountNudge,
@@ -204,13 +204,13 @@ export function PulseNudges({
                     <div className="flex items-center justify-between mb-1.5">
                         <div className="flex items-center gap-1.5 font-bold text-sm text-nature-900 dark:text-white">
                             <span aria-hidden="true">{platformMeta(clipboardPlatform).icon}</span>
-                            <span>Link from Clipboard</span>
+                            <span>{t('Link from Clipboard')}</span>
                         </div>
                         <button
                             type="button"
                             onClick={dismissClipboard}
                             className="min-w-[44px] min-h-[44px] flex items-center justify-center text-nature-400 hover:text-nature-700 dark:hover:text-nature-200 rounded-xl bg-transparent hover:bg-nature-100 dark:hover:bg-nature-800 border-none cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terra-500"
-                            aria-label="Dismiss clipboard suggestion"
+                            aria-label={t('Dismiss clipboard suggestion')}
                         >
                             ✕
                         </button>
@@ -221,7 +221,7 @@ export function PulseNudges({
                     </p>
 
                     <p className="text-xs sm:text-sm text-nature-700 dark:text-nature-300 leading-relaxed mb-3">
-                        Found a link to your {platformMeta(clipboardPlatform).label} channel. Would you like to share it to The Pulse?
+                        {t('Found a link to your {platform} channel. Would you like to share it to The Pulse?', { platform: platformName(clipboardPlatform) })}
                     </p>
 
                     <div className="flex items-center justify-end gap-2">
@@ -230,14 +230,14 @@ export function PulseNudges({
                             onClick={dismissClipboard}
                             className="min-h-[44px] px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-700 dark:text-nature-300 hover:bg-nature-50 dark:hover:bg-nature-700 dark:hover:text-nature-200 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terra-500 focus-visible:ring-offset-1"
                         >
-                            Dismiss
+                            {t('Dismiss')}
                         </button>
                         <button
                             type="button"
                             onClick={handleAddClipboard}
                             className="min-h-[44px] px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-bold bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on cursor-pointer shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terra-500 focus-visible:ring-offset-1"
                         >
-                            Add to Pulse
+                            {t('Add to Pulse')}
                         </button>
                     </div>
                 </div>
@@ -246,8 +246,7 @@ export function PulseNudges({
             {/* Post-Count Nudges */}
             {postCountNudges.map((nudge) => {
                 const meta = platformMeta(nudge.platform);
-                const count = nudge.newPostsCount;
-                const countText = count === 1 ? '1 new thing' : `${count} new things`;
+                const name = platformName(nudge.platform);
 
                 return (
                     <div
@@ -258,20 +257,20 @@ export function PulseNudges({
                         <div className="flex items-center justify-between mb-1.5">
                             <div className="flex items-center gap-1.5 font-bold text-sm text-nature-900 dark:text-white">
                                 <span aria-hidden="true">{meta.icon}</span>
-                                <span>{meta.label} Updates</span>
+                                <span>{t('{platform} Updates', { platform: name })}</span>
                             </div>
                             <button
                                 type="button"
                                 onClick={() => handleDismissPostCountNudge(nudge)}
                                 className="min-w-[44px] min-h-[44px] flex items-center justify-center text-nature-400 hover:text-nature-700 dark:hover:text-nature-200 rounded-xl bg-transparent hover:bg-nature-100 dark:hover:bg-nature-800 border-none cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terra-500"
-                                aria-label="Dismiss update notice"
+                                aria-label={t('Dismiss update notice')}
                             >
                                 ✕
                             </button>
                         </div>
 
                         <p className="text-xs sm:text-sm text-nature-700 dark:text-nature-300 leading-relaxed mb-3">
-                            You've posted {countText} on {meta.label} since your last visit.
+                            {tn(nudge.newPostsCount, "You've posted {n} new thing on {platform} since your last visit.", "You've posted {n} new things on {platform} since your last visit.", { platform: name })}
                         </p>
 
                         <div className="flex items-center justify-end gap-2">
@@ -280,14 +279,14 @@ export function PulseNudges({
                                 onClick={() => handleDismissPostCountNudge(nudge)}
                                 className="min-h-[44px] px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-700 dark:text-nature-300 hover:bg-nature-50 dark:hover:bg-nature-700 dark:hover:text-nature-200 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terra-500 focus-visible:ring-offset-1"
                             >
-                                Dismiss
+                                {t('Dismiss')}
                             </button>
                             <button
                                 type="button"
                                 onClick={() => onShareChannel && onShareChannel(nudge.channelId)}
                                 className="min-h-[44px] px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-bold bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on cursor-pointer shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terra-500 focus-visible:ring-offset-1"
                             >
-                                Share
+                                {t('Share')}
                             </button>
                         </div>
                     </div>

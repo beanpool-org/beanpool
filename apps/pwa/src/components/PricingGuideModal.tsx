@@ -7,11 +7,62 @@ import {
     PRICING_CATEGORIES,
     DEFAULT_PRICING_CATALOG,
     DEFAULT_PRICING_CONFIG,
+    formatNumber,
+    t,
+    tn,
+    word,
     type PricingGuideItem,
     type PricingCategory,
+    type PricingCategoryMeta,
     type PricingConfig,
+    type WordKey,
 } from '@beanpool/core';
 import { getPricingGuideApi, submitPricingReportApi } from '../lib/api';
+import { Sentence } from './Sentence';
+
+/**
+ * The category pills' names, as core's PRICING_CATEGORIES writes them (pricing-catalog.ts), marked here and shown
+ * through t() in the member's language; a category this build doesn't know, as the catalog wrote it. The catalog's
+ * own items (names, descriptions, units, season hints) come from the node's catalog and are shown as written.
+ */
+const PRICING_CATEGORY_WORDS: Readonly<Record<PricingCategory, WordKey>> = {
+    food: word('Food & Produce'),
+    services: word('Services & Trade'),
+    labour: word('Labour & Help'),
+    tools: word('Tools & Hardware'),
+    goods: word('Goods & Materials'),
+    garden: word('Plants & Garden'),
+    housing: word('Housing & Space'),
+    transport: word('Transport & Rides'),
+    education: word('Education & Lessons'),
+    arts: word('Arts & Crafts'),
+    health: word('Health & Wellness'),
+    care: word('Care & Family'),
+    animals: word('Animals & Pets'),
+    tech: word('Tech & Digital'),
+    energy: word('Energy & Firewood'),
+    mindset: word('Mindset & Wisdom'),
+    general: word('General & Community'),
+};
+
+function categoryWords(cat: PricingCategoryMeta): string {
+    return Object.prototype.hasOwnProperty.call(PRICING_CATEGORY_WORDS, cat.id) ? t(PRICING_CATEGORY_WORDS[cat.id]) : cat.label;
+}
+
+/** A price in Beans for a screen reader (the bean is hidden): "12 Beans", as the row always read. */
+function beansWords(n: number): string {
+    return tn(n, '{n} Beans', '{n} Beans');
+}
+
+/** The select control's whole name: the item (the catalog's, as written), the price, its unit and the trend. */
+function selectLabel(item: PricingGuideItem, price: number): string {
+    const label = item.unit
+        ? tn(price, 'Select {name} for offer at {n} Beans per {unit}', 'Select {name} for offer at {n} Beans per {unit}', { name: item.name, unit: item.unit })
+        : tn(price, 'Select {name} for offer at {n} Beans', 'Select {name} for offer at {n} Beans', { name: item.name });
+    if (item.trend === 'up') return t('{label}, price rising', { label });
+    if (item.trend === 'down') return t('{label}, price falling', { label });
+    return label;
+}
 
 interface Props {
     isOpen: boolean;
@@ -128,17 +179,17 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                 <div className="flex items-center justify-between p-4 sm:p-5 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50">
                     <div>
                         <h2 id="pricing-guide-title" className="text-lg sm:text-xl font-extrabold text-zinc-900 dark:text-zinc-50 flex items-center gap-2">
-                            <span aria-hidden="true">💡</span> Community Pricing Guide
+                            <span aria-hidden="true">💡</span> {t('Community Pricing Guide')}
                         </h2>
                         <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-                            {items.length} items & services benchmarked
+                            {tn(items.length, '{n} items & services benchmarked', '{n} items & services benchmarked')}
                         </p>
                     </div>
                     <button
                         type="button"
                         onClick={onClose}
                         className="w-8 h-8 rounded-full flex items-center justify-center text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 transition-colors"
-                        aria-label="Close pricing guide"
+                        aria-label={t('Close pricing guide')}
                     >
                         ✕
                     </button>
@@ -150,8 +201,8 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                         <span className="absolute left-3 text-zinc-400 text-sm" aria-hidden="true">🔍</span>
                         <input
                             type="text"
-                            aria-label="Search community price catalog"
-                            placeholder="Search produce, services, trades, gear..."
+                            aria-label={t('Search community price catalog')}
+                            placeholder={t('Search produce, services, trades, gear...')}
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                             className="w-full pl-9 pr-10 py-2 text-sm rounded-xl bg-zinc-100 dark:bg-zinc-800 border-none text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
@@ -159,7 +210,7 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                         {searchQuery && (
                             <button
                                 type="button"
-                                aria-label="Clear search"
+                                aria-label={t('Clear search')}
                                 onClick={() => setSearchQuery('')}
                                 className="absolute right-1.5 p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 font-bold rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                             >
@@ -181,7 +232,7 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                                 : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700'
                         }`}
                     >
-                        <span aria-hidden="true">🌟</span> All Items
+                        <span aria-hidden="true">🌟</span> {t('All Items')}
                     </button>
                     {PRICING_CATEGORIES.map((cat) => {
                         const active = selectedCategory === cat.id;
@@ -197,7 +248,7 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                                         : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700'
                                 }`}
                             >
-                                <span aria-hidden="true">{cat.emoji}</span> {cat.label}
+                                <span aria-hidden="true">{cat.emoji}</span> {categoryWords(cat)}
                             </button>
                         );
                     })}
@@ -208,8 +259,8 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                     <span className="text-sm" aria-hidden="true">💡</span>
                     <span>
                         {onSelectOfferItem
-                            ? 'Tap any item to auto-fill your offer listing with community price estimates.'
-                            : 'Community estimates based on local marketplace trades and seasonal averages.'}
+                            ? t('Tap any item to auto-fill your offer listing with community price estimates.')
+                            : t('Community estimates based on local marketplace trades and seasonal averages.')}
                     </span>
                 </div>
 
@@ -217,12 +268,12 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                 <div className="flex-1 overflow-y-auto p-4 space-y-2.5">
                     {loading ? (
                         <div className="flex items-center justify-center py-12 text-zinc-400 text-sm">
-                            <span className="animate-spin mr-2" aria-hidden="true">⏳</span> Loading community estimates...
+                            <span className="animate-spin mr-2" aria-hidden="true">⏳</span> {t('Loading community estimates...')}
                         </div>
                     ) : filteredItems.length === 0 ? (
                         <div className="py-12 text-center text-zinc-400">
                             <p className="text-3xl mb-2" aria-hidden="true">🔍</p>
-                            <p className="text-sm font-medium">No items found matching "{searchQuery}"</p>
+                            <p className="text-sm font-medium">{t('No items found matching "{query}"', { query: searchQuery })}</p>
                         </div>
                     ) : (
                         filteredItems.map((item) => {
@@ -236,7 +287,7 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                             return (
                                 <div
                                     key={item.id}
-                                    className={`relative isolate flex items-center gap-3 p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200/80 dark:border-zinc-800 transition-all ${
+                                    className={`relative isolate flex flex-wrap items-center gap-3 p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200/80 dark:border-zinc-800 transition-all ${
                                         onSelectOfferItem
                                             ? 'cursor-pointer hover:border-emerald-500/50 hover:bg-zinc-100/80 dark:hover:bg-zinc-800/80 active:scale-[0.99]'
                                             : ''
@@ -258,7 +309,7 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                                                 onClose();
                                             }}
                                             className="absolute -inset-px rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
-                                            aria-label={`Select ${item.name} for offer at ${effectivePrice} Beans${item.unit ? ` per ${item.unit}` : ''}${item.trend === 'up' ? ', price rising' : item.trend === 'down' ? ', price falling' : ''}`}
+                                            aria-label={selectLabel(item, effectivePrice)}
                                             aria-describedby={showSeasonality ? `${descriptionId} ${seasonalityId}` : descriptionId}
                                         />
                                     )}
@@ -272,8 +323,9 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                                         )}
                                     </div>
 
-                                    {/* Description */}
-                                    <div className="flex-1 min-w-0">
+                                    {/* Description: at least 6rem wide; below that the price moves under it (at 320 px with 1.3x
+                                        text the price took the whole row and left the name 0 px wide, in English too). */}
+                                    <div className="flex-1 min-w-[6rem]">
                                         <div className="flex items-center gap-2">
                                             <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 truncate">{item.name}</h3>
                                             {/* relative z-10 for the same reason as the Report button: the select overlay is a
@@ -281,7 +333,7 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                                                 hover its title tooltip needs. */}
                                             <span
                                                 className={`relative z-10 w-2 h-2 rounded-full flex-shrink-0 ${confidenceDot}`}
-                                                title={`Confidence: ${item.confidenceCount || 0} listings`}
+                                                title={tn(item.confidenceCount || 0, 'Confidence: {n} listings', 'Confidence: {n} listings')}
                                             />
                                         </div>
                                         <p id={descriptionId} className="text-xs text-zinc-500 dark:text-zinc-400 line-clamp-1 mt-0.5">{item.description}</p>
@@ -293,12 +345,13 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                                     </div>
 
                                     {/* Price & Actions */}
-                                    <div className="flex flex-col items-end flex-shrink-0">
+                                    <div className="flex flex-col items-end flex-shrink-0 ml-auto">
                                         <div className="flex items-center gap-1 bg-bp-chip-ok-tint text-bp-chip-ok-ink px-2.5 py-1 rounded-lg border border-transparent text-xs font-bold">
-                                            <span><span aria-hidden="true">🫘</span> {effectivePrice}<span className="sr-only"> Beans</span></span>
+                                            {/* The bean and the number are drawn; a screen reader hears the price as one sentence. */}
+                                            <span><span aria-hidden="true">🫘 {formatNumber(effectivePrice)}</span><span className="sr-only">{beansWords(effectivePrice)}</span></span>
                                             {item.unit && <span className="text-[10px] text-emerald-600/80 dark:text-emerald-400/80 font-normal">/{item.unit}</span>}
-                                            {item.trend === 'up' && <><span className="text-emerald-500 text-[10px] ml-0.5" aria-hidden="true">▲</span><span className="sr-only">, price rising</span></>}
-                                            {item.trend === 'down' && <><span className="text-rose-500 dark:text-rose-400 text-[10px] ml-0.5" aria-hidden="true">▼</span><span className="sr-only">, price falling</span></>}
+                                            {item.trend === 'up' && <><span className="text-emerald-500 text-[10px] ml-0.5" aria-hidden="true">▲</span><span className="sr-only">{t(', price rising')}</span></>}
+                                            {item.trend === 'down' && <><span className="text-rose-500 dark:text-rose-400 text-[10px] ml-0.5" aria-hidden="true">▼</span><span className="sr-only">{t(', price falling')}</span></>}
                                         </div>
 
                                         <div className="flex items-center gap-1 mt-1.5">
@@ -306,7 +359,7 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                                                 <span
                                                     className="px-2 py-0.5 bg-bp-commit-fill text-bp-commit-on rounded text-[11px] font-semibold pointer-events-none"
                                                 >
-                                                    Offer →
+                                                    {t('Offer →')}
                                                 </span>
                                             )}
                                             {/* relative z-10 keeps this above the select overlay spanning the row; the row's `isolate` keeps that z-10 local. */}
@@ -314,8 +367,8 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                                                 type="button"
                                                 onClick={() => setReportingItem(item)}
                                                 className="relative z-10 min-w-[44px] min-h-[44px] flex items-center justify-center p-1 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 text-xs rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
-                                                title="Report price feedback"
-                                                aria-label={`Report price for ${item.name}`}
+                                                title={t('Report price feedback')}
+                                                aria-label={t('Report price for {name}', { name: item.name })}
                                             >
                                                 <span aria-hidden="true">🚩</span>
                                             </button>
@@ -342,19 +395,31 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                             {reportSuccess ? (
                                 <div className="text-center py-6" role="status" aria-live="polite">
                                     <div className="text-4xl mb-2" aria-hidden="true">✨</div>
-                                    <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100">Feedback Submitted</h3>
-                                    <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">Thank you for helping keep community prices fair.</p>
+                                    <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100">{t('Feedback Submitted')}</h3>
+                                    <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">{t('Thank you for helping keep community prices fair.')}</p>
                                 </div>
                             ) : (
                                 <form onSubmit={handleSubmitReport}>
                                     <h3 id="report-modal-title" className="text-base font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-1.5">
-                                        <span aria-hidden="true">🚩</span> Report Price
+                                        <span aria-hidden="true">🚩</span> {t('Report Price')}
                                     </h3>
                                     <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5 mb-4">
-                                        {reportingItem.name} • Current: <span aria-hidden="true">🫘</span> {reportingItem.priceBeans}<span className="sr-only"> Beans</span>
+                                        {/* The item's name is the catalog's, as written; the bean and the number are drawn, and a
+                                            screen reader hears the price as one sentence. */}
+                                        <Sentence
+                                            text={t('{name} • Current: {price}', { name: reportingItem.name })}
+                                            parts={{
+                                                price: (
+                                                    <>
+                                                        <span aria-hidden="true">🫘 {formatNumber(reportingItem.priceBeans)}</span>
+                                                        <span className="sr-only">{beansWords(reportingItem.priceBeans)}</span>
+                                                    </>
+                                                ),
+                                            }}
+                                        />
                                     </p>
 
-                                    <div className="grid grid-cols-3 gap-2 mb-3" role="radiogroup" aria-label="Feedback reason">
+                                    <div className="grid grid-cols-3 gap-2 mb-3" role="radiogroup" aria-label={t('Feedback reason')}>
                                         <button
                                             type="button"
                                             role="radio"
@@ -366,7 +431,7 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                                                     : 'bg-zinc-50 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300'
                                             }`}
                                         >
-                                            <span aria-hidden="true">📈</span> Too High
+                                            <span aria-hidden="true">📈</span> {t('Too High')}
                                         </button>
                                         <button
                                             type="button"
@@ -379,7 +444,7 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                                                     : 'bg-zinc-50 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300'
                                             }`}
                                         >
-                                            <span aria-hidden="true">📉</span> Too Low
+                                            <span aria-hidden="true">📉</span> {t('Too Low')}
                                         </button>
                                         <button
                                             type="button"
@@ -392,14 +457,14 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                                                     : 'bg-zinc-50 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300'
                                             }`}
                                         >
-                                            <span aria-hidden="true">💬</span> Other
+                                            <span aria-hidden="true">💬</span> {t('Other')}
                                         </button>
                                     </div>
 
                                     <textarea
                                         rows={3}
-                                        aria-label="Additional feedback notes"
-                                        placeholder="Optional: Why is this estimate wrong?"
+                                        aria-label={t('Additional feedback notes')}
+                                        placeholder={t('Optional: Why is this estimate wrong?')}
                                         value={reportComment}
                                         onChange={(e) => setReportComment(e.target.value)}
                                         className="w-full text-xs p-2.5 rounded-xl bg-zinc-100 dark:bg-zinc-800 border-none text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 mb-4"
@@ -411,14 +476,14 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                                             onClick={() => setReportingItem(null)}
                                             className="flex-1 py-2 min-h-[44px] rounded-xl text-xs font-semibold bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                                         >
-                                            Cancel
+                                            {t('Cancel')}
                                         </button>
                                         <button
                                             type="submit"
                                             disabled={reportSubmitting}
                                             className="flex-1 py-2 min-h-[44px] rounded-xl text-xs font-semibold bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:opacity-50"
                                         >
-                                            {reportSubmitting ? 'Submitting...' : 'Submit'}
+                                            {reportSubmitting ? t('Submitting...') : t('Submit')}
                                         </button>
                                     </div>
                                 </form>

@@ -6,9 +6,9 @@
  * Shown as written: what the member and their community wrote (a name, a bio, the page's address, version numbers), the
  * 12 words (English in every language: the account key is made from them), DELETE (what a member types to confirm:
  * the code compares it), the language list (each language in itself), the brand and beanpool.org, and the guide's
- * pages (English until slice S5). Sentences that key-path files build (lib/delete-here, lib/words-clipboard,
- * lib/recovery-kit, components/SignInRecoveryLine) are the join and recovery sweep's (W4): shown whole, as written,
- * inside ours.
+ * pages (English until slice S5). Sentences that key-path files build (lib/recovery-kit, components/SignInRecoveryLine)
+ * are the join and recovery sweep's (W4): shown whole, as written, inside ours. W4 says lib/delete-here's and
+ * lib/words-clipboard's through components/key-lines.ts, so the delete card and the copy line are held to xx here.
  *
  * And a language switch: choosing another language in Settings → Language redraws the page in it, live.
  */
@@ -17,8 +17,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AREA_STEP_WORDS, AREA_TOWN_SEARCH_WORDS, NOMINATIM_SEARCH_URL, t } from '@beanpool/core';
 import { SettingsPage } from './SettingsPage';
 import { NO_WORDS_HERE } from '../components/SignInRecoveryLine';
-import { WEB_DELETE_CARD_LINE, WEB_DELETE_CHECKING_LINE, WEB_VAULT_COPY_LINE, webLastCommunityLine } from '../lib/delete-here';
-import { WEB_COPY_CLEARS_LINE } from '../lib/words-clipboard';
+import { WEB_PURGE_NOT_CONFIRMED, webDeleteFailedLine } from '../lib/delete-here';
 import { KIT_WEB_LABEL } from '../lib/recovery-kit';
 import * as api from '../lib/api';
 import { readMyArea, useNearbyLimits } from '../lib/member-area';
@@ -61,7 +60,7 @@ const ARCHETYPE = JSON.stringify({ primary: 'weaver', secondary: 'connector', mo
 const OTHERS = [
     'Kim', 'K', 'me-pk…', 'Grows beans by the river', 'Blocked Bea', window.location.host, window.location.origin, 'blocked-pk-0000000000000000'.slice(0, 16),
     ...WORDS, 'DELETE', 'CALLSIGN', ...LANGUAGE_LIST, ...AS_WRITTEN, 'Ed25519',
-    WEB_DELETE_CARD_LINE, WEB_DELETE_CHECKING_LINE, WEB_VAULT_COPY_LINE, webLastCommunityLine(true), WEB_COPY_CLEARS_LINE, NO_WORDS_HERE, KIT_WEB_LABEL,
+    NO_WORDS_HERE, KIT_WEB_LABEL,
 ];
 
 const said: string[] = [];
@@ -229,10 +228,34 @@ describe('Settings in the pseudo-locale: every word on it came through t() (word
         expect(await screen.findByText(xx('🚪 Confirm Device Sign Out'))).toBeInTheDocument();
         expect(unwrapped()).toEqual([]);
         await tap('Cancel');
+        expect(screen.getByTestId('delete-card-line').textContent?.startsWith('[')).toBe(true);
         await tap('Permanently Delete Account');
         const box = await screen.findByLabelText(xx('Type callsign {name} or {word} to confirm permanent deletion').replace('{name}', 'Kim').replace('{word}', 'DELETE'));
         expect(box).toHaveAttribute('placeholder', xx('Type "{name}" or "{word}"').replace('{name}', 'Kim').replace('{word}', 'DELETE'));
         expect(unwrapped()).toEqual([]);
+        // What leaves this browser, and the key vault's copy: the page's own node is the only one, so the key goes.
+        await screen.findByTestId('delete-vault-copy');
+        expect(unwrapped()).toEqual([]);
+    });
+
+    it('Permanently Delete Account refused by the node: the reason and what stays, in the member\'s language, redrawn on a switch', async () => {
+        // The node answers the purge with a 2xx that isn't { ok: true }: nothing in this browser changes.
+        vi.stubGlobal('fetch', vi.fn(async (url: unknown) => new Response('{}', { status: String(url).includes('/api/member/purge') ? 200 : 404 })));
+        await showIn('xx');
+        renderSettings();
+        await tap('Account Deletion & Sign Out');
+        await tap('Permanently Delete Account');
+        const box = await screen.findByLabelText(xx('Type callsign {name} or {word} to confirm permanent deletion').replace('{name}', 'Kim').replace('{word}', 'DELETE'));
+        fireEvent.change(box, { target: { value: 'DELETE' } });
+        await screen.findByTestId('delete-vault-copy');
+        await tap('🔥 Purge Account');
+        const alert = await waitFor(() => { const el = document.getElementById('purge-error-alert'); expect(el).not.toBeNull(); return el!; });
+        expect(alert.textContent?.startsWith('[')).toBe(true);
+        expect(unwrapped()).toEqual([]);
+        // Switched to English while it is shown: the lib file's sentence, exactly.
+        await showIn('en');
+        expect(alert.textContent).toBe(webDeleteFailedLine(WEB_PURGE_NOT_CONFIRMED));
+        expect(bracketed()).toBe(0);
     });
 
     it('Suggest a change, the profile editor and the guide', async () => {

@@ -25,16 +25,25 @@ import { WEB_REKEY_TEXT } from '../lib/web-rekey';
 import { approveUnlock, lookupUnlock, pasteProblemMessage, unlockRefusalMessage } from '../lib/takeover-unlock';
 import { OWNER_WORDS_COPY } from '../lib/owner-words';
 import { KIT_WEB_FAILED_LINE, KIT_WEB_LABEL, KIT_WEB_WARNING } from '../lib/recovery-kit';
+import {
+    hostOf, purgeHere, webDeletedButLine, webDeleteFailedLine, webKeepsKeyLine, webLastCommunityLine, WEB_COMMUNITY_CHANGED, WEB_DELETE_CARD_LINE,
+    WEB_DELETE_CHECKING_LINE, WEB_PURGE_NO_ANSWER, WEB_PURGE_NOT_CONFIRMED, WEB_VAULT_COPY_LINE,
+} from '../lib/delete-here';
+import { WEB_COPY_CLEARS_LINE } from '../lib/words-clipboard';
 
 /** The lib files key-lines.ts reads (its header names them). */
 const LIB_FILES = [
     'web-join.ts', 'identity.ts', 'door-work.ts', 'words-work.ts', 'web-restore.ts', 'link-signin.ts', 'web-rekey.ts', 'takeover-unlock.ts',
-    'owner-words.ts', 'recovery-kit.ts',
+    'owner-words.ts', 'recovery-kit.ts', 'delete-here.ts', 'words-clipboard.ts',
 ];
 const HOST = 'standby.example.org';
 const UNLOCK_REFUSALS = ['not-a-recipient', 'wrong-community', 'wrong-signer', 'wrong-envelope', 'bad-signature', 'wrong-kind', 'expired', 'used', 'closed', 'unknown-session', 'malformed'] as const;
 const PROVIDERS: JoinProvider[] = ['google', 'apple', 'facebook'];
-const NAMES = ['Google', 'Apple', 'Facebook', 'Alice', 'Maria José', 'Bob. Use your 12 words'];
+/** The page's own community and the one deleted at (lib/delete-here.ts), and a browser's own error. */
+const HOME = 'mullum.beanpool.org';
+const THERE = 'castlemaine.beanpool.org:8443';
+const BROWSER_ERROR = 'QuotaExceededError: The quota has been exceeded.';
+const NAMES = ['Google', 'Apple', 'Facebook', 'Alice', 'Maria José', 'Bob. Use your 12 words', HOME, THERE, BROWSER_ERROR];
 
 /** Every string literal a lib file writes, and the sentence a template literal starts with ("Too many tries just now. ${…}"). */
 function literals(file: string): string[] {
@@ -100,6 +109,14 @@ function libSentences(): string[] {
     for (const v of Object.values(OWNER_WORDS_COPY) as unknown[]) if (typeof v === 'string') out.push(v);
     out.push(KIT_WEB_LABEL, KIT_WEB_WARNING, KIT_WEB_FAILED_LINE);
     for (const r of UNLOCK_REFUSALS) out.push(unlockRefusalMessage(r as never, HOST));
+    for (const hasWords of [true, false]) {
+        for (const membership of ['member', 'unreachable'] as const) {
+            out.push(webKeepsKeyLine({ kind: 'this-one', here: `https://${THERE}`, keeps: { url: `https://${HOME}`, membership } }, hasWords));
+        }
+        out.push(webLastCommunityLine(hasWords));
+    }
+    out.push(WEB_DELETE_CARD_LINE, WEB_DELETE_CHECKING_LINE, WEB_VAULT_COPY_LINE, WEB_COPY_CLEARS_LINE, webDeletedButLine(BROWSER_ERROR));
+    for (const r of [WEB_PURGE_NO_ANSWER, WEB_PURGE_NOT_CONFIRMED, WEB_COMMUNITY_CHANGED]) out.push(r, webDeleteFailedLine(r));
     return [...new Set(out)];
 }
 
@@ -192,6 +209,24 @@ describe('key-lines.ts', () => {
             expect(outsideBrackets(signInNamesWords(english), NAMES)).toBe(false);
             setLanguage('en');
         }
+    });
+
+    it("deleting here: a node's refusal with no words of its own is translated; the community's own words are shown as they came", async () => {
+        // A fetch that fails with no words of its own: purgeHere's own sentence.
+        vi.stubGlobal('fetch', vi.fn(async () => { throw new Error(''); }));
+        const purged = await purgeHere({ kind: 'last', here: window.location.origin });
+        expect(purged.ok).toBe(false);
+        const reason = purged.ok ? '' : purged.reason;
+        expect(reason).toBe('Failed to purge account from node. Active escrow deals may need to be resolved first.');
+        const said = webDeleteFailedLine(reason);
+        expect(keyLineWords(said)).toBe(said);
+        setLanguage('xx');
+        expect(outsideBrackets(keyLineWords(said))).toBe(false);
+        const own = webDeleteFailedLine('Kim still holds an open deal.');
+        const shown = keyLineWords(own);
+        expect(shown).toContain('Kim still holds an open deal.');
+        expect(outsideBrackets(shown, ['Kim still holds an open deal.'])).toBe(false);
+        expect(hostOf(`https://${THERE}/`)).toBe(THERE);
     });
 
     it('two sentences, one after the other, read as they always did in English', () => {

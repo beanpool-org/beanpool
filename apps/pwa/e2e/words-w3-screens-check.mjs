@@ -73,6 +73,8 @@ const SCREENS = [
         await page.getByText(wordIn(lang, 'Account Deletion & Sign Out')).click();
         await page.getByRole('button', { name: wordIn(lang, 'Permanently Delete Account'), exact: true }).click();
         await page.locator('#purge-callsign-input').waitFor();
+        // What leaves this browser and the key vault's copy (W4: lib/delete-here's sentences, translated).
+        await page.locator('[data-testid="delete-vault-copy"]').waitFor();
     } },
     { name: 'settings-signout', screen: 'settings', ready: 'text=/ĀÇÇÖŪÑŢ/', act: async (page, lang) => {
         await page.getByText(wordIn(lang, 'Account Deletion & Sign Out')).click();

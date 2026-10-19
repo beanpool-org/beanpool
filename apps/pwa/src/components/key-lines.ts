@@ -7,7 +7,8 @@
  * words), lib/door-work.ts and lib/words-work.ts (the door's work, signed with the joining key), lib/web-restore.ts (opens
  * a sign-in's copy of the account), lib/link-signin.ts (seals the account to a sign-in), lib/web-rekey.ts (signs a re-key
  * ask), lib/takeover-unlock.ts (opens an owner's part of a community's locked keys), lib/owner-words.ts (checks an
- * owner's 12 words), lib/recovery-kit.ts (prints the 12 words). The screens translate those
+ * owner's 12 words), lib/recovery-kit.ts (prints the 12 words), lib/delete-here.ts (deletes the account here and says
+ * whether this browser's key stays) and lib/words-clipboard.ts (copies the 12 words). The screens translate those
  * files' sentences here: by the exact English (the key IS the English), or by the English with a sign-in's name, a member's
  * name, a status or a time in it, built again word for word. Nothing here imports those files at runtime:
  * key-lines.test.ts holds every sentence to the constant or builder it stands for, so a sentence changed there fails a
@@ -88,6 +89,19 @@ const FIXED: Readonly<Record<string, WordKey>> = {
     // lib/web-restore.ts: a restore with a sign-in.
     'That restore timed out on the community. Start again.': word('That restore timed out on the community. Start again.'),
     'Too many tries from this network. Please try again later.': word('Too many tries from this network. Please try again later.'),
+    // lib/delete-here.ts: Settings' Permanently Delete Account, and whether this browser's key stays.
+    "Permanently purges your account from this community node. Cancels active posts, clears push tokens, and settles your balance with the Commons Pool. Your key leaves this browser unless another community this web app opens still has you. The phone app, and other communities' web addresses, keep their own copy.": word("Permanently purges your account from this community node. Cancels active posts, clears push tokens, and settles your balance with the Commons Pool. Your key leaves this browser unless another community this web app opens still has you. The phone app, and other communities' web addresses, keep their own copy."),
+    'Checking whether this browser still needs your key…': word('Checking whether this browser still needs your key…'),
+    "Your key and 12 words leave this browser, for this web address. The phone app, and other communities' web addresses, keep their own copy. Write your 12 words down first if you use them anywhere else.": word("Your key and 12 words leave this browser, for this web address. The phone app, and other communities' web addresses, keep their own copy. Write your 12 words down first if you use them anywhere else."),
+    "Your key leaves this browser, for this web address. The phone app, and other communities' web addresses, keep their own copy.": word("Your key leaves this browser, for this web address. The phone app, and other communities' web addresses, keep their own copy."),
+    "If the phone app put a copy of your key in BeanPool's key vault, when you linked a sign-in there, deleting here doesn't remove it. Remove it in the phone app first: Settings → Account Protection → Disconnect.": word("If the phone app put a copy of your key in BeanPool's key vault, when you linked a sign-in there, deleting here doesn't remove it. Remove it in the phone app first: Settings → Account Protection → Disconnect."),
+    // lib/delete-here.ts purgeHere: why the node's delete didn't happen (before webDeleteFailedLine's sentence: see FILLED).
+    "The community didn't answer. You can try again: if it deleted your account meanwhile, trying again finishes the delete in this browser.": word("The community didn't answer. You can try again: if it deleted your account meanwhile, trying again finishes the delete in this browser."),
+    "The community's answer didn't confirm the delete. Try again.": word("The community's answer didn't confirm the delete. Try again."),
+    'This web app now talks to a different community. Open Delete account again.': word('This web app now talks to a different community. Open Delete account again.'),
+    'Failed to purge account from node. Active escrow deals may need to be resolved first.': word('Failed to purge account from node. Active escrow deals may need to be resolved first.'),
+    // lib/words-clipboard.ts: under Copy All Words.
+    'If you stay on this screen, the copy clears from your clipboard after a minute. On an iPhone or iPad, in Safari or in Firefox, it clears at your first tap or key press after that minute. If you leave this screen or switch to another app or tab first, it stays: copy something else over it.': word('If you stay on this screen, the copy clears from your clipboard after a minute. On an iPhone or iPad, in Safari or in Firefox, it clears at your first tap or key press after that minute. If you leave this screen or switch to another app or tab first, it stays: copy something else over it.'),
 };
 
 /** The English of every whole sentence above: what key-lines.test.ts holds to the lib files. */
@@ -225,6 +239,28 @@ const FILLED: ReadonlyArray<{ pattern: RegExp; words: (m: RegExpMatchArray) => s
     {
         pattern: new RegExp(`^${PROVIDER} is added, and your new-account limits are now the usual ones\\. Its copy of your account couldn't be saved, so your 12 words are still your only way back\\.$`),
         words: (m) => t("{provider} is added, and your new-account limits are now the usual ones. Its copy of your account couldn't be saved, so your 12 words are still your only way back.", { provider: m[1] }),
+    },
+    // lib/delete-here.ts webKeepsKeyLine: the page's own community keeps the key, by its address and the one deleted at.
+    {
+        pattern: /^(Your key and 12 words stay|Your key stays) in this browser, for (\S+), the community this web address belongs to\. After the delete at (\S+), the web app goes back to (\S+)\.(?: (\S+) couldn't be reached, so it counts as a community you are still in\.)?$/,
+        words: (m) => {
+            const stays = m[1] === 'Your key stays'
+                ? t('Your key stays in this browser, for {home}, the community this web address belongs to.', { home: m[2] })
+                : t('Your key and 12 words stay in this browser, for {home}, the community this web address belongs to.', { home: m[2] });
+            const back = twoSentences(stays, t('After the delete at {here}, the web app goes back to {home}.', { here: m[3], home: m[4] }));
+            return m[5] ? twoSentences(back, t("{home} couldn't be reached, so it counts as a community you are still in.", { home: m[5] })) : back;
+        },
+    },
+    // lib/delete-here.ts webDeletedButLine: the browser's own error, shown as it came (the phone's says it of a phone).
+    {
+        pattern: /^Your account was deleted, but this browser couldn't be cleared \(([\s\S]*)\)\. Use Sign Out \(Device Only\) to finish\.$/,
+        words: (m) => t("Your account was deleted, but this browser couldn't be cleared ({reason}). Use Sign Out (Device Only) to finish.", { reason: m[1] }),
+    },
+    // lib/delete-here.ts webDeleteFailedLine: purgeHere's reason (one of the sentences above, or the community's own
+    // words, shown as they came), then that nothing here changed.
+    {
+        pattern: /^([\s\S]+?) Nothing was removed from this browser: your key is still here\.$/,
+        words: (m) => twoSentences(keyLineWords(m[1]), t('Nothing was removed from this browser: your key is still here.')),
     },
 ];
 

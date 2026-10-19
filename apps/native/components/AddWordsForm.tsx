@@ -5,6 +5,11 @@
  *
  * Two columns rather than three: the phrase screen shows the words two to a row, and at 320dp with a 1.3x
  * font an eight-letter word needs the width. Nothing is fixed-height; the status line and the buttons wrap.
+ *
+ * utils/add-words.ts is on the 12 words' key path and never reaches the words layer, so its sentences are shown here in
+ * the member's language: each ADD_WORDS_COPY line by its exact English (a line that reads otherwise is shown as it is),
+ * and the status line again from the check's counts and box numbers, never from a word typed
+ * (utils/__tests__/key-components-words-render.test.ts holds both to add-words.ts).
  */
 import React, { useMemo, useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -18,8 +23,38 @@ import {
     checkWordBoxes,
     emptyWordBoxes,
     wordBoxesFromPaste,
-    wordBoxesStatus,
+    type WordBoxesCheck,
 } from '../utils/add-words';
+import { settingsLineWords } from './settings/settings-lines';
+import { formatNumber, t, word, type WordKey } from '@beanpool/core';
+
+/** ADD_WORDS_COPY's lines this form shows (the intro is no-words-copy.ts's, which Settings' lines translate). */
+const ADD_WORDS_WORDS = {
+    title: word('Add your 12 words to this phone'),
+    submit: word('Add these words'),
+    checking: word('Checking…'),
+    cancel: word('Cancel'),
+    mismatch: word('Those 12 words belong to a different account. Nothing on this phone has changed.'),
+    malformed: word('Those are not 12 words from the list. Nothing on this phone has changed.'),
+    failed: word('The words could not be saved on this phone. Nothing has changed. Try again.'),
+} as const satisfies Partial<Record<keyof typeof ADD_WORDS_COPY, WordKey>>;
+
+/** One ADD_WORDS_COPY line in the member's language, when it reads as this form knows it. */
+export function addWordsLine(which: keyof typeof ADD_WORDS_WORDS): string {
+    return ADD_WORDS_WORDS[which] === ADD_WORDS_COPY[which] ? t(ADD_WORDS_WORDS[which]) : ADD_WORDS_COPY[which];
+}
+
+/** add-words.ts wordBoxesStatus, in the member's language: box numbers and counts only. */
+export function wordBoxesStatusWords(check: WordBoxesCheck): string {
+    if (check.unknown.length === 1) {
+        return t('Word {n} is not on the list of recovery words. Check the spelling.', { n: check.unknown[0] });
+    }
+    if (check.unknown.length > 1) {
+        return t('Words {numbers} are not on the list of recovery words. Check the spelling.', { numbers: check.unknown.map((n) => formatNumber(n)).join(', ') });
+    }
+    if (check.ready) return t('All 12 words are on the list.');
+    return t('{n} of 12 words.', { n: check.listed });
+}
 
 export function AddWordsForm({
     onAdded,
@@ -59,11 +94,11 @@ export function AddWordsForm({
                 onAdded(result.identity);
                 return;
             }
-            setError(result.reason === 'mismatch' ? ADD_WORDS_COPY.mismatch
-                : result.reason === 'malformed' ? ADD_WORDS_COPY.malformed
-                    : ADD_WORDS_COPY.failed);
+            setError(result.reason === 'mismatch' ? addWordsLine('mismatch')
+                : result.reason === 'malformed' ? addWordsLine('malformed')
+                    : addWordsLine('failed'));
         } catch {
-            setError(ADD_WORDS_COPY.failed);
+            setError(addWordsLine('failed'));
         } finally {
             setBusy(false);
         }
@@ -72,17 +107,17 @@ export function AddWordsForm({
     return (
         <View style={styles.wrap}>
             <Text style={[styles.title, { color: colors.text.heading }]} accessibilityRole="header">
-                {ADD_WORDS_COPY.title}
+                {addWordsLine('title')}
             </Text>
-            <Text style={[styles.intro, { color: colors.text.secondary }]}>{ADD_WORDS_COPY.intro}</Text>
+            <Text style={[styles.intro, { color: colors.text.secondary }]}>{settingsLineWords(ADD_WORDS_COPY.intro)}</Text>
 
             <Pressable
                 style={[styles.pasteBtn, { borderColor: colors.border.strong, backgroundColor: colors.surface.subtle }]}
                 onPress={paste}
                 accessibilityRole="button"
-                accessibilityLabel="Paste your 12 words"
+                accessibilityLabel={t('Paste your 12 words')}
             >
-                <Text style={[styles.pasteText, { color: colors.text.body }]}>📋 {ADD_WORDS_COPY.paste}</Text>
+                <Text style={[styles.pasteText, { color: colors.text.body }]}>{t('📋 Paste')}</Text>
             </Pressable>
 
             <View style={styles.grid}>
@@ -106,8 +141,8 @@ export function AddWordsForm({
                                 style={[styles.input, { color: colors.text.heading }]}
                                 value={word}
                                 onChangeText={(t) => change(applyWordBoxChange(boxes, i, t))}
-                                accessibilityLabel={`Word ${i + 1}`}
-                                accessibilityHint={bad ? 'Not on the list of recovery words' : undefined}
+                                accessibilityLabel={t('Word {n}', { n: i + 1 })}
+                                accessibilityHint={bad ? t('Not on the list of recovery words') : undefined}
                                 autoCapitalize="none"
                                 autoCorrect={false}
                                 spellCheck={false}
@@ -127,7 +162,7 @@ export function AddWordsForm({
                 style={[styles.status, { color: check.unknown.length ? colors.feedback.danger.fg : colors.text.secondary }]}
                 accessibilityLiveRegion="polite"
             >
-                {wordBoxesStatus(check)}
+                {wordBoxesStatusWords(check)}
             </Text>
 
             {error && (
@@ -143,16 +178,16 @@ export function AddWordsForm({
                 onPress={submit}
                 disabled={!check.ready || busy}
                 accessibilityRole="button"
-                accessibilityLabel={busy ? ADD_WORDS_COPY.checking : ADD_WORDS_COPY.submit}
-                accessibilityHint="Saves recovery words to this device"
+                accessibilityLabel={busy ? addWordsLine('checking') : addWordsLine('submit')}
+                accessibilityHint={t('Saves recovery words to this device')}
                 accessibilityState={{ disabled: !check.ready || busy, busy }}
             >
                 {busy
                     ? <ActivityIndicator color={colors.text.inverse} />
-                    : <Text style={[styles.submitText, { color: colors.text.inverse }]}>{ADD_WORDS_COPY.submit}</Text>}
+                    : <Text style={[styles.submitText, { color: colors.text.inverse }]}>{addWordsLine('submit')}</Text>}
             </Pressable>
             <Pressable style={styles.cancel} onPress={onCancel} accessibilityRole="button" disabled={busy}>
-                <Text style={[styles.cancelText, { color: colors.text.secondary }]}>{ADD_WORDS_COPY.cancel}</Text>
+                <Text style={[styles.cancelText, { color: colors.text.secondary }]}>{addWordsLine('cancel')}</Text>
             </Pressable>
         </View>
     );

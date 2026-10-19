@@ -28,6 +28,7 @@ Scout's domain is `apps/server/` ONLY. Do NOT touch `apps/native`, `apps/manager
 4. Pick the most impactful untested area (prefer auth flows, economic state mutations, federation endpoints)
 
 ## ✅ Resolved — do NOT re-file
+- 2026-10-19 #2168: withheld-notes exemptions still checked where no block applies (#1819); assert each under a block.
 
 ### 2026-10-01 — "test-viewer-helpers" (#1363) — CLOSED, CONTRADICTS #1376.
 One of its 28 checks asserted `memberReadsOnlyHere` lets a stranger read on a local node. #1376 (merged 2026-10-01) made

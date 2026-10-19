@@ -187,7 +187,7 @@ describe('amendment 6\'s two lines under the DM box at 320dp with 1.3× text, li
         // [id].tsx shows what refusedSendNotice gives a refused send under the box (lockNotice), the words put back.
         const src = fs.readFileSync(path.resolve(__dirname, '../../app/chat/[id].tsx'), 'utf-8');
         expect(src).toMatch(/const refused = refusedSendNotice\(err, peerPubkey \? peerName : null\);/);
-        expect(src).toMatch(/notice=\{unplaced \? t\(DM_LOCK_WORDS\.unplaced\) : keyChangePending \? dmKeyChangedLine\(keyChange\?\.name\) : lockNotice\}/);
+        expect(src).toMatch(/notice=\{unplaced \? t\(DM_LOCK_WORDS\.unplaced\) : keyChangePending \? dmKeyChangedLine\(keyChange\?\.name\) : lockNotice \? chatLineWords\(lockNotice\) : null\}/);
     });
 
     for (const [label, line, lines] of [['full', DM_PINS_FULL_TEXT, 5], ['unreadable', DM_PIN_STORE_UNREAD_TEXT, 7]] as const) {

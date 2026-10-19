@@ -407,10 +407,10 @@ test('migration 0012: re-running changes nothing; a database without it publishe
 test('STATUS_SERVERS names our servers only (never mullum or castlemaine); unset, only the registrar is shown; /admin links the page', async () => {
     const toml = readFileSync(new URL('../wrangler.toml', import.meta.url), 'utf8');
     const listed = toml.match(/^STATUS_SERVERS = "([^"]*)"/m)?.[1];
-    assert.equal(listed, 'global,test', "wrangler.toml shows global and test: ours, a community's never");
+    assert.equal(listed, 'global', "wrangler.toml shows global only (Marty, 19 Oct: not test): ours, a community's never");
     const ours = ['global', 'test', 'vault'];
     for (const name of listed.split(',')) assert.ok(ours.includes(name), `${name} is one of our servers`);
-    assert.match(toml, /^# \[\[kv_namespaces\]\]\n# binding = "STATUS"/m, 'the STATUS binding is written down, for its id to be filled in');
+    assert.match(toml, /^\[\[kv_namespaces\]\]\nbinding = "STATUS"\nid = "[0-9a-f]{32}"/m, 'the STATUS binding is live, with the namespace id created on the live account (18 Oct 2026)');
 
     const r = await room({ env: { STATUS_SERVERS: undefined } });
     try {

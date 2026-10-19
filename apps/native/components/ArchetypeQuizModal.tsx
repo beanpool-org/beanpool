@@ -680,9 +680,13 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         borderRadius: 18,
     },
+    // Shrinks between the two buttons and wraps, centred: a longer language's title runs past them otherwise.
     headerTitle: {
+        flexShrink: 1,
         fontSize: 16,
         fontWeight: '800',
+        textAlign: 'center',
+        marginHorizontal: 8,
     },
 
     // Intro Screen
@@ -741,13 +745,19 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
     },
+    // The time badge goes under the title when the two don't fit beside each other (320 dp at 1.3x, or a longer
+    // language), and a title longer than the row shrinks and wraps.
     modeTitleRow: {
         flexDirection: 'row',
+        flexWrap: 'wrap',
         alignItems: 'center',
         justifyContent: 'space-between',
+        columnGap: 8,
+        rowGap: 4,
         marginBottom: 4,
     },
     modeTitle: {
+        flexShrink: 1,
         fontSize: 16,
         fontWeight: '800',
     },

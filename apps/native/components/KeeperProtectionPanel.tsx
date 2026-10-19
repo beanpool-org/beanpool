@@ -242,9 +242,9 @@ export function KeeperProtectionPanel({
             <View style={[styles.panel, styles.covered]}>
                 <Text style={styles.heading} accessibilityRole="header">{coveredHeading}</Text>
                 {protection.holding.map((label, i) => (
-                    <View key={`${label}-${i}`} style={styles.row} accessible accessibilityLabel={t('{label}: holding a piece', { label })}>
+                    <View key={`${label}-${i}`} style={styles.row} accessible accessibilityLabel={t('{label}: holding a piece', { label: welcomeLineWords(label) })}>
                         <Text style={styles.tick}>✅</Text>
-                        <Text style={styles.rowLabel}>{label}</Text>
+                        <Text style={styles.rowLabel}>{welcomeLineWords(label)}</Text>
                     </View>
                 ))}
                 {/* How a sign-in restore goes with a key vault (D2: every one waits a day unless a phone that has the
@@ -358,12 +358,16 @@ const make = (colors: AppColors) => StyleSheet.create({
         flexWrap: 'wrap',
         gap: 8,
     },
+    // Shrinks and wraps beside the tick: "{provider} Connected" runs longer than the row in some languages.
     providerName: {
+        flexShrink: 1,
         fontSize: 14,
         fontWeight: '600',
         color: colors.text.heading,
     },
+    // Both buttons shrink to the row when their words are longer than it (their words then wrap), rather than run past it.
     disconnectBtn: {
+        flexShrink: 1,
         paddingHorizontal: 12,
         paddingVertical: 6,
         minHeight: 44,
@@ -379,6 +383,7 @@ const make = (colors: AppColors) => StyleSheet.create({
         color: colors.feedback.danger.fg,
     },
     reconnectBtn: {
+        flexShrink: 1,
         paddingHorizontal: 12,
         paddingVertical: 6,
         minHeight: 44,

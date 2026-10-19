@@ -8,7 +8,8 @@
  * (turns a sign-in copy into the key), utils/sso-signin.ts, utils/sso-sheet-connect.ts and utils/keeper-enrolment.ts
  * (seal the account to a sign-in), utils/join-link.ts (adds a sign-in to the account), utils/no-words-copy.ts (what is
  * said about the 12 words), utils/words-on-screen.ts and utils/words-clipboard.ts (the words on screen and on the
- * clipboard), utils/recovery-kit.ts (the printed words). Welcome translates their sentences here, by the exact English
+ * clipboard), utils/recovery-kit.ts (the printed words), utils/protection-state.ts (what protects the account, beside the
+ * keeper enrolment). Welcome translates their sentences here, by the exact English
  * (the key IS the English), and builds the sentences that carry a name, a count or a time again, word for word in
  * English. A sentence not here goes on to Settings' table (components/settings/settings-lines.ts: the key vault's
  * sentences, an unsafe community address), and otherwise shows exactly as it came: a community's own words, a sign-in
@@ -95,6 +96,10 @@ const FIXED: Readonly<Record<string, WordKey>> = {
     "That sign-in didn't say which account it was, so nothing was linked. Try again.": word("That sign-in didn't say which account it was, so nothing was linked. Try again."),
     'No node configured yet.': word('No node configured yet.'),
     'The sign-in could not be linked.': word('The sign-in could not be linked.'),
+    // utils/protection-state.ts KEEPER_LABELS: what holds a piece, on the covered panel.
+    'Your community hub': word('Your community hub'),
+    'A trusted friend': word('A trusted friend'),
+    'Your sign-in account': word('Your sign-in account'),
     // utils/no-words-copy.ts: a phone with no 12 words, and a sign-in that brings them back.
     'This phone was restored with a sign-in, so it has no 12 words. A connected sign-in is how you get back in.': word('This phone was restored with a sign-in, so it has no 12 words. A connected sign-in is how you get back in.'),
     'A sign-in connected on this version of the app brings your 12 words back too. One connected on an earlier version brings back your account without them: tap Connect again to include them.': word('A sign-in connected on this version of the app brings your 12 words back too. One connected on an earlier version brings back your account without them: tap Connect again to include them.'),

@@ -1126,8 +1126,18 @@ router.post('/api/community/register', async (ctx) => {
         ctx.body = { error: 'publicKey and callsign are required' };
         return;
     }
-    const member = registerMember(publicKey, callsign.slice(0, 20));
-    ctx.body = { success: true, member };
+    try {
+        const member = registerMember(publicKey, callsign.slice(0, 20));
+        if (!member) {
+            ctx.status = 400;
+            ctx.body = { error: 'Failed to register member' };
+            return;
+        }
+        ctx.body = { success: true, member };
+    } catch (e: any) {
+        ctx.status = 400;
+        ctx.body = { error: memberErrorText(e, 'Failed to register member') };
+    }
 });
 
 // ===================== INVITE API (PUBLIC) =====================

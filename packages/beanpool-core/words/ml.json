@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ml",
     "name": "Malayalam",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-19",
@@ -325,5 +325,44 @@
   "{n} of these {count} from a new or 12-word account|{n} of these {count} from new or 12-word accounts": {
     "one": "ഈ {count} എണ്ണത്തിൽ {n} എണ്ണം പുതിയതോ 12-വാക്ക് ഉള്ളതോ ആയ അക്കൗണ്ടിൽ നിന്നാണ്",
     "other": "ഈ {count} എണ്ണത്തിൽ {n} എണ്ണം പുതിയതോ 12-വാക്ക് ഉള്ളതോ ആയ അക്കൗണ്ടുകളിൽ നിന്നാണ്"
-  }
+  },
+  "updates itself": "സ്വയം അപ്ഡേറ്റ് ചെയ്യുന്നു",
+  "a tap per post": "ഒരു പോസ്റ്റിന് ഒരു ടാപ്പ്",
+  "shows as a card": "ഒരു കാർഡായി കാണിക്കുന്നു",
+  "youtube.com/@you": "youtube.com/@you",
+  "@yourhandle": "@yourhandle",
+  "soundcloud.com/you": "soundcloud.com/you",
+  "yoursite.com": "yoursite.com",
+  "facebook.com/yourpage": "facebook.com/yourpage",
+  "yourblog.com/feed": "yourblog.com/feed",
+  "Community": "കമ്മ്യൂണിറ്റി",
+  "Food & growing": "ഭക്ഷണവും കൃഷിയും",
+  "Making & craft": "നിർമ്മാണവും കരകൗശലവും",
+  "Repair & reuse": "അറ്റകുറ്റപ്പണിയും പുനരുപയോഗവും",
+  "Art & music": "കലയും സംഗീതവും",
+  "Business": "ബിസിനസ്സ്",
+  "Other": "മറ്റുള്ളവ",
+  "Website": "വെബ്‌സൈറ്റ്",
+  "Blog / RSS": "ബ്ലോഗ് / RSS",
+  "Link": "ലിങ്ക്",
+  "Idea": "ആശയം",
+  "Problem": "പ്രശ്നം",
+  "This goes to the BeanPool project team, not to your community. Don't include personal details.": "ഇത് BeanPool പ്രോജക്റ്റ് ടീമിലേക്കാണ് പോകുന്നത്, നിങ്ങളുടെ കമ്മ്യൂണിറ്റിയിലേക്കല്ല. വ്യക്തിഗത വിവരങ്ങൾ ഉൾപ്പെടുത്തരുത്.",
+  "Thank you — your suggestion has reached the BeanPool project team.": "നന്ദി — നിങ്ങളുടെ നിർദ്ദേശം BeanPool പ്രോജക്റ്റ് ടീമിന് ലഭിച്ചു.",
+  "Please write at least {n} characters.|Please write at least {n} characters.": {
+    "one": "ദയവായി കുറഞ്ഞത് {n} അക്ഷരമെങ്കിലും എഴുതുക.",
+    "other": "ദയവായി കുറഞ്ഞത് {n} അക്ഷരങ്ങളെങ്കിലും എഴുതുക."
+  },
+  "Please keep it under {n} characters ({count} now).|Please keep it under {n} characters ({count} now).": {
+    "one": "ദയവായി ഇത് {n} അക്ഷരത്തിൽ താഴെയായി സൂക്ഷിക്കുക (ഇപ്പോൾ {count}).",
+    "other": "ദയവായി ഇത് {n} അക്ഷരങ്ങൾക്ക് താഴെയായി സൂക്ഷിക്കുക (ഇപ്പോൾ {count})."
+  },
+  "Couldn't reach the BeanPool project just now. Your text is still here — please try again later.": "BeanPool പ്രോജക്റ്റുമായി ബന്ധപ്പെടാൻ ഇപ്പോൾ കഴിഞ്ഞില്ല. നിങ്ങളുടെ എഴുത്ത് ഇവിടെത്തന്നെയുണ്ട് — ദയവായി പിന്നീട് വീണ്ടും ശ്രമിക്കുക.",
+  "Please keep the community name under {n} characters.|Please keep the community name under {n} characters.": {
+    "one": "ദയവായി കമ്മ്യൂണിറ്റിയുടെ പേര് {n} അക്ഷരത്തിൽ താഴെയായി സൂക്ഷിക്കുക.",
+    "other": "ദയവായി കമ്മ്യൂണിറ്റിയുടെ പേര് {n} അക്ഷരങ്ങൾക്ക് താഴെയായി സൂക്ഷിക്കുക."
+  },
+  "Too many suggestions from your connection recently. Please try again later — your text is still here.": "അടുത്തിടെ നിങ്ങളുടെ കണക്ഷനിൽ നിന്ന് വളരെയധികം നിർദ്ദേശങ്ങൾ വന്നു. ദയവായി പിന്നീട് ശ്രമിക്കുക — നിങ്ങളുടെ എഴുത്ത് ഇവിടെത്തന്നെയുണ്ട്.",
+  "This poll is shown at your area (about 10 km around it) to everyone who can read it.": "ഈ വോട്ടെടുപ്പ് നിങ്ങളുടെ പ്രദേശത്ത് (ചുറ്റുമുള്ള ഏകദേശം 10 കി.മീ) ഇത് വായിക്കാൻ കഴിയുന്ന എല്ലാവർക്കും കാണിക്കും.",
+  "You haven't set your area, so members nearby won't see this poll in their list; they can still find it by searching. Set it in Settings → Your area to show it near you.": "നിങ്ങൾ നിങ്ങളുടെ പ്രദേശം സജ്ജമാക്കിയിട്ടില്ല, അതിനാൽ അടുത്തുള്ള അംഗങ്ങൾക്ക് അവരുടെ ലിസ്റ്റിൽ ഈ വോട്ടെടുപ്പ് കാണാൻ കഴിയില്ല; തിരയുന്നതിലൂടെ അവർക്കിത് കണ്ടെത്താം. നിങ്ങളുടെ അടുത്തുള്ളവർക്ക് കാണിക്കാൻ ക്രമീകരണങ്ങൾ → നിങ്ങളുടെ പ്രദേശം എന്നതിൽ ഇത് സജ്ജമാക്കുക."
 }

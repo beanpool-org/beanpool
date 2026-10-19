@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ar",
     "name": "Arabic",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-19",
@@ -409,5 +409,56 @@
     "few": "{n} من هذه الـ {count} من حسابات جديدة أو بـ 12 كلمة",
     "many": "{n} من هذه الـ {count} من حسابات جديدة أو بـ 12 كلمة",
     "other": "{n} من هذه الـ {count} من حسابات جديدة أو بـ 12 كلمة"
-  }
+  },
+  "updates itself": "يتم التحديث تلقائيًا",
+  "a tap per post": "نقرة واحدة لكل منشور",
+  "shows as a card": "يظهر كبطاقة",
+  "youtube.com/@you": "youtube.com/@اسمك",
+  "@yourhandle": "@اسم_المستخدم",
+  "soundcloud.com/you": "soundcloud.com/اسمك",
+  "yoursite.com": "yoursite.com",
+  "facebook.com/yourpage": "facebook.com/صفحتك",
+  "yourblog.com/feed": "yourblog.com/feed",
+  "Community": "المجتمع",
+  "Food & growing": "الغذاء والزراعة",
+  "Making & craft": "الصناعة والحرف",
+  "Repair & reuse": "الإصلاح وإعادة الاستخدام",
+  "Art & music": "الفن والموسيقى",
+  "Business": "الأعمال",
+  "Other": "أخرى",
+  "Website": "موقع إلكتروني",
+  "Blog / RSS": "مدونة / RSS",
+  "Link": "رابط",
+  "Idea": "فكرة",
+  "Problem": "مشكلة",
+  "This goes to the BeanPool project team, not to your community. Don't include personal details.": "يصل هذا إلى فريق مشروع BeanPool، وليس إلى مجتمعك. لا تُدرج تفاصيل شخصية.",
+  "Thank you — your suggestion has reached the BeanPool project team.": "شكرًا لك — لقد وصل اقتراحك إلى فريق مشروع BeanPool.",
+  "Please write at least {n} characters.|Please write at least {n} characters.": {
+    "zero": "يرجى كتابة {n} حرف على الأقل.",
+    "one": "يرجى كتابة حرف واحد على الأقل.",
+    "two": "يرجى كتابة حرفين على الأقل.",
+    "few": "يرجى كتابة {n} أحرف على الأقل.",
+    "many": "يرجى كتابة {n} حرفًا على الأقل.",
+    "other": "يرجى كتابة {n} حرف على الأقل."
+  },
+  "Please keep it under {n} characters ({count} now).|Please keep it under {n} characters ({count} now).": {
+    "zero": "يرجى إبقاؤه أقل من {n} حرف (حاليًا {count}).",
+    "one": "يرجى إبقاؤه أقل من حرف واحد (حاليًا {count}).",
+    "two": "يرجى إبقاؤه أقل من حرفين (حاليًا {count}).",
+    "few": "يرجى إبقاؤه أقل من {n} أحرف (حاليًا {count}).",
+    "many": "يرجى إبقاؤه أقل من {n} حرفًا (حاليًا {count}).",
+    "other": "يرجى إبقاؤه أقل من {n} حرف (حاليًا {count})."
+  },
+  "Couldn't reach the BeanPool project just now. Your text is still here — please try again later.": "تعذر الوصول إلى مشروع BeanPool في الوقت الحالي. نصك ما زال محفوظًا هنا — يرجى المحاولة مرة أخرى لاحقًا.",
+  "Please keep the community name under {n} characters.|Please keep the community name under {n} characters.": {
+    "zero": "يرجى إبقاء اسم المجتمع أقل من {n} حرف.",
+    "one": "يرجى إبقاء اسم المجتمع أقل من حرف واحد.",
+    "two": "يرجى إبقاء اسم المجتمع أقل من حرفين.",
+    "few": "يرجى إبقاء اسم المجتمع أقل من {n} أحرف.",
+    "many": "يرجى إبقاء اسم المجتمع أقل من {n} حرفًا.",
+    "other": "يرجى إبقاء اسم المجتمع أقل من {n} حرف."
+  },
+  "Too many suggestions from your connection recently. Please try again later — your text is still here.": "وردت اقتراحات كثيرة جدًا من اتصالك مؤخرًا. يرجى المحاولة مرة أخرى لاحقًا — نصك ما زال محفوظًا هنا.",
+  "This poll is shown at your area (about 10 km around it) to everyone who can read it.": "يُعرض هذا الاستطلاع في منطقتك (حوالي 10 كم حولها) لكل من يمكنه قراءته.",
+  "You haven't set your area, so members nearby won't see this poll in their list; they can still find it by searching. Set it in Settings → Your area to show it near you.": "لم تحدد منطقتك، لذا لن يرى الأعضاء القريبون هذا الاستطلاع في قائمتهم؛ لا يزال بإمكانهم العثور عليه بالبحث. حددها في الإعدادات ← منطقتك لإظهاره بالقرب منك."
 }

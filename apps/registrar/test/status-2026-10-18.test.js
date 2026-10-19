@@ -356,6 +356,65 @@ test('the tick that begins an incident loses its status write and the next look 
     } finally { r.done(); }
 });
 
+// Once, the statement whose SQL matches `re` is refused when it is sent (D1 refuses a query past the budget then, not
+// when it is prepared); the statements before it went through. Returns how many times it was refused.
+function refuseAt(r, re) {
+    const prepare = r.w.env.DB.prepare.bind(r.w.env.DB);
+    let refused = 0;
+    const once = (f) => async () => { if (!refused) { refused++; refuse(); } return f(); };
+    r.w.env.DB.prepare = (sql) => {
+        const stmt = prepare(sql);
+        if (!re.test(sql)) return stmt;
+        return { bind(...a) { stmt.bind(...a); return this; }, first: once(() => stmt.first()), all: once(() => stmt.all()), run: once(() => stmt.run()) };
+    };
+    return () => refused;
+}
+
+test('the tick that begins or ends an incident refused at the marks read or at the derive itself, not its first statement: nothing is written, and the next tick names it from the log', async () => {
+    // The 2026-10-19 review's case (#2185): where the 50-query budget runs out depends on the tick's count, so what is
+    // refused need not be the days upsert. A derive refused must never leave status.json written over it.
+    for (const [what, re] of [['the marks read', /'first'/], ['the derive', /'status:derived'/]]) {
+        const r = await room();
+        try {
+            await r.tick();
+            const t0 = r.nowS();
+            await r.tick();
+            r.servers['test.watch.test'].fail = 502;
+            await r.tick();
+            const refused = refuseAt(r, re);
+            await r.tick();   // the second failed look: the alert-raise tick
+            assert.equal(refused(), 1, `${what} refused`);
+            assert.equal(r.doc().at, t0 + 600, `${what} refused: not written this tick`);
+            r.servers['test.watch.test'].fail = null;
+            await r.tick();
+            assert.deepEqual(r.server('test').incident, { began_at: t0 + 600, ended_at: t0 + 1200, why: 'http-502' }, `${what} refused at its begin: named`);
+            await r.tick();
+            assert.deepEqual(r.server('test').incident, { began_at: t0 + 600, ended_at: t0 + 1200, why: 'http-502' }, `${what}: and it stays`);
+        } finally { r.done(); }
+
+        const c = await room();
+        try {
+            await c.tick();
+            const t1 = c.nowS();
+            c.servers['test.watch.test'].fail = 'timeout';
+            await c.tick(); await c.tick();
+            assert.deepEqual(c.server('test').incident, { began_at: t1 + 300, ended_at: null, why: 'timed-out' });
+            c.servers['test.watch.test'].fail = null;
+            const refused = refuseAt(c, re);
+            await c.tick();   // the first answer: the alert-clear tick
+            assert.equal(refused(), 1, `${what} refused`);
+            assert.equal(c.doc().at, t1 + 600, `${what} refused: not written this tick`);
+            c.servers['test.watch.test'].fail = 503;
+            await c.tick();
+            assert.equal(c.server('test').up, false);
+            assert.deepEqual(c.server('test').incident, { began_at: t1 + 300, ended_at: t1 + 900, why: 'timed-out' }, `${what} refused at its end: ended at the answer the log holds`);
+            c.servers['test.watch.test'].fail = null;
+            await c.tick();
+            assert.deepEqual(c.server('test').incident, { began_at: t1 + 300, ended_at: t1 + 900, why: 'timed-out' }, `${what}: one failed look after is not one`);
+        } finally { c.done(); }
+    }
+});
+
 test("the registrar: the first tick back after missed ticks loses its status write; the next tick names the gap", async () => {
     const r = await room();
     try {

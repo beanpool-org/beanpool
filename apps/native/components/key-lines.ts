@@ -268,7 +268,7 @@ function compileFilled(key: string): Filled {
     return { key, names, greedy: new RegExp(`${greedy}${rest}$`, 's'), lazy: new RegExp(`${lazy}${rest}$`, 's') };
 }
 
-let compiled: Filled[] | null = null;
+let compiled: Array<Filled & { word: WordKey }> | null = null;
 let compiledCounted: Array<Filled & { words: (values: Record<string, string | number>) => string }> | null = null;
 
 /** A FILLED sentence read back: its values, or null when it isn't this sentence or could be read more than one way. */
@@ -297,10 +297,10 @@ export function knownKeyLines(): string[] {
  */
 export function keyLineWords(english: string): string {
     if (Object.prototype.hasOwnProperty.call(FIXED, english)) return t(FIXED[english]);
-    compiled ??= FILLED.map(compileFilled);
+    compiled ??= FILLED.map((word) => ({ ...compileFilled(word), word }));
     for (const f of compiled) {
         const values = readBack(f, english);
-        if (values) return t(f.key as WordKey, values);
+        if (values) return t(f.word, values);
     }
     compiledCounted ??= COUNTED.map((c) => ({ ...compileFilled(c.english), words: c.words }));
     for (const f of compiledCounted) {

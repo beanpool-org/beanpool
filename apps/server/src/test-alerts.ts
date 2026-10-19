@@ -9,8 +9,8 @@
  *  1. Owner only: an owner's key session reaches status, settings and test; an admin's and a moderator's are refused 403
  *     in words; an owner's automation token reaches none of it; no credential is 401.
  *  2. No channel: a disk at 79 % for three minutes is nothing; at 80 % it is raised at the third minute, not before: one
- *     `owner.alert` push to the owner's phone only, the owner's admin queue shows `server_alert` and an admin's doesn't;
- *     nothing is sent anywhere. Backups that never leave the server (no destination, no recovery code) nudge the owners
+ *     `owner.alert` push to the owner's phone only, the owner's admin queue shows `server_alert` and an admin's doesn't,
+ *     and the owner's diagnostics list the same alerts in words for Settings' Home (an admin's none); nothing is sent anywhere. Backups that never leave the server (no destination, no recovery code) nudge the owners
  *     and are never sent to the channel.
  *  3. The channel set in Settings: data/alerts.json is mode 600, the status shows the host and never the path or token;
  *     the waiting alert goes at the next minute with ntfy's Title, Priority and Authorization; 95 % raises 90 and 95 in one
@@ -37,6 +37,9 @@
  *     `tls.fallback` names the address, and clears when renewed; late and under a day, then expired un-renewed, the two
  *     are never told as resolved (only the fallback's end is, at the renewal); the fleet's Cloudflare name with none is
  *     told as before.
+ * 13. An alert book that can't be read (not JSON, or no list in it): the owner's diagnostics leave the alerts out, so
+ *     Settings' Home never says "all clear" from it; the log says so without quoting the file; the new book holds that
+ *     over a restart for a day. No book at all is a first start: its empty list is read.
  *
  * Run (as test-all does, through scripts/run-server-suites.mjs):
  *   BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-alerts.ts
@@ -337,6 +340,20 @@ async function main(): Promise<void> {
     assert(!getAdminQueue({}).items.some((i) => i.kind === 'server_alert'), "2. an admin's queue does not");
     const qHttp = await call('/api/local/admin/queue', {}, asAdmin);
     assert(!qHttp.text.includes('server_alert'), "2. an admin's queue over HTTP has no server_alert");
+    // Settings' Home lists exactly what the phone counts, each in the node's words, from the owner's diagnostics.
+    const diagOf = async (headers: Record<string, string>) => {
+        resetAdminAuthTarpit();
+        https.resetAdminRateLimit();
+        const res = await fetch(base + '/api/local/admin/diagnostics', { headers });
+        return { status: res.status, json: await res.json().catch(() => null) as any };
+    };
+    const ownerDiag = await diagOf(asOwner);
+    const listed = ownerDiag.json?.serverAlerts;
+    assert(listed?.count === ownerQ!.count && listed.items.length === ownerQ!.count, `2. the owner's diagnostics list the alerts the queue counts (${listed?.count} vs ${ownerQ?.count})`);
+    assert(JSON.stringify(listed.items.map((i: any) => i.key).sort()) === JSON.stringify(['backups.none', 'disk.80']), `2. the disk and the backups (${JSON.stringify(listed.items.map((i: any) => i.key))})`);
+    assert(listed.items.every((i: any) => typeof i.detail === 'string' && i.detail.length > 0 && typeof i.since === 'number'), '2. each in words, with since when');
+    const adminDiag = await diagOf(asAdmin);
+    assert(adminDiag.status === 200 && adminDiag.json?.serverAlerts === null, `2. an admin's diagnostics carry no server alerts (${JSON.stringify(adminDiag.json?.serverAlerts)})`);
     assert((await ntfy.hits()).length === 0, '2. with no channel nothing is sent anywhere');
 
     // ── 3. The channel, set in Settings ──────────────────────────────────────────────────────────────────────────────
@@ -800,6 +817,46 @@ async function main(): Promise<void> {
     forgetOwnAddresses();
     schedule._setScheduleHooksForTests({ now: null, order: null });
     tlsMod._setTlsClockForTests(null);
+
+    // ── 13. An alert book that can't be read ─────────────────────────────────────────────────────────────────────────
+    // Settings' Home says "All clear" only from a list the node read. A book on disk that couldn't be read is begun again
+    // empty, and that empty list is no all clear (review r4309393945): the owner's diagnostics leave the alerts out.
+    const bookFile = path.join(dataDir!, alerts.ALERTS_STATE_FILE);
+    const ownerDiag13 = async () => {
+        const d = await diagOf(asOwner);
+        if (d.status !== 200 || !d.json) throw new Error(`13. the owner's diagnostics answered ${d.status}`);
+        return d.json;
+    };
+    alerts.resetAlertsForTests();
+    const garbage = 'olive-garbage-' + crypto.randomBytes(6).toString('hex');
+    fs.writeFileSync(bookFile, `{ ${garbage}`);
+    alerts.rereadAlertsForTests();
+    const printedBefore13 = printed.length;
+    await tick();
+    let diag13 = await ownerDiag13();
+    assert(!('serverAlerts' in diag13), `13. a book that is not JSON: the owner's diagnostics leave the alerts out, not 0 (${JSON.stringify(diag13.serverAlerts)})`);
+    const said13 = printed.slice(printedBefore13).join('');
+    assert(/Could not read the alert book, so began a new one/.test(said13) && !said13.includes(garbage), '13. the log says so, without quoting the file');
+    assert(typeof JSON.parse(fs.readFileSync(bookFile, 'utf8')).lostAt === 'number', '13. the new book on disk says it was begun again');
+    alerts.rereadAlertsForTests();
+    diag13 = await ownerDiag13();
+    assert(!('serverAlerts' in diag13), '13. and still after a restart, within the day');
+    advance(24 * HOUR);
+    await tick();
+    diag13 = await ownerDiag13();
+    assert(Array.isArray(diag13.serverAlerts?.items) && diag13.serverAlerts.count === diag13.serverAlerts.items.length,
+        `13. a day later, what the old book held has left the banner anyway: listed again (${JSON.stringify(diag13.serverAlerts)})`);
+    // A book that parses but whose list isn't one can't be listed either.
+    fs.writeFileSync(bookFile, JSON.stringify({ raised: null }));
+    alerts.rereadAlertsForTests();
+    diag13 = await ownerDiag13();
+    assert(!('serverAlerts' in diag13), '13. a book whose alerts are no list: left out too');
+    // No book at all is a server's first start, not a lost book: its empty list is read, and all clear.
+    fs.rmSync(bookFile);
+    alerts.rereadAlertsForTests();
+    diag13 = await ownerDiag13();
+    assert(Array.isArray(diag13.serverAlerts?.items) && !alerts.alertBookLostLately(), `13. no book yet: the alerts are read (${JSON.stringify(diag13.serverAlerts)})`);
+    alerts.resetAlertsForTests();
 
     alerts.stopServerAlerts();
     await ntfy.close();

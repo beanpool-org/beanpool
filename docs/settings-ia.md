@@ -30,10 +30,15 @@ What the operator sees the second they log in — status, then what needs them, 
 community:
 
 1. **Header** — community name, public domain, appliance status:
-   `🟢 Online · Ledger balanced (0 drift) · Backed up 3h ago · v1.4.2`
-2. **Action required** — either `All clear` or the live list: `⚠️ 1 report pending`,
-   `🎟️ 2 invites unclaimed`, `💾 Storage 82%`
-3. **Four cards** — Members · Commons pool · Shared enterprises · Circulation this week
+   `🟢 Online · Ledger balanced (0 drift) · Backed up 3h ago · v1.4.2` (the ledger part only after an audit is run;
+   before that, `Ledger not audited yet`)
+2. **Action required** — either `All clear` or the live list: each of the server's alerts in the node's words (the
+   same set and count as the phone's "This server has alerts: N", from the owner's diagnostics, each linking to the
+   Alerts card), `⚠️ 1 report pending`, `💾 Storage 82%`. `All clear` only once the alerts, reports, disputes and
+   storage were all read; otherwise it says what it is still checking, or couldn't check, with a retry.
+3. **Four cards** — Members · Commons pool · Shared enterprises · Circulation (completed trades, all time). Each is
+   the node's figure, or `Loading…`, or `Couldn't load` with a retry: never a 0 for a figure that didn't arrive
+   (Marty, 19 Oct 2026: a 34-member community showed 0 members).
 4. **Quick actions** — Invite a member · Create an enterprise · Run ledger audit · Download backup
 5. **Suggest a change to BeanPool** — goes to the project team at beanpool.org, not to this node; the same form is in the member app and PWA Settings. What is stored and how it is triaged: [apps/feedback/README.md](../apps/feedback/README.md).
 

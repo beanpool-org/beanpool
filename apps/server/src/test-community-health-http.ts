@@ -31,7 +31,7 @@ process.env.ADMIN_PASSWORD = 'HealthPanel123!';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import { initTls } from './services/tls.js';
-import { initStateEngine, transfer, seedGenesisMember, createPost, getBalance, injectSystemMessage, createDecision } from './state-engine.js';
+import { initStateEngine, transfer, seedGenesisMember, createPost, getBalance, injectSystemMessage, createDecision, getCommonsBalance } from './state-engine.js';
 import { startHttpsServer, resetAdminRateLimit } from './https-server.js';
 import { ownerSessionHeaders, ownerTokenHeaders } from './admin-auth-test-harness.js';
 import { grantNodeRole } from './engine/node-roles.js';
@@ -554,6 +554,9 @@ async function main(): Promise<void> {
         && alertLines9.every((l) => l.action === 'alerts_read' && l.actor_pubkey === ada.pk)
         && JSON.stringify(alertLines9.map((l) => l.subject_pubkey).sort()) === JSON.stringify(named9),
         `an admin's read of the fraud alerts is a line per member they named (${data9.status} ${named9.length} named, ${alertLines9.length} lines)`);
+    // Settings' Home shows the Commons pot from this answer: the figure members' apps show, never a missing field read as 0.
+    assert(typeof data9.body?.commonsBalance === 'number' && data9.body.commonsBalance === getCommonsBalance(),
+        `the admin data carries the Commons pot (${data9.body?.commonsBalance} vs ${getCommonsBalance()})`);
     const healthBefore9 = logRows();
     const health9 = await call('POST', null, '/api/local/admin/health', {}, adaSession);
     const named9h = new Set(((health9.body?.flags ?? []) as any[]).flatMap((f) => f.members ?? []));

@@ -1,6 +1,6 @@
 import { render, screen, act, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
-import { HomeScreen } from './HomeScreen';
+import { HomeScreen, SERVER_ALERTS_ANCHOR } from './HomeScreen';
 
 describe('HomeScreen Component', () => {
     const defaultProps = {
@@ -18,7 +18,9 @@ describe('HomeScreen Component', () => {
     };
 
     it('renders 0 enterprises and 0.0 circulation beans on cold start / empty node data', () => {
-        render(<HomeScreen {...defaultProps} nodeData={{ members: [] }} />);
+        // A cold-start node's real answer: no members yet, and trade totals of zero (every node sends tradeTotals). A 0
+        // here is the node's; a payload without the field is "couldn't load" (below), never 0.
+        render(<HomeScreen {...defaultProps} nodeData={{ members: [], tradeTotals: { deals: 0, volume: 0, cancelled: 0 } }} />);
 
         // Enterprise card should render 0
         const enterpriseCard = screen.getByRole('button', { name: /Shared Enterprises/i });
@@ -211,6 +213,110 @@ describe('HomeScreen Component', () => {
         expect(screen.queryByTestId('offbox-health-banner')).toBeNull();
         rerender(<HomeScreen {...defaultProps} diag={{} as any} />);
         expect(screen.queryByTestId('offbox-health-banner')).toBeNull();
+    });
+
+    describe("the server's alerts and figures that didn't load (Marty, 19 Oct: 'This server has alerts: 1' on the phone, 'All clear' and 0 members here)", () => {
+        const loaded = {
+            members: [{ publicKey: 'a', isTreasury: false }, { publicKey: 'b', isTreasury: false }, { publicKey: 'c', isTreasury: true }],
+            reportCount: 0, escrowDisputesCount: 0, tradeTotals: { deals: 2, volume: 12.5, cancelled: 0 }, commonsBalance: 40.25,
+        };
+        const alertItems = [
+            { key: 'backups.none', title: 'backups stay on this server', priority: 2, since: 1, detail: 'Backups stay on this server: no destination and no recovery code.' },
+            { key: 'disk.90', title: 'disk 90% full', priority: 4, since: 2, detail: 'The disk is 91% full.' },
+        ];
+        const diagWith = (serverAlerts: unknown) => ({ activeWsConnections: 2, dbSizeBytes: 1, walSizeBytes: 0, serverAlerts }) as any;
+
+        it('lists each alert the phone counts, in the node\'s words, linked to the Alerts card; no All clear', async () => {
+            const onNavigate = vi.fn();
+            render(<HomeScreen {...defaultProps} onNavigate={onNavigate} nodeData={loaded} diag={diagWith({ count: 2, items: alertItems })} />);
+            const panel = screen.getByTestId('home-action-required');
+            expect(panel).toHaveTextContent('This server has alerts: 2');
+            for (const a of alertItems) expect(panel).toHaveTextContent(a.detail);
+            expect(panel).not.toHaveTextContent(/All clear/);
+            await act(async () => {
+                fireEvent.click(screen.getByRole('button', { name: /The disk is 91% full\./ }));
+            });
+            expect(onNavigate).toHaveBeenCalledWith('appliance', 'backups', SERVER_ALERTS_ANCHOR);
+        });
+
+        it('says All clear only when the alerts were read and there are none, and the data is in', () => {
+            const { rerender } = render(<HomeScreen {...defaultProps} nodeData={loaded} diag={diagWith({ count: 0, items: [] })} />);
+            expect(screen.getByText(/All clear/)).toBeInTheDocument();
+            // Not an owner: the node sends them no alerts (null), as the phone shows them none; the rest was read.
+            rerender(<HomeScreen {...defaultProps} nodeData={loaded} diag={diagWith(null)} />);
+            expect(screen.getByText(/All clear/)).toBeInTheDocument();
+            // A server from before the list (or one that couldn't read its alert book): unread, so not all clear.
+            rerender(<HomeScreen {...defaultProps} nodeData={loaded} diag={diagWith(undefined)} />);
+            expect(screen.queryByText(/All clear/)).toBeNull();
+            expect(screen.getByRole('button', { name: /alerts couldn't be read here/ })).toBeInTheDocument();
+            // Diagnostics not in yet: storage and alerts unchecked.
+            rerender(<HomeScreen {...defaultProps} nodeData={loaded} diag={null} />);
+            expect(screen.queryByText(/All clear/)).toBeNull();
+            expect(screen.getByText(/Checking storage and the server's alerts/)).toBeInTheDocument();
+            // The data not in: reports and disputes unchecked.
+            rerender(<HomeScreen {...defaultProps} nodeData={null} nodeDataError="HTTP 500: Error" diag={diagWith({ count: 0, items: [] })} />);
+            expect(screen.queryByText(/All clear/)).toBeNull();
+            expect(screen.getByText(/Couldn't check reports and escrow disputes \(HTTP 500: Error\)/)).toBeInTheDocument();
+        });
+
+        it("a failed or refused data load says each figure couldn't load, with a retry; never 0", async () => {
+            const onRetryNodeData = vi.fn();
+            render(<HomeScreen {...defaultProps} nodeData={null} nodeDataError="HTTP 403: Forbidden" onRetryNodeData={onRetryNodeData} diag={diagWith({ count: 0, items: [] })} />);
+            for (const id of ['members', 'pool', 'enterprises', 'circulation']) {
+                const card = screen.getByTestId(`home-figure-${id}`);
+                expect(card).toHaveTextContent("Couldn't load");
+                expect(card).not.toHaveTextContent(/\b0(\.0)?\b/);
+            }
+            expect(screen.getByTestId('home-figures-unloaded')).toHaveTextContent("Members, the Commons pool, enterprises and circulation couldn't load (HTTP 403: Forbidden).");
+            await act(async () => {
+                fireEvent.click(screen.getByRole('button', { name: 'Retry the figures' }));
+            });
+            expect(onRetryNodeData).toHaveBeenCalled();
+        });
+
+        it('while the data loads, the figures say so, not 0', () => {
+            render(<HomeScreen {...defaultProps} nodeData={null} nodeDataLoading diag={null} />);
+            for (const id of ['members', 'pool', 'enterprises', 'circulation']) {
+                expect(screen.getByTestId(`home-figure-${id}`)).toHaveTextContent('Loading…');
+            }
+            expect(screen.getByTestId('home-connections')).toHaveTextContent('Connections loading…');
+            expect(screen.queryByText(/All clear/)).toBeNull();
+        });
+
+        it("a figure an older server doesn't send says it couldn't load, not 0", () => {
+            render(<HomeScreen {...defaultProps} nodeData={{ members: loaded.members, reportCount: 0, escrowDisputesCount: 0 }} diag={diagWith({ count: 0, items: [] })} />);
+            expect(screen.getByTestId('home-figure-members')).toHaveTextContent('2');
+            expect(screen.getByTestId('home-figure-pool')).toHaveTextContent("Couldn't load");
+            expect(screen.getByTestId('home-figure-circulation')).toHaveTextContent("Couldn't load");
+            expect(screen.getByTestId('home-figures-unloaded')).toHaveTextContent("The Commons pool and circulation couldn't load: this server doesn't send them yet, so update it.");
+        });
+
+        it("the Commons pool is the node's pot, not the ledger audit's sum of balances", () => {
+            render(<HomeScreen {...defaultProps} auditState={{ running: false, result: { ok: true, drift: 0, sumBalances: -9.82 } }} nodeData={loaded} diag={diagWith({ count: 0, items: [] })} />);
+            const pool = screen.getByTestId('home-figure-pool');
+            expect(pool).toHaveTextContent('40.3 beans');
+            expect(pool).not.toHaveTextContent('9.8');
+        });
+
+        it("the Commons pool card opens Shared Projects & Economy, not the Pool tab's placeholder figures", () => {
+            const onNavigate = vi.fn();
+            render(<HomeScreen {...defaultProps} onNavigate={onNavigate} nodeData={loaded} diag={diagWith({ count: 0, items: [] })} />);
+            fireEvent.click(screen.getByTestId('home-figure-pool'));
+            // The Pool sub-tab still shows a fixed "240.0 beans" and "0.0 drift" (EconomySection), next to the real pot here.
+            expect(onNavigate).toHaveBeenCalledWith('economy');
+        });
+
+        it("diagnostics that failed: the connections couldn't load, with a retry; a loaded count is the node's", async () => {
+            const onRetryDiag = vi.fn();
+            const { rerender } = render(<HomeScreen {...defaultProps} nodeData={loaded} diag={null} diagError="HTTP 500: Error" onRetryDiag={onRetryDiag} />);
+            expect(screen.getByTestId('home-connections')).toHaveTextContent("Connections couldn't load");
+            await act(async () => {
+                fireEvent.click(screen.getByRole('button', { name: 'Retry connections' }));
+            });
+            expect(onRetryDiag).toHaveBeenCalled();
+            rerender(<HomeScreen {...defaultProps} nodeData={loaded} diag={diagWith({ count: 0, items: [] })} />);
+            expect(screen.getByTestId('home-connections')).toHaveTextContent('2 active connections');
+        });
     });
 });
 

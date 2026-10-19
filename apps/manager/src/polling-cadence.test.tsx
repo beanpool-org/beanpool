@@ -52,6 +52,9 @@ let calls: string[] = [];
 let dataPayload: Record<string, unknown> = { success: true, health: { flags: [] }, reports: [], members: [] };
 /** Endpoints whose response never settles, so an "in flight" request can be held open. */
 let stalled: string[] = [];
+/** Stalled requests still open per endpoint (one leaves when its signal aborts), and the most ever open at once. */
+let openNow: Record<string, number> = {};
+let mostOpen: Record<string, number> = {};
 /** Endpoints that answer, badly — every fragment listed here returns a 503. */
 let failing: string[] = [];
 /**
@@ -78,15 +81,21 @@ function jsonOk(body: unknown) {
 function installFetch() {
     calls = [];
     stalled = [];
+    openNow = {};
+    mostOpen = {};
     failing = [];
     holds = [];
     held = [];
     vi.stubGlobal(
         'fetch',
-        vi.fn().mockImplementation((url: string) => {
+        vi.fn().mockImplementation((url: string, init?: RequestInit) => {
             const href = String(url);
             calls.push(href);
-            if (stalled.some((fragment) => href.includes(fragment))) {
+            const stall = stalled.find((fragment) => href.includes(fragment));
+            if (stall) {
+                openNow[stall] = (openNow[stall] ?? 0) + 1;
+                mostOpen[stall] = Math.max(mostOpen[stall] ?? 0, openNow[stall]);
+                init?.signal?.addEventListener('abort', () => { openNow[stall] -= 1; }, { once: true });
                 return new Promise(() => {});
             }
             if (holds.some((fragments) => fragments.every((fragment) => href.includes(fragment)))) {
@@ -376,8 +385,11 @@ describe('Node Settings polling cadence', () => {
         await tick(60_000);
 
         // Twelve ticks went by against a node that never answers. Each kind of request was
-        // issued once and then waited for, rather than piling a new one on every tick.
-        expect(countOf(DIAGNOSTICS)).toBe(1);
+        // waited for, rather than piling a new one on every tick. Diagnostics give up after 30 s
+        // (review r4309522121) and stop the request before the next is asked: never two open at
+        // once, and exactly two asked in the minute, at 0 s and after the first's limit (r4309627922).
+        expect(mostOpen[DIAGNOSTICS]).toBe(1);
+        expect(countOf(DIAGNOSTICS)).toBe(2);
         expect(countOf(DATA)).toBe(1);
     });
 

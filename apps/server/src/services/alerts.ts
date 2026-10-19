@@ -353,6 +353,8 @@ interface BookState {
     child: ChildReports;
     /** The counts of SecurityNote.perDay lines, by key and words: the open window's first event and how many since. */
     dayCounts: Record<string, DayCount>;
+    /** When this book was begun again because the one on disk couldn't be read (readState): what it held is gone. */
+    lostAt?: number;
 }
 
 /**
@@ -405,8 +407,14 @@ function readState(): BookState {
     try {
         const parsed = JSON.parse(fs.readFileSync(stateFile(), 'utf8'));
         state = { ...emptyState(), ...parsed, channel: { ...emptyChannel(), ...(parsed?.channel ?? {}) }, dayCounts: dayCountsOf(parsed?.dayCounts) };
-    } catch {
-        state = emptyState();
+    } catch (e) {
+        // No book yet is a first start. One that is there but can't be read is lost, and the new one says so
+        // (alertBookLostLately), so Settings never takes its empty list for "all clear" (review r4309393945).
+        const missing = (e as NodeJS.ErrnoException)?.code === 'ENOENT';
+        // A parse error's message quotes the file, so never logged.
+        const why = e instanceof SyntaxError ? 'it is not JSON' : errorMessage(e);
+        if (!missing) logger.warn('SYS', `[Alerts] Could not read the alert book, so began a new one: ${why}`);
+        state = missing ? emptyState() : { ...emptyState(), lostAt: now() };
     }
     return state!;
 }
@@ -1669,13 +1677,50 @@ export function stopServerAlerts(): void {
 
 // ── What Settings and the admin queue read ─────────────────────────────────────────────────
 
+/** One alert the `server_alert` banner counts, in the node's own words: Settings' Home lists each. */
+export interface BannerAlert {
+    key: AlertKey;
+    title: string;
+    priority: AlertPriority;
+    /** When the condition started, or when the security event was told. */
+    since: number;
+    detail: string;
+}
+
+/**
+ * The alerts the `server_alert` banner counts, newest security event first after the conditions: the active rows with a
+ * banner, and each kind of security event of the last day no owner has acknowledged (a role granted, the community
+ * claimed, a key changed), once. The phone's count and Settings' Home list are both this, so they can't disagree. A book
+ * on disk that couldn't be read is begun again empty (readState), which lists none: alertBookLostLately says when.
+ */
+export function serverAlertsBanner(): { count: number; items: BannerAlert[] } {
+    const s = readState();
+    const items: BannerAlert[] = (Object.entries(s.raised) as Array<[AlertKey, Raised]>)
+        .filter(([k, r]) => ROWS[k]?.banner && r.endedAt === undefined)
+        .map(([key, r]) => ({ key, title: ROWS[key].title, priority: r.priority, since: r.since, detail: r.detail }));
+    const told = new Set<AlertKey>();
+    for (const e of recentSecurityEvents(s, now())) {
+        if (told.has(e.key)) continue;
+        told.add(e.key);
+        items.push({ key: e.key, title: ROWS[e.key].title, priority: e.priority, since: e.at, detail: e.detail });
+    }
+    return { count: items.length, items };
+}
+
+/**
+ * The book was begun again in the last day because the one on disk couldn't be read: its list may be missing what the old
+ * book held, so Settings' Home says it couldn't read the alerts rather than "all clear". A day is the longest a security
+ * event stays on the banner (SECURITY_BANNER_MS); the conditions are checked again every minute. It holds over a restart.
+ */
+export function alertBookLostLately(): boolean {
+    const lostAt = readState().lostAt;
+    return typeof lostAt === 'number' && Number.isFinite(lostAt) && now() - lostAt < SECURITY_BANNER_MS;
+}
+
 /** How many conditions the `server_alert` banner counts (the standby and an unclean stop have banners of their own). */
 export function serverAlertCount(): number {
     try {
-        const s = readState();
-        const active = (Object.keys(s.raised) as AlertKey[]).filter((k) => ROWS[k]?.banner && s.raised[k]?.endedAt === undefined).length;
-        // A role granted, the community claimed, a key changed: counted for a day, or until an owner acknowledges them.
-        return active + new Set(recentSecurityEvents(s, now()).map((e) => e.key)).size;
+        return serverAlertsBanner().count;
     } catch {
         return 0;
     }

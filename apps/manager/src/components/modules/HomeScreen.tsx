@@ -7,13 +7,27 @@ import { WebVisitsCard } from './WebVisitsCard';
 import { AppVersionsCard } from './AppVersionsCard';
 import type { NodeProfile } from '../../lib/profiles';
 
+/** The Alerts card (AlertsPanel, under Backups & Restore): where each of the server's alerts is listed and marked seen. */
+export const SERVER_ALERTS_ANCHOR = 'server-alerts';
+
+type HomeTab = 'people' | 'economy' | 'bulletin' | 'appliance';
+
 interface HomeScreenProps {
     communityName: string;
     publicDomain: string;
     version: string;
     diag: DiagnosticsResponse | null;
     nodeData: NodeDataPayload | null;
-    onNavigate: (tab: 'people' | 'economy' | 'bulletin' | 'appliance', subTab?: string) => void;
+    /** The node's data (members, reports, trades) is on its way: its figures say so, never 0. */
+    nodeDataLoading?: boolean;
+    /** Why that data last failed to load (refused, failed, timed out): its figures say they couldn't load, with a retry. */
+    nodeDataError?: string | null;
+    /** Why the diagnostics last failed to load (connections, storage, the server's alerts). */
+    diagError?: string | null;
+    onRetryNodeData?: () => void;
+    onRetryDiag?: () => void;
+    /** `anchor`: a card inside the section to bring into view (SERVER_ALERTS_ANCHOR). */
+    onNavigate: (tab: HomeTab, subTab?: string, anchor?: string) => void;
     onInviteMember: () => void;
     onCreateEnterprise: () => void;
     onDownloadBackup: () => Promise<void>;
@@ -33,6 +47,11 @@ export function HomeScreen({
     version,
     diag,
     nodeData,
+    nodeDataLoading = false,
+    nodeDataError = null,
+    diagError = null,
+    onRetryNodeData,
+    onRetryDiag,
     onNavigate,
     onInviteMember,
     onCreateEnterprise,
@@ -50,18 +69,23 @@ export function HomeScreen({
         setShutdownDismissed(false);
     }, [diag?.shutdownStatus?.powerLossTimestamp, diag?.shutdownStatus?.checkedAt, communityName]);
 
+    // Every figure below is the node's, or null when the data behind it didn't arrive: Home then says it couldn't load (or
+    // is loading), never 0. A 0 that meant "not loaded" said 0 members on a 34-member community (Marty, 19 Oct).
+    const dataState: 'loaded' | 'loading' | 'failed' = nodeData ? 'loaded' : (nodeDataLoading || !nodeDataError ? 'loading' : 'failed');
+    const diagState: 'loaded' | 'loading' | 'failed' = diag ? 'loaded' : (diagError ? 'failed' : 'loading');
+
     // Action required counts
-    const reports = Array.isArray(nodeData?.reports) ? nodeData.reports : [];
-    const members = Array.isArray(nodeData?.members) ? nodeData.members : [];
+    const members = Array.isArray(nodeData?.members) ? nodeData.members : null;
     const pendingReportsCount = typeof nodeData?.reportCount === 'number'
         ? nodeData.reportCount
-        : reports.filter((r: NodeReport) => (r.outcome ? r.outcome === 'open' : (r.status === 'pending' || !r.status))).length;
-    
-    // Calculate unclaimed invites from nodeData or invites count
-    const membersCount = members.filter((m: MemberItem) => m && !m.isTreasury).length;
+        : (Array.isArray(nodeData?.reports)
+            ? nodeData.reports.filter((r: NodeReport) => (r.outcome ? r.outcome === 'open' : (r.status === 'pending' || !r.status))).length
+            : null);
+
+    const membersCount = members ? members.filter((m: MemberItem) => m && !m.isTreasury).length : null;
     const enterprisesCount = Array.isArray(nodeData?.enterprises)
         ? nodeData.enterprises.length
-        : members.filter((m: MemberItem) => m && m.isTreasury).length;
+        : (members ? members.filter((m: MemberItem) => m && m.isTreasury).length : null);
 
     const circulationVolume = (() => {
         if (typeof nodeData?.tradeVolume === 'number') {
@@ -74,18 +98,30 @@ export function HomeScreen({
         if (typeof nodeData?.tradeTotals?.volume === 'number') {
             return nodeData.tradeTotals.volume.toFixed(1);
         }
-        return '0.0';
+        return null;
     })();
 
+    // The Commons pot, from the node's data (routes/admin.ts /admin/data). Not the ledger audit's sum of balances: that is
+    // the conservation baseline, which is no pool at all.
+    const commonsBalance = typeof nodeData?.commonsBalance === 'number' && Number.isFinite(nodeData.commonsBalance)
+        ? nodeData.commonsBalance.toFixed(1)
+        : null;
+
     // Disk/storage usage percentage: prefer real diskHealth if provided by server
-    const storagePercent = typeof diag?.diskHealth?.usedPercent === 'number'
+    const storagePercent = !diag ? null : typeof diag.diskHealth?.usedPercent === 'number'
         ? diag.diskHealth.usedPercent
         : (() => {
-            const dbBytes = diag?.dbSizeBytes || 0;
-            const walBytes = diag?.walSizeBytes || 0;
+            const dbBytes = diag.dbSizeBytes || 0;
+            const walBytes = diag.walSizeBytes || 0;
             const totalStorageMb = Math.round((dbBytes + walBytes) / (1024 * 1024) * 10) / 10;
             return Math.min(100, Math.round((totalStorageMb / 500) * 100));
         })();
+
+    // The server's alerts, exactly as the phone's "This server has alerts: N" counts them (the node's diagnostics): null to
+    // anyone but an owner, as on the phone; absent on a server from before them, or when the node couldn't read them.
+    const serverAlerts = diag?.serverAlerts;
+    const alertsRead = Boolean(serverAlerts && Array.isArray(serverAlerts.items));
+    const alertsUnread = Boolean(diag) && serverAlerts !== null && !alertsRead;
 
     // Unclean shutdown status
     const shutdownStatus = diag?.shutdownStatus;
@@ -104,9 +140,31 @@ export function HomeScreen({
     const offboxProblems = diag?.offboxBackups?.problems ?? [];
 
     // Action items
-    const actionItems:{ icon: string; text: string; tab: 'people' | 'economy' | 'bulletin' | 'appliance'; sub?: string }[] = [];
-    if (pendingReportsCount > 0) {
+    const actionItems: { key: string; icon: string; text: string; tab: HomeTab; sub?: string; anchor?: string }[] = [];
+    // Each of the server's alerts in the node's words, linked to the Alerts card where it is listed and marked seen.
+    for (const a of alertsRead ? serverAlerts!.items : []) {
         actionItems.push({
+            key: `alert-${a.key}`,
+            icon: a.priority >= 5 ? '🚨' : a.priority >= 4 ? '⚠️' : '🔔',
+            text: a.detail || a.title,
+            tab: 'appliance',
+            sub: 'backups',
+            anchor: SERVER_ALERTS_ANCHOR,
+        });
+    }
+    if (alertsUnread) {
+        actionItems.push({
+            key: 'alerts-unread',
+            icon: '🔔',
+            text: "This server's alerts couldn't be read here: open Alerts to see them",
+            tab: 'appliance',
+            sub: 'backups',
+            anchor: SERVER_ALERTS_ANCHOR,
+        });
+    }
+    if (pendingReportsCount !== null && pendingReportsCount > 0) {
+        actionItems.push({
+            key: 'reports',
             icon: '⚠️',
             text: `${pendingReportsCount} report${pendingReportsCount > 1 ? 's' : ''} pending`,
             tab: 'people',
@@ -116,9 +174,10 @@ export function HomeScreen({
 
     const pendingDisputesCount = typeof nodeData?.escrowDisputesCount === 'number'
         ? nodeData.escrowDisputesCount
-        : 0;
-    if (pendingDisputesCount > 0) {
+        : null;
+    if (pendingDisputesCount !== null && pendingDisputesCount > 0) {
         actionItems.push({
+            key: 'disputes',
             icon: '⚖️',
             text: `${pendingDisputesCount} escrow dispute${pendingDisputesCount > 1 ? 's' : ''} pending`,
             tab: 'economy',
@@ -126,8 +185,9 @@ export function HomeScreen({
         });
     }
 
-    if (storagePercent >= 80) {
+    if (storagePercent !== null && storagePercent >= 80) {
         actionItems.push({
+            key: 'storage',
             icon: '💾',
             text: `Storage ${storagePercent}%`,
             tab: 'appliance',
@@ -135,9 +195,32 @@ export function HomeScreen({
         });
     }
 
+    // What Action Required could not look at yet: "All clear" only when nothing is left here and nothing is listed.
+    const fromData = [pendingReportsCount === null && 'reports', pendingDisputesCount === null && 'escrow disputes'].filter(Boolean) as string[];
+    const fromDiag = diag ? [] : ['storage', "the server's alerts"];
+    const unchecked = [...fromData, ...fromDiag];
+    // Data that arrived without these fields (an older server) is no load to wait for: it is unchecked, and said so.
+    const uncheckedLoading = (fromData.length > 0 && dataState === 'loading') || (fromDiag.length > 0 && diagState === 'loading');
+    const retryChecks = () => {
+        if (fromData.length > 0 && dataState !== 'loading') onRetryNodeData?.();
+        if (fromDiag.length > 0 && diagState === 'failed') onRetryDiag?.();
+    };
+    const uncheckedWhy = [fromData.length > 0 && dataState === 'failed' && nodeDataError, fromDiag.length > 0 && diagState === 'failed' && diagError]
+        .filter(Boolean).join('; ');
+
+    // The four figures: each the node's value, or null (loading, or couldn't load).
+    const missingFigures = [
+        membersCount === null && 'members',
+        commonsBalance === null && 'the Commons pool',
+        enterprisesCount === null && 'enterprises',
+        circulationVolume === null && 'circulation',
+    ].filter(Boolean) as string[];
+    const figuresLoading = missingFigures.length > 0 && dataState === 'loading';
+
     const driftText = auditState.result
         ? `Ledger ${auditState.result.ok ? 'balanced' : 'drift detected'} (${Number.isFinite(auditState.result.drift) ? auditState.result.drift : 'not a number'} drift)`
-        : 'Ledger balanced (0 drift)';
+        : 'Ledger not audited yet';
+    const connections = typeof diag?.activeWsConnections === 'number' ? diag.activeWsConnections : null;
 
     return (
         <div className="space-y-6 font-sans animate-fade-in">
@@ -168,15 +251,24 @@ export function HomeScreen({
                         </p>
                     </div>
 
-                    {/* Quick status pill */}
-                    <div className="flex items-center gap-3">
+                    {/* Quick status pill: the node's count, or why there is none (never a 0 that wasn't sent) */}
+                    <div className="flex flex-wrap items-center gap-2">
                         <button
+                            type="button"
+                            data-testid="home-connections"
                             onClick={() => onNavigate('appliance', 'diagnostics')}
-                            className="px-3.5 py-2 rounded-xl bg-nature-800/80 hover:bg-nature-700 text-xs font-bold text-nature-200 border border-nature-700 transition-all flex items-center gap-2"
+                            className="min-h-[44px] px-3.5 py-2 rounded-xl bg-nature-800/80 hover:bg-nature-700 text-xs font-bold text-nature-200 border border-nature-700 transition-all flex items-center gap-2"
                         >
-                            <span>🔌</span>
-                            <span>{diag?.activeWsConnections ?? 0} active connections</span>
+                            <span aria-hidden="true">🔌</span>
+                            <span>
+                                {connections !== null
+                                    ? `${connections} active connection${connections === 1 ? '' : 's'}`
+                                    : diagState === 'loading' ? 'Connections loading…' : "Connections couldn't load"}
+                            </span>
                         </button>
+                        {connections === null && diagState !== 'loading' && onRetryDiag && (
+                            <RetryButton onClick={onRetryDiag} label="Retry connections" />
+                        )}
                     </div>
                 </div>
             </div>
@@ -335,33 +427,51 @@ export function HomeScreen({
                 </div>
             )}
 
-            {/* 2. Action required — either All clear or live list */}
-            <div className="bg-nature-900/60 border border-nature-800 rounded-2xl p-5 shadow-lg">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-nature-400 mb-3 flex items-center gap-2">
+            {/* 2. Action required — the live list, or All clear only once everything it covers was read */}
+            <div className="bg-nature-900/60 border border-nature-800 rounded-2xl p-5 shadow-lg space-y-3" data-testid="home-action-required">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-nature-400 m-0 flex items-center gap-2">
                     <span>⚡</span>
                     <span>Action Required</span>
                 </h3>
-                {actionItems.length === 0 ? (
+                {alertsRead && serverAlerts!.count > 0 && (
+                    // The words the phone's "Needs you" said, so the owner who tapped it sees what it meant.
+                    <p className="text-xs font-semibold text-nature-200 m-0">This server has alerts: {serverAlerts!.count}</p>
+                )}
+                {actionItems.length === 0 && unchecked.length === 0 && (
                     <div className="flex items-center gap-2 text-sm font-semibold text-emerald-400 bg-emerald-950/30 border border-emerald-800/40 px-4 py-3 rounded-xl">
                         <span>🟢</span>
                         <span>All clear — node is running cleanly with no pending actions.</span>
                     </div>
-                ) : (
+                )}
+                {actionItems.length > 0 && (
                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                        {actionItems.map((item, idx) => (
+                        {actionItems.map((item) => (
                             <button
-                                key={idx}
-                                onClick={() => onNavigate(item.tab, item.sub)}
-                                className="flex items-center justify-between p-3.5 rounded-xl bg-bp-chip-warn-tint hover:opacity-90 border border-amber-800/50 text-bp-chip-warn-ink text-xs font-bold transition-all text-left group"
+                                key={item.key}
+                                type="button"
+                                onClick={() => onNavigate(item.tab, item.sub, item.anchor)}
+                                className="min-h-[44px] flex items-center justify-between gap-2 p-3.5 rounded-xl bg-bp-chip-warn-tint hover:opacity-90 border border-amber-800/50 text-bp-chip-warn-ink text-xs font-bold transition-all text-left group"
                             >
-                                <div className="flex items-center gap-2.5">
-                                    <span className="text-base">{item.icon}</span>
-                                    <span>{item.text}</span>
+                                <div className="flex items-center gap-2.5 min-w-0">
+                                    <span className="text-base shrink-0" aria-hidden="true">{item.icon}</span>
+                                    <span className="min-w-0 break-words">{item.text}</span>
                                 </div>
-                                <span className="text-amber-400 group-hover:translate-x-0.5 transition-transform">→</span>
+                                <span className="text-bp-chip-warn-ink shrink-0 group-hover:translate-x-0.5 transition-transform" aria-hidden="true">→</span>
                             </button>
                         ))}
                     </div>
+                )}
+                {unchecked.length > 0 && (
+                    uncheckedLoading ? (
+                        <p className="text-xs text-nature-400 m-0" role="status">Checking {listInWords(unchecked)}…</p>
+                    ) : (
+                        <div className="flex flex-wrap items-center gap-2" role="status">
+                            <p className="text-xs text-nature-300 m-0 min-w-0 break-words flex-1">
+                                Couldn't check {listInWords(unchecked)}{uncheckedWhy ? ` (${uncheckedWhy})` : ': this server doesn\'t send them yet, so update it'}.
+                            </p>
+                            {(onRetryNodeData || onRetryDiag) && <RetryButton onClick={retryChecks} label="Retry the checks" />}
+                        </div>
+                    )
                 )}
             </div>
 
@@ -370,6 +480,7 @@ export function HomeScreen({
                 {/* Members Card */}
                 <button
                     type="button"
+                    data-testid="home-figure-members"
                     onClick={() => onNavigate('people')}
                     className="p-5 rounded-2xl bg-nature-900/70 hover:bg-nature-900 border border-nature-800 hover:border-nature-700 cursor-pointer transition-all shadow-md group text-left w-full focus:outline-none focus:ring-2 focus:ring-terra-500"
                 >
@@ -377,17 +488,16 @@ export function HomeScreen({
                         <span className="text-xs font-bold text-nature-400 uppercase tracking-wider">Members</span>
                         <span className="text-lg" aria-hidden="true">👥</span>
                     </div>
-                    <div className="text-3xl font-black text-white mb-1 group-hover:text-bp-ink-terra transition-colors">
-                        {membersCount}
-                    </div>
+                    <FigureValue value={membersCount === null ? null : String(membersCount)} loading={figuresLoading} />
                     <p className="text-xs text-nature-400 m-0">
-                        {membersCount === 1 ? '1 active sovereign member' : `${membersCount} active sovereign members`}
+                        {membersCount === null ? 'Active members' : membersCount === 1 ? '1 active sovereign member' : `${membersCount} active sovereign members`}
                     </p>
                 </button>
 
                 {/* Commons Pool Card */}
                 <button
                     type="button"
+                    data-testid="home-figure-pool"
                     onClick={() => onNavigate('economy')}
                     className="p-5 rounded-2xl bg-nature-900/70 hover:bg-nature-900 border border-nature-800 hover:border-nature-700 cursor-pointer transition-all shadow-md group text-left w-full focus:outline-none focus:ring-2 focus:ring-terra-500"
                 >
@@ -395,22 +505,17 @@ export function HomeScreen({
                         <span className="text-xs font-bold text-nature-400 uppercase tracking-wider">Commons Pool</span>
                         <span className="text-lg" aria-hidden="true">🏛️</span>
                     </div>
-                    <div className="text-3xl font-black text-white mb-1 group-hover:text-bp-ink-terra transition-colors">
-                        {typeof auditState.result?.sumBalances === 'number' && Number.isFinite(auditState.result.sumBalances)
-                            ? Math.abs(auditState.result.sumBalances).toFixed(1)
-                            : (typeof nodeData?.commonsBalance === 'number'
-                                ? nodeData.commonsBalance.toFixed(1)
-                                : '0.0')}{' '}
-                        <span className="text-xs font-normal text-nature-400">beans</span>
-                    </div>
-                    <p className="text-xs text-emerald-400 m-0 font-medium">
-                        ✓ 0 drift · 100% backed
+                    <FigureValue value={commonsBalance} unit="beans" loading={figuresLoading} />
+                    {/* The ledger's state only from an audit run here: nothing claims a balance no one checked. */}
+                    <p className={`text-xs m-0 font-medium ${auditState.result ? (auditState.result.ok ? 'text-bp-ink-success' : 'text-bp-ink-warning') : 'text-nature-400'}`}>
+                        {auditState.result ? (auditState.result.ok ? '✓ Ledger balanced' : 'Ledger drift detected') : 'Ledger not audited yet'}
                     </p>
                 </button>
 
                 {/* Shared Enterprises Card */}
                 <button
                     type="button"
+                    data-testid="home-figure-enterprises"
                     onClick={() => onNavigate('economy')}
                     className="p-5 rounded-2xl bg-nature-900/70 hover:bg-nature-900 border border-nature-800 hover:border-nature-700 cursor-pointer transition-all shadow-md group text-left w-full focus:outline-none focus:ring-2 focus:ring-terra-500"
                 >
@@ -418,9 +523,7 @@ export function HomeScreen({
                         <span className="text-xs font-bold text-nature-400 uppercase tracking-wider">Shared Enterprises</span>
                         <span className="text-lg" aria-hidden="true">🌾</span>
                     </div>
-                    <div className="text-3xl font-black text-white mb-1 group-hover:text-bp-ink-terra transition-colors">
-                        {enterprisesCount}
-                    </div>
+                    <FigureValue value={enterprisesCount === null ? null : String(enterprisesCount)} loading={figuresLoading} />
                     <p className="text-xs text-nature-400 m-0">
                         Community projects &amp; co-ops
                     </p>
@@ -429,6 +532,7 @@ export function HomeScreen({
                 {/* Circulation Card */}
                 <button
                     type="button"
+                    data-testid="home-figure-circulation"
                     onClick={() => onNavigate('appliance', 'diagnostics')}
                     className="p-5 rounded-2xl bg-nature-900/70 hover:bg-nature-900 border border-nature-800 hover:border-nature-700 cursor-pointer transition-all shadow-md group text-left w-full focus:outline-none focus:ring-2 focus:ring-terra-500"
                 >
@@ -436,14 +540,23 @@ export function HomeScreen({
                         <span className="text-xs font-bold text-nature-400 uppercase tracking-wider">Circulation</span>
                         <span className="text-lg" aria-hidden="true">🔄</span>
                     </div>
-                    <div className="text-3xl font-black text-white mb-1 group-hover:text-bp-ink-terra transition-colors">
-                        {circulationVolume} <span className="text-xs font-normal text-nature-400">beans</span>
-                    </div>
+                    <FigureValue value={circulationVolume} unit="beans" loading={figuresLoading} />
+                    {/* The node's figure is every completed trade's Beans, ever (state-engine getTradeTotals), not a week's. */}
                     <p className="text-xs text-nature-400 m-0">
-                        Active trade volume this week
+                        Completed trades, all time
                     </p>
                 </button>
             </div>
+
+            {missingFigures.length > 0 && !figuresLoading && (
+                <div className="flex flex-wrap items-center gap-2 -mt-2" role="status" data-testid="home-figures-unloaded">
+                    <p className="text-xs text-nature-300 m-0 min-w-0 break-words flex-1">
+                        {capitalised(listInWords(missingFigures))} couldn't load
+                        {dataState === 'failed' && nodeDataError ? ` (${nodeDataError})` : dataState === 'loaded' ? ': this server doesn\'t send them yet, so update it' : ''}.
+                    </p>
+                    {onRetryNodeData && <RetryButton onClick={onRetryNodeData} label="Retry the figures" />}
+                </div>
+            )}
 
             {/* Web app visits a day, counted by the node itself */}
             {activeNode && <WebVisitsCard node={activeNode} />}
@@ -537,4 +650,43 @@ export function HomeScreen({
             {FEEDBACK_LIVE && <SuggestChangePanel appVersion={version} />}
         </div>
     );
+}
+
+/** A figure card's number, or what stands in its place: never a 0 for a figure that didn't arrive. */
+function FigureValue({ value, unit, loading }: { value: string | null; unit?: string; loading: boolean }) {
+    if (value === null) {
+        return (
+            <div className="text-base font-bold text-nature-300 mb-1 min-h-[2.25rem] flex items-center">
+                {loading ? 'Loading…' : "Couldn't load"}
+            </div>
+        );
+    }
+    return (
+        <div className="text-3xl font-black text-white mb-1 group-hover:text-bp-ink-terra transition-colors">
+            {value}
+            {unit && <>{' '}<span className="text-xs font-normal text-nature-400">{unit}</span></>}
+        </div>
+    );
+}
+
+function RetryButton({ onClick, label }: { onClick: () => void; label: string }) {
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            aria-label={label}
+            className="min-h-[44px] px-3.5 py-2 rounded-xl bg-nature-800 hover:bg-nature-700 text-xs font-bold text-white border border-nature-700 transition-all shrink-0"
+        >
+            Retry
+        </button>
+    );
+}
+
+/** "a", "a and b", "a, b and c". */
+function listInWords(parts: string[]): string {
+    return parts.length <= 1 ? (parts[0] ?? '') : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
+}
+
+function capitalised(s: string): string {
+    return s.charAt(0).toUpperCase() + s.slice(1);
 }

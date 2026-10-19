@@ -135,6 +135,21 @@ export interface DiagnosticsResponse {
     standbyHealth?: StandbyHealthBanner | null;
     /** Off-box backups that need the owners (apps/server services/offbox-backups.ts): owners only, null to anyone else. */
     offboxBackups?: { problems: string[] } | null;
+    /**
+     * The alerts the phone's "This server has alerts: N" counts, each in the node's words (apps/server services/alerts.ts
+     * serverAlertsBanner): owners only, null to anyone else; absent on a server from before it, or when the node couldn't
+     * read its alert book. Settings' Home lists these as they are, never working them out again.
+     */
+    serverAlerts?: { count: number; items: ServerAlert[] } | null;
+}
+
+/** One of the server's own alerts, as the node says it. `priority`: 5 urgent, 4 high, 3 warning, 2 low, 1 info. */
+export interface ServerAlert {
+    key: string;
+    title: string;
+    priority: number;
+    since: number;
+    detail: string;
 }
 
 /** When the standby needs its owners: an incident, in the node's words, and each standby it watches. */
@@ -588,16 +603,58 @@ export function isAuthFailure(message: string): boolean {
         || message.includes(PASSWORD_NEEDS_2FA_HINT) || message.includes(PASSWORD_RETIRED_HINT);
 }
 
+/**
+ * Time limits for one read from a node: its answer (status and headers) within `answerMs` of the request, and its body
+ * within `allMs` of it. Each rejects in words and stops the request; a fetch that ignored the abort still ends here. Each
+ * limit's timer stops when its own work settles: the answer's, left running, aborted a body still arriving after it
+ * (review r4309522009). `answer` starts the clock again, so a second request (a retry after the 2FA code) has its own.
+ */
+export function nodeReadLimits(answerMs: number, allMs: number, words: { answer: string; all: string }) {
+    const ctl = new AbortController();
+    let started = Date.now();
+    const within = <T>(work: Promise<T>, ms: number, why: string): Promise<T> => {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        return Promise.race([work, new Promise<never>((_, reject) => {
+            timer = setTimeout(() => {
+                const e = new Error(why);
+                reject(e);
+                ctl.abort(e);
+            }, ms);
+        })]).finally(() => clearTimeout(timer));
+    };
+    return {
+        signal: ctl.signal,
+        answer: <T>(request: Promise<T>): Promise<T> => {
+            started = Date.now();
+            return within(request, answerMs, words.answer);
+        },
+        body: <T>(read: Promise<T>): Promise<T> => within(read, allMs - (Date.now() - started), words.all),
+    };
+}
+
+/**
+ * Diagnostics carry the server's alerts, so a stalled read fails rather than leave Home on "loading" with no Retry
+ * (review r4309522121). About a kilobyte: the node answers within 30 s, and all of it arrives within a minute.
+ */
+export const NODE_DIAG_ANSWER_MS = 30_000;
+export const NODE_DIAG_ALL_MS = 60_000;
+export const diagnosticsReadLimits = () => nodeReadLimits(NODE_DIAG_ANSWER_MS, NODE_DIAG_ALL_MS, {
+    answer: "The node didn't answer within 30 seconds",
+    all: "The node's diagnostics didn't all arrive within a minute",
+});
+
 export async function fetchDiagnostics(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<DiagnosticsResponse> {
     const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/diagnostics');
-    const res = await fetch(endpoint, {
+    const limits = diagnosticsReadLimits();
+    const res = await limits.answer(fetch(endpoint, {
         headers: buildAdminHeaders(adminPassword, tfaToken),
         cache: 'no-store',
-    });
+        signal: limits.signal,
+    }));
     if (!res.ok) {
-        throw (await passwordNeeds2faError(res)) ?? new Error(`HTTP ${res.status}: ${res.statusText}`);
+        throw (await limits.body(passwordNeeds2faError(res))) ?? new Error(`HTTP ${res.status}: ${res.statusText}`);
     }
-    return res.json();
+    return limits.body(res.json());
 }
 
 export async function acknowledgeShutdownStatus(
@@ -991,17 +1048,30 @@ export async function fetchAlertsSummary(nodeUrl: string, adminPassword?: string
     };
 }
 
+/**
+ * The data read fails rather than hang, so Home says it couldn't load, with a Retry, instead of "Loading…" for as long as
+ * the browser keeps the socket open (review r4309394025). The node answers within 30 s or it hasn't answered; the rest
+ * has 5 minutes, long on purpose: it is every member (~4 MB on a big node), over what can be a slow phone link.
+ */
+export const NODE_DATA_ANSWER_MS = 30_000;
+export const NODE_DATA_ALL_MS = 5 * 60_000;
+
 export async function fetchNodeData(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<NodeDataPayload> {
     const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/data');
-    const res = await fetch(endpoint, {
+    const limits = nodeReadLimits(NODE_DATA_ANSWER_MS, NODE_DATA_ALL_MS, {
+        answer: "The node didn't answer within 30 seconds",
+        all: "The node's data didn't all arrive within 5 minutes",
+    });
+    const res = await limits.answer(fetch(endpoint, {
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
         body: JSON.stringify({ ...passwordField(adminPassword) }),
-    });
+        signal: limits.signal,
+    }));
     if (!res.ok) {
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
     }
-    const json = await res.json();
+    const json = await limits.body(res.json());
     return normalizeNodeData(json);
 }
 

@@ -216,6 +216,14 @@ async function main(): Promise<void> {
     assert(!line.body.includes(CALLSIGNS[4]) && !line.body.includes(helper.slice(0, 12)), '1. and never the member');
     assert(banner('owner') >= 1, `1. the owner's admin queue shows the banner (${banner('owner')})`);
     assert(banner('admin') === 0, `1. an admin's shows none (${banner('admin')})`);
+    // Settings' Home lists what the phone counts, from the owner's diagnostics: the same count, the event in its words.
+    const diag1 = await call('GET', '/api/local/admin/diagnostics', undefined, asOwner);
+    assert(diag1.json?.serverAlerts?.count === banner('owner') && diag1.json.serverAlerts.items.length === banner('owner'),
+        `1. the owner's diagnostics list as many alerts as the banner counts (${diag1.json?.serverAlerts?.count} vs ${banner('owner')})`);
+    assert(diag1.json.serverAlerts.items.some((i: any) => i.key === 'sec.role' && /Someone was made an admin, by an owner\./.test(i.detail)),
+        `1. the role change is listed in its words (${JSON.stringify(diag1.json?.serverAlerts?.items)})`);
+    const diag1Admin = await call('GET', '/api/local/admin/diagnostics', undefined, { 'x-admin-session': session(admin, 'admin') });
+    assert(diag1Admin.status === 200 && diag1Admin.json?.serverAlerts === null, `1. an admin's diagnostics carry none (${JSON.stringify(diag1Admin.json?.serverAlerts)})`);
     const st1 = await call('POST', '/api/local/admin/alerts/status', {}, asOwner);
     assert(st1.json?.recent?.length === 1 && st1.json.recent[0].key === 'sec.role' && st1.json.acknowledge === true,
         `1. the Alerts card lists it under the last day's security events, to acknowledge (${st1.json?.recent?.length})`);
@@ -354,6 +362,7 @@ async function main(): Promise<void> {
     const ack = await call('POST', '/api/local/admin/alerts/acknowledge', {}, asOwner);
     assert(ack.status === 200 && ack.json?.replacedAcknowledged === true, `3. an owner acknowledges it through the real route (${ack.status})`);
     assert(banner('owner') === 0, `3. the banner lets it go at once (${banner('owner')})`);
+    assert(alerts.serverAlertsBanner().items.length === 0, `3. and so does Settings' Home list (${JSON.stringify(alerts.serverAlertsBanner().items)})`);
     const ackAdmin = await call('POST', '/api/local/admin/alerts/acknowledge', {}, { 'x-admin-session': session(admin, 'admin') });
     assert(ackAdmin.status === 403, `3. an admin can't acknowledge (${ackAdmin.status})`);
     advance(16 * MIN);

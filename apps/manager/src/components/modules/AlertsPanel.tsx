@@ -88,7 +88,8 @@ export function AlertsPanel({ activeNode }: AlertsPanelProps) {
     const remove = () => run(() => saveAlertsChannel(activeNode.url, { remove: true }, ...creds()), 'Channel removed. Owners still get a push and the banner.');
 
     return (
-        <div className="p-6 rounded-2xl bg-nature-900/80 border border-nature-800 shadow-xl space-y-4" data-testid="server-alerts">
+        // `id`: Settings' Home links each of the server's alerts here (HomeScreen SERVER_ALERTS_ANCHOR).
+        <div id="server-alerts" className="p-6 rounded-2xl bg-nature-900/80 border border-nature-800 shadow-xl space-y-4 scroll-mt-4" data-testid="server-alerts">
             <div className="border-b border-nature-800 pb-3 min-w-0">
                 <h3 className="text-base font-bold text-white m-0 flex items-center gap-2">
                     <span>🔔</span>

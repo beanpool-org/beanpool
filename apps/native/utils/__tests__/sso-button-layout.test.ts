@@ -153,7 +153,7 @@ describe('Restore your account: the Recover with Social button', () => {
     it('the label and logos sit in the named row styles, not inline ones', () => {
         expect(member).toContain('<Pressable\n                            style={styles.ssoRecoverBtn}');
         expect(member).toContain('<View style={styles.ssoRecoverRow}>');
-        expect(member).toContain('<Text style={styles.ssoRecoverBtnText}>🌐 Recover with Social</Text>');
+        expect(member).toContain("<Text style={styles.ssoRecoverBtnText}>{t('🌐 Recover with Social')}</Text>");
         expect(member).toContain('<View style={styles.ssoRecoverLogos}>');
     });
 

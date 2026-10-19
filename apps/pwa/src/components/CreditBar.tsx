@@ -7,7 +7,14 @@
  * (tag → track → anchors → hint) so nothing ever collides.
  *
  * Uses CSS linear-gradient instead of expo-linear-gradient.
+ *
+ * Its words are in the member's language (words S3, web sweep W2): each caption one sentence through t()/tn(), the
+ * bold parts marked **so** in it (a translator moves them where the language puts them), the numbers in the
+ * language's digits and decimal sign (formatNumber).
  */
+
+import { Fragment } from 'react';
+import { formatNumber, splitBold, t, tn } from '@beanpool/core';
 
 const RED = '#bb4b32';
 const WARM_BG = '#e9a23e';
@@ -51,7 +58,12 @@ function toPct(v: number, floor: number): number {
     return Math.max(3, Math.min(98, pct));
 }
 
-const fmt = (n: number) => `${n >= 0 ? '+' : ''}${Number.isInteger(n) ? n : n.toFixed(1)}`;
+const fmt = (n: number) => `${n >= 0 ? '+' : ''}${Number.isInteger(n) ? formatNumber(n) : formatNumber(n, 1)}`;
+
+/** A translated sentence with **bold** parts, each drawn in the caption's warm ink. */
+function Bold({ text }: { text: string }) {
+    return <>{splitBold(text).map((s, i) => (s.bold ? <b key={i} style={{ color: WARM_INK }}>{s.text}</b> : <Fragment key={i}>{s.text}</Fragment>))}</>;
+}
 
 // Offer-covenant bands - a faithful copy of @beanpool/core's OFFER_BANDS, where the array INDEX is
 // the live-offer count (index 0 = 0 offers → 0 unlocked, index 3 = 3 offers → -1000).
@@ -93,7 +105,7 @@ export function CreditBar({ balance, floor, usableFloor, liveOffers = 0, knownGr
     const nearLimit = floor < 0 && balance - floor < Math.abs(floor) * 0.12;
     const rate = marginalRate(balance);
     const tagBg = nearLimit ? RED : overFeeFree ? WARM_BG : '#16211b';
-    const tagLabel = overFeeFree ? `${fmt(balance)} B · ≈${rate}%/mo` : `${fmt(balance)} B`;
+    const tagLabel = overFeeFree ? t('{amount} B · ≈{rate}%/mo', { amount: fmt(balance), rate: formatNumber(rate) }) : t('{amount} B', { amount: fmt(balance) });
 
     // Offer ladder — the negative side mirrors the fee ladder above zero. `usableFloor` is the depth
     // your live Offers currently unlock; anything deeper (usableFloor → floor) is LOCKED until you
@@ -108,7 +120,8 @@ export function CreditBar({ balance, floor, usableFloor, liveOffers = 0, knownGr
     const rungs = showLadder ? ladder.rungs.map(b => ({ b, pct: toPct(-b, floor) })) : [];
     // Next unlock = the next band above what you've unlocked, capped at your earned limit
     // (a 4th offer on a −1400 limit unlocks −1400, not −1500).
-    const nextDepth = ladder.usableAt(liveOffers + 1);
+    const nextOffers = liveOffers + 1;
+    const nextDepth = ladder.usableAt(nextOffers);
     const nextUnlock = hasLocked && nextDepth > Math.abs(uFloor) ? nextDepth : undefined;
     // Total live Offers needed to unlock the FULL earned floor (band index, capped at 5).
     const offersForFull = ladder.offersForFull;
@@ -119,9 +132,9 @@ export function CreditBar({ balance, floor, usableFloor, liveOffers = 0, knownGr
     const revealT = Math.max(0, Math.min(1, (balance - feeFreeMax / 2) / (feeFreeMax / 2)));
     const showFees = revealT > 0;
     const FEE_ZONES = [
-        { label: '1%', mid: 74, lo: 200, hi: 500 },
-        { label: '1.5%', mid: 85, lo: 500, hi: 1000 },
-        { label: '2%', mid: 94, lo: 1000, hi: 2000 },
+        { label: `${formatNumber(1)}%`, mid: 74, lo: 200, hi: 500 },
+        { label: `${formatNumber(1.5)}%`, mid: 85, lo: 500, hi: 1000 },
+        { label: `${formatNumber(2)}%`, mid: 94, lo: 1000, hi: 2000 },
     ];
     const FEE_TICKS = [80, 90, 98]; // 500 / 1000 / 2000 boundaries
 
@@ -132,11 +145,11 @@ export function CreditBar({ balance, floor, usableFloor, liveOffers = 0, knownGr
     return (
         <div
             role="meter"
-            aria-label="Credit balance gauge"
+            aria-label={t('Credit balance gauge')}
             aria-valuenow={valuenow}
             aria-valuemin={valuemin}
             aria-valuemax={valuemax}
-            aria-valuetext={`${fmt(balance)} Beans`}
+            aria-valuetext={t('{amount} Beans', { amount: fmt(balance) })}
             className={`select-none ${className}`}
             style={{ paddingTop: 28, position: 'relative' }}
         >
@@ -236,9 +249,12 @@ export function CreditBar({ balance, floor, usableFloor, liveOffers = 0, knownGr
                 <div style={{ marginTop: 6, fontSize: 11, lineHeight: 1.4, color: MUTED_INK, fontWeight: 500, display: 'flex', alignItems: 'baseline', gap: 4 }}>
                     <span aria-hidden="true">🎣</span>
                     {uFloor < 0 ? (
-                        <span><b style={{ color: WARM_INK }}>{liveOffers} offer{liveOffers === 1 ? '' : 's'}</b> {liveOffers === 1 ? 'unlocks' : 'unlock'}{"\u00A0"}−{Math.abs(uFloor)}{nextUnlock ? <> · <b style={{ color: WARM_INK }}>{liveOffers + 1} offer{liveOffers + 1 === 1 ? '' : 's'}</b>{"\u00A0"}→{"\u00A0"}−{nextUnlock}</> : ''}</span>
+                        <span>
+                            <Bold text={tn(liveOffers, '**{n} offer** unlocks\u00A0−{limit}', '**{n} offers** unlock\u00A0−{limit}', { limit: Math.abs(uFloor) })} />
+                            {nextUnlock ? <> · <Bold text={tn(nextOffers, '**{n} offer**\u00A0→\u00A0−{limit}', '**{n} offers**\u00A0→\u00A0−{limit}', { limit: nextUnlock })} /></> : ''}
+                        </span>
                     ) : (
-                        <span><b style={{ color: WARM_INK }}>Post an Offer</b> to open your credit line — <b style={{ color: WARM_INK }}>{offersForFull}</b> offer{offersForFull === 1 ? '' : 's'} {offersForFull === 1 ? 'unlocks' : 'unlock'} your{"\u00A0"}full{"\u00A0"}−{Math.abs(floor)}.</span>
+                        <span><Bold text={tn(offersForFull, '**Post an Offer** to open your credit line — **{n}** offer unlocks your\u00A0full\u00A0−{limit}.', '**Post an Offer** to open your credit line — **{n}** offers unlock your\u00A0full\u00A0−{limit}.', { limit: Math.abs(floor) })} /></span>
                     )}
                 </div>
             )}
@@ -246,7 +262,7 @@ export function CreditBar({ balance, floor, usableFloor, liveOffers = 0, knownGr
             {/* Fee ladder — circulation-fee brackets above +feeFreeMax, revealed as you climb */}
             {showFees && (
                 <div style={{ position: 'relative', height: 12, marginTop: 4, opacity: revealT }}>
-                    <span style={{ position: 'absolute', left: 0, top: 1, fontSize: 8, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.4px' }}>fee/mo</span>
+                    <span style={{ position: 'absolute', left: 0, top: 1, fontSize: 8, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.4px' }}>{t('fee/mo')}</span>
                     {FEE_ZONES.map((z) => {
                         const active = balance > z.lo && balance <= z.hi;
                         return (
@@ -259,23 +275,23 @@ export function CreditBar({ balance, floor, usableFloor, liveOffers = 0, knownGr
             {/* Lane 3 — anchors (space-between, can't collide) */}
             <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10 }}>
                 <div>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: RED_INK, fontVariantNumeric: 'tabular-nums' }}>{floor}</div>
-                    <div style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.4px', marginTop: 1 }}>your limit</div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: RED_INK, fontVariantNumeric: 'tabular-nums' }}>{formatNumber(floor)}</div>
+                    <div style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.4px', marginTop: 1 }}>{t('your limit')}</div>
                 </div>
                 <div style={{ textAlign: 'center' }}>
                     <div style={{ fontSize: 12, fontWeight: 700, color: BEAN_INK }}><span aria-hidden="true">⚖️ </span>0</div>
-                    <div style={{ fontSize: 9, color: BEAN_INK, opacity: 0.85, textTransform: 'uppercase', letterSpacing: '0.4px', marginTop: 1 }}>sweet spot</div>
+                    <div style={{ fontSize: 9, color: BEAN_INK, opacity: 0.85, textTransform: 'uppercase', letterSpacing: '0.4px', marginTop: 1 }}>{t('sweet spot')}</div>
                 </div>
                 <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: WARM_INK }}>+{feeFreeMax}</div>
-                    <div style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.4px', marginTop: 1 }}>fee-free</div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: WARM_INK }}>+{formatNumber(feeFreeMax)}</div>
+                    <div style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.4px', marginTop: 1 }}>{t('fee-free')}</div>
                 </div>
             </div>
 
             {/* Lane 4 — directional hint */}
             <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 5 }}>
-                <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>← carry credit</span>
-                <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>hold credit →</span>
+                <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{t('← carry credit')}</span>
+                <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{t('hold credit →')}</span>
             </div>
         </div>
     );

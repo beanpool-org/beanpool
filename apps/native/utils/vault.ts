@@ -276,6 +276,9 @@ async function vaultRequest(
             throw new VaultError(refused.reason, refused.message);
         }
         if (!res.ok) {
+            // The address limit is counted before the signature is read (apps/vault server.ts `handle`, B3), so the vault
+            // can't sign that 429 (VLT-01). Like a 5xx, the phone acts on nothing in it but "later": no code of its own.
+            if (res.status === 429 && parsed?.signed === undefined) throw new VaultError('rate_limited', VAULT_MESSAGES.tooMany, 'rate_limited');
             const check = checkVaultAnswer(parsed?.signed, { ticketKeys: cfg.ticketKeys, kinds: ['refusal'], key: signer.publicKey, challenge });
             if (!check.ok) throw unverified(path, `refusal ${res.status}: ${check.reason}`);
             if (check.answer.status !== res.status) throw unverified(path, `refusal signed as ${String(check.answer.status)}, sent as ${res.status}`);
@@ -742,8 +745,9 @@ export async function startVaultRestore(
         // A refusal the vault gave for good leaves nothing waiting for this sign-in; no answer at all may have opened a
         // hold. Whatever this phone had on record before this try goes back, key and all: a hold this key already has
         // (an earlier sign-in's, even one whose answer was lost, so its hold id is unknown) is still this phone's to
-        // collect, and the same sign-in comes back to it (confirmation review NEW-2).
-        if (e instanceof VaultError && !['unreachable', 'locked'].includes(e.reason)) {
+        // collect, and the same sign-in comes back to it (confirmation review NEW-2). Too many tries is kept too: the vault's
+        // own 429 opened no hold, but an unsigned one may come from a relay that passed the restore on (VLT-01).
+        if (e instanceof VaultError && !['unreachable', 'locked', 'rate_limited'].includes(e.reason)) {
             if (earlier) await savePendingVaultRestore(earlier);
             else await clearPendingVaultRestore();
         }

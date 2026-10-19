@@ -6,7 +6,7 @@
  * and nothing on that path may reach the words layer (#1944, core __tests__/recovery-path-files.test.ts). vault.ts keeps
  * plain English and the vault's codes, and never imports this file (vault-phone.test.ts).
  */
-import { word } from '@beanpool/core';
+import { word, type TFunction } from '@beanpool/core';
 
 export const VAULT_WORDS = {
     /**
@@ -19,5 +19,21 @@ export const VAULT_WORDS = {
      * A Stop (or "Yes, it's me") after the other device already collected (VaultError code `collected`): it has the
      * account now. The same English as vault.ts VAULT_MESSAGES.holdCollected, the error's own message.
      */
+    /** VaultError reason `rate_limited`, signed or not (VLT-01): the same English as vault.ts VAULT_MESSAGES.tooMany. */
+    tooMany: word('Too many tries just now. Please try again later.'),
     holdCollected: word("That restore has already gone through: the other phone has your account now. If it wasn't you, someone else has your account: make sure the sign-in account it used is yours alone, and ask your community's admins for help."),
 } as const;
+
+/**
+ * Whether a vault error is "too many tries just now" (vault.ts VaultError reason `rate_limited`). Read by its fields, not
+ * `instanceof`: this file never imports vault.ts's native modules for a screen that only shows words.
+ */
+export function vaultTooMany(e: unknown): boolean {
+    const err = e as { name?: unknown; reason?: unknown } | null;
+    return err?.name === 'VaultError' && err.reason === 'rate_limited';
+}
+
+/** A vault error as the member reads it: too many tries in their language (VLT-01), anything else in its own words. */
+export function vaultErrorText(e: unknown, t: TFunction): string {
+    return vaultTooMany(e) ? t(VAULT_WORDS.tooMany) : (e as Error).message;
+}

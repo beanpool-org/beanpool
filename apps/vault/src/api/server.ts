@@ -1034,11 +1034,14 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
         const database = await ensureDb();
         return withWriteLock(async () => {
             const subIndexB64 = await index('sub', provider, identity.sub);
-            limited(limits.restores.take(subIndexB64, ctx.now), 'restores for this sign-in account today');
             const row = database.copyBySub(b64Bytes(subIndexB64));
             if (!row) {
                 throw new HttpError(404, 'no_copy', `The key vault keeps no copy for this ${ssoProviderLabel(provider)} account. Your 12 words work any time.`);
             }
+            // Counted only once there is a copy (VLT-03): a "no copy" answer opens no hold, pushes nothing and asks the
+            // keyholder for nothing more, and the sign-in was already checked, so it tells the caller nothing new. Counting
+            // it would leave a member who tried before depositing unable to restore that day.
+            limited(limits.restores.take(subIndexB64, ctx.now), 'restores for this sign-in account today');
             const open = database.openHoldForCopy(row.id);
             if (open) {
                 if (open.requester_key === ctx.key) return answer(ctx, 'restore', { status: 'held', holdId: open.id, until: open.release_at });

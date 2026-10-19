@@ -1,3 +1,4 @@
+import { t, tn } from '@beanpool/core';
 import type { TreasurySummary } from './db';
 import { pledgeClosedLine } from './enterprise-pledge';
 
@@ -48,20 +49,21 @@ export function enterpriseCardStatus(item: CardInput): EnterpriseCardStatus {
         ? 'funded'
         : hasGoal || item.lifecycle === 'bounded' ? 'project' : 'ongoing';
 
+    // Two facts side by side, each whole in the member's language.
     const liveOffers = item.liveOffers ?? 0;
     const stateText = item.status === 'completed'
-        ? 'Completed · Closed'
+        ? t('Completed · Closed')
         : item.status === 'winding_up'
-            ? 'Winding up'
+            ? t('Winding up')
             : item.paused
-                ? 'Paused for season'
-                : `${liveOffers} live offer${liveOffers === 1 ? '' : 's'}`;
+                ? t('Paused for season')
+                : tn(liveOffers, '{n} live offer', '{n} live offers');
     const keeperCount = item.keepers?.length ?? 0;
-    const keeperText = keeperCount > 0 ? ` · ${keeperCount} keeper${keeperCount === 1 ? '' : 's'}` : '';
+    const keeperText = keeperCount > 0 ? tn(keeperCount, '{n} keeper', '{n} keepers') : null;
 
     const showKindBadge = stateBadge === null || kindBadge === 'funded';
 
     const takesPledges = hasGoal && !isFunded && pledgeClosedLine(item.status) === null;
 
-    return { stateBadge, kindBadge, showKindBadge, hasGoal, isFunded, takesPledges, currentRaised, meta: stateText + keeperText };
+    return { stateBadge, kindBadge, showKindBadge, hasGoal, isFunded, takesPledges, currentRaised, meta: [stateText, keeperText].filter(Boolean).join(' · ') };
 }

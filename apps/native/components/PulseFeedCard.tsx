@@ -34,10 +34,15 @@ import { router } from 'expo-router';
 import {
     isWebUrl,
     platformMeta,
+    platformName,
     categoryMeta,
+    formatDate,
+    t,
 } from '@beanpool/core';
-import { type PulseFeedItem, formatRelativeTime, isOfficialSource, canReportPulseItem, resolvePulseThumbnailUrl, PULSE_REPORT_REASONS } from '../utils/pulse';
+import { type PulseFeedItem, pulseAge, isOfficialSource, canReportPulseItem, resolvePulseThumbnailUrl, PULSE_REPORT_REASONS } from '../utils/pulse';
 import { CHILD_SAFETY_REASON, CHILD_SAFETY_HINT } from '../utils/reportReasons';
+import { pulseLineWords } from './pulse-lines';
+import { Sentence } from './Sentence';
 import {
     pulseCardMedia,
     playPulseVideo,
@@ -57,6 +62,22 @@ interface PulseFeedCardProps {
     onReport?: (item: PulseFeedItem, reason: string) => Promise<void>;
     /** The node the feed came from; preview images load through its thumbnail proxy. */
     nodeUrl?: string | null;
+}
+
+/** The report box's line about Child safety: word() keys from utils/reportReasons, shown through t(). */
+const LINES = { childSafety: CHILD_SAFETY_REASON, childSafetyHint: CHILD_SAFETY_HINT };
+
+/** When the item was published, in the member's language: "Just now", "25m ago", "3h ago", "2d ago", then the date. */
+function publishedWords(dateString: string | null | undefined): string {
+    const age = pulseAge(dateString);
+    if (!age) return '';
+    switch (age.unit) {
+        case 'now': return t('Just now');
+        case 'minutes': return t('{n}m ago', { n: age.n });
+        case 'hours': return t('{n}h ago', { n: age.n });
+        case 'days': return t('{n}d ago', { n: age.n });
+        case 'date': return formatDate(age.date, 'day-month');
+    }
 }
 
 export function PulseFeedCard({ item, currentPubkey, onMute, onReport, nodeUrl }: PulseFeedCardProps) {
@@ -87,11 +108,12 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onReport, nodeUrl }
     const isOwner = Boolean(currentPubkey && item.ownerPubkey === currentPubkey);
     const canReport = Boolean(onReport) && canReportPulseItem(item, currentPubkey);
     const platMeta = platformMeta(item.platform);
+    const platName = platformName(item.platform);
     const catMeta = categoryMeta(item.category);
     const isVideo = media.kind === 'poster' && media.isVideo;
     const canPlayInApp = media.kind === 'poster' && media.canPlayInApp;
-    const timeAgo = formatRelativeTime(item.publishedAt);
-    const authorName = item.callsign?.trim() || (item.ownerPubkey ? `${item.ownerPubkey.slice(0, 8)}…` : 'Neighbour');
+    const timeAgo = publishedWords(item.publishedAt);
+    const authorName = item.callsign?.trim() || (item.ownerPubkey ? `${item.ownerPubkey.slice(0, 8)}…` : t('Neighbour'));
 
     const handleOpenPost = async () => {
         if (!item.url) return;
@@ -105,7 +127,7 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onReport, nodeUrl }
             await Linking.openURL(targetUrl);
         } catch (e) {
             console.warn('[PulseFeedCard] Error opening URL:', e);
-            Alert.alert('Cannot Open Link', 'The link could not be opened on this device.');
+            Alert.alert(t('Cannot Open Link'), t('The link could not be opened on this device.'));
         }
     };
 
@@ -126,12 +148,12 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onReport, nodeUrl }
     const handleMutePress = () => {
         if (!onMute) return;
         Alert.alert(
-            'Hide this post from feed?',
-            `"${item.title || 'This item'}" will no longer be visible to your neighbours on the community feed.`,
+            t('Hide this post from feed?'),
+            t('"{title}" will no longer be visible to your neighbours on the community feed.', { title: item.title || t('This item') }),
             [
-                { text: 'Keep post', style: 'cancel' },
+                { text: t('Keep post'), style: 'cancel' },
                 {
-                    text: 'Hide from feed',
+                    text: t('Hide from feed'),
                     style: 'destructive',
                     onPress: () => onMute(item.id),
                 },
@@ -150,15 +172,19 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onReport, nodeUrl }
         try {
             await onReport(item, reportReason);
             closeReport();
-            Alert.alert('Reported', "Thanks. This community's moderators will review it.");
+            Alert.alert(t('Reported'), t("Thanks. This community's moderators will review it."));
         } catch (e: any) {
-            Alert.alert('Could not report', e?.message || 'Please try again.');
+            // utils/pulse.ts signs the report and writes English: its sentences are translated here.
+            Alert.alert(t('Could not report'), e?.message ? pulseLineWords(e.message) : t('Please try again.'));
         } finally {
             setSubmittingReport(false);
         }
     };
 
-    const cardAccessibilityLabel = `${item.title || 'Community post'} by ${authorName} on ${platMeta.label}${item.isVerified ? ', verified creator' : ''}`;
+    const postWords = { title: item.title || t('Community post'), name: authorName, platform: platName };
+    const cardAccessibilityLabel = item.isVerified
+        ? t('{title} by {name} on {platform}, verified creator', postWords)
+        : t('{title} by {name} on {platform}', postWords);
 
     return (
         <View style={styles.cardContainer}>
@@ -168,7 +194,7 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onReport, nodeUrl }
                     onPress={handleAuthorPress}
                     style={styles.authorButton}
                     accessibilityRole="button"
-                    accessibilityLabel={`View ${authorName}'s public profile`}
+                    accessibilityLabel={t("View {name}'s public profile", { name: authorName })}
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 >
                     <MemberAvatar
@@ -183,7 +209,7 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onReport, nodeUrl }
                                 {authorName}
                             </Text>
                             {item.isVerified ? (
-                                <View style={styles.verifiedBadge} accessibilityLabel="Verified account">
+                                <View style={styles.verifiedBadge} accessibilityLabel={t('Verified account')}>
                                     <Text style={styles.verifiedText} allowFontScaling={false}>✓</Text>
                                 </View>
                             ) : null}
@@ -197,7 +223,7 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onReport, nodeUrl }
                             label gives way first — the footer repeats it, nothing repeats the time. */}
                         <View style={styles.metaRow}>
                             <Text style={isOfficialSource(item) ? styles.sourceBadge : styles.platformBadge} numberOfLines={1}>
-                                {isOfficialSource(item) ? '\u{1F4F0} Local source' : `${platMeta.icon} ${platMeta.label}`}
+                                {isOfficialSource(item) ? t('\u{1F4F0} Local source') : `${platMeta.icon} ${platName}`}
                             </Text>
                             {timeAgo ? (
                                 <Text style={styles.timeText} numberOfLines={1}> · {timeAgo}</Text>
@@ -207,9 +233,9 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onReport, nodeUrl }
                 </Pressable>
 
                 <View style={styles.headerActions}>
-                    <View style={styles.categoryPill} accessibilityLabel={`Category: ${catMeta.label}`}>
+                    <View style={styles.categoryPill} accessibilityLabel={t('Category: {category}', { category: t(catMeta.label) })}>
                         <Text style={styles.categoryText} numberOfLines={1} maxFontSizeMultiplier={1.3}>
-                            {compactHeader ? catMeta.icon : `${catMeta.icon} ${catMeta.label}`}
+                            {compactHeader ? catMeta.icon : t('{emoji} {label}', { emoji: catMeta.icon, label: t(catMeta.label) })}
                         </Text>
                     </View>
 
@@ -218,7 +244,7 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onReport, nodeUrl }
                             onPress={() => (showReport ? closeReport() : setShowReport(true))}
                             style={styles.reportFlagBtn}
                             accessibilityRole="button"
-                            accessibilityLabel="Report this post"
+                            accessibilityLabel={t('Report this post')}
                             accessibilityState={{ expanded: showReport }}
                         >
                             <Text style={styles.reportFlagText} aria-hidden={true}>⚑</Text>
@@ -231,9 +257,9 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onReport, nodeUrl }
                             style={styles.muteBtn}
                             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                             accessibilityRole="button"
-                            accessibilityLabel="Hide this item from feed"
+                            accessibilityLabel={t('Hide this item from feed')}
                         >
-                            <Text style={styles.muteBtnText}>Hide</Text>
+                            <Text style={styles.muteBtnText}>{t('Hide')}</Text>
                         </Pressable>
                     )}
                 </View>
@@ -241,9 +267,10 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onReport, nodeUrl }
 
             {showReport && canReport && (
                 <View style={styles.reportBox}>
-                    <Text style={styles.reportBoxLabel}>Report this post — why?</Text>
+                    <Text style={styles.reportBoxLabel}>{t('Report this post — why?')}</Text>
                     <View style={styles.reportReasons}>
-                        {PULSE_REPORT_REASONS.map((r) => {
+                        {PULSE_REPORT_REASONS.map((r, i) => {
+                            // The reason goes to the node as it is written (English: the server reads Child safety); shown translated.
                             const isSelected = reportReason === r;
                             return (
                                 <Pressable
@@ -254,14 +281,14 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onReport, nodeUrl }
                                     accessibilityState={{ selected: isSelected }}
                                 >
                                     <Text style={[styles.reportReasonText, isSelected && styles.reportReasonTextSelected]}>
-                                        {isSelected ? '✓ ' : ''}{r}
+                                        {isSelected ? t('✓ {reason}', { reason: t(PULSE_REPORT_REASONS[i]) }) : t(PULSE_REPORT_REASONS[i])}
                                     </Text>
                                 </Pressable>
                             );
                         })}
                     </View>
                     <Text style={styles.reportHint}>
-                        <Text style={styles.reportHintLabel}>{CHILD_SAFETY_REASON}:</Text> {CHILD_SAFETY_HINT}
+                        <Sentence text={t('{reason}: {hint}', { hint: t(LINES.childSafetyHint) })} parts={{ reason: <Text style={styles.reportHintLabel}>{t(LINES.childSafety)}</Text> }} />
                     </Text>
                     <View style={styles.reportActions}>
                         <Pressable
@@ -270,7 +297,7 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onReport, nodeUrl }
                             style={styles.reportCancelBtn}
                             accessibilityRole="button"
                         >
-                            <Text style={styles.reportCancelText}>Cancel</Text>
+                            <Text style={styles.reportCancelText}>{t('Cancel')}</Text>
                         </Pressable>
                         <Pressable
                             onPress={submitReport}
@@ -279,7 +306,7 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onReport, nodeUrl }
                             accessibilityRole="button"
                             accessibilityState={{ disabled: !reportReason || submittingReport }}
                         >
-                            <Text style={styles.reportSubmitText}>{submittingReport ? 'Sending…' : 'Submit report'}</Text>
+                            <Text style={styles.reportSubmitText}>{submittingReport ? t('Sending…') : t('Submit report')}</Text>
                         </Pressable>
                     </View>
                 </View>
@@ -310,9 +337,11 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onReport, nodeUrl }
                             onPress={handleOpenPost}
                             style={styles.playerErrorBtn}
                             accessibilityRole="link"
-                            accessibilityLabel={`Open ${item.title || 'this video'} on ${platMeta.label}`}
+                            accessibilityLabel={item.title
+                                ? t('Open {post} on {platform}', { post: item.title, platform: platName })
+                                : t('Open this video on {platform}', { platform: platName })}
                         >
-                            <Text style={styles.playerErrorBtnText}>Open on {platMeta.label} ↗</Text>
+                            <Text style={styles.playerErrorBtnText}>{t('Open on {platform} ↗', { platform: platName })}</Text>
                         </Pressable>
                     ) : null}
                 </View>
@@ -325,11 +354,11 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onReport, nodeUrl }
                         item.url && pressed && styles.contentPressed,
                     ]}
                     accessibilityRole={canPlayInApp ? 'button' : (item.url ? 'link' : undefined)}
-                    accessibilityLabel={canPlayInApp ? `Play ${cardAccessibilityLabel}` : cardAccessibilityLabel}
+                    accessibilityLabel={canPlayInApp ? t('Play {post}', { post: cardAccessibilityLabel }) : cardAccessibilityLabel}
                     accessibilityHint={
                         canPlayInApp
-                            ? 'Plays the video here, in this card'
-                            : (item.url ? 'Opens external post in browser or app' : undefined)
+                            ? t('Plays the video here, in this card')
+                            : (item.url ? t('Opens external post in browser or app') : undefined)
                     }
                 >
                     {thumbnailUri && !imageFailed ? (
@@ -351,7 +380,7 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onReport, nodeUrl }
                             )}
                             {item.url ? (
                                 <View style={styles.externalBadge}>
-                                    <Text style={styles.externalBadgeText}>{platMeta.label} ↗</Text>
+                                    <Text style={styles.externalBadgeText}>{platName} ↗</Text>
                                 </View>
                             ) : null}
                         </View>
@@ -360,7 +389,7 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onReport, nodeUrl }
                             <Text style={styles.placeholderIcon}>{item.callsign === 'Daily Pulse' ? '🌱' : platMeta.icon}</Text>
                             {item.url ? (
                                 <View style={styles.externalBadge}>
-                                    <Text style={styles.externalBadgeText}>{platMeta.label} ↗</Text>
+                                    <Text style={styles.externalBadgeText}>{platName} ↗</Text>
                                 </View>
                             ) : null}
                         </View>
@@ -378,23 +407,23 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onReport, nodeUrl }
                     item.url && pressed && styles.contentPressed,
                 ]}
                 accessibilityRole={item.url ? 'link' : undefined}
-                accessibilityLabel={item.url ? `Open ${cardAccessibilityLabel} on ${platMeta.label}` : undefined}
-                accessibilityHint={item.url ? 'Opens external post in browser or app' : undefined}
+                accessibilityLabel={item.url ? t('Open {post} on {platform}', { post: cardAccessibilityLabel, platform: platName }) : undefined}
+                accessibilityHint={item.url ? t('Opens external post in browser or app') : undefined}
             >
                 <View style={styles.bodyWrap}>
                     <Text style={styles.title} numberOfLines={3}>
-                        {item.title || 'View post on ' + platMeta.label}
+                        {item.title || t('View post on {platform}', { platform: platName })}
                     </Text>
                     {item.url ? (
                         <View style={styles.footerLinkRow}>
                             <Text style={styles.footerLinkText}>
-                                Open on {platMeta.label} <Text style={styles.arrowIcon}>↗</Text>
+                                <Sentence text={t('Open on {platform} {arrow}', { platform: platName })} parts={{ arrow: <Text style={styles.arrowIcon}>↗</Text> }} />
                             </Text>
                         </View>
                     ) : (
                         <View style={styles.footerLinkRow}>
                             <Text style={styles.footerLinkText}>
-                                🌱 Daily Reflection
+                                {t('🌱 Daily Reflection')}
                             </Text>
                         </View>
                     )}

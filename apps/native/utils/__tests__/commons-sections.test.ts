@@ -207,19 +207,19 @@ describe('the screens go through the helpers (source check)', () => {
         expect(src).not.toMatch(/const \[activeSection,/);
         expect(src.split('<DecideSection').length - 1).toBe(1);
         expect(src.slice(src.lastIndexOf('\n', src.indexOf('<DecideSection')) - 60, src.indexOf('<DecideSection'))).toContain("{activeSection === 'decide' ? (");
-        expect(block(src, '{showsDecide && (')).toContain('accessibilityLabel="Decide Section"');
+        expect(block(src, '{showsDecide && (')).toContain("accessibilityLabel={t('Decide Section')}");
         const modal = block(src, '{showsDecide && !decisionsPreview && (', src.indexOf('{createGroup.modal}') - 800);
         expect(modal).toContain('<ProposeDecisionModal');
         expect(src.split('<ProposeDecisionModal').length - 1).toBe(1);
         // No Enterprises pill: Groups holds them (pick 7), with the kind chips from groupKindChips and the rows from
         // commonsGroupRows.
         expect(src).not.toContain('Enterprises Section');
-        expect(block(src, '{sections.length > 1 && (')).toContain('accessibilityLabel="Groups Section"');
+        expect(block(src, '{sections.length > 1 && (')).toContain("accessibilityLabel={t('Groups Section')}");
         expect(src).toContain('const kindChips = groupKindChips(reader.effective);');
         expect(src).toContain('return commonsGroupRows(groupKind, groups, sorted, yourGroups, reader.effective);');
         expect(src).toContain("data={activeSection === 'decide' ? [] : groupRows}");
         expect(src).toContain('const heading = commonsHeading(reader.effective);');
-        expect(src).toContain('<PageTitle title={heading.title}');
+        expect(src).toContain('<PageTitle title={t(heading.title)}');
     });
 
     it("the header's vote icon asks for votes only where the node has Decisions, and draws them by Home's rule (PR #1483 review 4166559525, opus-1767 N3)", () => {

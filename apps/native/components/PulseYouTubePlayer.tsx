@@ -33,6 +33,7 @@ import React, { useCallback, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, Linking } from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import { useFocusEffect } from 'expo-router';
+import { t } from '@beanpool/core';
 import {
     isPlayerDocumentUrl,
     playerNavigation,
@@ -139,7 +140,7 @@ export function PulseYouTubePlayer({ itemId, html, baseUrl, embedUrl, onError }:
             {!ready ? (
                 <View style={styles.loading} pointerEvents="none">
                     <ActivityIndicator color="#ffffff" />
-                    <Text style={styles.loadingText} maxFontSizeMultiplier={1.3}>Starting video…</Text>
+                    <Text style={styles.loadingText} maxFontSizeMultiplier={1.3}>{t('Starting video…')}</Text>
                 </View>
             ) : null}
         </View>

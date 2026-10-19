@@ -320,11 +320,17 @@ export function withDigits(text: string, digits: string | null): string {
     return digits ? text.replace(/[0-9]/g, (c) => digits[Number(c)]) : text;
 }
 
+/** A Greek word in capitals without its accents; a lone "Ή" ("or") keeps its tonos, or it reads as "Η" ("the"). */
+const greekRunInCapitals = (run: string) => run.normalize('NFC') === '\u0389'
+    ? run
+    : run.normalize('NFD').replace(/[\u0300\u0301\u0342]/g, '').normalize('NFC');
+
 function inCapitals(text: string, caps: DateWords['caps']): string {
     if (caps === 'turkic') return text.replace(/i/g, 'İ').toUpperCase();
     // Greek capitals drop the accents (oxia/tonos, varia, perispomeni) and keep the dialytika: Μαΐ → ΜΑΪ, as ICU writes it;
-    // without it ΜΑΙ reads as the diphthong "αι". The tests compare every name with ICU's toLocaleUpperCase('el').
-    if (caps === 'greek') return text.toUpperCase().normalize('NFD').replace(/[\u0300\u0301\u0342]/g, '').normalize('NFC');
+    // without it ΜΑΙ reads as the diphthong "αι". Only inside runs of Greek letters, so "Café" in a Greek line keeps its
+    // accent. The tests compare every name and every shipped el string with ICU's toLocaleUpperCase('el').
+    if (caps === 'greek') return text.toUpperCase().replace(/[\u0370-\u03ff\u1f00-\u1fff][\u0300-\u036f\u0370-\u03ff\u1f00-\u1fff]*/g, greekRunInCapitals);
     return text.toUpperCase();
 }
 
@@ -531,11 +537,39 @@ export function formatCount(n: number, lang?: UiLang): string {
 }
 
 /**
+ * Words in capitals the language's way (DateWords.caps), in `lang` or the current language: Turkish "i" is "İ", Greek
+ * drops its accents. Never `.toUpperCase()` on a translated sentence, which is the English rule in every language; a
+ * code, an id or hex stays on toUpperCase.
+ */
+export function upperCase(text: string, lang?: UiLang): string {
+    return inCapitals(text, dateWordsOf(lang ?? active.lang).caps);
+}
+
+/**
+ * A sentence's first letter in capitals, the language's way, in `lang` or the current language: Turkish "i" is "İ".
+ * One capital in a line of small letters keeps its accent (Greek "έγινε" → "Έγινε"), so Greek takes toUpperCase here,
+ * never upperCase's all-capitals rule.
+ */
+export function capitalFirst(text: string, lang?: UiLang): string {
+    const caps = dateWordsOf(lang ?? active.lang).caps;
+    return inCapitals(text.charAt(0), caps === 'greek' ? 'upper' : caps) + text.slice(1);
+}
+
+/**
  * A date from the tables, never Intl, in `opts.lang` or the current language. en reads exactly as the apps always
  * have: "3 Oct", "3 Oct 2026", "Sat 3 Oct", "Sat", "9:05" (24 h, hour unpadded).
  */
 export function formatDate(d: Date, pattern: DatePattern, opts: DateOptions = {}): string {
     return dateIn(opts.lang ?? active.lang, d, pattern, opts);
+}
+
+/**
+ * A label in capitals, the language's way (DateWords.caps: Turkish dotted İ, Greek without accents), in `lang` or the
+ * current language. Never `toUpperCase()` or a `textTransform` on a translation: those follow the phone's rules, not
+ * the language's.
+ */
+export function inCapitalsOf(text: string, lang?: UiLang): string {
+    return inCapitals(text, dateWordsOf(lang ?? active.lang).caps);
 }
 
 /** "just now", "3 minutes ago", "2 hours ago", "5 days ago", in the current language. */

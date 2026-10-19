@@ -14,8 +14,9 @@ import { fileURLToPath } from 'node:url';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import {
-    DATE_WORDS, LANGS, LANGUAGE_HEADER, PLURAL_CATEGORIES, PLURAL_RULES, PSEUDO_LANG, canonicalLang, currentLanguage, formatCount, formatDate,
-    formatNumber, isLang, normaliseLang, pluralCategory, pluralKey, pseudoLocalise, setLanguage, t, timeAgo, tn, withDigits, word,
+    canonicalLang, capitalFirst, currentLanguage, DATE_WORDS, formatCount, formatDate, formatNumber, inCapitalsOf, isLang, LANGS, LANGUAGE_HEADER,
+    normaliseLang, PLURAL_CATEGORIES, PLURAL_RULES, pluralCategory, pluralKey, PSEUDO_LANG, pseudoLocalise, setLanguage, t, timeAgo, tn, upperCase,
+    withDigits, word,
     wordKey, wordsFor, type Lang, type UiLang,
 } from '../words.js';
 import { allowedPluralForms, callKey, callProblem, checkCatalog } from '../words-check.js';
@@ -405,6 +406,22 @@ describe('dates and numbers from tables', () => {
         expect(differ, RECHECK).toEqual([]);
     });
 
+    it('a label in capitals is the language\'s, never the phone\'s: Turkish keeps its dotted İ, Greek drops its accents', () => {
+        expect(inCapitalsOf('Voice credits', 'en')).toBe('VOICE CREDITS');
+        expect(inCapitalsOf('Gizli oylama', 'tr')).toBe('GİZLİ OYLAMA');
+        expect(inCapitalsOf('Ψηφοφορία', 'el')).toBe('ΨΗΦΟΦΟΡΙΑ');
+        expect(inCapitalsOf('提案', 'zh-Hans')).toBe('提案');
+        for (const [lang, text] of [['tr', 'iyi işler'], ['el', 'Πέμπτη'], ['de', 'Straße'], ['ru', 'Голосование']] as const) {
+            expect(inCapitalsOf(text, lang), lang).toBe(text.toLocaleUpperCase(lang));
+        }
+        // The current language when none is given; the pseudo-locale keeps its brackets.
+        setLanguage('tr');
+        expect(inCapitalsOf('bilgi')).toBe('BİLGİ');
+        setLanguage('xx');
+        expect(inCapitalsOf(pseudoLocalise('Voice credits'))).toMatch(/^\[.*\]$/su);
+        setLanguage('en');
+    });
+
     it('digits are data: ten glyphs would replace 0–9 (none in v1)', () => {
         expect(withDigits('15 Oct 2026, 09:05', '০১২৩৪৫৬৭৮৯')).toBe('১৫ Oct ২০২৬, ০৯:০৫');
         expect(withDigits('15', null)).toBe('15');
@@ -446,6 +463,65 @@ describe('dates and numbers from tables', () => {
         expect(formatCount(2310)).toBe('2,310');
         setLanguage('ru');
         expect([formatCount(2310), formatCount(12.5), formatCount(2310, 'en')]).toEqual(['2310', '12,5', '2,310']);
+    });
+
+    it('words in capitals: the language\'s rule, as ICU\'s toLocaleUpperCase writes it, never the English one', () => {
+        // Turkish: a dotted i is a dotted capital; a dotless ı stays dotless.
+        expect(upperCase('i', 'tr')).toBe('İ');
+        expect(upperCase('İlanlar için', 'tr')).toBe('İLANLAR İÇİN');
+        expect(upperCase('ılık', 'tr')).toBe('ILIK');
+        expect(upperCase('i')).toBe('I');
+        // Greek: capitals drop the accents and keep the dialytika.
+        expect(upperCase('Προσφορά', 'el')).toBe('ΠΡΟΣΦΟΡΑ');
+        expect(upperCase('Μαΐου', 'el')).toBe('ΜΑΪΟΥ');
+        // A lone "ή" ("or") keeps its tonos in capitals, or it reads as the article "Η" ("the"); a Latin word keeps its accent.
+        expect(upperCase('Προσφορές ή ανάγκες', 'el')).toBe('ΠΡΟΣΦΟΡΕΣ Ή ΑΝΑΓΚΕΣ');
+        expect(upperCase('Café ή τέχνη', 'el')).toBe('CAFÉ Ή ΤΕΧΝΗ');
+        for (const [lang, words] of [['tr', ['ilan', 'İstek', 'Çiftçi işi', 'ıhlamur']], ['el', ['Προσφορά', 'Ανάγκη', 'Τρόφιμα & ποτά', 'Μαΐου', 'ήταν', 'ή', '(ή)', 'ή,', 'Όνομα ή διεύθυνση', 'Café ή τέχνη', 'η\u0301', 'ΐ']], ['de', ['Straße']], ['ru', ['Предложение']]] as const) {
+            for (const w of words) expect([lang, w, upperCase(w, lang)]).toEqual([lang, w, w.toLocaleUpperCase(lang)]);
+        }
+        // No lang: the current one.
+        setLanguage('tr');
+        expect(upperCase('i')).toBe('İ');
+        setLanguage('el');
+        expect(upperCase('Ανάγκη')).toBe('ΑΝΑΓΚΗ');
+        setLanguage(PSEUDO_LANG);
+        expect(upperCase('[ilan~]')).toBe('[ILAN~]');
+    });
+
+    it('every shipped Greek string in capitals reads as ICU writes it (a lone "ή" keeps its tonos)', () => {
+        const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../../..');
+        const differ: string[] = [];
+        let seen = 0;
+        for (const file of ['packages/beanpool-core/words/el.json', 'apps/native/words/el.json', 'apps/pwa/words/el.json']) {
+            const catalog = JSON.parse(readFileSync(join(root, file), 'utf8')) as Record<string, string | Record<string, string>>;
+            for (const [key, entry] of Object.entries(catalog)) {
+                if (key === '_meta') continue;
+                for (const s of typeof entry === 'string' ? [entry] : Object.values(entry)) {
+                    seen++;
+                    if (upperCase(s, 'el') !== s.toLocaleUpperCase('el')) differ.push(s);
+                }
+            }
+        }
+        expect(seen).toBeGreaterThan(2500);
+        expect(differ).toEqual([]);
+    });
+
+    it('a sentence\'s first capital: Turkish "i" is "İ", and a Greek one keeps the accent that capitals in a heading drop', () => {
+        expect(capitalFirst('ilan bekliyor', 'tr')).toBe('İlan bekliyor');
+        expect(capitalFirst('ılık', 'tr')).toBe('Ilık');
+        // Greek writes "Έγινε…" at the start of a sentence; only a word all in capitals drops the tonos (ΕΓΙΝΕ).
+        expect(capitalFirst('έγινε επανεκκίνηση', 'el')).toBe('Έγινε επανεκκίνηση');
+        expect(upperCase('έ', 'el')).toBe('Ε');
+        expect(capitalFirst('ο κόμβος', 'el')).toBe('Ο κόμβος');
+        expect(capitalFirst('the node', 'en')).toBe('The node');
+        expect(capitalFirst('2 reports', 'en')).toBe('2 reports');
+        expect(capitalFirst('', 'el')).toBe('');
+        // No lang: the current one.
+        setLanguage('tr');
+        expect(capitalFirst('ilan')).toBe('İlan');
+        setLanguage('el');
+        expect(capitalFirst('έγινε')).toBe('Έγινε');
     });
 
     it('a tag that is not one of LANGS reads English and never throws (N-a: a stale stored tag must not break every date)', () => {

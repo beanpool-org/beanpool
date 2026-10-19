@@ -120,8 +120,9 @@ export interface DmQuoteView {
 export function dmQuoteFor(parent: ChatMessage | null | undefined, myPubkey: string | null | undefined, peerName: string | null | undefined): DmQuoteView {
     if (!parent) return { author: t('Someone'), text: t('Message not found'), note: null };
     const from = parent.quoteFrom ?? ((parent.type === 'system' || parent.senderId === 'SYSTEM') ? 'notice' : parent.unattributed ? 'nobody' : 'author');
-    // A line that isn't its named author's: the label and the words its layer wrote, in the member's language.
-    if (from !== 'author') return { author: chatLineWords(dmQuoteLabel(from)), text: chatLineWords(parent.text), note: null };
+    // A line that isn't its named author's: the label and the words its layer wrote, in the member's language. The
+    // admins' message is their words, quoted as written.
+    if (from !== 'author') return { author: chatLineWords(dmQuoteLabel(from)), text: from === 'admins' ? parent.text : chatLineWords(parent.text), note: null };
     const text = isTombstone(parent) ? tombstoneWords(parent, 'dm') : parent.type === 'image' ? t('🔒 Photo') : parent.text;
     return { author: parent.senderId === myPubkey ? t('You') : (peerName || t('Someone')), text, note: chatLineWords(parent.integrityNote ?? null) ?? null };
 }

@@ -220,9 +220,10 @@ export default function TreasuryDetailScreen() {
         requestStanding: { fontSize: 12, color: colors.text.secondary, marginTop: 2 },
         requestStandingShort: { color: colors.feedback.warning.fg, fontWeight: '600' },
         requestBtnRow: { flexDirection: 'row', gap: 8 },
-        approveBtn: { flex: 1, minHeight: 48, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.brand.fill, paddingHorizontal: 12, borderRadius: 8 },
+        // 8 dp at the sides, not 12: a longer language's Approve / Decline then fits its half at 320dp + 1.3x as it shrinks.
+        approveBtn: { flex: 1, minHeight: 48, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.brand.fill, paddingHorizontal: 8, borderRadius: 8 },
         approveBtnText: { color: colors.text.inverse, fontWeight: '700', fontSize: 13 },
-        declineBtn: { flex: 1, minHeight: 48, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface.subtle, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, borderColor: colors.border.default },
+        declineBtn: { flex: 1, minHeight: 48, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface.subtle, paddingHorizontal: 8, borderRadius: 8, borderWidth: 1, borderColor: colors.border.default },
         declineBtnText: { color: colors.text.secondary, fontWeight: '600', fontSize: 13 },
 
         // Lead Succession
@@ -1512,7 +1513,7 @@ export default function TreasuryDetailScreen() {
                                                 onPress={() => router.push({ pathname: '/treasury-post', params: { treasury: params.publicKey, mode: 'offer', name } })}
                                             >
                                                 <MaterialCommunityIcons name="tag-plus" size={16} color={colors.text.inverse} />
-                                                <Text style={[styles.opBtnText, { flexShrink: 1 }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Post Offer')}</Text>
+                                                <Text style={[styles.opBtnText, { flexShrink: 1, textAlign: 'center' }]} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8}>{t('Post Offer')}</Text>
                                             </Pressable>
                                             <Pressable
                                                 style={[styles.opBtn, !!postingBlocked && styles.opBtnDisabled]}
@@ -1522,7 +1523,7 @@ export default function TreasuryDetailScreen() {
                                                 onPress={() => router.push({ pathname: '/treasury-post', params: { treasury: params.publicKey, mode: 'need', name } })}
                                             >
                                                 <MaterialCommunityIcons name="hand-extended" size={16} color={colors.text.inverse} />
-                                                <Text style={[styles.opBtnText, { flexShrink: 1 }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Post Need')}</Text>
+                                                <Text style={[styles.opBtnText, { flexShrink: 1, textAlign: 'center' }]} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8}>{t('Post Need')}</Text>
                                             </Pressable>
                                         </View>
                                         {!!postingBlocked && <Text style={styles.opNotice}>{postingBlocked}</Text>}

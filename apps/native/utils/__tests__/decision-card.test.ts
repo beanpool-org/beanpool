@@ -32,7 +32,8 @@ describe('Decision card wording (native)', () => {
     it('explains an emergency suspension vote (L)', () => {
         const at = '2026-09-19T10:00:00.000Z';
         expect(keepSuspensionHeadline({ memberName: 'Dave', suspendedAt: at }, 'abc'))
-            .toBe(`An admin suspended Dave on ${new Date(at).toLocaleDateString()}. Keep the suspension?`);
+            // The date through core's formatDate (was the device's toLocaleDateString): "19 Sep 2026" in English.
+            .toBe('An admin suspended Dave on 19 Sep 2026. Keep the suspension?');
         expect(keepSuspensionHeadline(null, 'abcd1234')).toBe('An admin suspended abcd1234. Keep the suspension?');
     });
 });

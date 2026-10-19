@@ -26,7 +26,7 @@ import * as Clipboard from 'expo-clipboard';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import { platformMeta, isWebUrl, type ChannelPlatform } from '@beanpool/core';
+import { platformMeta, platformName, isWebUrl, t, tn, type ChannelPlatform } from '@beanpool/core';
 import { lightColors } from '../constants/colors';
 import { useTheme, useStyles } from '../app/ThemeContext';
 import { useIdentity } from '../app/IdentityContext';
@@ -253,7 +253,7 @@ export function PulseNudges({ channels, onNudgeDismissed }: Props) {
                                 {platformMeta(clipboardPlatform).icon}
                             </Text>
                             <Text style={styles.nudgeTitle} numberOfLines={1}>
-                                Link from Clipboard
+                                {t('Link from Clipboard')}
                             </Text>
                         </View>
                         <Pressable
@@ -261,7 +261,7 @@ export function PulseNudges({ channels, onNudgeDismissed }: Props) {
                             style={styles.closeButton}
                             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                             accessibilityRole="button"
-                            accessibilityLabel="Dismiss clipboard suggestion"
+                            accessibilityLabel={t('Dismiss clipboard suggestion')}
                         >
                             <Text style={styles.closeIcon} allowFontScaling={false}>✕</Text>
                         </Pressable>
@@ -272,7 +272,7 @@ export function PulseNudges({ channels, onNudgeDismissed }: Props) {
                     </Text>
 
                     <Text style={styles.nudgeBody}>
-                        Found a link to your {platformMeta(clipboardPlatform).label} channel. Would you like to share it to The Pulse?
+                        {t('Found a link to your {platform} channel. Would you like to share it to The Pulse?', { platform: platformName(clipboardPlatform) })}
                     </Text>
 
                     <View style={styles.actionRow}>
@@ -280,18 +280,18 @@ export function PulseNudges({ channels, onNudgeDismissed }: Props) {
                             onPress={dismissClipboard}
                             style={styles.secondaryButton}
                             accessibilityRole="button"
-                            accessibilityLabel="Dismiss"
+                            accessibilityLabel={t('Dismiss')}
                         >
-                            <Text style={styles.secondaryButtonText}>Dismiss</Text>
+                            <Text style={styles.secondaryButtonText}>{t('Dismiss')}</Text>
                         </Pressable>
 
                         <Pressable
                             onPress={addClipboardToPulse}
                             style={styles.primaryButton}
                             accessibilityRole="button"
-                            accessibilityLabel="Add to Pulse"
+                            accessibilityLabel={t('Add to Pulse')}
                         >
-                            <Text style={styles.primaryButtonText}>Add to Pulse</Text>
+                            <Text style={styles.primaryButtonText}>{t('Add to Pulse')}</Text>
                         </Pressable>
                     </View>
                 </View>
@@ -300,8 +300,7 @@ export function PulseNudges({ channels, onNudgeDismissed }: Props) {
             {/* Post-Count Nudges */}
             {postCountNudges.map((nudge) => {
                 const meta = platformMeta(nudge.platform);
-                const count = nudge.newPostsCount;
-                const countText = count === 1 ? '1 new thing' : `${count} new things`;
+                const name = platformName(nudge.platform);
 
                 return (
                     <View key={nudge.channelId} style={styles.nudgeCard} accessibilityRole="alert">
@@ -311,7 +310,7 @@ export function PulseNudges({ channels, onNudgeDismissed }: Props) {
                                     {meta.icon}
                                 </Text>
                                 <Text style={styles.nudgeTitle} numberOfLines={1}>
-                                    {meta.label} Updates
+                                    {t('{platform} Updates', { platform: name })}
                                 </Text>
                             </View>
                             <Pressable
@@ -319,14 +318,14 @@ export function PulseNudges({ channels, onNudgeDismissed }: Props) {
                                 style={styles.closeButton}
                                 hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                                 accessibilityRole="button"
-                                accessibilityLabel="Dismiss update notice"
+                                accessibilityLabel={t('Dismiss update notice')}
                             >
                                 <Text style={styles.closeIcon} allowFontScaling={false}>✕</Text>
                             </Pressable>
                         </View>
 
                         <Text style={styles.nudgeBody}>
-                            You've posted {countText} on {meta.label} since your last visit.
+                            {tn(nudge.newPostsCount, "You've posted {n} new thing on {platform} since your last visit.", "You've posted {n} new things on {platform} since your last visit.", { platform: name })}
                         </Text>
 
                         <View style={styles.actionRow}>
@@ -334,18 +333,18 @@ export function PulseNudges({ channels, onNudgeDismissed }: Props) {
                                 onPress={() => dismissPostCountNudge(nudge)}
                                 style={styles.secondaryButton}
                                 accessibilityRole="button"
-                                accessibilityLabel="Dismiss update notice"
+                                accessibilityLabel={t('Dismiss update notice')}
                             >
-                                <Text style={styles.secondaryButtonText}>Dismiss</Text>
+                                <Text style={styles.secondaryButtonText}>{t('Dismiss')}</Text>
                             </Pressable>
 
                             <Pressable
                                 onPress={() => shareChannelPosts(nudge)}
                                 style={styles.primaryButton}
                                 accessibilityRole="button"
-                                accessibilityLabel="Share to Pulse"
+                                accessibilityLabel={t('Share to Pulse')}
                             >
-                                <Text style={styles.primaryButtonText}>Share</Text>
+                                <Text style={styles.primaryButtonText}>{t('Share')}</Text>
                             </Pressable>
                         </View>
                     </View>

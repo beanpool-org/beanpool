@@ -10,7 +10,7 @@
  */
 import React, { useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { SAMPLE_COMMUNITY } from '@beanpool/core';
+import { SAMPLE_COMMUNITY, formatNumber, t, tn } from '@beanpool/core';
 import { useTheme } from '../../app/ThemeContext';
 import type { AppColors } from '../../constants/colors';
 import { LocalCommunityMark, ExampleHeader } from './LocalCommunityMark';
@@ -18,12 +18,12 @@ import { CommonsInfoModal } from '../CommonsInfoModal';
 import { EnterpriseCard } from '../EnterpriseCard';
 import { sampleEnterprises } from './sample-screens';
 
-/** A Bean amount as a row shows it: signed, at most one decimal, and the word Beans (never Ʀ). */
+/** A Bean amount as a row shows it: signed, at most one decimal, and the word Beans (never Ʀ), in the member's language. */
 export function beansText(amount: number, signed = false): string {
     const abs = Math.abs(amount);
-    const n = Number.isInteger(abs) ? String(abs) : abs.toFixed(1);
+    const n = formatNumber(abs, Number.isInteger(abs) ? undefined : 1);
     const sign = signed ? (amount < 0 ? '−' : '+') : amount < 0 ? '−' : '';
-    return `${sign}${n} ${abs === 1 ? 'Bean' : 'Beans'}`;
+    return tn(abs, '{sign}{n} Bean', '{sign}{n} Beans', { sign, n });
 }
 
 /**
@@ -44,8 +44,8 @@ export function CommonsPreview() {
             <ExampleHeader text="Example Valley" />
             <View style={s.card}>
                 <View style={s.row}>
-                    <Text style={s.label}>Commons pool</Text>
-                    <Pressable onPress={() => setInfo(true)} accessibilityRole="button" accessibilityLabel="About the Commons" hitSlop={12} style={s.infoBtn}>
+                    <Text style={s.label}>{t('Commons pool')}</Text>
+                    <Pressable onPress={() => setInfo(true)} accessibilityRole="button" accessibilityLabel={t('About the Commons')} hitSlop={12} style={s.infoBtn}>
                         <Text style={s.infoText}>ⓘ</Text>
                     </Pressable>
                 </View>
@@ -54,8 +54,8 @@ export function CommonsPreview() {
             <View style={s.sampleCard} testID="sample-enterprise">
                 <EnterpriseCard item={bakery} sample />
                 <View style={s.cardActions}>
-                    <LocalCommunityMark variant="action" feature="enterprises" label="Pledge" />
-                    <LocalCommunityMark variant="action" feature="enterprises" label="Pause" />
+                    <LocalCommunityMark variant="action" feature="enterprises" label={t('Pledge')} />
+                    <LocalCommunityMark variant="action" feature="enterprises" label={t('Pause')} />
                 </View>
             </View>
             <View style={s.sampleCard} testID="sample-project">

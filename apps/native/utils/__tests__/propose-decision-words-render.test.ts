@@ -110,14 +110,15 @@ describe('the phone propose-a-Decision form names projects and enterprises (§3.
 
     it('a project picked under "remove" names its leader; an enterprise its lead keeper', () => {
         click(radio('Remove a lead keeper or project leader'));
-        expect(text()).toContain('Project or enterprise');
-        expect(text()).toContain('The lead keeper or leader to remove: callsign or public key');
+        // The form's labels are drawn in capitals, as they always showed (core's inCapitalsOf, where a textTransform was).
+        expect(text()).toContain('PROJECT OR ENTERPRISE');
+        expect(text()).toContain('THE LEAD KEEPER OR LEADER TO REMOVE: CALLSIGN OR PUBLIC KEY');
         click(button('New hall roof'));
-        expect(text()).toContain('The leader to remove: callsign or public key');
+        expect(text()).toContain('THE LEADER TO REMOVE: CALLSIGN OR PUBLIC KEY');
         expect(container.querySelector(`input[placeholder="Enter the leader's callsign or pubkey..."]`)).toBeTruthy();
-        expect(text()).not.toContain('The lead keeper');
+        expect(text()).not.toContain('THE LEAD KEEPER');
         click(button('Egg flock'));
-        expect(text()).toContain('The lead keeper to remove: callsign or public key');
+        expect(text()).toContain('THE LEAD KEEPER TO REMOVE: CALLSIGN OR PUBLIC KEY');
         expect(text()).not.toMatch(/treasur/i);
     });
 

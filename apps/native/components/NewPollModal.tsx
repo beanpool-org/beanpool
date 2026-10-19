@@ -32,7 +32,7 @@ import { palette } from '../constants/colors';
 import { useIdentity } from '../app/IdentityContext';
 import { createPost } from '../utils/db';
 import { pageSheetTopInset } from '../utils/modal-safe-area';
-import { placelessListingNote } from '@beanpool/core';
+import { placelessListingNote, t, tn } from '@beanpool/core';
 import { useNodeProfile } from '../utils/use-node-profile';
 import { nearbyListingsOn, useMyArea } from '../utils/member-area';
 
@@ -86,27 +86,27 @@ export function NewPollModal({ visible, onClose, onSuccess }: NewPollModalProps)
     const handleCreatePoll = async () => {
         const cleanQuestion = question.trim();
         if (!cleanQuestion) {
-            Alert.alert('Required Field', 'Please enter a poll question.');
+            Alert.alert(t('Required Field'), t('Please enter a poll question.'));
             return;
         }
 
         const validOptions = options.map(o => o.text.trim()).filter(Boolean);
         if (validOptions.length < 2) {
-            Alert.alert('Options Required', 'A poll must have at least 2 non-empty options.');
+            Alert.alert(t('Options Required'), t('A poll must have at least 2 non-empty options.'));
             return;
         }
         const uniqueOptions = new Set(validOptions.map(o => o.toLowerCase()));
         if (uniqueOptions.size !== validOptions.length) {
-            Alert.alert('Duplicate Options', 'Each poll option must have distinct text.');
+            Alert.alert(t('Duplicate Options'), t('Each poll option must have distinct text.'));
             return;
         }
         if (validOptions.length > 4) {
-            Alert.alert('Too Many Options', 'A poll can have at most 4 options.');
+            Alert.alert(t('Too Many Options'), t('A poll can have at most 4 options.'));
             return;
         }
 
         if (!identity?.publicKey) {
-            Alert.alert('Error', 'No member identity found. Please set up your profile.');
+            Alert.alert(t('Error'), t('No member identity found. Please set up your profile.'));
             return;
         }
 
@@ -140,11 +140,12 @@ export function NewPollModal({ visible, onClose, onSuccess }: NewPollModalProps)
             setDurationDays(7);
             setOpenVote(false);
 
-            Alert.alert('Poll Created', 'Your poll has been published to the community feed!');
+            Alert.alert(t('Poll Created'), t('Your poll has been published to the community feed!'));
             onSuccess?.();
             onClose();
         } catch (err: any) {
-            Alert.alert('Failed to Create Poll', err.message || 'Server rejected the poll.');
+            // The node's own words as it sent them (slice S4).
+            Alert.alert(t('Failed to Create Poll'), err.message || t('Server rejected the poll.'));
         } finally {
             setSubmitting(false);
         }
@@ -169,25 +170,25 @@ export function NewPollModal({ visible, onClose, onSuccess }: NewPollModalProps)
                             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                             style={styles.cancelBtn}
                             accessibilityRole="button"
-                            accessibilityLabel="Cancel"
+                            accessibilityLabel={t('Cancel')}
                         >
-                            <Text style={styles.cancelText} numberOfLines={1}>Cancel</Text>
+                            <Text style={styles.cancelText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Cancel')}</Text>
                         </Pressable>
-                        <Text style={styles.headerTitle} numberOfLines={1}>New Community Poll</Text>
+                        <Text style={styles.headerTitle} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.6}>{t('New Community Poll')}</Text>
                         <Pressable
                             onPress={handleCreatePoll}
                             disabled={submitting}
                             hitSlop={12}
                             style={[styles.postBtn, submitting && { opacity: 0.5 }]}
                             accessibilityRole="button"
-                            accessibilityLabel={submitting ? "Creating poll" : "Create poll"}
-                            accessibilityHint="Publishes your community poll"
+                            accessibilityLabel={submitting ? t('Creating poll') : t('Create poll')}
+                            accessibilityHint={t('Publishes your community poll')}
                             accessibilityState={{ disabled: submitting, busy: submitting }}
                         >
                             {submitting ? (
                                 <ActivityIndicator size="small" color="#fff" />
                             ) : (
-                                <Text style={styles.postText} numberOfLines={1}>Create</Text>
+                                <Text style={styles.postText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Create')}</Text>
                             )}
                         </Pressable>
                     </View>
@@ -201,18 +202,18 @@ export function NewPollModal({ visible, onClose, onSuccess }: NewPollModalProps)
                         <View style={styles.noticeBanner}>
                             <Text style={styles.noticeIcon}>🗳️</Text>
                             <View style={{ flex: 1, marginLeft: 10 }}>
-                                <Text style={styles.noticeTitle}>Village Polling</Text>
+                                <Text style={styles.noticeTitle}>{t('Village Polling')}</Text>
                                 <Text style={styles.noticeBody}>
-                                    One member, one vote. Transparent and open — tallies and signed votes are visible to all members.
+                                    {t('One member, one vote. Transparent and open — tallies and signed votes are visible to all members.')}
                                 </Text>
                             </View>
                         </View>
 
                         {/* Question Input */}
-                        <Text style={styles.label}>QUESTION *</Text>
+                        <Text style={styles.label}>{t('QUESTION *')}</Text>
                         <TextInput
                             style={styles.input}
-                            placeholder="e.g. Should the market move to Sunday?"
+                            placeholder={t('e.g. Should the market move to Sunday?')}
                             placeholderTextColor={colors.text.muted}
                             value={question}
                             onChangeText={setQuestion}
@@ -220,10 +221,10 @@ export function NewPollModal({ visible, onClose, onSuccess }: NewPollModalProps)
                         />
 
                         {/* Description (Optional) */}
-                        <Text style={styles.label}>CONTEXT / NOTES (OPTIONAL)</Text>
+                        <Text style={styles.label}>{t('CONTEXT / NOTES (OPTIONAL)')}</Text>
                         <TextInput
                             style={[styles.input, styles.textArea]}
-                            placeholder="Add any extra background for your neighbours..."
+                            placeholder={t('Add any extra background for your neighbours...')}
                             placeholderTextColor={colors.text.muted}
                             value={description}
                             onChangeText={setDescription}
@@ -234,16 +235,16 @@ export function NewPollModal({ visible, onClose, onSuccess }: NewPollModalProps)
 
                         {/* Options */}
                         <View style={styles.optionsHeaderRow}>
-                            <Text style={styles.label}>OPTIONS (2–4) *</Text>
+                            <Text style={styles.label}>{t('OPTIONS (2–4) *')}</Text>
                             {options.length < 4 && (
                                 <Pressable
                                     onPress={handleAddOption}
                                     style={styles.addOptionBtn}
                                     hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                                     accessibilityRole="button"
-                                    accessibilityLabel="Add another poll option"
+                                    accessibilityLabel={t('Add another poll option')}
                                 >
-                                    <Text style={styles.addOptionText}>+ Add Option</Text>
+                                    <Text style={styles.addOptionText}>{t('+ Add Option')}</Text>
                                 </Pressable>
                             )}
                         </View>
@@ -253,7 +254,7 @@ export function NewPollModal({ visible, onClose, onSuccess }: NewPollModalProps)
                                 <Text style={styles.optionIndexBadge}>{idx + 1}</Text>
                                 <TextInput
                                     style={styles.optionInput}
-                                    placeholder={`Option ${idx + 1}`}
+                                    placeholder={t('Option {n}', { n: idx + 1 })}
                                     placeholderTextColor={colors.text.muted}
                                     value={opt.text}
                                     onChangeText={(val) => handleOptionChange(val, opt.id)}
@@ -265,7 +266,7 @@ export function NewPollModal({ visible, onClose, onSuccess }: NewPollModalProps)
                                         style={styles.removeOptionBtn}
                                         hitSlop={8}
                                         accessibilityRole="button"
-                                        accessibilityLabel={`Remove Option ${idx + 1}`}
+                                        accessibilityLabel={t('Remove Option {n}', { n: idx + 1 })}
                                     >
                                         <Text style={styles.removeOptionText}>✕</Text>
                                     </Pressable>
@@ -274,7 +275,7 @@ export function NewPollModal({ visible, onClose, onSuccess }: NewPollModalProps)
                         ))}
 
                         {/* Duration Selector */}
-                        <Text style={[styles.label, { marginTop: 18 }]}>DURATION</Text>
+                        <Text style={[styles.label, { marginTop: 18 }]}>{t('DURATION')}</Text>
                         <View style={styles.durationRow}>
                             {([3, 7, 14] as const).map(days => (
                                 <Pressable
@@ -286,7 +287,8 @@ export function NewPollModal({ visible, onClose, onSuccess }: NewPollModalProps)
                                     ]}
                                     accessibilityRole="button"
                                     accessibilityState={{ selected: durationDays === days }}
-                                    accessibilityLabel={`${days} Days duration${durationDays === days ? ', selected' : ''}`}
+                                    // English writes one form for both, as it always has (3, 7 or 14).
+                                    accessibilityLabel={durationDays === days ? tn(days, '{n} Days duration, selected', '{n} Days duration, selected') : tn(days, '{n} Days duration', '{n} Days duration')}
                                 >
                                     <Text
                                         style={[
@@ -294,7 +296,7 @@ export function NewPollModal({ visible, onClose, onSuccess }: NewPollModalProps)
                                             durationDays === days && styles.durationBtnTextActive,
                                         ]}
                                     >
-                                        {days} Days
+                                        {tn(days, '{n} Days', '{n} Days')}
                                     </Text>
                                 </Pressable>
                             ))}
@@ -306,21 +308,21 @@ export function NewPollModal({ visible, onClose, onSuccess }: NewPollModalProps)
                             style={[styles.openVoteRow, openVote && styles.openVoteRowActive]}
                             accessibilityRole="checkbox"
                             accessibilityState={{ checked: openVote }}
-                            accessibilityLabel="Open vote: members see who chose what"
+                            accessibilityLabel={t('Open vote: members see who chose what')}
                             testID="poll-open-vote"
                         >
                             <Text style={styles.openVoteBox}>{openVote ? '☑' : '☐'}</Text>
                             <View style={{ flex: 1, minWidth: 0 }}>
-                                <Text style={styles.openVoteTitle}>👁️ Open vote</Text>
+                                <Text style={styles.openVoteTitle}>{t('👁️ Open vote')}</Text>
                                 <Text style={styles.openVoteHint}>
                                     {openVote
-                                        ? "Members will see who chose what. You can't change this once someone has voted."
-                                        : "Off: the vote is anonymous. Everyone sees only the totals. Tick it to let members see who chose what; you can't change it once someone has voted."}
+                                        ? t("Members will see who chose what. You can't change this once someone has voted.")
+                                        : t("Off: the vote is anonymous. Everyone sees only the totals. Tick it to let members see who chose what; you can't change it once someone has voted.")}
                                 </Text>
                             </View>
                         </Pressable>
                         {placelessNote && (
-                            <Text style={styles.openVoteHint} testID="poll-placeless-note" accessibilityLiveRegion="polite">📍 {placelessNote}</Text>
+                            <Text style={styles.openVoteHint} testID="poll-placeless-note" accessibilityLiveRegion="polite">{t('📍 {note}', { note: t(placelessNote) })}</Text>
                         )}
                     </ScrollView>
                 </View>
@@ -346,7 +348,8 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
             borderBottomWidth: 1,
             borderBottomColor: theme === 'dark' ? '#374151' : '#e5e7eb',
         },
-        // At 320 wide and 1.3x text the title pushed Create off the right edge; it now shrinks instead.
+        // At 320 wide and 1.3x text the title pushed Create off the right edge; it now shrinks instead, onto two lines in a
+        // longer language, and Cancel and Create shrink too.
         headerTitle: {
             flex: 1,
             textAlign: 'center',
@@ -431,8 +434,10 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
             minHeight: 70,
             textAlignVertical: 'top',
         },
+        // Wraps: the label and "+ Add Option" in a longer language are wider than 320 dp.
         optionsHeaderRow: {
             flexDirection: 'row',
+            flexWrap: 'wrap',
             justifyContent: 'space-between',
             alignItems: 'center',
             marginBottom: 6,

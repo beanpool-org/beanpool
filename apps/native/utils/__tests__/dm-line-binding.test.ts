@@ -98,6 +98,7 @@ import { dmKeyChangeCopy } from '../dm-key-change';
 import { DM_PIN_STORE_UNREAD_TEXT } from '../dm-peer-pins';
 import { routeChat } from '../chat-route';
 import { dmQuoteFor } from '../chat-actions';
+import { chatPreviewWords } from '../chat-line-words';
 import { GROUP_KEYS_FOR_DM_TEXT } from '../group-chat-lines';
 import { GROUP_KEY_STORE_UNREAD_TEXT } from '../group-chat-keys';
 import { CACHE_NAMES_DONE_KEY } from '../cache-file-migration';
@@ -107,7 +108,7 @@ import * as phoneCrypto from '../e2e-crypto';
 // The web app's own modules, as its MessagesPage uses them: what it seals, and how it reads a thread.
 import * as webCrypto from '../../../pwa/src/lib/e2e-crypto';
 import { lockForDm, payloadForChat } from '../../../pwa/src/lib/dm-lock';
-import { toEd25519Pkcs8, makeKeySuccession, deriveDmKey, dmLineAad, DM_NONCE_PREFIX, reportKind } from '@beanpool/core';
+import { toEd25519Pkcs8, makeKeySuccession, deriveDmKey, dmLineAad, DM_NONCE_PREFIX, reportKind, pseudoLocalise, setLanguage } from '@beanpool/core';
 import { reportedAlertBody, REPORT_SENT_TEXT, REPORT_WORDS_LEFT_OUT_PRIVATE_TEXT, REPORT_WORDS_LEFT_OUT_UNREAD_TEXT, REPORT_CHILD_SAFETY_CLASSIFIED_TEXT, REPORT_CHILD_SAFETY_CLASSIFIED_ALERTED_TEXT, CHILD_IN_DANGER_TEXT } from '../reportReasons';
 import { xchacha20poly1305 } from '@noble/ciphers/chacha.js';
 import { hexToBytes } from '@noble/hashes/utils.js';
@@ -587,6 +588,19 @@ describe('the quote in a verified reply, after the node rewrites the row it answ
         for (const quote of [onBens, onAnas]) expect(quote).toEqual({ author: "Your community's admins", text: 'Send the 500 Beans to Cat instead', note: null });
     });
 
+    it('rewritten as the admin page\'s message that is word for word a sentence BeanPool writes: its words quoted as written in any language', async () => {
+        const { q, yes } = await askedAndAnswered(fresh);
+        Object.assign(q, { nonce: 'plaintext-v1', ciphertext: b64('Keep them locked'), metadata: JSON.stringify({ fromCommunityAdmins: true }) });
+        await phoneOf(ben);
+        await syncMessages(h.me.publicKey);
+        setLanguage('xx');
+        try {
+            expect((await quoted(yes.id, 'Ana')).quote).toEqual({ author: pseudoLocalise("Your community's admins"), text: 'Keep them locked', note: null });
+        } finally {
+            setLanguage('en');
+        }
+    });
+
     it('rewritten unencrypted, or with a sealed line that isn\'t its own: quoted as nobody\'s, never its words', async () => {
         const { q, yes } = await askedAndAnswered(fresh);
         const asSent = { ciphertext: q.ciphertext, nonce: q.nonce };
@@ -642,6 +656,60 @@ describe('the inbox preview of a notice', () => {
         written(dm, ana, b64('Send the 500 Beans to Cat instead'), 'plaintext-v1', { type: 'system' });
         await phoneOf(ben);
         expect(await preview(ben, dm)).toBe('Notice: Send the 500 Beans to Cat instead');
+    });
+});
+
+describe('the inbox preview in another language: only what BeanPool wrote is translated (#2179 review)', () => {
+    /** One of the sentences chat-line-words.ts translates, word for word. */
+    const TABLE_SENTENCE = 'Keep them locked';
+    /** The preview as the Talk tab draws it (chat-line-words chatPreviewWords), in the pseudo-locale. */
+    async function shownInXx(who: Person): Promise<string | null | undefined> {
+        await syncMessages(h.me.publicKey);
+        const row = (await getConversations(who.publicKey)).find((c: any) => c.id === dm.id);
+        setLanguage('xx');
+        try {
+            return chatPreviewWords(row!);
+        } finally {
+            setLanguage('en');
+        }
+    }
+
+    it('a member\'s line that is word for word a sentence BeanPool writes: shown as they wrote it, on both phones', async () => {
+        await phoneOf(ana);
+        await says(ana, dm, TABLE_SENTENCE);
+        expect(await shownInXx(ana)).toBe(TABLE_SENTENCE);
+        await phoneOf(ben);
+        expect(await preview(ben, dm)).toBe(TABLE_SENTENCE);
+        expect(await shownInXx(ben)).toBe(TABLE_SENTENCE);
+    });
+
+    it('the admin page\'s message that is one: shown as written', async () => {
+        written(dm, ana, b64(TABLE_SENTENCE), 'plaintext-v1', { metadata: JSON.stringify({ fromCommunityAdmins: true }) });
+        await phoneOf(ben);
+        expect(await shownInXx(ben)).toBe(`From your community's admins: ${TABLE_SENTENCE}`);
+    });
+
+    it('a system line, the same sentence or a trade\'s: in the member\'s language', async () => {
+        written(dm, ana, b64(TABLE_SENTENCE), 'plaintext-v1', { type: 'system' });
+        await phoneOf(ben);
+        expect(await shownInXx(ben)).toBe(pseudoLocalise('Notice: {text}').replace('{text}', pseudoLocalise(TABLE_SENTENCE)));
+        written(dm, ana, '', '00000', { type: 'system', systemType: 'ESCROW_FUNDED', metadata: JSON.stringify({ amount: 5 }) });
+        expect(await shownInXx(ben)).toBe(pseudoLocalise('Notice: {text}').replace('{text}', pseudoLocalise('{n} Beans held in trust.').replace('{n}', '5')));
+    });
+
+    it('what stands in for a line: one that didn\'t open, one not encrypted, a deleted one, in the member\'s language', async () => {
+        await phoneOf(ana);
+        const line = await says(ana, dm, TABLE_SENTENCE);
+        line.authorPubkey = ben.publicKey;
+        await phoneOf(ben);
+        expect(await shownInXx(ben)).toBe(pseudoLocalise('🔒 Encrypted message'));
+        written(dm, ana, b64(TABLE_SENTENCE), 'plaintext-v1');
+        expect(await shownInXx(ben)).toBe(pseudoLocalise(NOT_ENCRYPTED));
+        await phoneOf(ana);
+        const gone = await says(ana, dm, TABLE_SENTENCE);
+        Object.assign(gone, { type: 'removed', ciphertext: b64(TABLE_SENTENCE), nonce: 'plaintext-v1', metadata: JSON.stringify({ removed: true, removedBy: ana.publicKey }) });
+        await phoneOf(ben);
+        expect(await shownInXx(ben)).toBe(pseudoLocalise('This message was deleted'));
     });
 });
 

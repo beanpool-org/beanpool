@@ -19,7 +19,7 @@ import { PageTitle, useTabRetapScrollTop } from '../../components/PageTitle';
 import { useQuickReturn, QuickReturnBlock } from '../../components/QuickReturn';
 import { initialTalkView, type TalkView } from '../../utils/talk-views';
 import { unreadLabel, groupsUnreadTotal, yourGroupsPaneState, rowTime } from '../../utils/your-groups';
-import { chatLineWords } from '../../utils/chat-line-words';
+import { chatPreviewWords } from '../../utils/chat-line-words';
 import { listingStatusWords } from '../../utils/listing-status-words';
 import { YourGroupsRows, YourGroupsEmpty, YourGroupsLoading, YourGroupsError, NewGroupButton, FindGroupsButton, useCreateGroupFlow } from '../../components/YourGroupsPane';
 import { findGroupsInTalk, FIND_GROUPS_HREF } from '../../utils/commons-sections';
@@ -559,7 +559,7 @@ export default function ChatsScreen() {
                             </Text>
                         ) : (
                             <Text style={[styles.lastMessage, item.unread > 0 && styles.lastMessageUnread]} numberOfLines={1}>
-                                {chatLineWords(item.lastMessage)}
+                                {chatPreviewWords(item)}
                             </Text>
                         )}
                         {item.unread > 0 && (

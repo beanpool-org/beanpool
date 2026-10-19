@@ -30,7 +30,7 @@
  * rules above are assertions in `__tests__/youtube-embed.test.ts`, not comments to be trusted.
  */
 
-import { youtubeWatchId } from '@beanpool/core';
+import { t, youtubeWatchId } from '@beanpool/core';
 
 /**
  * The application id, from `app.json` (`expo.android.package` / `expo.ios.bundleIdentifier`).
@@ -211,24 +211,25 @@ export function youtubePlayerHtml(videoId: string): string {
  * The codes are YouTube's (https://developers.google.com/youtube/iframe_api_reference#onError).
  * 101 and 150 are the same thing said twice: the uploader does not allow this video off YouTube.
  * Nothing here blames the member or asks them to try again in a way that would not help.
+ * In the member's language (this file builds strings only: no keys, no signatures).
  */
 export function youtubePlayerErrorMessage(code: number): string {
     switch (code) {
         case YOUTUBE_ERROR_SCRIPT_FAILED:
-            return 'Could not reach YouTube. Check your connection.';
+            return t('Could not reach YouTube. Check your connection.');
         case 2:
-            return 'This video link does not look right.';
+            return t('This video link does not look right.');
         case 5:
-            return 'This video cannot play inside BeanPool on this phone.';
+            return t('This video cannot play inside BeanPool on this phone.');
         case 100:
-            return 'This video is private, or it has been taken down.';
+            return t('This video is private, or it has been taken down.');
         case 101:
         case 150:
-            return 'The person who uploaded this video does not allow it to play outside YouTube.';
+            return t('The person who uploaded this video does not allow it to play outside YouTube.');
         case 153:
-            return 'YouTube would not start the player here.';
+            return t('YouTube would not start the player here.');
         default:
-            return 'This video could not play here.';
+            return t('This video could not play here.');
     }
 }
 

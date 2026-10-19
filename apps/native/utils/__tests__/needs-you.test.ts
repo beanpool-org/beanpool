@@ -1,4 +1,7 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { pluralKey, setLanguage } from '@beanpool/core';
 import {
     adminItemInWords, adminLabel, buildNeedsYou, closesInWords, fitNeedsYou, moreLabel, needsYouRowOrder, NEEDS_YOU_PRIORITY,
     type NeedsYouInputs, type NeedsYouEntry,
@@ -304,6 +307,36 @@ describe('What needs you: 🛡️ admin work (owners and admins only)', () => {
             .toBe('1 report to review, 1 stalled trade awaiting a ruling and 2 emergency suspensions the community is voting on');
         // A kind a newer node added still reads as words, with its count.
         expect(label(item('appeals', 4, 'moderation', 'Appeals to hear'))).toBe('Appeals to hear: 4');
+    });
+
+    it('starts with a capital the language\'s way: Turkish "i" is "İ" (the shipped tr words)', () => {
+        const tr = JSON.parse(readFileSync(resolve(__dirname, '../../words/tr.json'), 'utf8'));
+        const reports = tr[pluralKey('{n} report to review', '{n} reports to review')].other as string;
+        expect(reports.startsWith('i')).toBe(true);
+        try {
+            setLanguage('tr', [tr]);
+            const shown = admin('owner', queue(item('reports', 2, 'moderation')))[0].label;
+            expect(shown).toBe(`İ${reports.slice(1).replace('{n}', '2')}`);
+            expect(shown.startsWith('I')).toBe(false);
+        } finally {
+            setLanguage('en');
+        }
+    });
+
+    it('a Greek line that starts with an accented letter keeps its accent: "Έγινε", never "Εγινε"', () => {
+        // Every shipped el line here starts with "{n}" or "ο"; this is a translator's next wording for the restart.
+        const el = JSON.parse(readFileSync(resolve(__dirname, '../../words/el.json'), 'utf8'));
+        const restarted = 'έγινε επανεκκίνηση του κόμβου μετά από μη ομαλό τερματισμό';
+        try {
+            setLanguage('el', [{ ...el, 'the node restarted after an unclean shutdown': restarted }]);
+            const shown = admin('owner', queue(item('unclean_shutdown', 1, 'home')))[0].label;
+            expect(shown).toBe(`Έ${restarted.slice(1)}`);
+            // The shipped line, which starts with "ο", reads as before.
+            setLanguage('el', [el]);
+            expect(admin('owner', queue(item('unclean_shutdown', 1, 'home')))[0].label).toBe(`Ο${(el['the node restarted after an unclean shutdown'] as string).slice(1)}`);
+        } finally {
+            setLanguage('en');
+        }
     });
 
     // With formal Decisions off (the worldwide community) an emergency suspension opens no vote: it lifts by itself

@@ -14,7 +14,7 @@ vi.mock('../node-post', () => ({ signedGet: async () => ({}), signedPost: async 
 import {
     pseudoLocalise, setLanguage, DM_LINE_DELETED_TEXT, DM_LINE_NOT_ENCRYPTED_TEXT, DM_LINE_NOT_VERIFIED_TEXT, dmLineMarkText, dmQuoteLabel,
 } from '@beanpool/core';
-import { chatAuthorWords, chatLineWords } from '../chat-line-words';
+import { chatAuthorWords, chatLineWords, chatPreviewWords } from '../chat-line-words';
 import { GROUP_LINE_FORMER_MEMBER, GROUP_LINE_NOT_IN_GROUP, GROUP_LINE_UNVERIFIED_NAME, earlierKeyDetails, nameSigner, type DisplayRosterRow } from '../group-line-display';
 import { groupChatShownLines } from '../group-chat-lines';
 import { lockedHistoryRowText } from '../group-history-unlock';
@@ -128,6 +128,17 @@ describe('what it gives back', () => {
         expect(chatLineWords(after.integrityNote)).not.toContain('This phone knew');
         // After words this table doesn't know (a member's), the whole line exactly as given.
         expect(chatLineWords(`see you then ${KEY_CHANGED_DETAILS}`)).toBe(`see you then ${KEY_CHANGED_DETAILS}`);
+    });
+
+    it('a Talk row\'s preview: translated only when BeanPool wrote it (db.ts getConversations lastMessageFromApp)', () => {
+        setLanguage('xx');
+        // A member's words, or a row that doesn't say: exactly as given, even word for word a sentence of the table.
+        expect(chatPreviewWords({ lastMessage: 'Keep them locked', lastMessageFromApp: false })).toBe('Keep them locked');
+        expect(chatPreviewWords({ lastMessage: 'Keep them locked' })).toBe('Keep them locked');
+        // BeanPool's own line: in the member's language.
+        expect(chatPreviewWords({ lastMessage: 'Keep them locked', lastMessageFromApp: true })).toBe(pseudoLocalise('Keep them locked'));
+        expect(chatPreviewWords({ lastMessage: '5 Beans held in trust.', lastMessageFromApp: true })).toBe(pseudoLocalise('{n} Beans held in trust.').replace('{n}', '5'));
+        expect(chatPreviewWords({ lastMessage: null, lastMessageFromApp: true })).toBeNull();
     });
 
     it('a member\'s own words, and anything it doesn\'t know, exactly as given', () => {

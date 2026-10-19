@@ -2495,13 +2495,10 @@
   "Your groups": "आपके समूह",
   "You're not in any groups yet. Join one below, or start one with +.": "आप अभी किसी भी समूह में नहीं हैं। नीचे किसी समूह से जुड़ें, या + से एक नया शुरू करें।",
   "Groups you could join": "वे समूह जिनसे आप जुड़ सकते हैं",
-  "🏛️ The Commons' enterprises": "🏛️ कॉमन्स के उपक्रम",
-  "Open {name}": "{name} खोलें",
   "{n} live offer|{n} live offers": {
     "one": "{n} सक्रिय प्रस्ताव",
     "other": "{n} सक्रिय प्रस्ताव"
   },
-  "You can act for these enterprises — post their offers & pay tenders": "आप इन उपक्रमों की ओर से कार्य कर सकते हैं — उनके प्रस्ताव पोस्ट करें और टेंडर का भुगतान करें",
   "+ Start an enterprise": "+ एक उपक्रम शुरू करें",
   "+ Start a project": "+ एक परियोजना शुरू करें",
   "+ Create a Group": "+ एक समूह बनाएँ",

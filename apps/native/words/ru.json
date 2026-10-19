@@ -2693,15 +2693,12 @@
   "Your groups": "Ваши группы",
   "You're not in any groups yet. Join one below, or start one with +.": "Вы пока не состоите в группах. Вступите в одну из них ниже или создайте свою с помощью +.",
   "Groups you could join": "Группы, в которые можно вступить",
-  "🏛️ The Commons' enterprises": "🏛️ Предприятия Общих проектов",
-  "Open {name}": "Открыть {name}",
   "{n} live offer|{n} live offers": {
     "one": "{n} активное предложение",
     "few": "{n} активных предложения",
     "many": "{n} активных предложений",
     "other": "{n} активных предложений"
   },
-  "You can act for these enterprises — post their offers & pay tenders": "Вы можете действовать от имени этих предприятий: публиковать предложения и оплачивать заявки",
   "+ Start an enterprise": "+ Создать предприятие",
   "+ Start a project": "+ Создать проект",
   "+ Create a Group": "+ Создать группу",

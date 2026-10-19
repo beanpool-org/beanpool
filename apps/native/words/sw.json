@@ -2495,13 +2495,10 @@
   "Your groups": "Vikundi vyako",
   "You're not in any groups yet. Join one below, or start one with +.": "Bado haumo katika kikundi chochote. Jiunge na kimoja hapa chini, au anzisha kimoja kwa +.",
   "Groups you could join": "Vikundi unavyoweza kujiunga navyo",
-  "🏛️ The Commons' enterprises": "🏛️ Mashirika ya Mali za Pamoja",
-  "Open {name}": "Fungua {name}",
   "{n} live offer|{n} live offers": {
     "one": "ofa {n} inayoendelea",
     "other": "ofa {n} zinazoendelea"
   },
-  "You can act for these enterprises — post their offers & pay tenders": "Unaweza kutenda kwa niaba ya mashirika haya — chapisha matoleo yao na ulipe zabuni",
   "+ Start an enterprise": "+ Anzisha shirika",
   "+ Start a project": "+ Anzisha mradi",
   "+ Create a Group": "+ Unda Kikundi",

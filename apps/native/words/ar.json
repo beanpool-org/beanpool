@@ -2891,8 +2891,6 @@
   "Your groups": "مجموعاتك",
   "You're not in any groups yet. Join one below, or start one with +.": "لست في أي مجموعة بعد. انضم إلى إحداها أدناه، أو ابدأ واحدة باستخدام +.",
   "Groups you could join": "مجموعات يمكنك الانضمام إليها",
-  "🏛️ The Commons' enterprises": "🏛️ مؤسسات المشاع",
-  "Open {name}": "فتح {name}",
   "{n} live offer|{n} live offers": {
     "zero": "{n} عرض نشط",
     "one": "عرض نشط واحد",
@@ -2901,7 +2899,6 @@
     "many": "{n} عرضًا نشطًا",
     "other": "{n} عرض نشط"
   },
-  "You can act for these enterprises — post their offers & pay tenders": "يمكنك التصرف نيابة عن هذه المؤسسات — نشر عروضها ودفع المناقصات",
   "+ Start an enterprise": "+ بدء مؤسسة",
   "+ Start a project": "+ بدء مشروع",
   "+ Create a Group": "+ إنشاء مجموعة",

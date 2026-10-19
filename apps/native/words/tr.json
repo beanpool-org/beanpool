@@ -2495,13 +2495,10 @@
   "Your groups": "Grupların",
   "You're not in any groups yet. Join one below, or start one with +.": "Henüz hiçbir grupta değilsin. Aşağıdakilerden birine katıl ya da + ile yeni bir grup başlat.",
   "Groups you could join": "Katılabileceğin gruplar",
-  "🏛️ The Commons' enterprises": "🏛️ Ortak girişimler",
-  "Open {name}": "{name} aç",
   "{n} live offer|{n} live offers": {
     "one": "{n} aktif teklif",
     "other": "{n} aktif teklif"
   },
-  "You can act for these enterprises — post their offers & pay tenders": "Bu girişimler adına hareket edebilirsin — tekliflerini paylaş ve ödemeleri yap",
   "+ Start an enterprise": "+ Bir girişim başlat",
   "+ Start a project": "+ Bir proje başlat",
   "+ Create a Group": "+ Grup Oluştur",

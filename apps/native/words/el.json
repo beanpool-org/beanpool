@@ -2495,13 +2495,10 @@
   "Your groups": "Οι ομάδες σου",
   "You're not in any groups yet. Join one below, or start one with +.": "Δεν είσαι ακόμα σε καμία ομάδα. Μπες σε μία παρακάτω ή ξεκίνα μία με το +.",
   "Groups you could join": "Ομάδες στις οποίες μπορείς να μπεις",
-  "🏛️ The Commons' enterprises": "🏛️ Τα εγχειρήματα των Κοινών",
-  "Open {name}": "Άνοιγμα {name}",
   "{n} live offer|{n} live offers": {
     "one": "{n} ενεργή προσφορά",
     "other": "{n} ενεργές προσφορές"
   },
-  "You can act for these enterprises — post their offers & pay tenders": "Μπορείς να ενεργείς για αυτά τα εγχειρήματα — να αναρτάς τις προσφορές τους & να πληρώνεις αναθέσεις",
   "+ Start an enterprise": "+ Ξεκίνα ένα εγχείρημα",
   "+ Start a project": "+ Ξεκίνα ένα έργο",
   "+ Create a Group": "+ Δημιούργησε μια ομάδα",

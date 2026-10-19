@@ -2495,13 +2495,10 @@
   "Your groups": "Iyong mga grupo",
   "You're not in any groups yet. Join one below, or start one with +.": "Hindi ka pa kasali sa anumang grupo. Sumali sa isa sa ibaba, o magsimula gamit ang +.",
   "Groups you could join": "Mga grupong maaari mong salihan",
-  "🏛️ The Commons' enterprises": "🏛️ Mga negosyo ng Komun",
-  "Open {name}": "Buksan ang {name}",
   "{n} live offer|{n} live offers": {
     "one": "{n} aktibong alok",
     "other": "{n} aktibong alok"
   },
-  "You can act for these enterprises — post their offers & pay tenders": "Maaari kang kumilos para sa mga negosyong ito — mag-post ng kanilang mga alok at magbayad ng mga tender",
   "+ Start an enterprise": "+ Magsimula ng negosyo",
   "+ Start a project": "+ Magsimula ng proyekto",
   "+ Create a Group": "+ Gumawa ng Grupo",

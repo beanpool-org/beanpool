@@ -2396,12 +2396,9 @@
   "Your groups": "你的群組",
   "You're not in any groups yet. Join one below, or start one with +.": "你尚未加入任何群組。從下方加入一個，或點擊 + 建立。",
   "Groups you could join": "你可以加入的群組",
-  "🏛️ The Commons' enterprises": "🏛️ 公共在地事業",
-  "Open {name}": "開啟 {name}",
   "{n} live offer|{n} live offers": {
     "other": "{n} 則有效提供"
   },
-  "You can act for these enterprises — post their offers & pay tenders": "你可以代表這些事業行事 — 發布其提供並支付標案款項",
   "+ Start an enterprise": "+ 建立在地事業",
   "+ Start a project": "+ 發起專案",
   "+ Create a Group": "+ 建立群組",

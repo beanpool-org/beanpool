@@ -2495,13 +2495,10 @@
   "Your groups": "আপনার গ্রুপ",
   "You're not in any groups yet. Join one below, or start one with +.": "আপনি এখনও কোনো গ্রুপে নেই। নিচে একটিতে যোগ দিন, বা + দিয়ে একটি শুরু করুন।",
   "Groups you could join": "যেসব গ্রুপে আপনি যোগ দিতে পারেন",
-  "🏛️ The Commons' enterprises": "🏛️ যৌথ তহবিলের উদ্যোগসমূহ",
-  "Open {name}": "{name} খুলুন",
   "{n} live offer|{n} live offers": {
     "one": "{n}টি সক্রিয় প্রস্তাব",
     "other": "{n}টি সক্রিয় প্রস্তাব"
   },
-  "You can act for these enterprises — post their offers & pay tenders": "আপনি এই উদ্যোগগুলোর পক্ষে কাজ করতে পারেন — তাদের প্রস্তাব পোস্ট করুন এবং দরপত্র পরিশোধ করুন",
   "+ Start an enterprise": "+ একটি উদ্যোগ শুরু করুন",
   "+ Start a project": "+ একটি প্রকল্প শুরু করুন",
   "+ Create a Group": "+ একটি গ্রুপ তৈরি করুন",

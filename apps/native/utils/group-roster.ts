@@ -12,6 +12,8 @@ import {
     groupRoleLabel,
     leadMustHandOverBeforeLeaving,
     leadHandOverBlockedByObservers,
+    t,
+    tn,
     type GroupRowActions,
 } from '@beanpool/core';
 import type { GroupItem, GroupMemberItem } from './db';
@@ -58,9 +60,9 @@ export interface RosterView {
 export function rosterHeading(p: { refused: boolean; rows: number; memberCount?: number | null }): { title: string; note: string | null } {
     if (p.refused) {
         const n = typeof p.memberCount === 'number' && p.memberCount >= 0 ? p.memberCount : null;
-        return { title: n === null ? 'Members' : `${n} ${n === 1 ? 'member' : 'members'}`, note: 'Join the group to see who is here' };
+        return { title: n === null ? t('Members') : tn(n, '{n} member', '{n} members'), note: t('Join the group to see who is here') };
     }
-    return { title: `Roster (${p.rows || p.memberCount || 0})`, note: null };
+    return { title: t('Roster ({n})', { n: p.rows || p.memberCount || 0 }), note: null };
 }
 
 export function leadPubkeyOf(group: Pick<GroupItem, 'leadPubkey' | 'convenorPubkey'> | null | undefined): string | null {

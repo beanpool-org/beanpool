@@ -12,6 +12,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { formatDate, t } from '@beanpool/core';
 import {
     getEventChat, postEventChatMessage, removeEventChatMessage,
     type EventThreadMessage, type EventThreadView,
@@ -20,15 +21,16 @@ import { resolveAvatarUrl } from '../lib/avatar';
 import { imageFromTransfer, dragCarriesFile } from '../lib/chat-image-transfer';
 import type { BeanPoolIdentity } from '../lib/identity';
 import { sendRouteOf, GROUP_HOLD_EVENT_TEXT, GROUP_HOLD_UNREAD_TEXT } from '../lib/group-hold';
-import { ACCOUNT_DELETED_TEXT, blankedWithAccount } from '../lib/chat-tombstone';
+import { blankedWithAccount } from '../lib/chat-tombstone';
 import { eventChatWaitingText, eventChatSystemText, isWaitingForHost } from '../lib/events';
 
 /**
  * Messages are stored base64 `plaintext-v1`: node-readable by design, not end-to-end encrypted. A removed one is the
- * host's removal, or its author's own delete when they deleted their account (lib/chat-tombstone.ts).
+ * host's removal, or its author's own delete when they deleted their account (lib/chat-tombstone.ts: its
+ * ACCOUNT_DELETED_TEXT, here in the reader's language). Called where the line is drawn.
  */
 export function decodeEventChatText(ciphertext: string, type: string, metadata?: string): string {
-    if (type === 'removed') return blankedWithAccount(metadata) ? ACCOUNT_DELETED_TEXT : 'removed by the host';
+    if (type === 'removed') return blankedWithAccount(metadata) ? t('This message was deleted') : t('removed by the host');
     try {
         const binString = atob(ciphertext);
         const bytes = Uint8Array.from(binString, (m) => m.charCodeAt(0));
@@ -40,10 +42,11 @@ export function decodeEventChatText(ciphertext: string, type: string, metadata?:
 
 export const EVENT_CHAT_MESSAGE_MAX = 2000;
 
+/** "28 Sep, 9:00", in the reader's language (the phone's date-and-time line). */
 function formatTime(iso: string): string {
     const d = new Date(iso);
     if (isNaN(d.getTime())) return '';
-    return d.toLocaleString(undefined, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
+    return t('{date}, {time}', { date: formatDate(d, 'day-month'), time: formatDate(d, 'time') });
 }
 
 interface Props {
@@ -79,7 +82,7 @@ export function EventChat({ postId, identity, onBack, onOpenEvent, refreshMs = 1
             setLoadError(null);
         } catch (e: any) {
             // Going, and the host hasn't let them in: said as that, never as "only the host and people going".
-            setLoadError(isWaitingForHost(e) ? eventChatWaitingText() : (e?.message || 'Could not open this event chat.'));
+            setLoadError(isWaitingForHost(e) ? eventChatWaitingText() : (e?.message || t('Could not open this event chat.')));
         }
     }, [postId]);
 
@@ -149,7 +152,7 @@ export function EventChat({ postId, identity, onBack, onOpenEvent, refreshMs = 1
             setImageNotice(null);
             await load();
         } catch (err: any) {
-            setPostError(err?.message || 'Could not send that message.');
+            setPostError(err?.message || t('Could not send that message.'));
         } finally {
             setPosting(false);
         }
@@ -162,14 +165,14 @@ export function EventChat({ postId, identity, onBack, onOpenEvent, refreshMs = 1
 
     const remove = async (m: EventThreadMessage) => {
         if (removingId) return;
-        if (!window.confirm('Remove this message from the event chat?')) return;
+        if (!window.confirm(t('Remove this message from the event chat?'))) return;
         setRemovingId(m.id);
         setPostError(null);
         try {
             await removeEventChatMessage(postId, m.id);
             await load();
         } catch (err: any) {
-            setPostError(err?.message || 'Could not remove that message.');
+            setPostError(err?.message || t('Could not remove that message.'));
         } finally {
             setRemovingId(null);
         }
@@ -178,7 +181,7 @@ export function EventChat({ postId, identity, onBack, onOpenEvent, refreshMs = 1
     if (loadError && !view) {
         return (
             <div data-testid="event-chat" className="h-full w-full flex flex-col">
-                <ChatHeader title="Event chat" onBack={onBack} onOpenEvent={onOpenEvent} />
+                <ChatHeader title={t('Event chat')} onBack={onBack} onOpenEvent={onOpenEvent} />
                 <p role="alert" data-testid="event-chat-error" className="m-4 text-sm text-nature-700 dark:text-nature-300">
                     {loadError}
                 </p>
@@ -189,8 +192,8 @@ export function EventChat({ postId, identity, onBack, onOpenEvent, refreshMs = 1
     if (!view) {
         return (
             <div data-testid="event-chat" className="h-full w-full flex flex-col">
-                <ChatHeader title="Event chat" onBack={onBack} onOpenEvent={onOpenEvent} />
-                <p className="m-4 text-sm text-nature-500 dark:text-nature-400">Opening the chat…</p>
+                <ChatHeader title={t('Event chat')} onBack={onBack} onOpenEvent={onOpenEvent} />
+                <p className="m-4 text-sm text-nature-500 dark:text-nature-400">{t('Opening the chat…')}</p>
             </div>
         );
     }
@@ -207,9 +210,9 @@ export function EventChat({ postId, identity, onBack, onOpenEvent, refreshMs = 1
                     className="flex-shrink-0 mx-3 mt-3 p-3 rounded-xl bg-violet-50 dark:bg-violet-950/40 border border-violet-200 dark:border-violet-800"
                 >
                     <p className="m-0 mb-1 text-xs font-black uppercase tracking-wide text-violet-800 dark:text-violet-300">
-                        📌 Note for people who are going
+                        <span aria-hidden="true">📌</span> {t('Note for people who are going')}
                     </p>
-                    <p className="m-0 text-sm text-nature-900 dark:text-nature-100 whitespace-pre-wrap break-words">
+                    <p dir="auto" className="m-0 text-sm text-nature-900 dark:text-nature-100 whitespace-pre-wrap break-words">
                         {view.privateNote}
                     </p>
                 </div>
@@ -227,7 +230,7 @@ export function EventChat({ postId, identity, onBack, onOpenEvent, refreshMs = 1
             <div className="flex-1 min-h-0 overflow-y-auto px-3 py-2">
                 {view.messages.length === 0 ? (
                     <p className="m-0 py-4 text-sm italic text-nature-500 dark:text-nature-400">
-                        {view.readOnly ? 'Nothing was said here.' : 'No messages yet. Say hello.'}
+                        {view.readOnly ? t('Nothing was said here.') : t('No messages yet. Say hello.')}
                     </p>
                 ) : (
                     <ul className="m-0 p-0 list-none divide-y divide-nature-100 dark:divide-nature-800">
@@ -242,7 +245,7 @@ export function EventChat({ postId, identity, onBack, onOpenEvent, refreshMs = 1
                                 );
                             }
                             const isRemoved = m.type === 'removed';
-                            const author = m.authorCallsign || m.authorPubkey?.slice(0, 8) || 'Member';
+                            const author = m.authorCallsign || m.authorPubkey?.slice(0, 8) || t('Member');
                             const avatar = resolveAvatarUrl(m.authorAvatar);
                             return (
                                 <li key={m.id} className="py-3 flex items-start gap-2 min-w-0">
@@ -254,11 +257,11 @@ export function EventChat({ postId, identity, onBack, onOpenEvent, refreshMs = 1
                                         </div>
                                     )}
                                     <div className="flex-1 min-w-0">
-                                        <div className="flex items-baseline gap-2 min-w-0">
-                                            <span className="flex-1 min-w-0 truncate text-sm font-bold text-nature-900 dark:text-white">{author}</span>
+                                        <div className="flex flex-wrap items-baseline gap-x-2 min-w-0">
+                                            <span className="flex-1 min-w-[5rem] truncate text-sm font-bold text-nature-900 dark:text-white">{author}</span>
                                             <span className="flex-shrink-0 text-[11px] text-nature-400">{formatTime(m.timestamp)}</span>
                                         </div>
-                                        <p className={`m-0 mt-1 text-sm leading-relaxed whitespace-pre-wrap break-words ${isRemoved ? 'italic text-nature-400 dark:text-nature-400' : 'text-nature-800 dark:text-nature-200'}`}>
+                                        <p dir="auto" className={`m-0 mt-1 text-sm leading-relaxed whitespace-pre-wrap break-words ${isRemoved ? 'italic text-nature-400 dark:text-nature-400' : 'text-nature-800 dark:text-nature-200'}`}>
                                             {decodeEventChatText(m.ciphertext, m.type, m.metadata)}
                                         </p>
                                         {view.isHost && !isRemoved && (
@@ -266,10 +269,10 @@ export function EventChat({ postId, identity, onBack, onOpenEvent, refreshMs = 1
                                                 type="button"
                                                 onClick={() => remove(m)}
                                                 disabled={removingId === m.id}
-                                                aria-label={`Remove message from ${author}`}
+                                                aria-label={t('Remove message from {name}', { name: author })}
                                                 className="mt-1 min-h-[48px] px-2 -ml-2 bg-transparent border-0 text-xs font-bold text-rose-600 dark:text-rose-400 cursor-pointer disabled:opacity-50"
                                             >
-                                                {removingId === m.id ? 'Removing…' : 'Remove'}
+                                                {removingId === m.id ? t('Removing…') : t('Remove')}
                                             </button>
                                         )}
                                     </div>
@@ -297,7 +300,7 @@ export function EventChat({ postId, identity, onBack, onOpenEvent, refreshMs = 1
                     <button
                         type="button"
                         onClick={() => setImageNotice(null)}
-                        aria-label="Dismiss"
+                        aria-label={t('Dismiss')}
                         className="flex-shrink-0 min-h-[48px] px-3 -mr-1 bg-transparent border-0 text-sm text-nature-500 dark:text-nature-400 cursor-pointer"
                     >
                         ✕
@@ -319,7 +322,7 @@ export function EventChat({ postId, identity, onBack, onOpenEvent, refreshMs = 1
                         if (!dragCarriesFile(e.dataTransfer)) return;
                         e.preventDefault();
                         if (!imageFromTransfer(e.dataTransfer)) return;
-                        setImageNotice('Photos can only be sent in direct messages');
+                        setImageNotice(t('Photos can only be sent in direct messages'));
                     }}
                 >
                     <textarea
@@ -328,7 +331,7 @@ export function EventChat({ postId, identity, onBack, onOpenEvent, refreshMs = 1
                         onPaste={e => {
                             if (!imageFromTransfer(e.clipboardData)) return;
                             e.preventDefault();
-                            setImageNotice('Photos can only be sent in direct messages');
+                            setImageNotice(t('Photos can only be sent in direct messages'));
                         }}
                         onKeyDown={e => {
                             // An input method is mid-word — Japanese, Chinese, Korean and
@@ -343,8 +346,8 @@ export function EventChat({ postId, identity, onBack, onOpenEvent, refreshMs = 1
                         }}
                         rows={1}
                         maxLength={EVENT_CHAT_MESSAGE_MAX}
-                        placeholder="Message everyone going…"
-                        aria-label="Message everyone going"
+                        placeholder={t('Message everyone going…')}
+                        aria-label={t('Message everyone going')}
                         className="flex-1 min-w-0 min-h-[48px] resize-y rounded-xl border border-nature-300 dark:border-nature-700 bg-white dark:bg-nature-900 px-3 py-3 text-sm text-nature-900 dark:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
                     />
                     <button
@@ -352,7 +355,7 @@ export function EventChat({ postId, identity, onBack, onOpenEvent, refreshMs = 1
                         disabled={posting || !draft.trim()}
                         className="flex-shrink-0 min-h-[48px] px-4 rounded-xl bg-violet-700 text-white font-bold text-sm disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-1"
                     >
-                        {posting ? 'Sending…' : 'Send'}
+                        {posting ? t('Sending…') : t('Send')}
                     </button>
                 </form>
             )}
@@ -371,7 +374,7 @@ function ChatHeader({ title, onBack, onOpenEvent }: { title: string; onBack?: ()
                 <button
                     type="button"
                     onClick={onBack}
-                    aria-label="Back"
+                    aria-label={t('Back')}
                     className="flex-shrink-0 min-h-[48px] px-2 bg-transparent border-0 text-violet-700 dark:text-violet-300 text-base cursor-pointer"
                 >
                     ←
@@ -379,16 +382,16 @@ function ChatHeader({ title, onBack, onOpenEvent }: { title: string; onBack?: ()
             )}
             <div className="min-w-0 flex-1">
                 <p className="m-0 truncate text-base font-extrabold text-nature-950 dark:text-white">{title}</p>
-                <p className="m-0 text-[11px] font-semibold text-violet-700 dark:text-violet-300">Event chat</p>
+                <p className="m-0 text-[11px] font-semibold text-violet-700 dark:text-violet-300">{t('Event chat')}</p>
             </div>
             {onOpenEvent && (
                 <button
                     type="button"
                     data-testid="event-chat-open-event"
                     onClick={onOpenEvent}
-                    className="flex-shrink-0 min-h-[48px] px-3 rounded-xl border border-violet-300 dark:border-violet-800 bg-transparent text-sm font-bold text-violet-800 dark:text-violet-200 cursor-pointer"
+                    className="min-w-0 max-w-[40%] min-h-[48px] px-3 rounded-xl border border-violet-300 dark:border-violet-800 bg-transparent text-sm font-bold leading-tight break-words text-violet-800 dark:text-violet-200 cursor-pointer"
                 >
-                    View event
+                    {t('View event')}
                 </button>
             )}
         </div>

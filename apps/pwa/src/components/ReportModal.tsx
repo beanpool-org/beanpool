@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { reportAbuse } from '../lib/api';
 import { useCoversScreen } from '../lib/screen-cover';
-import { REPORT_REASONS, CHILD_SAFETY_REASON, CHILD_SAFETY_HINT, REPORT_WORDS } from '../lib/reportReasons';
+import { REPORT_REASONS, REPORT_WORDS } from '../lib/reportReasons';
 import { t } from '@beanpool/core';
+import { Sentence } from './Sentence';
 
 interface Props {
     isOpen: boolean;
@@ -86,7 +87,7 @@ export function ReportModal({
             setSent(true);
         } catch (e: any) {
             // The choice and the words stay, so the member can send again without retyping.
-            setError(e?.message || 'Failed to submit report. Please try again.');
+            setError(e?.message || t('Failed to submit report. Please try again.'));
         } finally {
             setSubmitting(false);
         }
@@ -106,13 +107,13 @@ export function ReportModal({
             >
                 <div className="flex items-center justify-between border-b border-nature-100 dark:border-nature-800 pb-3">
                     <h3 id="report-modal-title" className="text-base font-bold text-nature-950 dark:text-white flex items-center gap-2">
-                        <span aria-hidden="true">🚩</span> Report {targetName}
+                        <span aria-hidden="true">🚩</span> {t('Report {name}', { name: targetName })}
                     </h3>
                     <button
                         type="button"
                         onClick={close}
                         disabled={submitting}
-                        aria-label="Close report dialog"
+                        aria-label={t('Close report dialog')}
                         className="min-w-[44px] min-h-[44px] w-11 h-11 flex items-center justify-center text-nature-400 hover:text-nature-700 dark:hover:text-white bg-transparent border-none text-lg cursor-pointer p-1 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
                     >
                         ✕
@@ -141,10 +142,10 @@ export function ReportModal({
 
                 <div>
                     <label className="block text-xs font-bold uppercase tracking-wider text-nature-500 dark:text-nature-400 mb-2">
-                        Select reason
+                        {t('Select reason')}
                     </label>
                     <div className="flex flex-wrap gap-2">
-                        {REPORT_REASONS.map(reason => {
+                        {REPORT_REASONS.map((reason, i) => {
                             const isSelected = selectedReason === reason;
                             return (
                                 <button
@@ -158,26 +159,26 @@ export function ReportModal({
                                             : 'bg-nature-50 dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-nature-200 dark:border-nature-700 hover:bg-nature-100 dark:hover:bg-nature-700 dark:hover:text-nature-200'
                                     }`}
                                 >
-                                    {isSelected ? '✓ ' : ''}{reason}
+                                    {isSelected ? t('✓ {reason}', { reason: t(REPORT_REASONS[i]) }) : t(REPORT_REASONS[i])}
                                 </button>
                             );
                         })}
                     </div>
                     <p className="mt-2 text-xs text-nature-600 dark:text-nature-300">
-                        <span className="font-bold">{CHILD_SAFETY_REASON}:</span> {CHILD_SAFETY_HINT}
+                        <Sentence text={t('{reason}: {hint}', { hint: t(REPORT_WORDS.childSafetyHint) })} parts={{ reason: <span className="font-bold">{t(REPORT_WORDS.childSafety)}</span> }} />
                     </p>
                 </div>
 
                 <div>
                     <label htmlFor="report-details" className="block text-xs font-bold uppercase tracking-wider text-nature-500 dark:text-nature-400 mb-2">
-                        Additional details (optional)
+                        {t('Additional details (optional)')}
                     </label>
                     <textarea
                         id="report-details"
                         rows={3}
                         value={details}
                         onChange={e => setDetails(e.target.value)}
-                        placeholder="Provide any additional context or comments for moderators..."
+                        placeholder={t('Provide any additional context or comments for moderators...')}
                         disabled={submitting}
                         className="w-full p-3 rounded-xl bg-nature-50 dark:bg-nature-950 border border-nature-200 dark:border-nature-800 text-xs font-medium text-nature-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-red-500 resize-none"
                     />
@@ -194,7 +195,7 @@ export function ReportModal({
                         disabled={submitting}
                         className="flex-1 min-h-[44px] py-2.5 px-4 rounded-xl font-bold text-xs bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 hover:bg-nature-200 dark:hover:bg-nature-700 dark:hover:text-nature-200 border-none cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-400"
                     >
-                        Cancel
+                        {t('Cancel')}
                     </button>
                     <button
                         type="button"
@@ -206,7 +207,7 @@ export function ReportModal({
                                 : 'bg-bg-hover text-text-muted cursor-not-allowed'
                         }`}
                     >
-                        {submitting ? 'Sending…' : 'Submit Report'}
+                        {submitting ? t('Sending…') : t('Submit Report')}
                     </button>
                 </div>
                 </>)}

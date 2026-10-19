@@ -2,7 +2,7 @@
   "_meta": {
     "language": "de",
     "name": "German",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-19",
@@ -325,5 +325,44 @@
   "{n} of these {count} from a new or 12-word account|{n} of these {count} from new or 12-word accounts": {
     "one": "{n} dieser {count} von einem neuen oder 12-Wörter-Konto",
     "other": "{n} dieser {count} von neuen oder 12-Wörter-Konten"
-  }
+  },
+  "updates itself": "aktualisiert sich selbst",
+  "a tap per post": "ein Fingertipp pro Beitrag",
+  "shows as a card": "wird als Karte angezeigt",
+  "youtube.com/@you": "youtube.com/@deinname",
+  "@yourhandle": "@deinname",
+  "soundcloud.com/you": "soundcloud.com/deinname",
+  "yoursite.com": "deineseite.com",
+  "facebook.com/yourpage": "facebook.com/deineseite",
+  "yourblog.com/feed": "deinblog.com/feed",
+  "Community": "Community",
+  "Food & growing": "Essen & Anbau",
+  "Making & craft": "Werken & Handwerk",
+  "Repair & reuse": "Reparatur & Wiederverwendung",
+  "Art & music": "Kunst & Musik",
+  "Business": "Geschäft",
+  "Other": "Sonstiges",
+  "Website": "Website",
+  "Blog / RSS": "Blog / RSS",
+  "Link": "Link",
+  "Idea": "Idee",
+  "Problem": "Problem",
+  "This goes to the BeanPool project team, not to your community. Don't include personal details.": "Dies geht an das BeanPool-Projektteam, nicht an deine Community. Gib keine persönlichen Daten an.",
+  "Thank you — your suggestion has reached the BeanPool project team.": "Danke — dein Vorschlag hat das BeanPool-Projektteam erreicht.",
+  "Please write at least {n} characters.|Please write at least {n} characters.": {
+    "one": "Bitte schreibe mindestens {n} Zeichen.",
+    "other": "Bitte schreibe mindestens {n} Zeichen."
+  },
+  "Please keep it under {n} characters ({count} now).|Please keep it under {n} characters ({count} now).": {
+    "one": "Bitte halte es unter {n} Zeichen (aktuell {count}).",
+    "other": "Bitte halte es unter {n} Zeichen (aktuell {count})."
+  },
+  "Couldn't reach the BeanPool project just now. Your text is still here — please try again later.": "Das BeanPool-Projekt konnte gerade nicht erreicht werden. Dein Text ist noch hier — bitte versuche es später erneut.",
+  "Please keep the community name under {n} characters.|Please keep the community name under {n} characters.": {
+    "one": "Bitte halte den Community-Namen unter {n} Zeichen.",
+    "other": "Bitte halte den Community-Namen unter {n} Zeichen."
+  },
+  "Too many suggestions from your connection recently. Please try again later — your text is still here.": "Zu viele Vorschläge von deiner Verbindung in letzter Zeit. Bitte versuche es später erneut — dein Text ist noch hier.",
+  "This poll is shown at your area (about 10 km around it) to everyone who can read it.": "Diese Umfrage wird in deiner Gegend (etwa 10 km im Umkreis) allen angezeigt, die sie lesen können.",
+  "You haven't set your area, so members nearby won't see this poll in their list; they can still find it by searching. Set it in Settings → Your area to show it near you.": "Du hast deine Gegend noch nicht festgelegt, daher sehen Mitglieder in der Nähe diese Umfrage nicht in ihrer Liste; sie können sie aber trotzdem über die Suche finden. Lege sie unter Einstellungen → Deine Gegend fest, um sie in deiner Nähe anzuzeigen."
 }

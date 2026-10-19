@@ -18,7 +18,7 @@ import { rekeySlotStore } from '../utils/rekey-slot-store';
 import { GLOBAL_NODE_URL, GLOBAL_DOOR_MESSAGES, beansOn, checkGlobalDoor, getCachedNodeProfile, wordsDoorOn } from '../utils/node-profile';
 // t comes from useWords() inside the screen (live in the member's language), not core's device-language t.
 import { DATE_WORDS, lowercaseRecoveryWords, photoStepNote, type Lang } from '@beanpool/core';
-import { welcomeLineWords } from '../components/welcome/welcome-lines';
+import { linkedNoticeWords, noWordsBeforeWipeWords, signInReplacedWords, welcomeLineWords } from '../components/welcome/welcome-lines';
 import { askGlobalDoorOffer, globalDoorOffer, rememberGlobalDoor } from '../utils/global-door-offer';
 import type { GlobalDoorState } from '../utils/global-entry';
 import { WelcomeDoors } from '../components/WelcomeDoors';
@@ -31,7 +31,7 @@ import { useDoorWork } from '../utils/use-door-work';
 import { DOOR_WORK_MESSAGES, solutionUnlessLeft } from '../utils/door-work';
 import { DoorChoices, DoorWorkProgress, WordsBackupNote, WORDS_BACKUP_TEXT } from '../components/WordsDoor';
 import { LinkSignInSheet } from '../components/LinkSignInSheet';
-import { linkedNotice, type LinkAnswer } from '../utils/join-link';
+import { type LinkAnswer } from '../utils/join-link';
 import { startOneWayBack } from '../utils/one-way-back';
 import { signInCopiesAt } from '../utils/vault-config';
 import { addSavedNode, clearGuestNode } from '../utils/nodes';
@@ -54,7 +54,7 @@ import { copyWordsForAMinute } from '../utils/words-clipboard';
 import { GoogleButton, AppleButton, FacebookButton, GoogleLogo, AppleLogo, FacebookLogo } from '../components/SsoButton';
 import { enrolKeepers, type KeeperEnrolmentResult } from '../utils/keeper-enrolment';
 import { protectionFrom } from '../utils/protection-state';
-import { NO_WORDS_WAY_BACK, noWordsBeforeWipe, signInReplacedNote } from '../utils/no-words-copy';
+import { NO_WORDS_WAY_BACK } from '../utils/no-words-copy';
 import { updateMemberProfile, fetchNodeCallsign, recordOnboardingEvent } from '../utils/db';
 import { buildSignedHeaders, validateMnemonic } from '../utils/crypto';
 import { palette, type AppColors } from '../constants/colors';
@@ -1123,7 +1123,7 @@ export default function WelcomeScreen() {
             // Final step — enter the app
             setIdentity(pendingIdentity);
         } catch (err: any) {
-            setError(err.message || 'Failed to complete registration.');
+            setError(err.message ? welcomeLineWords(err.message) : t('Failed to complete registration.'));
         } finally {
             setLoading(false);
         }
@@ -1780,7 +1780,7 @@ export default function WelcomeScreen() {
         const account = pendingIdentity;
         const turn = pendingWordsTurnRef.current;
         try {
-            const words = await readWordsBehindLock(account, 'Confirm your security to view your recovery phrase.');
+            const words = await readWordsBehindLock(account, t('Confirm your security to view your recovery phrase.'));
             // A check that did not pass shows nothing. Nor does one that answers after the step has moved on.
             if (!words || pendingIdentityRef.current !== account) return;
             // Put away while the check was up (the member left the step or the screen): nothing is shown.
@@ -1849,11 +1849,11 @@ export default function WelcomeScreen() {
             return;
         }
         Alert.alert(
-            hasMnemonic(pendingIdentity) ? 'Have you saved your words?' : 'Go back?',
-            'If you go back now, you\'ll need to start over.',
+            hasMnemonic(pendingIdentity) ? t('Have you saved your words?') : t('Go back?'),
+            t("If you go back now, you'll need to start over."),
             [
-                { text: 'Stay', style: 'cancel' },
-                { text: 'Go Back', style: 'destructive', onPress: () => {
+                { text: t('Stay'), style: 'cancel' },
+                { text: t('Go Back'), style: 'destructive', onPress: () => {
                     setPendingIdentity(null);
                     setPendingAvatar(null);
                     setSeedConfirmed(false);
@@ -1941,7 +1941,7 @@ export default function WelcomeScreen() {
             // 3. Profile done — go to seed phrase (Step 3)
             setMode('seedBackup');
         } catch (err: any) {
-            setError(err.message || 'Failed to save profile.');
+            setError(err.message ? welcomeLineWords(err.message) : t('Failed to save profile.'));
         } finally {
             setLoading(false);
         }
@@ -1958,14 +1958,21 @@ export default function WelcomeScreen() {
                         {inviterName && (
                             <View style={styles.inviteVerifiedBox}>
                                 <Text style={styles.inviteVerifiedText}>
-                                    🎟️ Your invite from <Text style={{ fontWeight: 'bold' }}>{inviterName}</Text> checks out
-                                    {inviteCommunityName ? <Text> — welcome to <Text style={{ fontWeight: 'bold' }}>{inviteCommunityName}</Text>!</Text> : <Text>!</Text>}
+                                    <Sentence
+                                        text={inviteCommunityName
+                                            ? t('🎟️ Your invite from {inviter} checks out — welcome to {community}!')
+                                            : t('🎟️ Your invite from {inviter} checks out!')}
+                                        parts={{
+                                            inviter: <Text style={{ fontWeight: 'bold' }}>{inviterName}</Text>,
+                                            community: <Text style={{ fontWeight: 'bold' }}>{inviteCommunityName}</Text>,
+                                        }}
+                                    />
                                 </Text>
                             </View>
                         )}
-                        <Text style={styles.title}>📸 Choose your look</Text>
+                        <Text style={styles.title}>{t('📸 Choose your look')}</Text>
                         <Text style={styles.subtitle}>
-                            Add a photo, or pick a fun avatar — whatever feels like you.
+                            {t('Add a photo, or pick a fun avatar — whatever feels like you.')}
                         </Text>
 
                         {/* Preview circle */}
@@ -1974,7 +1981,7 @@ export default function WelcomeScreen() {
                                 <Image
                                     source={pendingAvatar.startsWith('bundled://') ? resolveBundledAvatar(pendingAvatar)! : { uri: pendingAvatar }}
                                     style={profileStyles.previewImage}
-                                    accessibilityLabel="Your selected profile picture"
+                                    accessibilityLabel={t('Your selected profile picture')}
                                 />
                             ) : (
                                 <View style={profileStyles.previewPlaceholder}>
@@ -1996,14 +2003,14 @@ export default function WelcomeScreen() {
                             accessibilityRole="button"
                         >
                             <Text style={styles.secondaryBtnText}>
-                                {pendingAvatar ? 'Change Photo or Avatar' : 'Choose Photo or Avatar'}
+                                {pendingAvatar ? t('Change Photo or Avatar') : t('Choose Photo or Avatar')}
                             </Text>
                         </Pressable>
 
                         {loading && (
                             <View style={{ alignItems: 'center', marginVertical: 12 }}>
                                 <ActivityIndicator color={accentInk} />
-                                <Text style={{ color: colors.text.secondary, fontSize: 12, marginTop: 4 }}>Processing image...</Text>
+                                <Text style={{ color: colors.text.secondary, fontSize: 12, marginTop: 4 }}>{t('Processing image...')}</Text>
                             </View>
                         )}
 
@@ -2022,7 +2029,7 @@ export default function WelcomeScreen() {
                             {loading ? (
                                 <ActivityIndicator color={colors.text.inverse} />
                             ) : (
-                                <Text style={styles.primaryBtnText}>Next →</Text>
+                                <Text style={styles.primaryBtnText}>{t('Next →')}</Text>
                             )}
                         </Pressable>
 
@@ -2037,9 +2044,9 @@ export default function WelcomeScreen() {
                             }}
                             disabled={loading}
                             accessibilityRole="button"
-                            accessibilityLabel="Back"
+                            accessibilityLabel={t('Back')}
                         >
-                            <Text style={styles.backBtnText}>← Back</Text>
+                            <Text style={styles.backBtnText}>{t('← Back')}</Text>
                         </Pressable>
                         )}
                     </View>
@@ -2078,23 +2085,23 @@ export default function WelcomeScreen() {
                         />
                         )}
                         {linked && (
-                            <Text style={[styles.fieldHint, { marginBottom: 12 }]} accessibilityLiveRegion="polite">✅ {linkedNotice(linked)}</Text>
+                            <Text style={[styles.fieldHint, { marginBottom: 12 }]} accessibilityLiveRegion="polite">✅ {linkedNoticeWords(linked)}</Text>
                         )}
                         {/* The sign-in the member joined with used to protect another account: said here too, as the
                             protection sheet says it (PR #1336 review finding 9). */}
                         {enrolment?.replaced && enrolment.enrolledSso?.[0] && (
                             <Text style={[styles.fieldHint, { marginBottom: 12 }]} accessibilityLiveRegion="polite">
-                                {signInReplacedNote(SSO_PROVIDER_NAMES[enrolment.enrolledSso[0] as SsoProvider] ?? enrolment.enrolledSso[0])}
+                                {signInReplacedWords(SSO_PROVIDER_NAMES[enrolment.enrolledSso[0] as SsoProvider] ?? enrolment.enrolledSso[0])}
                             </Text>
                         )}
 
                         {Platform.OS === 'web' && (
                             <View style={{ backgroundColor: colors.feedback.info.bg, borderColor: colors.feedback.info.border, borderWidth: 1, borderRadius: 12, padding: 16, marginBottom: 16 }}>
                                 <Text style={{ color: colors.text.body, fontSize: 14, lineHeight: 20 }}>
-                                    The web version of BeanPool runs inside your hub's server, which means it can't safely manage recovery keys. Your 12 words are the only way back on the web.
+                                    {t("The web version of BeanPool runs inside your hub's server, which means it can't safely manage recovery keys. Your 12 words are the only way back on the web.")}
                                 </Text>
                                 <Text style={{ color: colors.text.secondary, fontSize: 13, lineHeight: 18, marginTop: 8 }}>
-                                    For sign-in account recovery (Apple, Google), use the BeanPool app on your phone.
+                                    {t('For sign-in account recovery (Apple, Google), use the BeanPool app on your phone.')}
                                 </Text>
                             </View>
                         )}
@@ -2133,14 +2140,14 @@ export default function WelcomeScreen() {
                                 style={[styles.secondaryBtn, { marginBottom: 4 }]}
                                 onPress={pendingWordsAreNew ? () => setRevealWords(true) : handleShowPendingWords}
                                 accessibilityRole="button"
-                                accessibilityHint="Shows the twelve words that can restore your account"
+                                accessibilityHint={t('Shows the twelve words that can restore your account')}
                             >
-                                <Text style={styles.secondaryBtnText}>{protection.showWords ? '🔑 Show my 12 words' : 'Rather write down 12 words?'}</Text>
+                                <Text style={styles.secondaryBtnText}>{protection.showWords ? t('🔑 Show my 12 words') : t('Rather write down 12 words?')}</Text>
                             </Pressable>
                         ) : (
                         <>
                         <Text style={{ color: colors.text.secondary, fontSize: 13, marginBottom: 16, lineHeight: 18 }}>
-                            💡 Write them down on paper and keep it somewhere safe.
+                            {t('💡 Write them down on paper and keep it somewhere safe.')}
                         </Text>
                         {/*
                           Says out loud that this screen is not the only chance. Without it,
@@ -2149,8 +2156,7 @@ export default function WelcomeScreen() {
                           are the ones with no pen to hand, not the ones who do not care.
                         */}
                         <Text style={{ color: colors.text.secondary, fontSize: 13, marginBottom: 16, lineHeight: 18 }}>
-                            No pen handy? Carry on — you can come back to these any time under
-                            Settings → Recovery Phrase.
+                            {t('No pen handy? Carry on — you can come back to these any time under Settings → Recovery Phrase.')}
                         </Text>
                         <View style={styles.seedGrid}>
                             {/*
@@ -2171,7 +2177,8 @@ export default function WelcomeScreen() {
                                     key={i}
                                     style={styles.seedCell}
                                     accessible={true}
-                                    accessibilityLabel={`Word ${i + 1}: ${word}`}
+                                    // The word is placed as written, never looked up: the 12 words are English in every language.
+                                    accessibilityLabel={t('Word {n}: {word}', { n: i + 1, word })}
                                 >
                                     <Text style={styles.seedIndex}>{i + 1}.</Text>
                                     <Text style={styles.seedWord} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{word}</Text>
@@ -2191,7 +2198,7 @@ export default function WelcomeScreen() {
                             accessibilityRole="button"
                         >
                             <Text style={styles.secondaryBtnText}>
-                                {seedCopied ? '✅ Copied!' : '📋 Copy All Words'}
+                                {seedCopied ? t('✅ Copied!') : t('📋 Copy All Words')}
                             </Text>
                         </Pressable>
                         <CopyClearsNote style={[styles.fieldHint, { marginTop: 0, marginBottom: 12 }]} />
@@ -2220,10 +2227,10 @@ export default function WelcomeScreen() {
                             // these words, check box, unchecked" — the tick state read out
                             // twice, once as a described emoji. The role and state already
                             // carry it, so the label is just the sentence.
-                            accessibilityLabel="I've saved these words"
+                            accessibilityLabel={t("I've saved these words")}
                         >
                             <Text style={styles.checkboxText}>
-                                {seedConfirmed ? '✅ ' : '⬜ '} I've saved these words
+                                {seedConfirmed ? '✅ ' : '⬜ '} <Text>{t("I've saved these words")}</Text>
                             </Text>
                         </Pressable>
                         </>
@@ -2267,7 +2274,7 @@ export default function WelcomeScreen() {
                             }}
                             accessibilityRole="button"
                         >
-                            <Text style={styles.primaryBtnText}>Next →</Text>
+                            <Text style={styles.primaryBtnText}>{t('Next →')}</Text>
                         </Pressable>
 
                         <Pressable
@@ -2275,9 +2282,9 @@ export default function WelcomeScreen() {
                             onPress={handleSeedBackPress}
                             disabled={loading}
                             accessibilityRole="button"
-                            accessibilityLabel="Back"
+                            accessibilityLabel={t('Back')}
                         >
-                            <Text style={styles.backBtnText}>← Back</Text>
+                            <Text style={styles.backBtnText}>{t('← Back')}</Text>
                         </Pressable>
                     </View>
                 </ScrollView>
@@ -2293,9 +2300,9 @@ export default function WelcomeScreen() {
                 <ScrollView key={mode} contentContainerStyle={styles.scroll}>
                     <OnboardingStepper step={4} />
                     <View style={styles.card}>
-                        <Text style={styles.title}>🫘 Welcome to BeanPool</Text>
+                        <Text style={styles.title}>{t('🫘 Welcome to BeanPool')}</Text>
                         <Text style={styles.subtitle}>
-                            {joinBeansOn ? "Let's look at how this community economy works." : "Here's how BeanPool works."}
+                            {joinBeansOn ? t("Let's look at how this community economy works.") : t("Here's how BeanPool works.")}
                         </Text>
 
                         {/* Cards 1-3 are Beans. A community with Beans off (the global one) gets one card that says so. */}
@@ -2303,32 +2310,38 @@ export default function WelcomeScreen() {
                         <>
                         {/* Card 1: Energy Exchange */}
                         <View style={guideStyles.card}>
-                            <Text style={guideStyles.cardTitle}>⚡ Energy Exchange Marketplace</Text>
+                            <Text style={guideStyles.cardTitle}>{t('⚡ Energy Exchange Marketplace')}</Text>
                             <Text style={guideStyles.cardText}>
-                                BeanPool runs on cooperation, not accumulation. The goal is to keep energy flowing.
+                                {t('BeanPool runs on cooperation, not accumulation. The goal is to keep energy flowing.')}
                             </Text>
                             <View style={guideStyles.highlightBox}>
                                 <Text style={guideStyles.highlightText}>
-                                    🟢 <Text style={{ fontWeight: 'bold' }}>The best place to be is zero (0 Beans).</Text> This means you have given as much value to your community as you have received from it.
+                                    <Sentence
+                                        text={t('🟢 {zero} This means you have given as much value to your community as you have received from it.')}
+                                        parts={{ zero: <Text style={{ fontWeight: 'bold' }}>{t('The best place to be is zero (0 Beans).')}</Text> }}
+                                    />
                                 </Text>
                             </View>
                             <View style={[guideStyles.highlightBox, { backgroundColor: 'rgba(245, 158, 11, 0.12)', borderColor: 'rgba(245, 158, 11, 0.35)' }]}>
                                 <Text style={[guideStyles.highlightText, { color: dark ? palette.amber400 : (palette.amber700 || '#b45309') }]}>
-                                    🫘 <Text style={{ fontWeight: 'bold' }}>Contributions First.</Text> In a community with Beans, to keep the credit pool healthy, list at least one Offer of what you can give back before you can post Needs or accept Offers.
+                                    <Sentence
+                                        text={t('🫘 {first} In a community with Beans, to keep the credit pool healthy, list at least one Offer of what you can give back before you can post Needs or accept Offers.')}
+                                        parts={{ first: <Text style={{ fontWeight: 'bold' }}>{t('Contributions First.')}</Text> }}
+                                    />
                                 </Text>
                             </View>
                         </View>
 
                         {/* Card 2: The Ledger Rules */}
                         <View style={guideStyles.card}>
-                            <Text style={guideStyles.cardTitle}>🪙 The Mutual Credit Ledger</Text>
+                            <Text style={guideStyles.cardTitle}>{t('🪙 The Mutual Credit Ledger')}</Text>
                             
                             <View style={guideStyles.bulletRow}>
                                 <Text style={guideStyles.bulletEmoji}>🤝</Text>
                                 <View style={guideStyles.bulletContent}>
-                                    <Text style={guideStyles.bulletTitle}>Trust-Backed Credit</Text>
+                                    <Text style={guideStyles.bulletTitle}>{t('Trust-Backed Credit')}</Text>
                                     <Text style={guideStyles.bulletText}>
-                                        Everyone starts with a 0 Bean limit. Complete your first real marketplace trade and your community credit line opens — then it deepens steadily with the value you trade and the people you trade with, up to -2000 Beans. No interest, no bank fees.
+                                        {t('Everyone starts with a 0 Bean limit. Complete your first real marketplace trade and your community credit line opens — then it deepens steadily with the value you trade and the people you trade with, up to -2000 Beans. No interest, no bank fees.')}
                                     </Text>
                                 </View>
                             </View>
@@ -2336,9 +2349,9 @@ export default function WelcomeScreen() {
                             <View style={guideStyles.bulletRow}>
                                 <Text style={guideStyles.bulletEmoji}>🌾</Text>
                                 <View style={guideStyles.bulletContent}>
-                                    <Text style={guideStyles.bulletTitle}>Community Commons Pool</Text>
+                                    <Text style={guideStyles.bulletTitle}>{t('Community Commons Pool')}</Text>
                                     <Text style={guideStyles.bulletText}>
-                                        Positive balances above 200 Beans contribute 1.0% to 2.5% monthly across progressive brackets (the first 200 is fee-free). This prevents hoarding and circulates surplus to fund the Community Commons.
+                                        {t('Positive balances above 200 Beans contribute 1.0% to 2.5% monthly across progressive brackets (the first 200 is fee-free). This prevents hoarding and circulates surplus to fund the Community Commons.')}
                                     </Text>
                                 </View>
                             </View>
@@ -2346,9 +2359,9 @@ export default function WelcomeScreen() {
                             <View style={guideStyles.bulletRow}>
                                 <Text style={guideStyles.bulletEmoji}>⏱️</Text>
                                 <View style={guideStyles.bulletContent}>
-                                    <Text style={guideStyles.bulletTitle}>Reference Rate</Text>
+                                    <Text style={guideStyles.bulletTitle}>{t('Reference Rate')}</Text>
                                     <Text style={guideStyles.bulletText}>
-                                        40 Beans represents roughly 1 hour of community service or time, helping you easily value what you offer or need.
+                                        {t('40 Beans represents roughly 1 hour of community service or time, helping you easily value what you offer or need.')}
                                     </Text>
                                 </View>
                             </View>
@@ -2356,17 +2369,17 @@ export default function WelcomeScreen() {
 
                         {/* Card 3: Safe Handshake Held in Trust */}
                         <View style={guideStyles.card}>
-                            <Text style={guideStyles.cardTitle}>🔒 Held in Trust</Text>
+                            <Text style={guideStyles.cardTitle}>{t('🔒 Held in Trust')}</Text>
                             <Text style={guideStyles.cardText}>
-                                To ensure fairness, when you accept an offer or request a job, your credits are safely held in a temporary Trust Wallet. They are only released to the provider once you confirm delivery.
+                                {t('To ensure fairness, when you accept an offer or request a job, your credits are safely held in a temporary Trust Wallet. They are only released to the provider once you confirm delivery.')}
                             </Text>
                         </View>
                         </>
                         ) : (
                         <View style={guideStyles.card}>
-                            <Text style={guideStyles.cardTitle}>🌍 A place to meet</Text>
+                            <Text style={guideStyles.cardTitle}>{t('🌍 A place to meet')}</Text>
                             <Text style={guideStyles.cardText}>
-                                The global community is for meeting people and finding a community near you. There are no Beans here: credit, the Commons and trading in Beans live in local communities, which you join with an invite from a member.
+                                {t('The global community is for meeting people and finding a community near you. There are no Beans here: credit, the Commons and trading in Beans live in local communities, which you join with an invite from a member.')}
                             </Text>
                         </View>
                         )}
@@ -2384,7 +2397,7 @@ export default function WelcomeScreen() {
                           Phase B, when the keepers are real.
                         */}
                         <View style={guideStyles.card}>
-                            <Text style={guideStyles.cardTitle}>🔑 Getting Back In</Text>
+                            <Text style={guideStyles.cardTitle}>{t('🔑 Getting Back In')}</Text>
                             {/* Spaced locally rather than by changing guideStyles.cardText,
                                 which has no marginBottom because the other three cards end on
                                 it. This is the only card where it is followed by bullets. */}
@@ -2394,25 +2407,48 @@ export default function WelcomeScreen() {
                                         {t('Your 12 words are your primary key to your account across devices. Nobody can reset them: not us, not this community.')}
                                     </Text>
                                     <Text style={guideStyles.bulletItem}>
-                                        📝 Find them any time under <Text style={{ fontWeight: 'bold' }}>Settings → Recovery Phrase</Text>.
+                                        <Sentence
+                                            text={t('📝 Find them any time under {where}.')}
+                                            parts={{ where: <Text style={{ fontWeight: 'bold' }}>{t('Settings → Recovery Phrase')}</Text> }}
+                                        />
                                     </Text>
                                 </>
                             ) : (
-                                <Text style={[guideStyles.cardText, { marginBottom: 8 }]}>{NO_WORDS_WAY_BACK}</Text>
+                                <Text style={[guideStyles.cardText, { marginBottom: 8 }]}>{welcomeLineWords(NO_WORDS_WAY_BACK)}</Text>
                             )}
                             <Text style={guideStyles.bulletItem}>
-                                🤝 On the phone app you can also link a sign-in account (Apple, Google, etc.) under Settings so your community node can help you back onto a new device.
+                                {t('🤝 On the phone app you can also link a sign-in account (Apple, Google, etc.) under Settings so your community node can help you back onto a new device.')}
                             </Text>
                         </View>
 
                         {/* Card 5: Where to Start */}
                         <View style={guideStyles.card}>
-                            <Text style={guideStyles.cardTitle}>🚀 Where to Start?</Text>
-                            <Text style={guideStyles.bulletItem}>📍 Explore the <Text style={{ fontWeight: 'bold' }}>Map</Text> to find offers (green) and needs (orange) near you.</Text>
-                            <Text style={guideStyles.bulletItem}>💬 Tap <Text style={{ fontWeight: 'bold' }}>Message</Text> on any post to chat securely (E2E encrypted) with neighbors.</Text>
-                            <Text style={guideStyles.bulletItem}>➕ Click <Text style={{ fontWeight: 'bold' }}>Post</Text> to list what you need or what you can offer to the community.</Text>
+                            <Text style={guideStyles.cardTitle}>{t('🚀 Where to Start?')}</Text>
+                            <Text style={guideStyles.bulletItem}>
+                                <Sentence
+                                    text={t('📍 Explore the {map} to find offers (green) and needs (orange) near you.')}
+                                    parts={{ map: <Text style={{ fontWeight: 'bold' }}>{t('Map', undefined, 'tab')}</Text> }}
+                                />
+                            </Text>
+                            <Text style={guideStyles.bulletItem}>
+                                <Sentence
+                                    text={t('💬 Tap {message} on any post to chat securely (E2E encrypted) with neighbors.')}
+                                    parts={{ message: <Text style={{ fontWeight: 'bold' }}>{t('Message', undefined, 'button: write to')}</Text> }}
+                                />
+                            </Text>
+                            <Text style={guideStyles.bulletItem}>
+                                <Sentence
+                                    text={t('➕ Click {post} to list what you need or what you can offer to the community.')}
+                                    parts={{ post: <Text style={{ fontWeight: 'bold' }}>{t('Post', undefined, 'button: publish')}</Text> }}
+                                />
+                            </Text>
                             {joinBeansOn && (
-                                <Text style={guideStyles.bulletItem}>💳 Use the <Text style={{ fontWeight: 'bold' }}>Ledger</Text> tab to send credits to neighbors instantly.</Text>
+                                <Text style={guideStyles.bulletItem}>
+                                    <Sentence
+                                        text={t('💳 Use the {ledger} tab to send credits to neighbors instantly.')}
+                                        parts={{ ledger: <Text style={{ fontWeight: 'bold' }}>{t('Ledger', undefined, 'tab')}</Text> }}
+                                    />
+                                </Text>
                             )}
                         </View>
 
@@ -2427,7 +2463,7 @@ export default function WelcomeScreen() {
                             {loading ? (
                                 <ActivityIndicator color={colors.text.inverse} />
                             ) : (
-                                <Text style={styles.primaryBtnText}>Let's Begin! 🚀</Text>
+                                <Text style={styles.primaryBtnText}>{t("Let's Begin! 🚀")}</Text>
                             )}
                         </Pressable>
 
@@ -2441,7 +2477,7 @@ export default function WelcomeScreen() {
                             disabled={loading}
                             accessibilityRole="button"
                         >
-                            <Text style={styles.backBtnText}>← Back to Backup</Text>
+                            <Text style={styles.backBtnText}>{t('← Back to Backup')}</Text>
                         </Pressable>
                     </View>
                 </ScrollView>
@@ -2984,7 +3020,7 @@ export default function WelcomeScreen() {
                             ) : (
                                 <View style={styles.noSeedWarnBox}>
                                     <Text style={styles.noSeedWarnText}>
-                                        ⚠️ {noWordsBeforeWipe(outCallsign)}
+                                        ⚠️ {noWordsBeforeWipeWords(outCallsign)}
                                     </Text>
                                 </View>
                             )}

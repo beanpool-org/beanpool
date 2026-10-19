@@ -956,7 +956,8 @@ describe('status, disconnect, push token, and the check at app open', () => {
         expect(answer).toMatchObject({ kind: 'joined', enrolment: { enrolledSso: ['google'], replaced: true } });
         const welcome = fs.readFileSync(path.resolve(__dirname, '../../app/welcome.tsx'), 'utf8');
         const backup = welcome.slice(welcome.indexOf("if (mode === 'seedBackup' && pendingIdentity)"));
-        expect(backup).toMatch(/\{enrolment\?\.replaced && [\s\S]{0,200}signInReplacedNote\(/);
+        // Said in the member's language: welcome-lines.ts builds the same sentence again (welcome-lines.test holds the two).
+        expect(backup).toMatch(/\{enrolment\?\.replaced && [\s\S]{0,200}signInReplacedWords\(/);
         expect(signInReplacedNote('Google')).toBe('This Google account used to protect a different BeanPool account. It protects this one now, and that one has only its 12 words.');
     });
 

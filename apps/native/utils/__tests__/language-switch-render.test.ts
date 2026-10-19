@@ -319,7 +319,27 @@ describe('the welcome and join screens\' words at 320 dp with 1.3× text', () =>
     const STEPS = ['Your Name', 'Your Photo', 'Safety Backup', 'How it Works'];
     const STEP_WIDTH = (FLOOR - 2 * 24 - 2 * 8 - 3 * (12 + 2 * 2)) / 4;
     const ALL_LANGS: UiLang[] = ['xx', ...fs.readdirSync(NATIVE_WORDS).filter((f) => /^[A-Za-z-]+\.json$/.test(f)).map((f) => f.slice(0, -5) as UiLang)];
-    const keys = Array.from(source.matchAll(/\bt\((['"])((?:(?!\1)[^\\]|\\.)*)\1/g)).map((m) => m[2].replace(/\\n/g, '\n').replace(/\\'/g, "'"));
+    /**
+     * The source with what is not on a phone's card taken out: every call that hands its words to one of the phone's own
+     * dialogs (an alert, the phone's lock prompt), which the phone draws and wraps itself, and what only the web build
+     * draws. What is measured here is the phone's cards.
+     */
+    const onCards = (src: string) => {
+        let out = src;
+        for (const name of ['Alert.alert(', 'authenticateUser(', 'readWordsBehindLock(', "Platform.OS === 'web' && ("]) {
+            for (let at = out.indexOf(name); at >= 0; at = out.indexOf(name, at + 1)) {
+                let depth = 0;
+                let end = at + name.length - 1;
+                for (; end < out.length; end++) {
+                    if (out[end] === '(') depth++;
+                    else if (out[end] === ')' && --depth === 0) break;
+                }
+                out = out.slice(0, at) + ' '.repeat(end + 1 - at) + out.slice(end + 1);
+            }
+        }
+        return out;
+    };
+    const keys = Array.from(onCards(source).matchAll(/\bt\((['"])((?:(?!\1)[^\\]|\\.)*)\1/g)).map((m) => m[2].replace(/\\n/g, '\n').replace(/\\'/g, "'"));
     /** The sentences some language's catalog has: the ones the drafting pass has reached. */
     const draftedKeys = new Set(ALL_LANGS.filter((l) => l !== 'xx').flatMap((l) => Object.keys(catalog(NATIVE_WORDS, l))));
     const drafted = (key: string) => draftedKeys.has(key);

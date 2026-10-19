@@ -70,9 +70,12 @@ describe('the phone\'s report lists', () => {
     it('the shared report box (components/ReportReasonBox.tsx) lists the shared reasons, says what Child safety is for, and sends the reason first', () => {
         const src = read('components/ReportReasonBox.tsx');
         expect(src).toMatch(/import \{[^}]*\bREPORT_REASONS\b[^}]*\} from '\.\.\/utils\/reportReasons'/);
-        expect(src).toContain('{REPORT_REASONS.map((r) =>');
-        expect(src).toContain(HINT);
-        expect(src).toContain('placeholder="Add a few words (optional)"');
+        // In the member's language since words S3h, as the post screen since S3b: the same shared reasons and hint,
+        // through t() (the reason sent stays as written), the hint one sentence with Child safety in bold inside it.
+        expect(src).toContain('{REPORT_REASONS.map((r, i) =>');
+        expect(src).toContain("<Sentence text={t('{reason}: {hint}', { hint: t(LINES.childSafetyHint) })} parts={{ reason: <Text style={{ fontWeight: '700' }}>{t(LINES.childSafety)}</Text> }} />");
+        expect(src).toContain('childSafety: CHILD_SAFETY_REASON, childSafetyHint: CHILD_SAFETY_HINT');
+        expect(src).toContain("placeholder={t('Add a few words (optional)')}");
         expect(src).toContain('await onSubmit(reportReasonWithWords(reason, words));');
     });
 
@@ -87,13 +90,14 @@ describe('the phone\'s report lists', () => {
     it('an enterprise or project (app/treasury-detail.tsx) reports through the shared box, never a free-text reason', () => {
         const src = read('app/treasury-detail.tsx');
         expect(src).toMatch(/import \{[^}]*\bReportReasonBox\b[^}]*\} from '\.\.\/components\/ReportReasonBox';/);
-        const b = box(src, '{showReportForm && (', 'Alert.alert(\'Reported\'');
+        // The alert's words through t() since words S3h; the same alert, the same order.
+        const b = box(src, '{showReportForm && (', 'Alert.alert(t(\'Reported\')');
         expect(b).toContain('<ReportReasonBox');
         expect(b).toContain('await reportAbuse(identity.publicKey, treasuryKey, reason, treasuryKey);');
         expect(b).not.toContain('TextInput');
         // A failed send rethrows after its alert, so the box keeps the choice and the words (review of #1912, finding 3;
         // the event screen's side is drawn in event-report-render.test.ts).
-        expect(src).toMatch(/Alert\.alert\('Error', e\.message \|\| 'Could not submit report\.'\);\s*throw e;/);
+        expect(src).toMatch(/Alert\.alert\(t\('Error'\), e\.message \|\| t\('Could not submit report\.'\)\);\s*throw e;/);
     });
 
     // #1938 case 14 (adopted): every accepted report says the same thanks in the "Reported" dialog, and when the member's

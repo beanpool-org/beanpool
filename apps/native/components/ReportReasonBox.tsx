@@ -7,7 +7,12 @@ import React, { useState } from 'react';
 import { View, Text, Pressable, TextInput, ActivityIndicator } from 'react-native';
 import { useTheme } from '../app/ThemeContext';
 import { hapticTick } from '../utils/haptics';
+import { t } from '@beanpool/core';
+import { Sentence } from './Sentence';
 import { CHILD_SAFETY_HINT, CHILD_SAFETY_REASON, REPORT_REASONS, reportReasonWithWords } from '../utils/reportReasons';
+
+/** Marked in utils/reportReasons.ts, translated here where they are shown (each reason still SENT as written). */
+const LINES = { childSafety: CHILD_SAFETY_REASON, childSafetyHint: CHILD_SAFETY_HINT };
 
 export function ReportReasonBox({ onSubmit, onCancel }: {
     /**
@@ -38,9 +43,9 @@ export function ReportReasonBox({ onSubmit, onCancel }: {
 
     return (
         <View style={{ marginTop: 12, backgroundColor: colors.feedback.danger.bg, padding: 14, borderRadius: 12, borderWidth: 1, borderColor: colors.feedback.danger.border }}>
-            <Text style={{ fontSize: 11, fontWeight: '700', color: colors.feedback.danger.fg, marginBottom: 8, letterSpacing: 0.5 }}>WHY ARE YOU REPORTING IT?</Text>
+            <Text style={{ fontSize: 11, fontWeight: '700', color: colors.feedback.danger.fg, marginBottom: 8, letterSpacing: 0.5 }}>{t('WHY ARE YOU REPORTING IT?')}</Text>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
-                {REPORT_REASONS.map((r) => {
+                {REPORT_REASONS.map((r, i) => {
                     const isSelected = reason === r;
                     return (
                         <Pressable
@@ -61,19 +66,19 @@ export function ReportReasonBox({ onSubmit, onCancel }: {
                             onPress={() => { setReason(r); hapticTick(); }}
                         >
                             <Text style={{ fontSize: 13, fontWeight: '700', color: isSelected ? colors.text.inverse : colors.text.body }}>
-                                {isSelected ? '✓ ' : ''}{r}
+                                {isSelected ? t('✓ {reason}', { reason: t(REPORT_REASONS[i]) }) : t(REPORT_REASONS[i])}
                             </Text>
                         </Pressable>
                     );
                 })}
             </View>
             <Text style={{ fontSize: 13, color: colors.text.body, marginBottom: 12 }}>
-                <Text style={{ fontWeight: '700' }}>{CHILD_SAFETY_REASON}:</Text> {CHILD_SAFETY_HINT}
+                <Sentence text={t('{reason}: {hint}', { hint: t(LINES.childSafetyHint) })} parts={{ reason: <Text style={{ fontWeight: '700' }}>{t(LINES.childSafety)}</Text> }} />
             </Text>
             <TextInput
-                accessibilityLabel="Add a few words (optional)"
+                accessibilityLabel={t('Add a few words (optional)')}
                 style={{ backgroundColor: colors.surface.card, minHeight: 48, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, borderWidth: 1, borderColor: colors.border.default, marginBottom: 10, color: colors.text.body }}
-                placeholder="Add a few words (optional)"
+                placeholder={t('Add a few words (optional)')}
                 placeholderTextColor={colors.text.muted}
                 value={words}
                 onChangeText={setWords}
@@ -86,7 +91,7 @@ export function ReportReasonBox({ onSubmit, onCancel }: {
                         onPress={onCancel}
                         style={{ flexGrow: 1, minHeight: 48, borderRadius: 8, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 14, borderWidth: 1, borderColor: colors.border.default, backgroundColor: colors.surface.card }}
                     >
-                        <Text style={{ color: colors.text.body, fontWeight: '700' }}>Cancel</Text>
+                        <Text style={{ color: colors.text.body, fontWeight: '700' }}>{t('Cancel')}</Text>
                     </Pressable>
                 )}
                 <Pressable
@@ -98,7 +103,7 @@ export function ReportReasonBox({ onSubmit, onCancel }: {
                 >
                     {sending
                         ? <ActivityIndicator size="small" color={colors.text.inverse} />
-                        : <Text style={{ color: reason ? colors.text.inverse : colors.text.muted, fontWeight: '700' }}>Submit report</Text>}
+                        : <Text style={{ color: reason ? colors.text.inverse : colors.text.muted, fontWeight: '700' }}>{t('Submit report')}</Text>}
                 </Pressable>
             </View>
         </View>

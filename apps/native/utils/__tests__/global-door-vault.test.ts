@@ -357,7 +357,8 @@ describe('P4: the door refuses the ticket: one more sheet, by itself, with the d
         const welcome = fs.readFileSync(path.resolve(__dirname, '../../app/welcome.tsx'), 'utf8');
         expect(welcome).toMatch(/submitJoin\(GLOBAL_NODE_URL, identity, name, signin, \{ onSignInAgain: setDoorNotice, work: doorWork\.runFor\('sign-in'\) \}\)/);
         const joining = welcome.slice(welcome.indexOf("{globalPhase === 'joining' && ("));
-        expect(joining.slice(0, 600)).toMatch(/\{doorNotice \?\? 'Joining the global community…'\}/);
+        // In the member's language (words S3j): the notice through components/welcome/welcome-lines.ts, the line through t().
+        expect(joining.slice(0, 600)).toMatch(/\{doorNotice \? welcomeLineWords\(doorNotice\) : t\('Joining the global community…'\)\}/);
     });
 });
 

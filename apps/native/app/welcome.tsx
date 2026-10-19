@@ -18,13 +18,15 @@ import { rekeySlotStore } from '../utils/rekey-slot-store';
 import { GLOBAL_NODE_URL, GLOBAL_DOOR_MESSAGES, beansOn, checkGlobalDoor, getCachedNodeProfile, wordsDoorOn } from '../utils/node-profile';
 // t comes from useWords() inside the screen (live in the member's language), not core's device-language t.
 import { DATE_WORDS, lowercaseRecoveryWords, photoStepNote, type Lang } from '@beanpool/core';
-import { linkedNoticeWords, noWordsBeforeWipeWords, signInReplacedWords, welcomeLineWords } from '../components/welcome/welcome-lines';
+import {
+    doorAnswerWords, linkedNoticeWords, nameCheckWords, noWordsBeforeWipeWords, signInReplacedWords, welcomeLineWords,
+} from '../components/welcome/welcome-lines';
 import { askGlobalDoorOffer, globalDoorOffer, rememberGlobalDoor } from '../utils/global-door-offer';
 import type { GlobalDoorState } from '../utils/global-entry';
 import { WelcomeDoors } from '../components/WelcomeDoors';
 import {
-    MAX_JOIN_NAME, adoptJoinKey, checkNameAtDoor, commitJoinKey, doorMessage, doorWaysOut, joinKeyForThisPhone, joinedUnderNodeName,
-    keepJoinedIdentity, nameCheckMessage, nextStepFor, releaseJoinKey, signInAtDoor, submitJoin, submitWordsJoin,
+    MAX_JOIN_NAME, adoptJoinKey, checkNameAtDoor, commitJoinKey, doorWaysOut, joinKeyForThisPhone, joinedUnderNodeName,
+    keepJoinedIdentity, nextStepFor, releaseJoinKey, signInAtDoor, submitJoin, submitWordsJoin,
     type DoorAnswer, type DoorPhase, type DoorSignIn, type DoorWay, type JoinKey,
 } from '../utils/global-join';
 import { useDoorWork } from '../utils/use-door-work';
@@ -821,7 +823,7 @@ export default function WelcomeScreen() {
                 rememberGlobalDoor(check);
                 if (cancelled) return;
                 if (!check.ok) {
-                    setGlobalMessage(GLOBAL_DOOR_MESSAGES[check.reason]);
+                    setGlobalMessage(welcomeLineWords(GLOBAL_DOOR_MESSAGES[check.reason]));
                     setGlobalPhase('unavailable');
                     return;
                 }
@@ -834,7 +836,7 @@ export default function WelcomeScreen() {
             .catch(() => {
                 rememberGlobalDoor(null);
                 if (cancelled) return;
-                setGlobalMessage(GLOBAL_DOOR_MESSAGES.unreachable);
+                setGlobalMessage(welcomeLineWords(GLOBAL_DOOR_MESSAGES.unreachable));
                 setGlobalPhase('unavailable');
             });
         return () => { cancelled = true; };
@@ -1502,7 +1504,7 @@ export default function WelcomeScreen() {
             // The phone's own account (a key this door didn't make): the join carries its recovery copy sealed to this
             // sign-in, so the phone's lock first, as Account Protection's connect asks it. A check that doesn't pass starts
             // nothing (PR #1205 review 4112404429).
-            if (!key.createdHere && !(await authenticateUser('Confirm authentication to link a sign-in to your account.'))) return;
+            if (!key.createdHere && !(await authenticateUser(t('Confirm authentication to link a sign-in to your account.')))) return;
             const result = await signInAtDoor(provider, GLOBAL_NODE_URL, key.identity);
             if (result.kind === 'answered') {
                 await afterDoorAnswer(result.answer, key, { ...key.identity, callsign: callsign.trim() || key.identity.callsign }, 'signIn');
@@ -1521,7 +1523,7 @@ export default function WelcomeScreen() {
         } catch (e) {
             // A cancel is not an error: the member thought better of it.
             const failure = e as { reason?: string; message?: string } | null;
-            setError(failure?.reason === 'cancelled' ? null : (failure?.message || 'Sign-in failed. Try again.'));
+            setError(failure?.reason === 'cancelled' ? null : (failure?.message ? welcomeLineWords(failure.message) : t('Sign-in failed. Try again.')));
         } finally {
             setLoading(false);
         }
@@ -1537,7 +1539,7 @@ export default function WelcomeScreen() {
         }
         const name = callsign.trim().slice(0, MAX_JOIN_NAME).trim();
         if (name.length < 2) {
-            setError('Please choose a name of at least 2 characters.');
+            setError(t('Please choose a name of at least 2 characters.'));
             return;
         }
         setLoading(true);
@@ -1553,7 +1555,7 @@ export default function WelcomeScreen() {
             if (check.kind === 'cancelled' || leave.signal.aborted) return;
             if (check.kind !== 'free') {
                 setCallsignSuggestions(check.kind === 'taken' ? check.suggestions : []);
-                setError(nameCheckMessage(name, check));
+                setError(nameCheckWords(name, check));
                 return;
             }
             setCallsignSuggestions([]);
@@ -1570,7 +1572,7 @@ export default function WelcomeScreen() {
             // The phone's account read as none a moment ago and is there now, or can't be read: never replaced (identity.ts).
             setError(err instanceof StoredKeyUnreadableError
                 ? t("BeanPool can't read the account on this phone. Restart and try again, or restore with your 12 words.")
-                : (err as Error | null)?.message || 'Your join could not be completed. Please sign in and try again.');
+                : (err as Error | null)?.message ? welcomeLineWords((err as Error).message) : t('Your join could not be completed. Please sign in and try again.'));
             setGlobalPhase(wordsDoor ? 'choose' : 'signIn');
         } finally {
             joinSendingRef.current = false;
@@ -1588,7 +1590,7 @@ export default function WelcomeScreen() {
     async function handleWordsJoin() {
         const name = callsign.trim().slice(0, MAX_JOIN_NAME).trim();
         if (name.length < 2) {
-            setError('Please choose a name of at least 2 characters.');
+            setError(t('Please choose a name of at least 2 characters.'));
             return;
         }
         setLoading(true);
@@ -1606,7 +1608,7 @@ export default function WelcomeScreen() {
             if (check.kind === 'cancelled' || leave.signal.aborted) return;
             if (check.kind !== 'free') {
                 setCallsignSuggestions(check.kind === 'taken' ? check.suggestions : []);
-                setError(nameCheckMessage(name, check));
+                setError(nameCheckWords(name, check));
                 return;
             }
             setCallsignSuggestions([]);
@@ -1629,7 +1631,7 @@ export default function WelcomeScreen() {
         } catch (err) {
             setError(err instanceof StoredKeyUnreadableError
                 ? t("BeanPool can't read the account on this phone. Restart and try again, or restore with your 12 words.")
-                : (err as Error | null)?.message || 'Your join could not be completed. Please try again.');
+                : (err as Error | null)?.message ? welcomeLineWords((err as Error).message) : t('Your join could not be completed. Please try again.'));
             setGlobalPhase('name');
         } finally {
             joinSendingRef.current = false;
@@ -1654,12 +1656,12 @@ export default function WelcomeScreen() {
             // This door takes no 12-words joins now: the sign-in buttons, with why. Nothing was written.
             setWordsDoor(false);
             doorWork.stop('words');
-            setError(doorMessage(answer));
+            setError(doorAnswerWords(answer));
             setGlobalPhase('signIn');
             return;
         }
         if (next === 'retry') {
-            setError(doorMessage(answer));
+            setError(doorAnswerWords(answer));
             // 12 words: the name step again, where Join tries again and "Choose another way" leads to the sign-in. A
             // sign-in is spent or stale: the member signs in again to retry.
             setGlobalPhase(way === 'words' ? 'name' : wordsDoor ? 'choose' : 'signIn');
@@ -1672,7 +1674,7 @@ export default function WelcomeScreen() {
         if (removed) setIdentity(null);
         setGlobalKey(null);
         setDoorSignIn(null);
-        setGlobalMessage(doorMessage(answer));
+        setGlobalMessage(doorAnswerWords(answer));
         // A shut door reads as it does on arrival, with Try again: it can open again, and a key kept here learns
         // that it joined by asking once it has.
         setGlobalPhase(next === 'restore' ? 'restore' : answer.kind === 'door_closed' ? 'unavailable' : 'closed');
@@ -2685,8 +2687,8 @@ export default function WelcomeScreen() {
         const wordsWay = doorWay === 'words';
         const wordsState = doorWork.state('words');
         const signInNote = signInCopiesAt() === 'vault'
-            ? 'BeanPool keeps a locked copy of your account for that sign-in, and BeanPool can open that copy. BeanPool never sees your password and never posts anything for you.'
-            : 'The global community keeps a locked copy of your account for that sign-in, and the people who run it can open that copy. BeanPool never sees your password and never posts anything for you.';
+            ? t('BeanPool keeps a locked copy of your account for that sign-in, and BeanPool can open that copy. BeanPool never sees your password and never posts anything for you.')
+            : t('The global community keeps a locked copy of your account for that sign-in, and the people who run it can open that copy. BeanPool never sees your password and never posts anything for you.');
         return (
             <SafeAreaView style={styles.container}>
                 <StatusBar style={dark ? 'light' : 'dark'} />
@@ -2694,13 +2696,13 @@ export default function WelcomeScreen() {
                     <ScrollView key={mode} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
                         <OnboardingStepper step={1} />
                         <View style={styles.card}>
-                            <Text style={styles.title} accessibilityRole="header">🌍 Explore BeanPool worldwide</Text>
+                            <Text style={styles.title} accessibilityRole="header">{t('🌍 Explore BeanPool worldwide')}</Text>
 
                             {globalPhase === 'checking' && (
                                 <View style={{ alignItems: 'center', marginVertical: 16 }} accessibilityLiveRegion="polite">
                                     <ActivityIndicator size="large" color={accentInk} />
                                     <Text style={{ marginTop: 12, color: colors.text.secondary, fontSize: 14, textAlign: 'center' }}>
-                                        Connecting to the global community…
+                                        {t('Connecting to the global community…')}
                                     </Text>
                                 </View>
                             )}
@@ -2710,7 +2712,7 @@ export default function WelcomeScreen() {
                                     <Text style={styles.subtitle} accessibilityLiveRegion="polite">{globalMessage}</Text>
                                     {globalPhase === 'unavailable' && (
                                         <Pressable style={styles.primaryBtn} onPress={() => { setError(null); setGlobalPhase('checking'); }} accessibilityRole="button">
-                                            <Text style={styles.primaryBtnText}>Try again</Text>
+                                            <Text style={styles.primaryBtnText}>{t('Try again')}</Text>
                                         </Pressable>
                                     )}
                                     <Pressable
@@ -2718,7 +2720,7 @@ export default function WelcomeScreen() {
                                         onPress={() => { setError(null); setMode('create'); }}
                                         accessibilityRole="button"
                                     >
-                                        <Text style={styles.secondaryBtnText}>🎟️ Join with an invite</Text>
+                                        <Text style={styles.secondaryBtnText}>{t('🎟️ Join with an invite')}</Text>
                                     </Pressable>
                                 </>
                             )}
@@ -2731,14 +2733,14 @@ export default function WelcomeScreen() {
                                         onPress={() => { setRecoveryAnchorUrl(GLOBAL_NODE_URL); setError(null); setMode('member'); }}
                                         accessibilityRole="button"
                                     >
-                                        <Text style={styles.primaryBtnText}>🔑 Restore my account</Text>
+                                        <Text style={styles.primaryBtnText}>{t('🔑 Restore my account')}</Text>
                                     </Pressable>
                                     <Pressable
                                         style={[styles.secondaryBtn, { marginTop: 12 }]}
                                         onPress={() => { setError(null); setGlobalPhase('signIn'); }}
                                         accessibilityRole="button"
                                     >
-                                        <Text style={styles.secondaryBtnText}>Use a different sign-in</Text>
+                                        <Text style={styles.secondaryBtnText}>{t('Use a different sign-in')}</Text>
                                     </Pressable>
                                 </>
                             )}
@@ -2747,7 +2749,7 @@ export default function WelcomeScreen() {
                             {globalPhase === 'choose' && (
                                 <>
                                     <Text style={styles.subtitle}>
-                                        Meet people from everywhere and find a community near you. No invite needed.
+                                        {t('Meet people from everywhere and find a community near you. No invite needed.')}
                                     </Text>
                                     {loading && (
                                         <View style={{ alignItems: 'center', marginVertical: 16 }} accessibilityLiveRegion="polite">
@@ -2760,7 +2762,7 @@ export default function WelcomeScreen() {
                                         onSignIn={(provider) => { setDoorWay('sign-in'); handleGlobalSignIn(provider); }}
                                         disabled={loading}
                                         busy={doorWork.busy}
-                                        wordsProblem={wordsState?.phase === 'failed' ? DOOR_WORK_MESSAGES.solverUnavailable : null}
+                                        wordsProblem={wordsState?.phase === 'failed' ? welcomeLineWords(DOOR_WORK_MESSAGES.solverUnavailable) : null}
                                         signInNote={signInNote}
                                         colors={colors}
                                     />
@@ -2770,13 +2772,10 @@ export default function WelcomeScreen() {
                             {globalPhase === 'signIn' && (
                                 <>
                                     <Text style={styles.subtitle}>
-                                        Meet people from everywhere and find a community near you. No invite needed.
+                                        {t('Meet people from everywhere and find a community near you. No invite needed.')}
                                     </Text>
                                     <Text style={[styles.subtitle, { marginTop: -12 }]}>
-                                        To keep out fake accounts, sign in once with an account you already have. That sign-in
-                                        also becomes a way back into BeanPool if you lose this phone: BeanPool keeps a locked copy
-                                        of your account for it, and BeanPool can open that copy. BeanPool never sees your
-                                        password and never posts anything for you.
+                                        {t('To keep out fake accounts, sign in once with an account you already have. That sign-in also becomes a way back into BeanPool if you lose this phone: BeanPool keeps a locked copy of your account for it, and BeanPool can open that copy. BeanPool never sees your password and never posts anything for you.')}
                                     </Text>
 
                                     {loading && (
@@ -2790,13 +2789,13 @@ export default function WelcomeScreen() {
                                     {!loading && (
                                         <>
                                             {Platform.OS === 'ios' && (
-                                                <AppleButton title="Continue with Apple" onPress={() => handleGlobalSignIn('apple')} style={{ marginBottom: 10, width: '100%' }} />
+                                                <AppleButton title={t('Continue with Apple')} onPress={() => handleGlobalSignIn('apple')} style={{ marginBottom: 10, width: '100%' }} />
                                             )}
-                                            <GoogleButton title="Continue with Google" onPress={() => handleGlobalSignIn('google')} style={{ marginBottom: 10, width: '100%' }} />
-                                            <FacebookButton title="Continue with Facebook" onPress={() => handleGlobalSignIn('facebook')} style={{ marginBottom: 10, width: '100%' }} />
+                                            <GoogleButton title={t('Continue with Google')} onPress={() => handleGlobalSignIn('google')} style={{ marginBottom: 10, width: '100%' }} />
+                                            <FacebookButton title={t('Continue with Facebook')} onPress={() => handleGlobalSignIn('facebook')} style={{ marginBottom: 10, width: '100%' }} />
                                             {wordsDoor && (
                                                 <Pressable style={styles.backBtn} onPress={() => { setError(null); setGlobalPhase('choose'); }} accessibilityRole="button">
-                                                    <Text style={styles.backBtnText}>Choose another way</Text>
+                                                    <Text style={styles.backBtnText}>{t('Choose another way')}</Text>
                                                 </Pressable>
                                             )}
                                         </>
@@ -2807,14 +2806,14 @@ export default function WelcomeScreen() {
                             {globalPhase === 'name' && (
                                 <>
                                     {wordsWay ? (
-                                        <Text style={[styles.subtitle, { marginBottom: 8 }]}>🔑 An account with 12 secret words. They come next, after your photo.</Text>
+                                        <Text style={[styles.subtitle, { marginBottom: 8 }]}>{t('🔑 An account with 12 secret words. They come next, after your photo.')}</Text>
                                     ) : signedInWith && (
-                                        <Text style={[styles.subtitle, { marginBottom: 8 }]}>✅ Signed in with {signedInWith}</Text>
+                                        <Text style={[styles.subtitle, { marginBottom: 8 }]}>{t('✅ Signed in with {provider}', { provider: signedInWith })}</Text>
                                     )}
-                                    <Text style={styles.callsignLabel}>What should we call you?</Text>
+                                    <Text style={styles.callsignLabel}>{t('What should we call you?')}</Text>
                                     <TextInput
                                         style={styles.callsignInput}
-                                        placeholder="Your name or nickname"
+                                        placeholder={t('Your name or nickname')}
                                         placeholderTextColor={colors.text.muted}
                                         value={callsign}
                                         onChangeText={(text) => { setCallsign(text); if (callsignSuggestions.length) setCallsignSuggestions([]); }}
@@ -2822,10 +2821,10 @@ export default function WelcomeScreen() {
                                         autoFocus={true}
                                         autoCapitalize="words"
                                         editable={!loading}
-                                        accessibilityLabel="Your name or nickname"
+                                        accessibilityLabel={t('Your name or nickname')}
                                     />
                                     <Text style={styles.callsignHelper}>
-                                        This is how people see you, e.g. Sarah. You can change it later.
+                                        {t('This is how people see you, e.g. Sarah. You can change it later.')}
                                     </Text>
 
                                     {callsignSuggestions.length > 0 && (
@@ -2836,7 +2835,7 @@ export default function WelcomeScreen() {
                                                     style={{ backgroundColor: colors.surface.subtle, borderWidth: 1, borderColor: colors.border.strong, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8, marginRight: 8, marginBottom: 8 }}
                                                     onPress={() => { setCallsign(s); setCallsignSuggestions([]); setError(null); }}
                                                     accessibilityRole="button"
-                                                    accessibilityLabel={`Use the name ${s}`}
+                                                    accessibilityLabel={t('Use the name {name}', { name: s })}
                                                 >
                                                     <Text style={{ color: colors.text.body, fontSize: 14, fontWeight: '600' }}>{s}</Text>
                                                 </Pressable>
@@ -2848,7 +2847,7 @@ export default function WelcomeScreen() {
 
                                     {/* From level 3: the phone's own estimate, with the sign-in door one tap away. */}
                                     {wordsWay && doorWork.busy && (
-                                        <Text style={[styles.fieldHint, { marginTop: 12 }]} accessibilityLiveRegion="polite">{doorWork.busy}</Text>
+                                        <Text style={[styles.fieldHint, { marginTop: 12 }]} accessibilityLiveRegion="polite">{welcomeLineWords(doorWork.busy)}</Text>
                                     )}
                                     {/* Join tapped before the work was done: it finishes here, and Back still works. */}
                                     {wordsWay && workWaiting && <DoorWorkProgress state={wordsState} colors={colors} />}
@@ -2858,10 +2857,10 @@ export default function WelcomeScreen() {
                                         onPress={wordsWay ? handleWordsJoin : handleGlobalJoin}
                                         disabled={loading}
                                         accessibilityRole="button"
-                                        accessibilityLabel={loading ? "Joining global community..." : "Join"}
+                                        accessibilityLabel={loading ? t('Joining global community...') : t('Join')}
                                         accessibilityState={{ disabled: loading, busy: loading }}
                                     >
-                                        {loading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>Join →</Text>}
+                                        {loading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>{t('Join →')}</Text>}
                                     </Pressable>
                                     <Pressable
                                         style={styles.backBtn}
@@ -2869,7 +2868,7 @@ export default function WelcomeScreen() {
                                         disabled={!doorWays.otherSignIn}
                                         accessibilityRole="button"
                                     >
-                                        <Text style={styles.backBtnText}>{wordsWay || wordsDoor ? 'Choose another way' : 'Use a different sign-in'}</Text>
+                                        <Text style={styles.backBtnText}>{wordsWay || wordsDoor ? t('Choose another way') : t('Use a different sign-in')}</Text>
                                     </Pressable>
                                 </>
                             )}
@@ -2878,22 +2877,25 @@ export default function WelcomeScreen() {
                                 <View style={{ alignItems: 'center', marginVertical: 16 }} accessibilityLiveRegion="polite">
                                     <ActivityIndicator size="large" color={accentInk} />
                                     <Text style={{ marginTop: 12, color: colors.text.secondary, fontSize: 14, textAlign: 'center' }}>
-                                        {doorNotice ?? 'Joining the global community…'}
+                                        {doorNotice ? welcomeLineWords(doorNotice) : t('Joining the global community…')}
                                     </Text>
                                 </View>
                             )}
 
                             {globalPhase !== 'joining' && (
-                                <Pressable style={styles.backBtn} onPress={leaveGlobalDoor} disabled={!doorWays.back} accessibilityRole="button" accessibilityLabel="Back to Home">
-                                    <Text style={styles.backBtnText}>← Back to Home</Text>
+                                <Pressable style={styles.backBtn} onPress={leaveGlobalDoor} disabled={!doorWays.back} accessibilityRole="button" accessibilityLabel={t('Back to Home')}>
+                                    <Text style={styles.backBtnText}>{t('← Back to Home')}</Text>
                                 </Pressable>
                             )}
 
                             <Text style={styles.tosText}>
-                                By joining you agree to our{' '}
-                                <Text style={styles.tosLink} onPress={() => openLink('https://beanpool.org/terms')}>Terms of Service & EULA</Text>
-                                {' '}and{' '}
-                                <Text style={styles.tosLink} onPress={() => openLink('https://beanpool.org/privacy')}>Privacy Policy</Text>.
+                                <Sentence
+                                    text={t('By joining you agree to our {terms} and {privacy}.')}
+                                    parts={{
+                                        terms: <Text style={styles.tosLink} onPress={() => openLink('https://beanpool.org/terms')}>{t('Terms of Service & EULA')}</Text>,
+                                        privacy: <Text style={styles.tosLink} onPress={() => openLink('https://beanpool.org/privacy')}>{t('Privacy Policy')}</Text>,
+                                    }}
+                                />
                             </Text>
                         </View>
                     </ScrollView>

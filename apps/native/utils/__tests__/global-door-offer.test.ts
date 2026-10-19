@@ -344,7 +344,8 @@ describe('the welcome screen', () => {
         expect(door).toMatch(/checkGlobalDoor\(\)/);
         expect(door).toMatch(/\.then\(check => \{\s*\/\/[^\n]*\n\s*rememberGlobalDoor\(check\);/);
         expect(door).toMatch(/\.catch\(\(\) => \{\s*rememberGlobalDoor\(null\);/);
-        expect(door).toMatch(/if \(!check\.ok\) \{\s*setGlobalMessage\(GLOBAL_DOOR_MESSAGES\[check\.reason\]\);\s*setGlobalPhase\('unavailable'\);/);
+        // In the member's language (words S3j): the door's sentence through components/welcome/welcome-lines.ts.
+        expect(door).toMatch(/if \(!check\.ok\) \{\s*setGlobalMessage\(welcomeLineWords\(GLOBAL_DOOR_MESSAGES\[check\.reason\]\)\);\s*setGlobalPhase\('unavailable'\);/);
     });
 
     it('the door screen for an account remembers its fresh answer too, so the sheet\'s row reads it on the way back', () => {

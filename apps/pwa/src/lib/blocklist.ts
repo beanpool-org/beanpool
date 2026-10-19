@@ -42,6 +42,7 @@
  * browser; a queue an older build left in localStorage (bp_pending_abuse_reports) is taken into memory and deleted. Once
  * the account is known, only its own reports are sent.
  */
+import { tn } from '@beanpool/core';
 import { reportAbuse, getBlockList, addToBlockList, removeFromBlockList, clearBlockList, type BlockList } from './api';
 import { BLOCKLIST_DOORBELL_EVENT } from './blocklist-doorbell';
 
@@ -359,16 +360,17 @@ export function getBlocklistStatus(): { loaded: boolean; error: string | null } 
 
 /**
  * What to tell the member, where they block, while blocks from before wait in this browser because their list on the
- * community is full; null otherwise. Those blocks still hold here, and go up once they unblock someone.
+ * community is full; null otherwise. Those blocks still hold here, and go up once they unblock someone. In the
+ * member's language at the moment it is asked.
  */
 export function getBlocklistFullNote(): string | null {
     if (!loaded || nodeMax <= 0 || nodeList.length < nodeMax) return null;
     const onNode = new Set(nodeList);
     const n = (readLocalList() ?? []).filter(k => isWaiting(k) && !onNode.has(k)).length;
     if (n === 0) return null;
-    return n === 1
-        ? 'Your block list is full, so 1 block is kept in this browser only. Unblock someone to make room for it.'
-        : `Your block list is full, so ${n} blocks are kept in this browser only. Unblock someone to make room for them.`;
+    return tn(n,
+        'Your block list is full, so {n} block is kept in this browser only. Unblock someone to make room for it.',
+        'Your block list is full, so {n} blocks are kept in this browser only. Unblock someone to make room for them.');
 }
 
 /**

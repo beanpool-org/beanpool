@@ -1,8 +1,9 @@
 /**
  * The rest of web sweep W3 in the pseudo-locale (`xx`: every sentence accented, padded ~35 % and bracketed): Home's card
- * menu, Add a card and a card's settings, Edit home, the tour bar, the new-account card, Start a community, Suggest a
- * change, the radius picker, the install prompt, the header pill, the Commons preview's own lines, and the guest
- * lobby's Join card and tabs. Any text, label, title, placeholder or alert with letters outside a bracket bypassed t().
+ * menu, Add a card and a card's settings, Edit home, the tour bar, the new-account card, "Posting paused", Start a
+ * community, Suggest a change, the radius picker, the install prompt, the header pill, the Commons preview's own
+ * lines, and the guest lobby's Join card and tabs. Any text, label, title, placeholder or alert with letters outside a
+ * bracket bypassed t().
  *
  * Shown as written: what members wrote, the brand and beanpool.org, a category's name (the Market's words, sweep W1),
  * and what joining takes and why a browser can't hold a key (the join screens' words, sweep W4).
@@ -15,6 +16,7 @@ import { AddCardDialog, CardSettingsDialog } from './AddCardDialog';
 import { EditHomeDialog } from './EditHomeDialog';
 import { TourBar } from './TourBar';
 import { NewAccountCard } from './NewAccountCard';
+import { ModerationPauseCard } from './ModerationPauseCard';
 import { StartCommunityScreen } from './StartCommunityScreen';
 import { SuggestChangeForm } from './SuggestChangeForm';
 import { RadiusPickerPage } from './RadiusPickerPage';
@@ -118,7 +120,7 @@ describe('Home\'s card menu, Add a card, a card\'s settings and Edit home in the
     });
 });
 
-describe('the tour bar, the new-account card, Start a community and Suggest a change in the pseudo-locale (words W3)', () => {
+describe('the tour bar, the new-account card, "Posting paused", Start a community and Suggest a change in the pseudo-locale (words W3)', () => {
     it('the tour bar: every step\'s caption and words, Skip and Next, and the last step\'s chips', async () => {
         await showIn('xx');
         const steps: TourStep[] = tourSteps('web', { global: false, beans: true });
@@ -147,6 +149,23 @@ describe('the tour bar, the new-account card, Start a community and Suggest a ch
         render(<NewAccountCard onClose={() => {}} />);
         expect(await screen.findByTestId('new-account-rule')).toBeInTheDocument();
         expect(screen.getByTestId('new-account-limit-photos')).toHaveTextContent(xx('You can add more {when}.').replace('{when}', xx('in about {n} hours').replace('{n}', '5')));
+        expect(unwrapped()).toEqual([]);
+    });
+
+    it('"Posting paused": until a moderator lifts it, and until a time with its date and how long that is', async () => {
+        vi.mocked(api.getCommunityMe).mockResolvedValue({ mute: { muted: true, until: '9999-12-31T23:59:59.999Z' } } as any);
+        await showIn('xx');
+        render(<ModerationPauseCard />);
+        expect(await screen.findByTestId('moderation-pause-until')).toHaveTextContent(
+            xx('The community’s moderators have paused your posting. You can’t post or send messages here {until}.').replace('{until}', xx('until a moderator lifts this')));
+        expect(unwrapped()).toEqual([]);
+        cleanup();
+
+        vi.mocked(api.getCommunityMe).mockResolvedValue({ mute: { muted: true, until: new Date(Date.now() + 3 * 86_400_000).toISOString() } } as any);
+        render(<ModerationPauseCard />);
+        const line = await screen.findByTestId('moderation-pause-until');
+        expect(line).toHaveTextContent(xx('in about {n} days').replace('{n}', '3'));
+        expect(line).not.toHaveTextContent(xx('until a moderator lifts this'));
         expect(unwrapped()).toEqual([]);
     });
 

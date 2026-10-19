@@ -89,11 +89,11 @@ vi.mock('../names-debts', async (importOriginal) => ({
     payTheCommons: vi.fn(async () => debt.pay),
 }));
 /** The node, for a group's landing. */
-const grp = vi.hoisted(() => ({ group: undefined as any, members: [] as any[], error: null as null | Error }));
+const grp = vi.hoisted(() => ({ group: undefined as any, members: [] as any[], error: null as null | Error, joinError: null as null | Error }));
 vi.mock('../db', () => ({
     getGroupForLanding: vi.fn(async () => { if (grp.error) throw grp.error; return grp.group; }),
     getGroupActiveMembers: vi.fn(async () => grp.members),
-    joinGroupApi: vi.fn(async () => ({})),
+    joinGroupApi: vi.fn(async () => { if (grp.joinError) throw grp.joinError; return {}; }),
     getMyPosts: vi.fn(async () => []),
 }));
 vi.mock('../../components/useYourGroups', () => ({ yourGroupsStore: { refresh: () => {} } }));
@@ -152,6 +152,7 @@ beforeEach(() => {
     grp.group = undefined;
     grp.members = [];
     grp.error = null;
+    grp.joinError = null;
     oneWay.record = { url: 'https://global.example', joinedAt: Date.now() - 86_400_000, done: null };
     oneWay.vault = false;
     globalThis.fetch = vi.fn(async () => { throw new TypeError('offline'); }) as typeof fetch;
@@ -343,6 +344,27 @@ describe("a group's invite landing in the pseudo-locale", () => {
         expect(host.textContent).toContain(xx("The group chat is visible to its members and this node's operator. Private things belong in a direct message."));
         expect(host.textContent).toContain(xx('Not now'));
         expect(bypassing(host, WRITTEN, alerts.said)).toEqual([]);
+    });
+
+    it("a join the node refused without its words, or the group's keys couldn't be read: the phone's sentences worded, the node's as given", async () => {
+        nav.params = { id: 'g1', invited: '1' };
+        grp.group = GROUP;
+        grp.members = MEMBERS;
+        await renderIn('xx', createElement(GroupInviteLanding));
+        const cases: Array<[string, string]> = [
+            ['The node answered 502.', xx('The node answered {status}.').replace('{status}', '502')],
+            ["This phone couldn't check who is in this group just now. Nothing was sent; try again in a moment.",
+                xx("This phone couldn't check who is in this group just now. Nothing was sent; try again in a moment.")],
+            ['This node is serving an older key than one this app already holds.', xx('This node is serving an older key than one this app already holds.')],
+            ['This group is full.', 'This group is full.'],
+        ];
+        for (const [thrown, body] of cases) {
+            grp.joinError = new Error(thrown);
+            alerts.said.length = 0;
+            await click(byLabel(xx('Join the group')), 'Join the group');
+            expect(alerts.said, thrown).toEqual([xx('Could not join'), body]);
+        }
+        expect(bypassing(host, WRITTEN, alerts.said.slice(0, -1))).toEqual([]);
     });
 
     it('the states that are not the group: unreachable, unavailable, an invitation withdrawn', async () => {

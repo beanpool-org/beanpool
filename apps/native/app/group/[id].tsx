@@ -31,6 +31,7 @@ import {
 import { yourGroupsStore } from '../../components/useYourGroups';
 import { MemberAvatar } from '../../components/MemberAvatar';
 import { hapticSuccess } from '../../utils/haptics';
+import { chatLineWords } from '../../utils/chat-line-words';
 import { t, tn } from '@beanpool/core';
 import { richWords } from '../../components/info-content/rich-words';
 
@@ -106,8 +107,9 @@ export default function GroupInviteLanding() {
                 router.replace(chatHref({ kind: 'group', conversationId: g.id, name: g.name }) as any);
             }
         } catch (e: any) {
-            // The node's own words as it sent them (slice S4).
-            Alert.alert(t('Could not join'), e?.message || t('Could not reach the node. Try again when you have signal.'));
+            // The node's own words as it sent them (slice S4); the group-key code's own (a refusal with no words, a roster or
+            // key store it couldn't read) in the member's language.
+            Alert.alert(t('Could not join'), e?.message ? chatLineWords(e.message) : t('Could not reach the node. Try again when you have signal.'));
         } finally {
             if (alive.current) setBusy(false);
         }

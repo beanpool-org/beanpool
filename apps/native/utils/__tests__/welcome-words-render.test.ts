@@ -610,8 +610,8 @@ describe('restoring an account in the pseudo-locale', () => {
         await act(async () => { await new Promise((r) => setTimeout(r, 450)); });
         await settle();
         expect(host!.textContent).toContain(pseudoLocalise('Is this you?'));
-        // "joined March 2026": the month from core's tables, the two in the language's order.
-        expect(host!.textContent).toContain(pseudoLocalise('joined {date}').replace('{date}', pseudoLocalise('{month} {year}').replace('{month}', 'March').replace('{year}', '2026')));
+        // "joined March 2026": core's month-year pattern writes the date whole, in the language's order and forms.
+        expect(host!.textContent).toContain(pseudoLocalise('joined {date}').replace('{date}', pseudoLocalise('March 2026')));
         check('Recover with Social Sign-In, Is this you?');
     });
 

@@ -17,7 +17,7 @@ import {
 import { rekeySlotStore } from '../utils/rekey-slot-store';
 import { GLOBAL_NODE_URL, GLOBAL_DOOR_MESSAGES, beansOn, checkGlobalDoor, getCachedNodeProfile, wordsDoorOn } from '../utils/node-profile';
 // t comes from useWords() inside the screen (live in the member's language), not core's device-language t.
-import { DATE_WORDS, lowercaseRecoveryWords, photoStepNote, type Lang } from '@beanpool/core';
+import { lowercaseRecoveryWords, photoStepNote } from '@beanpool/core';
 import {
     doorAnswerWords, linkedNoticeWords, nameCheckWords, noWordsBeforeWipeWords, signInReplacedWords, welcomeLineWords,
 } from '../components/welcome/welcome-lines';
@@ -105,7 +105,7 @@ export default function WelcomeScreen() {
     // the app's dark tokens in dark. See utils/onboarding-colors.ts.
     const { colors, dark } = useOnboardingColors();
     // The member's language, live: the first screen's switch and Settings → Language re-render this screen in it.
-    const { t, lang } = useWords();
+    const { t, formatDate } = useWords();
 
     // Friendly Step-1 rejection copy for a dud invite. Reasons come from
     // /api/invite/check; anything unrecognised falls back to the generic line.
@@ -129,15 +129,14 @@ export default function WelcomeScreen() {
      * "March 2026" from whatever the node stored, or '' if it is unusable.
      *
      * Month and year only: the day adds nothing to telling two namesakes apart, and a precise join
-     * date is more than a public lookup needs to hand out about somebody. The month's name is the language's own
-     * (core's date tables, never Intl), and the language orders the two.
+     * date is more than a public lookup needs to hand out about somebody. Core's date tables (CLDR, never Intl) write
+     * it as the language does: its order, its month's form beside a year, its 年/월 (PR #2206 review).
      */
     function joinedLabel(joinedAt: string | null | undefined): string {
         if (!joinedAt) return '';
         const d = new Date(joinedAt);
         if (isNaN(d.getTime())) return '';
-        const month = (DATE_WORDS[lang as Lang] ?? DATE_WORDS.en)!.monthsStandalone[d.getMonth()];
-        return t('{month} {year}', { month, year: String(d.getFullYear()) }, 'a month and year: "joined March 2026"');
+        return formatDate(d, 'month-year', { width: 'long' });
     }
     const { styles, profileStyles, stepperStyles, guideStyles } = useMemo(() => makeStyles(colors, dark), [colors, dark]);
     // Accent ink for text and spinners on the page; filled blue buttons keep blue600 under white text in both.

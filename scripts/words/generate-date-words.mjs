@@ -59,6 +59,7 @@ const OPTS = {
     'day-month': (w) => ({ day: 'numeric', month: w }),
     'day-month-year': (w) => ({ day: 'numeric', month: w, year: 'numeric' }),
     'weekday-day-month': (w) => ({ weekday: w, day: 'numeric', month: w }),
+    'month-year': (w) => ({ month: w, year: 'numeric' }),
 };
 
 /** A weekday table on its own, kept only where it differs from the one inside a date (de "Do" / "Do."). */
@@ -80,12 +81,21 @@ export function generate(lang) {
         const plain = width === 'long' ? months({ day: 'numeric', month: 'long' }) : months({ day: 'numeric', month: 'short' });
         if (withYear.some((m, i) => m !== plain[i])) monthsWithYear[width] = withYear;
     }
+    // A month with only its year: ru, uk and el name it on its own ("октябрь 2026 г."), fa with the ezafe. Kept only where
+    // it differs; zh and ja write it as a number there, which the pattern's {m} already is.
+    const monthsInMonthYear = {};
+    for (const width of ['short', 'long']) {
+        const inMonthYear = months({ month: width, year: 'numeric' });
+        const plain = width === 'long' ? months({ day: 'numeric', month: 'long' }) : months({ day: 'numeric', month: 'short' });
+        if (!inMonthYear.every((m) => /^\d+$/.test(m)) && inMonthYear.some((m, i) => m !== plain[i])) monthsInMonthYear[width] = inMonthYear;
+    }
     const decimal = new Intl.NumberFormat(intlTag(lang)).formatToParts(1.5).find((p) => p.type === 'decimal').value;
     return {
         monthsLong: months({ day: 'numeric', month: 'long' }),
         monthsShort: months({ day: 'numeric', month: 'short' }),
         monthsStandalone: months({ month: 'long' }),
         ...(Object.keys(monthsWithYear).length ? { monthsWithYear } : {}),
+        ...(Object.keys(monthsInMonthYear).length ? { monthsInMonthYear } : {}),
         daysShort: days({ weekday: 'short', day: 'numeric', month: 'short' }),
         daysLong: days({ weekday: 'long', day: 'numeric', month: 'long' }),
         ...standalone('daysShortStandalone', days({ weekday: 'short', day: 'numeric', month: 'short' }), days({ weekday: 'short' })),
@@ -102,7 +112,8 @@ export function generate(lang) {
 function render(w, d, name, width) {
     const fill = (tpl) => tpl
         .replace('{d}', String(d.getUTCDate())).replace('{m}', String(d.getUTCMonth() + 1)).replace('{y}', String(d.getUTCFullYear()))
-        .replace('{M}', ((name === 'day-month-year' && w.monthsWithYear?.[width]) || (width === 'long' ? w.monthsLong : w.monthsShort))[d.getUTCMonth()])
+        .replace('{M}', ((name === 'day-month-year' && w.monthsWithYear?.[width]) || (name === 'month-year' && w.monthsInMonthYear?.[width])
+            || (width === 'long' ? w.monthsLong : w.monthsShort))[d.getUTCMonth()])
         .replace('{W}', (width === 'long' ? w.daysLong : w.daysShort)[d.getUTCDay()])
         .replace('{H}', String(d.getUTCHours()).padStart(2, '0')).replace('{mm}', String(d.getUTCMinutes()).padStart(2, '0'));
     return name === 'time' ? fill(w.time) : fill(w.patterns[width][name]);

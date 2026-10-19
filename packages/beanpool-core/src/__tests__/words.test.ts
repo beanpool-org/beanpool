@@ -315,6 +315,8 @@ describe('dates and numbers from tables', () => {
         expect(formatDate(sat, 'day-month-year')).toBe('26 Sep 2026');
         expect(formatDate(sat, 'day-month-year', { width: 'long' })).toBe('26 September 2026');
         expect(formatDate(sat, 'weekday-day-month')).toBe('Sat 26 Sep');
+        expect(formatDate(sat, 'month-year')).toBe('Sep 2026');
+        expect(formatDate(sat, 'month-year', { width: 'long' })).toBe('September 2026');
         expect(formatDate(sat, 'weekday')).toBe('Sat');
         expect(formatDate(sat, 'time')).toBe('9:05');
         expect(formatDate(dec, 'day-month-year', { utc: true })).toBe('17 Dec 2026');
@@ -330,6 +332,12 @@ describe('dates and numbers from tables', () => {
                 expect([lang, m, w.monthsLong[m]], RECHECK).toEqual([lang, m, part({ day: 'numeric', month: 'long' })]);
                 expect([lang, m, w.monthsShort[m]], RECHECK).toEqual([lang, m, part({ day: 'numeric', month: 'short' })]);
                 expect([lang, m, w.monthsStandalone[m]], RECHECK).toEqual([lang, m, part({ month: 'long' })]);
+                for (const width of ['short', 'long'] as const) {
+                    const inMonthYear = w.monthsInMonthYear?.[width] ?? (width === 'long' ? w.monthsLong : w.monthsShort);
+                    const icu = part({ month: width, year: 'numeric' });
+                    // zh and ja write the month as a number there ("2026年10月"): the pattern's {m}, no name to compare.
+                    if (!/^\d+$/.test(icu)) expect([lang, m, width, inMonthYear[m]], RECHECK).toEqual([lang, m, width, icu]);
+                }
             }
             for (let i = 0; i < 7; i++) {
                 const d = new Date(Date.UTC(2026, 9, 11 + i, 12)); // 11 Oct 2026 is a Sunday
@@ -354,6 +362,7 @@ describe('dates and numbers from tables', () => {
                     expect([...at, formatDate(d, 'day-month', opts)], RECHECK).toEqual([...at, intl({ day: 'numeric', month: width })]);
                     expect([...at, formatDate(d, 'day-month-year', opts)], RECHECK).toEqual([...at, intl({ day: 'numeric', month: width, year: 'numeric' })]);
                     expect([...at, formatDate(d, 'weekday-day-month', opts)], RECHECK).toEqual([...at, intl({ weekday: width, day: 'numeric', month: width })]);
+                    expect([...at, formatDate(d, 'month-year', opts)], RECHECK).toEqual([...at, intl({ month: width, year: 'numeric' })]);
                     expect([...at, formatDate(d, 'weekday', opts)], RECHECK).toEqual([...at, intl({ weekday: width })]);
                 }
                 expect([lang, formatDate(d, 'time', { utc: true })], RECHECK).toEqual([lang, intl({ hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })]);
@@ -369,6 +378,13 @@ describe('dates and numbers from tables', () => {
             '2026 ഒക്‌ടോബർ 15', 'அக். 15', '15 thg 10', '15 Eki Per',
         ]);
         expect([say('uk', 'day-month-year'), say('id', 'time'), say('fa', 'day-month-year', 'long')]).toEqual(['15 жовт. 2026 р.', '09.05', '15 اکتبر 2026']);
+        // A month and its year (PR #2206 review): the month marker in the pattern or in the name, as each language writes
+        // it; ru, uk and el name the month on its own (nominative), not as inside a date; fa keeps its ezafe; es "de".
+        expect([say('ja', 'month-year', 'long'), say('zh-Hans', 'month-year', 'long'), say('zh-Hant', 'month-year'), say('ko', 'month-year', 'long')])
+            .toEqual(['2026年10月', '2026年10月', '2026年10月', '2026년 10월']);
+        expect([say('ru', 'month-year', 'long'), say('uk', 'month-year', 'long'), say('el', 'month-year', 'long'), say('es', 'month-year', 'long')])
+            .toEqual(['октябрь 2026 г.', 'жовтень 2026 р.', 'Οκτώβριος 2026', 'octubre de 2026']);
+        expect(formatDate(new Date(Date.UTC(2026, 0, 15)), 'month-year', { utc: true, width: 'long', lang: 'fa' })).toBe('ژانویهٔ 2026');
     });
 
     it('capitals on an event card are a per-language choice: Turkish dotted İ, Greek without accents but with the dialytika', () => {
@@ -385,6 +401,8 @@ describe('dates and numbers from tables', () => {
         const may = new Date(Date.UTC(2026, 4, 15));
         expect(formatDate(may, 'day-month', { utc: true, lang: 'el', caps: true })).toBe('15 ΜΑΪ');
         expect(formatDate(may, 'day-month-year', { utc: true, lang: 'el', caps: true, width: 'long' })).toBe('15 ΜΑΪΟΥ 2026');
+        // On its own, "Μάιος": the accent on α says αι is not a diphthong, so the capital Ι takes the dialytika (ΜΑΪΟΣ).
+        expect(formatDate(may, 'month-year', { utc: true, lang: 'el', caps: true, width: 'long' })).toBe('ΜΑΪΟΣ 2026');
     });
 
     it('capitals equal ICU\'s toLocaleUpperCase in every language, for every month and day name in every pattern', () => {
@@ -394,7 +412,7 @@ describe('dates and numbers from tables', () => {
                 for (let i = 0; i < 7; i++) {
                     const d = new Date(Date.UTC(2026, m, 1 + i, 9, 5));
                     for (const width of ['short', 'long'] as const) {
-                        for (const p of ['day-month', 'day-month-year', 'weekday-day-month', 'weekday'] as const) {
+                        for (const p of ['day-month', 'day-month-year', 'weekday-day-month', 'month-year', 'weekday'] as const) {
                             const plain = formatDate(d, p, { utc: true, lang, width });
                             const caps = formatDate(d, p, { utc: true, lang, width, caps: true });
                             if (caps !== plain.toLocaleUpperCase(lang)) differ.push([lang, p, width, plain, caps, plain.toLocaleUpperCase(lang)]);
@@ -474,10 +492,12 @@ describe('dates and numbers from tables', () => {
         // Greek: capitals drop the accents and keep the dialytika.
         expect(upperCase('Προσφορά', 'el')).toBe('ΠΡΟΣΦΟΡΑ');
         expect(upperCase('Μαΐου', 'el')).toBe('ΜΑΪΟΥ');
+        // An accent before ι or υ marks two syllables, not a diphthong: the dialytika stays once the accent goes.
+        expect([upperCase('Μάιος', 'el'), upperCase('κορόιδο', 'el'), upperCase('άυλος', 'el'), upperCase('αύριο', 'el')]).toEqual(['ΜΑΪΟΣ', 'ΚΟΡΟΪΔΟ', 'ΑΫΛΟΣ', 'ΑΥΡΙΟ']);
         // A lone "ή" ("or") keeps its tonos in capitals, or it reads as the article "Η" ("the"); a Latin word keeps its accent.
         expect(upperCase('Προσφορές ή ανάγκες', 'el')).toBe('ΠΡΟΣΦΟΡΕΣ Ή ΑΝΑΓΚΕΣ');
         expect(upperCase('Café ή τέχνη', 'el')).toBe('CAFÉ Ή ΤΕΧΝΗ');
-        for (const [lang, words] of [['tr', ['ilan', 'İstek', 'Çiftçi işi', 'ıhlamur']], ['el', ['Προσφορά', 'Ανάγκη', 'Τρόφιμα & ποτά', 'Μαΐου', 'ήταν', 'ή', '(ή)', 'ή,', 'Όνομα ή διεύθυνση', 'Café ή τέχνη', 'η\u0301', 'ΐ']], ['de', ['Straße']], ['ru', ['Предложение']]] as const) {
+        for (const [lang, words] of [['tr', ['ilan', 'İstek', 'Çiftçi işi', 'ıhlamur']], ['el', ['Προσφορά', 'Ανάγκη', 'Τρόφιμα & ποτά', 'Μαΐου', 'ήταν', 'ή', '(ή)', 'ή,', 'Όνομα ή διεύθυνση', 'Café ή τέχνη', 'η\u0301', 'ΐ', 'Μάιος', 'τσάι', 'κέικ', 'είναι', 'λαϊκός']], ['de', ['Straße']], ['ru', ['Предложение']]] as const) {
             for (const w of words) expect([lang, w, upperCase(w, lang)]).toEqual([lang, w, w.toLocaleUpperCase(lang)]);
         }
         // No lang: the current one.

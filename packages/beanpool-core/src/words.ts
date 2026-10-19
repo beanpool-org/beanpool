@@ -231,7 +231,7 @@ export function word<S extends string>(source: S & Sentence<S>, context?: string
 
 // ── Dates and numbers ──────────────────────────────────────────────────────────────────────────────────────────
 
-export type DatePattern = 'day-month' | 'day-month-year' | 'weekday-day-month' | 'weekday' | 'time';
+export type DatePattern = 'day-month' | 'day-month-year' | 'weekday-day-month' | 'month-year' | 'weekday' | 'time';
 /** The patterns a language writes in its own word order. */
 export type WrittenDatePattern = Exclude<DatePattern, 'weekday' | 'time'>;
 
@@ -244,6 +244,11 @@ export interface DateWords {
     monthsStandalone: readonly string[];
     /** Only where a month reads differently before a year (fa's ezafe: "ژانویهٔ 2026"); else monthsShort / monthsLong. */
     monthsWithYear?: Readonly<Partial<Record<'short' | 'long', readonly string[]>>>;
+    /**
+     * A month with only its year ("октябрь 2026 г.", el "Οκτώβριος 2026", fa "ژانویهٔ 2026"): the `month-year` pattern's,
+     * only where it differs from monthsShort / monthsLong. zh and ja write that month as a number ({m}), so need none.
+     */
+    monthsInMonthYear?: Readonly<Partial<Record<'short' | 'long', readonly string[]>>>;
     /** Weekday names inside a date (de "Do., 15. Okt."), Sunday first, like Date#getDay. */
     daysShort: readonly string[];
     daysLong: readonly string[];
@@ -269,7 +274,7 @@ export interface DateWords {
 }
 
 const EN_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-const EN_DATE_PATTERNS = { 'day-month': '{d} {M}', 'day-month-year': '{d} {M} {y}', 'weekday-day-month': '{W} {d} {M}' } as const;
+const EN_DATE_PATTERNS = { 'day-month': '{d} {M}', 'day-month-year': '{d} {M} {y}', 'weekday-day-month': '{W} {d} {M}', 'month-year': '{M} {y}' } as const;
 
 /** English as the apps have always printed it ("3 Oct", "Sat 3 Oct", "9:05"); every other language from CLDR. */
 const EN_DATE_WORDS: DateWords = Object.freeze({
@@ -320,10 +325,16 @@ export function withDigits(text: string, digits: string | null): string {
     return digits ? text.replace(/[0-9]/g, (c) => digits[Number(c)]) : text;
 }
 
-/** A Greek word in capitals without its accents; a lone "Ή" ("or") keeps its tonos, or it reads as "Η" ("the"). */
+/**
+ * A Greek word in capitals without its accents; a lone "Ή" ("or") keeps its tonos, or it reads as "Η" ("the"). An accent
+ * on the vowel before ι or υ says the two are not a diphthong ("Μάιος"): that ι or υ takes a dialytika once the accent
+ * goes ("ΜΑΪΟΣ"), as ICU writes it.
+ */
 const greekRunInCapitals = (run: string) => run.normalize('NFC') === '\u0389'
     ? run
-    : run.normalize('NFD').replace(/[\u0300\u0301\u0342]/g, '').normalize('NFC');
+    : run.normalize('NFD')
+        .replace(/([ΑΕΗΙΟΥΩαεηιουω][\u0300\u0301\u0342])([ΙΥιυ])(?!\u0308)/g, '$1$2\u0308')
+        .replace(/[\u0300\u0301\u0342]/g, '').normalize('NFC');
 
 function inCapitals(text: string, caps: DateWords['caps']): string {
     if (caps === 'turkic') return text.replace(/i/g, 'İ').toUpperCase();
@@ -351,7 +362,8 @@ function dateIn(lang: UiLang, d: Date, pattern: DatePattern, opts: DateOptions):
     const days = pattern === 'weekday'
         ? (width === 'long' ? w.daysLongStandalone ?? w.daysLong : w.daysShortStandalone ?? w.daysShort)
         : (width === 'long' ? w.daysLong : w.daysShort);
-    const months = (pattern === 'day-month-year' ? w.monthsWithYear?.[width] : undefined) ?? (width === 'long' ? w.monthsLong : w.monthsShort);
+    const months = (pattern === 'day-month-year' ? w.monthsWithYear?.[width] : pattern === 'month-year' ? w.monthsInMonthYear?.[width] : undefined)
+        ?? (width === 'long' ? w.monthsLong : w.monthsShort);
     const tokens: Record<string, string> = {
         d: String(utc ? d.getUTCDate() : d.getDate()),
         m: String(month + 1),

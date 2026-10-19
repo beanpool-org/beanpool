@@ -5135,7 +5135,7 @@
   "Failed to combine recovery fragments.": "மீட்புத் துண்டுகளை இணைக்க முடியவில்லை.",
   "Your node did not send a sign-in nonce.": "உங்கள் முனை உள்நுழைவுக் குறியீட்டை அனுப்பவில்லை.",
   "Apple completed the sign-in but returned no token.": "Apple உள்நுழைவு முடிந்தது, ஆனால் டோக்கன் எதுவும் வரவில்லை.",
-  "Apple Sign-In requires an active Apple ID in device or simulator settings (Settings → Apple ID).": "Apple உள்நுழைவுக்கு சாதன அமைப்புகளில் செயலில் உள்ள Apple ID தேவை.",
+  "Apple Sign-In requires an active Apple ID in device or simulator settings (Settings → Apple ID).": "Apple உள்நுழைவுக்கு சாதனம் அல்லது சிமுலேட்டர் அமைப்புகளில் செயலில் உள்ள Apple ID தேவை (அமைப்புகள் → Apple ID).",
   "Google Sign-In requires Google Play Services and an active Google account on this device / emulator.": "Google உள்நுழைவுக்கு Google Play சேவைகளும் செயலில் உள்ள கணக்கும் தேவை.",
   "This device cannot sign in with Apple.": "இந்தச் சாதனத்தால் Apple மூலம் உள்நுழைய முடியாது.",
   "This device or build cannot sign in with Google.": "இந்தச் சாதனத்தால் Google மூலம் உள்நுழைய முடியாது.",

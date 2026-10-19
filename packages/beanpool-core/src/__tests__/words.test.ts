@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import {
-    DATE_WORDS, LANGS, LANGUAGE_HEADER, PLURAL_CATEGORIES, PLURAL_RULES, PSEUDO_LANG, canonicalLang, currentLanguage, formatCount, formatDate,
+    DATE_WORDS, LANGS, LANGUAGE_HEADER, PLURAL_CATEGORIES, PLURAL_RULES, PSEUDO_LANG, canonicalLang, capitalFirst, currentLanguage, formatCount, formatDate,
     formatNumber, isLang, normaliseLang, pluralCategory, pluralKey, pseudoLocalise, setLanguage, t, timeAgo, tn, upperCase, withDigits, word,
     wordKey, wordsFor, type Lang, type UiLang,
 } from '../words.js';
@@ -488,6 +488,23 @@ describe('dates and numbers from tables', () => {
         }
         expect(seen).toBeGreaterThan(2500);
         expect(differ).toEqual([]);
+    });
+
+    it('a sentence\'s first capital: Turkish "i" is "İ", and a Greek one keeps the accent that capitals in a heading drop', () => {
+        expect(capitalFirst('ilan bekliyor', 'tr')).toBe('İlan bekliyor');
+        expect(capitalFirst('ılık', 'tr')).toBe('Ilık');
+        // Greek writes "Έγινε…" at the start of a sentence; only a word all in capitals drops the tonos (ΕΓΙΝΕ).
+        expect(capitalFirst('έγινε επανεκκίνηση', 'el')).toBe('Έγινε επανεκκίνηση');
+        expect(upperCase('έ', 'el')).toBe('Ε');
+        expect(capitalFirst('ο κόμβος', 'el')).toBe('Ο κόμβος');
+        expect(capitalFirst('the node', 'en')).toBe('The node');
+        expect(capitalFirst('2 reports', 'en')).toBe('2 reports');
+        expect(capitalFirst('', 'el')).toBe('');
+        // No lang: the current one.
+        setLanguage('tr');
+        expect(capitalFirst('ilan')).toBe('İlan');
+        setLanguage('el');
+        expect(capitalFirst('έγινε')).toBe('Έγινε');
     });
 
     it('a tag that is not one of LANGS reads English and never throws (N-a: a stale stored tag must not break every date)', () => {

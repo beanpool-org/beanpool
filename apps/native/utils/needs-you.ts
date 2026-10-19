@@ -4,7 +4,7 @@
  * (utils/__tests__/needs-you.test.ts); the component only loads the data and draws the result.
  */
 
-import { t, tn, upperCase } from '@beanpool/core';
+import { capitalFirst, t, tn } from '@beanpool/core';
 import type { DecisionWithTally, MyPoolVoting } from './db';
 import { isMuted, type YourChatMute } from './your-groups';
 import { poolVoteBlocker } from './decision-card';
@@ -156,14 +156,11 @@ export function adminItemInWords(i: Pick<AdminQueueItem, 'kind' | 'count' | 'lab
     }
 }
 
-/** The sentence's first letter in capitals, the language's way (Turkish "i" is "İ"). */
-const capitalise = (s: string) => upperCase(s.charAt(0)) + s.slice(1);
-
 /** "2 reports to review", "2 reports to review and 1 stalled trade awaiting a ruling", "A, B and C". */
 export function adminLabel(items: Pick<AdminQueueItem, 'kind' | 'count' | 'label'>[], node: AdminWordsNode = {}): string {
     const parts = items.map(i => adminItemInWords(i, node));
     const joined = parts.length <= 1 ? (parts[0] ?? '') : t('{items} and {last}', { items: parts.slice(0, -1).join(', '), last: parts[parts.length - 1] });
-    return capitalise(joined);
+    return capitalFirst(joined);
 }
 
 /** "closes within the hour", "closes in 3 hours", "closes tonight", "closes tomorrow", "closes in 4 days". */

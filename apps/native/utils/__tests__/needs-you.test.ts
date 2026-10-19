@@ -323,6 +323,22 @@ describe('What needs you: 🛡️ admin work (owners and admins only)', () => {
         }
     });
 
+    it('a Greek line that starts with an accented letter keeps its accent: "Έγινε", never "Εγινε"', () => {
+        // Every shipped el line here starts with "{n}" or "ο"; this is a translator's next wording for the restart.
+        const el = JSON.parse(readFileSync(resolve(__dirname, '../../words/el.json'), 'utf8'));
+        const restarted = 'έγινε επανεκκίνηση του κόμβου μετά από μη ομαλό τερματισμό';
+        try {
+            setLanguage('el', [{ ...el, 'the node restarted after an unclean shutdown': restarted }]);
+            const shown = admin('owner', queue(item('unclean_shutdown', 1, 'home')))[0].label;
+            expect(shown).toBe(`Έ${restarted.slice(1)}`);
+            // The shipped line, which starts with "ο", reads as before.
+            setLanguage('el', [el]);
+            expect(admin('owner', queue(item('unclean_shutdown', 1, 'home')))[0].label).toBe(`Ο${(el['the node restarted after an unclean shutdown'] as string).slice(1)}`);
+        } finally {
+            setLanguage('en');
+        }
+    });
+
     // With formal Decisions off (the worldwide community) an emergency suspension opens no vote: it lifts by itself
     // after 7 days unless an admin lifts it sooner. Only a profile that says off changes the words.
     describe('an emergency suspension where the node has no community votes', () => {

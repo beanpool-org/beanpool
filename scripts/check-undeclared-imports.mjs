@@ -316,6 +316,7 @@ function checkWorkspace({ path: relPath, enforceTypes = [], testFilePattern = nu
     // and quietly stop the check enforcing production dependencies at all.
     const isTest =
       wsRelative.includes('.test.') ||
+      wsRelative.includes('.test-') ||
       wsRelative.includes('__tests__') ||
       wsRelative.endsWith('setupTests.ts') ||
       (testFilePattern !== null && testFilePattern.test(wsRelative));

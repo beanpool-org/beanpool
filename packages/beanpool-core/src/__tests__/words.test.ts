@@ -14,8 +14,9 @@ import { fileURLToPath } from 'node:url';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import {
-    DATE_WORDS, LANGS, LANGUAGE_HEADER, PLURAL_CATEGORIES, PLURAL_RULES, PSEUDO_LANG, canonicalLang, capitalFirst, currentLanguage, formatCount, formatDate,
-    formatNumber, isLang, normaliseLang, pluralCategory, pluralKey, pseudoLocalise, setLanguage, t, timeAgo, tn, upperCase, withDigits, word,
+    canonicalLang, capitalFirst, currentLanguage, DATE_WORDS, formatCount, formatDate, formatNumber, inCapitalsOf, isLang, LANGS, LANGUAGE_HEADER,
+    normaliseLang, PLURAL_CATEGORIES, PLURAL_RULES, pluralCategory, pluralKey, PSEUDO_LANG, pseudoLocalise, setLanguage, t, timeAgo, tn, upperCase,
+    withDigits, word,
     wordKey, wordsFor, type Lang, type UiLang,
 } from '../words.js';
 import { allowedPluralForms, callKey, callProblem, checkCatalog } from '../words-check.js';
@@ -403,6 +404,22 @@ describe('dates and numbers from tables', () => {
             }
         }
         expect(differ, RECHECK).toEqual([]);
+    });
+
+    it('a label in capitals is the language\'s, never the phone\'s: Turkish keeps its dotted İ, Greek drops its accents', () => {
+        expect(inCapitalsOf('Voice credits', 'en')).toBe('VOICE CREDITS');
+        expect(inCapitalsOf('Gizli oylama', 'tr')).toBe('GİZLİ OYLAMA');
+        expect(inCapitalsOf('Ψηφοφορία', 'el')).toBe('ΨΗΦΟΦΟΡΙΑ');
+        expect(inCapitalsOf('提案', 'zh-Hans')).toBe('提案');
+        for (const [lang, text] of [['tr', 'iyi işler'], ['el', 'Πέμπτη'], ['de', 'Straße'], ['ru', 'Голосование']] as const) {
+            expect(inCapitalsOf(text, lang), lang).toBe(text.toLocaleUpperCase(lang));
+        }
+        // The current language when none is given; the pseudo-locale keeps its brackets.
+        setLanguage('tr');
+        expect(inCapitalsOf('bilgi')).toBe('BİLGİ');
+        setLanguage('xx');
+        expect(inCapitalsOf(pseudoLocalise('Voice credits'))).toMatch(/^\[.*\]$/su);
+        setLanguage('en');
     });
 
     it('digits are data: ten glyphs would replace 0–9 (none in v1)', () => {

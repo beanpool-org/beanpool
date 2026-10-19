@@ -563,6 +563,15 @@ export function formatDate(d: Date, pattern: DatePattern, opts: DateOptions = {}
     return dateIn(opts.lang ?? active.lang, d, pattern, opts);
 }
 
+/**
+ * A label in capitals, the language's way (DateWords.caps: Turkish dotted İ, Greek without accents), in `lang` or the
+ * current language. Never `toUpperCase()` or a `textTransform` on a translation: those follow the phone's rules, not
+ * the language's.
+ */
+export function inCapitalsOf(text: string, lang?: UiLang): string {
+    return inCapitals(text, dateWordsOf(lang ?? active.lang).caps);
+}
+
 /** "just now", "3 minutes ago", "2 hours ago", "5 days ago", in the current language. */
 export function timeAgo(ms: number): string {
     return active.timeAgo(ms);

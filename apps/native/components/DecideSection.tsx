@@ -16,10 +16,33 @@ import {
     castDecisionVote,
 } from '../utils/db';
 import { ownVoteSummary, startingVoteCount, voteButtonStates } from '../utils/decision-own-vote';
-import { LOCAL_COMMUNITY_STRIP } from '@beanpool/core';
-import { electorateLine, keepSuspensionHeadline, poolVoteBlocker, turnoutLine, voiceCreditsLine } from '../utils/decision-card';
+import { LOCAL_COMMUNITY_STRIP, formatDate, formatNumber, inCapitalsOf, t, tn, word, type WordKey } from '@beanpool/core';
+import { DECISION_CARD_WORDS, NO_TRADE_POOL_VOTE_MESSAGE, electorateLine, keepSuspensionHeadline, poolVoteBlocker, turnoutLine, voiceCreditsLine } from '../utils/decision-card';
 import { LocalCommunityMark, ExampleHeader } from './showcase/LocalCommunityMark';
 import { samplePoolVoting } from './showcase/sample-screens';
+
+/**
+ * What a Decision does, what it touches and where it ended, as the node names them: word() keys, shown through t(). A
+ * name this build doesn't know is shown as the node wrote it (an effect title-cased, a status in capitals, as always).
+ * The tables' own names only (a "constructor" is not one).
+ */
+const EFFECT_WORDS: Readonly<Record<string, WordKey>> = {
+    suspend_member: word('Suspend Member'), unsuspend_member: word('Unsuspend Member'), freeze_credit: word('Freeze Credit'),
+    unfreeze_credit: word('Unfreeze Credit'), grant_voucher: word('Grant Voucher'), revoke_voucher: word('Revoke Voucher'),
+    remove_lead_keeper: word('Remove Lead Keeper'), reinstate_member: word('Reinstate Member'), keep_suspension: word('Keep Suspension?'),
+    remove_member: word('Remove Member'), grant_enterprise: word('Grant Enterprise'), grant_hardship: word('Grant Hardship'),
+    write_off_deficit: word('Write Off Deficit'), forgive_debt: word('Forgive Debt'),
+};
+const TOUCH_WORDS: Readonly<Record<string, WordKey>> = { member: word('member', 'what a Decision touches'), pool: word('pool', 'what a Decision touches') };
+const STATUS_WORDS: Readonly<Record<string, WordKey>> = {
+    open: word('OPEN', 'Decision status'), passed: word('PASSED'), failed: word('FAILED'), unresolved: word('UNRESOLVED'),
+    passed_queued_for_funds: word('PASSED QUEUED FOR FUNDS'), execution_pending_grace: word('EXECUTION PENDING GRACE'),
+    execution_blocked: word('EXECUTION BLOCKED'), execution_void: word('EXECUTION VOID'), executed: word('EXECUTED'), admin_halted: word('ADMIN HALTED'),
+};
+const HISTORY_FILTER_WORDS: Readonly<Record<'all' | 'executed' | 'failed' | 'void', WordKey>> = {
+    all: word('All'), executed: word('Executed', 'Decision history filter'), failed: word('Failed', 'Decision history filter'), void: word('Void', 'Decision history filter'),
+};
+const own = (table: object, name: string) => Object.prototype.hasOwnProperty.call(table, name);
 
 interface Props {
     decisions: DecisionWithTally[];
@@ -66,26 +89,30 @@ export function DecideSection({
 
     const formatTimeLeft = (closesAt: string) => {
         const diffMs = new Date(closesAt).getTime() - Date.now();
-        if (diffMs <= 0) return 'Closing now';
+        if (diffMs <= 0) return t('Closing now');
+        // English writes one form for both, as it always has.
         const mins = Math.floor(diffMs / 60000);
-        if (mins < 60) return `${mins}m left`;
+        if (mins < 60) return tn(mins, '{n}m left', '{n}m left');
         const hours = Math.floor(diffMs / 3600000);
-        if (hours < 48) return `${hours}h left`;
+        if (hours < 48) return tn(hours, '{n}h left', '{n}h left');
         const days = Math.ceil(diffMs / (24 * 3600000));
-        return `${days} days left`;
+        return tn(days, '{n} days left', '{n} days left');
     };
 
     const formatEffectLabel = (effect: string) => {
-        if (effect === 'keep_suspension') return 'Keep Suspension?';
+        if (own(EFFECT_WORDS, effect)) return t(EFFECT_WORDS[effect]);
         return effect
             .split('_')
             .map(word => word.charAt(0).toUpperCase() + word.slice(1))
             .join(' ');
     };
 
+    /** "TOUCHES: POOL": what a Decision touches, in capitals the language's way. */
+    const touchesLabel = (touches: string) => inCapitalsOf(t('Touches: {what}', { what: own(TOUCH_WORDS, touches) ? t(TOUCH_WORDS[touches]) : touches }));
+
     const handleVote = async (decision: DecisionWithTally, support: boolean) => {
         if (!identity?.publicKey) {
-            Alert.alert('Not Logged In', 'You must be connected with an active account to vote.');
+            Alert.alert(t('Not Logged In'), t('You must be connected with an active account to vote.'));
             return;
         }
 
@@ -101,13 +128,18 @@ export function DecideSection({
             });
 
             if (res.success) {
-                Alert.alert('Vote Recorded', `Your ${support ? 'YES' : 'NO'} vote (${count} weight) has been cast.`);
+                // English writes one form for both, as it always has.
+                Alert.alert(t('Vote Recorded'), support
+                    ? tn(count, 'Your YES vote ({n} weight) has been cast.', 'Your YES vote ({n} weight) has been cast.')
+                    : tn(count, 'Your NO vote ({n} weight) has been cast.', 'Your NO vote ({n} weight) has been cast.'));
                 await onRefresh();
             } else {
-                Alert.alert('Voting Error', (res as any).error || 'Failed to record vote');
+                // The node's own words as it sent them (slice S4); the one the card also says, in the member's language.
+                const refusal: string | undefined = (res as any).error;
+                Alert.alert(t('Voting Error'), refusal === NO_TRADE_POOL_VOTE_MESSAGE ? t(DECISION_CARD_WORDS.noTradePoolVote) : refusal || t('Failed to record vote'));
             }
         } catch (err: any) {
-            Alert.alert('Error', err.message || 'Failed to cast vote');
+            Alert.alert(t('Error'), err.message || t('Failed to cast vote'));
         } finally {
             setVotingId(null);
         }
@@ -122,13 +154,16 @@ export function DecideSection({
             gap: 10,
             marginBottom: 16,
         },
+        // The Commons switch's shape (app/(tabs)/projects.tsx): the icon above the words and the count in the corner, so a
+        // longer language's words have the whole half at 320 dp and 1.3x text, not what an icon and a count beside them leave.
         viewTab: {
             flex: 1,
-            flexDirection: 'row',
+            minWidth: 0,
+            minHeight: 56,
             alignItems: 'center',
             justifyContent: 'center',
-            gap: 6,
-            paddingVertical: 10,
+            gap: 2,
+            paddingVertical: 8,
             paddingHorizontal: 12,
             borderRadius: 14,
             backgroundColor: colors.surface.card,
@@ -139,7 +174,10 @@ export function DecideSection({
             backgroundColor: colors.brand.tint,
             borderColor: colors.brand.primary,
         },
+        // Shrinks onto two lines in its half rather than past the edge (a longer language's "Decisions History").
         viewTabText: {
+            flexShrink: 1,
+            textAlign: 'center',
             fontSize: 13,
             fontWeight: '700',
             color: colors.text.secondary,
@@ -148,6 +186,9 @@ export function DecideSection({
             color: colors.brand.primary,
         },
         badgePill: {
+            position: 'absolute',
+            top: 4,
+            right: 6,
             paddingHorizontal: 6,
             paddingVertical: 2,
             borderRadius: 10,
@@ -249,11 +290,11 @@ export function DecideSection({
             borderRadius: 8,
             backgroundColor: colors.brand.tint,
         },
+        // Labels in capitals are written so by inCapitalsOf (the language's way), never a textTransform (the phone's).
         touchPillText: {
             fontSize: 11,
             fontWeight: '700',
             color: colors.brand.primary,
-            textTransform: 'uppercase',
         },
         effectPill: {
             paddingHorizontal: 8,
@@ -308,7 +349,6 @@ export function DecideSection({
             fontSize: 11,
             fontWeight: '800',
             color: palette.red700,
-            textTransform: 'uppercase',
             letterSpacing: 0.5,
             marginBottom: 4,
         },
@@ -462,6 +502,7 @@ export function DecideSection({
             justifyContent: 'center',
         },
         qvLabel: {
+            flexShrink: 1,
             fontSize: 12,
             color: colors.text.heading,
             fontWeight: '700',
@@ -478,7 +519,6 @@ export function DecideSection({
             fontSize: 11,
             fontWeight: '800',
             color: colors.text.secondary,
-            textTransform: 'uppercase',
             letterSpacing: 0.5,
             marginBottom: 2,
         },
@@ -500,8 +540,10 @@ export function DecideSection({
         statusTextFailed: { color: palette.red700, fontWeight: '800', fontSize: 11 },
         statusTextVoid: { color: palette.amber800, fontWeight: '800', fontSize: 11 },
         statusTextGrace: { color: palette.indigo700, fontWeight: '800', fontSize: 11 },
+        // Wraps: four filters in a longer language are wider than 320 dp.
         filterRow: {
             flexDirection: 'row',
+            flexWrap: 'wrap',
             gap: 6,
             marginBottom: 12,
         },
@@ -559,7 +601,6 @@ export function DecideSection({
             fontSize: 11,
             color: colors.text.secondary,
             fontWeight: '700',
-            textTransform: 'uppercase',
             letterSpacing: 0.5,
             marginBottom: 6,
         },
@@ -582,23 +623,23 @@ export function DecideSection({
                 <View style={{ marginBottom: 16 }}>
                     <View style={{ marginHorizontal: -16 }}>
                         <LocalCommunityMark variant="strip" feature="decisions" />
-                        <ExampleHeader text={LOCAL_COMMUNITY_STRIP.header} />
+                        <ExampleHeader text={t(LOCAL_COMMUNITY_STRIP.header)} />
                     </View>
                     <View style={[styles.statCard, { marginTop: 12 }]} testID="voice-credits-card">
-                        <Text style={styles.statCardLabel} numberOfLines={2}>Voice credits</Text>
-                        <Text style={styles.statCardAmount} numberOfLines={1}>{Math.floor(samplePoolVoting().voiceCredits)}</Text>
+                        <Text style={styles.statCardLabel} numberOfLines={2}>{inCapitalsOf(t('Voice credits'))}</Text>
+                        <Text style={styles.statCardAmount} numberOfLines={1}>{formatNumber(Math.floor(samplePoolVoting().voiceCredits))}</Text>
                         <Text style={styles.statCardHint}>
-                            For money votes · from completed trades · N votes cost N×N
+                            {t('For money votes · from completed trades · N votes cost N×N')}
                         </Text>
                     </View>
                 </View>
             )}
             {/* View Switcher: Open Decisions vs History */}
-            <View style={styles.viewSelector} accessibilityRole="tablist" accessibilityLabel="Decisions view">
+            <View style={styles.viewSelector} accessibilityRole="tablist" accessibilityLabel={t('Decisions view')}>
                 <Pressable
                     accessibilityRole="tab"
                     accessibilityState={{ selected: activeView === 'open' }}
-                    accessibilityLabel="Open Decisions"
+                    accessibilityLabel={t('Open Decisions')}
                     style={[styles.viewTab, activeView === 'open' && styles.viewTabActive]}
                     onPress={() => onChangeView('open')}
                 >
@@ -607,12 +648,12 @@ export function DecideSection({
                         size={16}
                         color={activeView === 'open' ? colors.brand.primary : colors.text.secondary}
                     />
-                    <Text style={[styles.viewTabText, activeView === 'open' && styles.viewTabTextActive]}>
-                        Open Decisions
+                    <Text style={[styles.viewTabText, activeView === 'open' && styles.viewTabTextActive]} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.7}>
+                        {t('Open Decisions')}
                     </Text>
                     {openDecisions.length > 0 && (
                         <View style={styles.badgePill}>
-                            <Text style={styles.badgePillText}>{openDecisions.length}</Text>
+                            <Text style={styles.badgePillText}>{formatNumber(openDecisions.length)}</Text>
                         </View>
                     )}
                 </Pressable>
@@ -620,7 +661,7 @@ export function DecideSection({
                 <Pressable
                     accessibilityRole="tab"
                     accessibilityState={{ selected: activeView === 'history' }}
-                    accessibilityLabel="Decisions History"
+                    accessibilityLabel={t('Decisions History')}
                     style={[styles.viewTab, activeView === 'history' && styles.viewTabActive]}
                     onPress={() => onChangeView('history')}
                 >
@@ -629,8 +670,8 @@ export function DecideSection({
                         size={16}
                         color={activeView === 'history' ? colors.brand.primary : colors.text.secondary}
                     />
-                    <Text style={[styles.viewTabText, activeView === 'history' && styles.viewTabTextActive]}>
-                        Decisions History
+                    <Text style={[styles.viewTabText, activeView === 'history' && styles.viewTabTextActive]} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.7}>
+                        {t('Decisions History')}
                     </Text>
                 </Pressable>
             </View>
@@ -641,44 +682,44 @@ export function DecideSection({
                     {/* Propose Decision Banner (earned standing or a node admin; 1 open per author; no bond) */}
                     <View style={styles.proposeBanner}>
                         <View style={styles.proposeHeaderRow}>
-                            <Text style={styles.proposeTitle}>🌱 Propose Community Action</Text>
-                            <Text style={{ fontSize: 12, color: colors.text.muted }}>No bond required</Text>
+                            <Text style={styles.proposeTitle}>{t('🌱 Propose Community Action')}</Text>
+                            <Text style={{ fontSize: 12, color: colors.text.muted }}>{t('No bond required')}</Text>
                         </View>
                         <Text style={styles.proposeDesc}>
-                            Binding decisions execute automatically upon passing (§3.7). Open to members with a completed trade or earned standing, and to node admins.
+                            {t('Binding decisions execute automatically upon passing (§3.7). Open to members with a completed trade or earned standing, and to node admins.')}
                         </Text>
                         {preview ? (
-                            <LocalCommunityMark variant="action" feature="decisions" label="+ Propose a Decision" />
+                            <LocalCommunityMark variant="action" feature="decisions" label={t('+ Propose a Decision')} />
                         ) : (
                             <Pressable
                                 accessibilityRole="button"
-                                accessibilityLabel="Propose a Community Decision"
+                                accessibilityLabel={t('Propose a Community Decision')}
                                 style={[styles.proposeBtn, (!canPropose || hasOpenDecision) && styles.proposeBtnDisabled]}
                                 onPress={() => {
                                     if (!canPropose) {
-                                        Alert.alert('Complete a Trade First', 'You can propose a Decision once you have completed a trade.');
+                                        Alert.alert(t('Complete a Trade First'), t('You can propose a Decision once you have completed a trade.'));
                                         return;
                                     }
                                     if (hasOpenDecision) {
-                                        Alert.alert('Limit Reached', 'You already have an open decision (limit 1 open decision per author).');
+                                        Alert.alert(t('Limit Reached'), t('You already have an open decision (limit 1 open decision per author).'));
                                         return;
                                     }
                                     onOpenPropose();
                                 }}
                             >
                                 <Text style={[styles.proposeBtnText, (!canPropose || hasOpenDecision) && styles.proposeBtnTextDisabled]}>
-                                    + Propose a Decision
+                                    {t('+ Propose a Decision')}
                                 </Text>
                             </Pressable>
                         )}
                         {!preview && !canPropose && (
                             <Text style={styles.gateWarning}>
-                                ⚠️ You can propose once you have completed a trade.
+                                {t('⚠️ You can propose once you have completed a trade.')}
                             </Text>
                         )}
                         {!preview && canPropose && hasOpenDecision && (
                             <Text style={styles.gateWarning}>
-                                ℹ️ You have an open decision. Wait for it to conclude before opening another.
+                                {t('ℹ️ You have an open decision. Wait for it to conclude before opening another.')}
                             </Text>
                         )}
                     </View>
@@ -687,9 +728,9 @@ export function DecideSection({
                     {openDecisions.length === 0 ? (
                         <View style={styles.emptyState}>
                             <MaterialCommunityIcons name="ballot-outline" size={40} color={colors.text.muted} />
-                            <Text style={styles.emptyTitle}>No open decisions right now</Text>
+                            <Text style={styles.emptyTitle}>{t('No open decisions right now')}</Text>
                             <Text style={styles.emptyDesc}>
-                                Community decisions appear here when members propose binding actions.
+                                {t('Community decisions appear here when members propose binding actions.')}
                             </Text>
                         </View>
                     ) : (
@@ -708,17 +749,18 @@ export function DecideSection({
                             const noDisabled = votingId === item.id || buttons.no.disabled || !!blocker;
 
                             // §3.8 Removal ballot text
-                            const targetName = item.params?.memberName || item.subject?.slice(0, 8) || 'Member';
+                            const targetName = item.params?.memberName || item.subject?.slice(0, 8) || t('Member');
                             // The node sends the member's balance and debt only to those who can vote in it (and to the member):
                             // balances are private (2026-09-28). Anyone else is told so, never shown a made-up 0.
                             const knowsDebt = typeof item.params?.debt === 'number' || typeof item.params?.balance === 'number';
                             const debtAmount = typeof item.params?.debt === 'number' ? Math.abs(item.params.debt) : (typeof item.params?.balance === 'number' ? Math.abs(Math.min(0, item.params.balance)) : 0);
                             const poolAmount = Math.round(item.params?.commonsPool ?? balanceState.commons ?? 0);
+                            // Whole sentences; English writes "beans" for one and many, as it always has.
                             const debtWriteOffLine = !knowsDebt
-                                ? `Balances are private: only the members who can vote in this see ${targetName}'s balance and any debt. The Commons pool holds ${poolAmount} beans.`
+                                ? tn(poolAmount, "Balances are private: only the members who can vote in this see {name}'s balance and any debt. The Commons pool holds {n} beans.", "Balances are private: only the members who can vote in this see {name}'s balance and any debt. The Commons pool holds {n} beans.", { name: targetName })
                                 : debtAmount > 0
-                                    ? `${targetName}'s balance is \u2212${debtAmount} beans. Removing them charges that ${debtAmount} to the Commons pool, which currently holds ${poolAmount}.`
-                                    : `${targetName} has no debt. Removing them charges nothing to the Commons pool, which currently holds ${poolAmount}.`;
+                                    ? tn(debtAmount, "{name}'s balance is \u2212{n} beans. Removing them charges that {n} to the Commons pool, which currently holds {pool}.", "{name}'s balance is \u2212{n} beans. Removing them charges that {n} to the Commons pool, which currently holds {pool}.", { name: targetName, pool: poolAmount })
+                                    : t('{name} has no debt. Removing them charges nothing to the Commons pool, which currently holds {pool}.', { name: targetName, pool: poolAmount });
 
                             return (
                                 <View key={item.id} style={styles.card} testID={preview ? 'sample-decision' : undefined}>
@@ -726,14 +768,14 @@ export function DecideSection({
                                     <View style={styles.cardHeader}>
                                         <View style={styles.tagRow}>
                                             <View style={styles.touchPill}>
-                                                <Text style={styles.touchPillText}>Touches: {item.touches}</Text>
+                                                <Text style={styles.touchPillText}>{touchesLabel(item.touches)}</Text>
                                             </View>
                                             <View style={styles.effectPill}>
                                                 <Text style={styles.effectPillText}>{formatEffectLabel(item.effect)}</Text>
                                             </View>
                                             <View style={styles.effectPill}>
                                                 <Text style={styles.effectPillText}>
-                                                    {item.franchise === 'quadratic_trade' ? 'Quadratic' : '1m1v'}
+                                                    {item.franchise === 'quadratic_trade' ? t('Quadratic') : t('1m1v')}
                                                 </Text>
                                             </View>
                                         </View>
@@ -751,10 +793,10 @@ export function DecideSection({
                                     {item.effect === 'keep_suspension' && (
                                         <View style={styles.keepBox} testID="keep-suspension-box">
                                             <Text style={styles.keepHeadline}>
-                                                {keepSuspensionHeadline(item.params, item.subject?.slice(0, 8) || 'a member')}
+                                                {keepSuspensionHeadline(item.params, item.subject?.slice(0, 8) || t('a member'))}
                                             </Text>
                                             <Text style={styles.keepBody}>
-                                                Vote Yes to keep it. If this vote doesn't pass, the suspension lifts by itself.
+                                                {t("Vote Yes to keep it. If this vote doesn't pass, the suspension lifts by itself.")}
                                             </Text>
                                         </View>
                                     )}
@@ -762,7 +804,7 @@ export function DecideSection({
                                     {/* §3.8 Removal Ballot debt-write-off line */}
                                     {item.effect === 'remove_member' && (
                                         <View style={styles.debtWarningBox} testID="removal-debt-write-off-box">
-                                            <Text style={styles.debtWarningLabel}>Mandatory Debt Disclosure (§3.8)</Text>
+                                            <Text style={styles.debtWarningLabel}>{inCapitalsOf(t('Mandatory Debt Disclosure (§3.8)'))}</Text>
                                             <Text style={styles.debtWriteOffText} testID="removal-debt-write-off-line">
                                                 {debtWriteOffLine}
                                             </Text>
@@ -775,17 +817,17 @@ export function DecideSection({
                                         <View>
                                             <View style={styles.metricRow}>
                                                 <Text style={styles.metricLabel}>
-                                                    Turnout: {turnoutLine(tally)}
+                                                    {t('Turnout: {line}', { line: turnoutLine(tally) })}
                                                 </Text>
                                                 <Text style={[styles.metricValue, { color: tally.quorumMet ? colors.feedback.success.fg : colors.text.secondary }]}>
-                                                    {tally.quorumMet ? 'Met ✅' : 'Pending'}
+                                                    {tally.quorumMet ? t('Met ✅') : t('Pending', undefined, 'quorum not met yet')}
                                                 </Text>
                                             </View>
                                             <View
                                                 style={styles.barBg}
                                                 accessibilityRole="progressbar"
                                                 accessibilityValue={{ min: 0, max: 100, now: Math.min(100, quorumPct) }}
-                                                accessibilityLabel="Quorum progress"
+                                                accessibilityLabel={t('Quorum progress')}
                                             >
                                                 <View
                                                     style={[
@@ -801,17 +843,17 @@ export function DecideSection({
                                         <View>
                                             <View style={styles.metricRow}>
                                                 <Text style={styles.metricLabel}>
-                                                    Tally: Yes {tally.yesWeight} ({supportPct}%) · No {tally.noWeight}
+                                                    {t('Tally: Yes {yes} ({pct}%) · No {no}', { yes: tally.yesWeight, pct: supportPct, no: tally.noWeight })}
                                                 </Text>
                                                 <Text style={styles.metricValue}>
-                                                    Needs {thresholdPct}%
+                                                    {t('Needs {pct}%', { pct: thresholdPct })}
                                                 </Text>
                                             </View>
                                             <View
                                                 style={styles.barBg}
                                                 accessibilityRole="progressbar"
                                                 accessibilityValue={{ min: 0, max: 100, now: Math.min(100, supportPct) }}
-                                                accessibilityLabel="Support progress"
+                                                accessibilityLabel={t('Support progress')}
                                             >
                                                 <View
                                                     style={[
@@ -828,13 +870,14 @@ export function DecideSection({
                                         {item.franchise === 'quadratic_trade' && (
                                             <View style={styles.qvStepper}>
                                                 <Text style={styles.qvLabel}>
-                                                    Votes: {currentCount} (Cost: {currentCount * currentCount} credits)
+                                                    {/* English writes one form for both, as it always has. */}
+                                                    {tn(currentCount * currentCount, 'Votes: {count} (Cost: {n} credits)', 'Votes: {count} (Cost: {n} credits)', { count: currentCount })}
                                                 </Text>
                                                 <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
                                                     <Pressable
                                                         accessibilityRole="button"
-                                                        accessibilityLabel="Decrease votes"
-                                                        accessibilityHint={`Decreases vote count from ${currentCount}`}
+                                                        accessibilityLabel={t('Decrease votes')}
+                                                        accessibilityHint={t('Decreases vote count from {n}', { n: currentCount })}
                                                         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                                                         disabled={votingId === item.id || currentCount <= 1}
                                                         style={[styles.stepperBtn, { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }, (votingId === item.id || currentCount <= 1) && { opacity: 0.5 }]}
@@ -849,8 +892,8 @@ export function DecideSection({
                                                     </Pressable>
                                                     <Pressable
                                                         accessibilityRole="button"
-                                                        accessibilityLabel="Increase votes"
-                                                        accessibilityHint={`Increases vote count from ${currentCount}`}
+                                                        accessibilityLabel={t('Increase votes')}
+                                                        accessibilityHint={t('Increases vote count from {n}', { n: currentCount })}
                                                         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                                                         disabled={votingId === item.id}
                                                         style={[styles.stepperBtn, { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }, votingId === item.id && { opacity: 0.5 }]}
@@ -879,8 +922,8 @@ export function DecideSection({
 
                                         {preview ? (
                                             <View style={{ gap: 8 }}>
-                                                <LocalCommunityMark variant="action" feature="decisions" label="👍 Vote YES" />
-                                                <LocalCommunityMark variant="action" feature="decisions" label="👎 Vote NO" />
+                                                <LocalCommunityMark variant="action" feature="decisions" label={t('👍 Vote YES')} />
+                                                <LocalCommunityMark variant="action" feature="decisions" label={t('👎 Vote NO')} />
                                             </View>
                                         ) : (
                                             <View style={styles.voteButtonsRow}>
@@ -922,7 +965,7 @@ export function DecideSection({
                                             </View>
                                         )}
                                         <Text style={styles.secretNote} testID="secret-ballot-note">
-                                            {preview ? '' : '🔒 '}Secret ballot: members see the totals, never who voted how.
+                                            {preview ? t('Secret ballot: members see the totals, never who voted how.') : t('🔒 Secret ballot: members see the totals, never who voted how.')}
                                         </Text>
                                     </View>
                                 </View>
@@ -945,7 +988,7 @@ export function DecideSection({
                                 onPress={() => setHistoryFilter(f)}
                             >
                                 <Text style={[styles.filterBtnText, historyFilter === f && styles.filterBtnTextActive]}>
-                                    {f.charAt(0).toUpperCase() + f.slice(1)}
+                                    {t(HISTORY_FILTER_WORDS[f])}
                                 </Text>
                             </Pressable>
                         ))}
@@ -954,9 +997,9 @@ export function DecideSection({
                     {filteredPastDecisions.length === 0 ? (
                         <View style={styles.emptyState}>
                             <MaterialCommunityIcons name="history" size={40} color={colors.text.muted} />
-                            <Text style={styles.emptyTitle}>No past decisions</Text>
+                            <Text style={styles.emptyTitle}>{t('No past decisions')}</Text>
                             <Text style={styles.emptyDesc}>
-                                Completed community votes and executed effects will be recorded here.
+                                {t('Completed community votes and executed effects will be recorded here.')}
                             </Text>
                         </View>
                     ) : (
@@ -982,14 +1025,14 @@ export function DecideSection({
                                     <View style={styles.cardHeader}>
                                         <View style={styles.tagRow}>
                                             <View style={styles.touchPill}>
-                                                <Text style={styles.touchPillText}>Touches: {item.touches}</Text>
+                                                <Text style={styles.touchPillText}>{touchesLabel(item.touches)}</Text>
                                             </View>
                                             <View style={styles.effectPill}>
                                                 <Text style={styles.effectPillText}>{formatEffectLabel(item.effect)}</Text>
                                             </View>
                                         </View>
                                         <View style={[styles.historyStatusBadge, badgeStyle]}>
-                                            <Text style={textStyle}>{item.status.toUpperCase().replace(/_/g, ' ')}</Text>
+                                            <Text style={textStyle}>{own(STATUS_WORDS, item.status) ? t(STATUS_WORDS[item.status]) : item.status.toUpperCase().replace(/_/g, ' ')}</Text>
                                         </View>
                                     </View>
 
@@ -1000,50 +1043,50 @@ export function DecideSection({
                                     <View style={styles.metricsContainer}>
                                         <View style={styles.metricRow}>
                                             <Text style={styles.metricLabel}>
-                                                Turnout: {turnoutLine(tally)} ({tally.quorumMet ? 'Met' : 'Unmet'})
+                                                {tally.quorumMet ? t('Turnout: {line} (Met)', { line: turnoutLine(tally) }) : t('Turnout: {line} (Unmet)', { line: turnoutLine(tally) })}
                                             </Text>
                                             <Text style={styles.metricValue}>
-                                                Yes: {tally.yesWeight} ({supportPct}%) · No: {tally.noWeight}
+                                                {t('Yes: {yes} ({pct}%) · No: {no}', { yes: tally.yesWeight, pct: supportPct, no: tally.noWeight })}
                                             </Text>
                                         </View>
                                     </View>
 
                                     {/* Who Authorised Each Executed Effect (§3.7, §3.8) */}
                                     <View style={styles.historyProvenanceBox}>
-                                        <Text style={styles.historyProvenanceLabel}>Authorisation & Provenance</Text>
+                                        <Text style={styles.historyProvenanceLabel}>{inCapitalsOf(t('Authorisation & Provenance'))}</Text>
                                         {item.status === 'executed' && (
                                             <>
                                                 <Text style={styles.historyProvenanceText}>
-                                                    Authorised by: Community Vote (system:decision:{item.id.slice(0, 8)})
+                                                    {t('Authorised by: Community Vote ({ref})', { ref: `system:decision:${item.id.slice(0, 8)}` })}
                                                 </Text>
                                                 <Text style={{ fontSize: 11, color: colors.text.muted, marginTop: 2 }}>
-                                                    Provenance: system:decision:{item.id} · {item.executionReason || 'Executed successfully'}
+                                                    {t('Provenance: {ref} · {reason}', { ref: `system:decision:${item.id}`, reason: item.executionReason || t('Executed successfully') })}
                                                 </Text>
                                             </>
                                         )}
                                         {item.status === 'admin_halted' && (
                                             <Text style={styles.historyProvenanceText}>
-                                                Halted by an admin — Reason: {item.adminHaltReason}
+                                                {t('Halted by an admin — Reason: {reason}', { reason: item.adminHaltReason ?? '' })}
                                             </Text>
                                         )}
                                         {item.status === 'execution_pending_grace' && (
                                             <Text style={styles.historyProvenanceText}>
-                                                In 7-day Grace Period: Scheduled for removal on {new Date(item.gracePeriodEndsAt!).toLocaleDateString()}
+                                                {t('In 7-day Grace Period: Scheduled for removal on {date}', { date: formatDate(new Date(item.gracePeriodEndsAt!), 'day-month-year') })}
                                             </Text>
                                         )}
                                         {item.status === 'execution_void' && (
                                             <Text style={styles.historyProvenanceText}>
-                                                Void: {item.executionReason || 'Subject does not exist or was pruned'}
+                                                {t('Void: {reason}', { reason: item.executionReason || t('Subject does not exist or was pruned') })}
                                             </Text>
                                         )}
                                         {item.status === 'failed' && (
                                             <Text style={styles.historyProvenanceText}>
-                                                Not executed: {tally.quorumMet ? 'Threshold not met' : 'Quorum not reached'}
+                                                {tally.quorumMet ? t('Not executed: Threshold not met') : t('Not executed: Quorum not reached')}
                                             </Text>
                                         )}
                                         {item.status === 'unresolved' && (
                                             <Text style={styles.historyProvenanceText}>
-                                                Expired unresolved: Quorum not reached
+                                                {t('Expired unresolved: Quorum not reached')}
                                             </Text>
                                         )}
                                     </View>

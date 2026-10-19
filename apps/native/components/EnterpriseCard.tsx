@@ -13,7 +13,8 @@ import { LocalCommunityMark } from './showcase/LocalCommunityMark';
 import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { palette } from '../constants/colors';
 import { enterpriseCardStatus } from '../utils/enterprise-card';
-import { t } from '@beanpool/core';
+import { formatNumber, inCapitalsOf, t, tn } from '@beanpool/core';
+import { Sentence } from './Sentence';
 
 /** The Commons cards' styles, the enterprise card's and (in projects.tsx) the group card's, which shares most of them. */
 export const commonsCardStyles = ({ theme, colors }: Pick<ThemeContextType, 'theme' | 'colors'>) => ({
@@ -49,14 +50,16 @@ export const commonsCardStyles = ({ theme, colors }: Pick<ThemeContextType, 'the
     purposeTextPlaceholder: { fontStyle: 'italic', color: colors.text.muted },
 
     financeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.surface.app, borderRadius: 12, padding: 10, borderWidth: 1, borderColor: colors.border.default },
-    financeLabel: { fontSize: 11, color: colors.text.secondary, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.4 },
+    // In capitals the language's way (inCapitalsOf), never a textTransform: that follows the phone's rules.
+    financeLabel: { fontSize: 11, color: colors.text.secondary, fontWeight: '700', letterSpacing: 0.4 },
     balanceText: { fontSize: 16, fontWeight: '900' },
     balancePos: { color: colors.brand.primary },
     balanceNeg: { color: colors.feedback.warning.fg },
     deficitWarning: { fontSize: 10, color: colors.feedback.warning.fg, fontWeight: '700', marginTop: 1 },
 
     progressSection: { marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: colors.border.default },
-    progressHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 6 },
+    // Wraps: a longer language's "raised" and "Goal" don't fit side by side at 320 dp.
+    progressHeader: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'flex-end', columnGap: 8, marginBottom: 6 },
     currentText: { fontSize: 13, fontWeight: 'bold', color: colors.text.body },
     currentTextFunded: { color: colors.brand.primary },
     goalText: { fontSize: 12, color: colors.text.secondary, fontWeight: '500' },
@@ -69,13 +72,15 @@ export const commonsCardStyles = ({ theme, colors }: Pick<ThemeContextType, 'the
     pledgeCardBtnText: { color: colors.text.inverse, fontSize: 13, fontWeight: '800', letterSpacing: 0.3 },
 } as const);
 
-function getDaysRemaining(deadline: string | null | undefined) {
+/** How long a project has left, in the member's language; `expired` drawn in the danger colour. */
+function getDaysRemaining(deadline: string | null | undefined): { text: string; expired: boolean } | null {
     if (!deadline) return null;
     const diff = new Date(deadline).getTime() - new Date().getTime();
     const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
-    if (days < 0) return 'Expired';
-    if (days === 0) return 'Ends today';
-    return `${days} days left`;
+    if (days < 0) return { text: t('Expired'), expired: true };
+    if (days === 0) return { text: t('Ends today'), expired: false };
+    // English writes one form for both, as it always has.
+    return { text: tn(days, '{n} days left', '{n} days left'), expired: false };
 }
 
 export function EnterpriseCard({ item, sample = false }: { item: TreasurySummary; sample?: boolean }) {
@@ -155,19 +160,19 @@ export function EnterpriseCard({ item, sample = false }: { item: TreasurySummary
                     style={[styles.purposeText, !item.purpose && styles.purposeTextPlaceholder]}
                     numberOfLines={2}
                 >
-                    {item.purpose || 'No stated purpose yet.'}
+                    {item.purpose || t('No stated purpose yet.')}
                 </Text>
 
                 {/* Financial summary row */}
                 <View style={styles.financeRow}>
-                    <View>
-                        <Text style={styles.financeLabel}>{t('Enterprise Balance')}</Text>
+                    <View style={{ flexShrink: 1 }}>
+                        <Text style={styles.financeLabel}>{inCapitalsOf(t('Enterprise Balance'))}</Text>
                         {item.balance < 0 && (
                             <Text style={styles.deficitWarning}>{t('in deficit (keepers eat last)')}</Text>
                         )}
                     </View>
                     <Text style={[styles.balanceText, item.balance < 0 ? styles.balanceNeg : styles.balancePos]}>
-                        {item.balance} 🫘
+                        {formatNumber(item.balance)} 🫘
                     </Text>
                 </View>
 
@@ -176,9 +181,12 @@ export function EnterpriseCard({ item, sample = false }: { item: TreasurySummary
                     <View style={styles.progressSection}>
                         <View style={styles.progressHeader}>
                             <Text style={[styles.currentText, isFunded && styles.currentTextFunded]}>
-                                {currentRaised} 🫘 <Text style={{ fontWeight: 'normal', color: colors.text.secondary }}>raised</Text>
+                                <Sentence
+                                    text={t('{amount} 🫘 {raised}', { amount: currentRaised })}
+                                    parts={{ raised: <Text style={{ fontWeight: 'normal', color: colors.text.secondary }}>{t('raised', undefined, 'pledged to a project so far')}</Text> }}
+                                />
                             </Text>
-                            <Text style={styles.goalText}>Goal: {item.goalAmount} 🫘</Text>
+                            <Text style={styles.goalText}>{t('Goal: {amount} 🫘', { amount: item.goalAmount ?? 0 })}</Text>
                         </View>
                         <View style={styles.progressBarBg}>
                             <View
@@ -189,8 +197,8 @@ export function EnterpriseCard({ item, sample = false }: { item: TreasurySummary
                             />
                         </View>
                         {daysRemaining && (
-                            <Text style={[styles.deadlineText, daysRemaining === 'Expired' && styles.deadlineExpired]}>
-                                ⏳ {daysRemaining}
+                            <Text style={[styles.deadlineText, daysRemaining.expired && styles.deadlineExpired]}>
+                                ⏳ {daysRemaining.text}
                             </Text>
                         )}
                     </View>

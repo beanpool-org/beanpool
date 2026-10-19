@@ -101,7 +101,7 @@ import { bindRekeyByMatch, declineRekeyProposal, rekeyCodeUnderAttack, RekeyRede
 import { getShutdownStatus, acknowledgeShutdownRecovery } from '../engine/shutdown-recovery.js';
 import { getStandbyHealthBanner, watchesStandbys } from '../services/standby-health.js';
 import { getOffboxHealth } from '../services/offbox-backups.js';
-import { serverAlertsBanner } from '../services/alerts.js';
+import { alertBookLostLately, serverAlertsBanner } from '../services/alerts.js';
 import { directoryHeldBack, directoryPromiseStatus } from '../services/directory-publisher.js';
 import { getUnhandledRejectionSummary } from '../process-handlers.js';
 import { getDiskHealth, getStorageCleanPreview, cleanStorageAndCompressLogs, type DiskHealth } from '../engine/storage-health.js';
@@ -1075,10 +1075,13 @@ function withLoggedAlerts<T extends { flags: Array<{ members: string[] }> }>(ctx
     }
 }
 
-/** The banner's alerts for an owner's diagnostics, or undefined (left out of the answer) when the book can't be read. */
+/**
+ * The banner's alerts for an owner's diagnostics, or undefined (left out of the answer) when the book can't be read, or
+ * was begun again in the last day because it couldn't be: its empty list is no "all clear".
+ */
 function readableServerAlerts(): ReturnType<typeof serverAlertsBanner> | undefined {
     try {
-        return serverAlertsBanner();
+        return alertBookLostLately() ? undefined : serverAlertsBanner();
     } catch {
         return undefined;
     }

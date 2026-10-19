@@ -353,6 +353,8 @@ interface BookState {
     child: ChildReports;
     /** The counts of SecurityNote.perDay lines, by key and words: the open window's first event and how many since. */
     dayCounts: Record<string, DayCount>;
+    /** When this book was begun again because the one on disk couldn't be read (readState): what it held is gone. */
+    lostAt?: number;
 }
 
 /**
@@ -405,8 +407,14 @@ function readState(): BookState {
     try {
         const parsed = JSON.parse(fs.readFileSync(stateFile(), 'utf8'));
         state = { ...emptyState(), ...parsed, channel: { ...emptyChannel(), ...(parsed?.channel ?? {}) }, dayCounts: dayCountsOf(parsed?.dayCounts) };
-    } catch {
-        state = emptyState();
+    } catch (e) {
+        // No book yet is a first start. One that is there but can't be read is lost, and the new one says so
+        // (alertBookLostLately), so Settings never takes its empty list for "all clear" (review r4309393945).
+        const missing = (e as NodeJS.ErrnoException)?.code === 'ENOENT';
+        // A parse error's message quotes the file, so never logged.
+        const why = e instanceof SyntaxError ? 'it is not JSON' : errorMessage(e);
+        if (!missing) logger.warn('SYS', `[Alerts] Could not read the alert book, so began a new one: ${why}`);
+        state = missing ? emptyState() : { ...emptyState(), lostAt: now() };
     }
     return state!;
 }
@@ -1682,8 +1690,8 @@ export interface BannerAlert {
 /**
  * The alerts the `server_alert` banner counts, newest security event first after the conditions: the active rows with a
  * banner, and each kind of security event of the last day no owner has acknowledged (a role granted, the community
- * claimed, a key changed), once. The phone's count and Settings' Home list are both this, so they can't disagree. Throws
- * when the book can't be read: a caller says so rather than a count of 0.
+ * claimed, a key changed), once. The phone's count and Settings' Home list are both this, so they can't disagree. A book
+ * on disk that couldn't be read is begun again empty (readState), which lists none: alertBookLostLately says when.
  */
 export function serverAlertsBanner(): { count: number; items: BannerAlert[] } {
     const s = readState();
@@ -1697,6 +1705,16 @@ export function serverAlertsBanner(): { count: number; items: BannerAlert[] } {
         items.push({ key: e.key, title: ROWS[e.key].title, priority: e.priority, since: e.at, detail: e.detail });
     }
     return { count: items.length, items };
+}
+
+/**
+ * The book was begun again in the last day because the one on disk couldn't be read: its list may be missing what the old
+ * book held, so Settings' Home says it couldn't read the alerts rather than "all clear". A day is the longest a security
+ * event stays on the banner (SECURITY_BANNER_MS); the conditions are checked again every minute. It holds over a restart.
+ */
+export function alertBookLostLately(): boolean {
+    const lostAt = readState().lostAt;
+    return typeof lostAt === 'number' && Number.isFinite(lostAt) && now() - lostAt < SECURITY_BANNER_MS;
 }
 
 /** How many conditions the `server_alert` banner counts (the standby and an unclean stop have banners of their own). */

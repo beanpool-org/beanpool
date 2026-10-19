@@ -60,8 +60,11 @@ describe('the phone\'s report lists', () => {
     it('the Pulse card (components/PulseFeedCard.tsx) lists the shared reasons and says what Child safety is for', () => {
         const src = read('components/PulseFeedCard.tsx');
         const b = box(src, 'Report this post — why?', '<View style={styles.reportActions}>');
-        expect(b).toContain('{PULSE_REPORT_REASONS.map((r) =>');
-        expect(b).toContain(HINT);
+        // In the member's language since words S3f: the same shared reasons and hint, through t() (the reason sent stays
+        // as written), the hint one sentence with Child safety in bold inside it.
+        expect(b).toContain('{PULSE_REPORT_REASONS.map((r, i) =>');
+        expect(b).toContain("<Sentence text={t('{reason}: {hint}', { hint: t(LINES.childSafetyHint) })} parts={{ reason: <Text style={styles.reportHintLabel}>{t(LINES.childSafety)}</Text> }} />");
+        expect(src).toContain('const LINES = { childSafety: CHILD_SAFETY_REASON, childSafetyHint: CHILD_SAFETY_HINT };');
     });
 
     // The follow-up to #1895 (director, 14 Oct): every report screen offers the list before the socialism.org launch.

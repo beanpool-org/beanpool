@@ -1,8 +1,9 @@
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect } from 'vitest';
 import {
-    platformMeta, categoryMeta, isWebUrl, PLATFORMS, CATEGORIES,
+    platformMeta, platformName, categoryMeta, isWebUrl, PLATFORMS, CATEGORIES, LISTING_LABEL,
     type ChannelPlatform, type ChannelCategory
 } from '../channels.js';
+import { pseudoLocalise, setLanguage, t } from '../words.js';
 
 describe('channels platform vocabulary and metadata', () => {
     it('resolves known platforms accurately', () => {
@@ -124,6 +125,37 @@ describe('channels platform vocabulary and metadata', () => {
         const nullFallback = categoryMeta(null);
         expect(nullFallback.icon).toBe('✨');
         expect(nullFallback.label).toBe('Other');
+    });
+});
+
+describe('channel words in the member\'s language (words S3f)', () => {
+    afterEach(() => setLanguage('en'));
+    const BRANDS: ChannelPlatform[] = ['youtube', 'instagram', 'tiktok', 'soundcloud', 'facebook'];
+
+    it('platformName reads in English exactly as the label, for every platform, an unknown one and none', () => {
+        for (const p of PLATFORMS) expect(platformName(p.id)).toBe(p.label);
+        expect(platformName('unknown_platform_xyz')).toBe('Link');
+        expect(platformName(null)).toBe('Link');
+    });
+
+    it('a brand is written as it is in every language; our own names, the categories, the listing words and the hints are translated', () => {
+        setLanguage('xx');
+        for (const id of BRANDS) expect(platformName(id)).toBe(platformMeta(id).label);
+        expect(platformName('website')).toBe(pseudoLocalise('Website'));
+        expect(platformName('rss')).toBe(pseudoLocalise('Blog / RSS'));
+        expect(platformName('unknown_platform_xyz')).toBe(pseudoLocalise('Link'));
+        for (const c of CATEGORIES) expect(t(c.label)).toBe(pseudoLocalise(c.label));
+        expect(t(categoryMeta('nope').label)).toBe(pseudoLocalise('Other'));
+        for (const listing of ['auto', 'manual', 'card'] as const) expect(t(LISTING_LABEL[listing])).toBe(pseudoLocalise(LISTING_LABEL[listing]));
+        for (const p of PLATFORMS) {
+            expect(p.hint).not.toBe('');
+            if (p.hint) expect(t(p.hint)).toBe(pseudoLocalise(p.hint));
+        }
+    });
+
+    it('the tables still read as plain English where they are shown raw (the web, the server)', () => {
+        expect(CATEGORIES.map((c) => c.label)).toEqual(['Community', 'Food & growing', 'Making & craft', 'Repair & reuse', 'Art & music', 'Business', 'How it works', 'Other']);
+        expect(LISTING_LABEL).toEqual({ auto: 'updates itself', manual: 'a tap per post', card: 'shows as a card' });
     });
 });
 

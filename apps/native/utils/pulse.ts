@@ -378,31 +378,51 @@ export async function reportPulseItem(
 }
 
 /**
- * Format an ISO publishedAt timestamp into a human-readable relative string.
- *
- * e.g. "Just now", "25m ago", "3h ago", "2d ago", "Aug 24"
+ * How long ago an ISO publishedAt timestamp was, in the one unit a card says it in: under a minute (or in the future),
+ * minutes, hours, days, or from a week on the date itself. Null when there is no usable date. Words, not here: the
+ * card says it in the member's language (components/PulseFeedCard.tsx), this file signs requests and stays English.
  */
-export function formatRelativeTime(dateString: string | null | undefined): string {
-    if (!dateString) return '';
-    const date = new Date(dateString);
-    if (isNaN(date.getTime())) return '';
+export type PulseAge =
+    | { unit: 'now' }
+    | { unit: 'minutes' | 'hours' | 'days'; n: number }
+    | { unit: 'date'; date: Date };
 
-    const now = Date.now();
-    const diffMs = now - date.getTime();
+export function pulseAge(dateString: string | null | undefined): PulseAge | null {
+    if (!dateString) return null;
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return null;
+
+    const diffMs = Date.now() - date.getTime();
 
     // Future timestamp protection
-    if (diffMs < 0) return 'Just now';
+    if (diffMs < 0) return { unit: 'now' };
 
     const diffSec = Math.floor(diffMs / 1000);
     const diffMin = Math.floor(diffSec / 60);
     const diffHour = Math.floor(diffMin / 60);
     const diffDay = Math.floor(diffHour / 24);
 
-    if (diffSec < 60) return 'Just now';
-    if (diffMin < 60) return `${diffMin}m ago`;
-    if (diffHour < 24) return `${diffHour}h ago`;
-    if (diffDay < 7) return `${diffDay}d ago`;
+    if (diffSec < 60) return { unit: 'now' };
+    if (diffMin < 60) return { unit: 'minutes', n: diffMin };
+    if (diffHour < 24) return { unit: 'hours', n: diffHour };
+    if (diffDay < 7) return { unit: 'days', n: diffDay };
+    return { unit: 'date', date };
+}
 
-    // Format as "MMM D" e.g. "Aug 24"
-    return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+/**
+ * Format an ISO publishedAt timestamp into a human-readable relative string, in English.
+ *
+ * e.g. "Just now", "25m ago", "3h ago", "2d ago", "Aug 24"
+ */
+export function formatRelativeTime(dateString: string | null | undefined): string {
+    const age = pulseAge(dateString);
+    if (!age) return '';
+    switch (age.unit) {
+        case 'now': return 'Just now';
+        case 'minutes': return `${age.n}m ago`;
+        case 'hours': return `${age.n}h ago`;
+        case 'days': return `${age.n}d ago`;
+        // Format as "MMM D" e.g. "Aug 24"
+        case 'date': return age.date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    }
 }

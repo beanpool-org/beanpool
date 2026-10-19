@@ -125,7 +125,9 @@ export function ProposeDecisionModal({
         return membersMap.get(subject) || membersMap.get(subject.toLowerCase()) || null;
     }, [membersMap, subject]);
 
-    const targetName = selectedMember?.callsign || subject || t('Member');
+    // What the node records as the member's name stays as it always was; only the line shown is in the member's language.
+    const targetName = selectedMember?.callsign || subject || 'Member';
+    const shownName = selectedMember?.callsign || subject || t('Member');
     // The one removed is a project's leader or an enterprise's lead keeper (§3.1); until one is picked, both words.
     const pickedGroup = treasuries.find(tr => tr.publicKey === enterprisePubkey.trim());
     const lead = leadWords(pickedGroup ? (keeperWords(pickedGroup.lifecycle).lead === 'leader' ? 'leader' : 'lead keeper') : 'either');
@@ -138,7 +140,7 @@ export function ProposeDecisionModal({
         poolAmount,
         "Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.",
         "Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.",
-        { name: targetName },
+        { name: shownName },
     );
 
     const styles = useStyles(({ colors }) => StyleSheet.create({

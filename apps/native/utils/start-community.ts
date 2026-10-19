@@ -8,7 +8,7 @@
  * watching that place is told.
  */
 
-import { BEANPOOL_WEBSITE_URL } from '@beanpool/core';
+import { BEANPOOL_WEBSITE_URL, t, word } from '@beanpool/core';
 import type { NodeProfile } from './node-profile';
 
 /** The website's own section on running a community's node: only where the community's node names no page of its own. */
@@ -22,26 +22,25 @@ export function runANodeUrl(profile: Pick<NodeProfile, 'startCommunityUrl'> | nu
     return profile?.startCommunityUrl ?? RUN_A_NODE_URL;
 }
 
-/** The link's words, naming the site it opens. */
+/** The link's words, naming the site it opens, in the member's language. */
 export function runANodeLabel(url: string): string {
-    if (url === RUN_A_NODE_URL) return START_COMMUNITY_COPY.website;
-    try { return `How to run a node, on ${new URL(url).hostname}`; } catch { return 'How to run a node'; }
+    if (url === RUN_A_NODE_URL) return t(START_COMMUNITY_COPY.website);
+    try { return t('How to run a node, on {host}', { host: new URL(url).hostname }); } catch { return t('How to run a node'); }
 }
 
+/** The screen's words: word() keys, shown through t() where they are drawn (app/start-community.tsx). */
 export const START_COMMUNITY_COPY = {
-    title: 'Start a community',
-    intro: "Every community runs on its own node: a small server that holds that community's members, posts and trades. "
-        + "Someone local runs it. If your town or valley doesn't have one yet, it could be you.",
+    title: word('Start a community'),
+    intro: word("Every community runs on its own node: a small server that holds that community's members, posts and trades. Someone local runs it. If your town or valley doesn't have one yet, it could be you."),
     ways: [
-        { icon: '💻', title: 'A spare computer', body: 'An old laptop, a Mini PC, a NAS or a Raspberry Pi at home runs a node. It stays on, and it needs the internet.' },
-        { icon: '☁️', title: 'A small rented server', body: 'A small virtual server from a hosting company, for a few dollars a month. Nobody needs to keep a machine at home.' },
-        { icon: '🤝', title: 'Ask for help', body: 'Post a Need here on BeanPool worldwide, such as "Someone to help run a community in my town". Someone near you may already know how.' },
+        { icon: '💻', title: word('A spare computer'), body: word('An old laptop, a Mini PC, a NAS or a Raspberry Pi at home runs a node. It stays on, and it needs the internet.') },
+        { icon: '☁️', title: word('A small rented server'), body: word('A small virtual server from a hosting company, for a few dollars a month. Nobody needs to keep a machine at home.') },
+        { icon: '🤝', title: word('Ask for help'), body: word('Post a Need here on BeanPool worldwide, such as "Someone to help run a community in my town". Someone near you may already know how.') },
     ],
-    after: "Once your node is running, you name your community in its settings app, invite the first members, and they invite the rest. "
-        + 'Turn on "publish location" there, and people near you who asked to be told will hear about it.',
-    website: 'How to run a node, on beanpool.org',
-    copyButton: "Copy my community's details",
-    copied: "Copied. Paste them into your node's settings app.",
+    after: word('Once your node is running, you name your community in its settings app, invite the first members, and they invite the rest. Turn on "publish location" there, and people near you who asked to be told will hear about it.'),
+    website: word('How to run a node, on beanpool.org'),
+    copyButton: word("Copy my community's details"),
+    copied: word("Copied. Paste them into your node's settings app."),
 } as const;
 
 export interface CommunityDetails {

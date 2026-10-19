@@ -4,13 +4,16 @@
  *
  * Text is rendered as plain React text (bold is the only style): a copy fetched from beanpool.org can never inject
  * markup. Views: the sheet (with search), one section of the manual, one page. Back walks back through them.
+ *
+ * The screen's own words are in the member's language (the phone's app/beanpool.tsx keys); the guide's pages are the
+ * guide's, in English until the guide carries other languages (design §4, slice S5).
  */
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
     FEEDBACK_LIVE, BEANPOOL_WEBSITE_URL, GUIDE_SLUGS,
     beanPoolSheetEntries, findGuidePage, findGuideSection, findGuideVideo, manualSections, relatedPages,
-    searchGuide, sectionPages, splitBold,
+    searchGuide, sectionPages, splitBold, t, tn,
     type GuidePage,
 } from '@beanpool/core';
 import { useGuide, useLearnVideos } from '../lib/guide';
@@ -84,7 +87,7 @@ export function MemberGuide({ onBack, onSuggest, feedbackLive = FEEDBACK_LIVE, i
     const header = (
         <div className="flex items-center mb-4">
             <button type="button" onClick={back} className="min-h-[48px] min-w-[48px] px-2 text-nature-600 dark:text-nature-400 font-semibold text-sm cursor-pointer border-none bg-transparent hover:text-nature-900 dark:hover:text-white rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
-                ← Back
+                {t('← Back')}
             </button>
             <h2 className="flex-1 text-center text-xl font-bold text-nature-950 dark:text-white tracking-tight m-0">BeanPool</h2>
             <div className="w-12" />
@@ -97,7 +100,7 @@ export function MemberGuide({ onBack, onSuggest, feedbackLive = FEEDBACK_LIVE, i
     } else if (view.kind === 'section') {
         const section = findGuideSection(guide, view.id);
         body = !section ? (
-            <p className="text-center text-nature-700 dark:text-nature-300 mt-8">This part of the guide is not available. Go back and pick another one.</p>
+            <p className="text-center text-nature-700 dark:text-nature-300 mt-8">{t('This part of the guide is not available. Go back and pick another one.')}</p>
         ) : (
             <>
                 <h1 className="text-2xl font-extrabold text-nature-950 dark:text-white m-0">{section.title}</h1>
@@ -119,8 +122,8 @@ export function MemberGuide({ onBack, onSuggest, feedbackLive = FEEDBACK_LIVE, i
                         type="search"
                         value={query}
                         onChange={e => setQuery(e.target.value)}
-                        placeholder="Search the guide"
-                        aria-label="Search the guide"
+                        placeholder={t('Search the guide')}
+                        aria-label={t('Search the guide')}
                         className="flex-1 min-w-0 min-h-[46px] bg-transparent border-none outline-none text-base text-nature-900 dark:text-white placeholder:text-nature-400"
                     />
                 </label>
@@ -128,47 +131,47 @@ export function MemberGuide({ onBack, onSuggest, feedbackLive = FEEDBACK_LIVE, i
                 {searching ? (
                     <>
                         <div className={label} aria-live="polite">
-                            {results.length === 0 ? 'Nothing found' : `${results.length} ${results.length === 1 ? 'page' : 'pages'}`}
+                            {results.length === 0 ? t('Nothing found') : tn(results.length, '{n} page', '{n} pages')}
                         </div>
                         <div className={card}>
                             {results.length === 0
-                                ? <p className="p-4 m-0 text-nature-700 dark:text-nature-300">No page has all of those words. Try one word, like "gift" or "vote".</p>
+                                ? <p className="p-4 m-0 text-nature-700 dark:text-nature-300">{t('No page has all of those words. Try one word, like "gift" or "vote".')}</p>
                                 : results.map(r => <Row key={r.page.slug} title={r.page.title} sub={r.snippet} onClick={() => openPage(r.page.slug)} />)}
                         </div>
                     </>
                 ) : (
                     <>
-                        <div className={label}>Your community</div>
+                        <div className={label}>{t('Your community')}</div>
                         <div className={card}>
                             <div className="min-h-[56px] px-4 py-3 flex items-center gap-3">
                                 <span className="text-xl shrink-0" aria-hidden="true">🏡</span>
                                 <span className="flex-1 min-w-0">
-                                    <span className="block text-[15px] font-bold text-nature-900 dark:text-white break-all">{globalThis.location?.host || 'This community'}</span>
+                                    <span className="block text-[15px] font-bold text-nature-900 dark:text-white break-all">{globalThis.location?.host || t('This community')}</span>
                                     <span className="flex items-center gap-1.5 text-xs text-nature-500 dark:text-nature-400 mt-0.5">
                                         <span aria-hidden="true" className={`inline-block w-2.5 h-2.5 rounded-full ${status === 'online' ? 'bg-emerald-500' : status === 'offline' ? 'bg-red-500' : 'bg-nature-400'}`} />
-                                        {status === 'online' ? 'Connected' : status === 'offline' ? "Can't reach it right now" : 'Checking the connection…'}
+                                        {status === 'online' ? t('Connected') : status === 'offline' ? t("Can't reach it right now") : t('Checking the connection…')}
                                     </span>
                                 </span>
                             </div>
                         </div>
 
-                        <div className={label}>Guides</div>
+                        <div className={label}>{t('Guides')}</div>
                         <div className={card}>
                             {about.map((p, i) => <Row key={p.slug} icon={['📖', '⚖️', '❓'][i]} title={p.title} sub={p.summary} onClick={() => openPage(p.slug)} />)}
                         </div>
 
-                        <div className={label}>How to use the app</div>
+                        <div className={label}>{t('How to use the app')}</div>
                         <div className={card}>
                             {manualSections(guide).map(s => (
                                 <Row key={s.id} icon={SECTION_ICONS[s.id] ?? '📄'} title={s.title} sub={s.summary} onClick={() => go({ kind: 'section', id: s.id })} />
                             ))}
                         </div>
 
-                        <div className={label}>The BeanPool project</div>
+                        <div className={label}>{t('The BeanPool project')}</div>
                         <div className={card}>
                             {beanPoolSheetEntries(feedbackLive).map(entry => {
                                 if (entry === 'suggest') {
-                                    return onSuggest ? <Row key={entry} icon="💬" title="Suggest a change" sub="Ideas and problems go to the BeanPool project team" onClick={onSuggest} /> : null;
+                                    return onSuggest ? <Row key={entry} icon="💬" title={t('Suggest a change')} sub={t('Ideas and problems go to the BeanPool project team')} onClick={onSuggest} /> : null;
                                 }
                                 if (entry === 'whats-new') {
                                     return whatsNew ? <Row key={entry} icon="🆕" title={whatsNew.title} sub={whatsNew.summary} onClick={() => openPage(whatsNew.slug)} /> : null;
@@ -178,7 +181,7 @@ export function MemberGuide({ onBack, onSuggest, feedbackLive = FEEDBACK_LIVE, i
                                         <span className="text-xl shrink-0" aria-hidden="true">🌐</span>
                                         <span className="flex-1 min-w-0">
                                             <span className="block text-[15px] font-bold">beanpool.org</span>
-                                            <span className="block text-xs font-normal text-nature-500 dark:text-nature-300 mt-0.5">The public website, to share with friends</span>
+                                            <span className="block text-xs font-normal text-nature-500 dark:text-nature-300 mt-0.5">{t('The public website, to share with friends')}</span>
                                         </span>
                                         <span className="text-nature-400 dark:text-nature-300 shrink-0" aria-hidden="true">↗</span>
                                     </a>
@@ -187,8 +190,10 @@ export function MemberGuide({ onBack, onSuggest, feedbackLive = FEEDBACK_LIVE, i
                         </div>
 
                         <p className="text-center text-xs text-nature-400 dark:text-nature-400 mt-6">
-                            Guide version {guide.version}{source === 'bundled' ? ' · built into the app' : ' · updated from beanpool.org'}
-                            <br />Works without a connection.
+                            {source === 'bundled'
+                                ? t('Guide version {version} · built into the app', { version: guide.version })
+                                : t('Guide version {version} · updated from beanpool.org', { version: guide.version })}
+                            <br /><>{t('Works without a connection.')}</>
                         </p>
                     </>
                 )}
@@ -210,7 +215,7 @@ function GuidePageView({ slug, openPage, openSection }: { slug: string; openPage
     const { guide } = useGuide();
     const videos = useLearnVideos();
     const page = findGuidePage(guide, slug);
-    if (!page) return <p className="text-center text-nature-700 dark:text-nature-300 mt-8">This guide is not available. Go back and pick another one.</p>;
+    if (!page) return <p className="text-center text-nature-700 dark:text-nature-300 mt-8">{t('This guide is not available. Go back and pick another one.')}</p>;
     const section = findGuideSection(guide, page.section);
     const video = findGuideVideo(page, videos);
     const related = relatedPages(guide, page);
@@ -226,7 +231,7 @@ function GuidePageView({ slug, openPage, openSection }: { slug: string; openPage
             {video && (
                 <a href={video.url} target="_blank" rel="noopener noreferrer" className="mt-3 flex items-center gap-2 min-h-[48px] px-4 py-2 rounded-2xl border border-nature-300 dark:border-nature-700 bg-white dark:bg-nature-900 font-semibold text-nature-900 dark:text-white no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
                     <span aria-hidden="true">▶️</span>
-                    <span className="flex-1 min-w-0 break-words">Watch: {video.title}</span>
+                    <span className="flex-1 min-w-0 break-words">{t('Watch: {title}', { title: video.title })}</span>
                 </a>
             )}
             {page.blocks.map((b, i) => {
@@ -241,7 +246,7 @@ function GuidePageView({ slug, openPage, openSection }: { slug: string; openPage
             })}
             {related.length > 0 && (
                 <>
-                    <h2 className={label + ' mt-8'}>Related</h2>
+                    <h2 className={label + ' mt-8'}>{t('Related')}</h2>
                     <div className={card}>
                         {related.map(r => <Row key={r.slug} title={r.title} sub={r.summary} onClick={() => openPage(r.slug)} />)}
                     </div>

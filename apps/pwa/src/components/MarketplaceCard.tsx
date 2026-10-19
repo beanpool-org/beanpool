@@ -11,8 +11,38 @@
 
 import { MARKETPLACE_CATEGORIES_BY_ID, POST_TYPE_COLORS, formatNodeName, type MarketplacePost } from '../lib/marketplace';
 import { PostAuthorTrust, isElder } from './PostAuthorTrust';
-import { listPhotoUrl } from '@beanpool/core';
-import { formatDistance } from '../lib/events';
+import { formatNumber, listPhotoUrl, t } from '@beanpool/core';
+import { Sentence } from './Sentence';
+
+/** A listing's type on its badge (the badge's `uppercase` class puts it in capitals); a type this build doesn't know, as written. */
+function typeWords(type: string): string {
+    return type === 'offer' ? t('offer', undefined, 'post type') : type === 'need' ? t('need', undefined, 'post type') : String(type ?? '');
+}
+
+/** The unit after a price ("/hr"), as the web card always wrote it; nothing for a fixed price. */
+function priceUnit(priceType: string | undefined): string {
+    if (priceType === 'hourly') return t('/hr', undefined, 'price per hour');
+    if (priceType === 'daily') return t('/day', undefined, 'price per day');
+    if (priceType === 'weekly') return t('/wk', undefined, 'price per week');
+    if (priceType === 'monthly') return t('/mo', undefined, 'price per month');
+    return '';
+}
+
+/** The price on a card: the language's decimal mark, English as before; "?" when the listing has none. */
+function priceAmount(credits: number | null | undefined): string {
+    if (credits === undefined) return '?';
+    return typeof credits === 'number' ? formatNumber(credits) : String(credits ?? '');
+}
+
+/**
+ * "2.4 km" / "800 m", in the member's language, with the phone's words (utils/events.ts formatDistance): the same
+ * numbers lib/events.ts formatDistance writes, which is still English for the screens that share it.
+ */
+function distanceWords(km: number): string {
+    if (km < 1) return t('{distance} m', { distance: Math.max(10, Math.round((km * 1000) / 10) * 10) });
+    if (km < 10) return t('{distance} km', { distance: formatNumber(km, 1) });
+    return t('{distance} km', { distance: Math.round(km) });
+}
 
 interface Props {
     post: MarketplacePost;
@@ -55,7 +85,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
     const distanceTag = typeof distanceKm === 'number' && Number.isFinite(distanceKm) ? (
         <span data-testid="card-distance" className="text-[10px] font-black text-nature-500 dark:text-nature-400 inline-flex items-center gap-1 shrink-0">
             <span aria-hidden="true">📍</span>
-            <span>{formatDistance(distanceKm)}</span>
+            <span>{distanceWords(distanceKm)}</span>
         </span>
     ) : null;
 
@@ -63,19 +93,21 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
     // distinguishable in "My Posts" from live listings.
     const isPaused = post.status === 'paused';
     const pausedPill = isPaused ? (
-        <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-bp-chip-warn-tint text-bp-chip-warn-ink border border-transparent">⏸ Paused</span>
+        <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-bp-chip-warn-tint text-bp-chip-warn-ink border border-transparent">{t('⏸ Paused')}</span>
     ) : null;
     const youPill = isOwnPost ? (
-        <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300 border border-blue-300/50">👤 You</span>
+        <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300 border border-blue-300/50">{t('👤 You')}</span>
     ) : null;
     const pulsePill = isPulse ? (
-        <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-bp-chip-warn-tint text-bp-chip-warn-ink border border-transparent shadow-sm">🗞️ Daily Pulse</span>
+        <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-bp-chip-warn-tint text-bp-chip-warn-ink border border-transparent shadow-sm">{t('🗞️ Daily Pulse')}</span>
     ) : null;
 
     const elderCard = !beansMarked && isElder(authorEnergy);
     const isGroupScope = post.audienceScope === 'group' || !!post.targetGroupId;
-    const targetGroupName = post.targetGroupName || 'Group';
-    const groupScopeBadge = isGroupScope ? `🔒 Only ${targetGroupName} can see this` : null;
+    // The group's name is its members' own, shown as written inside the sentence.
+    const targetGroupName = post.targetGroupName || t('Group');
+    const groupScopeBadge = isGroupScope ? t('🔒 Only {group} can see this', { group: targetGroupName }) : null;
+    const authorName = post.authorCallsign || t('Anonymous');
     const elderStyleGrid = isPulse
         ? 'border-2 border-amber-400/80 dark:border-amber-500/70 shadow-[0_4px_20px_rgba(245,158,11,0.18)] bg-gradient-to-b from-amber-50/30 to-transparent dark:from-amber-950/20'
         : elderCard ? 'border-l-4 border-l-amber-400 shadow-[0_4px_15px_rgba(251,191,36,0.15)]' : '';
@@ -95,19 +127,26 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                     
                     {/* Title and Author */}
                     <div className="flex-1 min-w-0">
-                        <h3 className="font-extrabold text-sm text-nature-950 dark:text-white truncate">
+                        <h3 dir="auto" className="font-extrabold text-sm text-nature-950 dark:text-white truncate">
                             {post.title}
                         </h3>
-                        <span className="text-[10px] text-nature-500 truncate flex items-center gap-1 flex-wrap">
-                            by {post.authorCallsign || 'Anonymous'} {elderCard && '⛰️'} {isOwnPost && <span className="text-blue-600 dark:text-blue-400 font-bold">👤 (You)</span>}
+                        <span className="text-[10px] text-nature-500 flex items-center gap-1 flex-wrap min-w-0 break-words">
+                            {/* One sentence per variant, as the phone's byLine: the name is the member's, the Elder mark
+                                and the blue "(You)" are parts of it wherever the language puts them. */}
+                            {isOwnPost ? (
+                                <Sentence
+                                    text={elderCard ? t('by {name} ⛰️ {you}', { name: authorName }) : t('by {name} {you}', { name: authorName })}
+                                    parts={{ you: <span className="text-blue-600 dark:text-blue-400 font-bold">{t('👤 (You)')}</span> }}
+                                />
+                            ) : elderCard ? t('by {name} ⛰️', { name: authorName }) : t('by {name}', { name: authorName })}
                             {distanceTag}
                             {foundingChip && (
-                                <span className="text-[8px] font-black tracking-wider px-1.5 py-0.5 rounded bg-bp-chip-ok-tint text-bp-chip-ok-ink border border-transparent shrink-0">
-                                    🌱 FOUNDING
+                                <span className="text-[8px] font-black tracking-wider px-1.5 py-0.5 rounded bg-bp-chip-ok-tint text-bp-chip-ok-ink border border-transparent min-w-0 max-w-full whitespace-normal break-words">
+                                    {t('🌱 FOUNDING')}
                                 </span>
                             )}
                             {groupScopeBadge && (
-                                <span className="text-[8px] font-black tracking-wider px-1.5 py-0.5 rounded bg-bp-chip-ok-tint text-bp-chip-ok-ink border border-transparent shrink-0">
+                                <span className="text-[8px] font-black tracking-wider px-1.5 py-0.5 rounded bg-bp-chip-ok-tint text-bp-chip-ok-ink border border-transparent min-w-0 max-w-full whitespace-normal break-words">
                                     {groupScopeBadge}
                                 </span>
                             )}
@@ -115,14 +154,16 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                     </div>
                 </div>
 
-                <div className="flex items-center gap-2 ml-3 flex-shrink-0">
+                {/* The price and the type pill: side by side while there is room; on a narrow screen (320 px, 1.3x text) or
+                    in a longer language the pill drops under the price, so the title keeps its width. */}
+                <div className="flex flex-wrap items-center justify-end gap-x-2 gap-y-1 ml-3 max-w-[45%]">
                     {/* Compact Price */}
                     {showPrice && (
                         <span className="font-black text-sm text-nature-950 dark:text-white flex items-center">
-                            {post.credits !== undefined ? post.credits : '?'}
-                            <img src="/assets/bean.png" className="mx-0.5" style={{ width: '12px', height: '12px', flexShrink: 0 }} alt="B" />
+                            {priceAmount(post.credits)}
+                            <img src="/assets/bean.png" className="mx-0.5" style={{ width: '12px', height: '12px', flexShrink: 0 }} alt={t('B', undefined, 'the Beans sign')} />
                             <span className="text-[9px] text-nature-500 font-normal">
-                                {{ fixed: '', hourly: '/hr', daily: '/day', weekly: '/wk', monthly: '/mo' }[post.priceType] || ''}
+                                {priceUnit(post.priceType)}
                             </span>
                         </span>
                     )}
@@ -130,14 +171,14 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                     {/* Daily Pulse or Needs/Offers pill */}
                     {isPulse ? (
                         <span className="text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-bp-chip-warn-tint text-bp-chip-warn-ink border border-transparent shadow-sm">
-                            PULSE
+                            {t('PULSE')}
                         </span>
                     ) : (
                         <span className={`text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded ${
                             post.type === 'offer' ? 'bg-bp-chip-ok-tint text-bp-chip-ok-ink'
                             : 'bg-bp-chip-need-tint text-bp-chip-need-ink'
                         }`}>
-                            {post.type}
+                            {typeWords(post.type)}
                         </span>
                     )}
                 </div>
@@ -169,7 +210,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                                     onPhotoClick(post.photos!, 0, e as any);
                                 }
                             }}
-                            aria-label={`View enlarged photo: ${post.title}`}
+                            aria-label={t('View enlarged photo: {title}', { title: post.title })}
                             className={`w-full h-full block rounded-xl overflow-hidden ${
                                 onPhotoClick ? 'cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500' : ''
                             }`}
@@ -193,7 +234,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                                     post.type === 'offer' ? 'bg-bp-chip-ok-tint text-bp-chip-ok-ink'
                                     : 'bg-bp-chip-need-tint text-bp-chip-need-ink'
                                 }`}>
-                                    {post.type}
+                                    {typeWords(post.type)}
                                 </span>
                             )}
                             {pulsePill}
@@ -202,13 +243,13 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                             {categoryConfig && (
                                 <span className="text-[10px] font-black text-nature-500 dark:text-nature-400 flex items-center gap-1">
                                     <span>{categoryConfig.emoji}</span>
-                                    <span>{categoryConfig.label}</span>
+                                    <span>{t(categoryConfig.label)}</span>
                                 </span>
                             )}
                             {distanceTag}
                             {post.repeatable && (
                                 <span className={`text-[9px] font-black tracking-wider px-2 py-0.5 rounded-md bg-bp-chip-warn-tint text-bp-chip-warn-ink`}>
-                                    ↻ RECURRING
+                                    {t('↻ RECURRING')}
                                 </span>
                             )}
                             {/* #108: on the card, not just the detail view — the point of the flag is
@@ -216,14 +257,14 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                             {post.cashAlsoNeeded && (
                                 <span
                                     className="text-[9px] font-black tracking-wider px-2 py-0.5 rounded-md bg-bp-chip-need-tint text-bp-chip-need-ink"
-                                    title="Cash also needed for fuel or materials — agreed in chat"
+                                    title={t('Cash also needed for fuel or materials — agreed in chat')}
                                 >
-                                    💸 CASH TOO
+                                    {t('💸 CASH TOO')}
                                 </span>
                             )}
                             {foundingChip && (
                                 <span className="text-[9px] font-black tracking-wider px-2 py-0.5 rounded-md bg-bp-chip-ok-tint text-bp-chip-ok-ink border border-transparent">
-                                    🌱 FOUNDING TRADE
+                                    {t('🌱 FOUNDING TRADE')}
                                 </span>
                             )}
                             {groupScopeBadge && (
@@ -237,22 +278,22 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                         {showPrice && (
                             <div className="flex items-center">
                                 <span className="font-bold text-base text-nature-950 dark:text-white" style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', flexWrap: 'nowrap' }}>
-                                    {post.credits !== undefined ? post.credits : '?'}
-                                    <img src="/assets/bean.png" className="mx-0.5" style={{ width: '14px', height: '14px', flexShrink: 0 }} alt="B" />
+                                    {priceAmount(post.credits)}
+                                    <img src="/assets/bean.png" className="mx-0.5" style={{ width: '14px', height: '14px', flexShrink: 0 }} alt={t('B', undefined, 'the Beans sign')} />
                                     <span className="text-[10px] text-nature-500 dark:text-nature-400 ml-0.5">
-                                        {{ fixed: '', hourly: '/hr', daily: '/day', weekly: '/wk', monthly: '/mo' }[post.priceType] || ''}
+                                        {priceUnit(post.priceType)}
                                     </span>
                                 </span>
                             </div>
                         )}
                     </div>
 
-                    <h3 className="font-bold text-md text-nature-950 dark:text-white truncate mb-1">
+                    <h3 dir="auto" className="font-bold text-md text-nature-950 dark:text-white truncate mb-1">
                         {post.title}
                     </h3>
 
                     <PostAuthorTrust
-                        callsign={post.authorCallsign || 'Anonymous'}
+                        callsign={authorName}
                         energyCycled={authorEnergy}
                         rating={authorRating}
                         avatarUrl={authorAvatarUrl}
@@ -287,7 +328,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
             <div className={`flex justify-between items-start mb-2`}>
                 <div className={`flex flex-col overflow-hidden`}>
                     <PostAuthorTrust
-                        callsign={post.authorCallsign || 'Anonymous'}
+                        callsign={authorName}
                         energyCycled={authorEnergy}
                         rating={authorRating}
                         avatarUrl={authorAvatarUrl}
@@ -297,7 +338,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                         className="mb-1"
                         onOpenProfile={onOpenProfile}
                     />
-                    <span className={`font-bold text-nature-950 dark:text-white truncate text-xs mt-0.5`}>
+                    <span dir="auto" className={`font-bold text-nature-950 dark:text-white truncate text-xs mt-0.5`}>
                         {post.title}
                     </span>
                     {distanceTag && <div className="mt-0.5">{distanceTag}</div>}
@@ -306,7 +347,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                     {pausedPill && <div className="mt-1">{pausedPill}</div>}
                     {groupScopeBadge && (
                         <div className="mt-1">
-                            <span className="text-[9px] font-black tracking-wider px-1.5 py-0.5 rounded bg-bp-chip-ok-tint text-bp-chip-ok-ink border border-transparent block truncate">
+                            <span className="text-[9px] font-black tracking-wider px-1.5 py-0.5 rounded bg-bp-chip-ok-tint text-bp-chip-ok-ink border border-transparent block break-words">
                                 {groupScopeBadge}
                             </span>
                         </div>
@@ -336,7 +377,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                                 onPhotoClick(post.photos!, 0, e as any);
                             }
                         }}
-                        aria-label={`View enlarged photo: ${post.title}`}
+                        aria-label={t('View enlarged photo: {title}', { title: post.title })}
                         className={`w-full h-full block rounded-xl overflow-hidden ${
                             onPhotoClick ? 'cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500' : ''
                         }`}
@@ -348,7 +389,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                     <div className={`absolute left-2 flex flex-col gap-1 items-start top-1.5`}>
                         {post.status === 'pending' && (
                             <span className={`font-bold bg-amber-400 text-amber-950 rounded-lg shadow-sm text-[0.6rem] px-1.5 py-0.5`}>
-                                ⏳ PENDING
+                                {t('⏳ PENDING')}
                             </span>
                         )}
                         {nodeBadge && (
@@ -358,7 +399,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                         )}
                         {foundingChip && (
                             <span className={`font-bold bg-bp-commit-fill text-bp-commit-on backdrop-blur-sm rounded-lg shadow-sm text-[0.6rem] px-1.5 py-0.5`}>
-                                🌱 FOUNDING TRADE
+                                {t('🌱 FOUNDING TRADE')}
                             </span>
                         )}
                     </div>
@@ -367,10 +408,10 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                     {showPrice && (
                         <div className={`absolute right-2 bg-nature-900/90 backdrop-blur-md text-white font-bold tracking-tight shadow-md bottom-2 px-2.5 py-1 rounded-lg text-sm`}>
                             <span style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', flexWrap: 'nowrap' }}>
-                                <span>{post.credits !== undefined ? post.credits : '?'}</span>
+                                <span>{priceAmount(post.credits)}</span>
                                 <span className="text-[10px] font-normal opacity-80 pl-0.5 flex items-center" style={{ flexShrink: 0 }}>
-                                    <img src="/assets/bean.png" style={{ width: '12px', height: '12px', marginLeft: '2px', marginRight: '2px', flexShrink: 0 }} alt="B" />
-                                    {{ fixed: '', hourly: '/hr', daily: '/day', weekly: '/wk', monthly: '/mo' }[post.priceType] || ''}
+                                    <img src="/assets/bean.png" style={{ width: '12px', height: '12px', marginLeft: '2px', marginRight: '2px', flexShrink: 0 }} alt={t('B', undefined, 'the Beans sign')} />
+                                    {priceUnit(post.priceType)}
                                 </span>
                             </span>
                         </div>
@@ -379,19 +420,19 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                     {/* Recurring Overlay */}
                     {post.repeatable && (
                         <div className={`absolute left-2 bg-bp-cta-fill backdrop-blur-md text-bp-cta-on font-bold tracking-tight shadow-md bottom-2 px-2 py-1 rounded-lg text-[10px]`}>
-                            ↻ RECURRING
+                            {t('↻ RECURRING')}
                         </div>
                     )}
                 </div>
             ) : (
                 <div className={`relative w-full rounded-xl bg-oat-50 dark:bg-nature-900 flex items-center justify-center shadow-inner h-[110px] mb-3`}>
                     <span className={`text-3xl opacity-20`}>{emoji}</span>
-                    
+
                     {/* Status Overlays */}
                     <div className={`absolute left-2 flex flex-col gap-1 items-start top-1.5`}>
                         {post.status === 'pending' && (
                             <span className={`font-bold bg-amber-400 text-amber-950 rounded-lg shadow-sm text-[0.6rem] px-1.5 py-0.5`}>
-                                ⏳ PENDING
+                                {t('⏳ PENDING')}
                             </span>
                         )}
                         {nodeBadge && (
@@ -401,7 +442,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                         )}
                         {foundingChip && (
                             <span className={`font-bold bg-bp-commit-fill text-bp-commit-on backdrop-blur-sm rounded-lg shadow-sm text-[0.6rem] px-1.5 py-0.5`}>
-                                🌱 FOUNDING TRADE
+                                {t('🌱 FOUNDING TRADE')}
                             </span>
                         )}
                     </div>
@@ -409,10 +450,10 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                     {showPrice && (
                         <div className={`absolute right-2 bg-nature-900/90 backdrop-blur-md text-white font-bold tracking-tight shadow-md bottom-2 px-2.5 py-1 rounded-lg text-sm`}>
                             <span style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', flexWrap: 'nowrap' }}>
-                                <span>{post.credits !== undefined ? post.credits : '?'}</span>
+                                <span>{priceAmount(post.credits)}</span>
                                 <span className="text-[10px] font-normal opacity-80 pl-0.5 flex items-center" style={{ flexShrink: 0 }}>
-                                    <img src="/assets/bean.png" style={{ width: '12px', height: '12px', marginLeft: '2px', marginRight: '2px', flexShrink: 0 }} alt="B" />
-                                    {{ fixed: '', hourly: '/hr', daily: '/day', weekly: '/wk', monthly: '/mo' }[post.priceType] || ''}
+                                    <img src="/assets/bean.png" style={{ width: '12px', height: '12px', marginLeft: '2px', marginRight: '2px', flexShrink: 0 }} alt={t('B', undefined, 'the Beans sign')} />
+                                    {priceUnit(post.priceType)}
                                 </span>
                             </span>
                         </div>
@@ -421,7 +462,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                     {/* Recurring Overlay */}
                     {post.repeatable && (
                         <div className={`absolute left-2 bg-bp-cta-fill backdrop-blur-md text-bp-cta-on font-bold tracking-tight shadow-md bottom-2 px-2 py-1 rounded-lg text-[10px]`}>
-                            ↻ RECURRING
+                            {t('↻ RECURRING')}
                         </div>
                     )}
                 </div>
@@ -430,8 +471,8 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
             {/* Body Text */}
             {/* `flex-1` here is what used to swallow the row's spare height. The line clamp already pins this to one
                 line; min-h keeps that line reserved even when the text is missing, so length never moves VIEW. */}
-            <p className={`text-nature-600 dark:text-nature-400 leading-relaxed px-1 text-[11px] line-clamp-1 min-h-[1.625em] mb-3`}>
-                {post.description || "No description provided."}
+            <p dir="auto" className={`text-nature-600 dark:text-nature-400 leading-relaxed px-1 text-[11px] line-clamp-1 min-h-[1.625em] mb-3`}>
+                {post.description || t('No description provided.')}
             </p>
 
             {/* Action Button */}
@@ -444,7 +485,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                         : 'bg-nature-700 text-white dark:bg-nature-800 hover:bg-nature-800'
                 }`}
             >
-                {isPulse ? 'DAILY PULSE' : 'VIEW'}
+                {isPulse ? t('DAILY PULSE') : t('VIEW')}
             </div>
         </div>
     );

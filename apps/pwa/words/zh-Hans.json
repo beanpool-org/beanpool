@@ -533,9 +533,5 @@
   "Post Need": "发布需求",
   "To Commons": "前往公共资金池",
   "Pause for season": "因季节暂停",
-  "Start wind-up": "开始清算结业",
-  "Ask to join as a {keeper}": "申请加入成为{keeper}",
-  "Help run this {kind}. You can back it with your earned trading standing to expand its credit floor.": "协助运营该{kind}。你可以使用通过交易建立的信誉为其担保，从而扩展其信用底线。",
-  "Join as {keeper}": "加入成为{keeper}",
-  "🏘️ In a local community its {keepers} and members talk it over here ›": "🏘️ 在本地社区中，其{keepers}与成员在此沟通商议 ›"
+  "Start wind-up": "开始清算结业"
 }

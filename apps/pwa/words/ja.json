@@ -533,9 +533,5 @@
   "Post Need": "求めを投稿",
   "To Commons": "コモンズへ",
   "Pause for season": "シーズン休止",
-  "Start wind-up": "解散手続きを開始",
-  "Ask to join as a {keeper}": "{keeper}として参加を申請",
-  "Help run this {kind}. You can back it with your earned trading standing to expand its credit floor.": "この{kind}の運営を手伝いましょう。これまでに獲得した取引実績で信用枠の下限を拡大して支援できます。",
-  "Join as {keeper}": "{keeper}として参加",
-  "🏘️ In a local community its {keepers} and members talk it over here ›": "🏘️ ローカルコミュニティでは、{keepers}とメンバーがここで話し合います ›"
+  "Start wind-up": "解散手続きを開始"
 }

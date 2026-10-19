@@ -543,9 +543,5 @@
   "Post Need": "Ανάρτηση ανάγκης",
   "To Commons": "Στα Κοινά",
   "Pause for season": "Παύση για τη σεζόν",
-  "Start wind-up": "Έναρξη εκκαθάρισης",
-  "Ask to join as a {keeper}": "Αίτηση συμμετοχής ως {keeper}",
-  "Help run this {kind}. You can back it with your earned trading standing to expand its credit floor.": "Βοηθήστε στη διαχείριση αυτού του {kind}. Μπορείτε να το υποστηρίξετε με το κερδισμένο κύρος σας για να επεκτείνετε το πιστωτικό όριο.",
-  "Join as {keeper}": "Συμμετοχή ως {keeper}",
-  "🏘️ In a local community its {keepers} and members talk it over here ›": "🏘️ Σε μια τοπική κοινότητα οι {keepers} και τα μέλη συζητούν εδώ ›"
+  "Start wind-up": "Έναρξη εκκαθάρισης"
 }

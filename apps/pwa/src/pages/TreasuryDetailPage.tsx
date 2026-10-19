@@ -2224,10 +2224,10 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                 <div>
                                     <div className="text-xs font-bold uppercase tracking-wider text-nature-500 dark:text-nature-400 flex items-center gap-1.5">
                                         <span>📊</span>
-                                        <span>Income & Spend (P&L)</span>
+                                        <span>{t('Income & Spend (P&L)')}</span>
                                     </div>
                                     <p className="text-xs text-nature-500 dark:text-nature-400 mt-0.5">
-                                        Transparent accounting · visible to every member
+                                        {t('Transparent accounting · visible to every member')}
                                     </p>
                                 </div>
                                 {/* Two by two below sm: at 320px with 1.3x text the four periods in one row ran into the card's
@@ -2244,7 +2244,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                     : 'text-nature-600 dark:text-nature-300 hover:text-nature-900 dark:hover:text-white'
                                             }`}
                                         >
-                                            {period === 'all' ? 'All time' : period === '30d' ? '30d' : period === '90d' ? '90d' : '1y'}
+                                            {t(LEDGER_PERIOD_WORDS[period])}
                                         </button>
                                     ))}
                                 </div>
@@ -2254,23 +2254,23 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                                 <div className="bg-emerald-50/70 dark:bg-emerald-950/30 rounded-xl p-3 border border-emerald-200/60 dark:border-emerald-800/40">
                                     <div className="text-[11px] font-bold uppercase tracking-wide text-emerald-800 dark:text-emerald-300">
-                                        Came in
+                                        {t('Came in')}
                                     </div>
                                     <div className="text-lg font-black text-emerald-700 dark:text-emerald-400 mt-1">
-                                        +{ledgerData?.summary?.totalIncome?.toFixed(2) ?? '0.00'} 🫘
+                                        +{formatNumber(ledgerData?.summary?.totalIncome ?? 0, 2)} 🫘
                                     </div>
                                 </div>
                                 <div className="bg-amber-50/70 dark:bg-amber-950/30 rounded-xl p-3 border border-amber-200/60 dark:border-amber-800/40">
                                     <div className="text-[11px] font-bold uppercase tracking-wide text-amber-800 dark:text-amber-300">
-                                        Went out
+                                        {t('Went out')}
                                     </div>
                                     <div className="text-lg font-black text-amber-700 dark:text-amber-400 mt-1">
-                                        {ledgerData?.summary?.totalSpend ? `-${ledgerData.summary.totalSpend.toFixed(2)}` : '0.00'} 🫘
+                                        {ledgerData?.summary?.totalSpend ? `-${formatNumber(ledgerData.summary.totalSpend, 2)}` : formatNumber(0, 2)} 🫘
                                     </div>
                                 </div>
                                 <div className="col-span-2 sm:col-span-1 bg-nature-50 dark:bg-nature-800/50 rounded-xl p-3 border border-nature-200/60 dark:border-nature-700/50">
                                     <div className="text-[11px] font-bold uppercase tracking-wide text-nature-500 dark:text-nature-300">
-                                        Net change
+                                        {t('Net change')}
                                     </div>
                                     <div className={`text-lg font-black mt-1 ${
                                         (ledgerData?.summary?.netChange ?? 0) >= 0
@@ -2278,7 +2278,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                             : 'text-amber-600 dark:text-amber-400'
                                     }`}>
                                         {(ledgerData?.summary?.netChange ?? 0) >= 0 ? '+' : ''}
-                                        {ledgerData?.summary?.netChange?.toFixed(2) ?? '0.00'} 🫘
+                                        {formatNumber(ledgerData?.summary?.netChange ?? 0, 2)} 🫘
                                     </div>
                                 </div>
                             </div>
@@ -2286,18 +2286,18 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                 // The node counts "came in" before the community fee, while net change is what the
                                 // balance actually moved, so without this the three numbers do not add up.
                                 <p className="text-[11px] text-nature-500 dark:text-nature-400 -mt-1" data-testid="ledger-fee-note">
-                                    Came in is before fees: {ledgerFees.toFixed(2)} 🫘 in fees came off it.
+                                    {t('Came in is before fees: {amount} 🫘 in fees came off it.', { amount: formatNumber(ledgerFees, 2) })}
                                 </p>
                             )}
 
                             {/* Ledger Entries Table */}
                             {ledgerLoading ? (
                                 <div className="py-8 text-center text-xs text-nature-400 font-medium">
-                                    Loading ledger records…
+                                    {t('Loading ledger records…')}
                                 </div>
                             ) : ledgerError && !viewerIsMember ? (
                                 <div className="py-4 text-center text-xs text-nature-500 dark:text-nature-400 italic" data-testid="ledger-members-only">
-                                    The full income and spend record is visible to members.
+                                    {t('The full income and spend record is visible to members.')}
                                 </div>
                             ) : ledgerError ? (
                                 <div className="py-4 text-center text-xs text-red-500 dark:text-red-300 font-medium space-y-2">
@@ -2307,27 +2307,27 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                         onClick={() => loadLedger(ledgerPeriod)}
                                         className="text-xs font-bold underline text-red-600 dark:text-red-300"
                                     >
-                                        Try again
+                                        {t('Try again')}
                                     </button>
                                 </div>
                             ) : !ledgerData?.entries?.length ? (
                                 <div className="py-6 text-center text-xs text-nature-400 italic">
-                                    No transactions recorded for this period.
+                                    {t('No transactions recorded for this period.')}
                                 </div>
                             ) : (
                                 <div className="space-y-3">
                                     {/* Below sm each transaction is a stacked row (what for + amount, with + running
                                         balance, when): six columns needed 642px of a 272px card on a 320px phone. */}
-                                    <div className="sm:overflow-x-auto sm:-mx-5 sm:px-5" tabIndex={0} role="region" aria-label={`${kw.Kind} ledger transactions`}>
+                                    <div className="sm:overflow-x-auto sm:-mx-5 sm:px-5" tabIndex={0} role="region" aria-label={project ? t('Project ledger transactions') : t('Enterprise ledger transactions')}>
                                         <table className="block sm:table w-full text-left text-xs border-collapse sm:min-w-[500px]">
                                             <thead className="hidden sm:table-header-group">
                                                 <tr className="border-b border-nature-200 dark:border-nature-800 text-nature-500 dark:text-nature-400 font-bold uppercase text-[10px] tracking-wider">
-                                                    <th scope="col" className="py-2 pr-3">When</th>
-                                                    <th scope="col" className="py-2 px-3">What for</th>
-                                                    <th scope="col" className="py-2 px-3">With</th>
-                                                    <th scope="col" className="py-2 px-3 text-right">Came in</th>
-                                                    <th scope="col" className="py-2 px-3 text-right">Went out</th>
-                                                    <th scope="col" className="py-2 pl-3 text-right">Running balance</th>
+                                                    <th scope="col" className="py-2 pr-3">{t('When', undefined, 'ledger column')}</th>
+                                                    <th scope="col" className="py-2 px-3">{t('What for', undefined, 'ledger column')}</th>
+                                                    <th scope="col" className="py-2 px-3">{t('With', undefined, 'ledger column')}</th>
+                                                    <th scope="col" className="py-2 px-3 text-right">{t('Came in')}</th>
+                                                    <th scope="col" className="py-2 px-3 text-right">{t('Went out')}</th>
+                                                    <th scope="col" className="py-2 pl-3 text-right">{t('Running balance')}</th>
                                                 </tr>
                                             </thead>
                                             <tbody className="block sm:table-row-group divide-y divide-nature-100 dark:divide-nature-800">
@@ -2337,19 +2337,19 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                             {formatTimestamp(entry.timestamp)}
                                                         </td>
                                                         <td className="order-1 sm:order-none sm:py-2.5 sm:px-3 font-semibold text-nature-800 dark:text-nature-200 [overflow-wrap:anywhere] sm:max-w-[140px] sm:truncate" title={entry.memo}>
-                                                            {entry.memo || 'Transfer'}
+                                                            {entry.memo || t('Transfer')}
                                                         </td>
                                                         <td className="order-3 text-[11px] sm:text-xs sm:order-none sm:py-2.5 sm:px-3 text-nature-600 dark:text-nature-300 [overflow-wrap:anywhere] sm:max-w-[110px] sm:truncate" title={entry.counterpartyName}>
-                                                            {entry.counterpartyName || 'Member'}
+                                                            {entry.counterpartyName || t('Member')}
                                                         </td>
                                                         <td className={`${entry.direction === 'income' ? 'order-2' : 'hidden'} sm:order-none sm:table-cell sm:py-2.5 sm:px-3 text-right font-bold text-emerald-600 dark:text-emerald-400 whitespace-nowrap`}>
-                                                            {entry.direction === 'income' ? `+${entry.amount.toFixed(2)} 🫘` : <span className="text-nature-300 dark:text-nature-300 font-normal">—</span>}
+                                                            {entry.direction === 'income' ? `+${formatNumber(entry.amount, 2)} 🫘` : <span className="text-nature-300 dark:text-nature-300 font-normal">—</span>}
                                                         </td>
                                                         <td className={`${entry.direction === 'spend' ? 'order-2' : 'hidden'} sm:order-none sm:table-cell sm:py-2.5 sm:px-3 text-right font-bold text-amber-600 dark:text-amber-400 whitespace-nowrap`}>
-                                                            {entry.direction === 'spend' ? `-${entry.amount.toFixed(2)} 🫘` : <span className="text-nature-300 dark:text-nature-300 font-normal">—</span>}
+                                                            {entry.direction === 'spend' ? `-${formatNumber(entry.amount, 2)} 🫘` : <span className="text-nature-300 dark:text-nature-300 font-normal">—</span>}
                                                         </td>
                                                         <td className="order-4 text-[11px] sm:text-xs sm:order-none sm:py-2.5 sm:pl-3 text-right font-extrabold text-nature-900 dark:text-white whitespace-nowrap">
-                                                            <span className="sm:hidden font-semibold text-nature-500 dark:text-nature-300">bal </span>{entry.runningBalance.toFixed(2)} 🫘
+                                                            <span className="sm:hidden font-semibold text-nature-500 dark:text-nature-300">{t('bal', undefined, 'running balance, short')} </span>{formatNumber(entry.runningBalance, 2)} 🫘
                                                         </td>
                                                     </tr>
                                                 ))}
@@ -2357,8 +2357,8 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                         </table>
                                     </div>
                                     <div className="pt-2 border-t border-nature-100 dark:border-nature-800 flex flex-wrap items-center justify-between gap-x-3 text-[11px] text-nature-500 dark:text-nature-400">
-                                        <span>Starting balance: <strong className="text-nature-700 dark:text-nature-300">{ledgerData.summary.startingBalance.toFixed(2)} 🫘</strong></span>
-                                        <span>Ending balance: <strong className="text-nature-700 dark:text-nature-300">{ledgerData.summary.endingBalance.toFixed(2)} 🫘</strong></span>
+                                        <span><Sentence text={t('Starting balance: {amount}')} parts={{ amount: <strong className="text-nature-700 dark:text-nature-300">{formatNumber(ledgerData.summary.startingBalance, 2)} 🫘</strong> }} /></span>
+                                        <span><Sentence text={t('Ending balance: {amount}')} parts={{ amount: <strong className="text-nature-700 dark:text-nature-300">{formatNumber(ledgerData.summary.endingBalance, 2)} 🫘</strong> }} /></span>
                                     </div>
                                 </div>
                             )}
@@ -2367,10 +2367,10 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                         {/* Enterprise Listings */}
                         <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-5 shadow-sm space-y-3">
                             <div className="text-xs font-bold uppercase tracking-wider text-nature-500 dark:text-nature-400">
-                                {kw.Kind} Listings ({posts.length})
+                                {project ? t('Project Listings ({n})', { n: posts.length }) : t('Enterprise Listings ({n})', { n: posts.length })}
                             </div>
                             {posts.length === 0 ? (
-                                <p className="text-xs text-nature-400 italic py-2">No listings posted yet.</p>
+                                <p className="text-xs text-nature-400 italic py-2">{t('No listings posted yet.')}</p>
                             ) : (
                                 <div className="divide-y divide-nature-100 dark:divide-nature-800">
                                     {posts.map((post: any) => (
@@ -2386,24 +2386,25 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                             ? 'bg-bp-chip-ok-tint text-bp-chip-ok-ink'
                                                             : 'bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300'
                                                     }`}>
-                                                        {post.type}
+                                                        {/* Small letters, as the node names the kind; the badge's CSS writes them in capitals. */}
+                                                        {post.type === 'offer' ? t('offer', undefined, 'listing kind badge') : post.type === 'need' ? t('need', undefined, 'listing kind badge') : post.type}
                                                     </span>
                                                     {post.repeatable && (
-                                                        <span className="text-[10px] text-nature-400 font-semibold">🔄 recurring</span>
+                                                        <span className="text-[10px] text-nature-400 font-semibold">{t('🔄 recurring')}</span>
                                                     )}
                                                     {detail.paused && detail.status !== 'winding_up' && detail.status !== 'completed' && (
                                                         <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-bp-chip-warn-tint text-bp-chip-warn-ink">
-                                                            ⏸️ Paused
+                                                            {t('⏸️ Paused')}
                                                         </span>
                                                     )}
                                                     {detail.status === 'winding_up' && (
                                                         <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-bp-chip-danger-tint text-bp-chip-danger-ink">
-                                                            ⏳ Winding up
+                                                            {t('⏳ Winding up')}
                                                         </span>
                                                     )}
                                                     {detail.status === 'completed' && (
                                                         <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-stone-200 dark:bg-stone-800 text-stone-700 dark:text-stone-300">
-                                                            Closed
+                                                            {t('Closed', undefined, 'a listing')}
                                                         </span>
                                                     )}
                                                 </div>
@@ -2418,10 +2419,10 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                             </div>
                                             <div className="text-right shrink-0">
                                                 <div className="text-sm font-black text-emerald-600 dark:text-emerald-400">
-                                                    {post.credits} 🫘
+                                                    {formatNumber(post.credits)} 🫘
                                                 </div>
                                                 {post.price_type && post.price_type !== 'fixed' && (
-                                                    <div className="text-[10px] text-nature-400">/{post.price_type}</div>
+                                                    <div className="text-[10px] text-nature-400">{priceTypeWords(post.price_type)}</div>
                                                 )}
                                             </div>
                                         </div>
@@ -2433,10 +2434,10 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                         {/* Recent Activity Flow */}
                         <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-5 shadow-sm space-y-3">
                             <div className="text-xs font-bold uppercase tracking-wider text-nature-500 dark:text-nature-400">
-                                Recent Activity
+                                {t('Recent Activity')}
                             </div>
                             {flow.length === 0 ? (
-                                <p className="text-xs text-nature-400 italic py-2">No recent activity.</p>
+                                <p className="text-xs text-nature-400 italic py-2">{t('No recent activity.')}</p>
                             ) : (
                                 <div className="divide-y divide-nature-100 dark:divide-nature-800">
                                     {flow.map((tx: any, idx: number) => {
@@ -2445,14 +2446,14 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                             <div key={tx.id || `${tx.timestamp}-${idx}`} className="py-2.5 flex items-center justify-between gap-3 text-xs">
                                                 <div className="min-w-0 flex-1">
                                                     <div className="font-semibold text-nature-800 dark:text-nature-200 truncate">
-                                                        {tx.memo || 'Transfer'}
+                                                        {tx.memo || t('Transfer')}
                                                     </div>
                                                     <div className="text-[11px] text-nature-400 mt-0.5">
                                                         {formatTimestamp(tx.timestamp)}
                                                     </div>
                                                 </div>
                                                 <div className={`font-black text-sm shrink-0 ${isOut ? 'text-amber-500' : 'text-emerald-500 dark:text-emerald-400'}`}>
-                                                    {isOut ? '-' : '+'}{tx.amount} 🫘
+                                                    {isOut ? '-' : '+'}{formatNumber(Number(tx.amount))} 🫘
                                                 </div>
                                             </div>
                                         );
@@ -2467,43 +2468,51 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                 <div>
                                     <h3 className="text-xs font-bold uppercase tracking-wider text-nature-500 dark:text-nature-400 flex items-center gap-1.5 m-0">
                                         <span aria-hidden="true">💬</span>
-                                        <span>{kw.Kind} Discussion</span>
+                                        <span>{project ? t('Project Discussion') : t('Enterprise Discussion')}</span>
                                     </h3>
                                     <p className="text-xs text-nature-500 dark:text-nature-400 mt-0.5">
-                                        Public coordination for this {kw.kind}
+                                        {project ? t('Public coordination for this project') : t('Public coordination for this enterprise')}
                                     </p>
                                 </div>
                                 {threadReadOnly && (
                                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-stone-200 dark:bg-stone-800 text-stone-700 dark:text-stone-300">
-                                        Read-only (Wound up)
+                                        {t('Read-only (Wound up)')}
                                     </span>
                                 )}
                             </div>
 
                             {threadReadOnly && (
                                 <div className="bg-nature-50 dark:bg-nature-800/60 p-3 rounded-xl text-xs italic text-nature-600 dark:text-nature-300 text-center">
-                                    This {kw.kind} has wound up. Discussion is read-only for accountability.
+                                    {project
+                                        ? t('This project has wound up. Discussion is read-only for accountability.')
+                                        : t('This enterprise has wound up. Discussion is read-only for accountability.')}
                                 </div>
                             )}
 
                             {threadUnavailable && !viewerIsMember ? (
                                 <p className="text-xs text-nature-600 dark:text-nature-300 italic py-2" data-testid="thread-members-only">
-                                    The discussion is open to members.
+                                    {t('The discussion is open to members.')}
                                 </p>
                             ) : isEffectivePreview ? (
                                 // Example Valley's: no thread to start here, so no "Start the conversation!" (review N4).
                                 <div className="py-2" data-testid="thread-preview">
-                                    <LocalCommunityLine feature="enterprises" text={t('🏘️ In a local community its {keepers} and members talk it over here ›', { keepers: kw.keepers })} {...ways} />
+                                    <LocalCommunityLine
+                                        feature="enterprises"
+                                        text={project
+                                            ? t('🏘️ In a local community its collaborators and members talk it over here ›')
+                                            : t('🏘️ In a local community its keepers and members talk it over here ›')}
+                                        {...ways}
+                                    />
                                 </div>
                             ) : threadMessages.length === 0 ? (
                                 <p className="text-xs text-nature-600 dark:text-nature-300 italic py-2">
-                                    {viewerIsMember ? 'No messages yet. Start the conversation!' : 'No messages yet.'}
+                                    {viewerIsMember ? t('No messages yet. Start the conversation!') : t('No messages yet.')}
                                 </p>
                             ) : (
                                 <div className="divide-y divide-nature-100 dark:divide-nature-800">
                                     {threadMessages.map((m) => {
                                         const isRemoved = m.type === 'removed';
-                                        const authorName = m.authorCallsign || (m.authorPubkey ? m.authorPubkey.slice(0, 8) : 'Member');
+                                        const authorName = m.authorCallsign || (m.authorPubkey ? m.authorPubkey.slice(0, 8) : t('Member'));
                                         const textContent = decodeThreadText(m.ciphertext, m.type, m.metadata, project);
                                         return (
                                             <div key={m.id} className="py-3 flex items-start gap-3 text-xs">
@@ -2529,11 +2538,11 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                                 type="button"
                                                                 onClick={() => handleRemoveThreadMessage(m.id)}
                                                                 disabled={threadRemovingId === m.id}
-                                                                aria-label={`Remove message from ${authorName}`}
+                                                                aria-label={t('Remove message from {name}', { name: authorName })}
                                                                 className="py-1 px-2 -my-1 -mx-2 text-[11px] font-semibold text-rose-600 hover:text-rose-700 dark:text-rose-300 dark:hover:text-rose-300 hover:underline cursor-pointer bg-transparent border-none rounded disabled:opacity-50 disabled:cursor-not-allowed"
-                                                                title="Remove message"
+                                                                title={t('Remove message')}
                                                             >
-                                                                {threadRemovingId === m.id ? 'Removing...' : 'Remove'}
+                                                                {threadRemovingId === m.id ? t('Removing...') : t('Remove')}
                                                             </button>
                                                         )}
                                                     </div>
@@ -2549,7 +2558,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
 
                             {!threadReadOnly && !viewerIsMember && !threadUnavailable && !isEffectivePreview && (
                                 <p className="text-xs text-nature-500 dark:text-nature-400 italic" data-testid="thread-guest-note">
-                                    Join the community to post here.
+                                    {t('Join the community to post here.')}
                                 </p>
                             )}
 
@@ -2563,11 +2572,11 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                     <div className="flex gap-2">
                                         <input
                                             type="text"
-                                            aria-label={`Message the ${kw.kind}`}
+                                            aria-label={project ? t('Message the project') : t('Message the enterprise')}
                                             value={threadInput}
                                             onChange={(e) => setThreadInput(e.target.value)}
                                             disabled={threadPosting}
-                                            placeholder={`Message the ${kw.kind}...`}
+                                            placeholder={project ? t('Message the project...') : t('Message the enterprise...')}
                                             maxLength={2000}
                                             className="flex-1 px-3 py-2 text-xs rounded-xl border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
                                         />
@@ -2576,7 +2585,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                             disabled={!threadInput.trim() || threadPosting}
                                             className="px-4 py-2 text-xs font-bold rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on disabled:opacity-50 transition-colors shadow-xs cursor-pointer"
                                         >
-                                            {threadPosting ? 'Posting...' : 'Post'}
+                                            {threadPosting ? t('Posting...') : t('Post', undefined, 'button: publish')}
                                         </button>
                                     </div>
                                 </form>
@@ -2591,7 +2600,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                     onClick={() => setShowReportModal(true)}
                                     className="text-xs text-red-600 dark:text-red-400 font-semibold hover:underline flex items-center gap-1 bg-transparent border-none cursor-pointer"
                                 >
-                                    <span aria-hidden="true">🛡️</span> Report {kw.Kind}
+                                    <span aria-hidden="true">🛡️</span> {project ? t('Report Project') : t('Report Enterprise')}
                                 </button>
                             </div>
                         )}
@@ -2614,11 +2623,13 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                     >
                         <div className="flex justify-between items-center">
                             <h2 id="post-modal-title" className="text-lg font-black text-nature-900 dark:text-white">
-                                {postModalMode === 'offer' ? `Post ${kw.Kind} Offer` : `Post ${kw.Kind} Need`}
+                                {postModalMode === 'offer'
+                                    ? (project ? t('Post Project Offer') : t('Post Enterprise Offer'))
+                                    : (project ? t('Post Project Need') : t('Post Enterprise Need'))}
                             </h2>
                             <button
                                 type="button"
-                                aria-label="Close dialog"
+                                aria-label={t('Close dialog')}
                                 onClick={() => setPostModalMode(null)}
                                 className="text-nature-400 hover:text-nature-600 dark:hover:text-nature-200 text-lg font-bold min-w-[44px] min-h-[44px] flex items-center justify-center -mr-2"
                             >
@@ -2635,12 +2646,12 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                         <form onSubmit={handleCreatePost} className="space-y-4">
                             <div>
                                 <label className="block text-xs font-bold text-nature-600 dark:text-nature-400 uppercase tracking-wider mb-1">
-                                    Title
+                                    {t('Title')}
                                 </label>
                                 <input
                                     type="text"
                                     required
-                                    placeholder={postModalMode === 'offer' ? 'e.g. Dozen fresh eggs' : 'e.g. Tend the chicken coop'}
+                                    placeholder={postModalMode === 'offer' ? t('e.g. Dozen fresh eggs') : t('e.g. Tend the chicken coop')}
                                     value={postTitle}
                                     onChange={(e) => setPostTitle(e.target.value)}
                                     className="w-full bg-nature-50 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 rounded-xl px-3 py-2 text-sm text-nature-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
@@ -2650,7 +2661,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                             <div className="grid grid-cols-2 gap-3">
                                 <div>
                                     <label className="block text-xs font-bold text-nature-600 dark:text-nature-400 uppercase tracking-wider mb-1">
-                                        Category
+                                        {t('Category')}
                                     </label>
                                     <select
                                         value={postCategory}
@@ -2659,29 +2670,29 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                     >
                                         {MARKETPLACE_CATEGORIES.map((c) => (
                                             <option key={c.id} value={c.id}>
-                                                {c.emoji} {c.label}
+                                                {c.emoji} {categoryWords(c)}
                                             </option>
                                         ))}
                                     </select>
                                 </div>
                                 <div>
                                     <label className="block text-xs font-bold text-nature-600 dark:text-nature-400 uppercase tracking-wider mb-1">
-                                        Price Type
+                                        {t('Price Type')}
                                     </label>
                                     <select
                                         value={postPriceType}
                                         onChange={(e) => setPostPriceType(e.target.value)}
                                         className="w-full bg-nature-50 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 rounded-xl px-3 py-2 text-sm text-nature-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                                     >
-                                        <option value="fixed">Fixed Total</option>
-                                        <option value="hourly">Hourly (/hr)</option>
+                                        <option value="fixed">{t('Fixed Total')}</option>
+                                        <option value="hourly">{t('Hourly (/hr)')}</option>
                                     </select>
                                 </div>
                             </div>
 
                             <div>
                                 <label className="block text-xs font-bold text-nature-600 dark:text-nature-400 uppercase tracking-wider mb-1">
-                                    Credits (🫘 Beans)
+                                    {t('Credits (🫘 Beans)')}
                                 </label>
                                 {/* Text, not type="number": a number box reads "12,5" by the browser's language, not the member's (#2202). */}
                                 <input
@@ -2697,11 +2708,11 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
 
                             <div>
                                 <label className="block text-xs font-bold text-nature-600 dark:text-nature-400 uppercase tracking-wider mb-1">
-                                    Description (optional)
+                                    {t('Description (optional)')}
                                 </label>
                                 <textarea
                                     rows={3}
-                                    placeholder="Describe the offer or need..."
+                                    placeholder={t('Describe the offer or need...')}
                                     value={postDescription}
                                     onChange={(e) => setPostDescription(e.target.value)}
                                     className="w-full bg-nature-50 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 rounded-xl px-3 py-2 text-sm text-nature-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
@@ -2717,7 +2728,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                         className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 border-nature-300"
                                     />
                                     <span className="text-xs font-semibold text-nature-700 dark:text-nature-300">
-                                        Recurring listing (stays active after purchase)
+                                        {t('Recurring listing (stays active after purchase)')}
                                     </span>
                                 </label>
                             )}
@@ -2728,14 +2739,14 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                     onClick={() => setPostModalMode(null)}
                                     className="flex-1 py-2.5 rounded-xl border border-nature-300 dark:border-nature-700 text-nature-700 dark:text-nature-300 font-bold text-sm hover:bg-nature-50 dark:hover:bg-nature-800"
                                 >
-                                    Cancel
+                                    {t('Cancel')}
                                 </button>
                                 <button
                                     type="submit"
                                     disabled={posting}
                                     className="flex-1 py-2.5 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-bold text-sm disabled:opacity-50"
                                 >
-                                    {posting ? 'Posting…' : 'Publish Listing'}
+                                    {posting ? t('Posting…') : t('Publish Listing')}
                                 </button>
                             </div>
                         </form>

@@ -533,9 +533,5 @@
   "Post Need": "요청 등록",
   "To Commons": "공유 공간으로",
   "Pause for season": "시즌 일시 중지",
-  "Start wind-up": "정리 절차 시작",
-  "Ask to join as a {keeper}": "{keeper}(으)로 참여 신청하기",
-  "Help run this {kind}. You can back it with your earned trading standing to expand its credit floor.": "이 {kind}의 운영을 도와주세요. 거래를 통해 쌓은 신뢰도로 후원하여 신용 한도를 넓힐 수 있어요.",
-  "Join as {keeper}": "{keeper}(으)로 참여하기",
-  "🏘️ In a local community its {keepers} and members talk it over here ›": "🏘️ 로컬 커뮤니티에서는 {keepers}와(과) 멤버들이 여기서 이야기를 나눠요 ›"
+  "Start wind-up": "정리 절차 시작"
 }

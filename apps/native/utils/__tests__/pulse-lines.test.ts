@@ -1,7 +1,7 @@
 /**
  * components/pulse-lines.ts translates, where the Channels screen and the Pulse tab show them, the sentences
- * utils/pulse-oauth.ts and utils/pulse.ts write in English (those files keep a platform's token or sign a request, and
- * never reach the words layer). Each sentence it knows is held here to the source that writes it: every fixed sentence
+ * utils/pulse-oauth.ts, utils/pulse.ts and utils/node-url.ts write in English (those files keep a platform's token or
+ * sign a request, and never reach the words layer). Each sentence it knows is held here to the source that writes it: every fixed sentence
  * thrown in those files is found (the pseudo-locale brackets it), the ones with a name or a status in them are built by
  * the real connectRefusal or read from the source's own template, and in English each reads exactly as its source
  * writes it. What a node or a platform said is shown as it came.
@@ -19,6 +19,7 @@ vi.mock('../node-post', () => ({ anchorUrl: async () => null, signedPost: async 
 
 import { pseudoLocalise, setLanguage } from '@beanpool/core';
 import { connectRefusal } from '../pulse-oauth';
+import { UNSAFE_NODE_ADDRESS_MESSAGE } from '../node-url';
 import { pulseLineWords } from '../../components/pulse-lines';
 
 afterEach(() => setLanguage('en'));
@@ -72,6 +73,11 @@ describe('the Pulse lower layers\' English, in the member\'s language where it i
                 expect(inXx(() => pulseLineWords(sentence)), `${file}: ${sentence}`).toBe(pseudoLocalise(sentence));
             }
         }
+    });
+
+    it('utils/node-url.ts\'s refusal of an address the key will not sign for, from the real constant', () => {
+        expect(pulseLineWords(UNSAFE_NODE_ADDRESS_MESSAGE)).toBe(UNSAFE_NODE_ADDRESS_MESSAGE);
+        expect(inXx(() => pulseLineWords(UNSAFE_NODE_ADDRESS_MESSAGE))).toBe(pseudoLocalise(UNSAFE_NODE_ADDRESS_MESSAGE));
     });
 
     it('the sentences built from a template: each template is in its source; English as built; translated around the values', () => {

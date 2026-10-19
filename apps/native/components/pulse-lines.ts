@@ -2,8 +2,8 @@
  * The sentences the Channels screen and the Pulse tab show that their lower layers write in English, shown in the
  * member's language.
  *
- * utils/pulse-oauth.ts (keeps a platform's token on this phone, signs the connect) and utils/pulse.ts (signs a hide or a
- * report) never reach the words layer. The screens translate those files' sentences here, by the exact English (the
+ * utils/pulse-oauth.ts (keeps a platform's token on this phone, signs the connect), utils/pulse.ts (signs a hide or a
+ * report) and utils/node-url.ts (which addresses the key signs for) never reach the words layer. The screens translate those files' sentences here, by the exact English (the
  * key IS the English), and the ones that carry a platform's name, a handle or a status by their English pattern.
  * Nothing here imports those files: utils/__tests__/pulse-lines.test.ts holds every sentence to the source that writes
  * it, so a sentence changed there fails a test rather than quietly showing English.
@@ -31,6 +31,8 @@ const FIXED: Readonly<Record<string, WordKey>> = {
     'Cannot refresh TikTok token without a client key.': word('Cannot refresh TikTok token without a client key.'),
     'Failed to refresh TikTok token. Please reconnect.': word('Failed to refresh TikTok token. Please reconnect.'),
     'Failed to disconnect channel.': word('Failed to disconnect channel.'),
+    // utils/node-url.ts UNSAFE_NODE_ADDRESS_MESSAGE: the signing of every request here refuses such an address.
+    "That community address isn't a plain web address (it has something like @ or \\ in it), so BeanPool won't connect to it or sign anything for it. Check the address with whoever gave it to you.": word("That community address isn't a plain web address (it has something like @ or \\ in it), so BeanPool won't connect to it or sign anything for it. Check the address with whoever gave it to you."),
     // utils/pulse.ts: the feed's page, a hide, a report.
     'Invalid feed response from server': word('Invalid feed response from server'),
     'Identity required to mute items.': word('Identity required to mute items.'),

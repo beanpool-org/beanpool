@@ -248,7 +248,7 @@ const OPEN = [
     decision('22222222', { effect: 'remove_member', params: { memberName: 'Mia' }, closesAt: iso(Date.now() + 30 * 60_000) }),
     decision('33333333', { effect: 'remove_member', params: { memberName: 'Kofi', balance: 15 }, closesAt: iso(Date.now() + 5 * 3600_000) }),
     decision('44444444', { touches: 'pool', effect: 'grant_enterprise', franchise: 'quadratic_trade', myVote: { support: false, voteCount: 3, creditsUsed: 9, updatedAt: iso(Date.now()) }, tally: tally({ quorumMet: true, quorumRequired: 3, electorate: 2 }) }),
-    decision('55555555', { effect: 'keep_suspension', params: { memberName: 'Ana', suspendedAt: iso(Date.UTC(2026, 9, 3, 2)) }, myVote: { support: true, voteCount: 1, creditsUsed: 1, updatedAt: iso(Date.now()) } }),
+    decision('55555555', { effect: 'keep_suspension', params: { memberName: 'Ana', suspendedAt: iso(new Date(2026, 9, 3, 12).getTime()) }, myVote: { support: true, voteCount: 1, creditsUsed: 1, updatedAt: iso(Date.now()) } }),
     decision('66666666', { effect: 'reach_the_moon', touches: 'sky', closesAt: iso(Date.now() - 1000) }),
 ];
 const PAST = [
@@ -257,7 +257,7 @@ const PAST = [
     decision('99999999', { status: 'failed', effect: 'unfreeze_credit', tally: tally({ quorumMet: true }) }),
     decision('10101010', { status: 'failed', effect: 'revoke_voucher' }),
     decision('12121212', { status: 'admin_halted', effect: 'grant_hardship', adminHaltReason: 'Duplicate of last week' }),
-    decision('13131313', { status: 'execution_pending_grace', effect: 'remove_member', gracePeriodEndsAt: iso(Date.UTC(2026, 9, 25, 2)) }),
+    decision('13131313', { status: 'execution_pending_grace', effect: 'remove_member', gracePeriodEndsAt: iso(new Date(2026, 9, 25, 12).getTime()) }),
     decision('14141414', { status: 'execution_void', effect: 'write_off_deficit' }),
     decision('15151515', { status: 'unresolved', effect: 'forgive_debt' }),
     decision('16161616', { status: 'passed_queued_for_funds', effect: 'remove_lead_keeper' }),

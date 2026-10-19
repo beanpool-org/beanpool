@@ -48,8 +48,13 @@ describe('EventCard at 320px (docs/events-on-the-map.md §3)', () => {
         expect(Array.from(when.children).map(c => [c.textContent, /whitespace-nowrap/.test(c.className), /text-lg/.test(c.className)])).toEqual([
             ['SAT 28 SEP ·', true, true], ['9:00–12:00', true, true],
         ]);
-        // Every other row gives way before the card does: nothing may push it past 320px.
-        for (const line of Array.from(lines).slice(1)) expect((line as HTMLElement).className).toMatch(/truncate/);
+        // Every other row gives way before the card does: nothing may push it past 320px. The title and the place are
+        // cut with an ellipsis; the counts wrap inside the card's width instead, so a longer language never cuts them
+        // (words sweep W1: "interested" ran past the card in the pseudo-locale at 320 px with 1.3x text).
+        for (const line of Array.from(lines).slice(1, 3)) expect((line as HTMLElement).className).toMatch(/truncate/);
+        expect(lines[3].className).toMatch(/(^| )block( |$)/);
+        expect(lines[3].className).toMatch(/(^| )w-full( |$)/);
+        expect(lines[3].className).toMatch(/(^| )break-words( |$)/);
         expect(card.className).toMatch(/min-w-0/);
         expect(card.className).toMatch(/overflow-hidden/);
     });

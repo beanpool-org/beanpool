@@ -205,7 +205,11 @@ export function CardSettingsDialog({ type, name, mode, initial, hasPoint = false
                 <select id="home-settings-category" data-testid="home-settings-category" value={category} onChange={(e) => setCategory(e.target.value)}
                     className="w-full min-w-0 min-h-[44px] px-3 rounded-xl border border-nature-300 dark:border-nature-700 bg-white dark:bg-nature-900 text-base text-nature-900 dark:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
                     <option value="">{t('Any category')}</option>
-                    {MARKETPLACE_CATEGORIES.map((c) => <option key={c.id} value={c.id}>{`${c.emoji} ${c.label}`}</option>)}
+                    {MARKETPLACE_CATEGORIES.map((c) => {
+                        // The category's name in the member's language, after its emoji (an icon, not words).
+                        const name = t(c.label);
+                        return <option key={c.id} value={c.id}>{`${c.emoji} ${name}`}</option>;
+                    })}
                 </select>
                 {hasPoint && (
                     <Chips legend={t('Distance')} testId="home-settings-km" value={km} onPick={setKm}

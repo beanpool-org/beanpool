@@ -9,6 +9,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
+import { t } from '@beanpool/core';
 import {
     getMyEvents, getNodeApiUrl, getNotificationPreferences, isRouteMissing, setEventReminder, type MarketplacePost,
 } from '../lib/api';
@@ -19,6 +20,7 @@ import {
     type ShareableEvent,
 } from '../lib/event-extras';
 import { eventShareWhen } from '../lib/events';
+import { Sentence } from './Sentence';
 
 /** The community's own address: the node the web app is talking to, or wherever it is being served from. */
 export function nodeOrigin(): string {
@@ -78,13 +80,13 @@ export function EventShareAndCalendar({ post }: { post: MarketplacePost }) {
         }
         try {
             await navigator.clipboard.writeText(text);
-            say('Link copied.');
+            say(t('Link copied.'));
         } catch {
             const el = document.createElement('textarea');
             el.value = text;
             document.body.appendChild(el);
             el.select();
-            try { document.execCommand('copy'); say('Link copied.'); } catch { say('Could not copy the link.'); }
+            try { document.execCommand('copy'); say(t('Link copied.')); } catch { say(t('Could not copy the link.')); }
             document.body.removeChild(el);
         }
     };
@@ -99,17 +101,17 @@ export function EventShareAndCalendar({ post }: { post: MarketplacePost }) {
         a.click();
         document.body.removeChild(a);
         setTimeout(() => URL.revokeObjectURL(url), 1000);
-        say('Calendar file saved.');
+        say(t('Calendar file saved.'));
     };
 
     return (
         <div className="flex flex-col gap-2">
             <div className="flex flex-wrap gap-2">
                 <button type="button" data-testid="event-share" onClick={share} className={`flex-1 min-w-[8rem] ${BUTTON}`}>
-                    <span aria-hidden="true">🔗 </span>Share
+                    <span aria-hidden="true">🔗 </span>{t('Share')}
                 </button>
                 <button type="button" data-testid="event-add-to-calendar" onClick={addToCalendar} className={`flex-1 min-w-[8rem] ${BUTTON}`}>
-                    <span aria-hidden="true">📅 </span>Add to calendar
+                    <span aria-hidden="true">📅 </span>{t('Add to calendar')}
                 </button>
             </div>
             {note && <p role="status" data-testid="event-share-note" className="m-0 text-xs text-nature-600 dark:text-nature-400">{note}</p>}
@@ -194,7 +196,7 @@ export function EventReminder({ post, identity, myRsvp }: ReminderProps) {
                 setSupported(false);
                 return;
             }
-            setError((e as Error)?.message || 'Could not save your reminder.');
+            setError((e as Error)?.message || t('Could not save your reminder.'));
         } finally {
             setSaving(false);
         }
@@ -204,8 +206,11 @@ export function EventReminder({ post, identity, myRsvp }: ReminderProps) {
         <div data-testid="event-reminder" className="flex flex-col gap-2 p-3 rounded-xl border border-nature-200 dark:border-nature-800">
             <div className="flex flex-wrap items-center justify-between gap-2 min-w-0">
                 <p className="m-0 min-w-0 text-sm font-semibold text-nature-800 dark:text-nature-200">
-                    <span aria-hidden="true">⏰ </span>Remind me:{' '}
-                    <span data-testid="event-reminder-current" className="font-bold">{formatReminderChoice(offsets, defaults)}</span>
+                    <span aria-hidden="true">⏰ </span>
+                    <Sentence
+                        text={t('Remind me: {choice}')}
+                        parts={{ choice: <span data-testid="event-reminder-current" className="font-bold">{formatReminderChoice(offsets, defaults)}</span> }}
+                    />
                 </p>
                 <button
                     type="button"
@@ -214,7 +219,7 @@ export function EventReminder({ post, identity, myRsvp }: ReminderProps) {
                     aria-expanded={open}
                     className={BUTTON}
                 >
-                    {open ? 'Close' : 'Change'}
+                    {open ? t('Close') : t('Change')}
                 </button>
             </div>
 
@@ -222,7 +227,7 @@ export function EventReminder({ post, identity, myRsvp }: ReminderProps) {
                 <div className="flex flex-col gap-2">
                     <fieldset className="m-0 p-0 border-0 flex flex-col gap-1">
                         <legend className="text-xs font-black uppercase tracking-wide text-nature-500 dark:text-nature-400 mb-1">
-                            Tell me before it starts
+                            {t('Tell me before it starts')}
                         </legend>
                         {REMINDER_OFFSETS.map(minutes => (
                             <label key={minutes} className="flex items-center gap-2 min-h-[48px] text-sm font-semibold text-nature-800 dark:text-nature-200 cursor-pointer">
@@ -232,12 +237,12 @@ export function EventReminder({ post, identity, myRsvp }: ReminderProps) {
                                     checked={draft.includes(minutes)}
                                     onChange={e => setDraft(d => (e.target.checked ? [...d, minutes] : d.filter(m => m !== minutes)))}
                                 />
-                                {reminderOffsetLabel(minutes)} before
+                                {t('{offset} before', { offset: reminderOffsetLabel(minutes) })}
                             </label>
                         ))}
                     </fieldset>
                     <p className="m-0 text-xs text-nature-500 dark:text-nature-400">
-                        With none ticked you get no reminder for this event.
+                        {t('With none ticked you get no reminder for this event.')}
                     </p>
                     <div className="flex flex-wrap gap-2">
                         <button
@@ -247,7 +252,7 @@ export function EventReminder({ post, identity, myRsvp }: ReminderProps) {
                             onClick={() => save(draft)}
                             className="flex-1 min-w-[8rem] min-h-[48px] px-3 rounded-xl border border-violet-700 text-sm font-bold text-white bg-violet-700 dark:bg-violet-600 disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-1"
                         >
-                            {saving ? 'Saving…' : 'Save for this event'}
+                            {saving ? t('Saving…') : t('Save for this event')}
                         </button>
                         {offsets !== null && (
                             <button
@@ -257,7 +262,7 @@ export function EventReminder({ post, identity, myRsvp }: ReminderProps) {
                                 onClick={() => save(null)}
                                 className={`flex-1 min-w-[8rem] disabled:opacity-60 ${BUTTON}`}
                             >
-                                Use my default
+                                {t('Use my default')}
                             </button>
                         )}
                     </div>

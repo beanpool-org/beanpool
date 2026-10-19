@@ -48,6 +48,14 @@ import {
     fetchStorageCleanPreview,
     cleanStorageAndCompressLogs,
     fetchAlertsSummary,
+    getAlertsStatus,
+    saveAlertsChannel,
+    acknowledgeAlerts,
+    sendTestAlert,
+    getOffboxStatus,
+    saveOffboxSettings,
+    runOffboxBackupNow,
+    listOffboxBackups,
 } from './node-client';
 
 describe('normalizeNodeUrl', () => {
@@ -180,6 +188,61 @@ describe('resolveNodeApiUrl', () => {
         expect(url).toBe('/proxy/https/node.beanpool.org/api/local/admin/onboarding-funnel?days=30');
 
         vi.unstubAllGlobals();
+    });
+});
+
+describe('alerts and offbox backup helpers', () => {
+    let fetchMock: ReturnType<typeof vi.fn>;
+
+    beforeEach(() => {
+        fetchMock = vi.fn().mockResolvedValue({
+            ok: true,
+            status: 200,
+            json: async () => ({ success: true, ok: true, started: true }),
+        });
+        vi.stubGlobal('fetch', fetchMock);
+    });
+
+    it('getAlertsStatus posts to /api/local/admin/alerts/status with credentials', async () => {
+        await getAlertsStatus('https://node.example.com', 'adminpw', 'tfa-123');
+        const [url, init] = fetchMock.mock.calls[0];
+        expect(url).toContain('/api/local/admin/alerts/status');
+        expect(init.method).toBe('POST');
+        expect(init.headers['X-Admin-Password']).toBe('adminpw');
+        expect(init.headers['X-Admin-2FA-Session']).toBe('tfa-123');
+    });
+
+    it('saveAlertsChannel posts channel config update', async () => {
+        await saveAlertsChannel('https://node.example.com', { url: 'https://ntfy.sh/mychannel', format: 'ntfy' }, 'adminpw', 'tfa-123');
+        const [url, init] = fetchMock.mock.calls[0];
+        expect(url).toContain('/api/local/admin/alerts/settings');
+        expect(JSON.parse(init.body)).toEqual({ url: 'https://ntfy.sh/mychannel', format: 'ntfy', password: 'adminpw' });
+    });
+
+    it('acknowledgeAlerts and sendTestAlert trigger alert management actions', async () => {
+        await acknowledgeAlerts('https://node.example.com', 'adminpw', 'tfa-123');
+        expect(fetchMock.mock.calls[0][0]).toContain('/api/local/admin/alerts/acknowledge');
+
+        await sendTestAlert('https://node.example.com', 'adminpw', 'tfa-123');
+        expect(fetchMock.mock.calls[1][0]).toContain('/api/local/admin/alerts/test');
+    });
+
+    it('getOffboxStatus, saveOffboxSettings, runOffboxBackupNow, and listOffboxBackups execute offbox API requests', async () => {
+        await getOffboxStatus('https://node.example.com', 'adminpw', 'tfa-123');
+        expect(fetchMock.mock.calls[0][0]).toContain('/api/local/admin/offbox-backups/status');
+
+        await saveOffboxSettings('https://node.example.com', { intervalHours: 24, retentionDays: 7 }, 'adminpw', 'tfa-123', 'proof-code-123');
+        const [saveUrl, saveInit] = fetchMock.mock.calls[1];
+        expect(saveUrl).toContain('/api/local/admin/offbox-backups/settings');
+        expect(JSON.parse(saveInit.body)).toEqual({ intervalHours: 24, retentionDays: 7, code: 'proof-code-123', password: 'adminpw' });
+
+        await runOffboxBackupNow('https://node.example.com', 'adminpw', 'tfa-123');
+        expect(fetchMock.mock.calls[2][0]).toContain('/api/local/admin/offbox-backups/run');
+
+        await listOffboxBackups('https://node.example.com', 's3-bucket-1', 'adminpw', 'tfa-123');
+        const [listUrl, listInit] = fetchMock.mock.calls[3];
+        expect(listUrl).toContain('/api/local/admin/offbox-backups/list');
+        expect(JSON.parse(listInit.body)).toEqual({ destination: 's3-bucket-1', password: 'adminpw' });
     });
 });
 

@@ -54,7 +54,6 @@ vi.mock('../lib/api', async () => {
     return { ...actual, getCommunityMe: vi.fn(async () => null) };
 });
 
-const CATEGORY_NAMES = MARKETPLACE_CATEGORIES.map((c) => `${c.emoji} ${c.label}`);
 const unwrapped = (root: ParentNode = document.body, others: string[] = []) => bypassing(root, { others: [...AS_WRITTEN, ...others] });
 const LOCAL = { profile: 'local', features: { beans: true, escrow: true, enterprises: true, invites: true, decisions: true } };
 const TWO_SEARCHES = {
@@ -102,7 +101,7 @@ describe('Home\'s card menu, Add a card, a card\'s settings and Edit home in the
         render(<CardSettingsDialog type="search" name={cardName('search')} mode="add" hasPoint onSubmit={() => {}} onClose={() => {}} />);
         expect(screen.getByText(xx('Words to look for'))).toBeInTheDocument();
         expect(screen.getByRole('button', { name: xx('{distance} km').replace('{distance}', '5') })).toBeInTheDocument();
-        expect(unwrapped(document.body, CATEGORY_NAMES)).toEqual([]);
+        expect(unwrapped(document.body)).toEqual([]);
         cleanup();
         render(<CardSettingsDialog type="sky" name={cardName('sky')} mode="save" onSubmit={() => {}} onClose={() => {}} />);
         expect(screen.getByRole('button', { name: xx('Your area') })).toBeInTheDocument();

@@ -19,7 +19,7 @@ import { GLOBAL_NODE_URL } from '../utils/global-node-url';
 import { globalEntryLine } from '../utils/global-entry-line';
 import { useIdentity } from './IdentityContext';
 import appConfig from '../app.json';
-import { FEEDBACK_LIVE, t } from '@beanpool/core';
+import { FEEDBACK_LIVE, t, tn, word, type WordKey } from '@beanpool/core';
 
 export { ErrorBoundary };
 
@@ -37,24 +37,31 @@ const SECTION_ICONS: Record<string, IconName> = {
     settings: 'cog-outline',
 };
 
-// The heading's status line for the community in use. Guest and "no community" each carry the next step.
-const STATUS_TEXT: Record<CommunityStatus | 'none', string> = {
-    checking: 'Checking the connection…',
-    online: 'Connected. You are a member here.',
-    offline: "Can't reach it right now",
-    guest: 'Visiting as a guest',
-    none: 'Not connected to a community yet',
+// The heading's status line for the community in use. Guest and "no community" each carry the next step. word() keys,
+// shown through t().
+const STATUS_TEXT: Record<CommunityStatus | 'none', WordKey> = {
+    checking: word('Checking the connection…'),
+    online: word('Connected. You are a member here.'),
+    offline: word("Can't reach it right now"),
+    guest: word('Visiting as a guest'),
+    none: word('Not connected to a community yet'),
 };
 
-// What TalkBack reads for a saved community's row: its name, its state, and whether it is the one in use.
-const savedRowLabel = (name: string, state: string, isCurrent: boolean) => `${name}, ${state}${isCurrent ? ', in use' : ''}`;
+/** The mark and the website's name, as written in every language (the mark is never translated). */
+const BEANPOOL_NAME = 'BeanPool';
+const WEBSITE_NAME = 'beanpool.org';
 
+// What TalkBack reads for a saved community's row: its name, its state, and whether it is the one in use.
+const savedRowLabel = (name: string, state: string, isCurrent: boolean) =>
+    (isCurrent ? t('{name}, {state}, in use', { name, state }) : t('{name}, {state}', { name, state }));
+
+// English writes one form for both counts ("synced 1s ago", "synced 5s ago"); a language with more forms has them.
 function syncedAgo(at: number | null): string | null {
     if (!at) return null;
     const s = Math.max(0, Math.floor((Date.now() - at) / 1000));
-    if (s < 60) return `synced ${s}s ago`;
-    if (s < 3600) return `synced ${Math.floor(s / 60)}m ago`;
-    return `synced ${Math.floor(s / 3600)}h ago`;
+    if (s < 60) return tn(s, 'synced {n}s ago', 'synced {n}s ago');
+    if (s < 3600) return tn(Math.floor(s / 60), 'synced {n}m ago', 'synced {n}m ago');
+    return tn(Math.floor(s / 3600), 'synced {n}h ago', 'synced {n}h ago');
 }
 
 // The BeanPool sheet — the one sheet for the community and for help. The header's bean opens it, and so does
@@ -114,6 +121,9 @@ export default function BeanPoolSheet() {
         : colors.feedback.danger.solid;
     const { current } = communities;
     const synced = status === 'online' ? syncedAgo(communities.lastSync) : null;
+    // The status and, once online, when it last synced: one line, and the same two read by TalkBack.
+    const statusLine = synced ? t('{status} · {synced}', { status: t(STATUS_TEXT[status]), synced }) : t(STATUS_TEXT[status]);
+    const statusLabel = synced ? t('{status}, {synced}', { status: t(STATUS_TEXT[status]), synced }) : t(STATUS_TEXT[status]);
     // Where a guest joins and a phone with no community connects: the same places the header's pill goes.
     const join = () => {
         DeviceEventEmitter.emit('set_people_view', { view: 'invites' });
@@ -208,7 +218,7 @@ export default function BeanPoolSheet() {
                 // The saved row is read as the saved rows beside it: the name it shows, then a member's connection (what the
                 // dot's colour says) or what its line says, and in use; a switch to the one in use does nothing.
                 accessibilityLabel={saved
-                    ? savedRowLabel(saved.name, globalEntry === 'member' ? STATUS_TEXT[saved.status] : globalState, isCurrent)
+                    ? savedRowLabel(saved.name, globalEntry === 'member' ? t(STATUS_TEXT[saved.status]) : globalState, isCurrent)
                     : t('Global community, {state}', { state: globalState })}
                 accessibilityHint={isCurrent ? undefined : globalHint}
                 testID="global-community-row"
@@ -245,10 +255,10 @@ export default function BeanPoolSheet() {
             <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
             <View style={styles.header}>
                 {/* The global community's link opens this sheet for a member (utils/global-link.ts), on a cold start too. */}
-                <Pressable onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)'))} style={styles.backButton} accessibilityRole="button" accessibilityLabel="Back">
+                <Pressable onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)'))} style={styles.backButton} accessibilityRole="button" accessibilityLabel={t('Back')}>
                     <MaterialCommunityIcons name="arrow-left" size={26} color={colors.text.inverse} />
                 </Pressable>
-                <Text style={styles.headerTitle} numberOfLines={1} accessibilityRole="header">BeanPool</Text>
+                <Text style={styles.headerTitle} numberOfLines={1} accessibilityRole="header">{BEANPOOL_NAME}</Text>
                 <View style={{ width: 48 }} />
             </View>
 
@@ -260,12 +270,12 @@ export default function BeanPoolSheet() {
                 {/* The community in use: its name heads the sheet (the header row no longer shows it). */}
                 <View style={styles.community}>
                     <Text style={styles.communityName} numberOfLines={2} accessibilityRole="header">
-                        {current?.name ?? (status === 'none' ? 'No community yet' : ' ')}
+                        {current?.name ?? (status === 'none' ? t('No community yet') : ' ')}
                     </Text>
-                    <View style={styles.statusRow} accessible accessibilityLabel={`${STATUS_TEXT[status]}${synced ? `, ${synced}` : ''}`}>
+                    <View style={styles.statusRow} accessible accessibilityLabel={statusLabel}>
                         <View style={[styles.dot, { backgroundColor: dotFor(status) }]} />
                         <Text style={[styles.rowSub, { marginTop: 0, flex: 1 }]} numberOfLines={2}>
-                            {STATUS_TEXT[status]}{synced ? ` · ${synced}` : ''}
+                            {statusLine}
                         </Text>
                     </View>
                     {(status === 'guest' || status === 'none') && (
@@ -273,18 +283,18 @@ export default function BeanPoolSheet() {
                             style={[styles.cta, status === 'guest' ? styles.ctaGuest : styles.ctaNone]}
                             onPress={status === 'guest' ? join : connect}
                             accessibilityRole="button"
-                            accessibilityLabel={status === 'guest' ? 'Join this community' : 'Connect to a community'}
+                            accessibilityLabel={status === 'guest' ? t('Join this community') : t('Connect to a community')}
                         >
                             <MaterialCommunityIcons name={status === 'guest' ? 'account-alert-outline' : 'link-variant'} size={20}
                                 color={status === 'guest' ? colors.feedback.warning.fg : colors.feedback.danger.fg} />
                             <Text style={[styles.ctaText, { color: status === 'guest' ? colors.feedback.warning.fg : colors.feedback.danger.fg }]}>
-                                {status === 'guest' ? 'Join this community' : 'Connect to a community'}
+                                {status === 'guest' ? t('Join this community') : t('Connect to a community')}
                             </Text>
                         </Pressable>
                     )}
                 </View>
 
-                <Text style={styles.sectionLabel}>YOUR COMMUNITIES</Text>
+                <Text style={styles.sectionLabel}>{t('YOUR COMMUNITIES')}</Text>
                 <View style={styles.group}>
                     {communities.rows.map((r, i) => {
                         if (r === globalSaved) return renderGlobalRow(r, i === 0);
@@ -299,8 +309,8 @@ export default function BeanPoolSheet() {
                                 disabled={communities.switching}
                                 accessibilityRole="button"
                                 accessibilityState={{ selected: isCurrent }}
-                                accessibilityLabel={savedRowLabel(r.name, STATUS_TEXT[r.status], isCurrent)}
-                                accessibilityHint={isCurrent ? undefined : 'Switches to this community. Long press to remove it.'}
+                                accessibilityLabel={savedRowLabel(r.name, t(STATUS_TEXT[r.status]), isCurrent)}
+                                accessibilityHint={isCurrent ? undefined : t('Switches to this community. Long press to remove it.')}
                             >
                                 <View style={[styles.dot, { backgroundColor: dotFor(r.status) }]} />
                                 <View style={styles.rowText}>
@@ -309,7 +319,7 @@ export default function BeanPoolSheet() {
                                 </View>
                                 {isCurrent
                                     ? <MaterialCommunityIcons name="check" size={22} color={colors.accent.primary} style={styles.chevron} />
-                                    : r.status === 'guest' && <Text style={styles.guestTag}>Guest</Text>}
+                                    : r.status === 'guest' && <Text style={styles.guestTag}>{t('Guest')}</Text>}
                             </Pressable>
                         );
                     })}
@@ -320,12 +330,12 @@ export default function BeanPoolSheet() {
                         style={({ pressed }) => [styles.row, styles.rowDivider, pressed && styles.rowPressed]}
                         onPress={connect}
                         accessibilityRole="button"
-                        accessibilityLabel="Add a community"
-                        accessibilityHint="Opens Settings, where you can connect to another community"
+                        accessibilityLabel={t('Add a community')}
+                        accessibilityHint={t('Opens Settings, where you can connect to another community')}
                     >
                         <MaterialCommunityIcons name="plus-circle-outline" size={24} color={colors.brand.primary} />
                         <View style={styles.rowText}>
-                            <Text style={styles.rowTitle}>Add a community</Text>
+                            <Text style={styles.rowTitle}>{t('Add a community')}</Text>
                         </View>
                         <MaterialCommunityIcons name="chevron-right" size={22} color={colors.text.muted} style={styles.chevron} />
                     </Pressable>
@@ -336,15 +346,15 @@ export default function BeanPoolSheet() {
                     <TextInput
                         value={query}
                         onChangeText={setQuery}
-                        placeholder="Search the guide"
+                        placeholder={t('Search the guide')}
                         placeholderTextColor={colors.text.muted}
                         style={styles.searchInput}
                         returnKeyType="search"
                         autoCorrect={false}
-                        accessibilityLabel="Search the guide"
+                        accessibilityLabel={t('Search the guide')}
                     />
                     {query.length > 0 && (
-                        <Pressable style={styles.clearBtn} onPress={() => setQuery('')} accessibilityRole="button" accessibilityLabel="Clear the search">
+                        <Pressable style={styles.clearBtn} onPress={() => setQuery('')} accessibilityRole="button" accessibilityLabel={t('Clear the search')}>
                             <MaterialCommunityIcons name="close-circle" size={20} color={colors.text.muted} />
                         </Pressable>
                     )}
@@ -353,11 +363,11 @@ export default function BeanPoolSheet() {
                 {searching ? (
                     <>
                         <Text style={styles.sectionLabel} accessibilityLiveRegion="polite">
-                            {results.length === 0 ? 'NOTHING FOUND' : `${results.length} ${results.length === 1 ? 'PAGE' : 'PAGES'}`}
+                            {results.length === 0 ? t('NOTHING FOUND') : tn(results.length, '{n} PAGE', '{n} PAGES')}
                         </Text>
                         <View style={styles.group}>
                             {results.length === 0 ? (
-                                <Text style={styles.empty}>No page has all of those words. Try one word, like "gift" or "vote".</Text>
+                                <Text style={styles.empty}>{t('No page has all of those words. Try one word, like "gift" or "vote".')}</Text>
                             ) : results.map((r, i) => (
                                 <Row key={r.page.slug} icon="file-document-outline" title={r.page.title} sub={r.snippet} first={i === 0} onPress={() => openGuide(r.page.slug)} />
                             ))}
@@ -365,14 +375,14 @@ export default function BeanPoolSheet() {
                     </>
                 ) : (
                     <>
-                        <Text style={styles.sectionLabel}>GUIDES</Text>
+                        <Text style={styles.sectionLabel}>{t('GUIDES')}</Text>
                         <View style={styles.group}>
                             <GuideRow p={page(GUIDE_SLUGS.howItWorks)} icon="book-open-variant" first />
                             <GuideRow p={page(GUIDE_SLUGS.rules)} icon="scale-balance" />
                             <GuideRow p={page(GUIDE_SLUGS.faq)} icon="help-circle-outline" />
                         </View>
 
-                        <Text style={styles.sectionLabel}>HOW TO USE THE APP</Text>
+                        <Text style={styles.sectionLabel}>{t('HOW TO USE THE APP')}</Text>
                         <View style={styles.group}>
                             {manualSections(guide).map((s, i) => (
                                 <Row
@@ -386,12 +396,12 @@ export default function BeanPoolSheet() {
                             ))}
                         </View>
 
-                        <Text style={styles.sectionLabel}>THE BEANPOOL PROJECT</Text>
+                        <Text style={styles.sectionLabel}>{t('THE BEANPOOL PROJECT')}</Text>
                         <View style={styles.group}>
                             {projectRows.map((entry, i) => {
                                 if (entry === 'suggest') {
                                     // Only while FEEDBACK_LIVE (@beanpool/core feedback.ts): the same screen Settings opens.
-                                    return <Row key={entry} icon="message-draw" title="Suggest a change" sub="Ideas and problems go to the BeanPool project team" label="Suggest a change to BeanPool" first={i === 0} onPress={() => router.push('/suggest-change')} />;
+                                    return <Row key={entry} icon="message-draw" title={t('Suggest a change')} sub={t('Ideas and problems go to the BeanPool project team')} label={t('Suggest a change to BeanPool')} first={i === 0} onPress={() => router.push('/suggest-change')} />;
                                 }
                                 if (entry === 'whats-new') {
                                     const p = page(GUIDE_SLUGS.whatsNew);
@@ -403,30 +413,34 @@ export default function BeanPoolSheet() {
                                             style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 48 }}
                                             onPress={() => { void openBeanPoolWebsite(); }}
                                             accessibilityRole="link"
-                                            accessibilityLabel="beanpool.org, opens in your browser"
+                                            accessibilityLabel={t('beanpool.org, opens in your browser')}
                                         >
                                             <MaterialCommunityIcons name="web" size={24} color={colors.brand.primary} />
                                             <View style={styles.rowText}>
-                                                <Text style={styles.rowTitle}>beanpool.org</Text>
-                                                <Text style={styles.rowSub} numberOfLines={2}>The public website, to share with friends</Text>
+                                                <Text style={styles.rowTitle}>{WEBSITE_NAME}</Text>
+                                                <Text style={styles.rowSub} numberOfLines={2}>{t('The public website, to share with friends')}</Text>
                                             </View>
                                         </Pressable>
                                         <Pressable
                                             style={styles.shareBtn}
-                                            onPress={() => Share.share({ message: `BeanPool: trade with your neighbours using beans. ${BEANPOOL_WEBSITE_URL}` }).catch(() => {})}
+                                            onPress={() => Share.share({ message: t('BeanPool: trade with your neighbours using beans. {url}', { url: BEANPOOL_WEBSITE_URL }) }).catch(() => {})}
                                             accessibilityRole="button"
-                                            accessibilityLabel="Share beanpool.org"
+                                            accessibilityLabel={t('Share beanpool.org')}
                                         >
-                                            <Text style={styles.shareText}>Share</Text>
+                                            <Text style={styles.shareText}>{t('Share')}</Text>
                                         </Pressable>
                                     </View>
                                 );
                             })}
                         </View>
 
+                        {/* Three whole sentences, one a line, in one block of text. */}
                         <Text style={styles.foot}>
-                            BeanPool v{appConfig.expo.version} ({Platform.OS === 'ios' ? appConfig.expo.ios.buildNumber : appConfig.expo.android.versionCode}){'\n'}
-                            Guide version {guide.version}{source === 'bundled' ? ' · built into the app' : ' · updated from beanpool.org'}{'\n'}Works without a connection.
+                            <Text>{t('BeanPool v{version} ({build})', { version: appConfig.expo.version, build: Platform.OS === 'ios' ? appConfig.expo.ios.buildNumber : appConfig.expo.android.versionCode })}</Text>
+                            {'\n'}
+                            <Text>{source === 'bundled' ? t('Guide version {version} · built into the app', { version: guide.version }) : t('Guide version {version} · updated from beanpool.org', { version: guide.version })}</Text>
+                            {'\n'}
+                            <Text>{t('Works without a connection.')}</Text>
                         </Text>
                     </>
                 )}

@@ -6,8 +6,8 @@ import { router, ErrorBoundary } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import {
-    FEEDBACK_KINDS, FEEDBACK_NOTICE, FEEDBACK_THANKS, FEEDBACK_TEXT_MAX, FEEDBACK_COMMUNITY_MAX,
-    feedbackCharCount, feedbackTextProblem, submitFeedback, type FeedbackKind,
+    FEEDBACK_KINDS, FEEDBACK_LINES, FEEDBACK_TEXT_MAX, FEEDBACK_COMMUNITY_MAX,
+    feedbackCharCount, feedbackTextProblem, submitFeedback, formatNumber, t, type FeedbackKind,
 } from '@beanpool/core';
 import appConfig from '../app.json';
 import { deviceLang } from '../utils/feedback-context';
@@ -28,7 +28,9 @@ export default function SuggestChangeScreen() {
         container: { flex: 1, backgroundColor: colors.surface.page },
         header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.border.default, backgroundColor: theme === 'dark' ? colors.surface.card : colors.text.heading },
         backButton: { width: 48, height: 48, justifyContent: 'center', alignItems: 'flex-start' },
-        headerTitle: { flex: 1, textAlign: 'center', fontSize: 16, fontWeight: 'bold', color: colors.brand.primary, letterSpacing: 0.5, textTransform: 'uppercase' },
+        // Written in capitals in the words themselves (never textTransform: Android upper-cases by the phone's locale, not
+        // the member's language, so a Turkish "i" would lose its dot).
+        headerTitle: { flex: 1, textAlign: 'center', fontSize: 16, fontWeight: 'bold', color: colors.brand.primary, letterSpacing: 0.5 },
         scroll: { padding: 20 },
         infoBox: { flexDirection: 'row', backgroundColor: colors.brand.tint, padding: 14, borderRadius: 12, marginBottom: 22, borderWidth: 1, borderColor: colors.brand.primary },
         infoText: { flex: 1, fontSize: 14, color: colors.text.body, lineHeight: 20 },
@@ -93,19 +95,19 @@ export default function SuggestChangeScreen() {
         <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
             <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
             <View style={styles.header}>
-                <Pressable onPress={() => router.back()} style={styles.backButton} accessibilityRole="button" accessibilityLabel="Close">
+                <Pressable onPress={() => router.back()} style={styles.backButton} accessibilityRole="button" accessibilityLabel={t('Close')}>
                     <MaterialCommunityIcons name="close" size={26} color={colors.text.inverse} />
                 </Pressable>
-                <Text style={styles.headerTitle} numberOfLines={1}>Suggest a change</Text>
+                <Text style={styles.headerTitle} numberOfLines={1}>{t('SUGGEST A CHANGE')}</Text>
                 <View style={{ width: 48 }} />
             </View>
 
             {sent ? (
                 <View style={[styles.done, { paddingBottom: Math.max(insets.bottom, 24) }]}>
                     <MaterialCommunityIcons name="check-circle-outline" size={56} color={colors.brand.primary} />
-                    <Text style={styles.doneText}>{FEEDBACK_THANKS}</Text>
+                    <Text style={styles.doneText}>{t(FEEDBACK_LINES.thanks)}</Text>
                     <Pressable style={[styles.submitBtn, { alignSelf: 'stretch' }]} onPress={() => router.back()} accessibilityRole="button">
-                        <Text style={styles.submitBtnText}>DONE</Text>
+                        <Text style={styles.submitBtnText}>{t('DONE')}</Text>
                     </Pressable>
                 </View>
             ) : (
@@ -113,11 +115,11 @@ export default function SuggestChangeScreen() {
                     <KeyboardAwareScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" bottomOffset={footerHeight + 16}>
                         <View style={styles.infoBox}>
                             <MaterialCommunityIcons name="information-outline" size={20} color={colors.brand.primary} style={{ marginRight: 10 }} />
-                            <Text style={styles.infoText}>{FEEDBACK_NOTICE}</Text>
+                            <Text style={styles.infoText}>{t(FEEDBACK_LINES.notice)}</Text>
                         </View>
 
                         <View style={styles.field}>
-                            <Text style={styles.label}>WHAT KIND?</Text>
+                            <Text style={styles.label}>{t('WHAT KIND?')}</Text>
                             <View style={styles.chipRow} accessibilityRole="radiogroup">
                                 {FEEDBACK_KINDS.map((k) => {
                                     const on = kind === k.id;
@@ -129,7 +131,7 @@ export default function SuggestChangeScreen() {
                                             accessibilityRole="radio"
                                             accessibilityState={{ selected: on }}
                                         >
-                                            <Text style={[styles.chipText, on && styles.chipTextOn]}>{k.label}</Text>
+                                            <Text style={[styles.chipText, on && styles.chipTextOn]}>{t(k.label)}</Text>
                                         </Pressable>
                                     );
                                 })}
@@ -137,31 +139,31 @@ export default function SuggestChangeScreen() {
                         </View>
 
                         <View style={styles.field}>
-                            <Text style={styles.label}>YOUR SUGGESTION</Text>
+                            <Text style={styles.label}>{t('YOUR SUGGESTION')}</Text>
                             <TextInput
-                                accessibilityLabel="Your suggestion"
+                                accessibilityLabel={t('Your suggestion')}
                                 style={[styles.input, styles.textarea]}
-                                placeholder="What would make BeanPool better for your community? Any language is fine."
+                                placeholder={t('What would make BeanPool better for your community? Any language is fine.')}
                                 placeholderTextColor={colors.text.muted}
                                 value={text}
                                 onChangeText={(v) => { setText(v); if (error) setError(null); }}
                                 multiline
                             />
-                            <Text style={[styles.counter, over && styles.counterOver]}>{count} / {FEEDBACK_TEXT_MAX}</Text>
+                            <Text style={[styles.counter, over && styles.counterOver]}>{formatNumber(count)} / {formatNumber(FEEDBACK_TEXT_MAX)}</Text>
                         </View>
 
                         <View style={styles.field}>
-                            <Text style={styles.label}>YOUR COMMUNITY (OPTIONAL)</Text>
+                            <Text style={styles.label}>{t('YOUR COMMUNITY (OPTIONAL)')}</Text>
                             <TextInput
-                                accessibilityLabel="Your community, optional"
+                                accessibilityLabel={t('Your community, optional')}
                                 style={styles.input}
-                                placeholder="Leave blank if you'd rather not say"
+                                placeholder={t("Leave blank if you'd rather not say")}
                                 placeholderTextColor={colors.text.muted}
                                 value={community}
                                 onChangeText={setCommunity}
                                 maxLength={FEEDBACK_COMMUNITY_MAX}
                             />
-                            <Text style={styles.hint}>Helps us see how many places ask for the same thing.</Text>
+                            <Text style={styles.hint}>{t('Helps us see how many places ask for the same thing.')}</Text>
                         </View>
                     </KeyboardAwareScrollView>
 
@@ -177,10 +179,10 @@ export default function SuggestChangeScreen() {
                                 onPress={handleSend}
                                 disabled={sending || over}
                                 accessibilityRole="button"
-                                accessibilityLabel={sending ? "Sending suggestion..." : "Send suggestion"}
+                                accessibilityLabel={sending ? t('Sending suggestion...') : t('Send suggestion')}
                                 accessibilityState={{ disabled: sending || over, busy: sending }}
                             >
-                                {sending ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.submitBtnText}>SEND</Text>}
+                                {sending ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.submitBtnText}>{t('SEND')}</Text>}
                             </Pressable>
                         </View>
                     </KeyboardStickyView>

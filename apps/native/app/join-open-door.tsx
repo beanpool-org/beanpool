@@ -28,13 +28,13 @@ import { SSO_PROVIDER_NAMES, type SsoProvider } from '../utils/sso-providers';
 import { FROM_LINK } from '../utils/global-link';
 import { doorNodeFromParam, takeDoorTap, type DoorNode } from '../utils/open-door';
 import {
-    doorAnswerWords, doorKeeperWords, doorNameCheckWords, doorRefusalWords, doorScreenWords, globalPlace, joinedTitle, placeAt,
+    doorAnswerWords, doorKeeperWords, doorNameCheckWords, doorRefusalWords, doorScreenWords, globalPlace, joinedTitle, phoneDoorLineWords, placeAt,
     type DoorPlace,
 } from '../utils/open-door-words';
 import { askCommunityName } from '../utils/community-name';
 import { getSavedNodes } from '../utils/nodes';
 import { plainOriginOf } from '../utils/node-url';
-import { t } from '@beanpool/core';
+import { t, tn } from '@beanpool/core';
 
 export { ErrorBoundary };
 
@@ -295,13 +295,13 @@ function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; t
         try {
             const account = await accountKeyForDoor();
             if (!account) {
-                setError(ACCOUNT_DOOR_MESSAGES.noAccount);
+                setError(phoneDoorLineWords(ACCOUNT_DOOR_MESSAGES.noAccount));
                 return;
             }
             setKey(account);
             // The sign-in also links to this account, so the phone's lock first, as Account Protection's connect asks
             // it. A check that doesn't pass starts nothing.
-            if (!(await authenticateUser('Confirm authentication to link a sign-in to your account.'))) return;
+            if (!(await authenticateUser(t('Confirm authentication to link a sign-in to your account.')))) return;
             const result = await signInAtDoor(provider, doorUrl, account.identity);
             if (result.kind === 'answered') {
                 await afterAnswer(result.answer, account, name.trim() || account.identity.callsign);
@@ -319,7 +319,7 @@ function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; t
         } catch (e) {
             // A cancel is not an error: the member thought better of it.
             const failure = e as { reason?: string; message?: string } | null;
-            setError(failure?.reason === 'cancelled' ? null : (failure?.message || 'Sign-in failed. Try again.'));
+            setError(failure?.reason === 'cancelled' ? null : (failure?.message || t('Sign-in failed. Try again.')));
         } finally {
             setLoading(false);
         }
@@ -330,7 +330,7 @@ function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; t
         if (!key || !signin) { setPhase('signIn'); return; }
         const typed = name.trim().slice(0, MAX_JOIN_NAME).trim();
         if (typed.length < 2) {
-            setError('Please choose a name of at least 2 characters.');
+            setError(tn(2, 'Please choose a name of at least {n} characters.', 'Please choose a name of at least {n} characters.'));
             return;
         }
         setLoading(true);
@@ -349,12 +349,12 @@ function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; t
             setSuggestions([]);
             joinSendingRef.current = true;
             setPhase('joining');
-            const answer = await submitJoin(doorUrl, key.identity, typed, signin, { onSignInAgain: setNotice, work: doorWork.runFor('sign-in') });
+            const answer = await submitJoin(doorUrl, key.identity, typed, signin, { onSignInAgain: (line) => setNotice(phoneDoorLineWords(line)), work: doorWork.runFor('sign-in') });
             setSignin(null);
             await afterAnswer(answer, key, typed);
         } catch (e) {
             setSignin(null);
-            setError((e as Error | null)?.message || 'Your join could not be completed. Please sign in and try again.');
+            setError((e as Error | null)?.message || t('Your join could not be completed. Please sign in and try again.'));
             setPhase(wordsDoor ? 'choose' : 'signIn');
         } finally {
             joinSendingRef.current = false;
@@ -372,7 +372,7 @@ function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; t
     async function handleWordsJoin() {
         const typed = name.trim().slice(0, MAX_JOIN_NAME).trim();
         if (typed.length < 2) {
-            setError('Please choose a name of at least 2 characters.');
+            setError(tn(2, 'Please choose a name of at least {n} characters.', 'Please choose a name of at least {n} characters.'));
             return;
         }
         setLoading(true);
@@ -383,7 +383,7 @@ function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; t
         try {
             const account = await accountKeyForDoor();
             if (!account) {
-                setError(ACCOUNT_DOOR_MESSAGES.noAccount);
+                setError(phoneDoorLineWords(ACCOUNT_DOOR_MESSAGES.noAccount));
                 return;
             }
             setKey(account);
@@ -410,7 +410,7 @@ function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; t
             const answer = await submitWordsJoin(doorUrl, account.identity, typed, run);
             await afterAnswer(answer, account, typed, 'words');
         } catch (e) {
-            setError((e as Error | null)?.message || 'Your join could not be completed. Please try again.');
+            setError((e as Error | null)?.message || t('Your join could not be completed. Please try again.'));
             setPhase('name');
         } finally {
             joinSendingRef.current = false;
@@ -449,8 +449,8 @@ function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; t
             // of the community it left (a stranger, when the door was opened from the not-recognised screen) can't send the
             // member back there on the way to the profile step.
             await recheck().catch(() => 'unknown');
-            Alert.alert(joinedTitle(place, joined.title), joined.body, [{
-                text: 'Next',
+            Alert.alert(joinedTitle(place, joined.title), phoneDoorLineWords(joined.body), [{
+                text: t('Next'),
                 // As after any second community: the name and photo for this one, then home.
                 // Started from the pairing screen's refusal (`then=pair-device`): back there to scan again, after the profile.
                 onPress: () => router.replace({ pathname: '/profile-setup', params: { redirect: afterJoinRedirect(thenParam, HOME_REDIRECT), name: joined.name } }),
@@ -510,7 +510,7 @@ function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; t
                             <Text style={styles.body} accessibilityLiveRegion="polite">{refusal ? doorRefusalWords(refusal, place) : message}</Text>
                             {phase === 'unavailable' && (
                                 <Pressable style={styles.primary} onPress={() => { setError(null); setRefusal(null); setPhase('checking'); }} accessibilityRole="button">
-                                    <Text style={styles.primaryText}>Try again</Text>
+                                    <Text style={styles.primaryText}>{t('Try again')}</Text>
                                 </Pressable>
                             )}
                         </>
@@ -520,7 +520,7 @@ function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; t
                         <>
                             <Text style={styles.body} accessibilityLiveRegion="polite">{message}</Text>
                             <Pressable style={styles.primary} onPress={signInAgain} accessibilityRole="button">
-                                <Text style={styles.primaryText}>Use a different sign-in</Text>
+                                <Text style={styles.primaryText}>{t('Use a different sign-in')}</Text>
                             </Pressable>
                         </>
                     )}
@@ -541,7 +541,7 @@ function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; t
                                 onSignIn={handleSignIn}
                                 disabled={loading}
                                 busy={doorWork.busy}
-                                wordsProblem={doorWork.state('words')?.phase === 'failed' ? DOOR_WORK_MESSAGES.solverUnavailable : null}
+                                wordsProblem={doorWork.state('words')?.phase === 'failed' ? phoneDoorLineWords(DOOR_WORK_MESSAGES.solverUnavailable) : null}
                                 signInNote={keeper.choose}
                             />
                         </>
@@ -560,13 +560,13 @@ function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; t
                             {!loading && (
                                 <>
                                     {Platform.OS === 'ios' && (
-                                        <AppleButton title="Continue with Apple" onPress={() => handleSignIn('apple')} style={styles.sso} />
+                                        <AppleButton title={t('Continue with {provider}', { provider: SSO_PROVIDER_NAMES.apple })} onPress={() => handleSignIn('apple')} style={styles.sso} />
                                     )}
-                                    <GoogleButton title="Continue with Google" onPress={() => handleSignIn('google')} style={styles.sso} />
-                                    <FacebookButton title="Continue with Facebook" onPress={() => handleSignIn('facebook')} style={styles.sso} />
+                                    <GoogleButton title={t('Continue with {provider}', { provider: SSO_PROVIDER_NAMES.google })} onPress={() => handleSignIn('google')} style={styles.sso} />
+                                    <FacebookButton title={t('Continue with {provider}', { provider: SSO_PROVIDER_NAMES.facebook })} onPress={() => handleSignIn('facebook')} style={styles.sso} />
                                     {wordsDoor && (
                                         <Pressable style={styles.quiet} onPress={() => { setError(null); setPhase('choose'); }} accessibilityRole="button">
-                                            <Text style={styles.quietText}>Choose another way</Text>
+                                            <Text style={styles.quietText}>{t('Choose another way')}</Text>
                                         </Pressable>
                                     )}
                                 </>
@@ -577,21 +577,21 @@ function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; t
                     {phase === 'name' && (
                         <>
                             {way === 'words'
-                                ? <Text style={styles.small}>🔑 With your 12 words: the ones this phone already has. No sign-in needed.</Text>
-                                : signedInWith && <Text style={styles.small}>✅ Signed in with {signedInWith}</Text>}
+                                ? <Text style={styles.small}>{t('🔑 With your 12 words: the ones this phone already has. No sign-in needed.')}</Text>
+                                : signedInWith && <Text style={styles.small}>{t('✅ Signed in with {provider}', { provider: signedInWith })}</Text>}
                             <Text style={styles.label}>{say.nameLabel}</Text>
                             <TextInput
                                 style={styles.input}
-                                placeholder="Your name or nickname"
+                                placeholder={t('Your name or nickname')}
                                 placeholderTextColor={colors.text.muted}
                                 value={name}
-                                onChangeText={(t) => { setName(t); if (suggestions.length) setSuggestions([]); }}
+                                onChangeText={(value) => { setName(value); if (suggestions.length) setSuggestions([]); }}
                                 maxLength={MAX_JOIN_NAME}
                                 autoCapitalize="words"
                                 editable={!loading}
                                 accessibilityLabel={say.nameLabel}
                             />
-                            <Text style={styles.helper}>This is how people there see you. You can change it later.</Text>
+                            <Text style={styles.helper}>{t('This is how people there see you. You can change it later.')}</Text>
                             {suggestions.length > 0 && (
                                 <View style={styles.chips}>
                                     {suggestions.map(s => (
@@ -600,7 +600,7 @@ function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; t
                                             style={styles.chip}
                                             onPress={() => { setName(s); setSuggestions([]); setError(null); }}
                                             accessibilityRole="button"
-                                            accessibilityLabel={`Use the name ${s}`}
+                                            accessibilityLabel={t('Use the name {name}', { name: s })}
                                         >
                                             <Text style={styles.chipText}>{s}</Text>
                                         </Pressable>
@@ -610,11 +610,11 @@ function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; t
                             {error && <Text style={[styles.error, { marginTop: 12 }]} accessibilityLiveRegion="polite">{error}</Text>}
                             {way === 'words' && doorWork.busy && <Text style={styles.helper} accessibilityLiveRegion="polite">{doorWork.busy}</Text>}
                             {way === 'words' && workWaiting && <DoorWorkProgress state={doorWork.state('words')} colors={colors} />}
-                            <Pressable style={styles.primary} onPress={way === 'words' ? handleWordsJoin : handleJoin} disabled={loading} accessibilityRole="button" accessibilityLabel="Join">
-                                {loading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryText}>Join →</Text>}
+                            <Pressable style={styles.primary} onPress={way === 'words' ? handleWordsJoin : handleJoin} disabled={loading} accessibilityRole="button" accessibilityLabel={t('Join')}>
+                                {loading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryText}>{t('Join →')}</Text>}
                             </Pressable>
                             <Pressable style={styles.secondary} onPress={signInAgain} disabled={!ways.otherSignIn} accessibilityRole="button">
-                                <Text style={styles.secondaryText}>{wordsDoor ? 'Choose another way' : 'Use a different sign-in'}</Text>
+                                <Text style={styles.secondaryText}>{wordsDoor ? t('Choose another way') : t('Use a different sign-in')}</Text>
                             </Pressable>
                         </>
                     )}
@@ -627,8 +627,8 @@ function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; t
                     )}
 
                     {phase !== 'joining' && (
-                        <Pressable style={styles.quiet} onPress={leave} disabled={!ways.back} accessibilityRole="button" accessibilityLabel="Back">
-                            <Text style={styles.quietText}>← Back</Text>
+                        <Pressable style={styles.quiet} onPress={leave} disabled={!ways.back} accessibilityRole="button" accessibilityLabel={t('Back')}>
+                            <Text style={styles.quietText}>{t('← Back')}</Text>
                         </Pressable>
                     )}
                 </View>

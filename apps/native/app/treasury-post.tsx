@@ -11,13 +11,21 @@ import { treasuryPostOffer, treasuryPostNeed } from '../utils/db';
 import { CategoryPickerSheet } from '../components/CategoryPickerSheet';
 import { categoryEmoji, categoryLabel } from '../constants/categories';
 import { useTheme, useStyles } from './ThemeContext';
+import { t, word, type WordKey } from '@beanpool/core';
 
 // Operator form to post a treasury's Offer (what the enterprise sells, e.g. a dozen eggs) or a
 // Need (a tender the treasury pays for, e.g. tending the flock). Mirrors propose-project.tsx.
 // The treasury id rides the params → the signed operator route; the operator signs on the
 // treasury's behalf.
 const PRICE_TYPES = ['fixed', 'hourly', 'daily', 'weekly', 'monthly'] as const;
-const PRICE_TYPE_LABEL: Record<string, string> = { fixed: 'Total', hourly: '/hr', daily: '/day', weekly: '/wk', monthly: '/mo' };
+/** The price box's unit, and the type a screen reader says: marked here, translated where shown. */
+const PRICE_TYPE_LABEL: Record<string, WordKey> = {
+    fixed: word('Total', 'price unit'), hourly: word('/hr'), daily: word('/day'), weekly: word('/wk'), monthly: word('/mo'),
+};
+const PRICE_TYPE_SPOKEN: Record<string, WordKey> = {
+    fixed: word('fixed', 'price type'), hourly: word('hourly', 'price type'), daily: word('daily', 'price type'),
+    weekly: word('weekly', 'price type'), monthly: word('monthly', 'price type'),
+};
 
 export default function TreasuryPostScreen() {
     const params = useLocalSearchParams<{ treasury?: string | string[]; mode?: string | string[]; name?: string | string[] }>();
@@ -25,7 +33,8 @@ export default function TreasuryPostScreen() {
     const modeStr = Array.isArray(params.mode) ? params.mode[0] : params.mode;
     const nameStr = Array.isArray(params.name) ? params.name[0] : params.name;
     const isNeed = modeStr === 'need';
-    const treasuryName = nameStr || 'this enterprise';
+    // The name its members gave it, as written; with none, each sentence says "this enterprise" itself.
+    const treasuryName = nameStr || null;
     const { theme, colors } = useTheme();
 
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
@@ -91,7 +100,7 @@ export default function TreasuryPostScreen() {
         if (!credits.trim() || isNaN(Number(credits)) || Number(credits) <= 0) errs.add('credits');
         setErrors(errs);
         if (errs.size > 0) {
-            setToast('⚠️ Add a title, category and price');
+            setToast(t('⚠️ Add a title, category and price'));
             setTimeout(() => setToast(''), 3000);
             return;
         }
@@ -99,7 +108,7 @@ export default function TreasuryPostScreen() {
         submittingRef.current = true;
         setSubmitting(true);
         if (!treasuryKey) {
-            Alert.alert('Not posted', "This screen didn't say which project or enterprise it posts for. Go back and open it again.");
+            Alert.alert(t('Not posted'), t("This screen didn't say which project or enterprise it posts for. Go back and open it again."));
             submittingRef.current = false;
             setSubmitting(false);
             return;
@@ -118,15 +127,20 @@ export default function TreasuryPostScreen() {
             } else {
                 await treasuryPostOffer(treasuryKey, body);
             }
+            const posted = isNeed
+                ? (treasuryName
+                    ? t('{name} is now looking for help — members can bid on this tender.', { name: treasuryName })
+                    : t('this enterprise is now looking for help — members can bid on this tender.'))
+                : (treasuryName
+                    ? t('{name} is now offering "{title}" in the Market.', { name: treasuryName, title: body.title })
+                    : t('this enterprise is now offering "{title}" in the Market.', { title: body.title }));
             Alert.alert(
-                isNeed ? 'Need posted' : 'Offer posted',
-                isNeed
-                    ? `${treasuryName} is now looking for help — members can bid on this tender.`
-                    : `${treasuryName} is now offering "${body.title}" in the Market.`,
-                [{ text: 'OK', onPress: () => router.back() }]
+                isNeed ? t('Need posted') : t('Offer posted'),
+                posted,
+                [{ text: t('OK'), onPress: () => router.back() }]
             );
         } catch (e: any) {
-            Alert.alert(isNeed ? 'Could not post need' : 'Could not post offer', e.message || 'Something went wrong.');
+            Alert.alert(isNeed ? t('Could not post need') : t('Could not post offer'), e.message || t('Something went wrong.'));
         } finally {
             setSubmitting(false);
             submittingRef.current = false;
@@ -137,10 +151,10 @@ export default function TreasuryPostScreen() {
         <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
             <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
             <View style={styles.header}>
-                <Pressable onPress={() => router.back()} style={styles.backButton} accessibilityRole="button" accessibilityLabel="Close">
+                <Pressable onPress={() => router.back()} style={styles.backButton} accessibilityRole="button" accessibilityLabel={t('Close')}>
                     <MaterialCommunityIcons name="close" size={26} color={colors.text.inverse} />
                 </Pressable>
-                <Text style={styles.headerTitle}>{isNeed ? 'Post a Need' : 'Post an Offer'}</Text>
+                <Text style={[styles.headerTitle, { flexShrink: 1, textAlign: 'center' }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{isNeed ? t('Post a Need') : t('Post an Offer')}</Text>
                 <View style={{ width: 40 }} />
             </View>
 
@@ -156,18 +170,22 @@ export default function TreasuryPostScreen() {
                         <MaterialCommunityIcons name={isNeed ? 'hand-extended' : 'tag'} size={20} color={colors.brand.primary} style={{ marginRight: 10 }} />
                         <Text style={styles.infoText}>
                             {isNeed
-                                ? `Posting on behalf of ${treasuryName}. Members can bid to fulfil this tender; you approve a bid and release payment when it's done — funded by the enterprise's credit line.`
-                                : `Posting on behalf of ${treasuryName}. This lists in the Market like any offer; income from sales lands in the enterprise's balance.`}
+                                ? (treasuryName
+                                    ? t("Posting on behalf of {name}. Members can bid to fulfil this tender; you approve a bid and release payment when it's done — funded by the enterprise's credit line.", { name: treasuryName })
+                                    : t("Posting on behalf of this enterprise. Members can bid to fulfil this tender; you approve a bid and release payment when it's done — funded by the enterprise's credit line."))
+                                : (treasuryName
+                                    ? t("Posting on behalf of {name}. This lists in the Market like any offer; income from sales lands in the enterprise's balance.", { name: treasuryName })
+                                    : t("Posting on behalf of this enterprise. This lists in the Market like any offer; income from sales lands in the enterprise's balance."))}
                         </Text>
                     </View>
 
                     {/* Title */}
                     <View style={styles.field}>
-                        <Text style={styles.label}>{isNeed ? 'WHAT DO YOU NEED?' : 'WHAT ARE YOU OFFERING?'}</Text>
+                        <Text style={styles.label}>{isNeed ? t('WHAT DO YOU NEED?') : t('WHAT ARE YOU OFFERING?')}</Text>
                         <TextInput
-                            accessibilityLabel="Title"
+                            accessibilityLabel={t('Title')}
                             style={[styles.input, fieldBorder('title')]}
-                            placeholder={isNeed ? 'e.g. Tend the community flock' : 'e.g. Dozen free-range eggs'}
+                            placeholder={isNeed ? t('e.g. Tend the community flock') : t('e.g. Dozen free-range eggs')}
                             placeholderTextColor={colors.text.muted}
                             value={title}
                             onChangeText={(v) => { setTitle(v); clearError('title'); }}
@@ -177,17 +195,17 @@ export default function TreasuryPostScreen() {
 
                     {/* Category */}
                     <View style={styles.field}>
-                        <Text style={styles.label}>CATEGORY</Text>
+                        <Text style={styles.label}>{t('CATEGORY')}</Text>
                         <Pressable
                             accessibilityRole="button"
-                            accessibilityLabel="Choose a category"
+                            accessibilityLabel={t('Choose a category')}
                             style={[styles.input, styles.pickerRow, fieldBorder('category')]}
                             onPress={() => setShowCategoryPicker(true)}
                         >
                             {category ? (
-                                <Text style={styles.pickerText}>{categoryEmoji(category)}  {categoryLabel(category)}</Text>
+                                <Text style={[styles.pickerText, { flexShrink: 1 }]}>{categoryEmoji(category)}  {categoryLabel(category)}</Text>
                             ) : (
-                                <Text style={styles.pickerPlaceholder}>Select a category</Text>
+                                <Text style={[styles.pickerPlaceholder, { flexShrink: 1 }]}>{t('Select a category')}</Text>
                             )}
                             <MaterialCommunityIcons name="chevron-down" size={22} color={colors.text.muted} />
                         </Pressable>
@@ -195,10 +213,10 @@ export default function TreasuryPostScreen() {
 
                     {/* Price */}
                     <View style={styles.field}>
-                        <Text style={styles.label}>PRICE (🫘 BEANS)</Text>
+                        <Text style={styles.label}>{t('PRICE (🫘 BEANS)')}</Text>
                         <View style={styles.priceRow}>
                             <TextInput
-                                accessibilityLabel="Price in Beans"
+                                accessibilityLabel={t('Price in Beans')}
                                 style={[styles.input, styles.priceInput, fieldBorder('credits')]}
                                 placeholder="0"
                                 placeholderTextColor={colors.text.muted}
@@ -207,20 +225,20 @@ export default function TreasuryPostScreen() {
                                 onChangeText={(v) => { setCredits(v); clearError('credits'); }}
                                 maxLength={6}
                             />
-                            <Pressable style={styles.priceTypeBtn} onPress={cyclePriceType} accessibilityRole="button" accessibilityLabel={`Price type: ${priceType}. Tap to change.`}>
-                                <Text style={styles.priceTypeText}>{PRICE_TYPE_LABEL[priceType]}</Text>
+                            <Pressable style={styles.priceTypeBtn} onPress={cyclePriceType} accessibilityRole="button" accessibilityLabel={t('Price type: {type}. Tap to change.', { type: t(PRICE_TYPE_SPOKEN[priceType]) })}>
+                                <Text style={styles.priceTypeText}>{t(PRICE_TYPE_LABEL[priceType])}</Text>
                             </Pressable>
                         </View>
-                        <Text style={styles.hint}>Tap the box on the right to switch between a fixed total and hourly/daily rates.</Text>
+                        <Text style={styles.hint}>{t('Tap the box on the right to switch between a fixed total and hourly/daily rates.')}</Text>
                     </View>
 
                     {/* Description */}
                     <View style={styles.field}>
-                        <Text style={styles.label}>DETAILS (OPTIONAL)</Text>
+                        <Text style={styles.label}>{t('DETAILS (OPTIONAL)')}</Text>
                         <TextInput
-                            accessibilityLabel="Details"
+                            accessibilityLabel={t('Details')}
                             style={[styles.input, styles.textarea]}
-                            placeholder={isNeed ? 'What does the work involve? Any requirements?' : 'Anything buyers should know…'}
+                            placeholder={isNeed ? t('What does the work involve? Any requirements?') : t('Anything buyers should know…')}
                             placeholderTextColor={colors.text.muted}
                             value={description}
                             onChangeText={setDescription}
@@ -235,12 +253,12 @@ export default function TreasuryPostScreen() {
                             <View style={[styles.checkbox, repeatable && styles.checkboxOn]}>
                                 {repeatable && <MaterialCommunityIcons name="check" size={18} color={colors.text.inverse} />}
                             </View>
-                            <Text style={styles.toggleLabel}>Recurring — stays live after each deal</Text>
+                            <Text style={[styles.toggleLabel, { flex: 1 }]}>{t('Recurring — stays live after each deal')}</Text>
                         </Pressable>
                         <Text style={styles.hint}>
                             {isNeed
-                                ? 'Leave on for an ongoing tender (e.g. weekly flock-tending); off for a one-off job.'
-                                : 'Leave on so the offer stays available for the next buyer (e.g. eggs every week).'}
+                                ? t('Leave on for an ongoing tender (e.g. weekly flock-tending); off for a one-off job.')
+                                : t('Leave on so the offer stays available for the next buyer (e.g. eggs every week).')}
                         </Text>
                     </View>
                 </KeyboardAwareScrollView>
@@ -255,7 +273,7 @@ export default function TreasuryPostScreen() {
                             {submitting ? (
                                 <ActivityIndicator color={colors.text.inverse} />
                             ) : (
-                                <Text style={styles.submitBtnText}>{isNeed ? 'POST NEED' : 'POST OFFER'}</Text>
+                                <Text style={styles.submitBtnText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{isNeed ? t('POST NEED') : t('POST OFFER')}</Text>
                             )}
                         </Pressable>
                     </View>

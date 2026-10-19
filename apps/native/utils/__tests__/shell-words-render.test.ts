@@ -3,7 +3,8 @@
  * The app shell in the member's language (words slice S3, sweep B11): "Update required" (components/ForceUpdateBlock.tsx),
  * the tour bar (components/TourBar.tsx), the header (components/GlobalHeader.tsx: words only), the guide's pages
  * (app/guide/[slug].tsx, app/guide/section/[id].tsx) and the re-key prompt app/_layout.tsx raises (components/
- * shell-lines.ts), drawn for real inside the real LanguageProvider. React Native's host components are plain tags
+ * shell-lines.ts), drawn for real inside the real LanguageProvider; and what _layout.tsx says when an invite link's
+ * redeem fails, read from its source (the root layout isn't drawn here). React Native's host components are plain tags
  * (profile-events-words-harness.ts); the update gate, the phone's lock and key store, the ways out of the block, the
  * guide's videos and the node are stubbed at their modules.
  *
@@ -157,6 +158,7 @@ import { GlobalHeader } from '../../components/GlobalHeader';
 import GuideScreen from '../../app/guide/[slug]';
 import GuideSectionScreen from '../../app/guide/section/[id]';
 import { rekeyPromptWords } from '../../components/shell-lines';
+import { welcomeLineWords } from '../../components/welcome/welcome-lines';
 import { KEY_SUCCESSION_PROMPT_NO, KEY_SUCCESSION_PROMPT_YES, keySuccessionPromptText } from '../key-succession';
 import { getBundledGuide, findGuidePage, findGuideSection, relatedPages, sectionPages, splitBold } from '../guide';
 import { lightColors } from '../../constants/colors';
@@ -477,5 +479,23 @@ describe("the re-key prompt (app/_layout.tsx) is key-succession.ts's, in the mem
         setLanguage('xx');
         const words = rekeyPromptWords('2026-10-03T09:00:00.000Z');
         for (const s of [words.text, words.yes, words.no]) expect(s).toMatch(/^\[.*\]$/s);
+    });
+});
+
+describe('"Redemption Failed" (app/_layout.tsx): an invite link whose redeem failed says why as the invite join does', () => {
+    it("both invite-link paths draw welcomeLineWords: redeemInvite's own sentences bracketed in the pseudo-locale, the node's as given", () => {
+        // The root layout isn't drawn here: both alerts are read from its source. welcome-lines.test.ts holds the
+        // table's redeem sentences to utils/db.ts redeemInvite.
+        const layout = fs.readFileSync(path.resolve(__dirname, '../../app/_layout.tsx'), 'utf8');
+        const bodies = [...layout.matchAll(/Alert\.alert\(t\('Redemption Failed'\), ([^;]+)\);/g)].map((m) => m[1]);
+        expect(bodies).toEqual(['welcomeLineWords(errStr)', 'welcomeLineWords(errStr)']);
+        expect(layout.split("t('Redemption Failed')").length - 1).toBe(2);
+        setLanguage('xx');
+        expect(welcomeLineWords('Relay Node Offline: The selected community node is currently unreachable (HTTP 502).'))
+            .toBe(xx('Relay Node Offline: The selected community node is currently unreachable (HTTP {status}).').replace('{status}', '502'));
+        expect(welcomeLineWords('Failed to redeem invite (HTTP 500)')).toBe(xx('Failed to redeem invite (HTTP {status})').replace('{status}', '500'));
+        const noAnswer = 'No answer from the community node in time. Check your connection and try again.';
+        expect(welcomeLineWords(noAnswer)).toBe(xx(noAnswer));
+        expect(welcomeLineWords('Invite code expired')).toBe('Invite code expired');
     });
 });

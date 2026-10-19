@@ -57,6 +57,7 @@ import { doorLinkFromSystemPath } from '../utils/open-door';
 import * as WebBrowser from 'expo-web-browser';
 import { t } from '@beanpool/core';
 import { settingsLineWords } from '../components/settings/settings-lines';
+import { welcomeLineWords } from '../components/welcome/welcome-lines';
 import { rekeyPromptWords } from '../components/shell-lines';
 
 // Complete any pending browser-based auth sessions (e.g. OAuth redirects)
@@ -483,7 +484,9 @@ function RootLayoutNav() {
                                                     ]
                                                 );
                                             } else {
-                                                Alert.alert(t('Redemption Failed'), errStr);
+                                                // redeemInvite's own sentences in the member's language, as the invite join says
+                                                // them; the node's words as given.
+                                                Alert.alert(t('Redemption Failed'), welcomeLineWords(errStr));
                                             }
                                         });
                                 }
@@ -565,7 +568,8 @@ function RootLayoutNav() {
                                                         ]
                                                     );
                                                 } else {
-                                                    Alert.alert(t('Redemption Failed'), errStr);
+                                                    // As above: redeemInvite's own sentences worded, the node's as given.
+                                                    Alert.alert(t('Redemption Failed'), welcomeLineWords(errStr));
                                                 }
                                             });
                                     }

@@ -1840,7 +1840,9 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                             <div className="bg-amber-50/50 dark:bg-amber-950/20 border-2 border-amber-400/40 rounded-2xl p-5 space-y-4 shadow-sm">
                                 <div className="text-xs font-black uppercase tracking-wider text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
                                     <span aria-hidden="true">📬</span>
-                                    <span>Asking to join as {kw.keepers} ({keeperRequests.length})</span>
+                                    <span>{project
+                                        ? t('Asking to join as collaborators ({n})', { n: keeperRequests.length })
+                                        : t('Asking to join as keepers ({n})', { n: keeperRequests.length })}</span>
                                 </div>
                                 <div className="space-y-3">
                                     {keeperRequests.map((req) => (
@@ -1855,7 +1857,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                         {req.callsign || `${req.memberPubkey.slice(0, 8)}…`}
                                                     </div>
                                                     <div className="text-[11px] text-nature-500 dark:text-nature-400">
-                                                        Backing pledge: <span className="font-bold text-emerald-600 dark:text-emerald-400">{req.pledgedBacking} 🫘</span>
+                                                        <Sentence text={t('Backing pledge: {amount}')} parts={{ amount: <span className="font-bold text-emerald-600 dark:text-emerald-400">{formatNumber(req.pledgedBacking)} 🫘</span> }} />
                                                     </div>
                                                     {applicantBackingText(req.canBackPledge) && (
                                                         <div className={req.canBackPledge === false
@@ -1868,7 +1870,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                             </div>
                                             {req.pendingChange ? (
                                                 <div className="text-[11px] font-semibold text-amber-800 dark:text-amber-300">
-                                                    Approved. Joins when the objection window ends ({timeLeftText(req.pendingChange.appliesAt)}).
+                                                    {t('Approved. Joins when the objection window ends ({time}).', { time: timeLeftText(req.pendingChange.appliesAt) })}
                                                 </div>
                                             ) : (
                                             <div className="flex items-center gap-2 self-end sm:self-auto">
@@ -1878,7 +1880,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                     onClick={() => handleApproveRequest(req.id)}
                                                     className="px-3 py-2 rounded-lg bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on text-xs font-bold shadow-xs transition-colors disabled:opacity-50 min-h-[36px]"
                                                 >
-                                                    {requestProcessingId === req.id ? 'Approving…' : 'Approve'}
+                                                    {requestProcessingId === req.id ? t('Approving…') : t('Approve')}
                                                 </button>
                                                 <button
                                                     type="button"
@@ -1886,7 +1888,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                     onClick={() => handleDeclineRequest(req.id)}
                                                     className="px-3 py-2 rounded-lg border border-nature-300 dark:border-nature-700 text-nature-700 dark:text-nature-300 text-xs font-semibold hover:bg-nature-100 dark:hover:bg-nature-800 transition-colors disabled:opacity-50 min-h-[36px]"
                                                 >
-                                                    Decline
+                                                    {t('Decline')}
                                                 </button>
                                             </div>
                                             )}
@@ -1900,24 +1902,26 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                         {!isEffectivePreview && keeperChanges.length > 0 && (
                             <div className="bg-amber-50/50 dark:bg-amber-950/20 border-2 border-amber-400/40 rounded-2xl p-5 space-y-3 shadow-sm">
                                 <div className="text-xs font-black uppercase tracking-wider text-amber-800 dark:text-amber-300">
-                                    {kw.Keeper} changes waiting ({keeperChanges.length})
+                                    {project
+                                        ? t('Collaborator changes waiting ({n})', { n: keeperChanges.length })
+                                        : t('Keeper changes waiting ({n})', { n: keeperChanges.length })}
                                 </div>
                                 {keeperChanges.map((c) => (
                                     <div key={c.id} className="bg-white dark:bg-nature-900 border border-amber-200 dark:border-amber-800/60 rounded-xl p-3 space-y-2">
                                         <div className="text-xs font-bold text-nature-900 dark:text-white">{keeperChangeTitle(c, kw)}</div>
                                         <p className="text-xs text-nature-600 dark:text-nature-400 leading-relaxed">{keeperChangeBody(c, kw)}</p>
                                         <div className="text-[11px] font-semibold text-amber-800 dark:text-amber-300">
-                                            <span aria-hidden="true">⏳ </span>Objection window: {timeLeftText(c.appliesAt)}
+                                            <span aria-hidden="true">⏳ </span>{t('Objection window: {time}', { time: timeLeftText(c.appliesAt) })}
                                         </div>
                                         {canObjectToChange(c, myPubkey, keeperList) && (
                                             <button
                                                 type="button"
                                                 disabled={changeProcessingId === c.id}
                                                 onClick={() => handleObjectToChange(c.id)}
-                                                aria-label={`Object: ${keeperChangeTitle(c, kw)}`}
+                                                aria-label={t('Object: {change}', { change: keeperChangeTitle(c, kw) })}
                                                 className="w-full px-3 py-2 rounded-lg border border-nature-300 dark:border-nature-700 text-nature-800 dark:text-nature-200 text-xs font-bold hover:bg-nature-100 dark:hover:bg-nature-800 transition-colors disabled:opacity-50 min-h-[48px]"
                                             >
-                                                {changeProcessingId === c.id ? 'Objecting…' : 'Object'}
+                                                {changeProcessingId === c.id ? t('Objecting…') : t('Object', undefined, 'button: object to a change')}
                                             </button>
                                         )}
                                     </div>
@@ -1943,7 +1947,12 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                 {activeProposal ? (
                                     <div className="bg-white dark:bg-nature-900 border border-amber-300 dark:border-amber-800 rounded-xl p-4 space-y-3">
                                         <div className="text-xs font-bold text-nature-900 dark:text-white">
-                                            Active Succession Proposal: Move the {kw.lead} role to <span className="text-emerald-700 dark:text-emerald-400 font-extrabold">{activeProposal.candidateCallsign}</span>
+                                            <Sentence
+                                                text={project
+                                                    ? t('Active Succession Proposal: Move the leader role to {name}')
+                                                    : t('Active Succession Proposal: Move the lead keeper role to {name}')}
+                                                parts={{ name: <span className="text-emerald-700 dark:text-emerald-400 font-extrabold">{activeProposal.candidateCallsign}</span> }}
+                                            />
                                         </div>
                                         <div className="text-xs text-nature-600 dark:text-nature-400">
                                             {successionTallyText(activeProposal, kw)}
@@ -1958,7 +1967,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                 {myChoice(activeProposal, myPubkey) ? (
                                                     <div className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 px-3 py-2 rounded-lg border border-emerald-200 dark:border-emerald-800">
                                                         <span aria-hidden="true">✓</span>
-                                                        <span>You voted {myChoice(activeProposal, myPubkey)}. Votes cannot be changed.</span>
+                                                        <span>{myChoice(activeProposal, myPubkey) === 'no' ? t('You voted no. Votes cannot be changed.') : t('You voted yes. Votes cannot be changed.')}</span>
                                                     </div>
                                                 ) : (
                                                     <div className="flex gap-2">
@@ -1966,19 +1975,23 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                             type="button"
                                                             disabled={submittingSuccession}
                                                             onClick={() => handleVoteSuccession(activeProposal.id, 'yes')}
-                                                            aria-label={`Yes, make ${activeProposal.candidateCallsign} ${kw.lead}`}
+                                                            aria-label={project
+                                                                ? t('Yes, make {name} leader', { name: activeProposal.candidateCallsign ?? '' })
+                                                                : t('Yes, make {name} lead keeper', { name: activeProposal.candidateCallsign ?? '' })}
                                                             className="flex-1 py-2.5 px-4 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-bold text-xs shadow-sm transition-all disabled:opacity-50 min-h-[48px]"
                                                         >
-                                                            {submittingSuccession ? 'Registering…' : 'Yes'}
+                                                            {submittingSuccession ? t('Registering…') : t('Yes')}
                                                         </button>
                                                         <button
                                                             type="button"
                                                             disabled={submittingSuccession}
                                                             onClick={() => handleVoteSuccession(activeProposal.id, 'no')}
-                                                            aria-label={`No, do not make ${activeProposal.candidateCallsign} ${kw.lead}`}
+                                                            aria-label={project
+                                                                ? t('No, do not make {name} leader', { name: activeProposal.candidateCallsign ?? '' })
+                                                                : t('No, do not make {name} lead keeper', { name: activeProposal.candidateCallsign ?? '' })}
                                                             className="flex-1 py-2.5 px-4 rounded-xl border border-nature-300 dark:border-nature-700 text-nature-800 dark:text-nature-200 font-bold text-xs transition-all disabled:opacity-50 min-h-[48px]"
                                                         >
-                                                            No
+                                                            {t('No')}
                                                         </button>
                                                     </div>
                                                 )}
@@ -1988,7 +2001,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                 ) : isEligibleSuccessor ? (
                                     <form onSubmit={handleProposeSuccession} className="bg-white dark:bg-nature-900 border border-amber-300 dark:border-amber-800 rounded-xl p-4 space-y-3">
                                         <div className="text-xs font-bold text-nature-800 dark:text-nature-200">
-                                            Propose an Active {kw.Keeper} as {kw.kind === 'project' ? 'Leader' : 'Lead'}
+                                            {project ? t('Propose an Active Collaborator as Leader') : t('Propose an Active Keeper as Lead')}
                                         </div>
                                         <div className="flex flex-col sm:flex-row gap-2">
                                             <select
@@ -1996,14 +2009,14 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                 onChange={(e) => setSelectedSuccessionCandidate(e.target.value)}
                                                 className="flex-1 bg-nature-50 dark:bg-nature-800 border border-nature-300 dark:border-nature-700 rounded-xl px-3 py-2 text-xs font-semibold text-nature-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500 min-h-[44px]"
                                             >
-                                                <option value="">Select an active {kw.keeper}…</option>
+                                                <option value="">{project ? t('Select an active collaborator…') : t('Select an active keeper…')}</option>
                                                 {keepers
                                                     .filter((k: any) => !k.suspended && (k.publicKey || k.pubkey || k.memberPubkey) !== leadInactivity.leadPubkey)
                                                     .map((k: any) => {
                                                         const pk = k.publicKey || k.pubkey || k.memberPubkey;
                                                         return (
                                                             <option key={pk} value={pk}>
-                                                                {k.callsign} {pk === identity?.publicKey ? '(yourself)' : ''}
+                                                                {pk === identity?.publicKey ? t('{name} (yourself)', { name: k.callsign }) : k.callsign}
                                                             </option>
                                                         );
                                                     })}
@@ -2013,7 +2026,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                 disabled={submittingSuccession || !selectedSuccessionCandidate}
                                                 className="py-2 px-4 rounded-xl bg-bp-gold-fill hover:bg-bp-gold-hover text-bp-gold-on font-bold text-xs shadow-sm transition-all disabled:opacity-50 shrink-0 min-h-[44px]"
                                             >
-                                                {submittingSuccession ? 'Proposing…' : `Propose ${kw.kind === 'project' ? 'Leader' : 'Lead'}`}
+                                                {submittingSuccession ? t('Proposing…') : project ? t('Propose Leader') : t('Propose Lead')}
                                             </button>
                                         </div>
                                     </form>
@@ -2027,27 +2040,31 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                 <div>
                                     <div className="text-xs font-bold uppercase tracking-wider text-nature-500 dark:text-nature-400 flex items-center gap-1.5">
                                         <span aria-hidden="true">🤝</span>
-                                        <span>{t('Ask to join as a {keeper}', { keeper: kw.keeper })}</span>
+                                        <span>{project ? t('Ask to join as a collaborator') : t('Ask to join as a keeper')}</span>
                                     </div>
                                     <p className="text-xs text-nature-600 dark:text-nature-400 mt-1 leading-relaxed">
-                                        {t('Help run this {kind}. You can back it with your earned trading standing to expand its credit floor.', { kind: kw.kind })}
+                                        {project
+                                            ? t('Help run this project. You can back it with your earned trading standing to expand its credit floor.')
+                                            : t('Help run this enterprise. You can back it with your earned trading standing to expand its credit floor.')}
                                     </p>
                                 </div>
-                                <LocalCommunityAction feature="enterprises" label={t('Join as {keeper}', { keeper: kw.keeper })} className="w-full" {...ways} />
+                                <LocalCommunityAction feature="enterprises" label={project ? t('Join as collaborator') : t('Join as keeper')} className="w-full" {...ways} />
                             </div>
                         ) : viewerIsMember && !isKeeperOfThis && detail.status !== 'completed' && (
                             myPendingRequest ? (
                                 <div className="bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-800 rounded-2xl p-5 space-y-2">
                                     <div className="text-xs font-bold uppercase tracking-wider text-sky-800 dark:text-sky-300 flex items-center gap-2">
                                         <span aria-hidden="true">⏳</span>
-                                        <span>Your request to join is waiting</span>
+                                        <span>{t('Your request to join is waiting')}</span>
                                     </div>
                                     <p className="text-xs text-sky-900 dark:text-sky-200 leading-relaxed">
                                         {myPendingRequest.pendingChange ? approvedApplicantText(myPendingRequest.pendingChange.appliesAt, undefined, kw) : (
-                                            <>
-                                                You asked to join this {kw.kind} with <strong className="font-bold text-emerald-700 dark:text-emerald-300">{myPendingRequest.pledgedBacking} 🫘</strong> of backing standing.
-                                                Waiting for the {kw.lead}.
-                                            </>
+                                            <Sentence
+                                                text={project
+                                                    ? t('You asked to join this project with {amount} of backing standing. Waiting for the leader.')
+                                                    : t('You asked to join this enterprise with {amount} of backing standing. Waiting for the lead keeper.')}
+                                                parts={{ amount: <strong className="font-bold text-emerald-700 dark:text-emerald-300">{formatNumber(myPendingRequest.pledgedBacking)} 🫘</strong> }}
+                                            />
                                         )}
                                     </p>
                                 </div>
@@ -2056,17 +2073,21 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                     <div>
                                         <div className="text-xs font-bold uppercase tracking-wider text-nature-500 dark:text-nature-400 flex items-center gap-1.5">
                                             <span aria-hidden="true">🤝</span>
-                                            <span>Ask to join as a {kw.keeper}</span>
+                                            <span>{project ? t('Ask to join as a collaborator') : t('Ask to join as a keeper')}</span>
                                         </div>
                                         <p className="text-xs text-nature-600 dark:text-nature-400 mt-1 leading-relaxed">
-                                            Help run this {kw.kind}. You can back it with your earned trading standing to expand its credit floor.
+                                            {project
+                                                ? t('Help run this project. You can back it with your earned trading standing to expand its credit floor.')
+                                                : t('Help run this enterprise. You can back it with your earned trading standing to expand its credit floor.')}
                                         </p>
                                     </div>
 
                                     <form onSubmit={handleJoinRequest} className="space-y-4">
                                         <div className="space-y-2">
                                             <label htmlFor="join-backing-input" className="block text-xs font-bold text-nature-800 dark:text-nature-200">
-                                                Back this {kw.kind} with your standing: 0 … {availableToBack}
+                                                {project
+                                                    ? t('Back this project with your standing: 0 … {n}', { n: availableToBack })
+                                                    : t('Back this enterprise with your standing: 0 … {n}', { n: availableToBack })}
                                             </label>
                                             <div className="flex items-center gap-3">
                                                 <input
@@ -2085,7 +2106,9 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                 />
                                                 <input
                                                     type="range"
-                                                    aria-label={`Back this ${kw.kind} with your standing: 0 to ${availableToBack}`}
+                                                    aria-label={project
+                                                        ? t('Back this project with your standing: 0 to {n}', { n: availableToBack })
+                                                        : t('Back this enterprise with your standing: 0 to {n}', { n: availableToBack })}
                                                     min={0}
                                                     max={availableToBack}
                                                     step={1}
@@ -2095,11 +2118,13 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                     className="flex-1 accent-emerald-600 disabled:opacity-40"
                                                 />
                                                 <span className="text-xs font-extrabold text-nature-700 dark:text-nature-300 w-16 text-right">
-                                                    {joinBackingPledge} 🫘
+                                                    {formatNumber(joinBackingPledge)} 🫘
                                                 </span>
                                             </div>
                                             <p className="text-[11px] text-nature-500 dark:text-nature-400">
-                                                A pledge of 0 is valid: someone who helps run it without pledging standing can still be a {kw.keeper}.
+                                                {project
+                                                    ? t('A pledge of 0 is valid: someone who helps run it without pledging standing can still be a collaborator.')
+                                                    : t('A pledge of 0 is valid: someone who helps run it without pledging standing can still be a keeper.')}
                                             </p>
                                         </div>
 
@@ -2108,7 +2133,9 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                             disabled={submittingJoinRequest}
                                             className="w-full py-2.5 px-4 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-bold text-xs shadow-sm transition-all disabled:opacity-50 min-h-[44px]"
                                         >
-                                            {submittingJoinRequest ? 'Submitting request…' : `Request to join as a ${kw.keeper}`}
+                                            {submittingJoinRequest
+                                                ? t('Submitting request…')
+                                                : project ? t('Request to join as a collaborator') : t('Request to join as a keeper')}
                                         </button>
                                     </form>
                                 </div>
@@ -2119,7 +2146,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                         {keepers.length > 0 && (
                             <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-5 shadow-sm space-y-3">
                                 <div className="text-xs font-bold uppercase tracking-wider text-nature-500 dark:text-nature-400">
-                                    {kw.Keepers} ({keepers.length})
+                                    {project ? t('Collaborators ({n})', { n: keepers.length }) : t('Keepers ({n})', { n: keepers.length })}
                                 </div>
                                 <div className="flex flex-wrap gap-2">
                                     {keepers.map((k: any) => {
@@ -2142,21 +2169,21 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                 <span>{k.callsign}</span>
                                                 {isSuspended && (
                                                     <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-nature-200 text-nature-700 dark:bg-nature-700 dark:text-nature-200">
-                                                        Suspended
+                                                        {t('Suspended')}
                                                     </span>
                                                 )}
                                                 {isLead ? (
                                                     <span className="px-1.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-bp-chip-warn-tint text-bp-chip-warn-ink">
-                                                        {kw.Lead}
+                                                        {keeperRoleWord(project, true)}
                                                     </span>
                                                 ) : (
                                                     <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-nature-200/70 text-nature-700 dark:bg-nature-700 dark:text-nature-200">
-                                                        {kw.Keeper}
+                                                        {keeperRoleWord(project, false)}
                                                     </span>
                                                 )}
                                                 {Number(k.backing) > 0 && (
                                                     <span className="text-[11px] text-emerald-700 dark:text-emerald-400 font-bold">
-                                                        +{k.backing} 🫘
+                                                        +{formatNumber(Number(k.backing))} 🫘
                                                     </span>
                                                 )}
                                             </KeeperRow>
@@ -2173,7 +2200,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                 onClick={() => handleRemoveKeeper(k)}
                                                 className="w-full px-3 py-2 rounded-lg border border-nature-300 dark:border-nature-700 text-nature-700 dark:text-nature-300 text-xs font-bold hover:bg-nature-100 dark:hover:bg-nature-800 transition-colors disabled:opacity-50 min-h-[48px]"
                                             >
-                                                Remove {k.callsign}
+                                                {t('Remove {name}', { name: k.callsign })}
                                             </button>
                                         ))}
                                         {canStepDown(myPubkey, keeperList) && (
@@ -2183,7 +2210,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                 onClick={handleStepDown}
                                                 className="w-full px-3 py-2 rounded-lg border border-nature-300 dark:border-nature-700 text-nature-700 dark:text-nature-300 text-xs font-bold hover:bg-nature-100 dark:hover:bg-nature-800 transition-colors disabled:opacity-50 min-h-[48px]"
                                             >
-                                                {steppingDown ? 'Stepping down…' : `Step down as a ${kw.keeper}`}
+                                                {steppingDown ? t('Stepping down…') : project ? t('Step down as a collaborator') : t('Step down as a keeper')}
                                             </button>
                                         )}
                                     </div>

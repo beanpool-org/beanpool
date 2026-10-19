@@ -28,7 +28,7 @@ import {
     successionDeadlineText, myChoice, successionHeading, successionExplainer, type KeeperChangeLite,
 } from '../utils/keeper-governance';
 import { decodeBase64, decodeUtf8 } from '../utils/crypto';
-import { groupKindLine, isWholeCents, keeperWords, t, isSampleId } from '@beanpool/core';
+import { formatDate, formatNumber, groupKindLine, isWholeCents, keeperWords, t, tn, isSampleId } from '@beanpool/core';
 import { loadIdentity } from '../utils/identity';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { EnterpriseDecisions } from '../components/EnterpriseDecisions';
@@ -41,8 +41,13 @@ import { LocalCommunityMark, ExampleHeader } from '../components/showcase/LocalC
 import { useReaderFeatures } from '../utils/use-reader-features';
 import { showcaseMode } from '../utils/node-profile';
 
-function decodeThreadMessage(ciphertext: string, type: string, keeper = 'keeper'): string {
-    if (type === 'removed') return `removed by a ${keeper}`;
+/** What stands in for a message a keeper (a project's collaborator) removed: the same words the remove alert quotes. */
+function removedLine(project: boolean): string {
+    return project ? t('removed by a collaborator') : t('removed by a keeper');
+}
+
+function decodeThreadMessage(ciphertext: string, type: string, project = false): string {
+    if (type === 'removed') return removedLine(project);
     try {
         return decodeUtf8(decodeBase64(ciphertext));
     } catch {
@@ -414,10 +419,10 @@ export default function TreasuryDetailScreen() {
                 setThreadInput('');
                 await loadThread();
             } else {
-                Alert.alert('Could not post', (res as any)?.error || 'Failed to post message');
+                Alert.alert(t('Could not post'), (res as any)?.error || t('Failed to post message'));
             }
         } catch (e: any) {
-            Alert.alert('Error', e.message || 'Could not post message');
+            Alert.alert(t('Error'), e.message || t('Could not post message'));
         } finally {
             setThreadPosting(false);
         }
@@ -427,12 +432,12 @@ export default function TreasuryDetailScreen() {
         // The trash button keeps the keyboard up (keyboardShouldPersistTaps); an Alert over it leaves phantom padding.
         await KeyboardController.dismiss();
         Alert.alert(
-            'Remove Message',
-            `Are you sure you want to remove this message? It will show as "removed by a ${keeperWords(detail?.lifecycle).keeper}".`,
+            t('Remove Message'),
+            t('Are you sure you want to remove this message? It will show as "{removed}".', { removed: removedLine(keeperWords(detail?.lifecycle).kind === 'project') }),
             [
-                { text: 'Cancel', style: 'cancel' },
+                { text: t('Cancel'), style: 'cancel' },
                 {
-                    text: 'Remove',
+                    text: t('Remove'),
                     style: 'destructive',
                     onPress: async () => {
                         if (!treasuryKey) return;
@@ -441,7 +446,7 @@ export default function TreasuryDetailScreen() {
                             await removeEnterpriseThreadMessage(treasuryKey, messageId);
                             await loadThread();
                         } catch (e: any) {
-                            Alert.alert('Error', e.message || 'Could not remove message');
+                            Alert.alert(t('Error'), e.message || t('Could not remove message'));
                         } finally {
                             setThreadRemovingId(null);
                         }
@@ -475,7 +480,7 @@ export default function TreasuryDetailScreen() {
             setLedgerShown(LEDGER_PAGE);
         } catch (e: any) {
             if (request !== ledgerRequest.current) return;
-            setLedgerError(e?.message || 'Could not load the ledger');
+            setLedgerError(e?.message || t('Could not load the ledger'));
         } finally {
             if (request === ledgerRequest.current) setLedgerLoading(false);
         }
@@ -487,40 +492,44 @@ export default function TreasuryDetailScreen() {
     const runLifecycleAction = async (action: LifecycleAction) => {
         if (!treasuryKey || lifecycleBusy) return;
         setLifecycleBusy(true);
+        const project = keeperWords(detail?.lifecycle).kind === 'project';
         let title = '';
         let message = '';
         try {
             if (action === 'pause') {
                 await pauseEnterprise(treasuryKey);
-                title = 'Paused for the season ❄️';
-                message = `${keeperWords(detail?.lifecycle).Kind} paused for the season. Credit held at snapshot.`;
+                title = t('Paused for the season ❄️');
+                message = project ? t('Project paused for the season. Credit held at snapshot.') : t('Enterprise paused for the season. Credit held at snapshot.');
             } else if (action === 'resume') {
                 await resumeEnterprise(treasuryKey);
-                title = `${keeperWords(detail?.lifecycle).Kind} resumed ▶️`;
-                message = `${keeperWords(detail?.lifecycle).Kind} resumed! Active listings are now buyable again.`;
+                title = project ? t('Project resumed ▶️') : t('Enterprise resumed ▶️');
+                message = project ? t('Project resumed! Active listings are now buyable again.') : t('Enterprise resumed! Active listings are now buyable again.');
             } else if (action === 'windUp') {
                 await initiateWindUp(treasuryKey);
-                title = 'Wind-up started';
-                message = 'Wind-up initiated. 7-day grace period has begun.';
+                title = t('Wind-up started');
+                message = t('Wind-up initiated. 7-day grace period has begun.');
             } else if (action === 'cancelWindUp') {
                 await cancelWindUp(treasuryKey);
-                title = 'Wind-up stopped';
-                message = `Wind-up cancelled. ${keeperWords(detail?.lifecycle).Kind} restored to active status.`;
+                title = t('Wind-up stopped');
+                message = project ? t('Wind-up cancelled. Project restored to active status.') : t('Wind-up cancelled. Enterprise restored to active status.');
             } else {
                 const res = await finaliseWindUp(treasuryKey);
-                title = 'Wind-up finalised 🏁';
-                message = `Wind-up finalised. Swept ${res?.sweptAmount ?? 0} 🫘 to Commons and released ${keeperWords(detail?.lifecycle).keepers}.`;
+                const amount = res?.sweptAmount ?? 0;
+                title = t('Wind-up finalised 🏁');
+                message = project
+                    ? t('Wind-up finalised. Swept {amount} 🫘 to Commons and released collaborators.', { amount })
+                    : t('Wind-up finalised. Swept {amount} 🫘 to Commons and released keepers.', { amount });
             }
             setConfirmingLifecycle(null);
         } catch (e: any) {
             const fallback = {
-                pause: `Failed to pause ${keeperWords(detail?.lifecycle).kind}`,
-                resume: `Failed to resume ${keeperWords(detail?.lifecycle).kind}`,
-                windUp: 'Failed to initiate wind-up',
-                cancelWindUp: 'Failed to cancel wind-up',
-                finaliseWindUp: 'Failed to finalise wind-up',
+                pause: project ? t('Failed to pause project') : t('Failed to pause enterprise'),
+                resume: project ? t('Failed to resume project') : t('Failed to resume enterprise'),
+                windUp: t('Failed to initiate wind-up'),
+                cancelWindUp: t('Failed to cancel wind-up'),
+                finaliseWindUp: t('Failed to finalise wind-up'),
             }[action];
-            title = 'Could not complete that';
+            title = t('Could not complete that');
             message = e?.message || fallback;
         } finally {
             setLifecycleBusy(false);
@@ -533,7 +542,8 @@ export default function TreasuryDetailScreen() {
     };
 
     const balance = detail?.balance ?? 0;
-    const name = detail?.name || nameParam || 'Community Enterprise';
+    // The name its members gave it, as written; the words only when there is none.
+    const name = detail?.name || nameParam || t('Community Enterprise');
     const avatar = detail?.avatar || avatarParam;
 
     const banner = seasonBanner(detail);
@@ -551,8 +561,12 @@ export default function TreasuryDetailScreen() {
     const keeperChanges: KeeperChangeLite[] = detail?.keeperChanges || [];
     const myPubkey: string | null = identity?.publicKey ?? null;
     const iAmLead = keeperList.some(k => k.publicKey === myPubkey && k.role === 'lead');
-    /** A project has a leader and collaborators; an enterprise a lead keeper and keepers (pick 8). */
+    /**
+     * A project has a leader and collaborators; an enterprise a lead keeper and keepers (pick 8). Each sentence is written
+     * whole for each kind (`project`), never with kw's words glued in, so a language can inflect them.
+     */
     const kw = keeperWords(detail?.lifecycle);
+    const project = kw.kind === 'project';
     const removableKeepers = keeperList.filter(k => canRemoveKeeper(k, myPubkey, iAmLead, keeperChanges));
     const isEligibleSuccessor = isKeeperOfThis && !!identity?.publicKey && !!leadInactivity?.leadPubkey && identity.publicKey !== leadInactivity.leadPubkey;
 
@@ -560,16 +574,21 @@ export default function TreasuryDetailScreen() {
     const handleSweep = async () => {
         if (!treasuryKey || sweeping) return;
         const amt = Number(sweepAmount);
-        if (isNaN(amt) || amt <= 0) { Alert.alert('Enter an amount', 'Type a positive number of Beans to sweep into the Commons.'); return; }
-        if (amt > balance) { Alert.alert('Not enough surplus', `This ${kw.kind} only holds ${balance} 🫘.`); return; }
+        if (isNaN(amt) || amt <= 0) { Alert.alert(t('Enter an amount'), t('Type a positive number of Beans to sweep into the Commons.')); return; }
+        if (amt > balance) {
+            Alert.alert(t('Not enough surplus'), project
+                ? t('This project only holds {amount} 🫘.', { amount: balance })
+                : t('This enterprise only holds {amount} 🫘.', { amount: balance }));
+            return;
+        }
         setSweeping(true);
         try {
             await treasurySweep(treasuryKey, amt);
-            Alert.alert('Swept to the Commons 🌱', `${amt} 🫘 moved from ${name} into the shared Commons pool.`);
+            Alert.alert(t('Swept to the Commons 🌱'), t('{amount} 🫘 moved from {name} into the shared Commons pool.', { amount: amt, name }));
             setSweepAmount('');
             load();
         } catch (e: any) {
-            Alert.alert('Sweep failed', e.message || 'Could not sweep to the Commons.');
+            Alert.alert(t('Sweep failed'), e.message || t('Could not sweep to the Commons.'));
         } finally {
             setSweeping(false);
         }
@@ -580,20 +599,24 @@ export default function TreasuryDetailScreen() {
         const available = detail?.availableToBack ?? 0;
         const amt = Number(joinBackingPledge);
         if (isNaN(amt) || amt < 0) {
-            Alert.alert('Invalid Backing', 'Please enter 0 or a positive number of standing beans.');
+            Alert.alert(t('Invalid Backing'), t('Please enter 0 or a positive number of standing beans.'));
             return;
         }
         if (amt > available) {
-            Alert.alert('Exceeds Available Standing', `You have ${available} Beans of standing available to back this ${kw.kind}.`);
+            Alert.alert(t('Exceeds Available Standing'), project
+                ? tn(available, 'You have {n} Beans of standing available to back this project.', 'You have {n} Beans of standing available to back this project.')
+                : tn(available, 'You have {n} Beans of standing available to back this enterprise.', 'You have {n} Beans of standing available to back this enterprise.'));
             return;
         }
         setSubmittingJoin(true);
         try {
             await requestToJoinEnterprise(treasuryKey, amt);
-            Alert.alert('Request Submitted 🌱', `Your request to join as a ${kw.keeper} with ${amt} 🫘 backing has been submitted for review.`);
+            Alert.alert(t('Request Submitted 🌱'), project
+                ? t('Your request to join as a collaborator with {amount} 🫘 backing has been submitted for review.', { amount: amt })
+                : t('Your request to join as a keeper with {amount} 🫘 backing has been submitted for review.', { amount: amt }));
             load();
         } catch (e: any) {
-            Alert.alert('Request Failed', e.message || `Could not submit ${kw.keeper} request.`);
+            Alert.alert(t('Request Failed'), e.message || (project ? t('Could not submit collaborator request.') : t('Could not submit keeper request.')));
         } finally {
             setSubmittingJoin(false);
         }
@@ -605,13 +628,15 @@ export default function TreasuryDetailScreen() {
         try {
             const res: any = await approveKeeperRequest(treasuryKey, requestId);
             if (res?.applied === false) {
-                Alert.alert('Approved 🌱', `They become a ${kw.keeper} in 3 days, unless another ${kw.keeper} objects first.`);
+                Alert.alert(t('Approved 🌱'), project
+                    ? t('They become a collaborator in 3 days, unless another collaborator objects first.')
+                    : t('They become a keeper in 3 days, unless another keeper objects first.'));
             } else {
-                Alert.alert('Request Approved 🌱', `Member is now a ${kw.keeper} of this ${kw.kind}.`);
+                Alert.alert(t('Request Approved 🌱'), project ? t('Member is now a collaborator of this project.') : t('Member is now a keeper of this enterprise.'));
             }
             load();
         } catch (e: any) {
-            Alert.alert('Approval Failed', e.message || `Could not approve ${kw.keeper} request.`);
+            Alert.alert(t('Approval Failed'), e.message || (project ? t('Could not approve collaborator request.') : t('Could not approve keeper request.')));
         } finally {
             setProcessingRequestId(null);
         }
@@ -622,10 +647,10 @@ export default function TreasuryDetailScreen() {
         setProcessingRequestId(requestId);
         try {
             await declineKeeperRequest(treasuryKey, requestId);
-            Alert.alert('Request Declined', `${kw.Keeper} request has been declined.`);
+            Alert.alert(t('Request Declined'), project ? t('Collaborator request has been declined.') : t('Keeper request has been declined.'));
             load();
         } catch (e: any) {
-            Alert.alert('Decline Failed', e.message || `Could not decline ${kw.keeper} request.`);
+            Alert.alert(t('Decline Failed'), e.message || (project ? t('Could not decline collaborator request.') : t('Could not decline keeper request.')));
         } finally {
             setProcessingRequestId(null);
         }
@@ -640,14 +665,14 @@ export default function TreasuryDetailScreen() {
             const votesCount = res?.proposal?.votesCount ?? res?.votesCount ?? 1;
             const votesRequired = res?.proposal?.requiredVotes ?? res?.votesRequired ?? 2;
             if (leadMoved) {
-                Alert.alert('Succession Passed 🌱', `${kw.Lead} role has been transferred.`);
+                Alert.alert(t('Succession Passed 🌱'), project ? t('Leader role has been transferred.') : t('Lead keeper role has been transferred.'));
             } else {
-                Alert.alert('Succession Proposed 🌱', `Proposal submitted (${votesCount} of ${votesRequired} votes recorded).`);
+                Alert.alert(t('Succession Proposed 🌱'), tn(votesRequired, 'Proposal submitted ({count} of {n} votes recorded).', 'Proposal submitted ({count} of {n} votes recorded).', { count: votesCount }));
             }
             setShowCandidatePicker(false);
             load();
         } catch (e: any) {
-            Alert.alert('Proposal Failed', e.message || 'Could not propose lead succession.');
+            Alert.alert(t('Proposal Failed'), e.message || t('Could not propose lead succession.'));
         } finally {
             setSubmittingSuccession(false);
         }
@@ -658,10 +683,10 @@ export default function TreasuryDetailScreen() {
         setProcessingChangeId(changeId);
         try {
             await objectToKeeperChange(treasuryKey, changeId);
-            Alert.alert('Objection recorded', 'The change is cancelled.');
+            Alert.alert(t('Objection recorded'), t('The change is cancelled.'));
             load();
         } catch (e: any) {
-            Alert.alert('Could not object', e.message || 'Please try again.');
+            Alert.alert(t('Could not object'), e.message || t('Please try again.'));
         } finally {
             setProcessingChangeId(null);
         }
@@ -669,16 +694,16 @@ export default function TreasuryDetailScreen() {
 
     const handleRemoveKeeper = (k: any) => {
         if (!treasuryKey || processingChangeId) return;
-        Alert.alert(`Remove ${k.callsign}?`, removeKeeperConfirmText(k, kw), [
-            { text: 'Cancel', style: 'cancel' },
+        Alert.alert(t('Remove {name}?', { name: k.callsign }), removeKeeperConfirmText(k, kw), [
+            { text: t('Cancel'), style: 'cancel' },
             {
-                text: 'Remove', style: 'destructive', onPress: async () => {
+                text: t('Remove'), style: 'destructive', onPress: async () => {
                     setProcessingChangeId(k.publicKey);
                     try {
                         await removeEnterpriseKeeper(treasuryKey, k.publicKey);
                         load();
                     } catch (e: any) {
-                        Alert.alert('Could not remove', e.message || 'Please try again.');
+                        Alert.alert(t('Could not remove'), e.message || t('Please try again.'));
                     } finally {
                         setProcessingChangeId(null);
                     }
@@ -689,17 +714,17 @@ export default function TreasuryDetailScreen() {
 
     const handleStepDown = () => {
         if (!treasuryKey || !myPubkey || steppingDown) return;
-        Alert.alert(`Step down as a ${kw.keeper}?`, stepDownConfirmText(myPubkey, keeperList, kw), [
-            { text: 'Cancel', style: 'cancel' },
+        Alert.alert(project ? t('Step down as a collaborator?') : t('Step down as a keeper?'), stepDownConfirmText(myPubkey, keeperList, kw), [
+            { text: t('Cancel'), style: 'cancel' },
             {
-                text: 'Step down', style: 'destructive', onPress: async () => {
+                text: t('Step down'), style: 'destructive', onPress: async () => {
                     setSteppingDown(true);
                     try {
                         await stepDownAsKeeper(treasuryKey);
                         load();
                     } catch (e: any) {
                         // The server says plainly what must happen first (e.g. the debt your pledge covers).
-                        Alert.alert('Not yet', e.message || 'Could not step down.');
+                        Alert.alert(t('Not yet'), e.message || t('Could not step down.'));
                     } finally {
                         setSteppingDown(false);
                     }
@@ -717,15 +742,19 @@ export default function TreasuryDetailScreen() {
             const votesCount = res?.proposal?.votesCount ?? res?.votesCount ?? 1;
             const votesRequired = res?.proposal?.requiredVotes ?? res?.votesRequired ?? 2;
             if (leadMoved) {
-                Alert.alert('Succession Passed 🌱', `Your vote was recorded and the ${kw.lead} role has been transferred!`);
+                Alert.alert(t('Succession Passed 🌱'), project
+                    ? t('Your vote was recorded and the leader role has been transferred!')
+                    : t('Your vote was recorded and the lead keeper role has been transferred!'));
             } else if (res?.proposal?.closedReason === 'rejected') {
-                Alert.alert('Vote Registered', `Not enough ${kw.keepers} can now say yes, so the ${kw.kind === 'project' ? 'leader' : 'lead'} stays.`);
+                Alert.alert(t('Vote Registered'), project
+                    ? t('Not enough collaborators can now say yes, so the leader stays.')
+                    : t('Not enough keepers can now say yes, so the lead stays.'));
             } else {
-                Alert.alert('Vote Registered 🌱', `Vote recorded (${votesCount} yes of ${votesRequired} needed).`);
+                Alert.alert(t('Vote Registered 🌱'), t('Vote recorded ({count} yes of {needed} needed).', { count: votesCount, needed: votesRequired }));
             }
             load();
         } catch (e: any) {
-            Alert.alert('Vote Failed', e.message || 'Could not vote on succession.');
+            Alert.alert(t('Vote Failed'), e.message || t('Could not vote on succession.'));
         } finally {
             setSubmittingSuccession(false);
         }
@@ -735,7 +764,7 @@ export default function TreasuryDetailScreen() {
         if (!treasuryKey || pledging) return;
         const amt = Number(pledgeAmount);
         if (isNaN(amt) || amt <= 0) {
-            Alert.alert('Invalid Amount', 'Please enter a positive number of Beans to pledge.');
+            Alert.alert(t('Invalid Amount'), t('Please enter a positive number of Beans to pledge.'));
             return;
         }
         // To the cent, as the node takes it (core isWholeCents).
@@ -746,12 +775,12 @@ export default function TreasuryDetailScreen() {
         setPledging(true);
         try {
             await treasuryPledge(treasuryKey, amt, pledgeMemo.trim() || undefined);
-            Alert.alert('Pledge Successful! 🌱', `Thank you for pledging ${amt} 🫘 to ${name}.`);
+            Alert.alert(t('Pledge Successful! 🌱'), t('Thank you for pledging {amount} 🫘 to {name}.', { amount: amt, name }));
             setPledgeAmount('');
             setPledgeMemo('');
             load();
         } catch (e: any) {
-            Alert.alert('Pledge Failed', e.message || 'Could not complete pledge.');
+            Alert.alert(t('Pledge Failed'), e.message || t('Could not complete pledge.'));
         } finally {
             setPledging(false);
         }
@@ -760,21 +789,21 @@ export default function TreasuryDetailScreen() {
     const handleCancelInitiative = () => {
         if (!treasuryKey || cancelling) return;
         Alert.alert(
-            'Cancel Initiative & Refund Backers?',
-            'This will close the initiative and immediately refund all escrowed pledges back to their backers.',
+            t('Cancel Initiative & Refund Backers?'),
+            t('This will close the initiative and immediately refund all escrowed pledges back to their backers.'),
             [
-                { text: 'Keep Initiative', style: 'cancel' },
+                { text: t('Keep Initiative'), style: 'cancel' },
                 {
-                    text: 'Cancel & Refund',
+                    text: t('Cancel & Refund'),
                     style: 'destructive',
                     onPress: async () => {
                         setCancelling(true);
                         try {
                             await deleteCrowdfundProjectApi(treasuryKey);
-                            Alert.alert('Initiative Cancelled 🌱', 'Pledges have been refunded to backers.');
+                            Alert.alert(t('Initiative Cancelled 🌱'), t('Pledges have been refunded to backers.'));
                             router.back();
                         } catch (e: any) {
-                            Alert.alert('Cancellation Failed', e.message || 'Could not cancel initiative.');
+                            Alert.alert(t('Cancellation Failed'), e.message || t('Could not cancel initiative.'));
                         } finally {
                             setCancelling(false);
                         }
@@ -784,13 +813,15 @@ export default function TreasuryDetailScreen() {
         );
     };
 
-    const getDaysRemaining = (deadline: string | null) => {
+    /** The deadline badge's words, and whether it has passed (the badge's colour). */
+    const getDaysRemaining = (deadline: string | null): { text: string; expired: boolean } | null => {
         if (!deadline) return null;
         const diff = new Date(deadline).getTime() - new Date().getTime();
         const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
-        if (days < 0) return 'Expired';
-        if (days === 0) return 'Ends today';
-        return `${days} days left`;
+        if (days < 0) return { text: t('Expired'), expired: true };
+        if (days === 0) return { text: t('Ends today'), expired: false };
+        // English has always said "days" for every count.
+        return { text: tn(days, '{n} days left', '{n} days left'), expired: false };
     };
 
     const handleApproveBid = async (txId: string) => {
@@ -798,10 +829,10 @@ export default function TreasuryDetailScreen() {
         setActionState({ id: txId, type: 'approve' });
         try {
             await treasuryApprove(treasuryKey, txId);
-            Alert.alert('Bid Approved ✅', 'Funds locked in trust successfully.');
+            Alert.alert(t('Bid Approved ✅'), t('Funds locked in trust successfully.'));
             load();
         } catch (e: any) {
-            Alert.alert('Approve Failed', e.message || 'Could not approve bid.');
+            Alert.alert(t('Approve Failed'), e.message || t('Could not approve bid.'));
         } finally {
             setActionState(null);
         }
@@ -810,21 +841,21 @@ export default function TreasuryDetailScreen() {
     const handleRejectBid = (txId: string) => {
         if (!treasuryKey) return;
         Alert.alert(
-            'Decline Bid?',
-            'Are you sure you want to decline this request? The member will be notified.',
+            t('Decline Bid?'),
+            t('Are you sure you want to decline this request? The member will be notified.'),
             [
-                { text: 'Cancel', style: 'cancel' },
+                { text: t('Cancel'), style: 'cancel' },
                 {
-                    text: 'Decline',
+                    text: t('Decline'),
                     style: 'destructive',
                     onPress: async () => {
                         setActionState({ id: txId, type: 'reject' });
                         try {
                             await treasuryReject(treasuryKey, txId);
-                            Alert.alert('Bid Declined', 'The request has been declined.');
+                            Alert.alert(t('Bid Declined'), t('The request has been declined.'));
                             load();
                         } catch (e: any) {
-                            Alert.alert('Decline Failed', e.message || 'Could not decline bid.');
+                            Alert.alert(t('Decline Failed'), e.message || t('Could not decline bid.'));
                         } finally {
                             setActionState(null);
                         }
@@ -842,20 +873,22 @@ export default function TreasuryDetailScreen() {
             return;
         }
         Alert.alert(
-            'Release Payment?',
-            `Are you sure you want to release ${d.credits} 🫘 to ${d.peer_callsign || 'the member'}? This cannot be undone.`,
+            t('Release Payment?'),
+            d.peer_callsign
+                ? t('Are you sure you want to release {amount} 🫘 to {name}? This cannot be undone.', { amount: d.credits, name: d.peer_callsign })
+                : t('Are you sure you want to release {amount} 🫘 to the member? This cannot be undone.', { amount: d.credits }),
             [
-                { text: 'Cancel', style: 'cancel' },
+                { text: t('Cancel'), style: 'cancel' },
                 {
-                    text: 'Release Payment',
+                    text: t('Release Payment'),
                     onPress: async () => {
                         setActionState({ id: d.id, type: 'complete' });
                         try {
                             await treasuryComplete(treasuryKey, d.id);
-                            Alert.alert('Payment Released ✅', 'The beans have been paid to the member.');
+                            Alert.alert(t('Payment Released ✅'), t('The beans have been paid to the member.'));
                             load();
                         } catch (e: any) {
-                            Alert.alert('Release Failed', e.message || 'Could not release payment.');
+                            Alert.alert(t('Release Failed'), e.message || t('Could not release payment.'));
                         } finally {
                             setActionState(null);
                         }
@@ -865,11 +898,12 @@ export default function TreasuryDetailScreen() {
         );
     };
 
-    const formatTime = (t: any) => {
+    /** "19 Oct, 9:05": core's date and time, in the member's language (never the device's toLocaleString). */
+    const formatTime = (when: any) => {
         try {
-            const d = new Date(typeof t === 'number' ? t : String(t));
+            const d = new Date(typeof when === 'number' ? when : String(when));
             if (isNaN(d.getTime())) return '';
-            return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ', ' + d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+            return t('{date}, {time}', { date: formatDate(d, 'day-month'), time: formatDate(d, 'time') });
         } catch { return ''; }
     };
 
@@ -984,8 +1018,8 @@ export default function TreasuryDetailScreen() {
                                             <Text style={styles.goalAmt}>Goal: {goal} 🫘</Text>
                                         </View>
                                         {daysRemaining && (
-                                            <Text style={[styles.deadlineBadge, daysRemaining === 'Expired' && styles.deadlineExpired]}>
-                                                ⏳ {daysRemaining}
+                                            <Text style={[styles.deadlineBadge, daysRemaining.expired && styles.deadlineExpired]}>
+                                                ⏳ {daysRemaining.text}
                                             </Text>
                                         )}
                                     </View>
@@ -1859,7 +1893,7 @@ export default function TreasuryDetailScreen() {
                                     const isRemoved = m.type === 'removed';
                                     const authorName = m.authorCallsign || (m.authorPubkey ? m.authorPubkey.slice(0, 8) : 'Member');
                                     const authorAvatar = m.authorAvatar;
-                                    const textContent = decodeThreadMessage(m.ciphertext, m.type, kw.keeper);
+                                    const textContent = decodeThreadMessage(m.ciphertext, m.type, project);
                                     return (
                                         <View key={m.id} style={[styles.threadMsgRow, idx === threadMessages.length - 1 && { borderBottomWidth: 0 }]}>
                                             <MemberAvatar
@@ -1951,9 +1985,9 @@ export default function TreasuryDetailScreen() {
                                                 const sent = await reportAbuse(identity.publicKey, treasuryKey, reason, treasuryKey);
                                                 setShowReportForm(false);
                                                 // The thanks, and why the member's words were left out when they were (case 14).
-                                                Alert.alert('Reported', reportedAlertBody(sent?.wordsLeftOut, reason));
+                                                Alert.alert(t('Reported'), reportedAlertBody(sent?.wordsLeftOut, reason));
                                             } catch (e: any) {
-                                                Alert.alert('Error', e.message || 'Could not submit report.');
+                                                Alert.alert(t('Error'), e.message || t('Could not submit report.'));
                                                 throw e; // the box keeps the choice and the words
                                             }
                                         }}
@@ -1998,7 +2032,7 @@ export default function TreasuryDetailScreen() {
                                     onPress={async () => {
                                         const parsed = Number(hourlyDealHours);
                                         if (isNaN(parsed) || parsed <= 0) {
-                                            Alert.alert('Invalid Hours', 'Please enter a valid positive number of hours.');
+                                            Alert.alert(t('Invalid Hours'), t('Please enter a valid positive number of hours.'));
                                             return;
                                         }
                                         const deal = hourlyDealPrompt;
@@ -2007,10 +2041,10 @@ export default function TreasuryDetailScreen() {
                                         setActionState({ id: deal.id, type: 'complete' });
                                         try {
                                             await treasuryComplete(treasuryKey, deal.id, parsed);
-                                            Alert.alert('Payment Released ✅', 'The beans have been paid to the member.');
+                                            Alert.alert(t('Payment Released ✅'), t('The beans have been paid to the member.'));
                                             load();
                                         } catch (e: any) {
-                                            Alert.alert('Release Failed', e.message || 'Could not release payment.');
+                                            Alert.alert(t('Release Failed'), e.message || t('Could not release payment.'));
                                         } finally {
                                             setActionState(null);
                                         }

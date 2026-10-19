@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ta",
     "name": "Tamil",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-19",
@@ -325,5 +325,44 @@
   "{n} of these {count} from a new or 12-word account|{n} of these {count} from new or 12-word accounts": {
     "one": "இந்த {count}-இல் {n} புதிய அல்லது 12 சொற்கள் கணக்கிலிருந்து",
     "other": "இந்த {count}-இல் {n} புதிய அல்லது 12 சொற்கள் கணக்குகளிலிருந்து"
-  }
+  },
+  "updates itself": "தானாகவே புதுப்பிக்கப்படும்",
+  "a tap per post": "ஒரு பதிவுக்கு ஒரு தட்டு",
+  "shows as a card": "அட்டையாகக் காட்டப்படும்",
+  "youtube.com/@you": "youtube.com/@you",
+  "@yourhandle": "@yourhandle",
+  "soundcloud.com/you": "soundcloud.com/you",
+  "yoursite.com": "yoursite.com",
+  "facebook.com/yourpage": "facebook.com/yourpage",
+  "yourblog.com/feed": "yourblog.com/feed",
+  "Community": "சமூகம்",
+  "Food & growing": "உணவு & வளர்ப்பு",
+  "Making & craft": "உருவாக்கம் & கைவினை",
+  "Repair & reuse": "பழுதுபார்ப்பு & மறுபயன்பாடு",
+  "Art & music": "கலை & இசை",
+  "Business": "வணிகம்",
+  "Other": "மற்றவை",
+  "Website": "வலைத்தளம்",
+  "Blog / RSS": "வலைப்பதிவு / RSS",
+  "Link": "இணைப்பு",
+  "Idea": "யோசனை",
+  "Problem": "சிக்கல்",
+  "This goes to the BeanPool project team, not to your community. Don't include personal details.": "இது உங்கள் சமூகத்திற்கு அல்லாமல் BeanPool திட்டக் குழுவிற்குச் செல்லும். தனிப்பட்ட விவரங்களைச் சேர்க்க வேண்டாம்.",
+  "Thank you — your suggestion has reached the BeanPool project team.": "நன்றி — உங்கள் பரிந்துரை BeanPool திட்டக் குழுவை அடைந்தது.",
+  "Please write at least {n} characters.|Please write at least {n} characters.": {
+    "one": "குறைந்தது {n} எழுத்தை எழுதவும்.",
+    "other": "குறைந்தது {n} எழுத்துகளை எழுதவும்."
+  },
+  "Please keep it under {n} characters ({count} now).|Please keep it under {n} characters ({count} now).": {
+    "one": "தயவுசெய்து {n} எழுத்துக்குள் வைக்கவும் (இப்போது {count}).",
+    "other": "தயவுசெய்து {n} எழுத்துகளுக்குள் வைக்கவும் (இப்போது {count})."
+  },
+  "Couldn't reach the BeanPool project just now. Your text is still here — please try again later.": "இப்போது BeanPool திட்டத்தை அணுக முடியவில்லை. உங்கள் உரை இன்னும் இங்கேயே உள்ளது — பின்னர் மீண்டும் முயற்சிக்கவும்.",
+  "Please keep the community name under {n} characters.|Please keep the community name under {n} characters.": {
+    "one": "சமூகத்தின் பெயரை {n} எழுத்துக்குள் வைக்கவும்.",
+    "other": "சமூகத்தின் பெயரை {n} எழுத்துகளுக்குள் வைக்கவும்."
+  },
+  "Too many suggestions from your connection recently. Please try again later — your text is still here.": "சமீபத்தில் உங்கள் இணைப்பிலிருந்து அதிக பரிந்துரைகள் வந்துள்ளன. பின்னர் மீண்டும் முயற்சிக்கவும் — உங்கள் உரை இன்னும் இங்கேயே உள்ளது.",
+  "This poll is shown at your area (about 10 km around it) to everyone who can read it.": "இந்த வாக்கெடுப்பு அதைப் படிக்கக்கூடிய அனைவருக்கும் உங்கள் பகுதியில் (அதைச் சுற்றி சுமார் 10 கி.மீ வரை) காட்டப்படும்.",
+  "You haven't set your area, so members nearby won't see this poll in their list; they can still find it by searching. Set it in Settings → Your area to show it near you.": "உங்கள் பகுதியை நீங்கள் அமைக்கவில்லை, எனவே அருகிலுள்ள உறுப்பினர்கள் தங்கள் பட்டியலில் இந்த வாக்கெடுப்பைக் காண மாட்டார்கள்; அவர்கள் தேடுவதன் மூலம் அதை இன்னும் கண்டறியலாம். உங்களுக்கு அருகில் அதைக் காட்ட அமைப்புகள் → உங்கள் பகுதி என்பதில் அமைக்கவும்."
 }

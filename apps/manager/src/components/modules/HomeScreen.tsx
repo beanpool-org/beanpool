@@ -498,7 +498,7 @@ export function HomeScreen({
                 <button
                     type="button"
                     data-testid="home-figure-pool"
-                    onClick={() => onNavigate('economy', 'pool')}
+                    onClick={() => onNavigate('economy')}
                     className="p-5 rounded-2xl bg-nature-900/70 hover:bg-nature-900 border border-nature-800 hover:border-nature-700 cursor-pointer transition-all shadow-md group text-left w-full focus:outline-none focus:ring-2 focus:ring-terra-500"
                 >
                     <div className="flex items-center justify-between mb-2">

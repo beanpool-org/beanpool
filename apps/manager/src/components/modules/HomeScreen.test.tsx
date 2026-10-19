@@ -298,6 +298,14 @@ describe('HomeScreen Component', () => {
             expect(pool).not.toHaveTextContent('9.8');
         });
 
+        it("the Commons pool card opens Shared Projects & Economy, not the Pool tab's placeholder figures", () => {
+            const onNavigate = vi.fn();
+            render(<HomeScreen {...defaultProps} onNavigate={onNavigate} nodeData={loaded} diag={diagWith({ count: 0, items: [] })} />);
+            fireEvent.click(screen.getByTestId('home-figure-pool'));
+            // The Pool sub-tab still shows a fixed "240.0 beans" and "0.0 drift" (EconomySection), next to the real pot here.
+            expect(onNavigate).toHaveBeenCalledWith('economy');
+        });
+
         it("diagnostics that failed: the connections couldn't load, with a retry; a loaded count is the node's", async () => {
             const onRetryDiag = vi.fn();
             const { rerender } = render(<HomeScreen {...defaultProps} nodeData={loaded} diag={null} diagError="HTTP 500: Error" onRetryDiag={onRetryDiag} />);

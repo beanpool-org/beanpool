@@ -4,11 +4,15 @@ import { InfoModal, InfoModalTab } from '../InfoModal';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { palette } from '../../constants/colors';
 import { useStyles, useTheme } from '../../app/ThemeContext';
-import { PROTOCOL_CONSTANTS, TIER_LEVELS } from '@beanpool/core';
+import { PROTOCOL_CONSTANTS, TIER_LEVELS, formatNumber, t, tn } from '@beanpool/core';
+import { TIER_WORDS } from '../../utils/trust-tier';
+import { richWords } from './rich-words';
 
 // Where each tier starts, as a floor (the node's own table — never a copy).
-const [, RESIDENT, STEWARD, ELDER] = TIER_LEVELS;
-const floorOf = (credit: number) => `${PROTOCOL_CONSTANTS.CREDIT_BASE_FLOOR - credit}B`;
+const [NEWCOMER, RESIDENT, STEWARD, ELDER] = TIER_LEVELS;
+const floorOf = (credit: number) => formatNumber(PROTOCOL_CONSTANTS.CREDIT_BASE_FLOOR - credit);
+/** What the counterparties' ratings scale the score to: stars → share (the reputation multiplier). */
+const RATING_SHARES: ReadonlyArray<readonly [stars: number, share: number]> = [[5, 100], [4, 90], [3, 80], [1, 60]];
 
 interface Props {
     isOpen: boolean;
@@ -98,95 +102,102 @@ export function TrustInfoModal({ isOpen, onClose, initialTab }: Props) {
         </View>
     );
 
+    const bold = styles.boldWhiteText;
+    /** A tier's heading: its emoji and its name in the member's language. */
+    const tierHeading = (tier: typeof NEWCOMER) => t('{emoji} {label}', { emoji: tier.emoji, label: t(TIER_WORDS[tier.name]) });
+    /** "Reached when your credit floor reaches -200B (up to -599B)": where a tier starts, and where the next one does. */
+    const reachedUpTo = (tier: typeof NEWCOMER, next: typeof NEWCOMER) => richWords(t('Reached when your credit floor reaches **{floor}B** (up to {upTo}B)', { floor: floorOf(tier.minCredit), upTo: floorOf(next.minCredit - 1) }), bold);
+
     const tabs: InfoModalTab[] = [
         {
             id: 'levels',
-            label: 'Trust Formula',
+            label: t('Trust Formula'),
             content: (
                 <View style={styles.tabContent}>
                     <Text style={styles.descriptionText}>
-                        Your <Text style={styles.boldWhiteText}>Trust</Text> grows with the <Text style={styles.boldWhiteText}>real value you trade</Text> with the community — not how many trades or handshakes you rack up.
+                        {richWords(t('Your **Trust** grows with the **real value you trade** with the community — not how many trades or handshakes you rack up.'), bold)}
                     </Text>
 
                     <View style={styles.cardContainer}>
-                        <Text style={styles.cardLabel}>1. VALUE YOU'VE TRADED</Text>
+                        <Text style={styles.cardLabel}>{t("1. VALUE YOU'VE TRADED")}</Text>
                         <Text style={styles.cardText}>
-                            Your score is a <Text style={styles.boldWhiteText}>smooth, saturating curve</Text> over the qualified value you cycle through trades — proportional at first, then leveling off near the top so no one runs away.
+                            {richWords(t('Your score is a **smooth, saturating curve** over the qualified value you cycle through trades — proportional at first, then leveling off near the top so no one runs away.'), bold)}
                         </Text>
                         <Text style={[styles.cardText, { marginTop: 8 }]}>
-                            💡 <Text style={styles.boldWhiteText}>Diversity counts:</Text> value with any one partner is capped, so trading with <Text style={styles.boldWhiteText}>many</Text> people builds trust far faster than repeat trades with a single partner.
+                            {richWords(t('💡 **Diversity counts:** value with any one partner is capped, so trading with **many** people builds trust far faster than repeat trades with a single partner.'), bold)}
                         </Text>
                     </View>
 
                     <View style={styles.cardContainer}>
-                        <Text style={styles.cardLabel}>2. REPUTATION MULTIPLIER</Text>
+                        <Text style={styles.cardLabel}>{t('2. REPUTATION MULTIPLIER')}</Text>
                         <Text style={[styles.cardText, { marginBottom: 8 }]}>
-                            Ratings left by counterparties scale your score:
+                            {t('Ratings left by counterparties scale your score:')}
                         </Text>
-                        <ListItem><Text style={styles.boldWhiteText}>5.0 stars</Text> = <Text style={styles.boldWhiteText}>100%</Text> of score</ListItem>
-                        <ListItem><Text style={styles.boldWhiteText}>4.0 stars</Text> = <Text style={styles.boldWhiteText}>90%</Text> of score</ListItem>
-                        <ListItem><Text style={styles.boldWhiteText}>3.0 stars</Text> = <Text style={styles.boldWhiteText}>80%</Text> of score</ListItem>
-                        <ListItem><Text style={styles.boldWhiteText}>1.0 star</Text> = <Text style={styles.boldWhiteText}>60%</Text> of score</ListItem>
-                        <ListItem><Text style={styles.boldWhiteText}>No reviews</Text> = <Text style={styles.boldWhiteText}>100%</Text> of score</ListItem>
+                        {RATING_SHARES.map(([stars, share]) => (
+                            <ListItem key={stars}>{richWords(tn(stars, '**{n} star** = **{share}%** of score', '**{n} stars** = **{share}%** of score', { n: formatNumber(stars, 1), share }), bold)}</ListItem>
+                        ))}
+                        <ListItem>{richWords(t('**No reviews** = **{share}%** of score', { share: 100 }), bold)}</ListItem>
                     </View>
 
                     <View style={styles.cardContainer}>
-                        <Text style={styles.cardLabel}>3. MILESTONES</Text>
+                        <Text style={styles.cardLabel}>{t('3. MILESTONES')}</Text>
                         <Text style={[styles.cardText, { marginBottom: 8 }]}>
-                            As your trust grows you pass milestone badges — they mark your progress, they don't set your credit floor:
+                            {t("As your trust grows you pass milestone badges — they mark your progress, they don't set your credit floor:")}
                         </Text>
-                        <ListItem>🌱 <Text style={styles.boldWhiteText}>Newcomer</Text> → 🏠 <Text style={styles.boldWhiteText}>Resident</Text> → 🏛️ <Text style={styles.boldWhiteText}>Steward</Text> → ⛰️ <Text style={styles.boldWhiteText}>Elder</Text></ListItem>
-                        <ListItem>New members show a <Text style={styles.boldWhiteText}>🔑 Founding</Text> badge until their first trade.</ListItem>
+                        <ListItem>{richWords(t('🌱 **{newcomer}** → 🏠 **{resident}** → 🏛️ **{steward}** → ⛰️ **{elder}**', {
+                            newcomer: t(TIER_WORDS.Newcomer), resident: t(TIER_WORDS.Resident), steward: t(TIER_WORDS.Steward), elder: t(TIER_WORDS.Elder),
+                        }), bold)}</ListItem>
+                        <ListItem>{richWords(t('New members show a **🔑 Founding** badge until their first trade.'), bold)}</ListItem>
                     </View>
                 </View>
             )
         },
         {
             id: 'perks',
-            label: 'Tiers & Perks',
+            label: t('Tiers & Perks'),
             content: (
                 <View style={styles.tabContent}>
                     <Text style={styles.descriptionText}>
-                        Tiers are <Text style={styles.boldWhiteText}>recognition milestones</Text> — they mark how far your trust has grown. The one reward that deepens with them is your <Text style={styles.boldWhiteText}>credit floor</Text> (how far below zero you can spend). Your floor slides continuously with the value you trade; the tiers are just the signposts along the way.
+                        {richWords(t('Tiers are **recognition milestones** — they mark how far your trust has grown. The one reward that deepens with them is your **credit floor** (how far below zero you can spend). Your floor slides continuously with the value you trade; the tiers are just the signposts along the way.'), bold)}
                     </Text>
 
                     <View style={[styles.tierContainer, { borderLeftColor: colors.brand.primary }]}>
-                        <Text style={styles.tierTitle}>🔑 Founding Status (before 1st trade)</Text>
-                        <ListItem>A starting state that lasts until you complete your <Text style={styles.boldWhiteText}>very first trade</Text></ListItem>
-                        <ListItem>Shows as <Text style={styles.boldWhiteText}>🔑 FOUNDING</Text> so members know to help you get started</ListItem>
-                        <ListItem>Your credit floor stays at <Text style={styles.boldWhiteText}>0</Text> until that first trade — no overdraft yet</ListItem>
-                        <ListItem>Graduates to <Text style={styles.boldWhiteText}>Newcomer</Text> automatically once you trade</ListItem>
+                        <Text style={styles.tierTitle}>{t('🔑 Founding Status (before 1st trade)')}</Text>
+                        <ListItem>{richWords(t('A starting state that lasts until you complete your **very first trade**'), bold)}</ListItem>
+                        <ListItem>{richWords(t('Shows as **🔑 FOUNDING** so members know to help you get started'), bold)}</ListItem>
+                        <ListItem>{richWords(t('Your credit floor stays at **{floor}** until that first trade — no overdraft yet', { floor: 0 }), bold)}</ListItem>
+                        <ListItem>{richWords(t('Graduates to **{tier}** automatically once you trade', { tier: t(TIER_WORDS.Newcomer) }), bold)}</ListItem>
                     </View>
 
                     <View style={[styles.tierContainer, { borderLeftColor: colors.trust.newcomer.fg }]}>
-                        <Text style={styles.tierTitle}>🌱 Newcomer</Text>
-                        <ListItem>Credit floor opens after your 1st completed trade (or via a starter vouch of 25, 50, or 100B)</ListItem>
-                        <ListItem>Browse & trade the marketplace, receive credits</ListItem>
-                        <ListItem><Text style={styles.boldWhiteText}>Sending credits</Text> unlocks the moment you complete that first trade</ListItem>
+                        <Text style={styles.tierTitle}>{tierHeading(NEWCOMER)}</Text>
+                        <ListItem>{t('Credit floor opens after your 1st completed trade (or via a starter vouch of 25, 50, or 100B)')}</ListItem>
+                        <ListItem>{t('Browse & trade the marketplace, receive credits')}</ListItem>
+                        <ListItem>{richWords(t('**Sending credits** unlocks the moment you complete that first trade'), bold)}</ListItem>
                     </View>
 
                     <View style={[styles.tierContainer, { borderLeftColor: colors.trust.resident.fg }]}>
-                        <Text style={styles.tierTitle}>🏠 Resident</Text>
-                        <ListItem>Reached when your credit floor reaches <Text style={styles.boldWhiteText}>{floorOf(RESIDENT.minCredit)}</Text> (up to {floorOf(STEWARD.minCredit - 1)})</ListItem>
+                        <Text style={styles.tierTitle}>{tierHeading(RESIDENT)}</Text>
+                        <ListItem>{reachedUpTo(RESIDENT, STEWARD)}</ListItem>
                     </View>
 
                     <View style={[styles.tierContainer, { borderLeftColor: colors.trust.steward.fg }]}>
-                        <Text style={styles.tierTitle}>🏛️ Steward</Text>
-                        <ListItem>Reached when your credit floor reaches <Text style={styles.boldWhiteText}>{floorOf(STEWARD.minCredit)}</Text> (up to {floorOf(ELDER.minCredit - 1)})</ListItem>
-                        <ListItem>Trusted-trader recognition across the community</ListItem>
+                        <Text style={styles.tierTitle}>{tierHeading(STEWARD)}</Text>
+                        <ListItem>{reachedUpTo(STEWARD, ELDER)}</ListItem>
+                        <ListItem>{t('Trusted-trader recognition across the community')}</ListItem>
                     </View>
 
                     <View style={[styles.tierContainer, { borderLeftColor: colors.trust.elder.fg }]}>
-                        <Text style={styles.tierTitle}>⛰️ Elder</Text>
-                        <ListItem>Reached when your credit floor reaches <Text style={styles.boldWhiteText}>{floorOf(ELDER.minCredit)}</Text> (max <Text style={styles.boldWhiteText}>{floorOf(PROTOCOL_CONSTANTS.CREDIT_FLOOR_CAP)}</Text>)</ListItem>
-                        <ListItem>Recognised as a long-standing, high-trust member</ListItem>
+                        <Text style={styles.tierTitle}>{tierHeading(ELDER)}</Text>
+                        <ListItem>{richWords(t('Reached when your credit floor reaches **{floor}B** (max **{max}B**)', { floor: floorOf(ELDER.minCredit), max: floorOf(PROTOCOL_CONSTANTS.CREDIT_FLOOR_CAP) }), bold)}</ListItem>
+                        <ListItem>{t('Recognised as a long-standing, high-trust member')}</ListItem>
                     </View>
 
                     <View style={styles.cardContainer}>
-                        <Text style={styles.cardLabel}>OPEN TO EVERYONE — NO TIER REQUIRED</Text>
-                        <ListItem><Text style={styles.boldWhiteText}>Inviting new members</Text> — share BeanPool freely from day one.</ListItem>
-                        <ListItem><Text style={styles.boldWhiteText}>A governance voice</Text> — 1 member 1 vote on community polls and roles, plus quadratic voting on pool spending based on earned trade standing.</ListItem>
-                        <ListItem><Text style={styles.boldWhiteText}>No daily spending limits</Text> — your credit floor is the only guardrail.</ListItem>
+                        <Text style={styles.cardLabel}>{t('OPEN TO EVERYONE — NO TIER REQUIRED')}</Text>
+                        <ListItem>{richWords(t('**Inviting new members** — share BeanPool freely from day one.'), bold)}</ListItem>
+                        <ListItem>{richWords(t('**A governance voice** — 1 member 1 vote on community polls and roles, plus quadratic voting on pool spending based on earned trade standing.'), bold)}</ListItem>
+                        <ListItem>{richWords(t('**No daily spending limits** — your credit floor is the only guardrail.'), bold)}</ListItem>
                     </View>
                 </View>
             )
@@ -197,7 +208,7 @@ export function TrustInfoModal({ isOpen, onClose, initialTab }: Props) {
         <InfoModal
             isOpen={isOpen}
             onClose={onClose}
-            title="Trust & Reputation"
+            title={t('Trust & Reputation')}
             icon={<MaterialCommunityIcons name="shield-star" size={24} color={colors.brand.primary} />}
             tabs={tabs}
             defaultTab={initialTab}

@@ -1753,11 +1753,16 @@ export async function getTransactions(pubkey: string) {
     
     return rows.map(row => {
         let peerName = row.peer_pubkey.slice(0, 8).toUpperCase();
+        // A hold's name as parts too: the Ledger tab writes it in the member's language from them (app/(tabs)/ledger.tsx
+        // peerWords); `peer` stays the English.
+        let held: { title: string | null; counterparty: string | null; toCounterparty: boolean } | null = null;
         if (row.peer_pubkey.startsWith('escrow_')) {
             peerName = 'Held in Trust';
+            held = { title: null, counterparty: null, toCounterparty: false };
             if (row.post_title) {
                 const isBuyer = pubkey === row.buyer_pubkey;
                 const counterparty = isBuyer ? row.seller_callsign : row.buyer_callsign;
+                held = { title: row.post_title, counterparty: counterparty || null, toCounterparty: isBuyer };
                 if (counterparty) {
                     peerName = `Held in Trust: ${row.post_title} (${isBuyer ? 'to' : 'from'} ${counterparty})`;
                 } else {
@@ -1784,7 +1789,11 @@ export async function getTransactions(pubkey: string) {
             // The other account's key: the Ledger tab shows Beans from someone blocked on this phone without their note
             // (utils/ledger-note.ts).
             peerPubkey: row.peer_pubkey,
+            held,
+            projectWallet: row.peer_pubkey.startsWith('project_'),
             timestamp: new Date(row.timestamp).toLocaleDateString(),
+            // The node's time as it came, for the Ledger tab's date in the member's language (core's formatDate).
+            at: row.timestamp,
             memo: displayMemo
         };
     });

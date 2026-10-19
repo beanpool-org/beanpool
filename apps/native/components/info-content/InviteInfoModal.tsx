@@ -2,6 +2,9 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { InfoModal, InfoModalTab } from '../InfoModal';
 import { useStyles } from '../../app/ThemeContext';
+import { t } from '@beanpool/core';
+import { TIER_WORDS } from '../../utils/trust-tier';
+import { richWords } from './rich-words';
 
 interface Props {
     isOpen: boolean;
@@ -134,24 +137,24 @@ export function InviteInfoModal({ isOpen, onClose }: Props) {
     const tabs: InfoModalTab[] = [
         {
             id: 'invites',
-            label: '🎟️ Network Invites',
+            label: t('🎟️ Network Invites'),
             content: (
                 <View style={styles.tabContent}>
                     <Text style={styles.descriptionText}>
-                        Every BeanPool community is invite-only: a member lets you in. To grow the community safely, we rely on a <Text style={styles.boldWhiteText}>Peer Vouching</Text> system.
+                        {richWords(t('Every BeanPool community is invite-only: a member lets you in. To grow the community safely, we rely on a **Peer Vouching** system.'), styles.boldWhiteText)}
                     </Text>
 
                     <View style={styles.cardContainer}>
-                        <Text style={styles.cardLabel}>WHO CAN INVITE</Text>
+                        <Text style={styles.cardLabel}>{t('WHO CAN INVITE')}</Text>
                         <Text style={styles.cardText}>
-                            <Text style={styles.boldWhiteText}>Every member can invite, from day one.</Text> Each invite is a single-use code that lasts <Text style={styles.boldWhiteText}>30 days</Text> — generate as many as you need.
+                            {richWords(t('**Every member can invite, from day one.** Each invite is a single-use code that lasts **30 days** — generate as many as you need.'), styles.boldWhiteText)}
                         </Text>
                     </View>
 
                     <View style={styles.warningBox}>
                         <Text style={styles.warningIcon}>⚠️</Text>
                         <Text style={styles.warningText}>
-                            You are permanently linked as the inviter of everyone you bring in — the community's invite tree is <Text style={styles.boldWhiteText}>public</Text>. Invite people you'd vouch for in real life.
+                            {richWords(t("You are permanently linked as the inviter of everyone you bring in — the community's invite tree is **public**. Invite people you'd vouch for in real life."), styles.boldWhiteText)}
                         </Text>
                     </View>
                 </View>
@@ -159,27 +162,27 @@ export function InviteInfoModal({ isOpen, onClose }: Props) {
         },
         {
             id: 'vouching',
-            label: '🤝 Vouching',
+            label: t('🤝 Vouching'),
             content: (
                 <View style={styles.tabContent}>
                     <Text style={styles.descriptionText}>
-                        When you invite someone, you are <Text style={styles.boldWhiteText}>vouching</Text> for them. This creates a web of trust across the network.
+                        {richWords(t('When you invite someone, you are **vouching** for them. This creates a web of trust across the network.'), styles.boldWhiteText)}
                     </Text>
 
                     <View style={styles.processContainer}>
-                        <Text style={styles.processLabel}>VOUCHING PROCESS</Text>
+                        <Text style={styles.processLabel}>{t('VOUCHING PROCESS')}</Text>
                         <View style={{ marginTop: 4 }}>
-                            <ListItem prefix="1.">Generate a <Text style={styles.boldWhiteText}>single-use invite link</Text> (valid for <Text style={styles.boldWhiteText}>30 days</Text>)</ListItem>
-                            <ListItem prefix="2.">Share it securely with someone you trust</ListItem>
-                            <ListItem prefix="3.">They create an account and join as a <Text style={styles.boldWhiteText}>Newcomer</Text></ListItem>
-                            <ListItem prefix="4.">Your profile is permanently linked as their inviter</ListItem>
+                            <ListItem prefix="1.">{richWords(t('Generate a **single-use invite link** (valid for **30 days**)'), styles.boldWhiteText)}</ListItem>
+                            <ListItem prefix="2.">{t('Share it securely with someone you trust')}</ListItem>
+                            <ListItem prefix="3.">{richWords(t('They create an account and join as a **{tier}**', { tier: t(TIER_WORDS.Newcomer) }), styles.boldWhiteText)}</ListItem>
+                            <ListItem prefix="4.">{t('Your profile is permanently linked as their inviter')}</ListItem>
                         </View>
                     </View>
 
                     <View style={styles.infoBox}>
                         <Text style={styles.infoBoxIcon}>💡</Text>
                         <Text style={styles.infoBoxText}>
-                            Because of the vouching system, we don't need invasive KYC (Know Your Customer) checks. Trust is maintained peer-to-peer!
+                            {t("Because of the vouching system, we don't need invasive KYC (Know Your Customer) checks. Trust is maintained peer-to-peer!")}
                         </Text>
                     </View>
                 </View>
@@ -191,7 +194,7 @@ export function InviteInfoModal({ isOpen, onClose }: Props) {
         <InfoModal
             isOpen={isOpen}
             onClose={onClose}
-            title="Invites & Vouching"
+            title={t('Invites & Vouching')}
             icon="🎟️"
             tabs={tabs}
         />

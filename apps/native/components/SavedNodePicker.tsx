@@ -3,6 +3,7 @@ import { View, Text, Pressable, StyleSheet } from 'react-native';
 import type { SavedNode } from '../utils/nodes';
 import { palette, type AppColors } from '../constants/colors';
 import { useOnboardingColors } from '../app/ThemeContext';
+import { t } from '@beanpool/core';
 
 /**
  * The communities this device has joined before, one tap each. Shared by node-mismatch (switch
@@ -40,7 +41,8 @@ export function SavedNodePicker({
                         disabled={disabled}
                         accessibilityRole="button"
                         accessibilityState={{ selected, disabled: !!disabled }}
-                        accessibilityLabel={`${actionLabel} ${n.alias || host}`}
+                        // The verb is the caller's, in the member's language; one sentence, so a language can put the name first.
+                        accessibilityLabel={t('{action} {name}', { action: actionLabel, name: n.alias || host })}
                     >
                         <View style={{ flex: 1 }}>
                             <Text style={styles.nodeRowName}>{n.alias || host}</Text>

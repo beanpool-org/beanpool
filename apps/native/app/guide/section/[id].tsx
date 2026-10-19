@@ -7,6 +7,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useTheme, useStyles } from '../../ThemeContext';
 import { useGuide } from '../../../utils/use-guide';
 import { findGuideSection, sectionPages } from '../../../utils/guide';
+import { t } from '@beanpool/core';
 
 export { ErrorBoundary };
 
@@ -40,16 +41,16 @@ export default function GuideSectionScreen() {
         <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
             <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
             <View style={styles.header}>
-                <Pressable onPress={() => router.back()} style={styles.backButton} accessibilityRole="button" accessibilityLabel="Back">
+                <Pressable onPress={() => router.back()} style={styles.backButton} accessibilityRole="button" accessibilityLabel={t('Back')}>
                     <MaterialCommunityIcons name="arrow-left" size={26} color={colors.text.inverse} />
                 </Pressable>
-                <Text style={styles.headerTitle} numberOfLines={1}>BEANPOOL GUIDE</Text>
+                <Text style={styles.headerTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('BEANPOOL GUIDE')}</Text>
                 <View style={{ width: 48 }} />
             </View>
 
             <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: Math.max(insets.bottom, 16) + 24 }]}>
                 {!section ? (
-                    <Text style={styles.missing}>This part of the guide is not available. Go back and pick another one.</Text>
+                    <Text style={styles.missing}>{t('This part of the guide is not available. Go back and pick another one.')}</Text>
                 ) : (
                     <>
                         <Text style={styles.title} accessibilityRole="header">{section.title}</Text>

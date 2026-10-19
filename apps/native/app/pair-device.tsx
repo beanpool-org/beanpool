@@ -479,7 +479,7 @@ export default function PairDeviceScreen() {
 
             if (!res.ok) {
                 const errData = await res.json().catch(() => ({}));
-                throw new Error(errData.error || `Transfer failed with status ${res.status}`);
+                throw new Error(errData.error || t('Transfer failed with status {status}', { status: String(res.status) }));
             }
 
             // The relay holds the account until the other device types these four digits (number matching): someone who
@@ -497,7 +497,7 @@ export default function PairDeviceScreen() {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         } catch (err: any) {
             console.error('[Pairing] Transfer error:', err);
-            setErrorMessage(err.message || 'Failed to link device');
+            setErrorMessage(err.message || t('Failed to link device'));
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         } finally {
             setIsTransferring(false);
@@ -581,19 +581,19 @@ export default function PairDeviceScreen() {
     
                             <View style={styles.infoBox}>
                                 <View style={styles.infoRow}>
-                                    <Text style={styles.infoLabel}>Account</Text>
+                                    <Text style={styles.infoLabel}>{t('Account')}</Text>
                                     <Text style={styles.infoValue}>{identity?.callsign}</Text>
                                 </View>
                                 <View style={styles.infoRow}>
-                                    <Text style={styles.infoLabel}>Target Host</Text>
+                                    <Text style={styles.infoLabel}>{t('Target Host')}</Text>
                                     <Text style={styles.infoValue}>
                                         {scannedData?.target?.kind === 'ok' ? scannedData.target.nodeUrl.replace(/^https:\/\//, '') : scannedData?.target?.kind === 'foreign' ? scannedData.target.scannedHost : ''}
                                     </Text>
                                 </View>
                                 <View style={[styles.infoRow, { marginBottom: 0 }]}>
-                                    <Text style={styles.infoLabel}>Public Key</Text>
+                                    <Text style={styles.infoLabel}>{t('Public Key')}</Text>
                                     <Text style={styles.infoValue}>
-                                        {identity?.publicKey ? `${identity.publicKey.slice(0, 10)}...${identity.publicKey.slice(-6)}` : 'Unknown'}
+                                        {identity?.publicKey ? `${identity.publicKey.slice(0, 10)}...${identity.publicKey.slice(-6)}` : t('Unknown')}
                                     </Text>
                                 </View>
                             </View>
@@ -625,13 +625,13 @@ export default function PairDeviceScreen() {
                                 onPress={handleConfirmLink}
                                 disabled={isTransferring}
                                 accessibilityRole="button"
-                                accessibilityLabel={isTransferring ? 'Linking device, please wait...' : 'Confirm & Link Device'}
+                                accessibilityLabel={isTransferring ? t('Linking device, please wait...') : t('Confirm & Link Device')}
                                 accessibilityState={{ busy: isTransferring, disabled: isTransferring }}
                             >
                                 {isTransferring ? (
                                     <ActivityIndicator color="#ffffff" />
                                 ) : (
-                                    <Text style={styles.confirmBtnText}>Confirm & Link Device</Text>
+                                    <Text style={styles.confirmBtnText}>{t('Confirm & Link Device')}</Text>
                                 )}
                             </Pressable>
                             )}
@@ -642,7 +642,7 @@ export default function PairDeviceScreen() {
                                 disabled={isTransferring}
                                 accessibilityRole="button"
                             >
-                                <Text style={styles.cancelBtnText}>Cancel</Text>
+                                <Text style={styles.cancelBtnText}>{t('Cancel')}</Text>
                             </Pressable>
                         </>
                     )}
@@ -668,21 +668,21 @@ export default function PairDeviceScreen() {
                     style={[styles.closeBtn, { position: 'absolute', top: Platform.OS === 'ios' ? 50 : 20, left: 20 }]}
                     onPress={() => router.back()}
                     accessibilityRole="button"
-                    accessibilityLabel="Go back"
+                    accessibilityLabel={t('Go back')}
                 >
                     <Text style={styles.closeBtnText}>✕</Text>
                 </Pressable>
-                <Text style={styles.permissionTitle}>📷 Camera Permission Needed</Text>
+                <Text style={styles.permissionTitle}>{t('📷 Camera Permission Needed')}</Text>
                 <Text style={styles.permissionDesc}>
-                    BeanPool requires camera access to scan the pairing QR code displayed on your computer.
+                    {t('BeanPool requires camera access to scan the pairing QR code displayed on your computer.')}
                 </Text>
                 {permission.canAskAgain ? (
                     <Pressable style={styles.permissionBtn} onPress={requestPermission} accessibilityRole="button">
-                        <Text style={styles.permissionBtnText}>Enable Camera Access</Text>
+                        <Text style={styles.permissionBtnText}>{t('Enable Camera Access')}</Text>
                     </Pressable>
                 ) : (
                     <Pressable style={styles.permissionBtn} onPress={() => Linking.openSettings()} accessibilityRole="button">
-                        <Text style={styles.permissionBtnText}>Open Device Settings</Text>
+                        <Text style={styles.permissionBtnText}>{t('Open Device Settings')}</Text>
                     </Pressable>
                 )}
                 {sheet}
@@ -697,7 +697,7 @@ export default function PairDeviceScreen() {
                     style={styles.closeBtn}
                     onPress={() => router.back()}
                     accessibilityRole="button"
-                    accessibilityLabel="Close camera scanner"
+                    accessibilityLabel={t('Close camera scanner')}
                 >
                     <Text style={styles.closeBtnText}>✕</Text>
                 </Pressable>
@@ -724,7 +724,7 @@ export default function PairDeviceScreen() {
 
             <View style={styles.instructionCard}>
                 <Text style={styles.instructionText}>
-                    Point your camera at the QR code on your computer's screen to link devices.
+                    {t("Point your camera at the QR code on your computer's screen to link devices.")}
                 </Text>
             </View>
 

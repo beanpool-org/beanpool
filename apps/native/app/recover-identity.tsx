@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, Pressable, SafeAreaView, ScrollView } from 'react-native';
 import { router, ErrorBoundary } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { t } from '@beanpool/core';
 
 export { ErrorBoundary };
 import { type AppColors } from '../constants/colors';
@@ -16,9 +17,9 @@ export default function RecoverIdentityScreen() {
             <StatusBar style={dark ? 'light' : 'dark'} />
             <ScrollView contentContainerStyle={styles.scroll}>
                 <View style={styles.card}>
-                    <Text style={styles.title} accessibilityRole="header">Restore Account</Text>
+                    <Text style={styles.title} accessibilityRole="header">{t('Restore Account')}</Text>
                     <Text style={styles.subtitle}>
-                        Choose how you would like to restore your account on this device.
+                        {t('Choose how you would like to restore your account on this device.')}
                     </Text>
 
                     <Pressable
@@ -28,13 +29,13 @@ export default function RecoverIdentityScreen() {
                         // Must match the visible label so speech control can address it
                         // (WCAG 2.5.3). The description belongs in the hint, because
                         // accessibilityLabel on the parent hides the child Text.
-                        accessibilityLabel="Recover with Sign-In"
-                        accessibilityHint="Restore using Google, Apple, or other linked accounts"
+                        accessibilityLabel={t('Recover with Sign-In')}
+                        accessibilityHint={t('Restore using Google, Apple, or other linked accounts')}
                     >
                         <Text style={styles.optionIcon} importantForAccessibility="no" accessibilityElementsHidden={true}>🌐</Text>
                         <View style={{ flex: 1 }}>
-                            <Text style={styles.optionTitle}>Recover with Sign-In</Text>
-                            <Text style={styles.optionSub}>Restore using Google, Apple, or other linked accounts</Text>
+                            <Text style={styles.optionTitle}>{t('Recover with Sign-In')}</Text>
+                            <Text style={styles.optionSub}>{t('Restore using Google, Apple, or other linked accounts')}</Text>
                         </View>
                         <Text style={styles.chevron} importantForAccessibility="no" accessibilityElementsHidden={true}>›</Text>
                     </Pressable>
@@ -43,13 +44,13 @@ export default function RecoverIdentityScreen() {
                         style={styles.optionBtn}
                         onPress={() => router.replace({ pathname: '/welcome', params: { mode: 'recover' } })}
                         accessibilityRole="button"
-                        accessibilityLabel="Recover with 12 Words"
-                        accessibilityHint="Type your 12-word recovery phrase"
+                        accessibilityLabel={t('Recover with 12 Words')}
+                        accessibilityHint={t('Type your 12-word recovery phrase')}
                     >
                         <Text style={styles.optionIcon} importantForAccessibility="no" accessibilityElementsHidden={true}>🔑</Text>
                         <View style={{ flex: 1 }}>
-                            <Text style={styles.optionTitle}>Recover with 12 Words</Text>
-                            <Text style={styles.optionSub}>Type your 12-word recovery phrase</Text>
+                            <Text style={styles.optionTitle}>{t('Recover with 12 Words')}</Text>
+                            <Text style={styles.optionSub}>{t('Type your 12-word recovery phrase')}</Text>
                         </View>
                         <Text style={styles.chevron} importantForAccessibility="no" accessibilityElementsHidden={true}>›</Text>
                     </Pressable>
@@ -61,9 +62,9 @@ export default function RecoverIdentityScreen() {
                             else router.replace('/welcome');
                         }}
                         accessibilityRole="button"
-                        accessibilityLabel="Back to welcome"
+                        accessibilityLabel={t('Back to welcome')}
                     >
-                        <Text style={styles.backBtnText}>← Back to Welcome</Text>
+                        <Text style={styles.backBtnText}>{t('← Back to Welcome')}</Text>
                     </Pressable>
                 </View>
             </ScrollView>

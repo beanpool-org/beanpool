@@ -11,7 +11,9 @@ import QRCode from 'react-native-qrcode-svg';
 import { useTheme } from './ThemeContext';
 import { newPhoneCode, newPhoneConfirmedNotes, newPhoneHandOvers } from '../utils/db';
 import { yourGroupsStore } from '../components/useYourGroups';
-import { NEW_PHONE_SHOW_BODY, NEW_PHONE_SHOW_TITLE, confirmedByText, type ConfirmedNote } from '../utils/group-history-unlock';
+import { NEW_PHONE_SHOW_BODY, NEW_PHONE_SHOW_TITLE, type ConfirmedNote } from '../utils/group-history-unlock';
+import { confirmedByWords, keyLineWords } from '../components/key-lines';
+import { t } from '@beanpool/core';
 
 /** How often the open screen looks for a member's hand-over, so the history and the note arrive within seconds of the scan. */
 const WATCH_MS = 5000;
@@ -51,22 +53,22 @@ export default function NewPhoneCodeScreen() {
 
     return (
         <ScrollView style={{ flex: 1, backgroundColor: colors.surface.app }} contentContainerStyle={[styles.page, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 24 }]}>
-            <Text style={[styles.title, { color: colors.text.heading }]}>{NEW_PHONE_SHOW_TITLE}</Text>
-            <Text style={[styles.body, { color: colors.text.secondary }]}>{NEW_PHONE_SHOW_BODY}</Text>
+            <Text style={[styles.title, { color: colors.text.heading }]}>{keyLineWords(NEW_PHONE_SHOW_TITLE)}</Text>
+            <Text style={[styles.body, { color: colors.text.secondary }]}>{keyLineWords(NEW_PHONE_SHOW_BODY)}</Text>
             {code === undefined ? <ActivityIndicator /> : code ? (
-                <View style={styles.qrWrap} accessibilityLabel="Your new-phone code">
+                <View style={styles.qrWrap} accessibilityLabel={t('Your new-phone code')}>
                     <QRCode value={code} size={240} backgroundColor="#ffffff" color="#000000" />
                 </View>
             ) : (
                 <Text style={[styles.body, { color: colors.feedback.danger.fg }]}>
-                    This phone doesn't know which key it replaced yet. Confirm your re-key when the app asks, then come back.
+                    {t("This phone doesn't know which key it replaced yet. Confirm your re-key when the app asks, then come back.")}
                 </Text>
             )}
             {notes.map((n) => (
-                <Text key={`${n.name}-${n.at}`} style={[styles.body, { color: colors.text.body }]} accessibilityLiveRegion="polite">✓ {confirmedByText(n.name, n.at)}</Text>
+                <Text key={`${n.name}-${n.at}`} style={[styles.body, { color: colors.text.body }]} accessibilityLiveRegion="polite">{t('✓ {line}', { line: confirmedByWords(n.name, n.at) })}</Text>
             ))}
             <Pressable style={styles.secondaryBtn} onPress={() => router.back()} accessibilityRole="button">
-                <Text style={[styles.secondaryText, { color: colors.text.secondary }]}>Back</Text>
+                <Text style={[styles.secondaryText, { color: colors.text.secondary }]}>{t('Back')}</Text>
             </Pressable>
         </ScrollView>
     );

@@ -33,6 +33,8 @@ import {
     ownerWordsReducer, saveCheckedWords, sendOwnerWordsAttestation, shouldOfferSaveWords, typedWordCount,
 } from '../utils/owner-words';
 import { ownerWordsStyleSpec } from '../utils/owner-words-style';
+import { keyLineWords, ownerWordsCountWords } from '../components/key-lines';
+import { t } from '@beanpool/core';
 
 export { ErrorBoundary };
 
@@ -98,20 +100,20 @@ export default function OwnerWordsCheckScreen() {
         <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
             <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
             <View style={styles.header}>
-                <Pressable onPress={() => router.back()} style={styles.backButton} accessibilityRole="button" accessibilityLabel="Back">
+                <Pressable onPress={() => router.back()} style={styles.backButton} accessibilityRole="button" accessibilityLabel={t('Back')}>
                     <MaterialCommunityIcons name="arrow-left" size={26} color={colors.text.heading} />
                 </Pressable>
-                <Text style={styles.headerTitle} numberOfLines={2}>{COPY.title}</Text>
+                <Text style={styles.headerTitle} numberOfLines={2}>{keyLineWords(COPY.title)}</Text>
             </View>
 
             <View style={{ flex: 1 }}>
                 <KeyboardAwareScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" bottomOffset={footerHeight + 16}>
-                    <Text style={styles.body}>{COPY.why}</Text>
-                    <Text style={styles.label}>YOUR 12 WORDS, IN ORDER</Text>
+                    <Text style={styles.body}>{keyLineWords(COPY.why)}</Text>
+                    <Text style={styles.label}>{t('YOUR 12 WORDS, IN ORDER')}</Text>
                     {/* The box shows the words as they are typed. */}
                     <NoScreenCapture>
                     <TextInput
-                        accessibilityLabel="Your 12 words, in order, with spaces between them"
+                        accessibilityLabel={t('Your 12 words, in order, with spaces between them')}
                         style={styles.input}
                         value={state.typed}
                         onChangeText={(text) => dispatch({ type: 'typed', text })}
@@ -129,16 +131,16 @@ export default function OwnerWordsCheckScreen() {
                         editable={!state.busy}
                     />
                     </NoScreenCapture>
-                    <Text style={styles.hint}>{count} of 12 words · {COPY.stays}</Text>
+                    <Text style={styles.hint}>{t('{n} of 12 words · {stays}', { n: count, stays: keyLineWords(COPY.stays) })}</Text>
 
                     {state.outcome === 'match' ? (
                         <View style={styles.matchBox} accessibilityLiveRegion="polite">
-                            <Text style={styles.matchText}>{state.record === 'sending' ? COPY.match : matchText}</Text>
+                            <Text style={styles.matchText}>{keyLineWords(state.record === 'sending' ? COPY.match : matchText)}</Text>
                         </View>
                     ) : null}
                     {state.outcome === 'match' && state.save !== 'none' ? (
                         <View style={styles.saveBox} accessibilityLiveRegion="polite">
-                            <Text style={styles.saveText}>{saveText}</Text>
+                            <Text style={styles.saveText}>{keyLineWords(saveText)}</Text>
                             {state.save === 'offered' || state.save === 'saving' ? (
                                 <Pressable
                                     style={[styles.checkBtn, state.save === 'saving' && styles.checkBtnDisabled]}
@@ -148,31 +150,31 @@ export default function OwnerWordsCheckScreen() {
                                     accessibilityState={{ busy: state.save === 'saving', disabled: state.save === 'saving' }}
                                 >
                                     {state.save === 'saving'
-                                        ? <ActivityIndicator color={colors.text.inverse} accessibilityLabel={COPY.saving} />
-                                        : <Text style={styles.checkBtnText}>{COPY.saveButton}</Text>}
+                                        ? <ActivityIndicator color={colors.text.inverse} accessibilityLabel={keyLineWords(COPY.saving)} />
+                                        : <Text style={styles.checkBtnText}>{keyLineWords(COPY.saveButton)}</Text>}
                                 </Pressable>
                             ) : null}
                         </View>
                     ) : null}
                     {state.outcome === 'mismatch' ? (
                         <View style={styles.mismatchBox} accessibilityLiveRegion="polite">
-                            <Text style={styles.mismatchText}>{COPY.mismatch}</Text>
+                            <Text style={styles.mismatchText}>{keyLineWords(COPY.mismatch)}</Text>
                         </View>
                     ) : null}
                     {state.outcome === 'count' ? (
                         <View style={styles.mismatchBox} accessibilityLiveRegion="polite">
-                            <Text style={styles.mismatchText}>{COPY.count(state.countSeen)}</Text>
+                            <Text style={styles.mismatchText}>{ownerWordsCountWords(state.countSeen)}</Text>
                         </View>
                     ) : null}
 
-                    <Text style={styles.hint}>{ownerWordsFindThem(hasMnemonic(identity))}</Text>
+                    <Text style={styles.hint}>{keyLineWords(ownerWordsFindThem(hasMnemonic(identity)))}</Text>
                 </KeyboardAwareScrollView>
 
                 <KeyboardStickyView onLayout={(e) => setFooterHeight(e.nativeEvent.layout.height)}>
                     <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 12) }]}>
                         {state.outcome === 'match' ? (
                             <Pressable style={styles.checkBtn} onPress={() => router.back()} accessibilityRole="button">
-                                <Text style={styles.checkBtnText}>Done</Text>
+                                <Text style={styles.checkBtnText}>{t('Done')}</Text>
                             </Pressable>
                         ) : (
                             <Pressable
@@ -184,7 +186,7 @@ export default function OwnerWordsCheckScreen() {
                             >
                                 {state.busy
                                     ? <ActivityIndicator color={colors.text.inverse} />
-                                    : <Text style={styles.checkBtnText}>Check my words</Text>}
+                                    : <Text style={styles.checkBtnText}>{t('Check my words')}</Text>}
                             </Pressable>
                         )}
                     </View>

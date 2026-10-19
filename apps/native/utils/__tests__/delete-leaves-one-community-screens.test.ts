@@ -100,7 +100,8 @@ describe('node-mismatch: its delete takes the key only when no saved community k
     it('offers to switch to the communities that keep the key, and no delete meanwhile', () => {
         const s = screen();
         const kept = slice(s, '{keptBy && keptBy.length > 0 && !showWipe && (', '{!showWipe ? (');
-        expect(kept).toContain('stillKeptLine(keptBy)');
+        // delete-here.ts stillKeptLine, said in the member's language (components/key-lines.ts; key-lines.test.ts holds the two).
+        expect(kept).toContain('stillKeptWords(keptBy)');
         expect(kept).toContain('onPick={switchToNode}');
         expect(kept).not.toContain('handleStartWipe');
         expect(slice(s, '{!showWipe ? (', ') : (')).toContain('!keptBy?.length && (');

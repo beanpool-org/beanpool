@@ -4,7 +4,7 @@ import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter, ErrorBoundary } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
-import { t } from '@beanpool/core';
+import { t, tn } from '@beanpool/core';
 
 export { ErrorBoundary };
 import { useIdentity } from './IdentityContext';
@@ -18,9 +18,11 @@ import { usePutAwayAfterLeave } from '../utils/words-put-away';
 import { authenticateUser } from '../utils/LocalAuth';
 import { deleteAccountFromThisPhone } from '../utils/account-leaves-phone';
 import {
-    NO_OTHER_COMMUNITY_LINE, SIGN_OUT_FROM_SETTINGS_LINE, deletePlanFailedLine, otherCommunitiesKeeping, stillKeptLine,
+    NO_OTHER_COMMUNITY_LINE, SIGN_OUT_FROM_SETTINGS_LINE, otherCommunitiesKeeping,
     type KeptCommunity,
 } from '../utils/delete-here';
+import { keyLineWords, stillKeptWords } from '../components/key-lines';
+import { deletePlanFailedWords, settingsLineWords } from '../components/settings/settings-lines';
 import { requestSync } from '../services/pillar-sync';
 import { askBeforeSwitch } from '../utils/reconnect';
 import { CLOSED_ACCOUNT_DELETE, mismatchPlan, inviteFromText } from '../utils/mismatch-plan';
@@ -253,7 +255,7 @@ export default function NodeMismatchScreen() {
             try {
                 keeping = identity?.publicKey ? await otherCommunitiesKeeping(nodeUrl, identity.publicKey) : [];
             } catch (e) {
-                setError(deletePlanFailedLine(e instanceof Error ? e.message : String(e)));
+                setError(deletePlanFailedWords(e instanceof Error ? e.message : String(e)));
                 return;
             } finally {
                 setChecking(false);
@@ -267,11 +269,11 @@ export default function NodeMismatchScreen() {
             // check that does not pass opens nothing and reads nothing. An account with no words is the one that can't
             // come back, so it asks too (PR #1205 review 4112404471). With words, this is also the check before they show.
             if (hasMnemonic(identity)) {
-                const w = await readWordsBehindLock(identity, 'Confirm authentication to delete this account from this phone.');
+                const w = await readWordsBehindLock(identity, t('Confirm authentication to delete this account from this phone.'));
                 if (!w) return;
                 setWords(w);
             } else {
-                if (!(await authenticateUser('Confirm authentication to delete this account from this phone.'))) return;
+                if (!(await authenticateUser(t('Confirm authentication to delete this account from this phone.')))) return;
                 setWords(null);
             }
             setShowWipe(true);
@@ -283,17 +285,14 @@ export default function NodeMismatchScreen() {
     function handleConfirmWipe() {
         const hasWords = hasMnemonic(identity);
         Alert.alert(
-            'Delete this account from this phone?',
+            t('Delete this account from this phone?'),
             hasWords
-                ? "Only do this if you have written your 12 words down. They are the only way back in, " +
-                  "apart from a sign-in account linked on a community that holds a recovery piece for you.\n\n" +
-                  `${NO_OTHER_COMMUNITY_LINE}`
-                : `${noWordsBeforeWipe()}\n\n${NO_OTHER_COMMUNITY_LINE}\n\n` +
-                  "Switching communities is almost certainly what you want instead.",
+                ? t('Only do this if you have written your 12 words down. They are the only way back in, apart from a sign-in account linked on a community that holds a recovery piece for you.\n\n{line}', { line: keyLineWords(NO_OTHER_COMMUNITY_LINE) })
+                : t('{noWords}\n\n{line}\n\nSwitching communities is almost certainly what you want instead.', { noWords: settingsLineWords(noWordsBeforeWipe()), line: keyLineWords(NO_OTHER_COMMUNITY_LINE) }),
             [
-                { text: 'Cancel', style: 'cancel' },
+                { text: t('Cancel'), style: 'cancel' },
                 {
-                    text: 'Delete',
+                    text: t('Delete'),
                     style: 'destructive',
                     onPress: async () => {
                         setDeleting(true);
@@ -302,7 +301,7 @@ export default function NodeMismatchScreen() {
                             await deleteAccountFromThisPhone(identity);
                             setIdentity(null);
                         } catch (e: any) {
-                            Alert.alert('Delete Failed', e?.message || 'The account could not be deleted from this phone.');
+                            Alert.alert(t('Delete Failed'), e?.message ? keyLineWords(e.message) : t('The account could not be deleted from this phone.'));
                         } finally {
                             setDeleting(false);
                         }
@@ -387,7 +386,7 @@ export default function NodeMismatchScreen() {
                                 <Text style={styles.inputLabel}>{t('Community address')}</Text>
                                 <TextInput
                                     style={styles.input}
-                                    placeholder="e.g. node.yourcommunity.org"
+                                    placeholder={t('e.g. {address}', { address: 'node.yourcommunity.org' })}
                                     placeholderTextColor={colors.text.muted}
                                     value={input}
                                     onChangeText={(v) => { setInput(v); setError(null); }}
@@ -485,17 +484,17 @@ export default function NodeMismatchScreen() {
 
                         {keptBy && keptBy.length > 0 && !showWipe && (
                             <View style={styles.keptBox} accessibilityLiveRegion="polite">
-                                <Text style={styles.keptText}>🔑 {stillKeptLine(keptBy)}</Text>
+                                <Text style={styles.keptText}>{t('🔑 {line}', { line: stillKeptWords(keptBy) })}</Text>
                                 <SavedNodePicker
                                     nodes={keptBy.map((c) => ({ url: c.url, alias: c.name }))}
                                     onPick={switchToNode}
                                     disabled={busy}
-                                    label={keptBy.length === 1 ? 'Your community' : 'Your communities'}
-                                    actionLabel="Switch to"
-                                    hint={SIGN_OUT_FROM_SETTINGS_LINE}
+                                    label={tn(keptBy.length, 'Your community', 'Your communities')}
+                                    actionLabel={t('Switch to')}
+                                    hint={keyLineWords(SIGN_OUT_FROM_SETTINGS_LINE)}
                                 />
                                 <Pressable style={styles.secondaryBtn} onPress={() => setKeptBy(null)} disabled={busy} accessibilityRole="button">
-                                    <Text style={styles.cancelWipeText}>Close</Text>
+                                    <Text style={styles.cancelWipeText}>{t('Close')}</Text>
                                 </Pressable>
                             </View>
                         )}
@@ -505,17 +504,16 @@ export default function NodeMismatchScreen() {
                                 <Pressable style={styles.secondaryBtn} onPress={handleStartWipe} disabled={busy} accessibilityRole="button">
                                     {checking
                                         ? <ActivityIndicator color={colors.text.secondary} />
-                                        : <Text style={styles.secondaryBtnText}>Delete this account from this phone</Text>}
+                                        : <Text style={styles.secondaryBtnText}>{t('Delete this account from this phone')}</Text>}
                                 </Pressable>
                             )
                         ) : (
                             <View style={styles.wipeWrap}>
                                 {words ? (
                                     <>
-                                        <Text style={styles.wipeTitle}>Write these 12 words down first</Text>
+                                        <Text style={styles.wipeTitle}>{t('Write these 12 words down first')}</Text>
                                         <Text style={styles.wipeBody}>
-                                            They are the only way back into this account, apart from a linked
-                                            sign-in on a community that holds a recovery piece for you.
+                                            {t('They are the only way back into this account, apart from a linked sign-in on a community that holds a recovery piece for you.')}
                                         </Text>
                                         <View style={styles.wordsBox}>
                                             <NoScreenCapture>
@@ -531,17 +529,17 @@ export default function NodeMismatchScreen() {
                                         {/* No way on to Account Protection from here: this community doesn't know the member. */}
                                         <NoWordsNotice kind="before-wipe" />
                                         <Text style={[styles.wipeBody, { marginTop: 10 }]}>
-                                            Switching communities above is almost certainly what you want instead.
+                                            {t('Switching communities above is almost certainly what you want instead.')}
                                         </Text>
                                     </>
                                 )}
                                 <Pressable style={styles.secondaryBtn} onPress={handleConfirmWipe} disabled={busy} accessibilityRole="button">
                                     {deleting
                                         ? <ActivityIndicator color={colors.text.secondary} />
-                                        : <Text style={styles.secondaryBtnText}>{words ? "I've saved them — delete the account" : 'Delete the account anyway'}</Text>}
+                                        : <Text style={styles.secondaryBtnText}>{words ? t("I've saved them — delete the account") : t('Delete the account anyway')}</Text>}
                                 </Pressable>
                                 <Pressable style={styles.secondaryBtn} onPress={() => { setShowWipe(false); setWords(null); }} disabled={busy} accessibilityRole="button">
-                                    <Text style={styles.cancelWipeText}>Cancel</Text>
+                                    <Text style={styles.cancelWipeText}>{t('Cancel')}</Text>
                                 </Pressable>
                             </View>
                         )}

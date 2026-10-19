@@ -6,7 +6,7 @@
  * was, and a switch to Russian redraws the page in Russian where the words have it.
  *
  * Left English here (not this page's to change; listed in the PR): the frozen-line card's sentences (lib/credit-line-card.ts,
- * a lib file this sweep does not touch), a row's date (the browser's toLocaleString), and a node's note on a line.
+ * a lib file this sweep does not touch) and a node's note on a line. A row's date is core's ('{date}, {time}').
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -48,8 +48,8 @@ const barBold = () => Array.from(document.querySelectorAll('[role="meter"] b')).
 
 const TS = '2026-10-01T10:00:00.000Z';
 const line = (id: string, from: string, to: string, memo: string) => ({ id, from, to, amount: 3, taxFee: 0, memo, timestamp: TS });
-/** What members and the node wrote, shown as written: names, notes on lines, and a row's date (the browser's). */
-const OTHERS = ['Visitor', 'Dana', 'thanks for the eggs', 'for the bread: ', new Date(TS).toLocaleString()];
+/** What members and the node wrote, shown as written: names and notes on lines. */
+const OTHERS = ['Visitor', 'Dana', 'thanks for the eggs', 'for the bread: '];
 
 /** A Newcomer with no credit line, nothing to send. */
 const NEWCOMER = { balance: 0, floor: 0, activated: false, commonsBalance: 12.5, callsign: 'Visitor', tier: { name: 'Newcomer' } };

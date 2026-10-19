@@ -32,7 +32,7 @@ import { useMembersOnDemand, useMemberSearch, getMembersWhole, MEMBERS_SEARCH_MI
 import { creditLineCard, knownFrozenPartNote, frozenDebitLine, KNOWN_FROZEN_TITLE, KNOWN_FROZEN_BODY } from '../lib/credit-line-card';
 import { LocalCommunityAction, LocalCommunityStrip, type LocalCommunityWays } from '../components/LocalCommunityMark';
 import { SampleHeader, sampleLedger, type LedgerRowView } from '../components/ShowcasePreviews';
-import { t, tn, word, splitBold, isWholeCents, monthlyCirculation, CIRCULATION_FREE_BEANS, formatNumber, amountRefusalWords, ANY_DECIMALS, isAmbiguousAmount, parseAmount, type WordKey } from '@beanpool/core';
+import { t, tn, word, splitBold, isWholeCents, monthlyCirculation, CIRCULATION_FREE_BEANS, formatDate, formatNumber, amountRefusalWords, ANY_DECIMALS, isAmbiguousAmount, parseAmount, type WordKey } from '@beanpool/core';
 import { useReadsOwn, resetReaderFeaturesOnce } from '../lib/features';
 import { resetCommunityInfoOnce } from '../lib/visitor-lobby-gate';
 
@@ -407,11 +407,13 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
     // The Wallet's rows: the member's own, or Example Valley's in preview (who it was with, and when, under each).
     const rows: LedgerRowView[] = sample ? sample.rows : txns.map(tx => {
         const isSent = tx.from === myKey;
+        const at = new Date(tx.timestamp);
         return {
             id: tx.id,
             sent: isSent,
             note: ledgerLineNote({ incoming: !isSent, counterparty: tx.from, memo: tx.memo }, blockedSet),
-            when: new Date(tx.timestamp).toLocaleString(),
+            // "1 Oct 2026, 9:00": core's date and time in the member's language, never the browser's own locale.
+            when: Number.isFinite(at.getTime()) ? t('{date}, {time}', { date: formatDate(at, 'day-month-year'), time: formatDate(at, 'time') }) : '',
             amount: tx.amount,
         };
     });

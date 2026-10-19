@@ -55,3 +55,9 @@ Format: `## YYYY-MM-DD - [Title]\n**Failure:** [Which test, what error]\n**Root 
 **Root Cause:** The initial bad password attempt (`bad1`) ran cold scrypt KDF / threadpool initialization taking ~400ms on top of the 250ms tarpit delay, while the second attempt (`bad2`) ran warm scrypt in ~50ms + 500ms tarpit. Under parallel CPU load, `bad1.ms` (685ms) exceeded `bad2.ms` (570ms).
 **Fix:** Added wrong password warmup request and `resetAdminAuthTarpit()` in `test-admin-auth.ts` before checking tarpit delay progression, and updated assertion to account for timing jitter.
 **Learning:** KDF timing variance during cold start/CPU contention can distort total HTTP response time assertions when testing small tarpit increment differences; warming up the execution path stabilizes delay comparison assertions.
+
+## 2026-10-19 - [All Suites Clean]
+**Failure:** None.
+**Root Cause:** All 508 server test suites ran and passed cleanly without regressions on `main`.
+**Fix:** N/A - no code changes required.
+**Learning:** All test-*.ts server suites pass when executed with clean environment configurations and workspace builds.

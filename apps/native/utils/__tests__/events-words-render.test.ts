@@ -31,7 +31,17 @@ vi.mock('react-native-keyboard-controller', async () => {
 });
 vi.mock('expo-router', () => ({ router: { canGoBack: () => true, back: () => {}, replace: () => {}, push: () => {} }, ErrorBoundary: () => null }));
 vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 24, bottom: 0, left: 0, right: 0 }) }));
-vi.mock('@react-native-community/datetimepicker', () => ({ default: () => null }));
+// A picker that answers at once ("set", on the value it opened on) when a case asks it to: Android's date, then its time.
+const picks = vi.hoisted(() => ({ answer: false }));
+vi.mock('@react-native-community/datetimepicker', async () => {
+    const { useEffect } = await import('react');
+    return {
+        default: (p: { value: Date; onChange: (e: { type: string }, d?: Date) => void }) => {
+            useEffect(() => { if (picks.answer) p.onChange({ type: 'set' }, new Date(p.value)); }, []);
+            return null;
+        },
+    };
+});
 vi.mock('react-native-maps', () => ({ default: () => null, Marker: () => null, PROVIDER_DEFAULT: 'default' }));
 vi.mock('expo-location', () => ({
     getForegroundPermissionsAsync: async () => ({ status: 'denied', canAskAgain: false }),
@@ -69,6 +79,7 @@ vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => who.value }));
 const node = vi.hoisted(() => ({
     view: null as any, rsvpError: null as null | Error, deleteError: null as null | Error, deleted: [] as string[], groups: [] as unknown[],
     reminders: [] as unknown[], reminderError: null as null | Error, reportError: null as null | Error,
+    createError: null as null | Error, updateError: null as null | Error,
 }));
 vi.mock('../db', async () => {
     const { UNSIGNABLE_RSVP_MESSAGE } = await import('../events');
@@ -86,8 +97,8 @@ vi.mock('../db', async () => {
         fetchMyEvents: async () => node.reminders,
         setEventReminder: async () => { throw node.reminderError ?? new Error(''); },
         isRouteMissing: () => false,
-        createPost: async () => ({}),
-        updateEvent: async () => node.view,
+        createPost: async () => { if (node.createError) throw node.createError; return {}; },
+        updateEvent: async () => { if (node.updateError) throw node.updateError; return node.view; },
         fetchEventZone: async () => null,
         fetchEventZones: async () => [],
         fetchGroups: async () => node.groups,
@@ -149,6 +160,9 @@ beforeEach(() => {
     node.reminders = [];
     node.reminderError = null;
     node.reportError = null;
+    node.createError = null;
+    node.updateError = null;
+    picks.answer = false;
 });
 afterEach(() => { act(() => root.unmount()); host.remove(); setLanguage('en'); });
 
@@ -179,7 +193,7 @@ const pressAlert = async (english: string) => {
     await settle();
 };
 const said = () => alerts.said;
-const byText = (shown: string) => [...host.querySelectorAll('button')].find((b) => b.textContent === shown) ?? null;
+const byText = (shown: string) => Array.from(host.querySelectorAll('button')).find((b) => b.textContent === shown) ?? null;
 
 describe('an event\'s page in the pseudo-locale: every word came through t() (words S3l)', () => {
     it('a member: the header, the date, the counts, Going and Interested, the place, the host line, Share, Add to calendar, Report', async () => {
@@ -299,7 +313,7 @@ describe('an event\'s page in the pseudo-locale: every word came through t() (wo
         expect(bypassing(host, MEMBERS, said())).toEqual([]);
     });
 
-    it("the refusals are utils/db.ts's, as rsvpEvent, deletePost, letInToEvent and setEventReminder throw them; a node's words as given", () => {
+    it("the refusals are utils/db.ts's, as rsvpEvent, deletePost, letInToEvent, setEventReminder, createPost and updateEvent throw them; a node's words as given", () => {
         const db = fs.readFileSync(path.resolve(__dirname, '../db.ts'), 'utf8');
         const body = (start: string) => {
             const at = db.indexOf(start);
@@ -312,6 +326,8 @@ describe('an event\'s page in the pseudo-locale: every word came through t() (wo
         const remove = body('export async function deletePost(');
         const signed = body('async function _signedRequest(');
         const reminder = body('export async function setEventReminder(');
+        const create = body('export async function createPost(');
+        const update = body('export async function updateEvent(');
         expect(rsvp).toContain('throw new Error(UNSIGNABLE_RSVP_MESSAGE)');
         expect(thrown(rsvp)).toEqual(['You are currently offline.', 'No identity found.', 'Could not save your RSVP']);
         expect(thrown(remove)).toEqual(['Action requires internet connection.', 'Not logged in. Identity required.', 'Failed to remove post on Node']);
@@ -319,7 +335,13 @@ describe('an event\'s page in the pseudo-locale: every word came through t() (wo
         expect(thrown(signed)).toEqual(['You are off-grid. Please connect to a BeanPool Node to perform this action.', 'No identity found. You must be logged in.', 'Network request failed. You must be connected to a node.']);
         expect(signed).toContain('`Server returned ${res.status}`');
         expect(thrown(reminder)).toEqual(['You are currently offline.', 'No identity found.', 'Could not save your reminder']);
-        const fixed = [UNSIGNABLE_RSVP_MESSAGE as string, ...thrown(rsvp), ...thrown(remove), ...thrown(signed), ...thrown(reminder)];
+        // createPost's other `|| '…'` are a draft's defaults ('fixed', 'public'), not sentences: only its throws are read.
+        const thrownByCreate = [...create.matchAll(/(?:new Error\(|errMsg = |e\.message \|\| )'([^']+)'/g)].map((m) => m[1]);
+        expect(thrownByCreate).toEqual(['You are currently offline. Please connect to a BeanPool Node to broadcast your post.', 'No identity found.',
+            'Network request failed or server rejected the post.', 'Network request failed. You must be connected to a node to post.']);
+        expect(thrown(update)).toEqual(['No identity found.']);
+        expect(update).toContain("await _signedRequest('/api/marketplace/posts/update'");
+        const fixed = [UNSIGNABLE_RSVP_MESSAGE as string, ...thrown(rsvp), ...thrown(remove), ...thrown(signed), ...thrown(reminder), ...thrownByCreate];
         const filled = ['Offline or anchor node unreachable: Failed to remove post on Node', 'Server returned 502'];
         for (const s of [...fixed, ...filled]) expect(eventLineWords(s), s).toBe(s);
         setLanguage('xx');
@@ -424,6 +446,46 @@ describe('the event form in the pseudo-locale', () => {
         await click(byLabel(xx('Online')), 'Online');
         expect(host.textContent).toContain(xx('LINK TO JOIN'));
         expect(bypassing(host, [...MEMBERS, 'https://'], said())).toEqual([]);
+    });
+
+    it("an event the phone couldn't create or save: createPost's, updateEvent's and _signedRequest's sentences worded, the node's repeat refusals too", async () => {
+        picks.answer = true;
+        await renderIn('xx', createElement(NewEventModal, { visible: true, onClose() {}, initialPin: { lat: -28.6871, lng: 153.5243 } }));
+        await type(byLabel(xx('Event title')), 'Garden dinner');
+        await type(host.querySelector(`[placeholder="${xx('e.g. The old bowls club')}"]`), 'Bangalow Hall');
+        await click(byLabel(xx('{label}: {placeholder}').replace('{label}', xx('STARTS *')).replace('{placeholder}', xx('Pick a date and time'))), 'Starts');
+        const cases: Array<[string, string]> = [
+            ...['You are currently offline. Please connect to a BeanPool Node to broadcast your post.', 'No identity found.',
+                'Network request failed or server rejected the post.', 'Network request failed. You must be connected to a node to post.'].map((s): [string, string] => [s, xx(s)]),
+            // The node's repeat refusal, worded by core; anything else the node says, as given.
+            ['An event can repeat every 1 to 12 weeks or months', xx('An event can repeat every 1 to 12 weeks or months')],
+            ['Title is too long.', 'Title is too long.'],
+        ];
+        for (const [thrown, body] of cases) {
+            node.createError = new Error(thrown);
+            alerts.said.length = 0;
+            await click(byLabel(xx('Create event')), 'Create');
+            expect(said(), thrown).toEqual([xx('Event not created'), body]);
+        }
+        expect(bypassing(host, MEMBERS, said().slice(0, -1))).toEqual([]);
+        act(() => root.unmount());
+        root = createRoot(host);
+
+        node.view = { ...base, author_pubkey: ME, authorPublicKey: ME, eventRsvps: [] };
+        await renderIn('xx', createElement(EventDetail, { post: { ...base, author_pubkey: ME, authorPublicKey: ME } }));
+        await click(byLabel(xx('Edit event')), 'Edit event');
+        await type(byLabel(xx('Event title')), 'Garden dinner, moved');
+        for (const [thrown, body] of [
+            ['No identity found.', xx('No identity found.')],
+            ['You are off-grid. Please connect to a BeanPool Node to perform this action.', xx('You are off-grid. Please connect to a BeanPool Node to perform this action.')],
+            ['Server returned 502', xx('Server returned {status}').replace('{status}', '502')],
+        ]) {
+            node.updateError = new Error(thrown);
+            alerts.said.length = 0;
+            await click(byLabel(xx('Save changes')), 'Save changes');
+            expect(said(), thrown).toEqual([xx('Event not saved'), body]);
+        }
+        expect(bypassing(host, [...MEMBERS, 'Garden dinner, moved'], said())).toEqual([]);
     });
 
     it('the reminder choice reads as utils/event-extras.ts writes it, for every set of offsets', () => {

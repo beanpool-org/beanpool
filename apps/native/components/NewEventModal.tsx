@@ -56,6 +56,7 @@ import { deviceLocalClock, formatDate, looksLikeStreetAddress, PLACE_WORDS, t, t
 import { EventRepeatFields } from './EventRepeatFields';
 import { onlineEventsOn } from '../utils/node-profile';
 import { readsOwn } from '../utils/reads-own';
+import { eventLineWords } from './event-lines';
 
 /** Marked in utils/events.ts, translated here where they are shown. */
 const LINES = { pinWarning: EVENT_PIN_WARNING, pinHint: EVENT_PIN_HINT };
@@ -507,8 +508,9 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
             onSaved?.(saved);
             onClose();
         } catch (err: any) {
-            // A repeating event's refusals are the node's own sentences, in the member's language (DESIGN-event-times §8).
-            Alert.alert(t('Event not saved'), repeatRefusalText(err?.message) || t('The node did not accept the change.'));
+            // A repeating event's refusals are the node's own sentences, in the member's language (DESIGN-event-times §8);
+            // so are the phone's own (utils/db.ts updateEvent and _signedRequest: components/event-lines.ts).
+            Alert.alert(t('Event not saved'), eventLineWords(repeatRefusalText(err?.message)) || t('The node did not accept the change.'));
         } finally {
             setSubmitting(false);
         }
@@ -560,7 +562,8 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
             onSuccess?.();
             onClose();
         } catch (err: any) {
-            Alert.alert(t('Event not created'), repeatRefusalText(err?.message) || t('The node did not accept the event.'));
+            // The node's repeat refusals and the phone's own (utils/db.ts createPost), as on Save above.
+            Alert.alert(t('Event not created'), eventLineWords(repeatRefusalText(err?.message)) || t('The node did not accept the event.'));
         } finally {
             setSubmitting(false);
         }

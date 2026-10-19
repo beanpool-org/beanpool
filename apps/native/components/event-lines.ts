@@ -1,12 +1,12 @@
 /**
  * The phone's own sentences an event's page shows from utils/db.ts, in the member's language (words S3l).
  *
- * utils/db.ts signs the RSVP, the cancel, the let-in, the report and the reminder with the member's key, so it never
- * reaches the words layer: what rsvpEvent, deletePost, letInToEvent and reportAbuse (_signedRequest) and setEventReminder
- * throw as written is worded again here as word() keys and looked up by the exact sentence where
- * components/EventDetail.tsx and EventExtras.tsx show it. db.ts is not touched. A node's own words (a refusal's reason)
- * are shown exactly as given (slice S4). utils/__tests__/events-words-render.test.ts holds each to the throw in db.ts it
- * stands for.
+ * utils/db.ts signs the RSVP, the cancel, the let-in, the report, the reminder and the event itself with the member's
+ * key, so it never reaches the words layer: what rsvpEvent, deletePost, letInToEvent and reportAbuse (_signedRequest),
+ * setEventReminder, createPost and updateEvent throw as written is worded again here as word() keys and looked up by the
+ * exact sentence where components/EventDetail.tsx, EventExtras.tsx and NewEventModal.tsx show it. db.ts is not touched.
+ * A node's own words (a refusal's reason) are shown exactly as given (slice S4). utils/__tests__/events-words-render.test.ts
+ * holds each to the throw in db.ts it stands for.
  */
 import { t, word, type WordKey } from '@beanpool/core';
 import { UNSIGNABLE_RSVP_MESSAGE } from '../utils/events';
@@ -19,6 +19,11 @@ const FIXED: Readonly<Record<string, WordKey>> = {
     'Could not save your RSVP': word('Could not save your RSVP'),
     // setEventReminder: the same two as rsvpEvent, and a refusal without the node's words.
     'Could not save your reminder': word('Could not save your reminder'),
+    // createPost: no community set (no key is rsvpEvent's), a refusal without the node's words, and a send that failed
+    // without a reason. updateEvent throws rsvpEvent's "No identity found." and _signedRequest's, below.
+    'You are currently offline. Please connect to a BeanPool Node to broadcast your post.': word('You are currently offline. Please connect to a BeanPool Node to broadcast your post.'),
+    'Network request failed or server rejected the post.': word('Network request failed or server rejected the post.'),
+    'Network request failed. You must be connected to a node to post.': word('Network request failed. You must be connected to a node to post.'),
     // deletePost: no community set, no key, and a refusal without the node's words (inside "Offline or …", below).
     'Action requires internet connection.': word('Action requires internet connection.'),
     'Not logged in. Identity required.': word('Not logged in. Identity required.'),

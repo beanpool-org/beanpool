@@ -1552,7 +1552,8 @@ describe("app/_layout.tsx listens with it", () => {
     it('the launch lock and the Unlock App button take the lock screen down through unlockWithPhoneLock, never on a bare pass', () => {
         const s = layout();
         expect(s).toContain("import { createReturnLock, unlockWithPhoneLock } from '../utils/return-lock';");
-        expect(s.match(/await unlockWithPhoneLock\('Unlock BeanPool'\)/g)).toHaveLength(2);
+        // The prompt's words in the member's language since words S3l: the same two prompts.
+        expect(s.match(/await unlockWithPhoneLock\(t\('Unlock BeanPool'\)\)/g)).toHaveLength(2);
         expect(s).not.toMatch(/authenticateUser\(/);
         const returnLock = fs.readFileSync(path.resolve(__dirname, '../return-lock.ts'), 'utf-8');
         expect(returnLock).toContain("if (await unlockWithPhoneLock('Unlock BeanPool')) setLocked(false);");

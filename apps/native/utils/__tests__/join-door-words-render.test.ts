@@ -11,12 +11,16 @@
  *
  * The phone's own door sentences are written in global-join.ts, global-join-existing.ts and door-work.ts, which sign the
  * join and hold the key and so stay off the words layer; open-door-words.ts translates them by their exact English. The
- * last block holds that table to those files, sentence by sentence.
+ * last block holds that table to those files both ways: each sentence it names is translated, and each fixed sentence
+ * the files write is in it or is named with why not.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement } from 'react';
 import * as ReactAll from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import ts from 'typescript';
 
 (globalThis as any).__DEV__ = false;
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
@@ -138,7 +142,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 import { pseudoLocalise, setLanguage, type UiLang } from '@beanpool/core';
 import { LanguageProvider } from '../../components/LanguageProvider';
 import JoinOpenDoorScreen from '../../app/join-open-door';
-import { DOOR_MESSAGES, nameCheckMessage, type NameCheck } from '../global-join';
+import { DOOR_MESSAGES, PRIVATE_PREVIEW_MESSAGE, WORK_MESSAGES, nameCheckMessage, type NameCheck } from '../global-join';
 import { ACCOUNT_DOOR_MESSAGES, joinedGlobalNotice } from '../global-join-existing';
 import { DOOR_WORK_MESSAGES } from '../door-work';
 import { GLOBAL_DOOR_MESSAGES } from '../node-profile';
@@ -330,7 +334,8 @@ describe('the global door\'s sentences from the files that sign the join: each o
     const fromTheKeyFiles = [
         DOOR_MESSAGES.unreachable, DOOR_MESSAGES.doorClosed, DOOR_MESSAGES.accountClosed, DOOR_MESSAGES.removed, DOOR_MESSAGES.keyInvalidated,
         DOOR_MESSAGES.rateLimited, DOOR_MESSAGES.signInRequired, DOOR_MESSAGES.signInAgain, DOOR_MESSAGES.phoneClock, DOOR_MESSAGES.tryAgain,
-        DOOR_MESSAGES.signInAnotherWay, ...Object.values(ACCOUNT_DOOR_MESSAGES), DOOR_WORK_MESSAGES.solverUnavailable,
+        DOOR_MESSAGES.signInAnotherWay, ...Object.values(WORK_MESSAGES), PRIVATE_PREVIEW_MESSAGE,
+        ...Object.values(ACCOUNT_DOOR_MESSAGES), DOOR_WORK_MESSAGES.solverUnavailable,
         joinedGlobalNotice(null).title, joinedGlobalNotice(null).body,
     ];
 
@@ -341,6 +346,44 @@ describe('the global door\'s sentences from the files that sign the join: each o
         // A node's own sentence, and one with a time in it, as it came.
         expect(phoneDoorLineWords('This community is full this week.')).toBe('This community is full this week.');
         expect(phoneDoorLineWords(`${DOOR_MESSAGES.rateLimited} (Try again in 5 minutes.)`)).toBe(`${DOOR_MESSAGES.rateLimited} (Try again in 5 minutes.)`);
+    });
+
+    it('and every fixed sentence those files write is in the table, or named here with why it is not', () => {
+        // Each plain string that reads as a sentence, two joined with + read as one. A template has a time or a name in it.
+        const written = ['global-join.ts', 'global-join-existing.ts', 'door-work.ts'].flatMap((file) => {
+            const sf = ts.createSourceFile(file, fs.readFileSync(path.resolve(__dirname, '..', file), 'utf8'), ts.ScriptTarget.Latest, true);
+            const text = (node: ts.Node): string | null => {
+                if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) return node.text;
+                if (ts.isParenthesizedExpression(node)) return text(node.expression);
+                if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.PlusToken) {
+                    const left = text(node.left);
+                    const right = text(node.right);
+                    return left !== null && right !== null ? left + right : null;
+                }
+                return null;
+            };
+            const out: string[] = [];
+            const visit = (node: ts.Node) => {
+                const said = text(node);
+                if (said === null) ts.forEachChild(node, visit);
+                else if (/^[A-Z].* .*[.…]$/s.test(said)) out.push(said);
+            };
+            visit(sf);
+            return out;
+        });
+        expect(written.length).toBeGreaterThan(20);
+        const elsewhere: Record<string, string> = {
+            [DOOR_MESSAGES.alreadyJoined]: "the first screen's: this door says ACCOUNT_DOOR_MESSAGES.otherAccount instead",
+            [nameCheckMessage('Wren', { kind: 'timed_out' })]: 'doorNameCheckWords says it (the next test)',
+            [DOOR_WORK_MESSAGES.settingUp]: "components/WordsDoor's, with the first screen's sweep",
+            "That sign-in did not say who you are, so it can't be used. Try again.": "providerSignIn's exception, shown as it came",
+            'This phone holds a different BeanPool account, so the join was not sent.': "commitJoinKey's: the first screen's join, never this door's",
+            'This phone holds a different BeanPool account, so the join was not saved here.': "keepJoinedIdentity's: the first screen's join, never this door's",
+        };
+        setLanguage('xx');
+        expect(written.filter((line) => phoneDoorLineWords(line) === line && !(line in elsewhere))).toEqual([]);
+        // Nothing named here is gone from the files.
+        for (const line of Object.keys(elsewhere)) expect(written, elsewhere[line]).toContain(line);
     });
 
     it('the global door\'s refusals, name checks and keeper lines: the same English as before, translated', () => {

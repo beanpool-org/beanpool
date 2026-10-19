@@ -10,8 +10,9 @@
  * The global community's door says its sentences in the member's language too. The phone's own fixed sentences that
  * global-join.ts, global-join-existing.ts and door-work.ts write (they sign the join and hold the key, so they stay off
  * the words layer: core recovery-path-files' rule) are translated here, by their exact English (PHONE_DOOR_LINES;
- * utils/__tests__/open-door.test.ts holds the table to them). A node's own sentence, and one with a time or a sign-in's
- * name in it, is shown as it came.
+ * utils/__tests__/join-door-words-render.test.ts holds the table to them both ways: each entry is one of their
+ * sentences, and each fixed sentence they write is an entry or is named there with why not). A node's own sentence, and
+ * one with a time or a sign-in's name in it, is shown as it came.
  */
 import { t, word, type WordKey } from '@beanpool/core';
 import {
@@ -32,6 +33,10 @@ const PHONE_DOOR_LINES: Readonly<Record<string, WordKey>> = {
     "The global community couldn't accept this because your phone's date and time look wrong. Check them in your phone's settings (set them to automatic), then try again.": word("The global community couldn't accept this because your phone's date and time look wrong. Check them in your phone's settings (set them to automatic), then try again."),
     'Your join could not be completed, and nothing was saved. Please try again in a minute.': word('Your join could not be completed, and nothing was saved. Please try again in a minute.'),
     'Checking your sign-in another way…': word('Checking your sign-in another way…'),
+    // global-join.ts WORK_MESSAGES: the door work didn't count twice in a row.
+    "Setting up your account didn't finish. Please try again.": word("Setting up your account didn't finish. Please try again."),
+    "Setting up your account didn't work out. Please try again.": word("Setting up your account didn't work out. Please try again."),
+    "That took a while, so setting up your account had to start again, and it didn't finish. Please try again.": word("That took a while, so setting up your account had to start again, and it didn't finish. Please try again."),
     'This sign-in already joined the global community with a different BeanPool account. To join as the account on this phone, use a different sign-in.': word('This sign-in already joined the global community with a different BeanPool account. To join as the account on this phone, use a different sign-in.'),
     'This phone has no BeanPool account now, so nothing was sent. Go back and start again from the first screen.': word('This phone has no BeanPool account now, so nothing was sent. Go back and start again from the first screen.'),
     "This phone can't finish setting up a 12-words account right now. Try again, or sign in.": word("This phone can't finish setting up a 12-words account right now. Try again, or sign in."),
@@ -39,6 +44,8 @@ const PHONE_DOOR_LINES: Readonly<Record<string, WordKey>> = {
     'Your key and your 12 words are the same as before, and nothing changed in your other communities: your posts, chats and trades stay in each one.': word('Your key and your 12 words are the same as before, and nothing changed in your other communities: your posts, chats and trades stay in each one.'),
     [GLOBAL_DOOR_MESSAGES.unreachable]: GLOBAL_DOOR_MESSAGES.unreachable,
     [GLOBAL_DOOR_MESSAGES.door_closed]: GLOBAL_DOOR_MESSAGES.door_closed,
+    // global-join.ts PRIVATE_PREVIEW_MESSAGE, the same English as the server's own sentence.
+    [GLOBAL_DOOR_MESSAGES.private_preview]: GLOBAL_DOOR_MESSAGES.private_preview,
 };
 
 /** One of the phone's fixed door sentences in the member's language; anything else (a node's own) exactly as given. */

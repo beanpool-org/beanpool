@@ -2,7 +2,7 @@
   "_meta": {
     "language": "uk",
     "name": "Ukrainian",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-19",
@@ -367,5 +367,50 @@
     "few": "{n} із цих {count} від нового акаунта або акаунта з 12 слів",
     "many": "{n} із цих {count} від нового акаунта або акаунта з 12 слів",
     "other": "{n} із цих {count} від нового акаунта або акаунта з 12 слів"
-  }
+  },
+  "updates itself": "оновлюється автоматично",
+  "a tap per post": "один дотик на публікацію",
+  "shows as a card": "відображається як картка",
+  "youtube.com/@you": "youtube.com/@you",
+  "@yourhandle": "@yourhandle",
+  "soundcloud.com/you": "soundcloud.com/you",
+  "yoursite.com": "yoursite.com",
+  "facebook.com/yourpage": "facebook.com/yourpage",
+  "yourblog.com/feed": "yourblog.com/feed",
+  "Community": "Спільнота",
+  "Food & growing": "Їжа та вирощування",
+  "Making & craft": "Творчість і ремесла",
+  "Repair & reuse": "Ремонт і повторне використання",
+  "Art & music": "Мистецтво та музика",
+  "Business": "Бізнес",
+  "Other": "Інше",
+  "Website": "Вебсайт",
+  "Blog / RSS": "Блог / RSS",
+  "Link": "Посилання",
+  "Idea": "Ідея",
+  "Problem": "Проблема",
+  "This goes to the BeanPool project team, not to your community. Don't include personal details.": "Це надсилається команді проекту BeanPool, а не вашій спільноті. Не вказуйте особисті дані.",
+  "Thank you — your suggestion has reached the BeanPool project team.": "Дякуємо — ваша пропозиція надійшла до команди проекту BeanPool.",
+  "Please write at least {n} characters.|Please write at least {n} characters.": {
+    "one": "Будь ласка, напишіть щонайменше {n} символ.",
+    "few": "Будь ласка, напишіть щонайменше {n} символи.",
+    "many": "Будь ласка, напишіть щонайменше {n} символів.",
+    "other": "Будь ласка, напишіть щонайменше {n} символів."
+  },
+  "Please keep it under {n} characters ({count} now).|Please keep it under {n} characters ({count} now).": {
+    "one": "Будь ласка, пишіть не більше ніж {n} символ (зараз {count}).",
+    "few": "Будь ласка, пишіть не більше ніж {n} символи (зараз {count}).",
+    "many": "Будь ласка, пишіть не більше ніж {n} символів (зараз {count}).",
+    "other": "Будь ласка, пишіть не більше ніж {n} символів (зараз {count})."
+  },
+  "Couldn't reach the BeanPool project just now. Your text is still here — please try again later.": "Не вдалося зв'язатися з проектом BeanPool. Ваш текст збережено — спробуйте пізніше.",
+  "Please keep the community name under {n} characters.|Please keep the community name under {n} characters.": {
+    "one": "Будь ласка, зробіть назву спільноти не довшою за {n} символ.",
+    "few": "Будь ласка, зробіть назву спільноти не довшою за {n} символи.",
+    "many": "Будь ласка, зробіть назву спільноти не довшою за {n} символів.",
+    "other": "Будь ласка, зробіть назву спільноти не довшою за {n} символів."
+  },
+  "Too many suggestions from your connection recently. Please try again later — your text is still here.": "Забагато пропозицій з вашого підключення останнім часом. Спробуйте пізніше — ваш текст збережено.",
+  "This poll is shown at your area (about 10 km around it) to everyone who can read it.": "Це опитування показується у вашій місцевості (близько 10 км навколо неї) усім, хто може його читати.",
+  "You haven't set your area, so members nearby won't see this poll in their list; they can still find it by searching. Set it in Settings → Your area to show it near you.": "Ви не вказали свою місцевість, тому учасники поблизу не бачитимуть це опитування у своєму списку; вони зможуть знайти його через пошук. Укажіть її в Налаштування → Ваша місцевість, щоб показувати опитування поруч із вами."
 }

@@ -2,7 +2,7 @@
   "_meta": {
     "language": "tr",
     "name": "Turkish",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-19",
@@ -325,5 +325,44 @@
   "{n} of these {count} from a new or 12-word account|{n} of these {count} from new or 12-word accounts": {
     "one": "Bu {count} tanenin {n} tanesi yeni veya 12 kelimelik bir hesaptan",
     "other": "Bu {count} tanenin {n} tanesi yeni veya 12 kelimelik hesaplardan"
-  }
+  },
+  "updates itself": "kendiliğinden güncellenir",
+  "a tap per post": "her gönderi için bir dokunuş",
+  "shows as a card": "kart olarak gösterilir",
+  "youtube.com/@you": "youtube.com/@sen",
+  "@yourhandle": "@kullaniciadin",
+  "soundcloud.com/you": "soundcloud.com/sen",
+  "yoursite.com": "siten.com",
+  "facebook.com/yourpage": "facebook.com/sayfan",
+  "yourblog.com/feed": "blogun.com/feed",
+  "Community": "Topluluk",
+  "Food & growing": "Gıda ve yetiştiricilik",
+  "Making & craft": "Üretim ve zanaat",
+  "Repair & reuse": "Tamir ve yeniden kullanım",
+  "Art & music": "Sanat ve müzik",
+  "Business": "İşletme",
+  "Other": "Diğer",
+  "Website": "Web sitesi",
+  "Blog / RSS": "Blog / RSS",
+  "Link": "Bağlantı",
+  "Idea": "Fikir",
+  "Problem": "Sorun",
+  "This goes to the BeanPool project team, not to your community. Don't include personal details.": "Bu, topluluğuna değil BeanPool proje ekibine gider. Kişisel bilgileri dahil etme.",
+  "Thank you — your suggestion has reached the BeanPool project team.": "Teşekkürler — önerin BeanPool proje ekibine ulaştı.",
+  "Please write at least {n} characters.|Please write at least {n} characters.": {
+    "one": "Lütfen en az {n} karakter yaz.",
+    "other": "Lütfen en az {n} karakter yaz."
+  },
+  "Please keep it under {n} characters ({count} now).|Please keep it under {n} characters ({count} now).": {
+    "one": "Lütfen {n} karakterin altında tut (şu anda {count}).",
+    "other": "Lütfen {n} karakterin altında tut (şu anda {count})."
+  },
+  "Couldn't reach the BeanPool project just now. Your text is still here — please try again later.": "Şu anda BeanPool projesine ulaşılamadı. Metnin hâlâ burada — lütfen daha sonra tekrar dene.",
+  "Please keep the community name under {n} characters.|Please keep the community name under {n} characters.": {
+    "one": "Lütfen topluluk adını {n} karakterin altında tut.",
+    "other": "Lütfen topluluk adını {n} karakterin altında tut."
+  },
+  "Too many suggestions from your connection recently. Please try again later — your text is still here.": "Son zamanlarda bağlantından çok fazla öneri geldi. Lütfen daha sonra tekrar dene — metnin hâlâ burada.",
+  "This poll is shown at your area (about 10 km around it) to everyone who can read it.": "Bu anket, okuyabilen herkese bölgende (çevresinde yaklaşık 10 km) gösterilir.",
+  "You haven't set your area, so members nearby won't see this poll in their list; they can still find it by searching. Set it in Settings → Your area to show it near you.": "Bölgeni ayarlamadın, bu yüzden yakındaki üyeler bu anketi listelerinde göremeyecek; yine de arayarak bulabilirler. Yakınında göstermek için Ayarlar → Bölgen bölümünden ayarla."
 }

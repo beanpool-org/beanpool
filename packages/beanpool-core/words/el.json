@@ -2,7 +2,7 @@
   "_meta": {
     "language": "el",
     "name": "Greek",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-19",
@@ -325,5 +325,44 @@
   "{n} of these {count} from a new or 12-word account|{n} of these {count} from new or 12-word accounts": {
     "one": "{n} από αυτές τις {count} από νέο λογαριασμό ή λογαριασμό 12 λέξεων",
     "other": "{n} από αυτές τις {count} από νέους λογαριασμούς ή λογαριασμούς 12 λέξεων"
-  }
+  },
+  "updates itself": "ενημερώνεται αυτόματα",
+  "a tap per post": "ένα πάτημα ανά ανάρτηση",
+  "shows as a card": "εμφανίζεται ως κάρτα",
+  "youtube.com/@you": "youtube.com/@όνομα_χρήστη",
+  "@yourhandle": "@όνομα_χρήστη",
+  "soundcloud.com/you": "soundcloud.com/όνομα_χρήστη",
+  "yoursite.com": "yoursite.com",
+  "facebook.com/yourpage": "facebook.com/η_σελίδα_σου",
+  "yourblog.com/feed": "yourblog.com/feed",
+  "Community": "Κοινότητα",
+  "Food & growing": "Τρόφιμα & καλλιέργεια",
+  "Making & craft": "Κατασκευές & χειροτεχνία",
+  "Repair & reuse": "Επισκευή & επαναχρησιμοποίηση",
+  "Art & music": "Τέχνη & μουσική",
+  "Business": "Επιχείρηση",
+  "Other": "Άλλο",
+  "Website": "Ιστότοπος",
+  "Blog / RSS": "Ιστολόγιο / RSS",
+  "Link": "Σύνδεσμος",
+  "Idea": "Ιδέα",
+  "Problem": "Πρόβλημα",
+  "This goes to the BeanPool project team, not to your community. Don't include personal details.": "Αυτό πηγαίνει στην ομάδα του έργου BeanPool, όχι στην κοινότητά σου. Μην συμπεριλάβεις προσωπικά στοιχεία.",
+  "Thank you — your suggestion has reached the BeanPool project team.": "Ευχαριστούμε — η πρότασή σου έφτασε στην ομάδα του έργου BeanPool.",
+  "Please write at least {n} characters.|Please write at least {n} characters.": {
+    "one": "Παρακαλώ γράψε τουλάχιστον {n} χαρακτήρα.",
+    "other": "Παρακαλώ γράψε τουλάχιστον {n} χαρακτήρες."
+  },
+  "Please keep it under {n} characters ({count} now).|Please keep it under {n} characters ({count} now).": {
+    "one": "Παρακαλώ κράτησέ το κάτω από {n} χαρακτήρα (τώρα {count}).",
+    "other": "Παρακαλώ κράτησέ το κάτω από {n} χαρακτήρες (τώρα {count})."
+  },
+  "Couldn't reach the BeanPool project just now. Your text is still here — please try again later.": "Δεν ήταν δυνατή η επικοινωνία με το έργο BeanPool μόλις τώρα. Το κείμενό σου είναι ακόμα εδώ — παρακαλώ δοκίμασε ξανά αργότερα.",
+  "Please keep the community name under {n} characters.|Please keep the community name under {n} characters.": {
+    "one": "Παρακαλώ κράτησε το όνομα της κοινότητας κάτω από {n} χαρακτήρα.",
+    "other": "Παρακαλώ κράτησε το όνομα της κοινότητας κάτω από {n} χαρακτήρες."
+  },
+  "Too many suggestions from your connection recently. Please try again later — your text is still here.": "Πάρα πολλές προτάσεις από τη σύνδεσή σου πρόσφατα. Παρακαλώ δοκίμασε ξανά αργότερα — το κείμενό σου είναι ακόμα εδώ.",
+  "This poll is shown at your area (about 10 km around it) to everyone who can read it.": "Αυτή η δημοσκόπηση εμφανίζεται στην περιοχή σου (περίπου 10 χλμ. γύρω της) σε όλους όσους μπορούν να τη διαβάσουν.",
+  "You haven't set your area, so members nearby won't see this poll in their list; they can still find it by searching. Set it in Settings → Your area to show it near you.": "Δεν έχεις ορίσει την περιοχή σου, οπότε τα μέλη κοντά σου δεν θα βλέπουν αυτή τη δημοσκόπηση στη λίστα τους· μπορούν όμως να τη βρουν μέσω αναζήτησης. Όρισέ την στις Ρυθμίσεις → Η περιοχή σου για να εμφανίζεται κοντά σου."
 }

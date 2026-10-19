@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ur",
     "name": "Urdu",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-19",
@@ -325,5 +325,44 @@
   "{n} of these {count} from a new or 12-word account|{n} of these {count} from new or 12-word accounts": {
     "one": "ان {count} میں سے {n} نئے یا 12 الفاظ والے اکاؤنٹ سے",
     "other": "ان {count} میں سے {n} نئے یا 12 الفاظ والے اکاؤنٹس سے"
-  }
+  },
+  "updates itself": "خود بخود اپ ڈیٹ ہوتا ہے",
+  "a tap per post": "ہر پوسٹ پر ایک ٹیپ",
+  "shows as a card": "کارڈ کی صورت میں نظر آتا ہے",
+  "youtube.com/@you": "youtube.com/@you",
+  "@yourhandle": "@yourhandle",
+  "soundcloud.com/you": "soundcloud.com/you",
+  "yoursite.com": "yoursite.com",
+  "facebook.com/yourpage": "facebook.com/yourpage",
+  "yourblog.com/feed": "yourblog.com/feed",
+  "Community": "کمیونٹی",
+  "Food & growing": "خوراک اور کاشتکاری",
+  "Making & craft": "دستکاری اور تخلیق",
+  "Repair & reuse": "مرمت اور دوبارہ استعمال",
+  "Art & music": "فن اور موسیقی",
+  "Business": "کاروبار",
+  "Other": "دیگر",
+  "Website": "ویب سائٹ",
+  "Blog / RSS": "بلاگ / RSS",
+  "Link": "لنک",
+  "Idea": "خیال",
+  "Problem": "مسئلہ",
+  "This goes to the BeanPool project team, not to your community. Don't include personal details.": "یہ آپ کی کمیونٹی کے بجائے BeanPool پروجیکٹ ٹیم کو جاتا ہے۔ ذاتی تفصیلات شامل نہ کریں۔",
+  "Thank you — your suggestion has reached the BeanPool project team.": "شکریہ — آپ کی تجویز BeanPool پروجیکٹ ٹیم تک پہنچ گئی ہے۔",
+  "Please write at least {n} characters.|Please write at least {n} characters.": {
+    "one": "براہ کرم کم از کم {n} حرف لکھیں۔",
+    "other": "براہ کرم کم از کم {n} حروف لکھیں۔"
+  },
+  "Please keep it under {n} characters ({count} now).|Please keep it under {n} characters ({count} now).": {
+    "one": "براہ کرم اسے {n} حرف سے کم رکھیں (ابھی {count})۔",
+    "other": "براہ کرم اسے {n} حروف سے کم رکھیں (ابھی {count})۔"
+  },
+  "Couldn't reach the BeanPool project just now. Your text is still here — please try again later.": "ابھی BeanPool پروجیکٹ تک رسائی ممکن نہیں ہوئی۔ آپ کی تحریر یہاں موجود ہے — براہ کرم بعد میں دوبارہ کوشش کریں۔",
+  "Please keep the community name under {n} characters.|Please keep the community name under {n} characters.": {
+    "one": "براہ کرم کمیونٹی کا نام {n} حرف سے کم رکھیں۔",
+    "other": "براہ کرم کمیونٹی کا نام {n} حروف سے کم رکھیں۔"
+  },
+  "Too many suggestions from your connection recently. Please try again later — your text is still here.": "حال ہی میں آپ کے کنکشن سے بہت زیادہ تجاویز موصول ہوئی ہیں۔ براہ کرم بعد میں دوبارہ کوشش کریں — آپ کی تحریر یہاں موجود ہے۔",
+  "This poll is shown at your area (about 10 km around it) to everyone who can read it.": "یہ رائے شماری آپ کے علاقے میں (اس کے گرد تقریباً 10 کلومیٹر) ہر اس شخص کو دکھائی جاتی ہے جو اسے پڑھ سکتا ہے۔",
+  "You haven't set your area, so members nearby won't see this poll in their list; they can still find it by searching. Set it in Settings → Your area to show it near you.": "آپ نے اپنا علاقہ متعین نہیں کیا ہے، اس لیے قریبی ارکان کو یہ رائے شماری اپنی فہرست میں نظر نہیں آئے گی؛ وہ اب بھی تلاش کر کے اسے پا سکتے ہیں۔ اسے اپنے قریب دکھانے کے لیے سیٹنگز → آپ کا علاقہ میں سیٹ کریں۔"
 }

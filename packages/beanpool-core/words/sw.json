@@ -2,7 +2,7 @@
   "_meta": {
     "language": "sw",
     "name": "Swahili",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-19",
@@ -325,5 +325,44 @@
   "{n} of these {count} from a new or 12-word account|{n} of these {count} from new or 12-word accounts": {
     "one": "{n} kati ya hizi {count} inatoka kwa akaunti mpya au ya maneno 12",
     "other": "{n} kati ya hizi {count} zinatoka kwa akaunti mpya au za maneno 12"
-  }
+  },
+  "updates itself": "hujisasisha yenyewe",
+  "a tap per post": "mguso kwa kila chapisho",
+  "shows as a card": "huonekana kama kadi",
+  "youtube.com/@you": "youtube.com/@wewe",
+  "@yourhandle": "@jinalako",
+  "soundcloud.com/you": "soundcloud.com/wewe",
+  "yoursite.com": "tovutiyako.com",
+  "facebook.com/yourpage": "facebook.com/ukurasawako",
+  "yourblog.com/feed": "bloguyako.com/mlisho",
+  "Community": "Jumuiya",
+  "Food & growing": "Chakula na kilimo",
+  "Making & craft": "Utengenezaji na ufundi",
+  "Repair & reuse": "Ukarabati na utumiaji tena",
+  "Art & music": "Sanaa na muziki",
+  "Business": "Biashara",
+  "Other": "Nyingine",
+  "Website": "Tovuti",
+  "Blog / RSS": "Blogu / RSS",
+  "Link": "Kiungo",
+  "Idea": "Wazo",
+  "Problem": "Tatizo",
+  "This goes to the BeanPool project team, not to your community. Don't include personal details.": "Hii huenda kwa timu ya mradi wa BeanPool, si kwa jumuiya yako. Usijumuishe maelezo binafsi.",
+  "Thank you — your suggestion has reached the BeanPool project team.": "Asante — pendekezo lako limefika kwa timu ya mradi wa BeanPool.",
+  "Please write at least {n} characters.|Please write at least {n} characters.": {
+    "one": "Tafadhali andika angalau herufi {n}.",
+    "other": "Tafadhali andika angalau herufi {n}."
+  },
+  "Please keep it under {n} characters ({count} now).|Please keep it under {n} characters ({count} now).": {
+    "one": "Tafadhali weka chini ya herufi {n} (sasa {count}).",
+    "other": "Tafadhali weka chini ya herufi {n} (sasa {count})."
+  },
+  "Couldn't reach the BeanPool project just now. Your text is still here — please try again later.": "Haikuweza kufikia mradi wa BeanPool sasa hivi. Maandishi yako bado yapo hapa — tafadhali jaribu tena baadaye.",
+  "Please keep the community name under {n} characters.|Please keep the community name under {n} characters.": {
+    "one": "Tafadhali weka jina la jumuiya chini ya herufi {n}.",
+    "other": "Tafadhali weka jina la jumuiya chini ya herufi {n}."
+  },
+  "Too many suggestions from your connection recently. Please try again later — your text is still here.": "Mapendekezo mengi mno kutoka kwenye muunganisho wako hivi karibuni. Tafadhali jaribu tena baadaye — maandishi yako bado yapo hapa.",
+  "This poll is shown at your area (about 10 km around it) to everyone who can read it.": "Kura hii ya maoni huonyeshwa katika eneo lako (takriban 10 km kulizunguka) kwa kila mtu anayeweza kuisoma.",
+  "You haven't set your area, so members nearby won't see this poll in their list; they can still find it by searching. Set it in Settings → Your area to show it near you.": "Hujaweka eneo lako, kwa hivyo wanachama wa karibu hawataona kura hii ya maoni kwenye orodha yao; bado wanaweza kuipata kwa kutafuta. Liweke katika Mipangilio → Eneo lako ili kuionyesha karibu nawe."
 }

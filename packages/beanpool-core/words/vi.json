@@ -2,7 +2,7 @@
   "_meta": {
     "language": "vi",
     "name": "Vietnamese",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-19",
@@ -304,5 +304,41 @@
   },
   "{n} of these {count} from a new or 12-word account|{n} of these {count} from new or 12-word accounts": {
     "other": "{n} trong số {count} phiếu này từ tài khoản mới hoặc tài khoản 12 từ"
-  }
+  },
+  "updates itself": "tự cập nhật",
+  "a tap per post": "chạm cho mỗi bài",
+  "shows as a card": "hiển thị dạng thẻ",
+  "youtube.com/@you": "youtube.com/@ban",
+  "@yourhandle": "@tencuaban",
+  "soundcloud.com/you": "soundcloud.com/ban",
+  "yoursite.com": "trangcuaban.com",
+  "facebook.com/yourpage": "facebook.com/trangcuaban",
+  "yourblog.com/feed": "blogcuaban.com/feed",
+  "Community": "Cộng đồng",
+  "Food & growing": "Thực phẩm & trồng trọt",
+  "Making & craft": "Chế tác & thủ công",
+  "Repair & reuse": "Sửa chữa & tái sử dụng",
+  "Art & music": "Nghệ thuật & âm nhạc",
+  "Business": "Kinh doanh",
+  "Other": "Khác",
+  "Website": "Trang web",
+  "Blog / RSS": "Blog / RSS",
+  "Link": "Liên kết",
+  "Idea": "Ý tưởng",
+  "Problem": "Vấn đề",
+  "This goes to the BeanPool project team, not to your community. Don't include personal details.": "Nội dung này được gửi tới nhóm dự án BeanPool, không phải cộng đồng của bạn. Đừng gửi thông tin cá nhân.",
+  "Thank you — your suggestion has reached the BeanPool project team.": "Cảm ơn bạn — gợi ý của bạn đã được gửi tới nhóm dự án BeanPool.",
+  "Please write at least {n} characters.|Please write at least {n} characters.": {
+    "other": "Vui lòng viết ít nhất {n} ký tự."
+  },
+  "Please keep it under {n} characters ({count} now).|Please keep it under {n} characters ({count} now).": {
+    "other": "Vui lòng giữ dưới {n} ký tự (hiện có {count} ký tự)."
+  },
+  "Couldn't reach the BeanPool project just now. Your text is still here — please try again later.": "Hiện không kết nối được với dự án BeanPool. Nội dung của bạn vẫn còn ở đây — vui lòng thử lại sau.",
+  "Please keep the community name under {n} characters.|Please keep the community name under {n} characters.": {
+    "other": "Vui lòng đặt tên cộng đồng dưới {n} ký tự."
+  },
+  "Too many suggestions from your connection recently. Please try again later — your text is still here.": "Có quá nhiều gợi ý từ kết nối của bạn gần đây. Vui lòng thử lại sau — nội dung của bạn vẫn còn ở đây.",
+  "This poll is shown at your area (about 10 km around it) to everyone who can read it.": "Cuộc bình chọn này được hiển thị tại khu vực của bạn (khoảng 10 km xung quanh) cho tất cả những ai có thể đọc.",
+  "You haven't set your area, so members nearby won't see this poll in their list; they can still find it by searching. Set it in Settings → Your area to show it near you.": "Bạn chưa đặt khu vực của mình, nên các thành viên ở gần sẽ không thấy cuộc bình chọn này trong danh sách của họ; họ vẫn có thể tìm thấy bằng cách tìm kiếm. Hãy đặt trong Cài đặt → Khu vực của bạn để hiển thị gần bạn."
 }

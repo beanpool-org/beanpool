@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ja",
     "name": "Japanese",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-19",
@@ -304,5 +304,41 @@
   },
   "{n} of these {count} from a new or 12-word account|{n} of these {count} from new or 12-word accounts": {
     "other": "これら{count}件中{n}件が新規または12単語のアカウントからのものです"
-  }
+  },
+  "updates itself": "自動で更新",
+  "a tap per post": "投稿ごとにタップ",
+  "shows as a card": "カードとして表示",
+  "youtube.com/@you": "youtube.com/@ユーザー名",
+  "@yourhandle": "@ユーザー名",
+  "soundcloud.com/you": "soundcloud.com/ユーザー名",
+  "yoursite.com": "yoursite.com",
+  "facebook.com/yourpage": "facebook.com/ページ名",
+  "yourblog.com/feed": "yourblog.com/feed",
+  "Community": "コミュニティ",
+  "Food & growing": "食と栽培",
+  "Making & craft": "ものづくりとクラフト",
+  "Repair & reuse": "修理とリユース",
+  "Art & music": "アートと音楽",
+  "Business": "ビジネス",
+  "Other": "その他",
+  "Website": "ウェブサイト",
+  "Blog / RSS": "ブログ / RSS",
+  "Link": "リンク",
+  "Idea": "アイデア",
+  "Problem": "問題点",
+  "This goes to the BeanPool project team, not to your community. Don't include personal details.": "これはあなたのコミュニティではなく、BeanPoolプロジェクトチームに届きます。個人情報は含めないでください。",
+  "Thank you — your suggestion has reached the BeanPool project team.": "ありがとうございます — いただいたご意見はBeanPoolプロジェクトチームに届きました。",
+  "Please write at least {n} characters.|Please write at least {n} characters.": {
+    "other": "{n}文字以上入力してください。"
+  },
+  "Please keep it under {n} characters ({count} now).|Please keep it under {n} characters ({count} now).": {
+    "other": "{n}文字以内にしてください（現在{count}文字）。"
+  },
+  "Couldn't reach the BeanPool project just now. Your text is still here — please try again later.": "いまBeanPoolプロジェクトに接続できませんでした。入力内容は残っています — 後でもう一度お試しください。",
+  "Please keep the community name under {n} characters.|Please keep the community name under {n} characters.": {
+    "other": "コミュニティ名は{n}文字以内にしてください。"
+  },
+  "Too many suggestions from your connection recently. Please try again later — your text is still here.": "最近この接続からのご意見が多すぎます。後でもう一度お試しください — 入力内容は残っています。",
+  "This poll is shown at your area (about 10 km around it) to everyone who can read it.": "この投票はあなたの地域（周辺約10 km）で、閲覧できるすべての人に表示されます。",
+  "You haven't set your area, so members nearby won't see this poll in their list; they can still find it by searching. Set it in Settings → Your area to show it near you.": "あなたの地域が設定されていないため、近くのメンバーのリストにはこの投票が表示されません。ただし検索で見つけることはできます。近くに表示するには、設定 → あなたの地域 で設定してください。"
 }

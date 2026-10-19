@@ -2,7 +2,7 @@
   "_meta": {
     "language": "bn",
     "name": "Bengali",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-19",
@@ -325,5 +325,44 @@
   "{n} of these {count} from a new or 12-word account|{n} of these {count} from new or 12-word accounts": {
     "one": "এই {count}টির মধ্যে {n}টি নতুন বা ১২-শব্দের অ্যাকাউন্ট থেকে",
     "other": "এই {count}টির মধ্যে {n}টি নতুন বা ১২-শব্দের অ্যাকাউন্ট থেকে"
-  }
+  },
+  "updates itself": "স্বয়ংক্রিয়ভাবে আপডেট হয়",
+  "a tap per post": "প্রতি পোস্টে একটি ট্যাপ",
+  "shows as a card": "কার্ড হিসেবে প্রদর্শিত হয়",
+  "youtube.com/@you": "youtube.com/@আপনার_নাম",
+  "@yourhandle": "@আপনার_নাম",
+  "soundcloud.com/you": "soundcloud.com/আপনার_নাম",
+  "yoursite.com": "yoursite.com",
+  "facebook.com/yourpage": "facebook.com/আপনার_পেজ",
+  "yourblog.com/feed": "yourblog.com/feed",
+  "Community": "কমিউনিটি",
+  "Food & growing": "খাদ্য ও চাষাবাদ",
+  "Making & craft": "তৈরি ও কারুশিল্প",
+  "Repair & reuse": "মেরামত ও পুনঃব্যবহার",
+  "Art & music": "শিল্প ও সংগীত",
+  "Business": "ব্যবসা",
+  "Other": "অন্যান্য",
+  "Website": "ওয়েবসাইট",
+  "Blog / RSS": "ব্লগ / RSS",
+  "Link": "লিঙ্ক",
+  "Idea": "ধারণা",
+  "Problem": "সমস্যা",
+  "This goes to the BeanPool project team, not to your community. Don't include personal details.": "এটি BeanPool প্রকল্প দলের কাছে যাবে, আপনার কমিউনিটির কাছে নয়। ব্যক্তিগত তথ্য অন্তর্ভুক্ত করবেন না।",
+  "Thank you — your suggestion has reached the BeanPool project team.": "ধন্যবাদ — আপনার পরামর্শ BeanPool প্রকল্প দলের কাছে পৌঁছেছে।",
+  "Please write at least {n} characters.|Please write at least {n} characters.": {
+    "one": "অনুগ্রহ করে কমপক্ষে {n}টি অক্ষর লিখুন।",
+    "other": "অনুগ্রহ করে কমপক্ষে {n}টি অক্ষর লিখুন।"
+  },
+  "Please keep it under {n} characters ({count} now).|Please keep it under {n} characters ({count} now).": {
+    "one": "অনুগ্রহ করে এটি {n}টি অক্ষরের মধ্যে রাখুন (এখন {count})।",
+    "other": "অনুগ্রহ করে এটি {n}টি অক্ষরের মধ্যে রাখুন (এখন {count})।"
+  },
+  "Couldn't reach the BeanPool project just now. Your text is still here — please try again later.": "এইমাত্র BeanPool প্রকল্পের সাথে যোগাযোগ করা যায়নি। আপনার লেখাটি এখনও এখানে রয়েছে — অনুগ্রহ করে পরে আবার চেষ্টা করুন।",
+  "Please keep the community name under {n} characters.|Please keep the community name under {n} characters.": {
+    "one": "অনুগ্রহ করে কমিউনিটির নাম {n}টি অক্ষরের মধ্যে রাখুন।",
+    "other": "অনুগ্রহ করে কমিউনিটির নাম {n}টি অক্ষরের মধ্যে রাখুন।"
+  },
+  "Too many suggestions from your connection recently. Please try again later — your text is still here.": "সম্প্রতি আপনার সংযোগ থেকে অনেক বেশি পরামর্শ এসেছে। অনুগ্রহ করে পরে আবার চেষ্টা করুন — আপনার লেখাটি এখনও এখানে রয়েছে।",
+  "This poll is shown at your area (about 10 km around it) to everyone who can read it.": "এই পোলটি আপনার এলাকায় (এর চারপাশে প্রায় ১০ কিমি) এমন সকলকে দেখানো হবে যারা এটি পড়তে পারেন।",
+  "You haven't set your area, so members nearby won't see this poll in their list; they can still find it by searching. Set it in Settings → Your area to show it near you.": "আপনি আপনার এলাকা সেট করেননি, তাই আশেপাশের সদস্যরা তাদের তালিকায় এই পোলটি দেখতে পাবেন না; তারা এখনও অনুসন্ধানের মাধ্যমে এটি খুঁজে পেতে পারেন। এটি আপনার কাছাকাছি দেখাতে সেটিংস → আপনার এলাকা-তে সেট করুন।"
 }

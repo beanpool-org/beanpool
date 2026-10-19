@@ -6,11 +6,14 @@
  * row's KeeperWords, an enterprise's when none is given. Pure functions only, so the words are tested; the PWA carries the same file.
  */
 
-import { keeperWords, type KeeperWords } from '@beanpool/core';
+import { keeperWords, t, tn, type KeeperWords } from '@beanpool/core';
 
 const ENTERPRISE = keeperWords('ongoing');
-/** "lead" in "becomes lead", "the lead stays": a project's is its leader. */
-const leadRole = (w: KeeperWords): string => (w.kind === 'project' ? 'leader' : 'lead');
+/**
+ * Each sentence is written whole for a project (leader, collaborators) and for an enterprise (lead keeper, keepers),
+ * never with the kind's words glued in, so a language can inflect them.
+ */
+const isProject = (w: KeeperWords): boolean => w.kind === 'project';
 
 export interface KeeperLite {
     publicKey: string;
@@ -46,31 +49,44 @@ export interface SuccessionLite {
 const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
 
-function plural(n: number, word: string): string {
-    return `${n} ${word}${n === 1 ? '' : 's'}`;
-}
-
 /** "2 days 5 hours left", "5 hours left", "less than an hour left", or "ending now". */
 export function timeLeftText(untilIso: string, now = Date.now()): string {
     const ms = new Date(untilIso).getTime() - now;
-    if (!Number.isFinite(ms) || ms <= 0) return 'ending now';
+    if (!Number.isFinite(ms) || ms <= 0) return t('ending now');
     const days = Math.floor(ms / DAY);
     const hours = Math.floor((ms % DAY) / HOUR);
-    if (days > 0) return hours > 0 ? `${plural(days, 'day')} ${plural(hours, 'hour')} left` : `${plural(days, 'day')} left`;
-    if (hours > 0) return `${plural(hours, 'hour')} left`;
-    return 'less than an hour left';
+    if (days > 0) {
+        return hours > 0
+            ? t('{days} {hours} left', { days: tn(days, '{n} day', '{n} days'), hours: tn(hours, '{n} hour', '{n} hours') })
+            : tn(days, '{n} day left', '{n} days left');
+    }
+    if (hours > 0) return tn(hours, '{n} hour left', '{n} hours left');
+    return t('less than an hour left');
 }
 
 export function keeperChangeTitle(c: KeeperChangeLite, w: KeeperWords = ENTERPRISE): string {
-    const who = c.memberCallsign || 'A member';
-    if (c.kind === 'remove') return `Removing ${who} as a ${w.keeper}`;
+    const name = c.memberCallsign || t('A member');
+    const project = isProject(w);
+    if (c.kind === 'remove') return project ? t('Removing {name} as a collaborator', { name }) : t('Removing {name} as a keeper', { name });
     const backing = Number(c.pledgedBacking || 0);
-    return backing > 0 ? `Adding ${who} as a ${w.keeper}, backing ${backing} beans` : `Adding ${who} as a ${w.keeper}`;
+    if (backing > 0) {
+        return project
+            ? tn(backing, 'Adding {name} as a collaborator, backing {n} beans', 'Adding {name} as a collaborator, backing {n} beans', { name })
+            : tn(backing, 'Adding {name} as a keeper, backing {n} beans', 'Adding {name} as a keeper, backing {n} beans', { name });
+    }
+    return project ? t('Adding {name} as a collaborator', { name }) : t('Adding {name} as a keeper', { name });
 }
 
 export function keeperChangeBody(c: KeeperChangeLite, w: KeeperWords = ENTERPRISE): string {
-    const lead = c.proposedByCallsign || `The ${w.lead}`;
-    return `${lead} made this change. Any other ${w.keeper} can object before it takes effect, and one objection cancels it.`;
+    const name = c.proposedByCallsign;
+    if (isProject(w)) {
+        return name
+            ? t('{name} made this change. Any other collaborator can object before it takes effect, and one objection cancels it.', { name })
+            : t('The leader made this change. Any other collaborator can object before it takes effect, and one objection cancels it.');
+    }
+    return name
+        ? t('{name} made this change. Any other keeper can object before it takes effect, and one objection cancels it.', { name })
+        : t('The lead keeper made this change. Any other keeper can object before it takes effect, and one objection cancels it.');
 }
 
 function activeKeeper(keepers: KeeperLite[], me: string | null | undefined): KeeperLite | null {
@@ -106,22 +122,47 @@ export function nextLead(keepers: KeeperLite[], leaving: string): KeeperLite | n
 
 export function stepDownConfirmText(me: string, keepers: KeeperLite[], w: KeeperWords = ENTERPRISE): string {
     const mine = keepers.find(k => k.publicKey === me);
-    const released = 'Any backing you pledged is released.';
-    if (mine?.role !== 'lead') return `You stop being a ${w.keeper} of this ${w.kind}. ${released}`;
+    const project = isProject(w);
+    if (mine?.role !== 'lead') {
+        return project
+            ? t('You stop being a collaborator of this project. Any backing you pledged is released.')
+            : t('You stop being a keeper of this enterprise. Any backing you pledged is released.');
+    }
     const next = nextLead(keepers, me);
     if (!next) {
-        return `You stop being a ${w.keeper}. No other ${w.keeper} is active, so the ${w.kind} pauses until someone winds it up. ${released}`;
+        return project
+            ? t('You stop being a collaborator. No other collaborator is active, so the project pauses until someone winds it up. Any backing you pledged is released.')
+            : t('You stop being a keeper. No other keeper is active, so the enterprise pauses until someone winds it up. Any backing you pledged is released.');
     }
-    return `You stop being a ${w.keeper}. ${next.callsign || `The longest-serving ${w.keeper}`} becomes ${leadRole(w)} at once, and the other ${w.keepers} can choose someone else straight away. ${released}`;
+    const name = next.callsign;
+    if (project) {
+        return name
+            ? t('You stop being a collaborator. {name} becomes leader at once, and the other collaborators can choose someone else straight away. Any backing you pledged is released.', { name })
+            : t('You stop being a collaborator. The longest-serving collaborator becomes leader at once, and the other collaborators can choose someone else straight away. Any backing you pledged is released.');
+    }
+    return name
+        ? t('You stop being a keeper. {name} becomes lead at once, and the other keepers can choose someone else straight away. Any backing you pledged is released.', { name })
+        : t('You stop being a keeper. The longest-serving keeper becomes lead at once, and the other keepers can choose someone else straight away. Any backing you pledged is released.');
 }
 
 export function removeKeeperConfirmText(k: KeeperLite, w: KeeperWords = ENTERPRISE): string {
-    return `${k.callsign || `This ${w.keeper}`} stops being a ${w.keeper} in 3 days, unless another ${w.keeper} objects first.`;
+    const name = k.callsign;
+    if (isProject(w)) {
+        return name
+            ? t('{name} stops being a collaborator in 3 days, unless another collaborator objects first.', { name })
+            : t('This collaborator stops being a collaborator in 3 days, unless another collaborator objects first.');
+    }
+    return name
+        ? t('{name} stops being a keeper in 3 days, unless another keeper objects first.', { name })
+        : t('This keeper stops being a keeper in 3 days, unless another keeper objects first.');
 }
 
 /** What an applicant sees once the lead has approved them and the window is running. */
 export function approvedApplicantText(appliesAt: string, now = Date.now(), w: KeeperWords = ENTERPRISE): string {
-    return `The ${w.lead} approved you. You become a ${w.keeper} when the other ${w.keepers}' 3-day objection window ends (${timeLeftText(appliesAt, now)}).`;
+    const time = timeLeftText(appliesAt, now);
+    return isProject(w)
+        ? t("The leader approved you. You become a collaborator when the other collaborators' 3-day objection window ends ({time}).", { time })
+        : t("The lead keeper approved you. You become a keeper when the other keepers' 3-day objection window ends ({time}).", { time });
 }
 
 /**
@@ -129,22 +170,23 @@ export function approvedApplicantText(appliesAt: string, now = Date.now(), w: Ke
  * applicant has left to back with is theirs alone). Null when a node too old to send canBackPledge answers: no line.
  */
 export function applicantBackingText(canBackPledge: boolean | null | undefined): string | null {
-    if (canBackPledge === true) return 'Their standing covers this pledge.';
-    if (canBackPledge === false) return "Their standing doesn't cover this pledge right now, so it can't be approved yet.";
+    if (canBackPledge === true) return t('Their standing covers this pledge.');
+    if (canBackPledge === false) return t("Their standing doesn't cover this pledge right now, so it can't be approved yet.");
     return null;
 }
 
 export function successionTallyText(p: SuccessionLite, w: KeeperWords = ENTERPRISE): string {
-    const yes = p.votesCount;
-    const no = p.noVotesCount ?? 0;
-    const need = p.requiredVotes ?? 0;
+    const values = { yes: p.votesCount, no: p.noVotesCount ?? 0, need: p.requiredVotes ?? 0 };
     const of = p.totalEligible ?? 0;
-    return `${yes} yes, ${no} no. Needs ${need} yes of ${of} ${w.keepers}.`;
+    // Counted on the keepers, whose word takes the plural; English writes "keepers" for every count, as it always has.
+    return isProject(w)
+        ? tn(of, '{yes} yes, {no} no. Needs {need} yes of {n} collaborators.', '{yes} yes, {no} no. Needs {need} yes of {n} collaborators.', values)
+        : tn(of, '{yes} yes, {no} no. Needs {need} yes of {n} keepers.', '{yes} yes, {no} no. Needs {need} yes of {n} keepers.', values);
 }
 
 export function successionDeadlineText(p: SuccessionLite, now = Date.now()): string | null {
     if (!p.deadlineAt) return null;
-    return `Open for 14 days: ${timeLeftText(p.deadlineAt, now)}.`;
+    return t('Open for 14 days: {time}.', { time: timeLeftText(p.deadlineAt, now) });
 }
 
 export function myChoice(p: SuccessionLite, me: string | null | undefined): 'yes' | 'no' | null {
@@ -153,27 +195,46 @@ export function myChoice(p: SuccessionLite, me: string | null | undefined): 'yes
 }
 
 export function successionClosedText(reason: string | null | undefined, w: KeeperWords = ENTERPRISE): string | null {
+    const project = isProject(w);
     switch (reason) {
-        case 'rejected': return `Not enough ${w.keepers} said yes, so the ${leadRole(w)} stays.`;
-        case 'expired': return 'The 14 days ran out before a majority said yes.';
-        case 'lead_returned': return `The ${leadRole(w)} became active again, so the proposal closed.`;
-        case 'lead_changed': return `The ${leadRole(w)} changed, so the proposal closed.`;
-        case 'candidate_gone': return `The candidate is no longer an active ${w.keeper}.`;
+        case 'rejected': return project ? t('Not enough collaborators said yes, so the leader stays.') : t('Not enough keepers said yes, so the lead stays.');
+        case 'expired': return t('The 14 days ran out before a majority said yes.');
+        case 'lead_returned': return project ? t('The leader became active again, so the proposal closed.') : t('The lead became active again, so the proposal closed.');
+        case 'lead_changed': return project ? t('The leader changed, so the proposal closed.') : t('The lead changed, so the proposal closed.');
+        case 'candidate_gone': return project ? t('The candidate is no longer an active collaborator.') : t('The candidate is no longer an active keeper.');
         default: return null;
     }
 }
 
-/** Heading for the succession card: why succession is open now. */
+/** Heading for the succession card: why succession is open now. In capitals as written, in every language. */
 export function successionHeading(inactivity: { autoPromoted?: boolean; daysInactive?: number } | null | undefined, w: KeeperWords = ENTERPRISE): string {
-    if (inactivity?.autoPromoted) return `NEW ${leadRole(w).toUpperCase()} CHOSEN AUTOMATICALLY`;
-    return `${w.Lead.toUpperCase()} INACTIVE (${Math.floor(inactivity?.daysInactive ?? 0)} DAYS)`;
+    const project = isProject(w);
+    if (inactivity?.autoPromoted) return project ? t('NEW LEADER CHOSEN AUTOMATICALLY') : t('NEW LEAD CHOSEN AUTOMATICALLY');
+    const days = Math.floor(inactivity?.daysInactive ?? 0);
+    return project
+        ? tn(days, 'LEADER INACTIVE ({n} DAYS)', 'LEADER INACTIVE ({n} DAYS)')
+        : tn(days, 'LEAD KEEPER INACTIVE ({n} DAYS)', 'LEAD KEEPER INACTIVE ({n} DAYS)');
 }
 
 export function successionExplainer(inactivity: { autoPromoted?: boolean; leadCallsign?: string | null } | null | undefined, w: KeeperWords = ENTERPRISE): string {
-    const lead = leadRole(w);
-    const tail = `More than half of the other ${w.keepers} saying yes moves the ${lead} role. Each proposal is open for 14 days.`;
+    const name = inactivity?.leadCallsign;
+    const project = isProject(w);
     if (inactivity?.autoPromoted) {
-        return `${inactivity.leadCallsign || `The ${lead}`} became ${lead} automatically as the longest-serving ${w.keeper}. The other ${w.keepers} can choose someone else now. ${tail}`;
+        if (project) {
+            return name
+                ? t('{name} became leader automatically as the longest-serving collaborator. The other collaborators can choose someone else now. More than half of the other collaborators saying yes moves the leader role. Each proposal is open for 14 days.', { name })
+                : t('The leader became leader automatically as the longest-serving collaborator. The other collaborators can choose someone else now. More than half of the other collaborators saying yes moves the leader role. Each proposal is open for 14 days.');
+        }
+        return name
+            ? t('{name} became lead automatically as the longest-serving keeper. The other keepers can choose someone else now. More than half of the other keepers saying yes moves the lead role. Each proposal is open for 14 days.', { name })
+            : t('The lead became lead automatically as the longest-serving keeper. The other keepers can choose someone else now. More than half of the other keepers saying yes moves the lead role. Each proposal is open for 14 days.');
     }
-    return `${inactivity?.leadCallsign || `The ${w.lead}`} has recorded no node activity for 30+ days. ${tail} If the ${lead} returns first, the proposal closes.`;
+    if (project) {
+        return name
+            ? t('{name} has recorded no node activity for 30+ days. More than half of the other collaborators saying yes moves the leader role. Each proposal is open for 14 days. If the leader returns first, the proposal closes.', { name })
+            : t('The leader has recorded no node activity for 30+ days. More than half of the other collaborators saying yes moves the leader role. Each proposal is open for 14 days. If the leader returns first, the proposal closes.');
+    }
+    return name
+        ? t('{name} has recorded no node activity for 30+ days. More than half of the other keepers saying yes moves the lead role. Each proposal is open for 14 days. If the lead returns first, the proposal closes.', { name })
+        : t('The lead keeper has recorded no node activity for 30+ days. More than half of the other keepers saying yes moves the lead role. Each proposal is open for 14 days. If the lead returns first, the proposal closes.');
 }

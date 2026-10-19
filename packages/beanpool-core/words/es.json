@@ -2,7 +2,7 @@
   "_meta": {
     "language": "es",
     "name": "Spanish",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-19",
@@ -325,5 +325,44 @@
   "{n} of these {count} from a new or 12-word account|{n} of these {count} from new or 12-word accounts": {
     "one": "{n} de estos {count} de una cuenta nueva o de 12 palabras",
     "other": "{n} de estos {count} de cuentas nuevas o de 12 palabras"
-  }
+  },
+  "updates itself": "se actualiza automáticamente",
+  "a tap per post": "un toque por publicación",
+  "shows as a card": "se muestra como tarjeta",
+  "youtube.com/@you": "youtube.com/@tu_canal",
+  "@yourhandle": "@tu_usuario",
+  "soundcloud.com/you": "soundcloud.com/tu_usuario",
+  "yoursite.com": "tusitio.com",
+  "facebook.com/yourpage": "facebook.com/tupagina",
+  "yourblog.com/feed": "tublog.com/feed",
+  "Community": "Comunidad",
+  "Food & growing": "Comida y cultivo",
+  "Making & craft": "Creación y artesanía",
+  "Repair & reuse": "Reparación y reutilización",
+  "Art & music": "Arte y música",
+  "Business": "Negocios",
+  "Other": "Otro",
+  "Website": "Sitio web",
+  "Blog / RSS": "Blog / RSS",
+  "Link": "Enlace",
+  "Idea": "Idea",
+  "Problem": "Problema",
+  "This goes to the BeanPool project team, not to your community. Don't include personal details.": "Esto va al equipo del proyecto BeanPool, no a tu comunidad. No incluyas datos personales.",
+  "Thank you — your suggestion has reached the BeanPool project team.": "Gracias: tu sugerencia llegó al equipo del proyecto BeanPool.",
+  "Please write at least {n} characters.|Please write at least {n} characters.": {
+    "one": "Escribe al menos {n} carácter.",
+    "other": "Escribe al menos {n} caracteres."
+  },
+  "Please keep it under {n} characters ({count} now).|Please keep it under {n} characters ({count} now).": {
+    "one": "Mantén el texto en menos de {n} carácter ({count} ahora).",
+    "other": "Mantén el texto en menos de {n} caracteres ({count} ahora)."
+  },
+  "Couldn't reach the BeanPool project just now. Your text is still here — please try again later.": "No se pudo conectar con el proyecto BeanPool en este momento. Tu texto sigue aquí; inténtalo de nuevo más tarde.",
+  "Please keep the community name under {n} characters.|Please keep the community name under {n} characters.": {
+    "one": "Mantén el nombre de la comunidad en menos de {n} carácter.",
+    "other": "Mantén el nombre de la comunidad en menos de {n} caracteres."
+  },
+  "Too many suggestions from your connection recently. Please try again later — your text is still here.": "Demasiadas sugerencias desde tu conexión recientemente. Inténtalo de nuevo más tarde; tu texto sigue aquí.",
+  "This poll is shown at your area (about 10 km around it) to everyone who can read it.": "Esta encuesta se muestra en tu zona (a unos 10 km a la redonda) a todas las personas que pueden leerla.",
+  "You haven't set your area, so members nearby won't see this poll in their list; they can still find it by searching. Set it in Settings → Your area to show it near you.": "No has configurado tu zona, así que los miembros cercanos no verán esta encuesta en su lista; aún pueden encontrarla buscando. Configúrala en Ajustes → Tu zona para mostrarla cerca de ti."
 }

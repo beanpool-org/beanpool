@@ -6,8 +6,12 @@
  *
  * While a vote is open the card shows turnout only ("2 of 4 have voted"); Yes and No once it has closed (Marty's pick 3,
  * 2026-10-10). A pay-out carries the 1.5% trade fee (pick 2): it comes out of the amount, as a Need's payment's does.
+ *
+ * The words are in the member's language (core's t / tn; the constants are word() keys, translated where shown). What
+ * members wrote (a vote's title and why) and the node's own words (an execution reason) are shown as written.
  */
 import { TRANSACTION_FEE_RATE } from './ledger.js';
+import { t, tn, word } from './words.js';
 
 export type ScopedEffect = 'pay_out' | 'remove_keeper' | 'replace_lead';
 
@@ -59,13 +63,14 @@ export interface ScopedDecisionList {
 /** A person on the roll, for the pickers. */
 export interface RollPerson { pubkey: string; name: string; role?: string }
 
-const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
-
 /** Beans to two places at most, never a trailing ".00" ("40", "39.4", "0.6"). */
 export function beansAmount(n: number): string {
     const cents = Math.round(n * 100);
     return cents % 100 === 0 ? String(cents / 100) : (cents / 100).toFixed(2).replace(/0$/, '');
 }
+
+/** beansAmount as a number, for a sentence: t() writes it with the language's decimal sign ("39,4" in fr). */
+const beansNumber = (n: number): number => Number(beansAmount(n));
 
 const heldCents = (balance: number) => Math.floor(Math.max(0, balance) * 100 + 1e-6);
 
@@ -87,7 +92,8 @@ export function payOutSplit(amount: number): { receives: number; fee: number } {
 /** The line under the amount: who gets what, and where the fee goes. */
 export function payOutFeeWords(amount: number, recipient: string): string {
     const { receives, fee } = payOutSplit(amount);
-    return `${recipient} receives ${beansAmount(receives)} Beans. The 1.5% trade fee (${beansAmount(fee)} Beans) goes to the Commons.`;
+    const n = beansNumber(receives);
+    return tn(n, '{name} receives {n} Beans. The 1.5% trade fee ({fee} Beans) goes to the Commons.', '{name} receives {n} Beans. The 1.5% trade fee ({fee} Beans) goes to the Commons.', { name: recipient, fee: beansNumber(fee) });
 }
 
 /** The node's words for a wage above the earned surplus (apps/server decisions-engine WAGE_NEEDS_SURPLUS). */
@@ -100,23 +106,34 @@ export const PAY_OUT_WAGE_WORDS = 'Paying a keeper is a wage, and a wage comes o
  * surplus not known (null) is left to the node. Returns the amount, or the words to show under the field.
  */
 export function checkPayOutAmount(typed: string, held: number, wageSurplus?: number | null): { amount: number } | { error: string } {
-    const t = typed.trim().replace(',', '.');
-    if (!/^\d+(\.\d{1,2})?$/.test(t)) return { error: 'Enter an amount in Beans, like 40 or 12.50.' };
-    const amount = Number(t);
-    if (!(amount > 0)) return { error: 'The amount must be more than 0 Beans.' };
-    if (Math.round(amount * 100) > heldCents(held)) return { error: `The enterprise holds ${beansHeld(held)} Beans, so it can't pay more than that.` };
+    const asTyped = typed.trim().replace(',', '.');
+    if (!/^\d+(\.\d{1,2})?$/.test(asTyped)) return { error: t('Enter an amount in Beans, like 40 or 12.50.') };
+    const amount = Number(asTyped);
+    if (!(amount > 0)) return { error: t('The amount must be more than 0 Beans.') };
+    if (Math.round(amount * 100) > heldCents(held)) {
+        const n = Number(beansHeld(held));
+        return { error: tn(n, "The enterprise holds {n} Beans, so it can't pay more than that.", "The enterprise holds {n} Beans, so it can't pay more than that.") };
+    }
     if (typeof wageSurplus === 'number' && Math.round(amount * 100) > heldCents(wageSurplus)) {
-        return { error: `${PAY_OUT_WAGE_WORDS}: ${beansHeld(wageSurplus)} Beans now.` };
+        // PAY_OUT_WAGE_WORDS, then what the surplus is now: one sentence.
+        const n = Number(beansHeld(wageSurplus));
+        return { error: tn(n, 'Paying a keeper is a wage, and a wage comes only out of what the enterprise has earned above its costs (its earned surplus): {n} Beans now.', 'Paying a keeper is a wage, and a wage comes only out of what the enterprise has earned above its costs (its earned surplus): {n} Beans now.') };
     }
     return { amount };
 }
 
 /** The line under the amount: a pay-out to a keeper is a wage, with the earned surplus it may come out of when known. */
 export function wageNoteWords(earnedSurplus: number | null | undefined, lifecycle: string | null | undefined): string {
-    const kind = lifecycle === 'bounded' ? 'project' : 'enterprise';
-    return typeof earnedSurplus === 'number'
-        ? `Paying a keeper is a wage: only out of what the ${kind} has earned above its costs, ${beansHeld(earnedSurplus)} Beans now.`
-        : `Paying a keeper is a wage: only out of what the ${kind} has earned.`;
+    const project = lifecycle === 'bounded';
+    if (typeof earnedSurplus !== 'number') {
+        return project
+            ? t('Paying a keeper is a wage: only out of what the project has earned.')
+            : t('Paying a keeper is a wage: only out of what the enterprise has earned.');
+    }
+    const n = Number(beansHeld(earnedSurplus));
+    return project
+        ? tn(n, 'Paying a keeper is a wage: only out of what the project has earned above its costs, {n} Beans now.', 'Paying a keeper is a wage: only out of what the project has earned above its costs, {n} Beans now.')
+        : tn(n, 'Paying a keeper is a wage: only out of what the enterprise has earned above its costs, {n} Beans now.', 'Paying a keeper is a wage: only out of what the enterprise has earned above its costs, {n} Beans now.');
 }
 
 /** The effects a keeper may propose here: making another keeper the lead only in an ongoing enterprise (§2.4, pick 1). */
@@ -128,9 +145,9 @@ export function scopedEffectsFor(lifecycle: string | null | undefined): ScopedEf
 export function scopedEffectLabel(effect: ScopedEffect, lifecycle: string | null | undefined): string {
     const project = lifecycle === 'bounded';
     switch (effect) {
-        case 'pay_out': return 'Pay Beans out';
-        case 'remove_keeper': return project ? 'Remove a collaborator' : 'Remove a keeper';
-        case 'replace_lead': return 'Make another keeper the lead';
+        case 'pay_out': return t('Pay Beans out');
+        case 'remove_keeper': return project ? t('Remove a collaborator') : t('Remove a keeper');
+        case 'replace_lead': return t('Make another keeper the lead');
     }
 }
 
@@ -154,76 +171,88 @@ export function rollChoices(effect: ScopedEffect, roll: readonly RollPerson[], m
  */
 export function votesOnlyWords(canVote: boolean): string {
     return canVote
-        ? "You're not in this group now, but you were when these votes opened, so you can still vote on them."
-        : "You're not in this group now. These are the votes you were part of.";
+        ? t("You're not in this group now, but you were when these votes opened, so you can still vote on them.")
+        : t("You're not in this group now. These are the votes you were part of.");
 }
 
-/** Who a group vote names when neither the roster nor the card knows them (an account deleted): never "a former member". */
-export const GROUP_SOMEONE = 'someone in the group';
+/**
+ * Who a group vote names when neither the roster nor the card knows them (an account deleted): never "a former member".
+ * Marked here, translated where it is shown.
+ */
+export const GROUP_SOMEONE = word('someone in the group');
 
 /** What the vote does, in one line, naming the person from the roll (the card is the keepers' own). */
 export function scopedEffectWords(d: Pick<ScopedDecisionCard, 'effect' | 'subject' | 'params'>, nameOf: (pubkey: string) => string, lifecycle?: string | null): string {
-    const who = d.subject ? nameOf(d.subject) : 'someone';
+    const name = d.subject ? nameOf(d.subject) : t('someone');
     switch (d.effect) {
-        case 'pay_out': return `Pay ${beansAmount(Number(d.params?.amount) || 0)} Beans to ${who}`;
-        case 'remove_keeper': return lifecycle === 'bounded' ? `Remove ${who} as a collaborator` : `Remove ${who} as a keeper`;
-        case 'replace_lead': return lifecycle === 'bounded' ? `Make ${who} the leader` : `Make ${who} the lead keeper`;
-        case 'replace_lead_convenor': return `Make ${who} the lead convenor`;
-        case 'set_group_role': return d.params?.role === 'convenor' ? `Make ${who} a convenor` : `Make ${who} a member, no longer a convenor`;
-        case 'remove_group_member': return `Remove ${who} from the group`;
-        case 'set_join_policy': return `Change who can join: ${joinPolicyWords(d.params?.policy)}`;
-        case 'close_group': return 'Close the group. Its chat stays to read.';
-        default: return 'A vote';
+        case 'pay_out': {
+            const n = beansNumber(Number(d.params?.amount) || 0);
+            return tn(n, 'Pay {n} Beans to {name}', 'Pay {n} Beans to {name}', { name });
+        }
+        case 'remove_keeper': return lifecycle === 'bounded' ? t('Remove {name} as a collaborator', { name }) : t('Remove {name} as a keeper', { name });
+        case 'replace_lead': return lifecycle === 'bounded' ? t('Make {name} the leader', { name }) : t('Make {name} the lead keeper', { name });
+        case 'replace_lead_convenor': return t('Make {name} the lead convenor', { name });
+        case 'set_group_role': return d.params?.role === 'convenor' ? t('Make {name} a convenor', { name }) : t('Make {name} a member, no longer a convenor', { name });
+        case 'remove_group_member': return t('Remove {name} from the group', { name });
+        case 'set_join_policy': return t('Change who can join: {policy}', { policy: joinPolicyWords(d.params?.policy) });
+        case 'close_group': return t('Close the group. Its chat stays to read.');
+        default: return t('A vote');
     }
 }
 
 /** The tally line: turnout while open, the split once closed (pick 3). */
 export function scopedTallyWords(d: Pick<ScopedDecisionCard, 'status' | 'tally'>): string {
-    const t = d.tally;
-    const turnout = `${t.voted} of ${t.roll} ${t.voted === 1 && t.roll === 1 ? 'has' : 'have'} voted`;
-    if (d.status === 'open') return `${turnout}. ${t.quorumRequired} must vote. Yes and No show when it closes.`;
-    return `Yes ${t.yes ?? 0} · No ${t.no ?? 0}. ${t.voted} of ${t.roll} voted.`;
+    const tally = d.tally;
+    if (d.status === 'open') {
+        const values = { roll: tally.roll, quorum: tally.quorumRequired };
+        // English says "has" only for one of one; otherwise the count of those who voted takes the plural.
+        return tally.voted === 1 && tally.roll === 1
+            ? t('{voted} of {roll} has voted. {quorum} must vote. Yes and No show when it closes.', { voted: tally.voted, ...values })
+            : tn(tally.voted, '{n} of {roll} have voted. {quorum} must vote. Yes and No show when it closes.', '{n} of {roll} have voted. {quorum} must vote. Yes and No show when it closes.', values);
+    }
+    return t('Yes {yes} · No {no}. {voted} of {roll} voted.', { yes: tally.yes ?? 0, no: tally.no ?? 0, voted: tally.voted, roll: tally.roll });
 }
 
-/** The outcome, in plain words, for a vote that has closed. */
+/** The outcome, in plain words, for a vote that has closed. The node's own reason is shown as it wrote it. */
 export function scopedOutcomeWords(d: Pick<ScopedDecisionCard, 'status' | 'executionReason'> & { scopeKind?: string }): string {
+    const reason = d.executionReason;
     switch (d.status) {
-        case 'open': return 'Open';
-        case 'executed': return 'Passed and carried out';
-        case 'passed': case 'passed_queued_for_funds': case 'execution_pending_grace': return 'Passed';
-        case 'failed': return 'Did not pass';
+        case 'open': return t('Open', undefined, 'a vote');
+        case 'executed': return t('Passed and carried out');
+        case 'passed': case 'passed_queued_for_funds': case 'execution_pending_grace': return t('Passed');
+        case 'failed': return t('Did not pass');
         // The node writes "Quorum not met (1/3)" for a vote too few joined: never a member's word (#1784 review N5).
-        case 'unresolved': return d.executionReason && !/^Quorum not met/.test(d.executionReason)
-            ? d.executionReason
-            : (d.scopeKind === 'group' ? 'Not enough people voted' : 'Not enough keepers voted');
-        case 'execution_blocked': return `Passed, but not carried out${d.executionReason ? `: ${d.executionReason}` : ''}`;
-        case 'execution_void': return `Passed, but there was nothing to do${d.executionReason ? `: ${d.executionReason}` : ''}`;
-        default: return 'Closed';
+        case 'unresolved': return reason && !/^Quorum not met/.test(reason)
+            ? reason
+            : (d.scopeKind === 'group' ? t('Not enough people voted') : t('Not enough keepers voted'));
+        case 'execution_blocked': return reason ? t('Passed, but not carried out: {reason}', { reason }) : t('Passed, but not carried out');
+        case 'execution_void': return reason ? t('Passed, but there was nothing to do: {reason}', { reason }) : t('Passed, but there was nothing to do');
+        default: return t('Closed', undefined, 'a vote');
     }
 }
 
 /** When it closes, in the reader's own time ("closes in 3 days", "closes in 5 hours", "closes within the hour"). */
 export function scopedClosesWords(closesAt: string, now: number): string {
     const ms = Date.parse(closesAt) - now;
-    if (!(ms > 0)) return 'closing now';
+    if (!(ms > 0)) return t('closing now');
     const hours = Math.floor(ms / 3600_000);
-    if (hours >= 48) return `closes in ${plural(Math.floor(hours / 24), 'day', 'days')}`;
-    if (hours >= 1) return `closes in ${plural(hours, 'hour', 'hours')}`;
-    return 'closes within the hour';
+    if (hours >= 48) return tn(Math.floor(hours / 24), 'closes in {n} day', 'closes in {n} days');
+    if (hours >= 1) return tn(hours, 'closes in {n} hour', 'closes in {n} hours');
+    return t('closes within the hour');
 }
 
-/** The one honest line (§2.5): in a very small roll, early close plus turnout can show the split. */
-export const SMALL_ROLL_BALLOT_NOTE = 'Nobody sees who voted how. In a very small group, though, the result and who has voted can show it.';
+/** The one honest line (§2.5): in a very small roll, early close plus turnout can show the split. Translated where shown. */
+export const SMALL_ROLL_BALLOT_NOTE = word('Nobody sees who voted how. In a very small group, though, the result and who has voted can show it.');
 
 // ── A chat group's vote (slice S3) ──────────────────────────────────────────────────────────────────────────────
 
 /** Who can join, in the words the group's info uses. */
 export function joinPolicyWords(policy: string | null | undefined): string {
     switch (policy) {
-        case 'open': return 'anyone can join';
-        case 'request_to_join': return 'people ask, and a convenor lets them in';
-        case 'invite_only': return 'by invitation only';
-        default: return 'a new rule';
+        case 'open': return t('anyone can join');
+        case 'request_to_join': return t('people ask, and a convenor lets them in');
+        case 'invite_only': return t('by invitation only');
+        default: return t('a new rule');
     }
 }
 
@@ -238,22 +267,22 @@ export const GROUP_CHOICES: readonly GroupChoice[] = ['lead', 'make_convenor', '
 /** The choice's label in the form. */
 export function groupChoiceLabel(choice: GroupChoice): string {
     switch (choice) {
-        case 'lead': return 'Choose a new lead convenor';
-        case 'make_convenor': return 'Make someone a convenor';
-        case 'make_member': return 'Make a convenor a member';
-        case 'remove': return 'Remove someone';
-        case 'join_policy': return 'Change who can join';
-        case 'close': return 'Close the group';
+        case 'lead': return t('Choose a new lead convenor');
+        case 'make_convenor': return t('Make someone a convenor');
+        case 'make_member': return t('Make a convenor a member');
+        case 'remove': return t('Remove someone');
+        case 'join_policy': return t('Change who can join');
+        case 'close': return t('Close the group');
     }
 }
 
 /** The question above the person picker, or null when the choice names nobody. */
 export function groupChoiceWhoWords(choice: GroupChoice): string | null {
     switch (choice) {
-        case 'lead': return 'Who should lead?';
-        case 'make_convenor': return 'Who should be a convenor?';
-        case 'make_member': return 'Which convenor?';
-        case 'remove': return 'Remove whom?';
+        case 'lead': return t('Who should lead?');
+        case 'make_convenor': return t('Who should be a convenor?');
+        case 'make_member': return t('Which convenor?');
+        case 'remove': return t('Remove whom?');
         default: return null;
     }
 }
@@ -284,9 +313,9 @@ export function joinPolicyChoices(current: string | null | undefined): GroupJoin
 /** A join policy's chip in the form. */
 export function joinPolicyLabel(policy: GroupJoinPolicy): string {
     switch (policy) {
-        case 'open': return 'Open: anyone can join';
-        case 'request_to_join': return 'Ask to join';
-        case 'invite_only': return 'Invite only';
+        case 'open': return t('Open: anyone can join');
+        case 'request_to_join': return t('Ask to join');
+        case 'invite_only': return t('Invite only');
     }
 }
 
@@ -303,11 +332,14 @@ export function groupProposal(choice: GroupChoice, who: string | null, policy: G
     }
 }
 
-/** The line on a closed group's info, the words the group's chat took when it closed (decisions-engine GROUP_CLOSED_LINE). */
-export const GROUP_CLOSED_NOTE = 'The group was closed by its members’ vote. Its chat stays to read.';
+/**
+ * The line on a closed group's info, the words the group's chat took when it closed (decisions-engine GROUP_CLOSED_LINE).
+ * Marked here, translated where it is shown.
+ */
+export const GROUP_CLOSED_NOTE = word('The group was closed by its members’ vote. Its chat stays to read.');
 
-/** The block's note under DECISIONS, for a group. */
-export const GROUP_DECISIONS_NOTE = "Votes among the group's members and convenors; observers watch. More than half must vote. 7 days, or sooner once the answer can't change.";
+/** The block's note under DECISIONS, for a group. Translated where it is shown. */
+export const GROUP_DECISIONS_NOTE = word("Votes among the group's members and convenors; observers watch. More than half must vote. 7 days, or sooner once the answer can't change.");
 
 /** The choices worth offering: one that names a person only when somebody can be named. */
 export function groupChoicesFor(people: readonly GroupPerson[], me: string): GroupChoice[] {

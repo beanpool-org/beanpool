@@ -11,6 +11,7 @@
  * - Join policies: open | request_to_join | invite_only.
  * - Audience scopes: public | group | direct.
  */
+import { t, word } from './words.js';
 
 export type GroupRole = 'convenor' | 'member' | 'observer';
 
@@ -212,10 +213,10 @@ export function groupRowActions(viewer: GroupRowViewer, target: GroupRowTarget, 
     };
 }
 
-/** "Lead convenor" / "Convenor" / "Member" / "Observer", as the roster badge prints it. */
+/** "Lead convenor" / "Convenor" / "Member" / "Observer", as the roster badge prints it, in the member's language. */
 export function groupRoleLabel(role: GroupRole, isLead: boolean): string {
-    if (isLead) return 'Lead convenor';
-    return role === 'convenor' ? 'Convenor' : role === 'member' ? 'Member' : 'Observer';
+    if (isLead) return t('Lead convenor', undefined, 'group role');
+    return role === 'convenor' ? t('Convenor', undefined, 'group role') : role === 'member' ? t('Member', undefined, 'group role') : t('Observer', undefined, 'group role');
 }
 
 /** A lead who tries to leave is asked to hand over first — but only while somebody else is still active. */
@@ -233,6 +234,6 @@ export function leadHandOverBlockedByObservers(handOverCandidates: number, activ
     return handOverCandidates === 0 && activeObservers > 0;
 }
 
-/** Short enough for an Alert body and for the PWA's error line at 320dp with 1.3x text. */
+/** Short enough for an Alert body and for the PWA's error line at 320dp with 1.3x text. Translated where it is shown. */
 export const MAKE_OBSERVER_MEMBER_FIRST =
-    'Make one of the observers a member first, then hand the lead to them.';
+    word('Make one of the observers a member first, then hand the lead to them.');

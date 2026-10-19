@@ -108,7 +108,8 @@ describe('"(key changed)" at 320dp with 1.3× text', () => {
         const callsign = src.match(/<Text style=\{styles\.memberCallsign\} numberOfLines=\{1\}>([\s\S]*?)<\/Text>/);
         expect(callsign).toBeTruthy();
         expect(callsign![1]).not.toContain('KEY_CHANGED_HINT');
-        const mark = src.indexOf('<Text style={styles.memberKeyChanged}>{KEY_CHANGED_HINT}</Text>');
+        // In the member's language since words S3h: the same mark through chat-line-words' table (Talk's own words for it).
+        const mark = src.indexOf('<Text style={styles.memberKeyChanged}>{chatLineWords(KEY_CHANGED_HINT)}</Text>');
         expect(mark).toBeGreaterThan(0);
         // After the whole line (avatar, name's column, buttons), inside the row: not in the name's column.
         const line = src.indexOf('<View style={styles.memberLine}>');

@@ -2,7 +2,7 @@
   "_meta": {
     "language": "hi",
     "name": "Hindi",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-19",
@@ -325,5 +325,44 @@
   "{n} of these {count} from a new or 12-word account|{n} of these {count} from new or 12-word accounts": {
     "one": "इन {count} में से {n} नए या 12-शब्द वाले खाते से",
     "other": "इन {count} में से {n} नए या 12-शब्द वाले खातों से"
-  }
+  },
+  "updates itself": "अपने आप अपडेट होता है",
+  "a tap per post": "हर पोस्ट पर एक टैप",
+  "shows as a card": "कार्ड के रूप में दिखता है",
+  "youtube.com/@you": "youtube.com/@आपका_नाम",
+  "@yourhandle": "@आपका_नाम",
+  "soundcloud.com/you": "soundcloud.com/आपका_नाम",
+  "yoursite.com": "yoursite.com",
+  "facebook.com/yourpage": "facebook.com/आपका_पेज",
+  "yourblog.com/feed": "yourblog.com/feed",
+  "Community": "समुदाय",
+  "Food & growing": "भोजन & बागवानी",
+  "Making & craft": "निर्माण & शिल्प",
+  "Repair & reuse": "मरम्मत & पुनः उपयोग",
+  "Art & music": "कला & संगीत",
+  "Business": "व्यवसाय",
+  "Other": "अन्य",
+  "Website": "वेबसाइट",
+  "Blog / RSS": "ब्लॉग / RSS",
+  "Link": "लिंक",
+  "Idea": "विचार",
+  "Problem": "समस्या",
+  "This goes to the BeanPool project team, not to your community. Don't include personal details.": "यह BeanPool प्रोजेक्ट टीम के पास जाता है, आपके समुदाय के पास नहीं। निजी जानकारी शामिल न करें।",
+  "Thank you — your suggestion has reached the BeanPool project team.": "धन्यवाद — आपका सुझाव BeanPool प्रोजेक्ट टीम तक पहुँच गया है।",
+  "Please write at least {n} characters.|Please write at least {n} characters.": {
+    "one": "कृपया कम से कम {n} अक्षर लिखें।",
+    "other": "कृपया कम से कम {n} अक्षर लिखें।"
+  },
+  "Please keep it under {n} characters ({count} now).|Please keep it under {n} characters ({count} now).": {
+    "one": "कृपया इसे {n} अक्षर से कम रखें (अभी {count})।",
+    "other": "कृपया इसे {n} अक्षरों से कम रखें (अभी {count})।"
+  },
+  "Couldn't reach the BeanPool project just now. Your text is still here — please try again later.": "अभी BeanPool प्रोजेक्ट से संपर्क नहीं हो सका। आपका टेक्स्ट यहीं है — कृपया बाद में पुनः प्रयास करें।",
+  "Please keep the community name under {n} characters.|Please keep the community name under {n} characters.": {
+    "one": "कृपया समुदाय का नाम {n} अक्षर से कम रखें।",
+    "other": "कृपया समुदाय का नाम {n} अक्षरों से कम रखें।"
+  },
+  "Too many suggestions from your connection recently. Please try again later — your text is still here.": "हाल ही में आपके कनेक्शन से बहुत सारे सुझाव भेजे गए हैं। कृपया बाद में पुनः प्रयास करें — आपका टेक्स्ट यहीं है।",
+  "This poll is shown at your area (about 10 km around it) to everyone who can read it.": "यह पोल आपके क्षेत्र में (इसके आस-पास लगभग 10 किमी) उन सभी को दिखाया जाता है जो इसे पढ़ सकते हैं।",
+  "You haven't set your area, so members nearby won't see this poll in their list; they can still find it by searching. Set it in Settings → Your area to show it near you.": "आपने अपना क्षेत्र तय नहीं किया है, इसलिए आस-पास के सदस्यों को यह पोल अपनी सूची में नहीं दिखेगा; वे इसे खोजकर अब भी पा सकते हैं। इसे अपने आस-पास दिखाने के लिए सेटिंग्स → आपका क्षेत्र में सेट करें।"
 }

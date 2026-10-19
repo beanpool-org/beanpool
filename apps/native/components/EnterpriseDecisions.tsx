@@ -17,12 +17,16 @@ import {
     beansHeld, checkPayOutAmount, payOutFeeWords, rollChoices, scopedClosesWords, scopedEffectLabel, scopedEffectsFor, scopedEffectWords,
     scopedOutcomeWords, scopedTallyWords, SMALL_ROLL_BALLOT_NOTE, votesOnlyWords, wageNoteWords,
     type RollPerson, type ScopedDecisionCard, type ScopedDecisionList, type ScopedEffect,
+    t, tn,
 } from '@beanpool/core';
 import {
     getEnterpriseDecisions, proposeEnterpriseDecision, voteEnterpriseDecision, getGroupDecisions, proposeGroupDecision, voteGroupDecision,
 } from '../utils/db';
 import { useTheme } from '../app/ThemeContext';
 import { useModalKeyboardLift } from './useModalKeyboardLift';
+
+/** Sentences marked in core (scoped-decision.ts), translated here where they are shown. */
+const LINES = { someone: GROUP_SOMEONE, groupNote: GROUP_DECISIONS_NOTE, smallRoll: SMALL_ROLL_BALLOT_NOTE };
 
 export interface EnterpriseDecisionsProps {
     treasuryKey: string;
@@ -39,15 +43,18 @@ export interface EnterpriseDecisionsProps {
 }
 
 export function EnterpriseDecisions({ treasuryKey, myPubkey, keepers, balance, earnedSurplus, lifecycle, refreshKey }: EnterpriseDecisionsProps) {
+    // A keeper's name as they wrote it; the words only stand in when there is none.
     const roll: RollPerson[] = useMemo(() => keepers.filter(k => !k.suspended)
-        .map(k => ({ pubkey: k.publicKey, name: k.callsign || 'A keeper', role: k.role })), [keepers]);
-    const nameOf = useCallback((pk: string) => keepers.find(k => k.publicKey === pk)?.callsign || (pk === treasuryKey ? 'this enterprise' : 'a member'), [keepers, treasuryKey]);
+        .map(k => ({ pubkey: k.publicKey, name: k.callsign || t('A keeper'), role: k.role })), [keepers]);
+    const nameOf = useCallback((pk: string) => keepers.find(k => k.publicKey === pk)?.callsign || (pk === treasuryKey ? t('this enterprise') : t('a member')), [keepers, treasuryKey]);
     const read = useCallback(() => getEnterpriseDecisions(treasuryKey), [treasuryKey]);
     const cast = useCallback((id: string, support: boolean) => voteEnterpriseDecision(treasuryKey, id, support), [treasuryKey]);
     return (
         <ScopedDecisions
             read={read} cast={cast} nameOf={nameOf} lifecycle={lifecycle} refreshKey={refreshKey}
-            note={`Votes among this ${lifecycle === 'bounded' ? "project's leader and collaborators" : "enterprise's keepers"}. More than half must vote. 7 days, or sooner once the answer can't change.`}
+            note={lifecycle === 'bounded'
+                ? t("Votes among this project's leader and collaborators. More than half must vote. 7 days, or sooner once the answer can't change.")
+                : t("Votes among this enterprise's keepers. More than half must vote. 7 days, or sooner once the answer can't change.")}
             propose={myPubkey ? (close, done) => (
                 <ProposeScopedDecision
                     treasuryKey={treasuryKey} me={myPubkey} roll={roll} balance={balance} earnedSurplus={earnedSurplus} lifecycle={lifecycle}
@@ -75,12 +82,12 @@ export interface GroupDecisionsProps {
 /** A chat group's votes (slice S3), on its info: the same block, its own form (no recipient, no amount). */
 export function GroupDecisions({ groupId, myPubkey, people, joinPolicy, refreshKey, onChanged, votesOnly }: GroupDecisionsProps) {
     // Someone removed lands here with no roster (people is []): the card's own names, then plain words (#1794 N7).
-    const nameOf = useCallback((pk: string, names?: Record<string, string>) => people.find(p => p.pubkey === pk)?.name || names?.[pk] || GROUP_SOMEONE, [people]);
+    const nameOf = useCallback((pk: string, names?: Record<string, string>) => people.find(p => p.pubkey === pk)?.name || names?.[pk] || t(LINES.someone), [people]);
     const read = useCallback(() => getGroupDecisions(groupId), [groupId]);
     const cast = useCallback((id: string, support: boolean) => voteGroupDecision(groupId, id, support), [groupId]);
     return (
         <ScopedDecisions
-            read={read} cast={cast} nameOf={nameOf} refreshKey={refreshKey} note={GROUP_DECISIONS_NOTE} onChanged={onChanged}
+            read={read} cast={cast} nameOf={nameOf} refreshKey={refreshKey} note={t(LINES.groupNote)} onChanged={onChanged}
             lead={votesOnly ? l => votesOnlyWords(l.decisions.some(d => d.canVote === true)) : undefined}
             propose={myPubkey ? (close, done, list) => (
                 // Only the people the node takes in a vote (no suspended member, #1784 review N2).
@@ -130,7 +137,7 @@ function ScopedDecisions({ read, cast, nameOf, note, lifecycle, refreshKey, prop
             await load();
             onChanged?.();
         } catch (e: any) {
-            Alert.alert('Your vote was not counted', e?.message || 'Try again in a moment.');
+            Alert.alert(t('Your vote was not counted'), e?.message || t('Try again in a moment.'));
         } finally {
             setBusyId(null);
         }
@@ -138,48 +145,50 @@ function ScopedDecisions({ read, cast, nameOf, note, lifecycle, refreshKey, prop
 
     const s = styles(colors);
     return (
-        <View style={s.card} accessibilityLabel="Decisions">
-            <Text style={s.label} accessibilityRole="header">DECISIONS</Text>
+        <View style={s.card} accessibilityLabel={t('Decisions')}>
+            <Text style={s.label} accessibilityRole="header">{t('DECISIONS')}</Text>
             {lead && list.decisions.length > 0 && <Text style={s.lead}>{lead(list)}</Text>}
             <Text style={s.note}>{note}</Text>
-            {list.watching === true && !list.closedAt && <Text style={s.note}>You watch this group, so you see its votes but don't vote.</Text>}
+            {list.watching === true && !list.closedAt && <Text style={s.note}>{t("You watch this group, so you see its votes but don't vote.")}</Text>}
             {[...open, ...closed.slice(0, 5)].map(d => {
-                const mine = d.myVote ? (d.myVote.support === true || d.myVote.support === 1 ? 'Yes' : 'No') : null;
+                // What the member's vote was, never words: the line and the buttons say it in the member's language.
+                const mine = d.myVote ? (d.myVote.support === true || d.myVote.support === 1 ? 'yes' : 'no') : null;
                 const isOpen = d.status === 'open';
                 return (
                     <View key={d.id} style={s.decision}>
+                        {/* The vote's title and why are what a member wrote: shown as written. */}
                         <Text style={s.title}>{d.title}</Text>
                         <Text style={s.effect}>{scopedEffectWords(d, pk => nameOf(pk, d.names), lifecycle)}</Text>
                         {!!d.description && <Text style={s.why}>{d.description}</Text>}
-                        <Text style={s.meta}>Proposed by {nameOf(d.authorPubkey, d.names)} · {isOpen ? scopedClosesWords(d.closesAt, now) : scopedOutcomeWords(d)}</Text>
+                        <Text style={s.meta}>{t('Proposed by {name} · {when}', { name: nameOf(d.authorPubkey, d.names), when: isOpen ? scopedClosesWords(d.closesAt, now) : scopedOutcomeWords(d) })}</Text>
                         <Text style={s.tally}>{scopedTallyWords(d)}</Text>
-                        {mine && <Text style={s.meta}>You voted {mine}.</Text>}
+                        {mine && <Text style={s.meta}>{mine === 'yes' ? t('You voted Yes.') : t('You voted No.')}</Text>}
                         {/* The vote's own roll, frozen when it opened, says who votes: never who is in the group now. */}
                         {isOpen && !mine && d.canVote === true && (
                             <View style={s.voteRow}>
                                 <Pressable
                                     style={[s.voteBtn, { backgroundColor: colors.brand.fill }, busyId === d.id && { opacity: 0.5 }]}
                                     disabled={busyId === d.id} onPress={() => vote(d, true)}
-                                    accessibilityRole="button" accessibilityLabel={`Vote Yes on ${d.title}`}
+                                    accessibilityRole="button" accessibilityLabel={t('Vote Yes on {title}', { title: d.title })}
                                 >
-                                    <Text style={s.voteYesText}>Yes</Text>
+                                    <Text style={s.voteYesText}>{t('Yes')}</Text>
                                 </Pressable>
                                 <Pressable
                                     style={[s.voteBtn, s.voteNo, busyId === d.id && { opacity: 0.5 }]}
                                     disabled={busyId === d.id} onPress={() => vote(d, false)}
-                                    accessibilityRole="button" accessibilityLabel={`Vote No on ${d.title}`}
+                                    accessibilityRole="button" accessibilityLabel={t('Vote No on {title}', { title: d.title })}
                                 >
-                                    <Text style={s.voteNoText}>No</Text>
+                                    <Text style={s.voteNoText}>{t('No')}</Text>
                                 </Pressable>
                             </View>
                         )}
                     </View>
                 );
             })}
-            {list.decisions.length > 0 && list.rollSize <= 4 && <Text style={s.small}>{SMALL_ROLL_BALLOT_NOTE}</Text>}
+            {list.decisions.length > 0 && list.rollSize <= 4 && <Text style={s.small}>{t(LINES.smallRoll)}</Text>}
             {list.canPropose && !!propose && (
                 <Pressable style={s.proposeBtn} onPress={() => setProposing(true)} accessibilityRole="button">
-                    <Text style={s.proposeText}>Propose a vote</Text>
+                    <Text style={s.proposeText}>{t('Propose a vote')}</Text>
                 </Pressable>
             )}
             {proposing && propose?.(() => setProposing(false), () => { setProposing(false); void load(); onChanged?.(); }, list)}
@@ -224,7 +233,7 @@ function ProposeScopedDecision({ treasuryKey, me, roll, balance, earnedSurplus, 
                 : { title: title.trim(), description: why.trim(), effect, subject: person.pubkey });
             onDone();
         } catch (e: any) {
-            setError(e?.message || 'The vote was not opened. Try again in a moment.');
+            setError(e?.message || t('The vote was not opened. Try again in a moment.'));
         } finally {
             setBusy(false);
         }
@@ -235,9 +244,9 @@ function ProposeScopedDecision({ treasuryKey, me, roll, balance, earnedSurplus, 
             <View style={[s.backdrop, { paddingTop: insets.top + 8 }]}>
                 <View style={[s.sheet, { maxHeight: lift.maxHeight, marginBottom: lift.lift }]} testID="propose-scoped-sheet">
                     <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 12 }}>
-                        <Text style={s.sheetTitle} accessibilityRole="header">Propose a vote</Text>
-                        <Text style={s.note}>Everyone on the roll votes. It runs 7 days, or ends sooner once the answer can't change.</Text>
-                        <Text style={s.fieldLabel}>What should happen?</Text>
+                        <Text style={s.sheetTitle} accessibilityRole="header">{t('Propose a vote')}</Text>
+                        <Text style={s.note}>{t("Everyone on the roll votes. It runs 7 days, or ends sooner once the answer can't change.")}</Text>
+                        <Text style={s.fieldLabel}>{t('What should happen?')}</Text>
                         <View style={s.chips}>
                             {effects.map(e => (
                                 <Pressable key={e} onPress={() => { setEffect(e); setWho(null); }}
@@ -246,55 +255,69 @@ function ProposeScopedDecision({ treasuryKey, me, roll, balance, earnedSurplus, 
                                 </Pressable>
                             ))}
                         </View>
-                        <Text style={s.fieldLabel}>{effect === 'pay_out' ? 'Pay whom?' : effect === 'remove_keeper' ? 'Remove whom?' : 'Who should lead?'}</Text>
+                        <Text style={s.fieldLabel}>{effect === 'pay_out' ? t('Pay whom?') : effect === 'remove_keeper' ? t('Remove whom?') : t('Who should lead?')}</Text>
                         {choices.length === 0
-                            ? <Text style={s.note}>Nobody on the roll can be chosen for this.</Text>
+                            ? <Text style={s.note}>{t('Nobody on the roll can be chosen for this.')}</Text>
                             : (
                                 <View style={s.chips}>
                                     {choices.map(p => (
                                         <Pressable key={p.pubkey} onPress={() => setWho(p.pubkey)}
                                             style={[s.chip, who === p.pubkey && s.chipOn]} accessibilityRole="radio" accessibilityState={{ selected: who === p.pubkey }}>
-                                            <Text style={[s.chipText, who === p.pubkey && s.chipTextOn]}>{p.name}{p.pubkey === me ? ' (you)' : ''}</Text>
+                                            <Text style={[s.chipText, who === p.pubkey && s.chipTextOn]}>{personChip(p.name, p.pubkey === me)}</Text>
                                         </Pressable>
                                     ))}
                                 </View>
                             )}
                         {effect === 'pay_out' && (
                             <>
-                                <Text style={s.fieldLabel}>How many Beans?</Text>
+                                <Text style={s.fieldLabel}>{t('How many Beans?')}</Text>
                                 <TextInput
                                     value={amountText} onChangeText={setAmountText} keyboardType="decimal-pad" placeholder="40"
-                                    placeholderTextColor={colors.text.muted} style={s.input} accessibilityLabel="Amount in Beans"
+                                    placeholderTextColor={colors.text.muted} style={s.input} accessibilityLabel={t('Amount in Beans')}
                                 />
-                                <Text style={s.note}>It holds {beansHeld(balance)} Beans now.</Text>
+                                <Text style={s.note}>{tn(Number(beansHeld(balance)), 'It holds {n} Beans now.', 'It holds {n} Beans now.')}</Text>
                                 {amountError && <Text style={s.error}>{amountError}</Text>}
                                 {amount && 'amount' in amount && person && <Text style={s.fee}>{payOutFeeWords(amount.amount, person.name)}</Text>}
                                 <Text style={s.note}>{wageNoteWords(wageSurplus, lifecycle)}</Text>
                             </>
                         )}
-                        <Text style={s.fieldLabel}>Title</Text>
-                        <TextInput value={title} onChangeText={setTitle} style={s.input} maxLength={120} placeholder="Pay Ali for the stall repairs"
-                            placeholderTextColor={colors.text.muted} accessibilityLabel="Title" />
-                        <Text style={s.fieldLabel}>Why?</Text>
+                        <Text style={s.fieldLabel}>{t('Title')}</Text>
+                        <TextInput value={title} onChangeText={setTitle} style={s.input} maxLength={120} placeholder={t('Pay Ali for the stall repairs')}
+                            placeholderTextColor={colors.text.muted} accessibilityLabel={t('Title')} />
+                        <Text style={s.fieldLabel}>{t('Why?')}</Text>
                         <TextInput value={why} onChangeText={setWhy} style={[s.input, { minHeight: 72, textAlignVertical: 'top' }]} multiline
-                            placeholder="Say why, in a sentence or two." placeholderTextColor={colors.text.muted} accessibilityLabel="Why" />
+                            placeholder={t('Say why, in a sentence or two.')} placeholderTextColor={colors.text.muted} accessibilityLabel={t('Why')} />
                         {error && <Text style={s.error}>{error}</Text>}
-                        <View style={s.voteRow}>
-                            <Pressable style={[s.voteBtn, { backgroundColor: colors.brand.fill }, (!ready || busy) && { opacity: 0.5 }]}
-                                disabled={!ready || busy} onPress={send} accessibilityRole="button"
-                                accessibilityLabel={busy ? "Opening the vote..." : "Open the vote"}
-                                accessibilityHint="Opens a new decision vote"
-                                accessibilityState={{ disabled: !ready || busy, busy }}>
-                                {busy ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={s.voteYesText}>Open the vote</Text>}
-                            </Pressable>
-                            <Pressable style={[s.voteBtn, s.voteNo]} onPress={onClose} accessibilityRole="button">
-                                <Text style={s.voteNoText}>Cancel</Text>
-                            </Pressable>
-                        </View>
+                        <OpenTheVoteButtons ready={ready} busy={busy} onSend={send} onClose={onClose} />
                     </ScrollView>
                 </View>
             </View>
         </Modal>
+    );
+}
+
+/** A person on a picker chip: their name as they wrote it, and "(you)" for the member themself. */
+function personChip(name: string, isMe: boolean): string {
+    return isMe ? t('{name} (you)', { name }) : name;
+}
+
+/** Both forms' Open the vote / Cancel row. */
+function OpenTheVoteButtons({ ready, busy, onSend, onClose }: { ready: boolean; busy: boolean; onSend: () => void; onClose: () => void }) {
+    const { colors } = useTheme();
+    const s = styles(colors);
+    return (
+        <View style={s.voteRow}>
+            <Pressable style={[s.voteBtn, { backgroundColor: colors.brand.fill }, (!ready || busy) && { opacity: 0.5 }]}
+                disabled={!ready || busy} onPress={onSend} accessibilityRole="button"
+                accessibilityLabel={busy ? t('Opening the vote...') : t('Open the vote')}
+                accessibilityHint={t('Opens a new decision vote')}
+                accessibilityState={{ disabled: !ready || busy, busy }}>
+                {busy ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={[s.voteYesText, { textAlign: 'center' }]}>{t('Open the vote')}</Text>}
+            </Pressable>
+            <Pressable style={[s.voteBtn, s.voteNo]} onPress={onClose} accessibilityRole="button">
+                <Text style={[s.voteNoText, { textAlign: 'center' }]}>{t('Cancel')}</Text>
+            </Pressable>
+        </View>
     );
 }
 
@@ -332,7 +355,7 @@ function ProposeGroupDecision({ groupId, me, people, joinPolicy, onClose, onDone
             await proposeGroupDecision(groupId, { title: title.trim(), description: why.trim(), ...proposal });
             onDone();
         } catch (e: any) {
-            setError(e?.message || 'The vote was not opened. Try again in a moment.');
+            setError(e?.message || t('The vote was not opened. Try again in a moment.'));
         } finally {
             setBusy(false);
         }
@@ -343,9 +366,9 @@ function ProposeGroupDecision({ groupId, me, people, joinPolicy, onClose, onDone
             <View style={[s.backdrop, { paddingTop: insets.top + 8 }]}>
                 <View style={[s.sheet, { maxHeight: lift.maxHeight, marginBottom: lift.lift }]} testID="propose-group-sheet">
                     <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 12 }}>
-                        <Text style={s.sheetTitle} accessibilityRole="header">Propose a vote</Text>
-                        <Text style={s.note}>The group's members and convenors vote. It runs 7 days, or ends sooner once the answer can't change.</Text>
-                        <Text style={s.fieldLabel}>What should happen?</Text>
+                        <Text style={s.sheetTitle} accessibilityRole="header">{t('Propose a vote')}</Text>
+                        <Text style={s.note}>{t("The group's members and convenors vote. It runs 7 days, or ends sooner once the answer can't change.")}</Text>
+                        <Text style={s.fieldLabel}>{t('What should happen?')}</Text>
                         <View style={s.chips}>
                             {choicesOffered.map(c => (
                                 <Pressable key={c} onPress={() => { setChoice(c); setWho(null); setPolicy(null); }}
@@ -361,7 +384,7 @@ function ProposeGroupDecision({ groupId, me, people, joinPolicy, onClose, onDone
                                     {pickable.map(p => (
                                         <Pressable key={p.pubkey} onPress={() => setWho(p.pubkey)}
                                             style={[s.chip, who === p.pubkey && s.chipOn]} accessibilityRole="radio" accessibilityState={{ selected: who === p.pubkey }}>
-                                            <Text style={[s.chipText, who === p.pubkey && s.chipTextOn]}>{p.name}{p.pubkey === me ? ' (you)' : ''}</Text>
+                                            <Text style={[s.chipText, who === p.pubkey && s.chipTextOn]}>{personChip(p.name, p.pubkey === me)}</Text>
                                         </Pressable>
                                     ))}
                                 </View>
@@ -369,7 +392,7 @@ function ProposeGroupDecision({ groupId, me, people, joinPolicy, onClose, onDone
                         )}
                         {choice === 'join_policy' && (
                             <>
-                                <Text style={s.fieldLabel}>Who should be able to join?</Text>
+                                <Text style={s.fieldLabel}>{t('Who should be able to join?')}</Text>
                                 <View style={s.chips}>
                                     {joinPolicyChoices(joinPolicy).map(p => (
                                         <Pressable key={p} onPress={() => setPolicy(p)}
@@ -381,27 +404,16 @@ function ProposeGroupDecision({ groupId, me, people, joinPolicy, onClose, onDone
                             </>
                         )}
                         {choice === 'close' && (
-                            <Text style={s.fee}>If it passes, the group takes no new messages, posts or members, and its other open votes end. Its chat stays to read.</Text>
+                            <Text style={s.fee}>{t('If it passes, the group takes no new messages, posts or members, and its other open votes end. Its chat stays to read.')}</Text>
                         )}
-                        <Text style={s.fieldLabel}>Title</Text>
-                        <TextInput value={title} onChangeText={setTitle} style={s.input} maxLength={120} placeholder="Ada leads the guild"
-                            placeholderTextColor={colors.text.muted} accessibilityLabel="Title" />
-                        <Text style={s.fieldLabel}>Why?</Text>
+                        <Text style={s.fieldLabel}>{t('Title')}</Text>
+                        <TextInput value={title} onChangeText={setTitle} style={s.input} maxLength={120} placeholder={t('Ada leads the guild')}
+                            placeholderTextColor={colors.text.muted} accessibilityLabel={t('Title')} />
+                        <Text style={s.fieldLabel}>{t('Why?')}</Text>
                         <TextInput value={why} onChangeText={setWhy} style={[s.input, { minHeight: 72, textAlignVertical: 'top' }]} multiline
-                            placeholder="Say why, in a sentence or two." placeholderTextColor={colors.text.muted} accessibilityLabel="Why" />
+                            placeholder={t('Say why, in a sentence or two.')} placeholderTextColor={colors.text.muted} accessibilityLabel={t('Why')} />
                         {error && <Text style={s.error}>{error}</Text>}
-                        <View style={s.voteRow}>
-                            <Pressable style={[s.voteBtn, { backgroundColor: colors.brand.fill }, (!ready || busy) && { opacity: 0.5 }]}
-                                disabled={!ready || busy} onPress={send} accessibilityRole="button"
-                                accessibilityLabel={busy ? "Opening the vote..." : "Open the vote"}
-                                accessibilityHint="Opens a new decision vote"
-                                accessibilityState={{ disabled: !ready || busy, busy }}>
-                                {busy ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={s.voteYesText}>Open the vote</Text>}
-                            </Pressable>
-                            <Pressable style={[s.voteBtn, s.voteNo]} onPress={onClose} accessibilityRole="button">
-                                <Text style={s.voteNoText}>Cancel</Text>
-                            </Pressable>
-                        </View>
+                        <OpenTheVoteButtons ready={ready} busy={busy} onSend={send} onClose={onClose} />
                     </ScrollView>
                 </View>
             </View>

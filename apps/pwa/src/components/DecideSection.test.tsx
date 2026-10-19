@@ -164,7 +164,9 @@ describe('DecideSection voting answers', () => {
         card.params = { memberName: 'Dave', suspendedAt: '2026-09-19T10:00:00.000Z', reason: 'Threats in the market chat' };
         renderDecide(true, [card]);
         const box = screen.getByTestId('keep-suspension-box');
-        expect(box.textContent).toContain(`An admin suspended Dave on ${new Date('2026-09-19T10:00:00.000Z').toLocaleDateString()}. Keep the suspension?`);
+        // The date through core's formatDate (the words layer's tables, the phone's lib/decision-card.ts since S3g), not the
+        // browser's own locale.
+        expect(box.textContent).toContain('An admin suspended Dave on 19 Sep 2026. Keep the suspension?');
         expect(box.textContent).toContain("If this vote doesn't pass, the suspension lifts by itself.");
     });
 

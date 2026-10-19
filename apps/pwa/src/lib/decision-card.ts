@@ -1,15 +1,25 @@
 /**
- * Plain-language lines for a Decision card. Kept apart from the component so the wording is tested once.
+ * Plain-language lines for a Decision card, in the member's language. Kept apart from the component so the wording is
+ * tested once.
  */
 
+import { formatDate, t, tn, word } from '@beanpool/core';
 import type { DecisionTally, MyPoolVoting } from './api';
 
-/** Word for word what the node answers; the card shows it before the member tries. */
-export const NO_TRADE_POOL_VOTE_MESSAGE = 'Voting on community money opens after your first completed trade.';
+/** The card's sentences that are also the node's own answers: word() keys, shown through t(). */
+export const DECISION_CARD_WORDS = {
+    noTradePoolVote: word('Voting on community money opens after your first completed trade.'),
+} as const;
+
+/**
+ * Word for word what the node answers; the card shows it before the member tries (in the member's language), and the
+ * vote's refusal, when it is this sentence, is shown the same way.
+ */
+export const NO_TRADE_POOL_VOTE_MESSAGE: string = DECISION_CARD_WORDS.noTradePoolVote;
 
 /** "4 of 6 votes needed" — turnout counts people, not vote weight. */
 export function turnoutLine(tally: Pick<DecisionTally, 'totalVoters' | 'quorumRequired'>): string {
-    return `${tally.totalVoters} of ${tally.quorumRequired} votes needed`;
+    return tn(tally.quorumRequired, '{voters} of {n} vote needed', '{voters} of {n} votes needed', { voters: tally.totalVoters });
 }
 
 /**
@@ -19,16 +29,19 @@ export function turnoutLine(tally: Pick<DecisionTally, 'totalVoters' | 'quorumRe
 export function electorateLine(tally: Pick<DecisionTally, 'electorate' | 'quorumRatio' | 'quorumRequired'>): string {
     const pct = Math.round((tally.quorumRatio ?? 0.3) * 100);
     const electorate = tally.electorate ?? 0;
-    const floor = Math.ceil((tally.quorumRatio ?? 0.3) * electorate) < tally.quorumRequired ? ' (at least 3)' : '';
-    return `${pct}% of ${electorate} ${electorate === 1 ? 'member' : 'members'} active in the last 30 days${floor}`;
+    const floor = Math.ceil((tally.quorumRatio ?? 0.3) * electorate) < tally.quorumRequired;
+    return floor
+        ? tn(electorate, '{pct}% of {n} member active in the last 30 days (at least 3)', '{pct}% of {n} members active in the last 30 days (at least 3)', { pct })
+        : tn(electorate, '{pct}% of {n} member active in the last 30 days', '{pct}% of {n} members active in the last 30 days', { pct });
 }
 
-/** The emergency-suspension card's question (answer L). */
+/** The emergency-suspension card's question (answer L), its date through core's formatDate ("19 Sep 2026"). */
 export function keepSuspensionHeadline(params: { memberName?: string; suspendedAt?: string } | null | undefined, fallbackName: string): string {
     const name = params?.memberName || fallbackName;
-    const t = params?.suspendedAt ? Date.parse(params.suspendedAt) : NaN;
-    const on = Number.isFinite(t) ? ` on ${new Date(t).toLocaleDateString()}` : '';
-    return `An admin suspended ${name}${on}. Keep the suspension?`;
+    const at = params?.suspendedAt ? Date.parse(params.suspendedAt) : NaN;
+    return Number.isFinite(at)
+        ? t('An admin suspended {name} on {date}. Keep the suspension?', { name, date: formatDate(new Date(at), 'day-month-year') })
+        : t('An admin suspended {name}. Keep the suspension?', { name });
 }
 
 /**
@@ -36,7 +49,7 @@ export function keepSuspensionHeadline(params: { memberName?: string; suspendedA
  * can vote, otherwise the sentence the node would answer with.
  */
 export function poolVoteBlocker(myPoolVoting: MyPoolVoting | null | undefined): string | null {
-    if (myPoolVoting && !myPoolVoting.hasCompletedTrade && myPoolVoting.voiceCredits <= 0) return NO_TRADE_POOL_VOTE_MESSAGE;
+    if (myPoolVoting && !myPoolVoting.hasCompletedTrade && myPoolVoting.voiceCredits <= 0) return t(DECISION_CARD_WORDS.noTradePoolVote);
     return null;
 }
 
@@ -45,5 +58,9 @@ export function voiceCreditsLine(myPoolVoting: MyPoolVoting | null | undefined):
     if (!myPoolVoting || myPoolVoting.voiceCredits <= 0) return null;
     const credits = Math.floor(myPoolVoting.voiceCredits);
     const maxVotes = Math.floor(Math.sqrt(credits));
-    return `You have ${credits} voice ${credits === 1 ? 'credit' : 'credits'}: up to ${maxVotes} ${maxVotes === 1 ? 'vote' : 'votes'} on this Decision.`;
+    // Two counts in one sentence: each takes its own plural.
+    return t('You have {credits}: up to {votes} on this Decision.', {
+        credits: tn(credits, '{n} voice credit', '{n} voice credits'),
+        votes: tn(maxVotes, '{n} vote', '{n} votes'),
+    });
 }

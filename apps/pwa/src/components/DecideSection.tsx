@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { formatDate, t, tn, upperCase, word, type WordKey } from '@beanpool/core';
 import {
     castDecisionVote,
     type DecisionWithTally,
@@ -6,9 +7,39 @@ import {
 } from '../lib/api';
 import { type BeanPoolIdentity } from '../lib/identity';
 import { ownVoteSummary, startingVoteCount, voteButtonStates } from '../lib/decision-own-vote';
-import { electorateLine, keepSuspensionHeadline, poolVoteBlocker, turnoutLine, voiceCreditsLine } from '../lib/decision-card';
+import {
+    DECISION_CARD_WORDS, NO_TRADE_POOL_VOTE_MESSAGE, electorateLine, keepSuspensionHeadline, poolVoteBlocker, turnoutLine, voiceCreditsLine,
+} from '../lib/decision-card';
 import { LocalCommunityAction, LocalCommunityStrip, type LocalCommunityWays } from './LocalCommunityMark';
 import { SampleHeader, samplePoolVoting } from './ShowcasePreviews';
+import { Sentence } from './Sentence';
+
+/**
+ * What a Decision does, what it touches, where it ended and the history's filters, as the node names them: word() keys
+ * (the phone's, components/DecideSection.tsx), shown through t(). A name this build doesn't know is shown as the node
+ * wrote it (an effect title-cased, a status as its code words, as always). The tables' own names only.
+ */
+const EFFECT_WORDS: Readonly<Record<string, WordKey>> = {
+    suspend_member: word('Suspend Member'), unsuspend_member: word('Unsuspend Member'), freeze_credit: word('Freeze Credit'),
+    unfreeze_credit: word('Unfreeze Credit'), grant_voucher: word('Grant Voucher'), revoke_voucher: word('Revoke Voucher'),
+    remove_lead_keeper: word('Remove Lead Keeper'), reinstate_member: word('Reinstate Member'), keep_suspension: word('Keep Suspension?'),
+    remove_member: word('Remove Member'), grant_enterprise: word('Grant Enterprise'), grant_hardship: word('Grant Hardship'),
+    write_off_deficit: word('Write Off Deficit'), forgive_debt: word('Forgive Debt'),
+};
+const TOUCH_WORDS: Readonly<Record<string, WordKey>> = { member: word('member', 'what a Decision touches'), pool: word('pool', 'what a Decision touches') };
+/** The web writes a status in small letters (its badge's CSS puts it in capitals). */
+const STATUS_WORDS: Readonly<Record<string, WordKey>> = {
+    open: word('open', 'Decision status'), passed: word('passed', 'Decision status'), failed: word('failed', 'Decision status'),
+    unresolved: word('unresolved', 'Decision status'), passed_queued_for_funds: word('passed queued for funds', 'Decision status'),
+    execution_pending_grace: word('execution pending grace', 'Decision status'), execution_blocked: word('execution blocked', 'Decision status'),
+    execution_void: word('execution void', 'Decision status'), executed: word('executed', 'Decision status'), admin_halted: word('admin halted', 'Decision status'),
+};
+const HISTORY_FILTER_WORDS: Readonly<Record<'all' | 'executed' | 'failed' | 'void', WordKey>> = {
+    all: word('All'), executed: word('Executed', 'Decision history filter'), failed: word('Failed', 'Decision history filter'), void: word('Void', 'Decision history filter'),
+};
+const own = (table: object, name: string) => Object.prototype.hasOwnProperty.call(table, name);
+// The card's lines (turnout, electorate, the suspension question, voice credits, the own vote, the buttons) are
+// lib/decision-card.ts's and lib/decision-own-vote.ts's, in the member's language with the phone's keys.
 
 interface Props extends LocalCommunityWays {
     decisions: DecisionWithTally[];
@@ -59,26 +90,28 @@ export function DecideSection({
 
     const formatTimeLeft = (closesAt: string) => {
         const diffMs = new Date(closesAt).getTime() - Date.now();
-        if (diffMs <= 0) return 'Closing now';
+        if (diffMs <= 0) return t('Closing now');
         const mins = Math.floor(diffMs / 60000);
-        if (mins < 60) return `${mins}m left`;
+        if (mins < 60) return tn(mins, '{n}m left', '{n}m left');
         const hours = Math.floor(diffMs / 3600000);
-        if (hours < 48) return `${hours}h left`;
+        if (hours < 48) return tn(hours, '{n}h left', '{n}h left');
         const days = Math.ceil(diffMs / (24 * 3600000));
-        return `${days} days left`;
+        return tn(days, '{n} days left', '{n} days left');
     };
 
     const formatEffectLabel = (effect: string) => {
-        if (effect === 'keep_suspension') return 'Keep Suspension?';
+        if (own(EFFECT_WORDS, effect)) return t(EFFECT_WORDS[effect]);
         return effect
             .split('_')
             .map(word => word.charAt(0).toUpperCase() + word.slice(1))
             .join(' ');
     };
 
+    const touchesWords = (touches: string) => t('Touches: {what}', { what: own(TOUCH_WORDS, touches) ? t(TOUCH_WORDS[touches]) : touches });
+
     const handleVote = async (decision: DecisionWithTally, support: boolean) => {
         if (!identity?.publicKey) {
-            setVoteError('You must be logged in to vote.');
+            setVoteError(t('You must be logged in to vote.'));
             return;
         }
 
@@ -97,10 +130,11 @@ export function DecideSection({
             if (res.success) {
                 await onRefresh();
             } else {
-                setVoteError((res as any).error || 'Failed to record vote');
+                const refusal: string | undefined = (res as any).error;
+                setVoteError(refusal === NO_TRADE_POOL_VOTE_MESSAGE ? t(DECISION_CARD_WORDS.noTradePoolVote) : refusal || t('Failed to record vote'));
             }
         } catch (err: any) {
-            setVoteError(err.message || 'Failed to cast vote');
+            setVoteError(err.message || t('Failed to cast vote'));
         } finally {
             setVotingId(null);
         }
@@ -113,25 +147,25 @@ export function DecideSection({
             {preview && (
                 <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-xl p-3" data-testid="voice-credits-card">
                     <div className="text-[10px] font-bold uppercase tracking-wider text-nature-600 dark:text-nature-300">
-                        Voice credits for money votes
+                        {t('Voice credits for money votes')}
                     </div>
                     <div className="text-base sm:text-lg font-black text-nature-950 dark:text-white mt-1 truncate">
                         {Math.floor(samplePoolVoting().voiceCredits)}
                     </div>
                     <div className="text-[10px] text-nature-600 dark:text-nature-300 mt-0.5 leading-snug">
-                        From completed trades · N votes cost N×N
+                        {t('From completed trades · N votes cost N×N')}
                     </div>
                 </div>
             )}
             {voteError && !preview && (
                 <div className="bg-red-50 dark:bg-red-500/10 border border-red-500/30 text-red-700 dark:text-red-300 text-sm p-3 rounded-xl flex items-center justify-between">
                     <span>{voteError}</span>
-                    <button type="button" onClick={() => setVoteError(null)} aria-label="Dismiss error" className="text-red-700 dark:text-red-400 hover:text-red-900 dark:hover:text-white p-1 min-w-[44px] min-h-[44px] flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 rounded-lg">✕</button>
+                    <button type="button" onClick={() => setVoteError(null)} aria-label={t('Dismiss error')} className="text-red-700 dark:text-red-400 hover:text-red-900 dark:hover:text-white p-1 min-w-[44px] min-h-[44px] flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 rounded-lg">✕</button>
                 </div>
             )}
 
             {/* View Switcher: Open Decisions vs History */}
-            <div role="tablist" aria-label="Decisions view" className="flex gap-2">
+            <div role="tablist" aria-label={t('Decisions view')} className="flex gap-2">
                 <button
                     type="button"
                     role="tab"
@@ -145,7 +179,7 @@ export function DecideSection({
                             : 'bg-nature-900 border-nature-800 text-nature-400 hover:border-nature-700'
                     }`}
                 >
-                    <span><span aria-hidden="true">🗳️ </span>Open Decisions</span>
+                    <span><span aria-hidden="true">🗳️ </span>{t('Open Decisions')}</span>
                     {openDecisions.length > 0 && (
                         <span className="bg-bp-commit-fill text-bp-commit-on text-xs px-2 py-0.5 rounded-full font-extrabold">
                             {openDecisions.length}
@@ -166,7 +200,7 @@ export function DecideSection({
                             : 'bg-nature-900 border-nature-800 text-nature-400 hover:border-nature-700'
                     }`}
                 >
-                    <span><span aria-hidden="true">📜 </span>Decisions History</span>
+                    <span><span aria-hidden="true">📜 </span>{t('Decisions History')}</span>
                 </button>
             </div>
 
@@ -177,26 +211,26 @@ export function DecideSection({
                     <div className="bg-nature-900 border border-nature-800 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm">
                         <div>
                             <div className="flex items-center gap-2">
-                                <h3 className="text-white font-bold text-base"><span aria-hidden="true">🌱 </span>Propose Community Action</h3>
-                                <span className="text-xs text-nature-400 font-medium">No bond required</span>
+                                <h3 className="text-white font-bold text-base"><span aria-hidden="true">🌱 </span>{t('Propose Community Action')}</h3>
+                                <span className="text-xs text-nature-400 font-medium">{t('No bond required')}</span>
                             </div>
                             <p className="text-nature-400 text-xs sm:text-sm mt-1 max-w-xl">
-                                Binding decisions execute automatically upon passing (§3.7). Open to members with a completed trade or earned standing, and to node admins.
+                                {t('Binding decisions execute automatically upon passing (§3.7). Open to members with a completed trade or earned standing, and to node admins.')}
                             </p>
                             {!preview && !canPropose && (
                                 <p className="text-amber-400 text-xs font-semibold mt-1">
-                                    <span aria-hidden="true">⚠️ </span>You can propose once you have completed a trade.
+                                    <span aria-hidden="true">⚠️ </span>{t('You can propose once you have completed a trade.')}
                                 </p>
                             )}
                             {!preview && canPropose && hasOpenDecision && (
                                 <p className="text-sky-400 text-xs font-semibold mt-1">
-                                    <span aria-hidden="true">ℹ️ </span>You already have an open decision (limit 1 open per author).
+                                    <span aria-hidden="true">ℹ️ </span>{t('You already have an open decision (limit 1 open per author).')}
                                 </p>
                             )}
                         </div>
 
                         {preview ? (
-                            <LocalCommunityAction feature="decisions" label="+ Propose Decision" className="w-full sm:w-auto" {...ways} />
+                            <LocalCommunityAction feature="decisions" label={t('+ Propose Decision')} className="w-full sm:w-auto" {...ways} />
                         ) : (
                             <button
                                 type="button"
@@ -208,7 +242,7 @@ export function DecideSection({
                                         : 'bg-nature-800 text-nature-500 cursor-not-allowed border border-nature-700/50'
                                 }`}
                             >
-                                + Propose Decision
+                                {t('+ Propose Decision')}
                             </button>
                         )}
                     </div>
@@ -217,9 +251,9 @@ export function DecideSection({
                     {openDecisions.length === 0 ? (
                         <div className="bg-nature-900 border border-nature-800 rounded-2xl p-8 text-center text-nature-400 flex flex-col items-center gap-2">
                             <span className="text-4xl opacity-40" aria-hidden="true">🗳️</span>
-                            <div className="text-white font-bold text-base mt-2">No open decisions right now</div>
+                            <div className="text-white font-bold text-base mt-2">{t('No open decisions right now')}</div>
                             <div className="text-sm max-w-md">
-                                Decisions appear here when members propose community actions. Propose one or check back later.
+                                {t('Decisions appear here when members propose community actions. Propose one or check back later.')}
                             </div>
                         </div>
                     ) : (
@@ -237,17 +271,17 @@ export function DecideSection({
                                 const creditsLine = isQuadratic ? voiceCreditsLine(myPoolVoting) : null;
 
                                 // §3.8 Removal ballot debt line
-                                const targetName = item.params?.memberName || item.subject?.slice(0, 8) || 'Member';
+                                const targetName = item.params?.memberName || item.subject?.slice(0, 8) || t('Member');
                                 // The node sends the member's balance and debt only to those who can vote in it (and to the member):
                                 // balances are private (2026-09-28). Anyone else is told so, never shown a made-up 0.
                                 const knowsDebt = typeof item.params?.debt === 'number' || typeof item.params?.balance === 'number';
                                 const debtAmount = typeof item.params?.debt === 'number' ? Math.abs(item.params.debt) : (typeof item.params?.balance === 'number' ? Math.abs(Math.min(0, item.params.balance)) : 0);
                                 const poolAmount = Math.round(item.params?.commonsPool ?? commonsBalance ?? 0);
                                 const debtWriteOffLine = !knowsDebt
-                                    ? `Balances are private: only the members who can vote in this see ${targetName}'s balance and any debt. The Commons pool holds ${poolAmount} beans.`
+                                    ? tn(poolAmount, "Balances are private: only the members who can vote in this see {name}'s balance and any debt. The Commons pool holds {n} beans.", "Balances are private: only the members who can vote in this see {name}'s balance and any debt. The Commons pool holds {n} beans.", { name: targetName })
                                     : debtAmount > 0
-                                        ? `${targetName}'s balance is \u2212${debtAmount} beans. Removing them charges that ${debtAmount} to the Commons pool, which currently holds ${poolAmount}.`
-                                        : `${targetName} has no debt. Removing them charges nothing to the Commons pool, which currently holds ${poolAmount}.`;
+                                        ? tn(debtAmount, "{name}'s balance is \u2212{n} beans. Removing them charges that {n} to the Commons pool, which currently holds {pool}.", "{name}'s balance is \u2212{n} beans. Removing them charges that {n} to the Commons pool, which currently holds {pool}.", { name: targetName, pool: poolAmount })
+                                        : t('{name} has no debt. Removing them charges nothing to the Commons pool, which currently holds {pool}.', { name: targetName, pool: poolAmount });
 
                                 return (
                                     <div
@@ -259,13 +293,13 @@ export function DecideSection({
                                         <div className="flex flex-wrap items-center justify-between gap-2">
                                             <div className="flex flex-wrap items-center gap-2">
                                                 <span className="bg-emerald-500/20 text-emerald-400 text-xs font-bold px-2.5 py-1 rounded-lg uppercase tracking-wider">
-                                                    Touches: {item.touches}
+                                                    {touchesWords(item.touches)}
                                                 </span>
                                                 <span className="bg-nature-800 text-nature-300 text-xs font-semibold px-2.5 py-1 rounded-lg border border-nature-700/60">
                                                     {formatEffectLabel(item.effect)}
                                                 </span>
                                                 <span className="bg-nature-800 text-nature-300 text-xs font-semibold px-2.5 py-1 rounded-lg border border-nature-700/60">
-                                                    {item.franchise === 'quadratic_trade' ? 'Quadratic on Trade' : '1 Member 1 Vote'}
+                                                    {item.franchise === 'quadratic_trade' ? t('Quadratic on Trade') : t('1 Member 1 Vote')}
                                                 </span>
                                             </div>
                                             <div className="flex items-center gap-1.5 bg-amber-500/15 text-amber-300 text-xs font-bold px-2.5 py-1 rounded-lg border border-amber-500/20">
@@ -288,10 +322,10 @@ export function DecideSection({
                                         {item.effect === 'keep_suspension' && (
                                             <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 my-2 space-y-1" data-testid="keep-suspension-box">
                                                 <div className="text-sm font-bold text-amber-200">
-                                                    {keepSuspensionHeadline(item.params, item.subject?.slice(0, 8) || 'a member')}
+                                                    {keepSuspensionHeadline(item.params, item.subject?.slice(0, 8) || t('a member'))}
                                                 </div>
                                                 <div className="text-xs text-nature-300">
-                                                    Vote Yes to keep it. If this vote doesn't pass, the suspension lifts by itself.
+                                                    {t("Vote Yes to keep it. If this vote doesn't pass, the suspension lifts by itself.")}
                                                 </div>
                                             </div>
                                         )}
@@ -303,7 +337,7 @@ export function DecideSection({
                                                 data-testid="removal-debt-write-off-box"
                                             >
                                                 <div className="text-xs font-bold text-red-400 uppercase tracking-wider mb-0.5">
-                                                    Mandatory Debt Disclosure (§3.8)
+                                                    {t('Mandatory Debt Disclosure (§3.8)')}
                                                 </div>
                                                 <div
                                                     className="text-sm font-semibold text-red-200"
@@ -320,10 +354,10 @@ export function DecideSection({
                                             <div>
                                                 <div className="flex justify-between text-xs font-semibold mb-1">
                                                     <span className="text-nature-400">
-                                                        Turnout: {turnoutLine(tally)}
+                                                        {t('Turnout: {line}', { line: turnoutLine(tally) })}
                                                     </span>
                                                     <span className={tally.quorumMet ? 'text-emerald-400' : 'text-nature-400'}>
-                                                        {tally.quorumMet ? 'Quorum Met ✅' : 'Pending Quorum'}
+                                                        {tally.quorumMet ? t('Quorum Met ✅') : t('Pending Quorum')}
                                                     </span>
                                                 </div>
                                                 <div
@@ -331,7 +365,7 @@ export function DecideSection({
                                                     aria-valuenow={Math.min(100, quorumPct)}
                                                     aria-valuemin={0}
                                                     aria-valuemax={100}
-                                                    aria-label="Quorum progress"
+                                                    aria-label={t('Quorum progress')}
                                                     className="h-2 bg-nature-800 rounded-full overflow-hidden"
                                                 >
                                                     <div
@@ -346,10 +380,10 @@ export function DecideSection({
                                             <div>
                                                 <div className="flex justify-between text-xs font-semibold mb-1">
                                                     <span className="text-nature-300">
-                                                        Tally: Yes {tally.yesWeight} ({supportPct}%) · No {tally.noWeight}
+                                                        {t('Tally: Yes {yes} ({pct}%) · No {no}', { yes: tally.yesWeight, pct: supportPct, no: tally.noWeight })}
                                                     </span>
                                                     <span className="text-nature-400">
-                                                        Threshold required: {thresholdPct}%
+                                                        {t('Threshold required: {pct}%', { pct: thresholdPct })}
                                                     </span>
                                                 </div>
                                                 <div
@@ -357,7 +391,7 @@ export function DecideSection({
                                                     aria-valuenow={Math.min(100, supportPct)}
                                                     aria-valuemin={0}
                                                     aria-valuemax={100}
-                                                    aria-label="Support progress"
+                                                    aria-label={t('Support progress')}
                                                     className="h-2 bg-nature-800 rounded-full overflow-hidden"
                                                 >
                                                     <div
@@ -373,7 +407,14 @@ export function DecideSection({
                                             {item.franchise === 'quadratic_trade' && (
                                                 <div className="flex items-center justify-between bg-nature-800/60 border border-nature-700/60 rounded-xl px-3 py-2 text-xs">
                                                     <span className="text-nature-300 font-medium">
-                                                        Vote Count: <strong className="text-white">{currentCount}</strong> (Cost: <strong className="text-emerald-400">{currentCount * currentCount} credits</strong>)
+                                                        <Sentence
+                                                            text={t('Vote Count: {count} (Cost: {cost})')}
+                                                            parts={{
+                                                                count: <strong className="text-white">{currentCount}</strong>,
+                                                                // English writes one form for both, as it always has.
+                                                                cost: <strong className="text-emerald-400">{tn(currentCount * currentCount, '{n} credits', '{n} credits')}</strong>,
+                                                            }}
+                                                        />
                                                     </span>
                                                     <div className="flex items-center gap-2">
                                                         <button
@@ -383,7 +424,7 @@ export function DecideSection({
                                                                 [item.id]: Math.max(1, startingVoteCount(prev[item.id], item.myVote) - 1),
                                                             }))}
                                                             className="w-11 h-11 rounded-xl text-base bg-nature-700 text-white font-bold hover:bg-nature-600 flex items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
-                                                            aria-label="Decrease votes"
+                                                            aria-label={t('Decrease votes')}
                                                         >
                                                             -
                                                         </button>
@@ -394,7 +435,7 @@ export function DecideSection({
                                                                 [item.id]: startingVoteCount(prev[item.id], item.myVote) + 1,
                                                             }))}
                                                             className="w-11 h-11 rounded-xl text-base bg-nature-700 text-white font-bold hover:bg-nature-600 flex items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
-                                                            aria-label="Increase votes"
+                                                            aria-label={t('Increase votes')}
                                                         >
                                                             +
                                                         </button>
@@ -418,8 +459,8 @@ export function DecideSection({
 
                                             {preview ? (
                                                 <div className="flex flex-col sm:flex-row gap-3">
-                                                    <LocalCommunityAction feature="decisions" label="👍 Vote YES" className="flex-1" {...ways} />
-                                                    <LocalCommunityAction feature="decisions" label="👎 Vote NO" className="flex-1" {...ways} />
+                                                    <LocalCommunityAction feature="decisions" label={t('👍 Vote YES')} className="flex-1" {...ways} />
+                                                    <LocalCommunityAction feature="decisions" label={t('👎 Vote NO')} className="flex-1" {...ways} />
                                                 </div>
                                             ) : (
                                                 <div className="flex gap-3">
@@ -430,7 +471,7 @@ export function DecideSection({
                                                         className="flex-1 py-2.5 px-4 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-extrabold text-sm shadow transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
                                                     >
                                                         <span aria-hidden="true">👍</span>
-                                                        <span>{votingId === item.id ? 'Recording...' : buttons.yes.label}</span>
+                                                        <span>{votingId === item.id ? t('Recording...') : buttons.yes.label}</span>
                                                     </button>
 
                                                     <button
@@ -440,12 +481,12 @@ export function DecideSection({
                                                         className="flex-1 py-2.5 px-4 rounded-xl bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on font-extrabold text-sm shadow transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
                                                     >
                                                         <span aria-hidden="true">👎</span>
-                                                        <span>{votingId === item.id ? 'Recording...' : buttons.no.label}</span>
+                                                        <span>{votingId === item.id ? t('Recording...') : buttons.no.label}</span>
                                                     </button>
                                                 </div>
                                             )}
                                             <p className="text-[11px] text-nature-500" data-testid="secret-ballot-note">
-                                                {preview ? '' : '🔒 '}Secret ballot: members see the totals, never who voted how.
+                                                {preview ? t('Secret ballot: members see the totals, never who voted how.') : t('🔒 Secret ballot: members see the totals, never who voted how.')}
                                             </p>
                                         </div>
                                     </div>
@@ -472,7 +513,7 @@ export function DecideSection({
                                         : 'bg-nature-900 text-nature-400 border-nature-800 hover:border-nature-700'
                                 }`}
                             >
-                                {f.toUpperCase()}
+                                {upperCase(t(HISTORY_FILTER_WORDS[f]))}
                             </button>
                         ))}
                     </div>
@@ -480,9 +521,9 @@ export function DecideSection({
                     {filteredPastDecisions.length === 0 ? (
                         <div className="bg-nature-900 border border-nature-800 rounded-2xl p-8 text-center text-nature-400">
                             <span className="text-3xl opacity-40" aria-hidden="true">📜</span>
-                            <div className="text-white font-bold text-base mt-2">No history records found</div>
+                            <div className="text-white font-bold text-base mt-2">{t('No history records found')}</div>
                             <div className="text-sm mt-1">
-                                Past decisions, tallies, and executed effect provenances will be listed here.
+                                {t('Past decisions, tallies, and executed effect provenances will be listed here.')}
                             </div>
                         </div>
                     ) : (
@@ -508,14 +549,14 @@ export function DecideSection({
                                         <div className="flex flex-wrap items-center justify-between gap-2">
                                             <div className="flex items-center gap-2">
                                                 <span className="bg-nature-800 text-nature-300 text-xs font-semibold px-2.5 py-1 rounded-lg border border-nature-700/60">
-                                                    Touches: {item.touches}
+                                                    {touchesWords(item.touches)}
                                                 </span>
                                                 <span className="bg-nature-800 text-nature-300 text-xs font-semibold px-2.5 py-1 rounded-lg border border-nature-700/60">
                                                     {formatEffectLabel(item.effect)}
                                                 </span>
                                             </div>
                                             <span className={`text-xs font-extrabold px-2.5 py-1 rounded-lg border uppercase tracking-wider ${badgeColor}`}>
-                                                {item.status.replace(/_/g, ' ')}
+                                                {own(STATUS_WORDS, item.status) ? t(STATUS_WORDS[item.status]) : item.status.replace(/_/g, ' ')}
                                             </span>
                                         </div>
 
@@ -531,51 +572,51 @@ export function DecideSection({
                                         {/* Final Tally */}
                                         <div className="bg-nature-800/40 border border-nature-700/50 rounded-xl p-3 text-xs text-nature-300 flex justify-between items-center">
                                             <span>
-                                                Turnout: {turnoutLine(tally)} ({tally.quorumMet ? 'Met ✅' : 'Unmet ❌'})
+                                                {tally.quorumMet ? t('Turnout: {line} (Met ✅)', { line: turnoutLine(tally) }) : t('Turnout: {line} (Unmet ❌)', { line: turnoutLine(tally) })}
                                             </span>
                                             <span className="font-semibold">
-                                                Yes: {tally.yesWeight} ({supportPct}%) · No: {tally.noWeight}
+                                                {t('Yes: {yes} ({pct}%) · No: {no}', { yes: tally.yesWeight, pct: supportPct, no: tally.noWeight })}
                                             </span>
                                         </div>
 
                                         {/* Who Authorised Each Executed Effect (§3.7, §3.8) */}
                                         <div className="bg-nature-800/60 border border-nature-700/60 rounded-xl p-3 text-xs space-y-1">
                                             <div className="text-xs font-bold uppercase tracking-wider text-nature-400">
-                                                Authorisation & Provenance
+                                                {t('Authorisation & Provenance')}
                                             </div>
                                             {item.status === 'executed' && (
                                                 <>
                                                     <div className="text-emerald-300 font-semibold">
-                                                        Authorised by: Community Vote (system:decision:{item.id.slice(0, 8)})
+                                                        {t('Authorised by: Community Vote ({ref})', { ref: `system:decision:${item.id.slice(0, 8)}` })}
                                                     </div>
                                                     <div className="text-nature-400 font-mono text-[11px]">
-                                                        Provenance: system:decision:{item.id} · {item.executionReason || 'Executed successfully'}
+                                                        {t('Provenance: {ref} · {reason}', { ref: `system:decision:${item.id}`, reason: item.executionReason || t('Executed successfully') })}
                                                     </div>
                                                 </>
                                             )}
                                             {item.status === 'admin_halted' && (
                                                 <div className="text-amber-300 font-semibold">
-                                                    Halted by an admin — Reason: {item.adminHaltReason}
+                                                    {t('Halted by an admin — Reason: {reason}', { reason: item.adminHaltReason ?? '' })}
                                                 </div>
                                             )}
                                             {item.status === 'execution_pending_grace' && (
                                                 <div className="text-indigo-300 font-semibold">
-                                                    In 7-day Grace Window: Scheduled for removal on {new Date(item.gracePeriodEndsAt!).toLocaleDateString()}
+                                                    {t('In 7-day Grace Window: Scheduled for removal on {date}', { date: formatDate(new Date(item.gracePeriodEndsAt!), 'day-month-year') })}
                                                 </div>
                                             )}
                                             {item.status === 'execution_void' && (
                                                 <div className="text-amber-300">
-                                                    Void: {item.executionReason || 'Subject no longer exists or was pruned'}
+                                                    {t('Void: {reason}', { reason: item.executionReason || t('Subject no longer exists or was pruned') })}
                                                 </div>
                                             )}
                                             {item.status === 'failed' && (
                                                 <div className="text-red-300">
-                                                    Not executed: {tally.quorumMet ? 'Threshold not met' : 'Quorum not reached'}
+                                                    {tally.quorumMet ? t('Not executed: Threshold not met') : t('Not executed: Quorum not reached')}
                                                 </div>
                                             )}
                                             {item.status === 'unresolved' && (
                                                 <div className="text-nature-400">
-                                                    Expired unresolved: Quorum not reached
+                                                    {t('Expired unresolved: Quorum not reached')}
                                                 </div>
                                             )}
                                         </div>

@@ -12,7 +12,7 @@
  */
 
 import { timeLeftText } from './keeper-governance';
-import { formatDate } from '@beanpool/core';
+import { formatDate, t, tn } from '@beanpool/core';
 import type { GroupMember } from './api';
 
 export type GroupSuccessionClosedReason = 'rejected' | 'convenor_returned' | 'candidate_gone' | 'candidate_ineligible' | 'no_longer_needed';
@@ -128,12 +128,12 @@ export function closingDateText(iso: string): string | null {
 export function closingLineText(p: GroupSuccessionProposal, now = Date.now()): string | null {
     const date = p.deadlineAt ? closingDateText(p.deadlineAt) : null;
     if (!date) return null;
-    return `Closes ${date} — ${timeLeftText(p.deadlineAt, now)}.`;
+    return t('Closes {date} — {time}.', { date, time: timeLeftText(p.deadlineAt, now) });
 }
 
 export function tallyLineText(p: GroupSuccessionProposal): string {
     const can = p.electorateSize ?? 0;
-    return `${p.yesCount} yes, ${p.noCount} no, of ${can} who can vote.`;
+    return tn(can, '{yes} yes, {no} no, of {n} who can vote.', '{yes} yes, {no} no, of {n} who can vote.', { yes: p.yesCount, no: p.noCount });
 }
 
 /**
@@ -151,8 +151,8 @@ export function whoVotesLineText(s: GroupSilence): string | null {
     const by = s.votersJoinedBy ? closingDateText(s.votersJoinedBy) : null;
     if (!by) return null;
     return s.electorate === 'convenors'
-        ? `Only convenors appointed by ${by} can vote.`
-        : `Only the members who were in the group by ${by} vote; convenors appointed after ${by} don't.`;
+        ? t('Only convenors appointed by {date} can vote.', { date: by })
+        : t("Only the members who were in the group by {date} vote; convenors appointed after {date} don't.", { date: by });
 }
 
 /**
@@ -165,19 +165,26 @@ export function nobodyCanVote(s: GroupSilence): boolean {
 
 /** Why the lead can be replaced, in the group's own words — or why, although quiet, they can't be. */
 export function silenceLineText(s: GroupSilence): string | null {
-    const who = s.convenorCallsign || 'The lead convenor';
+    // The lead's name as written; with none, each sentence names "the lead convenor" itself.
+    const name = s.convenorCallsign;
     const days = Math.floor(s.daysInactive);
-    const quiet = `${who} hasn't been active for ${days} ${days === 1 ? 'day' : 'days'}.`;
     if (nobodyCanVote(s)) {
         // In a members' vote every convenor but the lead was appointed after the day (had one been appointed by then,
         // the convenors would be voting), so the line says why they can't either, as whoVotesLineText does.
-        const by = closingDateText(s.votersJoinedBy as string);
-        return s.electorate === 'convenors'
-            ? `${quiet} Only convenors appointed by ${by} can choose a new lead, and there are none, so no vote can open.`
-            : `${quiet} Only the members who were in the group by ${by} can choose a new lead, and there are none (convenors appointed after ${by} can't), so no vote can open.`;
+        const date = closingDateText(s.votersJoinedBy as string) ?? '';
+        if (s.electorate === 'convenors') {
+            return name
+                ? tn(days, "{name} hasn't been active for {n} day. Only convenors appointed by {date} can choose a new lead, and there are none, so no vote can open.", "{name} hasn't been active for {n} days. Only convenors appointed by {date} can choose a new lead, and there are none, so no vote can open.", { name, date })
+                : tn(days, "The lead convenor hasn't been active for {n} day. Only convenors appointed by {date} can choose a new lead, and there are none, so no vote can open.", "The lead convenor hasn't been active for {n} days. Only convenors appointed by {date} can choose a new lead, and there are none, so no vote can open.", { date });
+        }
+        return name
+            ? tn(days, "{name} hasn't been active for {n} day. Only the members who were in the group by {date} can choose a new lead, and there are none (convenors appointed after {date} can't), so no vote can open.", "{name} hasn't been active for {n} days. Only the members who were in the group by {date} can choose a new lead, and there are none (convenors appointed after {date} can't), so no vote can open.", { name, date })
+            : tn(days, "The lead convenor hasn't been active for {n} day. Only the members who were in the group by {date} can choose a new lead, and there are none (convenors appointed after {date} can't), so no vote can open.", "The lead convenor hasn't been active for {n} days. Only the members who were in the group by {date} can choose a new lead, and there are none (convenors appointed after {date} can't), so no vote can open.", { date });
     }
     if (!s.isEligible) return null;
-    return `${quiet} The group can choose a new lead.`;
+    return name
+        ? tn(days, "{name} hasn't been active for {n} day. The group can choose a new lead.", "{name} hasn't been active for {n} days. The group can choose a new lead.", { name })
+        : tn(days, "The lead convenor hasn't been active for {n} day. The group can choose a new lead.", "The lead convenor hasn't been active for {n} days. The group can choose a new lead.");
 }
 
 /**
@@ -213,21 +220,23 @@ export function isOutcomeRecent(p: GroupSuccessionProposal | null | undefined, n
 /** The latest finished vote, in one line for the fortnight after it closed. No history list: decision 5. */
 export function outcomeLineText(p: GroupSuccessionProposal | null | undefined): string | null {
     if (!p || p.status === 'active') return null;
-    const who = p.candidateCallsign || 'The person proposed';
-    if (p.status === 'passed') return `${who} is now the group's lead convenor.`;
+    // Names as written; with none, each sentence names "the person proposed" or "the lead" itself.
+    const name = p.candidateCallsign;
+    const lead = p.convenorCallsign;
+    if (p.status === 'passed') return name ? t("{name} is now the group's lead convenor.", { name }) : t("The person proposed is now the group's lead convenor.");
     switch (p.closedReason) {
         case 'rejected':
-            return `The group voted no, so ${p.convenorCallsign || 'the lead'} is still the lead.`;
+            return lead ? t('The group voted no, so {name} is still the lead.', { name: lead }) : t('The group voted no, so the lead is still the lead.');
         case 'convenor_returned':
-            return `${p.convenorCallsign || 'The lead'} came back, so the vote closed.`;
+            return lead ? t('{name} came back, so the vote closed.', { name: lead }) : t('The lead came back, so the vote closed.');
         case 'candidate_gone':
-            return `${who} is no longer in the group, so the vote closed.`;
+            return name ? t('{name} is no longer in the group, so the vote closed.', { name }) : t('The person proposed is no longer in the group, so the vote closed.');
         case 'candidate_ineligible':
-            return `${who} can't be chosen as lead, so the vote closed.`;
+            return name ? t("{name} can't be chosen as lead, so the vote closed.", { name }) : t("The person proposed can't be chosen as lead, so the vote closed.");
         case 'no_longer_needed':
-            return 'The group has another lead now, so the vote closed.';
+            return t('The group has another lead now, so the vote closed.');
         default:
-            return 'The last vote on a new lead closed.';
+            return t('The last vote on a new lead closed.');
     }
 }
 
@@ -308,8 +317,13 @@ export function buildSuccessionView(
 
 /** The confirm a voter reads before their one and only vote. */
 export function voteConfirmText(choice: 'yes' | 'no', candidateCallsign: string | null | undefined): string {
-    const who = candidateCallsign || 'this member';
-    return choice === 'yes'
-        ? `Vote yes to make ${who} the group's lead convenor? Votes can't be changed.`
-        : `Vote no to making ${who} the group's lead convenor? Votes can't be changed.`;
+    const name = candidateCallsign;
+    if (choice === 'yes') {
+        return name
+            ? t("Vote yes to make {name} the group's lead convenor? Votes can't be changed.", { name })
+            : t("Vote yes to make this member the group's lead convenor? Votes can't be changed.");
+    }
+    return name
+        ? t("Vote no to making {name} the group's lead convenor? Votes can't be changed.", { name })
+        : t("Vote no to making this member the group's lead convenor? Votes can't be changed.");
 }

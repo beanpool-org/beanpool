@@ -5,9 +5,8 @@
  * where it says the same (S3h). A group's name and purpose and its members' names are what members wrote: shown as
  * written.
  *
- * The quiet-lead vote's lines that lib/group-succession.ts writes (who has been quiet, who votes, the tally, the closing
- * date, the outcome and the vote's confirm) are not this sweep's file: they are taken out here by what that module
- * writes, and listed in the PR (the phone's copy, utils/group-succession.ts, has them through t()).
+ * The quiet-lead vote's lines are lib/group-succession.ts's (who has been quiet, who votes, the tally, the closing date,
+ * the outcome and the vote's confirm): the phone's utils/group-succession.ts, through t()/tn() with the same keys.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -162,11 +161,11 @@ describe('the quiet-lead vote in the pseudo-locale', () => {
     const proposal = (over: Record<string, unknown> = {}) => ({
         id: 'p1', groupId: 'g1', convenorPubkey: ME, convenorCallsign: 'Marty', candidatePubkey: DAMO, candidateCallsign: 'Damo',
         proposerPubkey: DAMO, proposerCallsign: 'Damo', status: 'active', closedReason: null, createdAt: '2026-09-23T00:00:00.000Z',
-        // Half an hour past 5 days, so the panel and libLines (a moment apart) both read "5 days left".
+        // Half an hour past 5 days, so the panel and libLines (a moment apart) both read the same days left.
         deadlineAt: new Date(Date.now() + 5 * 86_400_000 + 1_800_000).toISOString(), executedAt: null, yesCount: 1, noCount: 0, electorateSize: 3,
         myVote: null, canVote: true, ...over,
     });
-    /** What lib/group-succession.ts writes for this answer, as the panel draws it now. */
+    /** What lib/group-succession.ts writes for this answer, as the panel draws it now: each line came through t(). */
     const libLines = (data: unknown) => {
         const v = buildSuccessionView(data as any, ROSTER);
         return [v.silenceLine, v.whoVotesLine, v.tallyLine, v.closingLine, v.outcomeLine].filter((l): l is string => !!l);
@@ -182,14 +181,21 @@ describe('the quiet-lead vote in the pseudo-locale', () => {
         expect(screen.getByRole('button', { name: xx('Vote yes to make {name} the lead convenor').replace('{name}', 'Damo') }).textContent).toBe(xx('Yes'));
         fireEvent.click(screen.getByRole('button', { name: xx('Vote no to making {name} the lead convenor').replace('{name}', 'Damo') }));
         expect(said).toEqual([voteConfirmText('no', 'Damo')]);
-        expect(bypassing(document.body, { others: [...OTHERS, ...libLines(data)] })).toEqual([]);
+        expect(bypassing(document.body, { others: OTHERS, said })).toEqual([]);
+        // The module's lines are drawn, each in xx's form (the bypass check above reads them as drawn).
+        const lines = libLines(data);
+        expect(lines.length).toBeGreaterThanOrEqual(3);
+        for (const line of lines) {
+            expect(line.startsWith('[')).toBe(true);
+            expect(document.body.textContent).toContain(line);
+        }
         cleanup();
 
         const voted = { silence, proposals: [proposal({ myVote: 'yes', canVote: false })], canPropose: false };
         vi.mocked(getGroupSuccession).mockResolvedValue(voted as any);
         panel();
         expect(await screen.findByText(xx("You voted yes. Votes can't be changed."))).toBeInTheDocument();
-        expect(bypassing(document.body, { others: [...OTHERS, ...libLines(voted)] })).toEqual([]);
+        expect(bypassing(document.body, { others: OTHERS })).toEqual([]);
     });
 
     it('proposing: the picker with the viewer in it, and a refusal with no words of its own', async () => {
@@ -201,11 +207,11 @@ describe('the quiet-lead vote in the pseudo-locale', () => {
         const picker = await screen.findByLabelText(xx('Propose a new lead'));
         expect(screen.getByRole('option', { name: xx('{name} (yourself)').replace('{name}', 'Damo') })).toBeInTheDocument();
         expect(screen.getByRole('option', { name: xx('Choose someone…') })).toBeInTheDocument();
-        expect(bypassing(document.body, { others: [...OTHERS, ...libLines(data)] })).toEqual([]);
+        expect(bypassing(document.body, { others: OTHERS })).toEqual([]);
         fireEvent.change(picker, { target: { value: DAMO } });
         await act(async () => { fireEvent.click(screen.getByRole('button', { name: xx('Propose') })); });
         expect(await screen.findByText(xx('Could not propose a new lead.'))).toBeInTheDocument();
-        expect(bypassing(document.body, { others: [...OTHERS, ...libLines(data)] })).toEqual([]);
+        expect(bypassing(document.body, { others: OTHERS })).toEqual([]);
     });
 
     it("a vote that closed: the quiet heading over the outcome", async () => {
@@ -214,7 +220,7 @@ describe('the quiet-lead vote in the pseudo-locale', () => {
         await showIn('xx');
         panel();
         expect(await screen.findByRole('heading', { name: xx('Lead convenor') })).toBeInTheDocument();
-        expect(bypassing(document.body, { others: [...OTHERS, ...libLines(data)] })).toEqual([]);
+        expect(bypassing(document.body, { others: OTHERS })).toEqual([]);
     });
 });
 

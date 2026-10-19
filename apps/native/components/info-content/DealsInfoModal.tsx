@@ -3,6 +3,8 @@ import { View, Text, StyleSheet } from 'react-native';
 import { InfoModal, InfoModalTab } from '../InfoModal';
 import { CurrencyDisplay } from '../CurrencyDisplay';
 import { useStyles } from '../../app/ThemeContext';
+import { t } from '@beanpool/core';
+import { richWords } from './rich-words';
 
 interface Props {
     isOpen: boolean;
@@ -135,27 +137,28 @@ export function DealsInfoModal({ isOpen, onClose }: Props) {
     const tabs: InfoModalTab[] = [
         {
             id: 'escrow',
-            label: '🤝 Held in Trust',
+            label: t('🤝 Held in Trust'),
             content: (
                 <View style={styles.tabContent}>
                     <Text style={styles.descriptionText}>
-                        BeanPool uses a <Text style={styles.boldWhiteText}>Trust Wallet</Text> system to protect both buyers and sellers during a transaction.
+                        {richWords(t('BeanPool uses a **Trust Wallet** system to protect both buyers and sellers during a transaction.'), styles.boldWhiteText)}
                     </Text>
 
                     <View style={styles.cardContainer}>
-                        <Text style={styles.cardLabel}>HOW DEALS WORK</Text>
+                        <Text style={styles.cardLabel}>{t('HOW DEALS WORK')}</Text>
                         <View style={{ marginTop: 4 }}>
-                            <ListItem prefix="1.">Buyer accepts an offer or Seller accepts a need.</ListItem>
-                            <ListItem prefix="2.">The <CurrencyDisplay hideAmount={true} /> credits are <Text style={styles.boldWhiteText}>locked in a Trust Wallet</Text> (they leave the buyer's account but aren't given to the seller yet).</ListItem>
-                            <ListItem prefix="3.">Both parties meet to exchange the goods/services.</ListItem>
-                            <ListItem prefix="4.">The Buyer <Text style={styles.boldWhiteText}>releases the funds</Text> held in trust to complete the deal.</ListItem>
+                            <ListItem prefix="1.">{t('Buyer accepts an offer or Seller accepts a need.')}</ListItem>
+                            {/* {currency} is the community's currency mark, drawn where the sentence puts it. */}
+                            <ListItem prefix="2.">{richWords(t("The {currency} credits are **locked in a Trust Wallet** (they leave the buyer's account but aren't given to the seller yet)."), styles.boldWhiteText, { currency: <CurrencyDisplay hideAmount={true} /> })}</ListItem>
+                            <ListItem prefix="3.">{t('Both parties meet to exchange the goods/services.')}</ListItem>
+                            <ListItem prefix="4.">{richWords(t('The Buyer **releases the funds** held in trust to complete the deal.'), styles.boldWhiteText)}</ListItem>
                         </View>
                     </View>
 
                     <View style={styles.infoBox}>
                         <Text style={styles.infoBoxIcon}>💡</Text>
                         <Text style={styles.infoBoxText}>
-                            If goods aren't delivered, the buyer can cancel the hold directly. For contested trades stuck over 7 days, administrators can arbitrate with full provenance.
+                            {t("If goods aren't delivered, the buyer can cancel the hold directly. For contested trades stuck over 7 days, administrators can arbitrate with full provenance.")}
                         </Text>
                     </View>
                 </View>
@@ -163,26 +166,27 @@ export function DealsInfoModal({ isOpen, onClose }: Props) {
         },
         {
             id: 'disputes',
-            label: '⚖️ Disputes',
+            label: t('⚖️ Disputes'),
             content: (
                 <View style={styles.tabContent}>
                     <Text style={styles.descriptionText}>
-                        When a trade cannot be agreed upon, community administrators provide transparent dispute arbitration for escrows stalled over 7 days.
+                        {t('When a trade cannot be agreed upon, community administrators provide transparent dispute arbitration for escrows stalled over 7 days.')}
                     </Text>
 
                     <View style={styles.cardContainer}>
-                        <Text style={styles.cardLabel}>THREE ARBITRATION OUTCOMES</Text>
+                        <Text style={styles.cardLabel}>{t('THREE ARBITRATION OUTCOMES')}</Text>
                         <View style={{ marginTop: 4 }}>
-                            <ListItem prefix="1."><Text style={styles.boldWhiteText}>Release to Seller:</Text> Disburses escrowed credits to the seller (with standard community fee).</ListItem>
-                            <ListItem prefix="2."><Text style={styles.boldWhiteText}>Refund to Buyer:</Text> Returns 100% of escrowed credits back to the buyer (fee-exempt).</ListItem>
-                            <ListItem prefix="3."><Text style={styles.boldWhiteText}>Split 50/50:</Text> Returns half to the buyer and releases half to the seller.</ListItem>
+                            <ListItem prefix="1.">{richWords(t('**Release to Seller:** Disburses escrowed credits to the seller (with standard community fee).'), styles.boldWhiteText)}</ListItem>
+                            <ListItem prefix="2.">{richWords(t('**Refund to Buyer:** Returns 100% of escrowed credits back to the buyer (fee-exempt).'), styles.boldWhiteText)}</ListItem>
+                            <ListItem prefix="3.">{richWords(t('**Split 50/50:** Returns half to the buyer and releases half to the seller.'), styles.boldWhiteText)}</ListItem>
                         </View>
                     </View>
 
                     <View style={styles.infoBox}>
                         <Text style={styles.infoBoxIcon}>🛡️</Text>
                         <Text style={styles.infoBoxText}>
-                            <Text style={styles.boldWhiteText}>Never a Quiet Admin Override:</Text> Every arbitration carries the acting admin's cryptographic identity (<Text style={styles.boldWhiteText}>auth_signer</Text>), writes a visible public record on both parties' transaction and activity views, notifies both members, and strictly preserves ledger conservation.
+                            {/* auth_signer is the record's field name, the same in every language. */}
+                            {richWords(t("**Never a Quiet Admin Override:** Every arbitration carries the acting admin's cryptographic identity (**{field}**), writes a visible public record on both parties' transaction and activity views, notifies both members, and strictly preserves ledger conservation.", { field: 'auth_signer' }), styles.boldWhiteText)}
                         </Text>
                     </View>
                 </View>
@@ -190,24 +194,24 @@ export function DealsInfoModal({ isOpen, onClose }: Props) {
         },
         {
             id: 'reviews',
-            label: '⭐ Reviews',
+            label: t('⭐ Reviews'),
             content: (
                 <View style={styles.tabContent}>
                     <Text style={styles.descriptionText}>
-                        After a deal is completed, both the buyer and seller should leave a <Text style={styles.boldWhiteText}>Review</Text> for each other.
+                        {richWords(t('After a deal is completed, both the buyer and seller should leave a **Review** for each other.'), styles.boldWhiteText)}
                     </Text>
 
                     <View style={styles.processContainer}>
-                        <Text style={styles.processLabel}>TRUST SCORE</Text>
+                        <Text style={styles.processLabel}>{t('TRUST SCORE')}</Text>
                         <Text style={styles.processText}>
-                            Your reviews directly impact your <Text style={styles.boldWhiteText}>Trust Score</Text>, which is visible on your public profile. Building a high trust score makes it easier to find trading partners!
+                            {richWords(t('Your reviews directly impact your **Trust Score**, which is visible on your public profile. Building a high trust score makes it easier to find trading partners!'), styles.boldWhiteText)}
                         </Text>
                     </View>
 
                     <View style={styles.warningBox}>
                         <Text style={styles.warningIcon}>⚠️</Text>
                         <Text style={styles.warningText}>
-                            Repeated bad reviews lower your standing with trading partners. Unresolved disputes stuck in escrow over 7 days are arbitrated by administrators via public, signed resolutions (release, refund, or split).
+                            {t('Repeated bad reviews lower your standing with trading partners. Unresolved disputes stuck in escrow over 7 days are arbitrated by administrators via public, signed resolutions (release, refund, or split).')}
                         </Text>
                     </View>
                 </View>
@@ -219,7 +223,7 @@ export function DealsInfoModal({ isOpen, onClose }: Props) {
         <InfoModal
             isOpen={isOpen}
             onClose={onClose}
-            title="My Deals & Trust Hold"
+            title={t('My Deals & Trust Hold')}
             icon="🤝"
             tabs={tabs}
         />

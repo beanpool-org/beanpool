@@ -18,19 +18,22 @@ import { rekeySlotStore } from '../utils/rekey-slot-store';
 import { GLOBAL_NODE_URL, GLOBAL_DOOR_MESSAGES, beansOn, checkGlobalDoor, getCachedNodeProfile, wordsDoorOn } from '../utils/node-profile';
 // t comes from useWords() inside the screen (live in the member's language), not core's device-language t.
 import { lowercaseRecoveryWords, photoStepNote } from '@beanpool/core';
+import {
+    doorAnswerWords, linkedNoticeWords, nameCheckWords, noWordsBeforeWipeWords, signInReplacedWords, welcomeLineWords,
+} from '../components/welcome/welcome-lines';
 import { askGlobalDoorOffer, globalDoorOffer, rememberGlobalDoor } from '../utils/global-door-offer';
 import type { GlobalDoorState } from '../utils/global-entry';
 import { WelcomeDoors } from '../components/WelcomeDoors';
 import {
-    MAX_JOIN_NAME, adoptJoinKey, checkNameAtDoor, commitJoinKey, doorMessage, doorWaysOut, joinKeyForThisPhone, joinedUnderNodeName,
-    keepJoinedIdentity, nameCheckMessage, nextStepFor, releaseJoinKey, signInAtDoor, submitJoin, submitWordsJoin,
+    MAX_JOIN_NAME, adoptJoinKey, checkNameAtDoor, commitJoinKey, doorWaysOut, joinKeyForThisPhone, joinedUnderNodeName,
+    keepJoinedIdentity, nextStepFor, releaseJoinKey, signInAtDoor, submitJoin, submitWordsJoin,
     type DoorAnswer, type DoorPhase, type DoorSignIn, type DoorWay, type JoinKey,
 } from '../utils/global-join';
 import { useDoorWork } from '../utils/use-door-work';
 import { DOOR_WORK_MESSAGES, solutionUnlessLeft } from '../utils/door-work';
 import { DoorChoices, DoorWorkProgress, WordsBackupNote, WORDS_BACKUP_TEXT } from '../components/WordsDoor';
 import { LinkSignInSheet } from '../components/LinkSignInSheet';
-import { linkedNotice, type LinkAnswer } from '../utils/join-link';
+import { type LinkAnswer } from '../utils/join-link';
 import { startOneWayBack } from '../utils/one-way-back';
 import { signInCopiesAt } from '../utils/vault-config';
 import { addSavedNode, clearGuestNode } from '../utils/nodes';
@@ -53,7 +56,7 @@ import { copyWordsForAMinute } from '../utils/words-clipboard';
 import { GoogleButton, AppleButton, FacebookButton, GoogleLogo, AppleLogo, FacebookLogo } from '../components/SsoButton';
 import { enrolKeepers, type KeeperEnrolmentResult } from '../utils/keeper-enrolment';
 import { protectionFrom } from '../utils/protection-state';
-import { NO_WORDS_WAY_BACK, noWordsBeforeWipe, signInReplacedNote } from '../utils/no-words-copy';
+import { NO_WORDS_WAY_BACK } from '../utils/no-words-copy';
 import { updateMemberProfile, fetchNodeCallsign, recordOnboardingEvent } from '../utils/db';
 import { buildSignedHeaders, validateMnemonic } from '../utils/crypto';
 import { palette, type AppColors } from '../constants/colors';
@@ -63,7 +66,8 @@ import {
     vaultKeepsNoCopyFor, waitingSsoRestore, type PendingVaultRestore, type RestorableAccount, type RestoredFromVault,
 } from '../utils/sso-recovery';
 import { restoreRefusalText } from '../utils/community-restore-copy';
-import { hasVault, holdEndsText, VAULT_MESSAGES, VaultError } from '../utils/vault';
+import { hasVault, VAULT_MESSAGES, VaultError } from '../utils/vault';
+import { holdEndsWords } from '../components/RecoveryAlertBanner';
 import { VAULT_WORDS } from '../utils/vault-words';
 import { landNextOn } from '../utils/member-landing';
 import { MemberAvatar } from '../components/MemberAvatar';
@@ -93,42 +97,47 @@ import { Sentence } from '../components/Sentence';
 // rejection rather than crash with an unhandled promise warning.
 const openLink = (url: string) => Linking.openURL(url).catch((err) => console.warn('Failed to open URL', err));
 
-// Friendly Step-1 rejection copy for a dud invite. Reasons come from
-// /api/invite/check; anything unrecognised falls back to the generic line.
-function inviteProblemMessage(reason?: string): string {
-    switch (reason) {
-        case 'used':
-            return 'This invite has already been used — each one works exactly once. Ask whoever invited you to send a fresh one (it only takes them a minute).';
-        case 'expired':
-            return 'This invite has expired — invites last 30 days. Ask whoever invited you to send a fresh one (it only takes them a minute).';
-        case 'unknown_inviter':
-            return "This community doesn't know the person who made this invite. Double-check you're joining the right community, or ask for a fresh invite.";
-        case 'admins_only':
-            return MEMBER_TICKET_REFUSED_TEXT;
-        default:
-            return "That invite wasn't recognised by your community. Double-check the code, or ask whoever invited you for a fresh one.";
-    }
-}
-
-/**
- * "March 2026" from whatever the node stored, or '' if it is unusable.
- *
- * Month and year only: the day adds nothing to telling two namesakes apart, and a precise join
- * date is more than a public lookup needs to hand out about somebody.
- */
-function joinedLabel(joinedAt: string | null | undefined): string {
-    if (!joinedAt) return '';
-    const d = new Date(joinedAt);
-    if (isNaN(d.getTime())) return '';
-    return d.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
-}
+/** utils/invite-entries.ts's sentence for a member's invite where only admins invite now: a word() key, shown with t(). */
+const INVITE_ENTRY_WORDS = { memberTicketRefused: MEMBER_TICKET_REFUSED_TEXT } as const;
 
 export default function WelcomeScreen() {
     // Onboarding follows light/dark like the rest of the app: the classic light tokens in light (exactly as before),
     // the app's dark tokens in dark. See utils/onboarding-colors.ts.
     const { colors, dark } = useOnboardingColors();
     // The member's language, live: the first screen's switch and Settings → Language re-render this screen in it.
-    const { t } = useWords();
+    const { t, formatDate } = useWords();
+
+    // Friendly Step-1 rejection copy for a dud invite. Reasons come from
+    // /api/invite/check; anything unrecognised falls back to the generic line.
+    // In the screen, not above it: its sentences are the screen's t()'s.
+    function inviteProblemMessage(reason?: string): string {
+        switch (reason) {
+            case 'used':
+                return t('This invite has already been used — each one works exactly once. Ask whoever invited you to send a fresh one (it only takes them a minute).');
+            case 'expired':
+                return t('This invite has expired — invites last 30 days. Ask whoever invited you to send a fresh one (it only takes them a minute).');
+            case 'unknown_inviter':
+                return t("This community doesn't know the person who made this invite. Double-check you're joining the right community, or ask for a fresh invite.");
+            case 'admins_only':
+                return t(INVITE_ENTRY_WORDS.memberTicketRefused);
+            default:
+                return t("That invite wasn't recognised by your community. Double-check the code, or ask whoever invited you for a fresh one.");
+        }
+    }
+
+    /**
+     * "March 2026" from whatever the node stored, or '' if it is unusable.
+     *
+     * Month and year only: the day adds nothing to telling two namesakes apart, and a precise join
+     * date is more than a public lookup needs to hand out about somebody. Core's date tables (CLDR, never Intl) write
+     * it as the language does: its order, its month's form beside a year, its 年/월 (PR #2206 review).
+     */
+    function joinedLabel(joinedAt: string | null | undefined): string {
+        if (!joinedAt) return '';
+        const d = new Date(joinedAt);
+        if (isNaN(d.getTime())) return '';
+        return formatDate(d, 'month-year', { width: 'long' });
+    }
     const { styles, profileStyles, stepperStyles, guideStyles } = useMemo(() => makeStyles(colors, dark), [colors, dark]);
     // Accent ink for text and spinners on the page; filled blue buttons keep blue600 under white text in both.
     const accentInk = dark ? palette.blue400 : palette.blue600;
@@ -278,7 +287,7 @@ export default function WelcomeScreen() {
             }
         } catch (e) {
             if (e instanceof VaultError && e.message === VAULT_MESSAGES.gone) setSsoWaiting(null);
-            if (!quiet || (e instanceof VaultError && e.reason === 'wrong_account')) setError((e as Error).message);
+            if (!quiet || (e instanceof VaultError && e.reason === 'wrong_account')) setError(welcomeLineWords((e as Error).message));
         } finally {
             setSsoChecking(false);
         }
@@ -571,9 +580,9 @@ export default function WelcomeScreen() {
         }
         if (source === 'home') {
             Alert.alert(
-                'No invite found',
-                "Your clipboard doesn't have a BeanPool invite on it. No worries — you can paste or type the code on the next screen.",
-                [{ text: 'OK', onPress: () => setMode('create') }]
+                t('No invite found'),
+                t("Your clipboard doesn't have a BeanPool invite on it. No worries — you can paste or type the code on the next screen."),
+                [{ text: t('OK'), onPress: () => setMode('create') }]
             );
             return;
         }
@@ -585,8 +594,8 @@ export default function WelcomeScreen() {
             setInviteCode(content);
         } else {
             Alert.alert(
-                'No invite found',
-                'Your clipboard has something else on it. You can type or paste your invite code below instead.'
+                t('No invite found'),
+                t('Your clipboard has something else on it. You can type or paste your invite code below instead.')
             );
         }
     }
@@ -609,7 +618,7 @@ export default function WelcomeScreen() {
             origin = extractNodeOrigin(fullUrl);
         } catch (e) {
             if (e instanceof UnsafeNodeAddressError) {
-                Alert.alert('Invite not used', e.message);
+                Alert.alert(t('Invite not used'), welcomeLineWords(e.message));
                 return;
             }
             throw e;
@@ -624,18 +633,18 @@ export default function WelcomeScreen() {
             setInviteCode(fullUrl);
         }
         setMode('create');
-    }, []);
+    }, [t]);
 
     const handlePasteInvite = async () => {
         try {
             const content = (await Clipboard.getStringAsync())?.trim() || '';
             if (!content) {
-                Alert.alert("Nothing to paste", "Your clipboard is empty.");
+                Alert.alert(t('Nothing to paste'), t('Your clipboard is empty.'));
                 return;
             }
             await applyInviteContent(content, 'join');
         } catch (e) {
-            Alert.alert("Failed to read clipboard", "Please try pasting the link manually.");
+            Alert.alert(t('Failed to read clipboard'), t('Please try pasting the link manually.'));
         }
     };
 
@@ -814,7 +823,7 @@ export default function WelcomeScreen() {
                 rememberGlobalDoor(check);
                 if (cancelled) return;
                 if (!check.ok) {
-                    setGlobalMessage(GLOBAL_DOOR_MESSAGES[check.reason]);
+                    setGlobalMessage(welcomeLineWords(GLOBAL_DOOR_MESSAGES[check.reason]));
                     setGlobalPhase('unavailable');
                     return;
                 }
@@ -827,7 +836,7 @@ export default function WelcomeScreen() {
             .catch(() => {
                 rememberGlobalDoor(null);
                 if (cancelled) return;
-                setGlobalMessage(GLOBAL_DOOR_MESSAGES.unreachable);
+                setGlobalMessage(welcomeLineWords(GLOBAL_DOOR_MESSAGES.unreachable));
                 setGlobalPhase('unavailable');
             });
         return () => { cancelled = true; };
@@ -876,11 +885,11 @@ export default function WelcomeScreen() {
         // A second tap while Next is out starts nothing, not even its checks below.
         if (nextOutRef.current) return;
         if (!inviteCode.trim()) {
-            setError('An invite code is required to join the network.');
+            setError(t('An invite code is required to join the network.'));
             return;
         }
         if (callsign.trim().length < 2) {
-            setError('Callsign must be at least 2 characters.');
+            setError(t('Callsign must be at least 2 characters.'));
             return;
         }
         const rawInvite = inviteCode.trim();
@@ -889,22 +898,22 @@ export default function WelcomeScreen() {
             extractedOrigin = extractNodeOrigin(rawInvite);
         } catch (e) {
             if (e instanceof UnsafeNodeAddressError) {
-                setError(e.message);
+                setError(welcomeLineWords(e.message));
                 return;
             }
             throw e;
         }
         const nodeUrl = normalizeNodeUrl(extractedOrigin || createAnchorUrl.trim() || (__DEV__ ? 'https://127.0.0.1:8443' : ''));
         if (!nodeUrl) {
-            setError('Enter your community node address — you need it to connect to your community.');
+            setError(t('Enter your community node address — you need it to connect to your community.'));
             return;
         }
         if (!looksLikeNodeAddress(nodeUrl)) {
-            setError("That doesn't look right. Try your community name, like mullum, or its full address.");
+            setError(t("That doesn't look right. Try your community name, like mullum, or its full address."));
             return;
         }
         if (shouldBlockCleartextNodeUrl(nodeUrl)) {
-            setError('That node address is insecure (http on a public host). Ask your inviter for the https:// address.');
+            setError(t('That node address is insecure (http on a public host). Ask your inviter for the https:// address.'));
             return;
         }
 
@@ -967,7 +976,7 @@ export default function WelcomeScreen() {
                         // No longer than the redeem keeps, as the field is: a tapped suggestion is sent as it was checked and shown.
                         const sugg = await suggestCallsigns(callsign.trim(), 3, nodeUrl, MAX_JOIN_NAME, { signal: nameCheck.signal, signer: storedIdentity ?? undefined });
                         setCallsignSuggestions(sugg);
-                        setError(`"${callsign.trim()}" is already taken in this community. Pick one of the suggestions below, or choose another name.`);
+                        setError(t('"{name}" is already taken in this community. Pick one of the suggestions below, or choose another name.', { name: callsign.trim() }));
                         return;
                     }
                 } finally {
@@ -1039,7 +1048,8 @@ export default function WelcomeScreen() {
                     setError(t("BeanPool can't read the account on this phone. Restart and try again, or restore with your 12 words."));
                     return;
                 }
-                setError(`Failed to register identity: ${err?.message || err}`);
+                // The reason: a lower layer's sentence in the member's language, or the node's own words as they came.
+                setError(t('Failed to register identity: {reason}', { reason: welcomeLineWords(String(err?.message || err)) }));
                 console.error(err);
             }
         });
@@ -1115,7 +1125,7 @@ export default function WelcomeScreen() {
             // Final step — enter the app
             setIdentity(pendingIdentity);
         } catch (err: any) {
-            setError(err.message || 'Failed to complete registration.');
+            setError(err.message ? welcomeLineWords(err.message) : t('Failed to complete registration.'));
         } finally {
             setLoading(false);
         }
@@ -1136,25 +1146,25 @@ export default function WelcomeScreen() {
         const words = recoveryWords.map(w => lowercaseRecoveryWords(w).trim());
         const valid = words.filter(w => w.length > 0).length === 12;
         if (!valid) {
-            setError('Please enter all 12 recovery words.');
+            setError(t('Please enter all 12 recovery words.'));
             return;
         }
         if (!validateMnemonic(words)) {
-            setError("One or more of those words isn't a valid recovery word. Check your spelling — they're all lowercase, single words.");
+            setError(t("One or more of those words isn't a valid recovery word. Check your spelling — they're all lowercase, single words."));
             return;
         }
         const rawAnchor = recoveryAnchorUrl.trim();
         if (!rawAnchor) {
-            setError('Enter your community node address — you need it to reconnect to your community.');
+            setError(t('Enter your community node address — you need it to reconnect to your community.'));
             return;
         }
         const finalAnchorUrl = normalizeNodeUrl(rawAnchor);
         if (!looksLikeNodeAddress(finalAnchorUrl)) {
-            setError("That doesn't look right. Try your community name, like mullum, or its full address.");
+            setError(t("That doesn't look right. Try your community name, like mullum, or its full address."));
             return;
         }
         if (shouldBlockCleartextNodeUrl(finalAnchorUrl)) {
-            setError('That node address is insecure (http on a public host). Ask whoever invited you for the https:// address.');
+            setError(t('That node address is insecure (http on a public host). Ask whoever invited you for the https:// address.'));
             return;
         }
         setLoading(true);
@@ -1174,7 +1184,7 @@ export default function WelcomeScreen() {
             if (err instanceof ReplaceNotSaved) setIdentity(null);
             // Keep on the confirm-replace screen has already gone back, with nothing changed.
             if ((err as { reason?: string } | null)?.reason !== 'cancelled') {
-                setError('Recovery failed. Check words and try again.');
+                setError(t('Recovery failed. Check words and try again.'));
                 leaveReplace('recover');
             }
         } finally {
@@ -1235,27 +1245,27 @@ export default function WelcomeScreen() {
     async function handleSsoRecoverAtCommunity(provider: SsoProvider) {
         const trimmedCallsign = ssoCallsign.trim();
         if (!trimmedCallsign) {
-            setError('Please enter your callsign.');
+            setError(t('Please enter your callsign.'));
             return;
         }
         const rawAnchor = recoveryAnchorUrl.trim();
         if (!rawAnchor) {
-            setError('Please enter your community node address.');
+            setError(t('Please enter your community node address.'));
             return;
         }
         const finalAnchorUrl = normalizeNodeUrl(rawAnchor);
         if (!looksLikeNodeAddress(finalAnchorUrl)) {
-            setError("That doesn't look right. Try your community name, like mullum, or its full address.");
+            setError(t("That doesn't look right. Try your community name, like mullum, or its full address."));
             return;
         }
         if (shouldBlockCleartextNodeUrl(finalAnchorUrl)) {
-            setError('That node address is insecure (http on a public host). Use https:// instead.');
+            setError(t('That node address is insecure (http on a public host). Use https:// instead.'));
             return;
         }
 
         setLoading(true);
         setError(null);
-        setSsoProgressMessage('Connecting to recovery session...');
+        setSsoProgressMessage(t('Connecting to recovery session...'));
         recoveryAbortRef.current?.abort();
         const abort = new AbortController();
         recoveryAbortRef.current = abort;
@@ -1266,7 +1276,7 @@ export default function WelcomeScreen() {
                 callsign: trimmedCallsign,
                 anchorUrl: finalAnchorUrl,
                 provider,
-                onProgress: (p) => setSsoProgressMessage(p.message),
+                onProgress: (p) => setSsoProgressMessage(welcomeLineWords(p.message)),
                 signal: abort.signal,
                 onSignedIn: () => { signedIn = true; },
                 // Onto a phone that holds another account: "Replace this phone's account?" first, as the
@@ -1308,7 +1318,8 @@ export default function WelcomeScreen() {
             if (e.reason === 'cancelled' || e.message === 'Sign-in was cancelled.') {
                 setError(null);
             } else {
-                setError(restoreRefusalText(e) || `Recovery failed: ${String(e)}`);
+                const refusal = restoreRefusalText(e);
+                setError(refusal ? welcomeLineWords(refusal) : t('Recovery failed: {reason}', { reason: String(e) }));
                 leaveReplace('ssoRecover');
             }
         } finally {
@@ -1326,7 +1337,7 @@ export default function WelcomeScreen() {
     async function handleSsoRecover(provider: SsoProvider) {
         setLoading(true);
         setError(null);
-        setSsoProgressMessage(`Signing in with ${SSO_PROVIDER_NAMES[provider]}...`);
+        setSsoProgressMessage(t('Signing in with {provider}...', { provider: SSO_PROVIDER_NAMES[provider] }));
         recoveryAbortRef.current?.abort();
         const abort = new AbortController();
         recoveryAbortRef.current = abort;
@@ -1334,7 +1345,7 @@ export default function WelcomeScreen() {
             const held = await startSsoRestore(provider, {
                 signal: abort.signal,
                 onSignedIn: async () => {
-                    setSsoProgressMessage("Asking BeanPool's key vault...");
+                    setSsoProgressMessage(t("Asking BeanPool's key vault..."));
                     // Same reason the enrolment sheet does it: a sign-in page may still be in front of the app.
                     await returnToApp();
                 },
@@ -1348,7 +1359,7 @@ export default function WelcomeScreen() {
                 setError(null);
                 setSsoAtCommunity(provider);
             } else {
-                setError(e?.message || `Recovery failed: ${String(e)}`);
+                setError(e?.message ? welcomeLineWords(e.message) : t('Recovery failed: {reason}', { reason: String(e) }));
             }
             // A restore whose answer was lost stays on the phone, and the next try comes back to the same hold.
             setSsoWaiting(await waitingSsoRestore().catch(() => null));
@@ -1367,16 +1378,16 @@ export default function WelcomeScreen() {
         if (!ssoReleased) return;
         const raw = ssoCommunity.trim();
         if (!raw) {
-            setError('Enter a community to open your account in. The global community works for everyone.');
+            setError(t('Enter a community to open your account in. The global community works for everyone.'));
             return;
         }
         const finalAnchorUrl = normalizeNodeUrl(raw);
         if (!looksLikeNodeAddress(finalAnchorUrl)) {
-            setError("That doesn't look right. Try your community name, like mullum, or its full address.");
+            setError(t("That doesn't look right. Try your community name, like mullum, or its full address."));
             return;
         }
         if (shouldBlockCleartextNodeUrl(finalAnchorUrl)) {
-            setError('That node address is insecure (http on a public host). Use https:// instead.');
+            setError(t('That node address is insecure (http on a public host). Use https:// instead.'));
             return;
         }
         setLoading(true);
@@ -1400,7 +1411,7 @@ export default function WelcomeScreen() {
             // its key unless even that failed): the app must not go on as it. The restore stays on the phone to try again.
             if (e instanceof ReplaceNotSaved) setIdentity(null);
             if (e?.reason !== 'cancelled') {
-                setError(e?.message || `Recovery failed: ${String(e)}`);
+                setError(e?.message ? welcomeLineWords(e.message) : t('Recovery failed: {reason}', { reason: String(e) }));
                 leaveReplace('ssoRecover');
             }
         } finally {
@@ -1494,7 +1505,7 @@ export default function WelcomeScreen() {
             // The phone's own account (a key this door didn't make): the join carries its recovery copy sealed to this
             // sign-in, so the phone's lock first, as Account Protection's connect asks it. A check that doesn't pass starts
             // nothing (PR #1205 review 4112404429).
-            if (!key.createdHere && !(await authenticateUser('Confirm authentication to link a sign-in to your account.'))) return;
+            if (!key.createdHere && !(await authenticateUser(t('Confirm authentication to link a sign-in to your account.')))) return;
             const result = await signInAtDoor(provider, GLOBAL_NODE_URL, key.identity);
             if (result.kind === 'answered') {
                 await afterDoorAnswer(result.answer, key, { ...key.identity, callsign: callsign.trim() || key.identity.callsign }, 'signIn');
@@ -1513,7 +1524,7 @@ export default function WelcomeScreen() {
         } catch (e) {
             // A cancel is not an error: the member thought better of it.
             const failure = e as { reason?: string; message?: string } | null;
-            setError(failure?.reason === 'cancelled' ? null : (failure?.message || 'Sign-in failed. Try again.'));
+            setError(failure?.reason === 'cancelled' ? null : (failure?.message ? welcomeLineWords(failure.message) : t('Sign-in failed. Try again.')));
         } finally {
             setLoading(false);
         }
@@ -1529,7 +1540,7 @@ export default function WelcomeScreen() {
         }
         const name = callsign.trim().slice(0, MAX_JOIN_NAME).trim();
         if (name.length < 2) {
-            setError('Please choose a name of at least 2 characters.');
+            setError(t('Please choose a name of at least 2 characters.'));
             return;
         }
         setLoading(true);
@@ -1545,7 +1556,7 @@ export default function WelcomeScreen() {
             if (check.kind === 'cancelled' || leave.signal.aborted) return;
             if (check.kind !== 'free') {
                 setCallsignSuggestions(check.kind === 'taken' ? check.suggestions : []);
-                setError(nameCheckMessage(name, check));
+                setError(nameCheckWords(name, check));
                 return;
             }
             setCallsignSuggestions([]);
@@ -1562,7 +1573,7 @@ export default function WelcomeScreen() {
             // The phone's account read as none a moment ago and is there now, or can't be read: never replaced (identity.ts).
             setError(err instanceof StoredKeyUnreadableError
                 ? t("BeanPool can't read the account on this phone. Restart and try again, or restore with your 12 words.")
-                : (err as Error | null)?.message || 'Your join could not be completed. Please sign in and try again.');
+                : (err as Error | null)?.message ? welcomeLineWords((err as Error).message) : t('Your join could not be completed. Please sign in and try again.'));
             setGlobalPhase(wordsDoor ? 'choose' : 'signIn');
         } finally {
             joinSendingRef.current = false;
@@ -1580,7 +1591,7 @@ export default function WelcomeScreen() {
     async function handleWordsJoin() {
         const name = callsign.trim().slice(0, MAX_JOIN_NAME).trim();
         if (name.length < 2) {
-            setError('Please choose a name of at least 2 characters.');
+            setError(t('Please choose a name of at least 2 characters.'));
             return;
         }
         setLoading(true);
@@ -1598,7 +1609,7 @@ export default function WelcomeScreen() {
             if (check.kind === 'cancelled' || leave.signal.aborted) return;
             if (check.kind !== 'free') {
                 setCallsignSuggestions(check.kind === 'taken' ? check.suggestions : []);
-                setError(nameCheckMessage(name, check));
+                setError(nameCheckWords(name, check));
                 return;
             }
             setCallsignSuggestions([]);
@@ -1621,7 +1632,7 @@ export default function WelcomeScreen() {
         } catch (err) {
             setError(err instanceof StoredKeyUnreadableError
                 ? t("BeanPool can't read the account on this phone. Restart and try again, or restore with your 12 words.")
-                : (err as Error | null)?.message || 'Your join could not be completed. Please try again.');
+                : (err as Error | null)?.message ? welcomeLineWords((err as Error).message) : t('Your join could not be completed. Please try again.'));
             setGlobalPhase('name');
         } finally {
             joinSendingRef.current = false;
@@ -1646,12 +1657,12 @@ export default function WelcomeScreen() {
             // This door takes no 12-words joins now: the sign-in buttons, with why. Nothing was written.
             setWordsDoor(false);
             doorWork.stop('words');
-            setError(doorMessage(answer));
+            setError(doorAnswerWords(answer));
             setGlobalPhase('signIn');
             return;
         }
         if (next === 'retry') {
-            setError(doorMessage(answer));
+            setError(doorAnswerWords(answer));
             // 12 words: the name step again, where Join tries again and "Choose another way" leads to the sign-in. A
             // sign-in is spent or stale: the member signs in again to retry.
             setGlobalPhase(way === 'words' ? 'name' : wordsDoor ? 'choose' : 'signIn');
@@ -1664,7 +1675,7 @@ export default function WelcomeScreen() {
         if (removed) setIdentity(null);
         setGlobalKey(null);
         setDoorSignIn(null);
-        setGlobalMessage(doorMessage(answer));
+        setGlobalMessage(doorAnswerWords(answer));
         // A shut door reads as it does on arrival, with Try again: it can open again, and a key kept here learns
         // that it joined by asking once it has.
         setGlobalPhase(next === 'restore' ? 'restore' : answer.kind === 'door_closed' ? 'unavailable' : 'closed');
@@ -1721,8 +1732,8 @@ export default function WelcomeScreen() {
         const account = outgoingIdentity;
         const turn = outgoingWordsTurnRef.current;
         try {
-            const outCallsign = account?.callsign?.trim() || 'your current account';
-            const words = await readWordsBehindLock(account, `Confirm your security to view ${outCallsign}'s recovery phrase.`);
+            const outCallsign = account?.callsign?.trim() || t('your current account');
+            const words = await readWordsBehindLock(account, t("Confirm your security to view {name}'s recovery phrase.", { name: outCallsign }));
             // A check that did not pass shows nothing. Nor does one that answers after the screen has moved on.
             if (!words || outgoingIdentityRef.current !== account) return;
             // Put away while the check was up (the member left the step or the screen): nothing is shown.
@@ -1752,8 +1763,8 @@ export default function WelcomeScreen() {
         replaceLockBusyRef.current = true;
         const account = outgoingIdentity;
         try {
-            const outCallsign = account?.callsign?.trim() || 'your current account';
-            const passed = await authenticateUser(`Confirm authentication to remove ${outCallsign} from this phone.`);
+            const outCallsign = account?.callsign?.trim() || t('your current account');
+            const passed = await authenticateUser(t('Confirm authentication to remove {name} from this phone.', { name: outCallsign }));
             // Not passed, or the screen moved on while it asked (Keep, another account, or the restore gone): nothing.
             if (!passed || outgoingIdentityRef.current !== account || !replaceAnswerRef.current) return;
             answerReplace(true);
@@ -1772,7 +1783,7 @@ export default function WelcomeScreen() {
         const account = pendingIdentity;
         const turn = pendingWordsTurnRef.current;
         try {
-            const words = await readWordsBehindLock(account, 'Confirm your security to view your recovery phrase.');
+            const words = await readWordsBehindLock(account, t('Confirm your security to view your recovery phrase.'));
             // A check that did not pass shows nothing. Nor does one that answers after the step has moved on.
             if (!words || pendingIdentityRef.current !== account) return;
             // Put away while the check was up (the member left the step or the screen): nothing is shown.
@@ -1841,11 +1852,11 @@ export default function WelcomeScreen() {
             return;
         }
         Alert.alert(
-            hasMnemonic(pendingIdentity) ? 'Have you saved your words?' : 'Go back?',
-            'If you go back now, you\'ll need to start over.',
+            hasMnemonic(pendingIdentity) ? t('Have you saved your words?') : t('Go back?'),
+            t("If you go back now, you'll need to start over."),
             [
-                { text: 'Stay', style: 'cancel' },
-                { text: 'Go Back', style: 'destructive', onPress: () => {
+                { text: t('Stay'), style: 'cancel' },
+                { text: t('Go Back'), style: 'destructive', onPress: () => {
                     setPendingIdentity(null);
                     setPendingAvatar(null);
                     setSeedConfirmed(false);
@@ -1933,7 +1944,7 @@ export default function WelcomeScreen() {
             // 3. Profile done — go to seed phrase (Step 3)
             setMode('seedBackup');
         } catch (err: any) {
-            setError(err.message || 'Failed to save profile.');
+            setError(err.message ? welcomeLineWords(err.message) : t('Failed to save profile.'));
         } finally {
             setLoading(false);
         }
@@ -1950,14 +1961,21 @@ export default function WelcomeScreen() {
                         {inviterName && (
                             <View style={styles.inviteVerifiedBox}>
                                 <Text style={styles.inviteVerifiedText}>
-                                    🎟️ Your invite from <Text style={{ fontWeight: 'bold' }}>{inviterName}</Text> checks out
-                                    {inviteCommunityName ? <Text> — welcome to <Text style={{ fontWeight: 'bold' }}>{inviteCommunityName}</Text>!</Text> : <Text>!</Text>}
+                                    <Sentence
+                                        text={inviteCommunityName
+                                            ? t('🎟️ Your invite from {inviter} checks out — welcome to {community}!')
+                                            : t('🎟️ Your invite from {inviter} checks out!')}
+                                        parts={{
+                                            inviter: <Text style={{ fontWeight: 'bold' }}>{inviterName}</Text>,
+                                            community: <Text style={{ fontWeight: 'bold' }}>{inviteCommunityName}</Text>,
+                                        }}
+                                    />
                                 </Text>
                             </View>
                         )}
-                        <Text style={styles.title}>📸 Choose your look</Text>
+                        <Text style={styles.title}>{t('📸 Choose your look')}</Text>
                         <Text style={styles.subtitle}>
-                            Add a photo, or pick a fun avatar — whatever feels like you.
+                            {t('Add a photo, or pick a fun avatar — whatever feels like you.')}
                         </Text>
 
                         {/* Preview circle */}
@@ -1966,7 +1984,7 @@ export default function WelcomeScreen() {
                                 <Image
                                     source={pendingAvatar.startsWith('bundled://') ? resolveBundledAvatar(pendingAvatar)! : { uri: pendingAvatar }}
                                     style={profileStyles.previewImage}
-                                    accessibilityLabel="Your selected profile picture"
+                                    accessibilityLabel={t('Your selected profile picture')}
                                 />
                             ) : (
                                 <View style={profileStyles.previewPlaceholder}>
@@ -1988,14 +2006,14 @@ export default function WelcomeScreen() {
                             accessibilityRole="button"
                         >
                             <Text style={styles.secondaryBtnText}>
-                                {pendingAvatar ? 'Change Photo or Avatar' : 'Choose Photo or Avatar'}
+                                {pendingAvatar ? t('Change Photo or Avatar') : t('Choose Photo or Avatar')}
                             </Text>
                         </Pressable>
 
                         {loading && (
                             <View style={{ alignItems: 'center', marginVertical: 12 }}>
                                 <ActivityIndicator color={accentInk} />
-                                <Text style={{ color: colors.text.secondary, fontSize: 12, marginTop: 4 }}>Processing image...</Text>
+                                <Text style={{ color: colors.text.secondary, fontSize: 12, marginTop: 4 }}>{t('Processing image...')}</Text>
                             </View>
                         )}
 
@@ -2014,7 +2032,7 @@ export default function WelcomeScreen() {
                             {loading ? (
                                 <ActivityIndicator color={colors.text.inverse} />
                             ) : (
-                                <Text style={styles.primaryBtnText}>Next →</Text>
+                                <Text style={styles.primaryBtnText}>{t('Next →')}</Text>
                             )}
                         </Pressable>
 
@@ -2029,9 +2047,9 @@ export default function WelcomeScreen() {
                             }}
                             disabled={loading}
                             accessibilityRole="button"
-                            accessibilityLabel="Back"
+                            accessibilityLabel={t('Back')}
                         >
-                            <Text style={styles.backBtnText}>← Back</Text>
+                            <Text style={styles.backBtnText}>{t('← Back')}</Text>
                         </Pressable>
                         )}
                     </View>
@@ -2070,23 +2088,23 @@ export default function WelcomeScreen() {
                         />
                         )}
                         {linked && (
-                            <Text style={[styles.fieldHint, { marginBottom: 12 }]} accessibilityLiveRegion="polite">✅ {linkedNotice(linked)}</Text>
+                            <Text style={[styles.fieldHint, { marginBottom: 12 }]} accessibilityLiveRegion="polite">✅ {linkedNoticeWords(linked)}</Text>
                         )}
                         {/* The sign-in the member joined with used to protect another account: said here too, as the
                             protection sheet says it (PR #1336 review finding 9). */}
                         {enrolment?.replaced && enrolment.enrolledSso?.[0] && (
                             <Text style={[styles.fieldHint, { marginBottom: 12 }]} accessibilityLiveRegion="polite">
-                                {signInReplacedNote(SSO_PROVIDER_NAMES[enrolment.enrolledSso[0] as SsoProvider] ?? enrolment.enrolledSso[0])}
+                                {signInReplacedWords(SSO_PROVIDER_NAMES[enrolment.enrolledSso[0] as SsoProvider] ?? enrolment.enrolledSso[0])}
                             </Text>
                         )}
 
                         {Platform.OS === 'web' && (
                             <View style={{ backgroundColor: colors.feedback.info.bg, borderColor: colors.feedback.info.border, borderWidth: 1, borderRadius: 12, padding: 16, marginBottom: 16 }}>
                                 <Text style={{ color: colors.text.body, fontSize: 14, lineHeight: 20 }}>
-                                    The web version of BeanPool runs inside your hub's server, which means it can't safely manage recovery keys. Your 12 words are the only way back on the web.
+                                    {t("The web version of BeanPool runs inside your hub's server, which means it can't safely manage recovery keys. Your 12 words are the only way back on the web.")}
                                 </Text>
                                 <Text style={{ color: colors.text.secondary, fontSize: 13, lineHeight: 18, marginTop: 8 }}>
-                                    For sign-in account recovery (Apple, Google), use the BeanPool app on your phone.
+                                    {t('For sign-in account recovery (Apple, Google), use the BeanPool app on your phone.')}
                                 </Text>
                             </View>
                         )}
@@ -2125,14 +2143,14 @@ export default function WelcomeScreen() {
                                 style={[styles.secondaryBtn, { marginBottom: 4 }]}
                                 onPress={pendingWordsAreNew ? () => setRevealWords(true) : handleShowPendingWords}
                                 accessibilityRole="button"
-                                accessibilityHint="Shows the twelve words that can restore your account"
+                                accessibilityHint={t('Shows the twelve words that can restore your account')}
                             >
-                                <Text style={styles.secondaryBtnText}>{protection.showWords ? '🔑 Show my 12 words' : 'Rather write down 12 words?'}</Text>
+                                <Text style={styles.secondaryBtnText}>{protection.showWords ? t('🔑 Show my 12 words') : t('Rather write down 12 words?')}</Text>
                             </Pressable>
                         ) : (
                         <>
                         <Text style={{ color: colors.text.secondary, fontSize: 13, marginBottom: 16, lineHeight: 18 }}>
-                            💡 Write them down on paper and keep it somewhere safe.
+                            {t('💡 Write them down on paper and keep it somewhere safe.')}
                         </Text>
                         {/*
                           Says out loud that this screen is not the only chance. Without it,
@@ -2141,8 +2159,7 @@ export default function WelcomeScreen() {
                           are the ones with no pen to hand, not the ones who do not care.
                         */}
                         <Text style={{ color: colors.text.secondary, fontSize: 13, marginBottom: 16, lineHeight: 18 }}>
-                            No pen handy? Carry on — you can come back to these any time under
-                            Settings → Recovery Phrase.
+                            {t('No pen handy? Carry on — you can come back to these any time under Settings → Recovery Phrase.')}
                         </Text>
                         <View style={styles.seedGrid}>
                             {/*
@@ -2163,7 +2180,8 @@ export default function WelcomeScreen() {
                                     key={i}
                                     style={styles.seedCell}
                                     accessible={true}
-                                    accessibilityLabel={`Word ${i + 1}: ${word}`}
+                                    // The word is placed as written, never looked up: the 12 words are English in every language.
+                                    accessibilityLabel={t('Word {n}: {word}', { n: i + 1, word })}
                                 >
                                     <Text style={styles.seedIndex}>{i + 1}.</Text>
                                     <Text style={styles.seedWord} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{word}</Text>
@@ -2183,7 +2201,7 @@ export default function WelcomeScreen() {
                             accessibilityRole="button"
                         >
                             <Text style={styles.secondaryBtnText}>
-                                {seedCopied ? '✅ Copied!' : '📋 Copy All Words'}
+                                {seedCopied ? t('✅ Copied!') : t('📋 Copy All Words')}
                             </Text>
                         </Pressable>
                         <CopyClearsNote style={[styles.fieldHint, { marginTop: 0, marginBottom: 12 }]} />
@@ -2212,10 +2230,12 @@ export default function WelcomeScreen() {
                             // these words, check box, unchecked" — the tick state read out
                             // twice, once as a described emoji. The role and state already
                             // carry it, so the label is just the sentence.
-                            accessibilityLabel="I've saved these words"
+                            accessibilityLabel={t("I've saved these words")}
                         >
-                            <Text style={styles.checkboxText}>
-                                {seedConfirmed ? '✅ ' : '⬜ '} I've saved these words
+                            {/* Shrinks to the box and wraps, as the consent tickbox does: alone in a row, it ran past the box
+                                at 320 dp with 1.3x text, and longer languages more. */}
+                            <Text style={[styles.checkboxText, { flexShrink: 1 }]}>
+                                {seedConfirmed ? '✅ ' : '⬜ '} <Text>{t("I've saved these words")}</Text>
                             </Text>
                         </Pressable>
                         </>
@@ -2259,7 +2279,7 @@ export default function WelcomeScreen() {
                             }}
                             accessibilityRole="button"
                         >
-                            <Text style={styles.primaryBtnText}>Next →</Text>
+                            <Text style={styles.primaryBtnText}>{t('Next →')}</Text>
                         </Pressable>
 
                         <Pressable
@@ -2267,9 +2287,9 @@ export default function WelcomeScreen() {
                             onPress={handleSeedBackPress}
                             disabled={loading}
                             accessibilityRole="button"
-                            accessibilityLabel="Back"
+                            accessibilityLabel={t('Back')}
                         >
-                            <Text style={styles.backBtnText}>← Back</Text>
+                            <Text style={styles.backBtnText}>{t('← Back')}</Text>
                         </Pressable>
                     </View>
                 </ScrollView>
@@ -2285,9 +2305,9 @@ export default function WelcomeScreen() {
                 <ScrollView key={mode} contentContainerStyle={styles.scroll}>
                     <OnboardingStepper step={4} />
                     <View style={styles.card}>
-                        <Text style={styles.title}>🫘 Welcome to BeanPool</Text>
+                        <Text style={styles.title}>{t('🫘 Welcome to BeanPool')}</Text>
                         <Text style={styles.subtitle}>
-                            {joinBeansOn ? "Let's look at how this community economy works." : "Here's how BeanPool works."}
+                            {joinBeansOn ? t("Let's look at how this community economy works.") : t("Here's how BeanPool works.")}
                         </Text>
 
                         {/* Cards 1-3 are Beans. A community with Beans off (the global one) gets one card that says so. */}
@@ -2295,32 +2315,38 @@ export default function WelcomeScreen() {
                         <>
                         {/* Card 1: Energy Exchange */}
                         <View style={guideStyles.card}>
-                            <Text style={guideStyles.cardTitle}>⚡ Energy Exchange Marketplace</Text>
+                            <Text style={guideStyles.cardTitle}>{t('⚡ Energy Exchange Marketplace')}</Text>
                             <Text style={guideStyles.cardText}>
-                                BeanPool runs on cooperation, not accumulation. The goal is to keep energy flowing.
+                                {t('BeanPool runs on cooperation, not accumulation. The goal is to keep energy flowing.')}
                             </Text>
                             <View style={guideStyles.highlightBox}>
                                 <Text style={guideStyles.highlightText}>
-                                    🟢 <Text style={{ fontWeight: 'bold' }}>The best place to be is zero (0 Beans).</Text> This means you have given as much value to your community as you have received from it.
+                                    <Sentence
+                                        text={t('🟢 {zero} This means you have given as much value to your community as you have received from it.')}
+                                        parts={{ zero: <Text style={{ fontWeight: 'bold' }}>{t('The best place to be is zero (0 Beans).')}</Text> }}
+                                    />
                                 </Text>
                             </View>
                             <View style={[guideStyles.highlightBox, { backgroundColor: 'rgba(245, 158, 11, 0.12)', borderColor: 'rgba(245, 158, 11, 0.35)' }]}>
                                 <Text style={[guideStyles.highlightText, { color: dark ? palette.amber400 : (palette.amber700 || '#b45309') }]}>
-                                    🫘 <Text style={{ fontWeight: 'bold' }}>Contributions First.</Text> In a community with Beans, to keep the credit pool healthy, list at least one Offer of what you can give back before you can post Needs or accept Offers.
+                                    <Sentence
+                                        text={t('🫘 {first} In a community with Beans, to keep the credit pool healthy, list at least one Offer of what you can give back before you can post Needs or accept Offers.')}
+                                        parts={{ first: <Text style={{ fontWeight: 'bold' }}>{t('Contributions First.')}</Text> }}
+                                    />
                                 </Text>
                             </View>
                         </View>
 
                         {/* Card 2: The Ledger Rules */}
                         <View style={guideStyles.card}>
-                            <Text style={guideStyles.cardTitle}>🪙 The Mutual Credit Ledger</Text>
+                            <Text style={guideStyles.cardTitle}>{t('🪙 The Mutual Credit Ledger')}</Text>
                             
                             <View style={guideStyles.bulletRow}>
                                 <Text style={guideStyles.bulletEmoji}>🤝</Text>
                                 <View style={guideStyles.bulletContent}>
-                                    <Text style={guideStyles.bulletTitle}>Trust-Backed Credit</Text>
+                                    <Text style={guideStyles.bulletTitle}>{t('Trust-Backed Credit')}</Text>
                                     <Text style={guideStyles.bulletText}>
-                                        Everyone starts with a 0 Bean limit. Complete your first real marketplace trade and your community credit line opens — then it deepens steadily with the value you trade and the people you trade with, up to -2000 Beans. No interest, no bank fees.
+                                        {t('Everyone starts with a 0 Bean limit. Complete your first real marketplace trade and your community credit line opens — then it deepens steadily with the value you trade and the people you trade with, up to -2000 Beans. No interest, no bank fees.')}
                                     </Text>
                                 </View>
                             </View>
@@ -2328,9 +2354,9 @@ export default function WelcomeScreen() {
                             <View style={guideStyles.bulletRow}>
                                 <Text style={guideStyles.bulletEmoji}>🌾</Text>
                                 <View style={guideStyles.bulletContent}>
-                                    <Text style={guideStyles.bulletTitle}>Community Commons Pool</Text>
+                                    <Text style={guideStyles.bulletTitle}>{t('Community Commons Pool')}</Text>
                                     <Text style={guideStyles.bulletText}>
-                                        Positive balances above 200 Beans contribute 1.0% to 2.5% monthly across progressive brackets (the first 200 is fee-free). This prevents hoarding and circulates surplus to fund the Community Commons.
+                                        {t('Positive balances above 200 Beans contribute 1.0% to 2.5% monthly across progressive brackets (the first 200 is fee-free). This prevents hoarding and circulates surplus to fund the Community Commons.')}
                                     </Text>
                                 </View>
                             </View>
@@ -2338,9 +2364,9 @@ export default function WelcomeScreen() {
                             <View style={guideStyles.bulletRow}>
                                 <Text style={guideStyles.bulletEmoji}>⏱️</Text>
                                 <View style={guideStyles.bulletContent}>
-                                    <Text style={guideStyles.bulletTitle}>Reference Rate</Text>
+                                    <Text style={guideStyles.bulletTitle}>{t('Reference Rate')}</Text>
                                     <Text style={guideStyles.bulletText}>
-                                        40 Beans represents roughly 1 hour of community service or time, helping you easily value what you offer or need.
+                                        {t('40 Beans represents roughly 1 hour of community service or time, helping you easily value what you offer or need.')}
                                     </Text>
                                 </View>
                             </View>
@@ -2348,17 +2374,17 @@ export default function WelcomeScreen() {
 
                         {/* Card 3: Safe Handshake Held in Trust */}
                         <View style={guideStyles.card}>
-                            <Text style={guideStyles.cardTitle}>🔒 Held in Trust</Text>
+                            <Text style={guideStyles.cardTitle}>{t('🔒 Held in Trust')}</Text>
                             <Text style={guideStyles.cardText}>
-                                To ensure fairness, when you accept an offer or request a job, your credits are safely held in a temporary Trust Wallet. They are only released to the provider once you confirm delivery.
+                                {t('To ensure fairness, when you accept an offer or request a job, your credits are safely held in a temporary Trust Wallet. They are only released to the provider once you confirm delivery.')}
                             </Text>
                         </View>
                         </>
                         ) : (
                         <View style={guideStyles.card}>
-                            <Text style={guideStyles.cardTitle}>🌍 A place to meet</Text>
+                            <Text style={guideStyles.cardTitle}>{t('🌍 A place to meet')}</Text>
                             <Text style={guideStyles.cardText}>
-                                The global community is for meeting people and finding a community near you. There are no Beans here: credit, the Commons and trading in Beans live in local communities, which you join with an invite from a member.
+                                {t('The global community is for meeting people and finding a community near you. There are no Beans here: credit, the Commons and trading in Beans live in local communities, which you join with an invite from a member.')}
                             </Text>
                         </View>
                         )}
@@ -2376,7 +2402,7 @@ export default function WelcomeScreen() {
                           Phase B, when the keepers are real.
                         */}
                         <View style={guideStyles.card}>
-                            <Text style={guideStyles.cardTitle}>🔑 Getting Back In</Text>
+                            <Text style={guideStyles.cardTitle}>{t('🔑 Getting Back In')}</Text>
                             {/* Spaced locally rather than by changing guideStyles.cardText,
                                 which has no marginBottom because the other three cards end on
                                 it. This is the only card where it is followed by bullets. */}
@@ -2386,25 +2412,48 @@ export default function WelcomeScreen() {
                                         {t('Your 12 words are your primary key to your account across devices. Nobody can reset them: not us, not this community.')}
                                     </Text>
                                     <Text style={guideStyles.bulletItem}>
-                                        📝 Find them any time under <Text style={{ fontWeight: 'bold' }}>Settings → Recovery Phrase</Text>.
+                                        <Sentence
+                                            text={t('📝 Find them any time under {where}.')}
+                                            parts={{ where: <Text style={{ fontWeight: 'bold' }}>{t('Settings → Recovery Phrase')}</Text> }}
+                                        />
                                     </Text>
                                 </>
                             ) : (
-                                <Text style={[guideStyles.cardText, { marginBottom: 8 }]}>{NO_WORDS_WAY_BACK}</Text>
+                                <Text style={[guideStyles.cardText, { marginBottom: 8 }]}>{welcomeLineWords(NO_WORDS_WAY_BACK)}</Text>
                             )}
                             <Text style={guideStyles.bulletItem}>
-                                🤝 On the phone app you can also link a sign-in account (Apple, Google, etc.) under Settings so your community node can help you back onto a new device.
+                                {t('🤝 On the phone app you can also link a sign-in account (Apple, Google, etc.) under Settings so your community node can help you back onto a new device.')}
                             </Text>
                         </View>
 
                         {/* Card 5: Where to Start */}
                         <View style={guideStyles.card}>
-                            <Text style={guideStyles.cardTitle}>🚀 Where to Start?</Text>
-                            <Text style={guideStyles.bulletItem}>📍 Explore the <Text style={{ fontWeight: 'bold' }}>Map</Text> to find offers (green) and needs (orange) near you.</Text>
-                            <Text style={guideStyles.bulletItem}>💬 Tap <Text style={{ fontWeight: 'bold' }}>Message</Text> on any post to chat securely (E2E encrypted) with neighbors.</Text>
-                            <Text style={guideStyles.bulletItem}>➕ Click <Text style={{ fontWeight: 'bold' }}>Post</Text> to list what you need or what you can offer to the community.</Text>
+                            <Text style={guideStyles.cardTitle}>{t('🚀 Where to Start?')}</Text>
+                            <Text style={guideStyles.bulletItem}>
+                                <Sentence
+                                    text={t('📍 Explore the {map} to find offers (green) and needs (orange) near you.')}
+                                    parts={{ map: <Text style={{ fontWeight: 'bold' }}>{t('Map', undefined, 'tab')}</Text> }}
+                                />
+                            </Text>
+                            <Text style={guideStyles.bulletItem}>
+                                <Sentence
+                                    text={t('💬 Tap {message} on any post to chat securely (E2E encrypted) with neighbors.')}
+                                    parts={{ message: <Text style={{ fontWeight: 'bold' }}>{t('Message', undefined, 'button: write to')}</Text> }}
+                                />
+                            </Text>
+                            <Text style={guideStyles.bulletItem}>
+                                <Sentence
+                                    text={t('➕ Click {post} to list what you need or what you can offer to the community.')}
+                                    parts={{ post: <Text style={{ fontWeight: 'bold' }}>{t('Post', undefined, 'button: publish')}</Text> }}
+                                />
+                            </Text>
                             {joinBeansOn && (
-                                <Text style={guideStyles.bulletItem}>💳 Use the <Text style={{ fontWeight: 'bold' }}>Ledger</Text> tab to send credits to neighbors instantly.</Text>
+                                <Text style={guideStyles.bulletItem}>
+                                    <Sentence
+                                        text={t('💳 Use the {ledger} tab to send credits to neighbors instantly.')}
+                                        parts={{ ledger: <Text style={{ fontWeight: 'bold' }}>{t('Ledger', undefined, 'tab')}</Text> }}
+                                    />
+                                </Text>
                             )}
                         </View>
 
@@ -2419,7 +2468,7 @@ export default function WelcomeScreen() {
                             {loading ? (
                                 <ActivityIndicator color={colors.text.inverse} />
                             ) : (
-                                <Text style={styles.primaryBtnText}>Let's Begin! 🚀</Text>
+                                <Text style={styles.primaryBtnText}>{t("Let's Begin! 🚀")}</Text>
                             )}
                         </Pressable>
 
@@ -2433,7 +2482,7 @@ export default function WelcomeScreen() {
                             disabled={loading}
                             accessibilityRole="button"
                         >
-                            <Text style={styles.backBtnText}>← Back to Backup</Text>
+                            <Text style={styles.backBtnText}>{t('← Back to Backup')}</Text>
                         </Pressable>
                     </View>
                 </ScrollView>
@@ -2563,7 +2612,8 @@ export default function WelcomeScreen() {
                         {error && (
                             <View style={{ marginBottom: 12 }}>
                                 <Text style={styles.error}>{error}</Text>
-                                {(error.includes('already been used') || error.includes('already used')) && (
+                                {/* A spent invite: said by the node in English, or by this screen in the member's language. */}
+                                {(error.includes('already been used') || error.includes('already used') || error === inviteProblemMessage('used')) && (
                                     <Pressable
                                         style={{ marginTop: 8, paddingVertical: 10, paddingHorizontal: 14, backgroundColor: dark ? colors.feedback.info.bg : (palette.blue50 || '#eff6ff'), borderRadius: 8, borderWidth: 1, borderColor: dark ? colors.feedback.info.border : (palette.blue200 || '#bfdbfe'), alignItems: 'center' }}
                                         onPress={() => leaveUnlessNextIsOut(nextOutRef, () => {
@@ -2640,8 +2690,8 @@ export default function WelcomeScreen() {
         const wordsWay = doorWay === 'words';
         const wordsState = doorWork.state('words');
         const signInNote = signInCopiesAt() === 'vault'
-            ? 'BeanPool keeps a locked copy of your account for that sign-in, and BeanPool can open that copy. BeanPool never sees your password and never posts anything for you.'
-            : 'The global community keeps a locked copy of your account for that sign-in, and the people who run it can open that copy. BeanPool never sees your password and never posts anything for you.';
+            ? t('BeanPool keeps a locked copy of your account for that sign-in, and BeanPool can open that copy. BeanPool never sees your password and never posts anything for you.')
+            : t('The global community keeps a locked copy of your account for that sign-in, and the people who run it can open that copy. BeanPool never sees your password and never posts anything for you.');
         return (
             <SafeAreaView style={styles.container}>
                 <StatusBar style={dark ? 'light' : 'dark'} />
@@ -2649,13 +2699,13 @@ export default function WelcomeScreen() {
                     <ScrollView key={mode} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
                         <OnboardingStepper step={1} />
                         <View style={styles.card}>
-                            <Text style={styles.title} accessibilityRole="header">🌍 Explore BeanPool worldwide</Text>
+                            <Text style={styles.title} accessibilityRole="header">{t('🌍 Explore BeanPool worldwide')}</Text>
 
                             {globalPhase === 'checking' && (
                                 <View style={{ alignItems: 'center', marginVertical: 16 }} accessibilityLiveRegion="polite">
                                     <ActivityIndicator size="large" color={accentInk} />
                                     <Text style={{ marginTop: 12, color: colors.text.secondary, fontSize: 14, textAlign: 'center' }}>
-                                        Connecting to the global community…
+                                        {t('Connecting to the global community…')}
                                     </Text>
                                 </View>
                             )}
@@ -2665,7 +2715,7 @@ export default function WelcomeScreen() {
                                     <Text style={styles.subtitle} accessibilityLiveRegion="polite">{globalMessage}</Text>
                                     {globalPhase === 'unavailable' && (
                                         <Pressable style={styles.primaryBtn} onPress={() => { setError(null); setGlobalPhase('checking'); }} accessibilityRole="button">
-                                            <Text style={styles.primaryBtnText}>Try again</Text>
+                                            <Text style={styles.primaryBtnText}>{t('Try again')}</Text>
                                         </Pressable>
                                     )}
                                     <Pressable
@@ -2673,7 +2723,7 @@ export default function WelcomeScreen() {
                                         onPress={() => { setError(null); setMode('create'); }}
                                         accessibilityRole="button"
                                     >
-                                        <Text style={styles.secondaryBtnText}>🎟️ Join with an invite</Text>
+                                        <Text style={styles.secondaryBtnText}>{t('🎟️ Join with an invite')}</Text>
                                     </Pressable>
                                 </>
                             )}
@@ -2686,14 +2736,14 @@ export default function WelcomeScreen() {
                                         onPress={() => { setRecoveryAnchorUrl(GLOBAL_NODE_URL); setError(null); setMode('member'); }}
                                         accessibilityRole="button"
                                     >
-                                        <Text style={styles.primaryBtnText}>🔑 Restore my account</Text>
+                                        <Text style={styles.primaryBtnText}>{t('🔑 Restore my account')}</Text>
                                     </Pressable>
                                     <Pressable
                                         style={[styles.secondaryBtn, { marginTop: 12 }]}
                                         onPress={() => { setError(null); setGlobalPhase('signIn'); }}
                                         accessibilityRole="button"
                                     >
-                                        <Text style={styles.secondaryBtnText}>Use a different sign-in</Text>
+                                        <Text style={styles.secondaryBtnText}>{t('Use a different sign-in')}</Text>
                                     </Pressable>
                                 </>
                             )}
@@ -2702,7 +2752,7 @@ export default function WelcomeScreen() {
                             {globalPhase === 'choose' && (
                                 <>
                                     <Text style={styles.subtitle}>
-                                        Meet people from everywhere and find a community near you. No invite needed.
+                                        {t('Meet people from everywhere and find a community near you. No invite needed.')}
                                     </Text>
                                     {loading && (
                                         <View style={{ alignItems: 'center', marginVertical: 16 }} accessibilityLiveRegion="polite">
@@ -2715,7 +2765,7 @@ export default function WelcomeScreen() {
                                         onSignIn={(provider) => { setDoorWay('sign-in'); handleGlobalSignIn(provider); }}
                                         disabled={loading}
                                         busy={doorWork.busy}
-                                        wordsProblem={wordsState?.phase === 'failed' ? DOOR_WORK_MESSAGES.solverUnavailable : null}
+                                        wordsProblem={wordsState?.phase === 'failed' ? welcomeLineWords(DOOR_WORK_MESSAGES.solverUnavailable) : null}
                                         signInNote={signInNote}
                                         colors={colors}
                                     />
@@ -2725,13 +2775,10 @@ export default function WelcomeScreen() {
                             {globalPhase === 'signIn' && (
                                 <>
                                     <Text style={styles.subtitle}>
-                                        Meet people from everywhere and find a community near you. No invite needed.
+                                        {t('Meet people from everywhere and find a community near you. No invite needed.')}
                                     </Text>
                                     <Text style={[styles.subtitle, { marginTop: -12 }]}>
-                                        To keep out fake accounts, sign in once with an account you already have. That sign-in
-                                        also becomes a way back into BeanPool if you lose this phone: BeanPool keeps a locked copy
-                                        of your account for it, and BeanPool can open that copy. BeanPool never sees your
-                                        password and never posts anything for you.
+                                        {t('To keep out fake accounts, sign in once with an account you already have. That sign-in also becomes a way back into BeanPool if you lose this phone: BeanPool keeps a locked copy of your account for it, and BeanPool can open that copy. BeanPool never sees your password and never posts anything for you.')}
                                     </Text>
 
                                     {loading && (
@@ -2745,13 +2792,13 @@ export default function WelcomeScreen() {
                                     {!loading && (
                                         <>
                                             {Platform.OS === 'ios' && (
-                                                <AppleButton title="Continue with Apple" onPress={() => handleGlobalSignIn('apple')} style={{ marginBottom: 10, width: '100%' }} />
+                                                <AppleButton title={t('Continue with Apple')} onPress={() => handleGlobalSignIn('apple')} style={{ marginBottom: 10, width: '100%' }} />
                                             )}
-                                            <GoogleButton title="Continue with Google" onPress={() => handleGlobalSignIn('google')} style={{ marginBottom: 10, width: '100%' }} />
-                                            <FacebookButton title="Continue with Facebook" onPress={() => handleGlobalSignIn('facebook')} style={{ marginBottom: 10, width: '100%' }} />
+                                            <GoogleButton title={t('Continue with Google')} onPress={() => handleGlobalSignIn('google')} style={{ marginBottom: 10, width: '100%' }} />
+                                            <FacebookButton title={t('Continue with Facebook')} onPress={() => handleGlobalSignIn('facebook')} style={{ marginBottom: 10, width: '100%' }} />
                                             {wordsDoor && (
                                                 <Pressable style={styles.backBtn} onPress={() => { setError(null); setGlobalPhase('choose'); }} accessibilityRole="button">
-                                                    <Text style={styles.backBtnText}>Choose another way</Text>
+                                                    <Text style={styles.backBtnText}>{t('Choose another way')}</Text>
                                                 </Pressable>
                                             )}
                                         </>
@@ -2762,14 +2809,14 @@ export default function WelcomeScreen() {
                             {globalPhase === 'name' && (
                                 <>
                                     {wordsWay ? (
-                                        <Text style={[styles.subtitle, { marginBottom: 8 }]}>🔑 An account with 12 secret words. They come next, after your photo.</Text>
+                                        <Text style={[styles.subtitle, { marginBottom: 8 }]}>{t('🔑 An account with 12 secret words. They come next, after your photo.')}</Text>
                                     ) : signedInWith && (
-                                        <Text style={[styles.subtitle, { marginBottom: 8 }]}>✅ Signed in with {signedInWith}</Text>
+                                        <Text style={[styles.subtitle, { marginBottom: 8 }]}>{t('✅ Signed in with {provider}', { provider: signedInWith })}</Text>
                                     )}
-                                    <Text style={styles.callsignLabel}>What should we call you?</Text>
+                                    <Text style={styles.callsignLabel}>{t('What should we call you?')}</Text>
                                     <TextInput
                                         style={styles.callsignInput}
-                                        placeholder="Your name or nickname"
+                                        placeholder={t('Your name or nickname')}
                                         placeholderTextColor={colors.text.muted}
                                         value={callsign}
                                         onChangeText={(text) => { setCallsign(text); if (callsignSuggestions.length) setCallsignSuggestions([]); }}
@@ -2777,10 +2824,10 @@ export default function WelcomeScreen() {
                                         autoFocus={true}
                                         autoCapitalize="words"
                                         editable={!loading}
-                                        accessibilityLabel="Your name or nickname"
+                                        accessibilityLabel={t('Your name or nickname')}
                                     />
                                     <Text style={styles.callsignHelper}>
-                                        This is how people see you, e.g. Sarah. You can change it later.
+                                        {t('This is how people see you, e.g. Sarah. You can change it later.')}
                                     </Text>
 
                                     {callsignSuggestions.length > 0 && (
@@ -2791,7 +2838,7 @@ export default function WelcomeScreen() {
                                                     style={{ backgroundColor: colors.surface.subtle, borderWidth: 1, borderColor: colors.border.strong, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8, marginRight: 8, marginBottom: 8 }}
                                                     onPress={() => { setCallsign(s); setCallsignSuggestions([]); setError(null); }}
                                                     accessibilityRole="button"
-                                                    accessibilityLabel={`Use the name ${s}`}
+                                                    accessibilityLabel={t('Use the name {name}', { name: s })}
                                                 >
                                                     <Text style={{ color: colors.text.body, fontSize: 14, fontWeight: '600' }}>{s}</Text>
                                                 </Pressable>
@@ -2803,7 +2850,7 @@ export default function WelcomeScreen() {
 
                                     {/* From level 3: the phone's own estimate, with the sign-in door one tap away. */}
                                     {wordsWay && doorWork.busy && (
-                                        <Text style={[styles.fieldHint, { marginTop: 12 }]} accessibilityLiveRegion="polite">{doorWork.busy}</Text>
+                                        <Text style={[styles.fieldHint, { marginTop: 12 }]} accessibilityLiveRegion="polite">{welcomeLineWords(doorWork.busy)}</Text>
                                     )}
                                     {/* Join tapped before the work was done: it finishes here, and Back still works. */}
                                     {wordsWay && workWaiting && <DoorWorkProgress state={wordsState} colors={colors} />}
@@ -2813,10 +2860,10 @@ export default function WelcomeScreen() {
                                         onPress={wordsWay ? handleWordsJoin : handleGlobalJoin}
                                         disabled={loading}
                                         accessibilityRole="button"
-                                        accessibilityLabel={loading ? "Joining global community..." : "Join"}
+                                        accessibilityLabel={loading ? t('Joining global community...') : t('Join')}
                                         accessibilityState={{ disabled: loading, busy: loading }}
                                     >
-                                        {loading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>Join →</Text>}
+                                        {loading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>{t('Join →')}</Text>}
                                     </Pressable>
                                     <Pressable
                                         style={styles.backBtn}
@@ -2824,7 +2871,7 @@ export default function WelcomeScreen() {
                                         disabled={!doorWays.otherSignIn}
                                         accessibilityRole="button"
                                     >
-                                        <Text style={styles.backBtnText}>{wordsWay || wordsDoor ? 'Choose another way' : 'Use a different sign-in'}</Text>
+                                        <Text style={styles.backBtnText}>{wordsWay || wordsDoor ? t('Choose another way') : t('Use a different sign-in')}</Text>
                                     </Pressable>
                                 </>
                             )}
@@ -2833,22 +2880,25 @@ export default function WelcomeScreen() {
                                 <View style={{ alignItems: 'center', marginVertical: 16 }} accessibilityLiveRegion="polite">
                                     <ActivityIndicator size="large" color={accentInk} />
                                     <Text style={{ marginTop: 12, color: colors.text.secondary, fontSize: 14, textAlign: 'center' }}>
-                                        {doorNotice ?? 'Joining the global community…'}
+                                        {doorNotice ? welcomeLineWords(doorNotice) : t('Joining the global community…')}
                                     </Text>
                                 </View>
                             )}
 
                             {globalPhase !== 'joining' && (
-                                <Pressable style={styles.backBtn} onPress={leaveGlobalDoor} disabled={!doorWays.back} accessibilityRole="button" accessibilityLabel="Back to Home">
-                                    <Text style={styles.backBtnText}>← Back to Home</Text>
+                                <Pressable style={styles.backBtn} onPress={leaveGlobalDoor} disabled={!doorWays.back} accessibilityRole="button" accessibilityLabel={t('Back to Home')}>
+                                    <Text style={styles.backBtnText}>{t('← Back to Home')}</Text>
                                 </Pressable>
                             )}
 
                             <Text style={styles.tosText}>
-                                By joining you agree to our{' '}
-                                <Text style={styles.tosLink} onPress={() => openLink('https://beanpool.org/terms')}>Terms of Service & EULA</Text>
-                                {' '}and{' '}
-                                <Text style={styles.tosLink} onPress={() => openLink('https://beanpool.org/privacy')}>Privacy Policy</Text>.
+                                <Sentence
+                                    text={t('By joining you agree to our {terms} and {privacy}.')}
+                                    parts={{
+                                        terms: <Text style={styles.tosLink} onPress={() => openLink('https://beanpool.org/terms')}>{t('Terms of Service & EULA')}</Text>,
+                                        privacy: <Text style={styles.tosLink} onPress={() => openLink('https://beanpool.org/privacy')}>{t('Privacy Policy')}</Text>,
+                                    }}
+                                />
                             </Text>
                         </View>
                     </ScrollView>
@@ -2864,9 +2914,9 @@ export default function WelcomeScreen() {
                 <StatusBar style={dark ? 'light' : 'dark'} />
                 <ScrollView key={mode} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
                     <View style={styles.card}>
-                        <Text style={styles.title} accessibilityRole="header">🔑 Restore your account</Text>
+                        <Text style={styles.title} accessibilityRole="header">{t('🔑 Restore your account')}</Text>
                         <Text style={styles.subtitle}>
-                            Your account isn't lost — bring it to this device with your social sign-in or 12 recovery words.
+                            {t("Your account isn't lost — bring it to this device with your social sign-in or 12 recovery words.")}
                         </Text>
 
                         <Pressable
@@ -2876,10 +2926,10 @@ export default function WelcomeScreen() {
                                 setError(null);
                             }}
                             accessibilityRole="button"
-                            accessibilityLabel="Recover with Social Sign-In"
+                            accessibilityLabel={t('Recover with Social Sign-In')}
                         >
                             <View style={styles.ssoRecoverRow}>
-                                <Text style={styles.ssoRecoverBtnText}>🌐 Recover with Social</Text>
+                                <Text style={styles.ssoRecoverBtnText}>{t('🌐 Recover with Social')}</Text>
                                 <View style={styles.ssoRecoverLogos}>
                                     {Platform.OS === 'ios' && <AppleLogo size={16} color={dark ? palette.blue400 : '#1D4ED8'} />}
                                     <GoogleLogo size={16} />
@@ -2889,16 +2939,16 @@ export default function WelcomeScreen() {
                         </Pressable>
 
                         <Pressable style={styles.recoverBtn} onPress={() => { setMode('recover'); setError(null); }} accessibilityRole="button">
-                            <Text style={styles.recoverBtnText}>🔑 Recover with 12 Words</Text>
+                            <Text style={styles.recoverBtnText}>{t('🔑 Recover with 12 Words')}</Text>
                         </Pressable>
 
                         {/* Lost the phone and the words: an admin's re-key code (app/rekey-code.tsx, #1768). */}
                         <Pressable style={styles.recoverBtn} onPress={() => { setError(null); router.push('/rekey-code'); }} accessibilityRole="button">
-                            <Text style={styles.recoverBtnText}>🪪 An admin gave me a re-key code</Text>
+                            <Text style={styles.recoverBtnText}>{t('🪪 An admin gave me a re-key code')}</Text>
                         </Pressable>
 
-                        <Pressable style={styles.backBtn} onPress={goBack} accessibilityRole="button" accessibilityLabel="Back to Home">
-                            <Text style={styles.backBtnText}>← Back to Home</Text>
+                        <Pressable style={styles.backBtn} onPress={goBack} accessibilityRole="button" accessibilityLabel={t('Back to Home')}>
+                            <Text style={styles.backBtnText}>{t('← Back to Home')}</Text>
                         </Pressable>
                     </View>
                 </ScrollView>
@@ -2913,7 +2963,8 @@ export default function WelcomeScreen() {
     // that already holds one. Blocking, plain-language, with a backup of the
     // outgoing account's words and a typed WIPE confirmation. ---
     if (mode === 'confirmReplace' && outgoingIdentity) {
-        const outCallsign = outgoingIdentity.callsign?.trim() || 'your current account';
+        const outCallsign = outgoingIdentity.callsign?.trim() || t('your current account');
+        const named = <Text style={styles.emphasis}>{outCallsign}</Text>;
         const hasOutgoingSeed = hasMnemonic(outgoingIdentity);
         return (
             <SafeAreaView style={styles.container}>
@@ -2921,21 +2972,27 @@ export default function WelcomeScreen() {
                 <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
                     <ScrollView key={mode} contentContainerStyle={styles.scroll}>
                         <View style={styles.card}>
-                            <Text style={styles.title}>⚠️ Replace this phone's account?</Text>
+                            <Text style={styles.title}>{t("⚠️ Replace this phone's account?")}</Text>
                             <Text style={styles.subtitle}>
-                                This phone is already set up as <Text style={styles.emphasis}>{outCallsign}</Text>. A phone can only hold one account at a time.
+                                <Sentence text={t('This phone is already set up as {name}. A phone can only hold one account at a time.')} parts={{ name: named }} />
                             </Text>
 
                             <View style={styles.replaceWarnBox}>
                                 <Text style={styles.replaceWarnText}>
-                                    If you continue, <Text style={styles.emphasis}>{outCallsign}</Text> will be removed from this phone and replaced by the account you're restoring. Any community you joined as <Text style={styles.emphasis}>{outCallsign}</Text> will no longer open on this phone.
+                                    <Sentence
+                                        text={t("If you continue, {name} will be removed from this phone and replaced by the account you're restoring. Any community you joined as {name} will no longer open on this phone.")}
+                                        parts={{ name: named }}
+                                    />
                                 </Text>
                             </View>
 
                             {hasOutgoingSeed ? (
                                 <>
                                     <Text style={styles.replaceBackupIntro}>
-                                        The only way to get <Text style={styles.emphasis}>{outCallsign}</Text> back afterwards is with its own 12 recovery words. Save them now, before you continue:
+                                        <Sentence
+                                            text={t('The only way to get {name} back afterwards is with its own 12 recovery words. Save them now, before you continue:')}
+                                            parts={{ name: named }}
+                                        />
                                     </Text>
                                     {!showOutgoingSeed ? (
                                         <Pressable
@@ -2943,7 +3000,7 @@ export default function WelcomeScreen() {
                                             onPress={handleShowOutgoingSeed}
                                             accessibilityRole="button"
                                         >
-                                            <Text style={styles.secondaryBtnText}>🔑 Show {outCallsign}'s 12 words</Text>
+                                            <Text style={styles.secondaryBtnText}>{t("🔑 Show {name}'s 12 words", { name: outCallsign })}</Text>
                                         </Pressable>
                                     ) : (
                                         <>
@@ -2962,11 +3019,11 @@ export default function WelcomeScreen() {
                                                 onPress={handleCopyOutgoingSeed}
                                                 accessibilityRole="button"
                                             >
-                                                <Text style={styles.secondaryBtnText}>{outgoingSeedCopied ? '✅ Copied!' : '📋 Copy All Words'}</Text>
+                                                <Text style={styles.secondaryBtnText}>{outgoingSeedCopied ? t('✅ Copied!') : t('📋 Copy All Words')}</Text>
                                             </Pressable>
                                             <CopyClearsNote style={[styles.fieldHint, { marginTop: 0, marginBottom: 8 }]} />
                                             <Text style={styles.fieldHint}>
-                                                Write these 12 words down on paper and keep it somewhere safe. They bring {outCallsign} back on any phone.
+                                                {t('Write these 12 words down on paper and keep it somewhere safe. They bring {name} back on any phone.', { name: outCallsign })}
                                             </Text>
                                             <NoScreenLockNote style={[styles.fieldHint, { marginTop: 0 }]} />
                                         </>
@@ -2975,12 +3032,13 @@ export default function WelcomeScreen() {
                             ) : (
                                 <View style={styles.noSeedWarnBox}>
                                     <Text style={styles.noSeedWarnText}>
-                                        ⚠️ {noWordsBeforeWipe(outCallsign)}
+                                        ⚠️ {noWordsBeforeWipeWords(outCallsign)}
                                     </Text>
                                 </View>
                             )}
 
-                            <Text style={styles.wipeLabel}>TYPE 'WIPE' TO CONFIRM</Text>
+                            {/* The word typed stays WIPE in every language: the code compares it. */}
+                            <Text style={styles.wipeLabel}>{t("TYPE '{word}' TO CONFIRM", { word: 'WIPE' })}</Text>
                             <TextInput
                                 style={styles.input}
                                 value={replaceConfirmText}
@@ -2989,7 +3047,7 @@ export default function WelcomeScreen() {
                                 placeholderTextColor={colors.text.muted}
                                 autoCapitalize="characters"
                                 autoCorrect={false}
-                                accessibilityLabel="Type WIPE to confirm replacing this phone's account"
+                                accessibilityLabel={t("Type {word} to confirm replacing this phone's account", { word: 'WIPE' })}
                             />
 
                             {error && <Text style={styles.error}>{error}</Text>}
@@ -2999,11 +3057,11 @@ export default function WelcomeScreen() {
                                 disabled={loading || replaceConfirmText !== 'WIPE'}
                                 onPress={handleReplaceAccount}
                                 accessibilityRole="button"
-                                accessibilityLabel={loading ? "Replacing account..." : "Replace Account"}
-                                accessibilityHint="Replaces the account currently stored on this phone"
+                                accessibilityLabel={loading ? t('Replacing account...') : t('Replace Account')}
+                                accessibilityHint={t('Replaces the account currently stored on this phone')}
                                 accessibilityState={{ disabled: loading || replaceConfirmText !== 'WIPE', busy: loading }}
                             >
-                                {loading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.dangerBtnText}>Replace Account</Text>}
+                                {loading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.dangerBtnText}>{t('Replace Account')}</Text>}
                             </Pressable>
 
                             <Pressable
@@ -3011,9 +3069,9 @@ export default function WelcomeScreen() {
                                 onPress={() => answerReplace(false)}
                                 disabled={loading}
                                 accessibilityRole="button"
-                                accessibilityLabel={`Keep ${outCallsign} and go back`}
+                                accessibilityLabel={t('Keep {name} and go back', { name: outCallsign })}
                             >
-                                <Text style={styles.backBtnText}>← Keep {outCallsign}, go back</Text>
+                                <Text style={styles.backBtnText}>{t('← Keep {name}, go back', { name: outCallsign })}</Text>
                             </Pressable>
                         </View>
                     </ScrollView>
@@ -3033,7 +3091,7 @@ export default function WelcomeScreen() {
                     {/* "handled": with the keyboard up from the words, one tap on a community chip chooses it. */}
                     <ScrollView key={mode} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
                     <View style={styles.card}>
-                        <Text style={styles.title}>🔑 Recover Identity</Text>
+                        <Text style={styles.title}>{t('🔑 Recover Identity')}</Text>
                         <RecoveryWordsEntry words={recoveryWords} onChange={setRecoveryWords} labelStyle={styles.subtitle} colors={colors} />
 
                         {/* Which community, as taps (decision 5): the global community, this phone's own, or another address. */}
@@ -3047,10 +3105,10 @@ export default function WelcomeScreen() {
 
                         <TextInput
                             ref={recoveryAddressRef}
-                            accessibilityLabel="Community name or node address"
-                            accessibilityHint="Enter your community name, like mullum, or its full address"
+                            accessibilityLabel={t('Community name or node address')}
+                            accessibilityHint={t('Enter your community name, like mullum, or its full address')}
                             style={styles.input}
-                            placeholder="Community name or address (e.g. mullum)"
+                            placeholder={t('Community name or address (e.g. mullum)')}
                             placeholderTextColor={colors.text.muted}
                             value={recoveryAnchorUrl}
                             onChangeText={setRecoveryAnchorUrl}
@@ -3063,12 +3121,11 @@ export default function WelcomeScreen() {
                             takes when every other one has failed. */}
                         {isBareCommunityName(recoveryAnchorUrl) && (
                             <Text accessibilityLiveRegion="polite" style={{ fontSize: 12, color: colors.text.secondary, marginTop: -6, marginBottom: 10, marginLeft: 4 }}>
-                                Will connect to {normalizeNodeUrl(recoveryAnchorUrl).replace('https://', '')} — if your
-                                community is hosted elsewhere, enter its full address instead.
+                                {t('Will connect to {address} — if your community is hosted elsewhere, enter its full address instead.', { address: normalizeNodeUrl(recoveryAnchorUrl).replace('https://', '') })}
                             </Text>
                         )}
                         <Text style={styles.fieldHint}>
-                            Required — the community node that holds your account. Your name and picture come back automatically once you're in. Ask whoever invited you if you're unsure.
+                            {t("Required — the community node that holds your account. Your name and picture come back automatically once you're in. Ask whoever invited you if you're unsure.")}
                         </Text>
 
                         {error && <Text style={styles.error}>{error}</Text>}
@@ -3078,14 +3135,14 @@ export default function WelcomeScreen() {
                             onPress={handleRecover}
                             disabled={loading}
                             accessibilityRole="button"
-                            accessibilityLabel={loading ? "Recovering identity..." : "Recover Identity"}
+                            accessibilityLabel={loading ? t('Recovering identity...') : t('Recover Identity')}
                             accessibilityState={{ disabled: loading, busy: loading }}
                         >
-                            {loading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>Recover Identity</Text>}
+                            {loading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>{t('Recover Identity')}</Text>}
                         </Pressable>
 
-                        <Pressable style={styles.backBtn} onPress={() => { setMode('member'); setError(null); }} accessibilityRole="button" accessibilityLabel="Back to Restore Options">
-                            <Text style={styles.backBtnText}>← Back to Restore Options</Text>
+                        <Pressable style={styles.backBtn} onPress={() => { setMode('member'); setError(null); }} accessibilityRole="button" accessibilityLabel={t('Back to Restore Options')}>
+                            <Text style={styles.backBtnText}>{t('← Back to Restore Options')}</Text>
                         </Pressable>
                     </View>
                 </ScrollView>
@@ -3109,27 +3166,27 @@ export default function WelcomeScreen() {
                     <ScrollView key={mode} contentContainerStyle={styles.scroll}>
                         <View style={styles.card}>
                             <Text style={styles.title} accessibilityRole="header">
-                                🌐 Recover with Social Sign-In
+                                {t('🌐 Recover with Social Sign-In')}
                             </Text>
                             {ssoAtCommunity ? (
                                 <>
                                     <Text style={styles.subtitle}>
-                                        BeanPool's key vault keeps no copy for this {SSO_PROVIDER_NAMES[ssoAtCommunity]} account. Your community may still keep one.
+                                        {t("BeanPool's key vault keeps no copy for this {provider} account. Your community may still keep one.", { provider: SSO_PROVIDER_NAMES[ssoAtCommunity] })}
                                     </Text>
                                     <Text style={styles.fieldHint}>
-                                        Enter your callsign and your community, then sign in with {SSO_PROVIDER_NAMES[ssoAtCommunity]} once more. Your 12 words work any time.
+                                        {t('Enter your callsign and your community, then sign in with {provider} once more. Your 12 words work any time.', { provider: SSO_PROVIDER_NAMES[ssoAtCommunity] })}
                                     </Text>
                                 </>
                             ) : (
                                 <Text style={styles.subtitle}>
-                                    Enter your callsign and node address to restore your account with any linked sign-in.
+                                    {t('Enter your callsign and node address to restore your account with any linked sign-in.')}
                                 </Text>
                             )}
 
                             <TextInput
-                                accessibilityLabel="Callsign"
+                                accessibilityLabel={t('Callsign')}
                                 style={styles.input}
-                                placeholder="Your Callsign (e.g. Monnunit)"
+                                placeholder={t('Your Callsign (e.g. Monnunit)')}
                                 placeholderTextColor={colors.text.muted}
                                 value={ssoCallsign}
                                 onChangeText={setSsoCallsign}
@@ -3145,7 +3202,7 @@ export default function WelcomeScreen() {
                             {!loading && ssoCandidates.length > 0 && (
                                 <View accessibilityLiveRegion="polite" style={{ marginTop: -6, marginBottom: 12 }}>
                                     <Text style={{ fontSize: 12, color: colors.text.secondary, marginBottom: 6, marginLeft: 4 }}>
-                                        {ssoCandidates.length === 1 ? 'Is this you?' : 'Which one is you?'}
+                                        {ssoCandidates.length === 1 ? t('Is this you?') : t('Which one is you?')}
                                     </Text>
                                     {ssoCandidates.map((c) => (
                                         <Pressable
@@ -3158,9 +3215,9 @@ export default function WelcomeScreen() {
                                             accessible
                                             accessibilityRole="button"
                                             accessibilityLabel={joinedLabel(c.joinedAt)
-                                                ? `Select the account ${c.callsign}, joined ${joinedLabel(c.joinedAt)}`
-                                                : `Select the account ${c.callsign}`}
-                                            accessibilityHint="Uses this account for recovery"
+                                                ? t('Select the account {name}, joined {date}', { name: c.callsign, date: joinedLabel(c.joinedAt) })
+                                                : t('Select the account {name}', { name: c.callsign })}
+                                            accessibilityHint={t('Uses this account for recovery')}
                                             style={{
                                                 flexDirection: 'row', alignItems: 'center', gap: 10,
                                                 paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10,
@@ -3174,7 +3231,7 @@ export default function WelcomeScreen() {
                                                     kept the default identicon are otherwise identical rows. */}
                                                 {!!joinedLabel(c.joinedAt) && (
                                                     <Text style={{ color: colors.text.secondary, fontSize: 12 }}>
-                                                        joined {joinedLabel(c.joinedAt)}
+                                                        {t('joined {date}', { date: joinedLabel(c.joinedAt) })}
                                                     </Text>
                                                 )}
                                             </View>
@@ -3184,7 +3241,7 @@ export default function WelcomeScreen() {
                             )}
                             {!loading && ssoLookupBusy && ssoCandidates.length === 0 && (
                                 <Text accessibilityLiveRegion="polite" style={{ fontSize: 12, color: colors.text.muted, marginTop: -6, marginBottom: 10, marginLeft: 4 }}>
-                                    Looking for your account…
+                                    {t('Looking for your account…')}
                                 </Text>
                             )}
 
@@ -3193,16 +3250,16 @@ export default function WelcomeScreen() {
                                 onPick={(url) => { setRecoveryAnchorUrl(url); setError(null); }}
                                 disabled={loading}
                                 selectedUrl={normalizeNodeUrl(recoveryAnchorUrl.trim())}
-                                label="Your communities on this phone"
-                                actionLabel="Recover on"
-                                hint="Or type your community's name or address below."
+                                label={t('Your communities on this phone')}
+                                actionLabel={t('Recover on')}
+                                hint={t("Or type your community's name or address below.")}
                             />
 
                             <TextInput
-                                accessibilityLabel="Community name or node address"
-                                accessibilityHint="Enter your community name, like mullum, or its full address"
+                                accessibilityLabel={t('Community name or node address')}
+                                accessibilityHint={t('Enter your community name, like mullum, or its full address')}
                                 style={styles.input}
-                                placeholder="Community name or address (e.g. mullum)"
+                                placeholder={t('Community name or address (e.g. mullum)')}
                                 placeholderTextColor={colors.text.muted}
                                 value={recoveryAnchorUrl}
                                 onChangeText={setRecoveryAnchorUrl}
@@ -3215,8 +3272,7 @@ export default function WelcomeScreen() {
                                 own domain has a name that expands to the wrong address. */}
                             {isBareCommunityName(recoveryAnchorUrl) && (
                                 <Text accessibilityLiveRegion="polite" style={{ fontSize: 12, color: colors.text.secondary, marginTop: -6, marginBottom: 10, marginLeft: 4 }}>
-                                    Will connect to {normalizeNodeUrl(recoveryAnchorUrl).replace('https://', '')} — if your
-                                    community is hosted elsewhere, enter its full address instead.
+                                    {t('Will connect to {address} — if your community is hosted elsewhere, enter its full address instead.', { address: normalizeNodeUrl(recoveryAnchorUrl).replace('https://', '') })}
                                 </Text>
                             )}
 
@@ -3224,7 +3280,7 @@ export default function WelcomeScreen() {
                                 <View style={{ alignItems: 'center', marginVertical: 16 }} accessibilityLiveRegion="polite">
                                     <ActivityIndicator size="large" color={accentInk} />
                                     <Text style={{ marginTop: 12, color: colors.text.secondary, fontSize: 14, textAlign: 'center' }}>
-                                        {ssoProgressMessage || 'Verifying sign-in...'}
+                                        {ssoProgressMessage || t('Verifying sign-in...')}
                                     </Text>
                                 </View>
                             )}
@@ -3235,21 +3291,21 @@ export default function WelcomeScreen() {
                                 <>
                                     {Platform.OS === 'ios' && offeredHere('apple') && (
                                         <AppleButton
-                                            title="Recover with Apple"
+                                            title={t('Recover with Apple')}
                                             onPress={() => handleSsoRecoverAtCommunity('apple')}
                                             style={{ marginBottom: 10, width: '100%' }}
                                         />
                                     )}
                                     {offeredHere('google') && (
                                         <GoogleButton
-                                            title="Recover with Google"
+                                            title={t('Recover with Google')}
                                             onPress={() => handleSsoRecoverAtCommunity('google')}
                                             style={{ marginBottom: 10, width: '100%' }}
                                         />
                                     )}
                                     {offeredHere('facebook') && (
                                         <FacebookButton
-                                            title="Recover with Facebook"
+                                            title={t('Recover with Facebook')}
                                             onPress={() => handleSsoRecoverAtCommunity('facebook')}
                                             style={{ marginBottom: 10, width: '100%' }}
                                         />
@@ -3262,9 +3318,9 @@ export default function WelcomeScreen() {
                                 onPress={() => { setMode('member'); setSsoAtCommunity(null); setError(null); }}
                                 disabled={loading}
                                 accessibilityRole="button"
-                                accessibilityLabel="Back to Restore Options"
+                                accessibilityLabel={t('Back to Restore Options')}
                             >
-                                <Text style={styles.backBtnText}>← Back to Restore Options</Text>
+                                <Text style={styles.backBtnText}>{t('← Back to Restore Options')}</Text>
                             </Pressable>
                         </View>
                     </ScrollView>
@@ -3286,28 +3342,28 @@ export default function WelcomeScreen() {
                     <ScrollView key={mode} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
                         <View style={styles.card}>
                             <Text style={styles.title} accessibilityRole="header">
-                                🌐 Recover with Social Sign-In
+                                {t('🌐 Recover with Social Sign-In')}
                             </Text>
 
                             {ssoReleased ? (
                                 <>
                                     <Text style={styles.subtitle}>
-                                        Your account is back. Which community do you want to open it in? You can add your other communities afterwards.
+                                        {t('Your account is back. Which community do you want to open it in? You can add your other communities afterwards.')}
                                     </Text>
                                     <SavedNodePicker
                                         nodes={savedNodes}
                                         onPick={(url) => { setSsoCommunity(url); setError(null); }}
                                         disabled={loading}
                                         selectedUrl={normalizeNodeUrl(ssoCommunity.trim())}
-                                        label="Your communities on this phone"
-                                        actionLabel="Open in"
-                                        hint="Or type a community's name or address below."
+                                        label={t('Your communities on this phone')}
+                                        actionLabel={t('Open in')}
+                                        hint={t("Or type a community's name or address below.")}
                                     />
                                     <TextInput
-                                        accessibilityLabel="Community name or node address"
-                                        accessibilityHint="The global community is filled in. Enter your community's name, like mullum, or its full address"
+                                        accessibilityLabel={t('Community name or node address')}
+                                        accessibilityHint={t("The global community is filled in. Enter your community's name, like mullum, or its full address")}
                                         style={styles.input}
-                                        placeholder="Community name or address (e.g. mullum)"
+                                        placeholder={t('Community name or address (e.g. mullum)')}
                                         placeholderTextColor={colors.text.muted}
                                         value={ssoCommunity}
                                         onChangeText={setSsoCommunity}
@@ -3318,12 +3374,11 @@ export default function WelcomeScreen() {
                                     />
                                     {isBareCommunityName(ssoCommunity) && (
                                         <Text accessibilityLiveRegion="polite" style={{ fontSize: 12, color: colors.text.secondary, marginTop: -6, marginBottom: 10, marginLeft: 4 }}>
-                                            Will connect to {normalizeNodeUrl(ssoCommunity).replace('https://', '')} — if your
-                                            community is hosted elsewhere, enter its full address instead.
+                                            {t('Will connect to {address} — if your community is hosted elsewhere, enter its full address instead.', { address: normalizeNodeUrl(ssoCommunity).replace('https://', '') })}
                                         </Text>
                                     )}
                                     <Text style={styles.fieldHint}>
-                                        The global community is filled in. If you belong to a local community, type its name or address. Your name and picture come back from it.
+                                        {t('The global community is filled in. If you belong to a local community, type its name or address. Your name and picture come back from it.')}
                                     </Text>
                                     {error && <Text style={styles.error}>{error}</Text>}
                                     <Pressable
@@ -3331,22 +3386,22 @@ export default function WelcomeScreen() {
                                         onPress={handleSsoFinish}
                                         disabled={loading}
                                         accessibilityRole="button"
-                                        accessibilityLabel={loading ? "Finishing recovery..." : "Continue"}
+                                        accessibilityLabel={loading ? t('Finishing recovery...') : t('Continue')}
                                         accessibilityState={{ disabled: loading, busy: loading }}
                                     >
-                                        {loading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>Continue</Text>}
+                                        {loading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>{t('Continue')}</Text>}
                                     </Pressable>
                                 </>
                             ) : waitingUntil ? (
                                 <>
                                     <Text style={styles.subtitle} accessibilityLiveRegion="polite">
-                                        Your account comes back {holdEndsText(waitingUntil)}.
+                                        {t('Your account comes back {when}.', { when: holdEndsWords(waitingUntil) })}
                                     </Text>
                                     <Text style={styles.fieldHint}>
                                         {t('For your safety, getting back in with a sign-in waits a day. If you still have another phone with your BeanPool account on it, open BeanPool there and tap "Yes, it\'s me" to bring it back now. If it wasn\'t you, that phone can stop it.')}
                                     </Text>
                                     <Text style={styles.fieldHint}>
-                                        Keep BeanPool on this phone: it checks by itself. Your 12 words work any time, with no wait.
+                                        {t('Keep BeanPool on this phone: it checks by itself. Your 12 words work any time, with no wait.')}
                                     </Text>
                                     {error && <Text style={styles.error}>{error}</Text>}
                                     <Pressable
@@ -3354,22 +3409,22 @@ export default function WelcomeScreen() {
                                         onPress={() => checkSsoWaiting(false)}
                                         disabled={ssoChecking}
                                         accessibilityRole="button"
-                                        accessibilityLabel={ssoChecking ? "Checking now..." : "Check now"}
+                                        accessibilityLabel={ssoChecking ? t('Checking now...') : t('Check now')}
                                         accessibilityState={{ busy: ssoChecking, disabled: ssoChecking }}
                                     >
-                                        {ssoChecking ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>Check now</Text>}
+                                        {ssoChecking ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>{t('Check now')}</Text>}
                                     </Pressable>
                                     <Pressable style={[styles.recoverBtn, { marginTop: 12 }]} onPress={() => handleSsoStartAgain('recover')} accessibilityRole="button">
-                                        <Text style={styles.recoverBtnText}>🔑 Use my 12 words instead</Text>
+                                        <Text style={styles.recoverBtnText}>{t('🔑 Use my 12 words instead')}</Text>
                                     </Pressable>
-                                    <Pressable style={styles.backBtn} onPress={() => handleSsoStartAgain('ssoRecover')} accessibilityRole="button" accessibilityLabel="Start again with a sign-in">
-                                        <Text style={styles.backBtnText}>Start again</Text>
+                                    <Pressable style={styles.backBtn} onPress={() => handleSsoStartAgain('ssoRecover')} accessibilityRole="button" accessibilityLabel={t('Start again with a sign-in')}>
+                                        <Text style={styles.backBtnText}>{t('Start again')}</Text>
                                     </Pressable>
                                 </>
                             ) : (
                                 <>
                                     <Text style={styles.subtitle}>
-                                        Sign in with the account you linked to BeanPool. The sign-in finds your account: there's no name or address to type.
+                                        {t("Sign in with the account you linked to BeanPool. The sign-in finds your account: there's no name or address to type.")}
                                     </Text>
                                     <Text style={styles.fieldHint}>
                                         {t("For your safety it takes a day, or less if another phone of yours says it's you.")}
@@ -3379,7 +3434,7 @@ export default function WelcomeScreen() {
                                         <View style={{ alignItems: 'center', marginVertical: 16 }} accessibilityLiveRegion="polite">
                                             <ActivityIndicator size="large" color={accentInk} />
                                             <Text style={{ marginTop: 12, color: colors.text.secondary, fontSize: 14, textAlign: 'center' }}>
-                                                {ssoProgressMessage || 'Verifying sign-in...'}
+                                                {ssoProgressMessage || t('Verifying sign-in...')}
                                             </Text>
                                         </View>
                                     )}
@@ -3390,18 +3445,18 @@ export default function WelcomeScreen() {
                                         <>
                                             {Platform.OS === 'ios' && (
                                                 <AppleButton
-                                                    title="Recover with Apple"
+                                                    title={t('Recover with Apple')}
                                                     onPress={() => handleSsoRecover('apple')}
                                                     style={{ marginBottom: 10, width: '100%' }}
                                                 />
                                             )}
                                             <GoogleButton
-                                                title="Recover with Google"
+                                                title={t('Recover with Google')}
                                                 onPress={() => handleSsoRecover('google')}
                                                 style={{ marginBottom: 10, width: '100%' }}
                                             />
                                             <FacebookButton
-                                                title="Recover with Facebook"
+                                                title={t('Recover with Facebook')}
                                                 onPress={() => handleSsoRecover('facebook')}
                                                 style={{ marginBottom: 10, width: '100%' }}
                                             />
@@ -3416,9 +3471,9 @@ export default function WelcomeScreen() {
                                     onPress={() => { setMode('member'); setError(null); }}
                                     disabled={loading}
                                     accessibilityRole="button"
-                                    accessibilityLabel="Back to Restore Options"
+                                    accessibilityLabel={t('Back to Restore Options')}
                                 >
-                                    <Text style={styles.backBtnText}>← Back to Restore Options</Text>
+                                    <Text style={styles.backBtnText}>{t('← Back to Restore Options')}</Text>
                                 </Pressable>
                             )}
                         </View>

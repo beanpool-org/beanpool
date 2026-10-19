@@ -17,6 +17,7 @@ import {
     QUICK_SPARK_QUESTIONS,
     DEEP_RESONANCE_QUESTIONS,
     scoreQuiz,
+    t,
     type ArchetypeKey,
     type QuizQuestion,
     type QuizResult,
@@ -24,6 +25,7 @@ import {
 import { palette } from '../constants/colors';
 import { useTheme } from '../app/ThemeContext';
 import { pageSheetTopInset } from '../utils/modal-safe-area';
+import { Sentence } from './Sentence';
 
 const HEADER_PAD_TOP = 14;
 
@@ -161,7 +163,7 @@ export function ArchetypeQuizModal({
                     {step === 'quiz' ? (
                         <Pressable
                             accessibilityRole="button"
-                            accessibilityLabel="Go back to previous question"
+                            accessibilityLabel={t('Go back to previous question')}
                             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                             style={styles.headerBtn}
                             onPress={handleBackQuestion}
@@ -178,15 +180,15 @@ export function ArchetypeQuizModal({
 
                     <Text style={[styles.headerTitle, { color: colors.text.heading }]}>
                         {step === 'intro'
-                            ? 'How you like to work'
+                            ? t('How you like to work')
                             : step === 'quiz'
-                            ? `${mode === 'quick' ? '⚡ Quick Spark' : '🧭 Deep Resonance'}`
-                            : '✨ Your Working Style'}
+                            ? (mode === 'quick' ? t('⚡ Quick Spark') : t('🧭 Deep Resonance'))
+                            : t('✨ Your Working Style')}
                     </Text>
 
                     <Pressable
                         accessibilityRole="button"
-                        accessibilityLabel="Close quiz modal"
+                        accessibilityLabel={t('Close quiz modal')}
                         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                         style={styles.headerBtn}
                         onPress={handleClose}
@@ -206,18 +208,16 @@ export function ArchetypeQuizModal({
                         </View>
 
                         <Text style={[styles.introHeadline, { color: colors.text.heading }]}>
-                            Community Working Style
+                            {t('Community Working Style')}
                         </Text>
                         <Text style={[styles.introSub, { color: colors.text.secondary }]}>
-                            Every community thrives on a balance of different energies — from
-                            creative visionaries and organizers to anchors and champions. Say what
-                            you prefer, and get tips for working well with neighbours.
+                            {t('Every community thrives on a balance of different energies — from creative visionaries and organizers to anchors and champions. Say what you prefer, and get tips for working well with neighbours.')}
                         </Text>
 
                         {/* Mode Card: Quick Spark */}
                         <Pressable
                             accessibilityRole="button"
-                            accessibilityLabel="Quick Spark: 9 questions, approx 1 minute. A 60-second snapshot of how you like to work."
+                            accessibilityLabel={t('Quick Spark: 9 questions, approx 1 minute. A 60-second snapshot of how you like to work.')}
                             style={({ pressed }) => [
                                 styles.modeCard,
                                 {
@@ -242,7 +242,7 @@ export function ArchetypeQuizModal({
                                         <Text
                                             style={[styles.modeTitle, { color: colors.text.heading }]}
                                         >
-                                            Quick Spark
+                                            {t('Quick Spark')}
                                         </Text>
                                         <View
                                             style={[
@@ -256,15 +256,14 @@ export function ArchetypeQuizModal({
                                                     { color: colors.brand.primary },
                                                 ]}
                                             >
-                                                9 Qs • ~1 min
+                                                {t('9 Qs • ~1 min')}
                                             </Text>
                                         </View>
                                     </View>
                                     <Text
                                         style={[styles.modeDesc, { color: colors.text.secondary }]}
                                     >
-                                        A 60-second snapshot of how you like to work, plus tips for
-                                        working with others.
+                                        {t('A 60-second snapshot of how you like to work, plus tips for working with others.')}
                                     </Text>
                                 </View>
                             </View>
@@ -273,7 +272,7 @@ export function ArchetypeQuizModal({
                         {/* Mode Card: Deep Resonance */}
                         <Pressable
                             accessibilityRole="button"
-                            accessibilityLabel="Deep Resonance: 27 questions, approx 3 minutes. Recommended for deep accuracy."
+                            accessibilityLabel={t('Deep Resonance: 27 questions, approx 3 minutes. Recommended for deep accuracy.')}
                             style={({ pressed }) => [
                                 styles.modeCard,
                                 {
@@ -304,7 +303,7 @@ export function ArchetypeQuizModal({
                                         <Text
                                             style={[styles.modeTitle, { color: colors.text.heading }]}
                                         >
-                                            Deep Resonance
+                                            {t('Deep Resonance')}
                                         </Text>
                                         <View
                                             style={[
@@ -328,15 +327,14 @@ export function ArchetypeQuizModal({
                                                     },
                                                 ]}
                                             >
-                                                27 Qs • ~3 min
+                                                {t('27 Qs • ~3 min')}
                                             </Text>
                                         </View>
                                     </View>
                                     <Text
                                         style={[styles.modeDesc, { color: colors.text.secondary }]}
                                     >
-                                        Recommended for deep accuracy. Maps your primary archetype,
-                                        secondary wings, and complementary collaborator pairings.
+                                        {t('Recommended for deep accuracy. Maps your primary archetype, secondary wings, and complementary collaborator pairings.')}
                                     </Text>
                                 </View>
                             </View>
@@ -373,9 +371,10 @@ export function ArchetypeQuizModal({
                                     },
                                 ]}
                             >
-                                <Text style={{ fontWeight: '700' }}>Privacy-First:</Text> We never
-                                show your type to other members, only tips for working with you. No
-                                labels on profiles, lists or the map.
+                                <Sentence
+                                    text={t('{lead} We never show your type to other members, only tips for working with you. No labels on profiles, lists or the map.')}
+                                    parts={{ lead: <Text style={{ fontWeight: '700' }}>{t('Privacy-First:')}</Text> }}
+                                />
                             </Text>
                         </View>
                     </ScrollView>
@@ -387,12 +386,12 @@ export function ArchetypeQuizModal({
                         <View
                             style={styles.progressContainer}
                             accessibilityRole="progressbar"
-                            accessibilityLabel="Quiz progress"
+                            accessibilityLabel={t('Quiz progress')}
                             accessibilityValue={{
                                 min: 1,
                                 max: totalQuestions,
                                 now: currentIndex + 1,
-                                text: `Question ${currentIndex + 1} of ${totalQuestions}`,
+                                text: t('Question {n} of {total}', { n: currentIndex + 1, total: totalQuestions }),
                             }}
                         >
                             <View style={[styles.progressTrack, theme === 'dark' && { backgroundColor: colors.border.strong }]}>
@@ -407,7 +406,7 @@ export function ArchetypeQuizModal({
                                 />
                             </View>
                             <Text style={[styles.progressText, { color: colors.text.muted }]}>
-                                Question {currentIndex + 1} of {totalQuestions}
+                                {t('Question {n} of {total}', { n: currentIndex + 1, total: totalQuestions })}
                             </Text>
                         </View>
 
@@ -428,7 +427,7 @@ export function ArchetypeQuizModal({
                                 <Text
                                     style={[styles.questionPrompt, { color: colors.text.heading }]}
                                 >
-                                    {currentQ.prompt}
+                                    {t(currentQ.prompt)}
                                 </Text>
                             </View>
 
@@ -440,7 +439,7 @@ export function ArchetypeQuizModal({
                                         <Pressable
                                             key={idx}
                                             accessibilityRole="radio"
-                                            accessibilityLabel={opt.text}
+                                            accessibilityLabel={t(opt.text)}
                                             accessibilityState={{ selected: isSelected }}
                                             style={({ pressed }) => [
                                                 styles.optionButton,
@@ -472,7 +471,7 @@ export function ArchetypeQuizModal({
                                                     },
                                                 ]}
                                             >
-                                                {opt.text}
+                                                {t(opt.text)}
                                             </Text>
                                         </Pressable>
                                     );
@@ -499,13 +498,13 @@ export function ArchetypeQuizModal({
                         >
                             <Text style={styles.resultEmoji}>{primaryInfo.emoji}</Text>
                             <Text style={[styles.resultArchetypeName, { color: colors.text.heading }]}>
-                                {primaryInfo.name}
+                                {t(primaryInfo.name)}
                             </Text>
                             <Text style={[styles.resultTagline, { color: colors.brand.primary }]}>
-                                {primaryInfo.tagline}
+                                {t(primaryInfo.tagline)}
                             </Text>
                             <Text style={[styles.resultDesc, { color: colors.text.secondary }]}>
-                                {primaryInfo.description}
+                                {t(primaryInfo.description)}
                             </Text>
 
                             {secondaryInfo && (
@@ -524,7 +523,7 @@ export function ArchetypeQuizModal({
                                             { color: colors.text.body },
                                         ]}
                                     >
-                                        Secondary Rhythm: {secondaryInfo.emoji} {secondaryInfo.name}
+                                        {t('Secondary Rhythm: {emoji} {name}', { emoji: secondaryInfo.emoji, name: t(secondaryInfo.name) })}
                                     </Text>
                                 </View>
                             )}
@@ -541,15 +540,15 @@ export function ArchetypeQuizModal({
                             ]}
                         >
                             <Text style={[styles.sectionTitle, { color: colors.text.heading }]}>
-                                🌟 What you tend to enjoy
+                                {t('🌟 What you tend to enjoy')}
                             </Text>
-                            {primaryInfo.superpowers.map((power, i) => (
+                            {primaryInfo.superpowers.map((_power, i) => (
                                 <View key={i} style={styles.bulletRow}>
                                     <Text style={[styles.bulletPoint, { color: colors.brand.primary }]}>
                                         •
                                     </Text>
                                     <Text style={[styles.bulletText, { color: colors.text.body }]}>
-                                        {power}
+                                        {t(primaryInfo.superpowers[i])}
                                     </Text>
                                 </View>
                             ))}
@@ -566,10 +565,10 @@ export function ArchetypeQuizModal({
                             ]}
                         >
                             <Text style={[styles.sectionTitle, { color: colors.text.heading }]}>
-                                👥 Who you work well with
+                                {t('👥 Who you work well with')}
                             </Text>
                             <Text style={[styles.sectionSubtitle, { color: colors.text.secondary }]}>
-                                You tend to work well with people who prefer the styles of:
+                                {t('You tend to work well with people who prefer the styles of:')}
                             </Text>
                             <View style={styles.partnerTagsRow}>
                                 {primaryInfo.idealPartners.map((partnerKey) => {
@@ -593,7 +592,7 @@ export function ArchetypeQuizModal({
                                                     { color: colors.text.heading },
                                                 ]}
                                             >
-                                                {p.name}
+                                                {t(p.name)}
                                             </Text>
                                         </View>
                                     );
@@ -605,7 +604,7 @@ export function ArchetypeQuizModal({
                         <View style={styles.actionButtonsWrap}>
                             <Pressable
                                 accessibilityRole="button"
-                                accessibilityLabel={saving ? "Saving archetype to profile" : "Done · Save to Profile"}
+                                accessibilityLabel={saving ? t('Saving archetype to profile') : t('Done · Save to Profile')}
                                 accessibilityState={{ disabled: saving, busy: saving }}
                                 style={({ pressed }) => [
                                     styles.saveBtn,
@@ -626,7 +625,7 @@ export function ArchetypeQuizModal({
                                             { color: colors.text.inverse },
                                         ]}
                                     >
-                                        Done · Save to Profile
+                                        {t('Done · Save to Profile')}
                                     </Text>
                                 )}
                             </Pressable>
@@ -634,7 +633,7 @@ export function ArchetypeQuizModal({
                             {mode === 'quick' && (
                                 <Pressable
                                     accessibilityRole="button"
-                                    accessibilityLabel="Deepen with 27 Questions, approx 3 minutes"
+                                    accessibilityLabel={t('Deepen with 27 Questions, approx 3 minutes')}
                                     style={styles.secondaryActionBtn}
                                     onPress={() => {
                                         setMode('deep');
@@ -649,7 +648,7 @@ export function ArchetypeQuizModal({
                                             { color: colors.brand.primary },
                                         ]}
                                     >
-                                        🧭 Deepen with 27 Questions (~3 min)
+                                        {t('🧭 Deepen with 27 Questions (~3 min)')}
                                     </Text>
                                 </Pressable>
                             )}
@@ -681,9 +680,13 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         borderRadius: 18,
     },
+    // Shrinks between the two buttons and wraps, centred: a longer language's title runs past them otherwise.
     headerTitle: {
+        flexShrink: 1,
         fontSize: 16,
         fontWeight: '800',
+        textAlign: 'center',
+        marginHorizontal: 8,
     },
 
     // Intro Screen
@@ -742,13 +745,19 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
     },
+    // The time badge goes under the title when the two don't fit beside each other (320 dp at 1.3x, or a longer
+    // language), and a title longer than the row shrinks and wraps.
     modeTitleRow: {
         flexDirection: 'row',
+        flexWrap: 'wrap',
         alignItems: 'center',
         justifyContent: 'space-between',
+        columnGap: 8,
+        rowGap: 4,
         marginBottom: 4,
     },
     modeTitle: {
+        flexShrink: 1,
         fontSize: 16,
         fontWeight: '800',
     },

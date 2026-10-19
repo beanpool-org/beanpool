@@ -178,7 +178,8 @@ describe('finding 3: on the vault\'s signed "no copy", a vault build restores at
         expect(welcome).toMatch(/\} else if \(vaultKeepsNoCopyFor\(provider\)\) \{\n(\s*\/\/.*\n)*\s*setError\(null\);\n\s*setSsoAtCommunity\(provider\);/);
         expect(welcome).toMatch(/const offeredHere = \(p: SsoProvider\) => !hasVault\(\) \|\| ssoAtCommunity === p;/);
         for (const p of ['apple', 'google', 'facebook']) {
-            expect(welcome, p).toMatch(new RegExp(`offeredHere\\('${p}'\\) && \\(\\s*<\\w+Button\\s+title="Recover with \\w+"\\s+onPress=\\{\\(\\) => handleSsoRecoverAtCommunity\\('${p}'\\)\\}`));
+            // The title in the member's language (words S3j): t('Recover with …').
+            expect(welcome, p).toMatch(new RegExp(`offeredHere\\('${p}'\\) && \\(\\s*<\\w+Button\\s+title=\\{t\\('Recover with \\w+'\\)\\}\\s+onPress=\\{\\(\\) => handleSsoRecoverAtCommunity\\('${p}'\\)\\}`));
         }
         // Back in from the community's copy in a vault build: Settings, whose first card (under the hold banner) is the move.
         // Where the member actually lands is measured in member-landing.test.ts, through the root guard's own landing.

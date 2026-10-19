@@ -83,7 +83,8 @@ describe('"Replace this phone\'s account?": Replace Account', () => {
         expect(screen()).toContain('onPress={handleReplaceAccount}');
         expect(screen()).not.toContain('answerReplace(true)');
         const body = handler();
-        const asked = body.indexOf('const passed = await authenticateUser(`Confirm authentication to remove ${outCallsign} from this phone.`);');
+        // The prompt in the member's language (words S3j): the same sentence, through the screen's t().
+        const asked = body.indexOf("const passed = await authenticateUser(t('Confirm authentication to remove {name} from this phone.', { name: outCallsign }));");
         const refused = body.indexOf('if (!passed || outgoingIdentityRef.current !== account || !replaceAnswerRef.current) return;');
         const replaced = body.indexOf('answerReplace(true);');
         expect(asked).toBeGreaterThan(-1);

@@ -302,7 +302,8 @@ describe('components/SsoEnrolSheet.tsx: Protect with / Connect again / Try again
         const s = sheet();
         expect(s).toContain("import { authenticateUser } from '../utils/LocalAuth';");
         expect(s).toMatch(/askPhoneLock = true,/);
-        expect(s).toContain(`phoneLock: askPhoneLock ? () => authenticateUser('${REASON}') : null,`);
+        // The prompt in the member's language (words S3j): the same sentence, through t().
+        expect(s).toContain(`phoneLock: askPhoneLock ? () => authenticateUser(t('${REASON}')) : null,`);
     });
 
     it('a check that did not pass closes the sheet, as a cancelled sign-in does', () => {
@@ -327,7 +328,8 @@ describe("welcome.tsx: the global door's sign-in with the phone's own key", () =
         expect(s).toContain("import { authenticateUser } from '../utils/LocalAuth';");
         const body = slice(s, 'async function handleGlobalSignIn(provider: SsoProvider) {', '\n    }\n');
         const key = body.indexOf('const key = await joinKeyForThisPhone(globalKey);');
-        const asked = body.indexOf(`if (!key.createdHere && !(await authenticateUser('${REASON}'))) return;`);
+        // The prompt in the member's language (words S3j): the same sentence, through the screen's t().
+        const asked = body.indexOf(`if (!key.createdHere && !(await authenticateUser(t('${REASON}')))) return;`);
         const signIn = body.indexOf('await signInAtDoor(');
         expect(key).toBeGreaterThan(-1);
         expect(asked).toBeGreaterThan(key);

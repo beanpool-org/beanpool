@@ -394,7 +394,9 @@ describe("the join's pre-flight: a member's ticket where only admins invite now"
     it('the welcome screen says so in plain words, not "not recognised"', () => {
         const welcome = fs.readFileSync(path.resolve(__dirname, '../..', 'app/welcome.tsx'), 'utf-8');
         const fn = welcome.slice(welcome.indexOf('function inviteProblemMessage'), welcome.indexOf('function joinedLabel'));
-        expect(fn).toMatch(/case 'admins_only':\s*return MEMBER_TICKET_REFUSED_TEXT;/);
+        // In the member's language: the sentence is a word() key, shown with t() (words S3j).
+        expect(welcome).toContain('const INVITE_ENTRY_WORDS = { memberTicketRefused: MEMBER_TICKET_REFUSED_TEXT } as const;');
+        expect(fn).toMatch(/case 'admins_only':\s*return t\(INVITE_ENTRY_WORDS\.memberTicketRefused\);/);
         expect(fn.indexOf("case 'admins_only'")).toBeLessThan(fn.indexOf('default:'));
         expect(MEMBER_TICKET_REFUSED_TEXT).toMatch(/only its admins bring people in/);
         expect(MEMBER_TICKET_REFUSED_TEXT).toMatch(/Ask an admin for a fresh invite/);

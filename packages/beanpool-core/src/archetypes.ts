@@ -5,7 +5,12 @@
  * working preferences ("You prefer…", "Works best when…"), not identities.
  * A member sees their own type; nothing shown about another member names one.
  * Archetypes gate nothing. See docs/the-commons.md, "Working-style archetypes".
+ *
+ * The types and the questions are word() keys (words.ts): the quiz shows them with t(), in the member's language. The
+ * English is the key, so code that reads them as plain strings reads the same English as before.
  */
+
+import { word, type WordKey } from './words.js';
 
 export type ArchetypeKey =
     | 'weaver'      // Type 1 - Principled, craft-focused, brings structure and quality
@@ -20,160 +25,160 @@ export type ArchetypeKey =
 
 export interface ArchetypeInfo {
     key: ArchetypeKey;
-    name: string;
+    name: WordKey;
     emoji: string;
-    tagline: string;
-    description: string;
-    superpowers: string[];
-    collaborationStyle: string;
+    tagline: WordKey;
+    description: WordKey;
+    superpowers: WordKey[];
+    collaborationStyle: WordKey;
     idealPartners: ArchetypeKey[];
-    communicationTip: string;
+    communicationTip: WordKey;
 }
 
 export const ARCHETYPES: Record<ArchetypeKey, ArchetypeInfo> = {
     weaver: {
         key: 'weaver',
-        name: 'The Weaver',
+        name: word('The Weaver'),
         emoji: '🏛️',
-        tagline: 'Craft, Quality & Purpose',
-        description: 'You prefer work with structure and care, built to last. Works best when standards are agreed up front and there is time to do things well.',
+        tagline: word('Craft, Quality & Purpose'),
+        description: word('You prefer work with structure and care, built to last. Works best when standards are agreed up front and there is time to do things well.'),
         superpowers: [
-            'Turning loose ideas into structured, high-quality plans',
-            'Spotting ways to improve shared processes and agreements',
-            'Bringing reliability, precision, and follow-through',
+            word('Turning loose ideas into structured, high-quality plans'),
+            word('Spotting ways to improve shared processes and agreements'),
+            word('Bringing reliability, precision, and follow-through'),
         ],
-        collaborationStyle: 'Values clear expectations, honest feedback, and well-thought-out workflows.',
+        collaborationStyle: word('Values clear expectations, honest feedback, and well-thought-out workflows.'),
         idealPartners: ['spark', 'harmonizer', 'connector'],
-        communicationTip: 'Appreciates clarity and attention to detail upfront.',
+        communicationTip: word('Appreciates clarity and attention to detail upfront.'),
     },
     connector: {
         key: 'connector',
-        name: 'The Connector',
+        name: word('The Connector'),
         emoji: '🤝',
-        tagline: 'Warmth, Empathy & Mutual Aid',
-        description: 'You prefer work that looks after people and links those who need help with those who can offer it. Works best when members check in on each other.',
+        tagline: word('Warmth, Empathy & Mutual Aid'),
+        description: word('You prefer work that looks after people and links those who need help with those who can offer it. Works best when members check in on each other.'),
         superpowers: [
-            'Intuitive sense for who needs support or encouragement',
-            'Weaving strong social bonds across community members',
-            'Energizing mutual aid and cooperative exchanges',
+            word('Intuitive sense for who needs support or encouragement'),
+            word('Weaving strong social bonds across community members'),
+            word('Energizing mutual aid and cooperative exchanges'),
         ],
-        collaborationStyle: 'Thrives in collaborative, relational environments where people check in on each other.',
+        collaborationStyle: word('Thrives in collaborative, relational environments where people check in on each other.'),
         idealPartners: ['weaver', 'sage', 'champion'],
-        communicationTip: 'Values personal warmth and acknowledging shared contributions.',
+        communicationTip: word('Values personal warmth and acknowledging shared contributions.'),
     },
     catalyst: {
         key: 'catalyst',
-        name: 'The Catalyst',
+        name: word('The Catalyst'),
         emoji: '⚡',
-        tagline: 'Momentum, Drive & Progress',
-        description: 'You prefer getting things off the ground: clear goals, milestones and visible progress. Works best when decisions come quickly and next steps are concrete.',
+        tagline: word('Momentum, Drive & Progress'),
+        description: word('You prefer getting things off the ground: clear goals, milestones and visible progress. Works best when decisions come quickly and next steps are concrete.'),
         superpowers: [
-            'Transforming discussions into actionable milestones',
-            'Unblocking logjams and keeping energy high',
-            'Adapting quickly to changing needs and resources',
+            word('Transforming discussions into actionable milestones'),
+            word('Unblocking logjams and keeping energy high'),
+            word('Adapting quickly to changing needs and resources'),
         ],
-        collaborationStyle: 'Enjoys dynamic, goal-oriented teamwork with tangible outcomes.',
+        collaborationStyle: word('Enjoys dynamic, goal-oriented teamwork with tangible outcomes.'),
         idealPartners: ['sage', 'harmonizer', 'artisan'],
-        communicationTip: 'Prefers efficient updates and clear, actionable next steps.',
+        communicationTip: word('Prefers efficient updates and clear, actionable next steps.'),
     },
     artisan: {
         key: 'artisan',
-        name: 'The Artisan',
+        name: word('The Artisan'),
         emoji: '🎨',
-        tagline: 'Creativity, Depth & Authenticity',
-        description: 'You prefer work with meaning, craft and a personal touch. Works best when there is room for original ideas and the deeper purpose stays in view.',
+        tagline: word('Creativity, Depth & Authenticity'),
+        description: word('You prefer work with meaning, craft and a personal touch. Works best when there is room for original ideas and the deeper purpose stays in view.'),
         superpowers: [
-            'Infusing projects with authentic meaning and creative flair',
-            'Seeing unique possibilities others might overlook',
-            'Creating inspiring spaces, stories, and cultural touchpoints',
+            word('Infusing projects with authentic meaning and creative flair'),
+            word('Seeing unique possibilities others might overlook'),
+            word('Creating inspiring spaces, stories, and cultural touchpoints'),
         ],
-        collaborationStyle: 'Works best when there is room for authentic expression and genuine connection.',
+        collaborationStyle: word('Works best when there is room for authentic expression and genuine connection.'),
         idealPartners: ['catalyst', 'guardian', 'weaver'],
-        communicationTip: 'Values sincere, thoughtful listening over rushed transactions.',
+        communicationTip: word('Values sincere, thoughtful listening over rushed transactions.'),
     },
     sage: {
         key: 'sage',
-        name: 'The Sage',
+        name: word('The Sage'),
         emoji: '🧭',
-        tagline: 'Insight, Systems & Deep Knowledge',
-        description: 'You prefer to understand how things work before acting, and to build tools others can use. Works best with time to think and clear written information.',
+        tagline: word('Insight, Systems & Deep Knowledge'),
+        description: word('You prefer to understand how things work before acting, and to build tools others can use. Works best with time to think and clear written information.'),
         superpowers: [
-            'Synthesizing complex information into practical insights',
-            'Designing scalable tools, guides, and decentralized systems',
-            'Providing calm, objective analysis in uncertain situations',
+            word('Synthesizing complex information into practical insights'),
+            word('Designing scalable tools, guides, and decentralized systems'),
+            word('Providing calm, objective analysis in uncertain situations'),
         ],
-        collaborationStyle: 'Prefers having space to think deeply and communicate asynchronously.',
+        collaborationStyle: word('Prefers having space to think deeply and communicate asynchronously.'),
         idealPartners: ['spark', 'connector', 'champion'],
-        communicationTip: 'Appreciates well-structured information and respect for thinking time.',
+        communicationTip: word('Appreciates well-structured information and respect for thinking time.'),
     },
     guardian: {
         key: 'guardian',
-        name: 'The Guardian',
+        name: word('The Guardian'),
         emoji: '🛡️',
-        tagline: 'Loyalty, Trust & Resilience',
-        description: 'You prefer to plan ahead, look after shared resources and keep commitments. Works best when roles are clear and people follow through on what they say.',
+        tagline: word('Loyalty, Trust & Resilience'),
+        description: word('You prefer to plan ahead, look after shared resources and keep commitments. Works best when roles are clear and people follow through on what they say.'),
         superpowers: [
-            'Anticipating risks and preparing backup solutions',
-            'Fierce loyalty to community members and shared commitments',
-            'Building reliable, long-lasting trust circles',
+            word('Anticipating risks and preparing backup solutions'),
+            word('Fierce loyalty to community members and shared commitments'),
+            word('Building reliable, long-lasting trust circles'),
         ],
-        collaborationStyle: 'Thrives when there is mutual transparency and dependable follow-through.',
+        collaborationStyle: word('Thrives when there is mutual transparency and dependable follow-through.'),
         idealPartners: ['artisan', 'spark', 'harmonizer'],
-        communicationTip: 'Values predictability, honesty, and clear commitments.',
+        communicationTip: word('Values predictability, honesty, and clear commitments.'),
     },
     spark: {
         key: 'spark',
-        name: 'The Spark',
+        name: word('The Spark'),
         emoji: '✨',
-        tagline: 'Vision, Possibility & Optimism',
-        description: 'You prefer starting fresh projects and connecting unexpected ideas. Works best when there is room to explore and others help carry things through.',
+        tagline: word('Vision, Possibility & Optimism'),
+        description: word('You prefer starting fresh projects and connecting unexpected ideas. Works best when there is room to explore and others help carry things through.'),
         superpowers: [
-            'Igniting fresh excitement and rallying interest',
-            'Synthesizing cross-disciplinary ideas into novel initiatives',
-            'Keeping morale high with optimism and playful curiosity',
+            word('Igniting fresh excitement and rallying interest'),
+            word('Synthesizing cross-disciplinary ideas into novel initiatives'),
+            word('Keeping morale high with optimism and playful curiosity'),
         ],
-        collaborationStyle: 'Thrives in open, exploratory projects with creative freedom.',
+        collaborationStyle: word('Thrives in open, exploratory projects with creative freedom.'),
         idealPartners: ['weaver', 'sage', 'guardian'],
-        communicationTip: 'Enjoys brainstorming and exploring what could be possible.',
+        communicationTip: word('Enjoys brainstorming and exploring what could be possible.'),
     },
     champion: {
         key: 'champion',
-        name: 'The Champion',
+        name: word('The Champion'),
         emoji: '🪵',
-        tagline: 'Advocacy, Courage & Direct Action',
-        description: 'You prefer direct action, plain talk and standing up for what is fair. Works best when people say what they mean and stand behind their word.',
+        tagline: word('Advocacy, Courage & Direct Action'),
+        description: word('You prefer direct action, plain talk and standing up for what is fair. Works best when people say what they mean and stand behind their word.'),
         superpowers: [
-            'Cutting through ambiguity with decisive, candid leadership',
-            'Advocating fiercely for community equity and fairness',
-            'Taking on heavy lifts when urgent action is needed',
+            word('Cutting through ambiguity with decisive, candid leadership'),
+            word('Advocating fiercely for community equity and fairness'),
+            word('Taking on heavy lifts when urgent action is needed'),
         ],
-        collaborationStyle: 'Prefers direct, transparent communication and people who stand behind their word.',
+        collaborationStyle: word('Prefers direct, transparent communication and people who stand behind their word.'),
         idealPartners: ['harmonizer', 'connector', 'sage'],
-        communicationTip: 'Values straight talk, courage, and direct clarity.',
+        communicationTip: word('Values straight talk, courage, and direct clarity.'),
     },
     harmonizer: {
         key: 'harmonizer',
-        name: 'The Harmonizer',
+        name: word('The Harmonizer'),
         emoji: '🕊️',
-        tagline: 'Balance, Consensus & Flow',
-        description: 'You prefer calm, inclusive work where everyone is heard. Works best when there is patience for different views and no needless pressure.',
+        tagline: word('Balance, Consensus & Flow'),
+        description: word('You prefer calm, inclusive work where everyone is heard. Works best when there is patience for different views and no needless pressure.'),
         superpowers: [
-            'Unifying diverse opinions into common ground',
-            'Bringing grounding calm to stressful or high-stakes moments',
-            'Ensuring quiet voices and unseen needs are included',
+            word('Unifying diverse opinions into common ground'),
+            word('Bringing grounding calm to stressful or high-stakes moments'),
+            word('Ensuring quiet voices and unseen needs are included'),
         ],
-        collaborationStyle: 'Thrives in collaborative, respectful spaces that value patience and harmony.',
+        collaborationStyle: word('Thrives in collaborative, respectful spaces that value patience and harmony.'),
         idealPartners: ['champion', 'catalyst', 'weaver'],
-        communicationTip: 'Values patient listening and avoiding unnecessary pressure.',
+        communicationTip: word('Values patient listening and avoiding unnecessary pressure.'),
     },
 };
 
 export interface QuizQuestion {
     id: string;
-    prompt: string;
-    scenario?: string;
+    prompt: WordKey;
+    scenario?: WordKey;
     options: {
-        text: string;
+        text: WordKey;
         emoji?: string;
         target: ArchetypeKey;
     }[];
@@ -183,83 +188,83 @@ export interface QuizQuestion {
 export const QUICK_SPARK_QUESTIONS: QuizQuestion[] = [
     {
         id: 'q1',
-        prompt: 'When a new community project kicks off, where do you naturally jump in?',
+        prompt: word('When a new community project kicks off, where do you naturally jump in?'),
         options: [
-            { text: 'Organizing logistics, checklists, and quality standards', emoji: '🏛️', target: 'weaver' },
-            { text: 'Welcoming members and seeing who needs support', emoji: '🤝', target: 'connector' },
-            { text: 'Setting clear milestones and rallying quick momentum', emoji: '⚡', target: 'catalyst' },
+            { text: word('Organizing logistics, checklists, and quality standards'), emoji: '🏛️', target: 'weaver' },
+            { text: word('Welcoming members and seeing who needs support'), emoji: '🤝', target: 'connector' },
+            { text: word('Setting clear milestones and rallying quick momentum'), emoji: '⚡', target: 'catalyst' },
         ],
     },
     {
         id: 'q2',
-        prompt: 'How do you prefer to bring value to a shared effort?',
+        prompt: word('How do you prefer to bring value to a shared effort?'),
         options: [
-            { text: 'Crafting the creative identity, story, and meaningful details', emoji: '🎨', target: 'artisan' },
-            { text: 'Researching the best tools, systems, and technical approaches', emoji: '🧭', target: 'sage' },
-            { text: 'Identifying potential roadblocks and building trust among the team', emoji: '🛡️', target: 'guardian' },
+            { text: word('Crafting the creative identity, story, and meaningful details'), emoji: '🎨', target: 'artisan' },
+            { text: word('Researching the best tools, systems, and technical approaches'), emoji: '🧭', target: 'sage' },
+            { text: word('Identifying potential roadblocks and building trust among the team'), emoji: '🛡️', target: 'guardian' },
         ],
     },
     {
         id: 'q3',
-        prompt: 'What kind of contribution brings you the most energy?',
+        prompt: word('What kind of contribution brings you the most energy?'),
         options: [
-            { text: 'Brainstorming fresh ideas and exploring possibilities', emoji: '✨', target: 'spark' },
-            { text: 'Tackling tough challenges and making decisive things happen', emoji: '🪵', target: 'champion' },
-            { text: 'Bringing people together to find peaceful, shared consensus', emoji: '🕊️', target: 'harmonizer' },
+            { text: word('Brainstorming fresh ideas and exploring possibilities'), emoji: '✨', target: 'spark' },
+            { text: word('Tackling tough challenges and making decisive things happen'), emoji: '🪵', target: 'champion' },
+            { text: word('Bringing people together to find peaceful, shared consensus'), emoji: '🕊️', target: 'harmonizer' },
         ],
     },
     {
         id: 'q4',
-        prompt: 'When collaborating with neighbours on a marketplace deal or project, you appreciate when:',
+        prompt: word('When collaborating with neighbours on a marketplace deal or project, you appreciate when:'),
         options: [
-            { text: 'Agreements are precise, tidy, and followed through with care', emoji: '🏛️', target: 'weaver' },
-            { text: 'Communication is warm, personal, and mutually caring', emoji: '🤝', target: 'connector' },
-            { text: 'Things move efficiently without getting bogged down in endless talk', emoji: '⚡', target: 'catalyst' },
+            { text: word('Agreements are precise, tidy, and followed through with care'), emoji: '🏛️', target: 'weaver' },
+            { text: word('Communication is warm, personal, and mutually caring'), emoji: '🤝', target: 'connector' },
+            { text: word('Things move efficiently without getting bogged down in endless talk'), emoji: '⚡', target: 'catalyst' },
         ],
     },
     {
         id: 'q5',
-        prompt: 'If a challenge or disagreement arises in a group, your instinct is to:',
+        prompt: word('If a challenge or disagreement arises in a group, your instinct is to:'),
         options: [
-            { text: 'Listen to everyone patiently and find common ground', emoji: '🕊️', target: 'harmonizer' },
-            { text: 'Address the issue directly and advocate for fairness', emoji: '🪵', target: 'champion' },
-            { text: 'Take a step back to analyze the root causes and data', emoji: '🧭', target: 'sage' },
+            { text: word('Listen to everyone patiently and find common ground'), emoji: '🕊️', target: 'harmonizer' },
+            { text: word('Address the issue directly and advocate for fairness'), emoji: '🪵', target: 'champion' },
+            { text: word('Take a step back to analyze the root causes and data'), emoji: '🧭', target: 'sage' },
         ],
     },
     {
         id: 'q6',
-        prompt: 'In community meetings or group discussions, you often find yourself:',
+        prompt: word('In community meetings or group discussions, you often find yourself:'),
         options: [
-            { text: 'Sharing creative solutions or inspiring new directions', emoji: '✨', target: 'spark' },
-            { text: 'Making sure plans are safe, realistic, and dependable', emoji: '🛡️', target: 'guardian' },
-            { text: 'Ensuring the project stays true to its authentic purpose and heart', emoji: '🎨', target: 'artisan' },
+            { text: word('Sharing creative solutions or inspiring new directions'), emoji: '✨', target: 'spark' },
+            { text: word('Making sure plans are safe, realistic, and dependable'), emoji: '🛡️', target: 'guardian' },
+            { text: word('Ensuring the project stays true to its authentic purpose and heart'), emoji: '🎨', target: 'artisan' },
         ],
     },
     {
         id: 'q7',
-        prompt: 'What gives you the deepest sense of satisfaction at the end of a busy week?',
+        prompt: word('What gives you the deepest sense of satisfaction at the end of a busy week?'),
         options: [
-            { text: 'Knowing work was done thoroughly, cleanly, and properly', emoji: '🏛️', target: 'weaver' },
-            { text: 'Knowing you brightened someone’s day or helped someone out', emoji: '🤝', target: 'connector' },
-            { text: 'Checking key milestones off the list and seeing tangible results', emoji: '⚡', target: 'catalyst' },
+            { text: word('Knowing work was done thoroughly, cleanly, and properly'), emoji: '🏛️', target: 'weaver' },
+            { text: word('Knowing you brightened someone’s day or helped someone out'), emoji: '🤝', target: 'connector' },
+            { text: word('Checking key milestones off the list and seeing tangible results'), emoji: '⚡', target: 'catalyst' },
         ],
     },
     {
         id: 'q8',
-        prompt: 'When exploring new tools or resources for the community, you love to:',
+        prompt: word('When exploring new tools or resources for the community, you love to:'),
         options: [
-            { text: 'Deep-dive into documentation and understand how it works', emoji: '🧭', target: 'sage' },
-            { text: 'Dream up exciting new ways the community can use it', emoji: '✨', target: 'spark' },
-            { text: 'Ensure the tool is secure and protects members\' privacy', emoji: '🛡️', target: 'guardian' },
+            { text: word('Deep-dive into documentation and understand how it works'), emoji: '🧭', target: 'sage' },
+            { text: word('Dream up exciting new ways the community can use it'), emoji: '✨', target: 'spark' },
+            { text: word('Ensure the tool is secure and protects members\' privacy'), emoji: '🛡️', target: 'guardian' },
         ],
     },
     {
         id: 'q9',
-        prompt: 'What principle matters most to you in local cooperation?',
+        prompt: word('What principle matters most to you in local cooperation?'),
         options: [
-            { text: 'Standing strong for fairness and standing up for others', emoji: '🪵', target: 'champion' },
-            { text: 'Creating an atmosphere of peace, patience, and inclusion', emoji: '🕊️', target: 'harmonizer' },
-            { text: 'Cultivating authentic beauty, expression, and uniqueness', emoji: '🎨', target: 'artisan' },
+            { text: word('Standing strong for fairness and standing up for others'), emoji: '🪵', target: 'champion' },
+            { text: word('Creating an atmosphere of peace, patience, and inclusion'), emoji: '🕊️', target: 'harmonizer' },
+            { text: word('Cultivating authentic beauty, expression, and uniqueness'), emoji: '🎨', target: 'artisan' },
         ],
     },
 ];
@@ -269,261 +274,261 @@ export const DEEP_RESONANCE_QUESTIONS: QuizQuestion[] = [
     // Weaver cluster (1)
     {
         id: 'd1',
-        prompt: 'I naturally spot what needs improvement in a process and care about getting details right.',
+        prompt: word('I naturally spot what needs improvement in a process and care about getting details right.'),
         options: [
-            { text: 'Strongly describes me', target: 'weaver' },
-            { text: 'Somewhat describes me', target: 'weaver' },
-            { text: 'Not my primary focus', target: 'harmonizer' },
+            { text: word('Strongly describes me'), target: 'weaver' },
+            { text: word('Somewhat describes me'), target: 'weaver' },
+            { text: word('Not my primary focus'), target: 'harmonizer' },
         ],
     },
     {
         id: 'd2',
-        prompt: 'I feel most comfortable when expectations, roles, and guidelines are clearly defined.',
+        prompt: word('I feel most comfortable when expectations, roles, and guidelines are clearly defined.'),
         options: [
-            { text: 'Definitely agree', target: 'weaver' },
-            { text: 'Sometimes agree', target: 'guardian' },
-            { text: 'I prefer open, flexible fluidity', target: 'spark' },
+            { text: word('Definitely agree'), target: 'weaver' },
+            { text: word('Sometimes agree'), target: 'guardian' },
+            { text: word('I prefer open, flexible fluidity'), target: 'spark' },
         ],
     },
     {
         id: 'd3',
-        prompt: 'In shared projects, I am often the one ensuring our work meets high craft and ethical standards.',
+        prompt: word('In shared projects, I am often the one ensuring our work meets high craft and ethical standards.'),
         options: [
-            { text: 'Yes, very much so', target: 'weaver' },
-            { text: 'I focus more on the big picture', target: 'spark' },
-            { text: 'I focus more on how people feel', target: 'connector' },
+            { text: word('Yes, very much so'), target: 'weaver' },
+            { text: word('I focus more on the big picture'), target: 'spark' },
+            { text: word('I focus more on how people feel'), target: 'connector' },
         ],
     },
 
     // Connector cluster (2)
     {
         id: 'd4',
-        prompt: 'I quickly sense when someone in the community is feeling left out or overwhelmed.',
+        prompt: word('I quickly sense when someone in the community is feeling left out or overwhelmed.'),
         options: [
-            { text: 'Always — I notice people right away', target: 'connector' },
-            { text: 'Sometimes, if I know them well', target: 'harmonizer' },
-            { text: 'I focus more on the task at hand', target: 'catalyst' },
+            { text: word('Always — I notice people right away'), target: 'connector' },
+            { text: word('Sometimes, if I know them well'), target: 'harmonizer' },
+            { text: word('I focus more on the task at hand'), target: 'catalyst' },
         ],
     },
     {
         id: 'd5',
-        prompt: 'Helping neighbours and contributing to mutual aid gives me real joy and energy.',
+        prompt: word('Helping neighbours and contributing to mutual aid gives me real joy and energy.'),
         options: [
-            { text: 'A core part of who I am', target: 'connector' },
-            { text: 'I enjoy helping when asked', target: 'guardian' },
-            { text: 'I prefer contributing through ideas or tools', target: 'sage' },
+            { text: word('A core part of who I am'), target: 'connector' },
+            { text: word('I enjoy helping when asked'), target: 'guardian' },
+            { text: word('I prefer contributing through ideas or tools'), target: 'sage' },
         ],
     },
     {
         id: 'd6',
-        prompt: 'I place a high value on warm, appreciative, and considerate communication.',
+        prompt: word('I place a high value on warm, appreciative, and considerate communication.'),
         options: [
-            { text: 'Strongly agree', target: 'connector' },
-            { text: 'I value clarity above all', target: 'champion' },
-            { text: 'I value authenticity and depth', target: 'artisan' },
+            { text: word('Strongly agree'), target: 'connector' },
+            { text: word('I value clarity above all'), target: 'champion' },
+            { text: word('I value authenticity and depth'), target: 'artisan' },
         ],
     },
 
     // Catalyst cluster (3)
     {
         id: 'd7',
-        prompt: 'I am motivated by setting tangible goals and seeing steady, measurable progress.',
+        prompt: word('I am motivated by setting tangible goals and seeing steady, measurable progress.'),
         options: [
-            { text: 'Yes, I love momentum and results', target: 'catalyst' },
-            { text: 'I prefer to let things unfold naturally', target: 'harmonizer' },
-            { text: 'I prioritize quality over speed', target: 'weaver' },
+            { text: word('Yes, I love momentum and results'), target: 'catalyst' },
+            { text: word('I prefer to let things unfold naturally'), target: 'harmonizer' },
+            { text: word('I prioritize quality over speed'), target: 'weaver' },
         ],
     },
     {
         id: 'd8',
-        prompt: 'When energy dips in a project, I naturally try to revitalize the group and get us moving.',
+        prompt: word('When energy dips in a project, I naturally try to revitalize the group and get us moving.'),
         options: [
-            { text: 'Very typical of me', target: 'catalyst' },
-            { text: 'I look for new creative angles', target: 'spark' },
-            { text: 'I step in to do the heavy lifting directly', target: 'champion' },
+            { text: word('Very typical of me'), target: 'catalyst' },
+            { text: word('I look for new creative angles'), target: 'spark' },
+            { text: word('I step in to do the heavy lifting directly'), target: 'champion' },
         ],
     },
     {
         id: 'd9',
-        prompt: 'I can quickly adapt my strategy when circumstances change to keep our goals on track.',
+        prompt: word('I can quickly adapt my strategy when circumstances change to keep our goals on track.'),
         options: [
-            { text: 'Strongly describes me', target: 'catalyst' },
-            { text: 'I prefer sticking to the researched plan', target: 'sage' },
-            { text: 'I check in with the team first', target: 'guardian' },
+            { text: word('Strongly describes me'), target: 'catalyst' },
+            { text: word('I prefer sticking to the researched plan'), target: 'sage' },
+            { text: word('I check in with the team first'), target: 'guardian' },
         ],
     },
 
     // Artisan cluster (4)
     {
         id: 'd10',
-        prompt: 'I value authenticity and bring a distinct creative flair or personal touch to my work.',
+        prompt: word('I value authenticity and bring a distinct creative flair or personal touch to my work.'),
         options: [
-            { text: 'Absolutely — creativity is essential', target: 'artisan' },
-            { text: 'I appreciate good design', target: 'weaver' },
-            { text: 'Function matters more to me than style', target: 'sage' },
+            { text: word('Absolutely — creativity is essential'), target: 'artisan' },
+            { text: word('I appreciate good design'), target: 'weaver' },
+            { text: word('Function matters more to me than style'), target: 'sage' },
         ],
     },
     {
         id: 'd11',
-        prompt: 'I prefer deep, meaningful conversations over casual small talk or surface pleasantries.',
+        prompt: word('I prefer deep, meaningful conversations over casual small talk or surface pleasantries.'),
         options: [
-            { text: 'Very true for me', target: 'artisan' },
-            { text: 'I enjoy connecting in various ways', target: 'connector' },
-            { text: 'I prefer practical, goal-focused talk', target: 'catalyst' },
+            { text: word('Very true for me'), target: 'artisan' },
+            { text: word('I enjoy connecting in various ways'), target: 'connector' },
+            { text: word('I prefer practical, goal-focused talk'), target: 'catalyst' },
         ],
     },
     {
         id: 'd12',
-        prompt: 'I am sensitive to whether a community initiative feels genuinely heartfelt and true.',
+        prompt: word('I am sensitive to whether a community initiative feels genuinely heartfelt and true.'),
         options: [
-            { text: 'Strongly agree', target: 'artisan' },
-            { text: 'I look at whether it works practically', target: 'champion' },
-            { text: 'I look at whether it is inclusive to everyone', target: 'harmonizer' },
+            { text: word('Strongly agree'), target: 'artisan' },
+            { text: word('I look at whether it works practically'), target: 'champion' },
+            { text: word('I look at whether it is inclusive to everyone'), target: 'harmonizer' },
         ],
     },
 
     // Sage cluster (5)
     {
         id: 'd13',
-        prompt: 'I enjoy digging deep into a topic to thoroughly master the details before jumping in.',
+        prompt: word('I enjoy digging deep into a topic to thoroughly master the details before jumping in.'),
         options: [
-            { text: 'Yes, I like being well-informed', target: 'sage' },
-            { text: 'I prefer learning by doing on the fly', target: 'spark' },
-            { text: 'I rely on trusted community experts', target: 'guardian' },
+            { text: word('Yes, I like being well-informed'), target: 'sage' },
+            { text: word('I prefer learning by doing on the fly'), target: 'spark' },
+            { text: word('I rely on trusted community experts'), target: 'guardian' },
         ],
     },
     {
         id: 'd14',
-        prompt: 'I often contribute by creating guides, systems, or tools that make things easier for others.',
+        prompt: word('I often contribute by creating guides, systems, or tools that make things easier for others.'),
         options: [
-            { text: 'Strongly describes me', target: 'sage' },
-            { text: 'I prefer direct hands-on collaboration', target: 'connector' },
-            { text: 'I prefer initiating and pitching ideas', target: 'spark' },
+            { text: word('Strongly describes me'), target: 'sage' },
+            { text: word('I prefer direct hands-on collaboration'), target: 'connector' },
+            { text: word('I prefer initiating and pitching ideas'), target: 'spark' },
         ],
     },
     {
         id: 'd15',
-        prompt: 'I appreciate having time and quiet space to reflect before making major decisions.',
+        prompt: word('I appreciate having time and quiet space to reflect before making major decisions.'),
         options: [
-            { text: 'Essential for me', target: 'sage' },
-            { text: 'I can make decisions quickly under pressure', target: 'champion' },
-            { text: 'I prefer talking it through with others', target: 'harmonizer' },
+            { text: word('Essential for me'), target: 'sage' },
+            { text: word('I can make decisions quickly under pressure'), target: 'champion' },
+            { text: word('I prefer talking it through with others'), target: 'harmonizer' },
         ],
     },
 
     // Guardian cluster (6)
     {
         id: 'd16',
-        prompt: 'I am naturally alert to what could go wrong and like having backup plans in place.',
+        prompt: word('I am naturally alert to what could go wrong and like having backup plans in place.'),
         options: [
-            { text: 'Very true — preparedness matters', target: 'guardian' },
-            { text: 'I am optimistic that things will work out', target: 'spark' },
-            { text: 'I deal with issues when they appear', target: 'champion' },
+            { text: word('Very true — preparedness matters'), target: 'guardian' },
+            { text: word('I am optimistic that things will work out'), target: 'spark' },
+            { text: word('I deal with issues when they appear'), target: 'champion' },
         ],
     },
     {
         id: 'd17',
-        prompt: 'Once I commit to a community group or neighbour, I am dependable and fiercely loyal.',
+        prompt: word('Once I commit to a community group or neighbour, I am dependable and fiercely loyal.'),
         options: [
-            { text: 'Deeply true for me', target: 'guardian' },
-            { text: 'I stay committed as long as goals are progressing', target: 'catalyst' },
-            { text: 'I value flexibility and exploring new circles', target: 'spark' },
+            { text: word('Deeply true for me'), target: 'guardian' },
+            { text: word('I stay committed as long as goals are progressing'), target: 'catalyst' },
+            { text: word('I value flexibility and exploring new circles'), target: 'spark' },
         ],
     },
     {
         id: 'd18',
-        prompt: 'Trust and reliability are the most important qualities I look for in collaborators.',
+        prompt: word('Trust and reliability are the most important qualities I look for in collaborators.'),
         options: [
-            { text: 'Strongly agree', target: 'guardian' },
-            { text: 'Creativity and vision matter most', target: 'artisan' },
-            { text: 'Action and decisiveness matter most', target: 'champion' },
+            { text: word('Strongly agree'), target: 'guardian' },
+            { text: word('Creativity and vision matter most'), target: 'artisan' },
+            { text: word('Action and decisiveness matter most'), target: 'champion' },
         ],
     },
 
     // Spark cluster (7)
     {
         id: 'd19',
-        prompt: 'I love brainstorming new ideas, possibilities, and adventures with neighbours.',
+        prompt: word('I love brainstorming new ideas, possibilities, and adventures with neighbours.'),
         options: [
-            { text: 'Yes, this is where I shine', target: 'spark' },
-            { text: 'I prefer refining existing solid plans', target: 'weaver' },
-            { text: 'I focus on executing today\'s tasks', target: 'catalyst' },
+            { text: word('Yes, this is where I shine'), target: 'spark' },
+            { text: word('I prefer refining existing solid plans'), target: 'weaver' },
+            { text: word('I focus on executing today\'s tasks'), target: 'catalyst' },
         ],
     },
     {
         id: 'd20',
-        prompt: 'I bring optimism, spontaneous energy, and enthusiasm into group projects.',
+        prompt: word('I bring optimism, spontaneous energy, and enthusiasm into group projects.'),
         options: [
-            { text: 'Strongly describes me', target: 'spark' },
-            { text: 'I bring calm and grounded balance', target: 'harmonizer' },
-            { text: 'I bring focus and discipline', target: 'weaver' },
+            { text: word('Strongly describes me'), target: 'spark' },
+            { text: word('I bring calm and grounded balance'), target: 'harmonizer' },
+            { text: word('I bring focus and discipline'), target: 'weaver' },
         ],
     },
     {
         id: 'd21',
-        prompt: 'I get excited about connecting different projects, skills, or groups together.',
+        prompt: word('I get excited about connecting different projects, skills, or groups together.'),
         options: [
-            { text: 'Very true of me', target: 'spark' },
-            { text: 'I prefer deep focus on one core project', target: 'sage' },
-            { text: 'I focus on personal 1-on-1 connections', target: 'connector' },
+            { text: word('Very true of me'), target: 'spark' },
+            { text: word('I prefer deep focus on one core project'), target: 'sage' },
+            { text: word('I focus on personal 1-on-1 connections'), target: 'connector' },
         ],
     },
 
     // Champion cluster (8)
     {
         id: 'd22',
-        prompt: 'I am comfortable speaking up directly when something feels unfair or inefficient.',
+        prompt: word('I am comfortable speaking up directly when something feels unfair or inefficient.'),
         options: [
-            { text: 'Always — I value direct honesty', target: 'champion' },
-            { text: 'I prefer raising concerns gently', target: 'harmonizer' },
-            { text: 'I analyze the rules first', target: 'weaver' },
+            { text: word('Always — I value direct honesty'), target: 'champion' },
+            { text: word('I prefer raising concerns gently'), target: 'harmonizer' },
+            { text: word('I analyze the rules first'), target: 'weaver' },
         ],
     },
     {
         id: 'd23',
-        prompt: 'I am energized by stepping into challenges that require courage and clear direction.',
+        prompt: word('I am energized by stepping into challenges that require courage and clear direction.'),
         options: [
-            { text: 'Strongly describes me', target: 'champion' },
-            { text: 'I prefer calm, collaborative facilitation', target: 'harmonizer' },
-            { text: 'I prefer strategic, backstage planning', target: 'sage' },
+            { text: word('Strongly describes me'), target: 'champion' },
+            { text: word('I prefer calm, collaborative facilitation'), target: 'harmonizer' },
+            { text: word('I prefer strategic, backstage planning'), target: 'sage' },
         ],
     },
     {
         id: 'd24',
-        prompt: 'I respect people who say what they mean and stand firmly behind their commitments.',
+        prompt: word('I respect people who say what they mean and stand firmly behind their commitments.'),
         options: [
-            { text: 'Strongly agree', target: 'champion' },
-            { text: 'I value kindness and understanding', target: 'connector' },
-            { text: 'I value precision and craft', target: 'weaver' },
+            { text: word('Strongly agree'), target: 'champion' },
+            { text: word('I value kindness and understanding'), target: 'connector' },
+            { text: word('I value precision and craft'), target: 'weaver' },
         ],
     },
 
     // Harmonizer cluster (9)
     {
         id: 'd25',
-        prompt: 'I naturally sense multiple sides of an argument and help people find common ground.',
+        prompt: word('I naturally sense multiple sides of an argument and help people find common ground.'),
         options: [
-            { text: 'Yes, peacemaking is natural for me', target: 'harmonizer' },
-            { text: 'I usually take a clear, decisive stance', target: 'champion' },
-            { text: 'I look at the objective facts', target: 'sage' },
+            { text: word('Yes, peacemaking is natural for me'), target: 'harmonizer' },
+            { text: word('I usually take a clear, decisive stance'), target: 'champion' },
+            { text: word('I look at the objective facts'), target: 'sage' },
         ],
     },
     {
         id: 'd26',
-        prompt: 'I prefer calm, steady environments where everyone feels respected and unhurried.',
+        prompt: word('I prefer calm, steady environments where everyone feels respected and unhurried.'),
         options: [
-            { text: 'Deeply true for me', target: 'harmonizer' },
-            { text: 'I thrive in fast-paced, buzzing settings', target: 'catalyst' },
-            { text: 'I thrive in spontaneous, novel settings', target: 'spark' },
+            { text: word('Deeply true for me'), target: 'harmonizer' },
+            { text: word('I thrive in fast-paced, buzzing settings'), target: 'catalyst' },
+            { text: word('I thrive in spontaneous, novel settings'), target: 'spark' },
         ],
     },
     {
         id: 'd27',
-        prompt: 'I am patient with different paces and value keeping the community atmosphere harmonious.',
+        prompt: word('I am patient with different paces and value keeping the community atmosphere harmonious.'),
         options: [
-            { text: 'Strongly agree', target: 'harmonizer' },
-            { text: 'I push for faster progress when needed', target: 'catalyst' },
-            { text: 'I push for higher standards when needed', target: 'weaver' },
+            { text: word('Strongly agree'), target: 'harmonizer' },
+            { text: word('I push for faster progress when needed'), target: 'catalyst' },
+            { text: word('I push for higher standards when needed'), target: 'weaver' },
         ],
     },
 ];

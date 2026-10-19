@@ -2495,13 +2495,10 @@
   "Your groups": "உங்கள் குழுக்கள்",
   "You're not in any groups yet. Join one below, or start one with +.": "நீங்கள் இன்னும் எந்தக் குழுவிலும் இல்லை. கீழே உள்ள ஒன்றில் இணையுங்கள் அல்லது + மூலம் ஒன்றைத் தொடங்குங்கள்.",
   "Groups you could join": "நீங்கள் இணையக்கூடிய குழுக்கள்",
-  "🏛️ The Commons' enterprises": "🏛️ பொதுக் கூட்டு முயற்சிகள்",
-  "Open {name}": "{name} ஐத் திற",
   "{n} live offer|{n} live offers": {
     "one": "{n} நேரலை சலுகை",
     "other": "{n} நேரலை சலுகைகள்"
   },
-  "You can act for these enterprises — post their offers & pay tenders": "இந்தக் கூட்டு முயற்சிகளுக்காக நீங்கள் செயல்படலாம் — அவற்றின் சலுகைகளை வெளியிடலாம் & டெண்டர்களுக்குப் பணம் செலுத்தலாம்",
   "+ Start an enterprise": "+ கூட்டு முயற்சியைத் தொடங்குங்கள்",
   "+ Start a project": "+ திட்டத்தைத் தொடங்குங்கள்",
   "+ Create a Group": "+ குழுவை உருவாக்குங்கள்",

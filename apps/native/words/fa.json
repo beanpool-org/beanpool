@@ -2495,13 +2495,10 @@
   "Your groups": "گروه‌های شما",
   "You're not in any groups yet. Join one below, or start one with +.": "هنوز در هیچ گروهی عضو نیستید. به یکی از گروه‌های زیر بپیوندید یا با + یک گروه بسازید.",
   "Groups you could join": "گروه‌هایی که می‌توانید بپیوندید",
-  "🏛️ The Commons' enterprises": "🏛️ طرح‌های تجاری مشاع",
-  "Open {name}": "باز کردن {name}",
   "{n} live offer|{n} live offers": {
     "one": "{n} پیشنهاد فعال",
     "other": "{n} پیشنهاد فعال"
   },
-  "You can act for these enterprises — post their offers & pay tenders": "می‌توانید به نمایندگی از این طرح‌های تجاری اقدام کنید — پیشنهادهای آن‌ها را ثبت کنید و مناقصه‌ها را بپردازید",
   "+ Start an enterprise": "+ شروع یک طرح تجاری",
   "+ Start a project": "+ شروع یک پروژه",
   "+ Create a Group": "+ ایجاد یک گروه",

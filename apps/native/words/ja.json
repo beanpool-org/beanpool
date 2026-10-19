@@ -2396,12 +2396,9 @@
   "Your groups": "参加中のグループ",
   "You're not in any groups yet. Join one below, or start one with +.": "まだどのグループにも参加していません。下の一覧から参加するか、+ で新しく作成してください。",
   "Groups you could join": "参加できるグループ",
-  "🏛️ The Commons' enterprises": "🏛️ コモンズの事業体",
-  "Open {name}": "{name}を開く",
   "{n} live offer|{n} live offers": {
     "other": "公開中の出品{n}件"
   },
-  "You can act for these enterprises — post their offers & pay tenders": "これらの事業体の代理として活動できます — 出品の投稿や発注の支払いができます",
   "+ Start an enterprise": "+ 事業体を始める",
   "+ Start a project": "+ プロジェクトを始める",
   "+ Create a Group": "+ グループを作成",

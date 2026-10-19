@@ -2495,13 +2495,10 @@
   "Your groups": "Vos groupes",
   "You're not in any groups yet. Join one below, or start one with +.": "Vous ne faites encore partie d'aucun groupe. Rejoignez-en un ci-dessous ou créez-en un avec +.",
   "Groups you could join": "Groupes que vous pourriez rejoindre",
-  "🏛️ The Commons' enterprises": "🏛️ Les entreprises des Communs",
-  "Open {name}": "Ouvrir {name}",
   "{n} live offer|{n} live offers": {
     "one": "{n} offre active",
     "other": "{n} offres actives"
   },
-  "You can act for these enterprises — post their offers & pay tenders": "Vous pouvez agir pour ces entreprises — publier leurs offres et régler les prestations",
   "+ Start an enterprise": "+ Démarrer une entreprise",
   "+ Start a project": "+ Démarrer un projet",
   "+ Create a Group": "+ Créer un groupe",

@@ -9,6 +9,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { getActivityFeedApi, type ActivityFeedItem } from '../lib/api';
 import { withJitter } from '../lib/jitter';
 import { onSyncActivity } from '../lib/sync';
+import { formatNumber, t, tn } from '@beanpool/core';
+import { Sentence } from './Sentence';
 
 interface Props {
     isFullView?: boolean;
@@ -26,12 +28,17 @@ interface Props {
 function formatRelativeTime(isoDate: string): string {
     const diffMs = Date.now() - new Date(isoDate).getTime();
     const diffMins = Math.floor(diffMs / 60000);
-    if (diffMins < 1) return 'just now';
-    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffMins < 1) return t('just now');
+    if (diffMins < 60) return t('{n}m ago', { n: diffMins });
     const diffHours = Math.floor(diffMins / 60);
-    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffHours < 24) return t('{n}h ago', { n: diffHours });
     const diffDays = Math.floor(diffHours / 24);
-    return `${diffDays}d ago`;
+    return t('{n}d ago', { n: diffDays });
+}
+
+/** A Beans amount the feed carries (a number from the node), written the language's way; anything else as it came. */
+function beansAmount(v: unknown): string {
+    return typeof v === 'number' ? formatNumber(v) : String(v);
 }
 
 type PulseTarget =
@@ -58,40 +65,41 @@ function pulseEmoji(eventType: ActivityFeedItem['eventType']): string {
  * listing's title, a rating's comment. Nothing is fetched per chip, and nothing private is added.
  */
 function pulseText(item: ActivityFeedItem): { short: string; full: string } {
-    const actor = item.actorCallsign || 'Someone';
-    const target = item.targetCallsign || 'another member';
+    // The names, titles and comments are the members' own, shown as written inside each sentence.
+    const actor = item.actorCallsign || t('Someone');
+    const target = item.targetCallsign || t('another member');
     const text = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : '');
 
     switch (item.eventType) {
         case 'trade_completed': {
             const title = text(item.metadata?.postTitle);
             return {
-                short: `${actor} traded`,
-                full: title ? `${actor} traded with ${target}: ${title}` : `${actor} traded with ${target}`,
+                short: t('{actor} traded', { actor }),
+                full: title ? t('{actor} traded with {target}: {title}', { actor, target, title }) : t('{actor} traded with {target}', { actor, target }),
             };
         }
         case 'rating_given': {
             const comment = text(item.metadata?.comment);
             return {
-                short: `${actor} rated ★`,
-                full: comment ? `${actor} rated ${target}: “${comment}”` : `${actor} rated ${target}`,
+                short: t('{actor} rated ★', { actor }),
+                full: comment ? t('{actor} rated {target}: “{comment}”', { actor, target, comment }) : t('{actor} rated {target}', { actor, target }),
             };
         }
         case 'post_created': {
             const title = text(item.metadata?.title);
             return {
-                short: `${actor} posted`,
-                full: title ? `${actor} posted: ${title}` : `${actor} posted`,
+                short: t('{actor} posted', { actor }),
+                full: title ? t('{actor} posted: {title}', { actor, title }) : t('{actor} posted', { actor }),
             };
         }
         case 'dispute_resolved':
             // The actor here is whoever ruled — an admin, or the owner password. Naming them would put a
             // moderator in front of every member, so this chip stays impersonal and opens nothing.
             // (Before this mapping it fell through to the default and read "<admin> joined".)
-            return { short: 'Dispute resolved', full: 'A trade dispute was resolved' };
+            return { short: t('Dispute resolved'), full: t('A trade dispute was resolved') };
         case 'member_joined':
         default:
-            return { short: `${actor} joined`, full: `${actor} joined the community` };
+            return { short: t('{actor} joined', { actor }), full: t('{actor} joined the community', { actor }) };
     }
 }
 
@@ -215,7 +223,7 @@ function PulseChip({
                 onMouseLeave={snapBack}
             >
                 {/* The chip's own text is hidden from a screen reader: the sizer would read it twice. */}
-                <span className="sr-only">{`${full}, ${timeStr}`}</span>
+                <span className="sr-only">{t('{summary}, {time}', { summary: full, time: timeStr })}</span>
                 {inner}
             </span>
         );
@@ -225,7 +233,7 @@ function PulseChip({
         <button
             type="button"
             className={`${PULSE_CHIP_SHELL} text-left cursor-pointer transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-700/70 hover:border-zinc-300 dark:hover:border-zinc-600`}
-            aria-label={`${full}, ${timeStr} — open`}
+            aria-label={t('{summary}, {time} — open', { summary: full, time: timeStr })}
             title={prefersReducedMotion && full !== short ? full : undefined}
             onClick={() => {
                 if (target.kind === 'post') onOpenPost?.(target.postId);
@@ -330,9 +338,9 @@ export function ActivityWaterfall({ isFullView = false, isMember = true, onOpenP
         return isFullView ? (
             <div className="py-12 flex flex-col items-center justify-center text-center p-6 bg-zinc-50 dark:bg-zinc-900/40 rounded-2xl border border-zinc-200/80 dark:border-zinc-800">
                 <div className="text-4xl mb-3" aria-hidden="true">🌱</div>
-                <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100">Community activity is for members</h3>
+                <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100">{t('Community activity is for members')}</h3>
                 <p className="text-xs text-zinc-500 dark:text-zinc-400 max-w-sm mt-1">
-                    Join this community to see who is trading and who is new.
+                    {t('Join this community to see who is trading and who is new.')}
                 </p>
             </div>
         ) : null;
@@ -342,7 +350,7 @@ export function ActivityWaterfall({ isFullView = false, isMember = true, onOpenP
         return isFullView ? (
             <div className="py-12 flex flex-col items-center justify-center text-zinc-400">
                 <div className="animate-spin text-2xl mb-2" aria-hidden="true">⏳</div>
-                <p className="text-xs font-semibold">Tuning into community pulse...</p>
+                <p className="text-xs font-semibold">{t('Tuning into community pulse...')}</p>
             </div>
         ) : null;
     }
@@ -351,9 +359,9 @@ export function ActivityWaterfall({ isFullView = false, isMember = true, onOpenP
         return isFullView ? (
             <div className="py-12 flex flex-col items-center justify-center text-center p-6 bg-zinc-50 dark:bg-zinc-900/40 rounded-2xl border border-zinc-200/80 dark:border-zinc-800">
                 <div className="text-4xl mb-3" aria-hidden="true">🌱</div>
-                <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100">Welcome to the Community</h3>
+                <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100">{t('Welcome to the Community')}</h3>
                 <p className="text-xs text-zinc-500 dark:text-zinc-400 max-w-sm mt-1">
-                    You're among the first here! Create an offer or need above to start local circulation.
+                    {t("You're among the first here! Create an offer or need above to start local circulation.")}
                 </p>
             </div>
         ) : null;
@@ -366,19 +374,23 @@ export function ActivityWaterfall({ isFullView = false, isMember = true, onOpenP
                 <div className="text-center pb-2">
                     <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 text-xs font-extrabold mb-1.5">
                         <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" aria-hidden="true" />
-                        Community Pulse
+                        {t('Community Pulse')}
                     </div>
-                    <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100">Recent Community Life</h3>
+                    <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100">{t('Recent Community Life')}</h3>
                     <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                        Live activity across members and trades
+                        {t('Live activity across members and trades')}
                     </p>
                 </div>
 
                 <div className="space-y-2.5">
                     {feed.map((item) => {
-                        const actorName = item.actorCallsign || 'Member';
-                        const targetName = item.targetCallsign || 'Member';
+                        const actorName = item.actorCallsign || t('Member');
+                        const targetName = item.targetCallsign || t('Member');
                         const timeStr = formatRelativeTime(item.createdAt);
+                        // Each line is one sentence in the member's language, as on the phone; the names (and a
+                        // listing's title) are the members' own, bold parts of it wherever the language puts them.
+                        const actor = <span className="font-bold text-zinc-900 dark:text-zinc-100">{actorName}</span>;
+                        const target = <span className="font-bold text-zinc-900 dark:text-zinc-100">{targetName}</span>;
 
                         let emoji = '✨';
                         let badgeBg = 'bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300';
@@ -390,7 +402,7 @@ export function ActivityWaterfall({ isFullView = false, isMember = true, onOpenP
                                 badgeBg = 'bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800';
                                 content = (
                                     <p className="text-xs text-zinc-800 dark:text-zinc-200">
-                                        <span className="font-bold text-zinc-900 dark:text-zinc-100">{actorName}</span> joined the community
+                                        <Sentence text={t('{actor} joined the community')} parts={{ actor }} />
                                     </p>
                                 );
                                 break;
@@ -399,11 +411,10 @@ export function ActivityWaterfall({ isFullView = false, isMember = true, onOpenP
                                 badgeBg = 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800';
                                 content = (
                                     <p className="text-xs text-zinc-800 dark:text-zinc-200">
-                                        <span className="font-bold text-zinc-900 dark:text-zinc-100">{actorName}</span> completed a trade with{' '}
-                                        <span className="font-bold text-zinc-900 dark:text-zinc-100">{targetName}</span>
+                                        <Sentence text={t('{actor} completed a trade with {target}')} parts={{ actor, target }} />
                                         {item.metadata?.credits && (
                                             <span className="ml-1 font-bold text-emerald-600 dark:text-emerald-400">
-                                                (🫘 {item.metadata.credits})
+                                                (🫘 {beansAmount(item.metadata.credits)})
                                             </span>
                                         )}
                                     </p>
@@ -413,19 +424,20 @@ export function ActivityWaterfall({ isFullView = false, isMember = true, onOpenP
                                 const starCount = Math.max(1, Math.min(5, Math.round(Number(item.metadata?.stars) || 5)));
                                 emoji = '⭐️';
                                 badgeBg = 'bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800';
+                                const stars = (
+                                    <span
+                                        className="font-bold text-amber-500"
+                                        role="img"
+                                        aria-label={tn(starCount, '{n} out of 5 stars', '{n} out of 5 stars')}
+                                    >
+                                        {'★'.repeat(starCount)}
+                                    </span>
+                                );
                                 content = (
                                     <p className="text-xs text-zinc-800 dark:text-zinc-200">
-                                        <span className="font-bold text-zinc-900 dark:text-zinc-100">{actorName}</span> rated{' '}
-                                        <span className="font-bold text-zinc-900 dark:text-zinc-100">{targetName}</span>{' '}
-                                        <span
-                                            className="font-bold text-amber-500"
-                                            role="img"
-                                            aria-label={`${starCount} out of 5 stars`}
-                                        >
-                                            {'★'.repeat(starCount)}
-                                        </span>
+                                        <Sentence text={t('{actor} rated {target} {stars}')} parts={{ actor, target, stars }} />
                                         {item.metadata?.comment && (
-                                            <span className="italic text-zinc-500 dark:text-zinc-400 block text-[11px] mt-0.5">
+                                            <span dir="auto" className="italic text-zinc-500 dark:text-zinc-400 block text-[11px] mt-0.5">
                                                 "{item.metadata.comment}"
                                             </span>
                                         )}
@@ -433,19 +445,23 @@ export function ActivityWaterfall({ isFullView = false, isMember = true, onOpenP
                                 );
                                 break;
                             }
-                            case 'post_created':
+                            case 'post_created': {
                                 emoji = '📍';
                                 badgeBg = 'bg-sky-50 dark:bg-sky-950/50 text-sky-700 dark:text-sky-300 border-sky-200 dark:border-sky-800';
+                                const credits = item.metadata?.credits;
+                                const title = <span className="font-bold text-zinc-900 dark:text-zinc-100">{item.metadata?.title || t('Listing')}</span>;
                                 content = (
                                     <p className="text-xs text-zinc-800 dark:text-zinc-200">
-                                        <span className="font-bold text-zinc-900 dark:text-zinc-100">{actorName}</span> posted{' '}
-                                        <span className="font-bold text-zinc-900 dark:text-zinc-100">
-                                            "{item.metadata?.title || 'Listing'}"
-                                        </span>
-                                        {item.metadata?.credits ? ` for 🫘 ${item.metadata.credits}` : ''}
+                                        <Sentence
+                                            text={credits
+                                                ? t('{actor} posted "{title}" for 🫘 {credits}', { credits: typeof credits === 'number' ? credits : String(credits) })
+                                                : t('{actor} posted "{title}"')}
+                                            parts={{ actor, title }}
+                                        />
                                     </p>
                                 );
                                 break;
+                            }
                         }
 
                         return (
@@ -481,7 +497,7 @@ export function ActivityWaterfall({ isFullView = false, isMember = true, onOpenP
             <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-1.5 flex-shrink-0 text-zinc-500 dark:text-zinc-400 font-bold text-[11px]">
                     <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" aria-hidden="true" />
-                    <span>Live Pulse</span>
+                    <span>{t('Live Pulse')}</span>
                 </div>
 
                 <div className="flex-1 overflow-x-auto scrollbar-none flex items-center gap-2">

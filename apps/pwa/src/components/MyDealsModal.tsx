@@ -13,13 +13,45 @@
 import { useState, useEffect, useRef, useMemo, type KeyboardEvent } from 'react';
 import type { MarketplacePost, MarketplaceTransaction } from '../lib/api';
 import { ImageLightbox } from './ImageLightbox';
-import { listPhotoUrl, t } from '@beanpool/core';
+import { formatDate, formatNumber, listPhotoUrl, t, word, type WordKey } from '@beanpool/core';
 import { LocalCommunityAction, LocalCommunityStrip, LocalCommunitySheet, type LocalCommunityWays } from './LocalCommunityMark';
 import { StartCommunityScreen } from './StartCommunityScreen';
 import { SampleHeader, sampleDealChip, sampleDeals } from './ShowcasePreviews';
+import { Sentence } from './Sentence';
 
 /** A marker's own sheet or Start screen (LocalCommunityAction draws them inside the card): its Escape is its own. */
 const MARKER_SHEET = '[data-testid="local-community-sheet"], [data-testid="start-community-screen"]';
+
+/**
+ * A deal's status on its badge, shown through t(); a status this build doesn't know, as the node wrote it. Written
+ * small, as the web always drew it: the badge's `uppercase` class puts it in capitals, the language's way (`<html lang>`).
+ */
+const DEAL_STATUS_WORDS: Readonly<Record<string, WordKey>> = {
+    pending: word('pending', 'deal status'),
+    requested: word('requested', 'deal status'),
+    completed: word('completed', 'deal status'),
+    cancelled: word('cancelled', 'deal status'),
+    rejected: word('rejected', 'deal status'),
+};
+function dealStatusWords(status: string): string {
+    return Object.prototype.hasOwnProperty.call(DEAL_STATUS_WORDS, status) ? t(DEAL_STATUS_WORDS[status]) : String(status ?? '');
+}
+
+/** A post's type on its badge (in capitals by its `uppercase` class); a type this build doesn't know, as the node wrote it. */
+function postTypeWords(type: string): string {
+    return type === 'offer' ? t('offer', undefined, 'post type') : type === 'need' ? t('need', undefined, 'post type') : String(type ?? '');
+}
+
+/** The day a deal began, as core writes dates ("3 Oct 2026"), in the member's language; nothing for a date it can't read. */
+function dealDate(iso: string | null | undefined): string {
+    const d = iso ? new Date(iso) : null;
+    return d && Number.isFinite(d.getTime()) ? formatDate(d, 'day-month-year') : '';
+}
+
+/** A Beans amount on a card, the language's way (English as before: String(n)); anything else as it came. */
+function beans(n: unknown): string {
+    return typeof n === 'number' ? formatNumber(n) : n === null || n === undefined ? '' : String(n);
+}
 
 interface Props extends LocalCommunityWays {
     visible: boolean;
@@ -340,7 +372,7 @@ export function MyDealsModal({
                                     onClick={() => { onClose(); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
                                     className={preview ? "px-6 py-2.5 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-bold text-sm shadow-md transition-colors" : "px-6 py-2.5 rounded-xl bg-indigo-600 text-white font-bold text-sm shadow-md hover:bg-indigo-700 transition-colors"}
                                 >
-                                    {preview ? t('+ Create a Post') : '+ Create a Post'}
+                                    {t('+ Create a Post')}
                                 </button>
                             )}
                         </div>
@@ -363,7 +395,7 @@ export function MyDealsModal({
                                                 data-testid={`deal-card-${item.id}`}
                                                 role={isPending ? 'button' : undefined}
                                                 tabIndex={isPending ? 0 : undefined}
-                                                aria-label={isPending ? `View deal: ${item.postTitle}` : undefined}
+                                                aria-label={isPending ? t('View deal: {title}', { title: item.postTitle }) : undefined}
                                                 onKeyDown={isPending ? (e) => {
                                                     if (e.key === 'Enter' || e.key === ' ') {
                                                         e.preventDefault();
@@ -394,10 +426,10 @@ export function MyDealsModal({
                                                                 openLightbox([item.coverImage!], item.postTitle, e.currentTarget);
                                                             }}
                                                             onKeyDown={photoKeyDown([item.coverImage!], item.postTitle)}
-                                                            aria-label={`View enlarged photo: ${item.postTitle}`}
+                                                            aria-label={t('View enlarged photo: {title}', { title: item.postTitle })}
                                                             className="w-14 h-14 rounded-xl overflow-hidden border border-nature-100 dark:border-nature-800 shrink-0 cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
                                                         >
-                                                            <img src={listPhotoUrl(item.coverImage)} alt="Cover" className="w-full h-full object-cover" />
+                                                            <img src={listPhotoUrl(item.coverImage)} alt={t('Cover', undefined, "a listing's cover photo")} className="w-full h-full object-cover" />
                                                         </button>
                                                     ) : (
                                                         <div className="w-14 h-14 rounded-xl bg-nature-100 dark:bg-nature-800 flex items-center justify-center shrink-0">
@@ -412,28 +444,30 @@ export function MyDealsModal({
                                                                     : isPending ? 'bg-bp-chip-warn-tint text-bp-chip-warn-ink'
                                                                     : 'bg-nature-200 text-nature-700 dark:bg-nature-800 dark:text-nature-300'
                                                                 }`}>
-                                                                    {item.status}
+                                                                    {dealStatusWords(item.status)}
                                                                 </span>
                                                                 <span className="text-[10px] text-nature-400 font-bold">
-                                                                    {new Date(item.createdAt).toLocaleDateString()}
+                                                                    {dealDate(item.createdAt)}
                                                                 </span>
                                                             </div>
                                                             <div className="flex items-center">
                                                                 <span className={`font-black text-sm ${isBuyer ? 'text-red-500 dark:text-red-300' : 'text-emerald-500 dark:text-emerald-400'}`}>
-                                                                    {isBuyer ? '- ' : '+ '}{item.credits}
+                                                                    {isBuyer ? '- ' : '+ '}{beans(item.credits)}
                                                                 </span>
-                                                                <img src="/assets/bean.png" className="w-3.5 h-3.5 ml-1" alt="B" />
+                                                                <img src="/assets/bean.png" className="w-3.5 h-3.5 ml-1" alt={t('B', undefined, 'the Beans sign')} />
                                                             </div>
                                                         </div>
-                                                        <h4 className="font-bold text-nature-950 dark:text-white text-[15px] truncate">
+                                                        <h4 dir="auto" className="font-bold text-nature-950 dark:text-white text-[15px] truncate">
                                                             {item.postTitle}
                                                         </h4>
                                                     </div>
                                                 </div>
                                                 <div className="flex justify-between items-end">
                                                     <p className="text-[11px] text-nature-500 dark:text-nature-400 font-medium">
-                                                        {isBuyer ? 'Bought from ' : 'Sold to '}
-                                                        <span className="text-nature-800 dark:text-nature-300 font-bold">{partnerCallsign}</span>
+                                                        <Sentence
+                                                            text={isBuyer ? t('Bought from {who}') : t('Sold to {who}')}
+                                                            parts={{ who: <span className="text-nature-800 dark:text-nature-300 font-bold">{partnerCallsign}</span> }}
+                                                        />
                                                     </p>
                                                     {needsReview && onPromptReview && (
                                                         <button
@@ -448,7 +482,7 @@ export function MyDealsModal({
                                                             }}
                                                             className="px-3 py-1.5 bg-amber-100 hover:bg-amber-200 dark:bg-amber-900/40 dark:hover:bg-amber-900/60 text-amber-800 dark:text-amber-500 text-xs font-bold rounded-lg border border-amber-300 dark:border-amber-800 transition-colors shadow-sm"
                                                         >
-                                                            Leave Review
+                                                            {t('Leave Review')}
                                                         </button>
                                                     )}
                                                 </div>
@@ -465,7 +499,7 @@ export function MyDealsModal({
                                             data-testid={`sample-deal-${item.id}`}
                                             role="button"
                                             tabIndex={0}
-                                            aria-label={`${item.postTitle}`}
+                                            aria-label={item.postTitle}
                                             onKeyDown={(e) => {
                                                 if (e.target !== e.currentTarget) return;
                                                 if (e.key === 'Enter' || e.key === ' ') {
@@ -491,10 +525,10 @@ export function MyDealsModal({
                                                             openLightbox([item.coverImage!], item.postTitle, e.currentTarget);
                                                         }}
                                                         onKeyDown={photoKeyDown([item.coverImage!], item.postTitle)}
-                                                        aria-label={`View enlarged photo: ${item.postTitle}`}
+                                                        aria-label={t('View enlarged photo: {title}', { title: item.postTitle })}
                                                         className="w-14 h-14 rounded-xl overflow-hidden border border-nature-100 dark:border-nature-800 shrink-0 cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
                                                     >
-                                                        <img src={listPhotoUrl(item.coverImage)} alt="Cover" className="w-full h-full object-cover" />
+                                                        <img src={listPhotoUrl(item.coverImage)} alt={t('Cover', undefined, "a listing's cover photo")} className="w-full h-full object-cover" />
                                                     </button>
                                                 ) : (
                                                     <div className="w-14 h-14 rounded-xl bg-nature-100 dark:bg-nature-800 flex items-center justify-center shrink-0">
@@ -513,17 +547,17 @@ export function MyDealsModal({
                                                                 </span>
                                                             )}
                                                             <span className="text-[10px] text-nature-400 font-bold shrink-0 whitespace-nowrap">
-                                                                {new Date(item.createdAt).toLocaleDateString()}
+                                                                {dealDate(item.createdAt)}
                                                             </span>
                                                         </div>
                                                         <div className="flex items-center shrink-0 whitespace-nowrap ml-auto">
                                                             <span className={`font-black text-sm whitespace-nowrap shrink-0 ${isBuyer ? 'text-bp-ink-danger' : 'text-emerald-500 dark:text-emerald-400'}`}>
-                                                                {isBuyer ? '- ' : '+ '}{item.credits}
+                                                                {isBuyer ? '- ' : '+ '}{beans(item.credits)}
                                                             </span>
-                                                            <img src="/assets/bean.png" className="w-3.5 h-3.5 ml-1 shrink-0" alt="B" />
+                                                            <img src="/assets/bean.png" className="w-3.5 h-3.5 ml-1 shrink-0" alt={t('B', undefined, 'the Beans sign')} />
                                                         </div>
                                                     </div>
-                                                    <h4 className="font-bold text-nature-950 dark:text-white text-[15px] line-clamp-2 leading-snug">
+                                                    <h4 dir="auto" className="font-bold text-nature-950 dark:text-white text-[15px] line-clamp-2 leading-snug">
                                                         {item.postTitle}
                                                     </h4>
                                                 </div>
@@ -587,7 +621,7 @@ export function MyDealsModal({
                                             data-testid={`deal-card-${item.id}`}
                                             role="button"
                                             tabIndex={0}
-                                            aria-label={`View post: ${item.title}`}
+                                            aria-label={t('View post: {title}', { title: item.title })}
                                             onKeyDown={(e) => {
                                                 if (e.key === 'Enter' || e.key === ' ') {
                                                     e.preventDefault();
@@ -616,10 +650,10 @@ export function MyDealsModal({
                                                             openLightbox(item.photos || [coverImage], item.title, e.currentTarget);
                                                         }}
                                                         onKeyDown={photoKeyDown(item.photos || [coverImage], item.title)}
-                                                        aria-label={`View enlarged photo: ${item.title}`}
+                                                        aria-label={t('View enlarged photo: {title}', { title: item.title })}
                                                         className="w-14 h-14 rounded-xl overflow-hidden border border-nature-100 dark:border-nature-800 shrink-0 cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
                                                     >
-                                                        <img src={listPhotoUrl(coverImage)} alt="Cover" className="w-full h-full object-cover" />
+                                                        <img src={listPhotoUrl(coverImage)} alt={t('Cover', undefined, "a listing's cover photo")} className="w-full h-full object-cover" />
                                                     </button>
                                                 ) : (
                                                     <div className="w-14 h-14 rounded-xl bg-nature-100 dark:bg-nature-800 flex items-center justify-center shrink-0">
@@ -632,20 +666,20 @@ export function MyDealsModal({
                                                             item.type === 'offer' ? 'bg-bp-chip-ok-tint text-bp-chip-ok-ink'
                                                             : 'bg-nature-200 text-nature-700 dark:bg-nature-800 dark:text-nature-300'
                                                         }`}>
-                                                            {item.type}
+                                                            {postTypeWords(item.type)}
                                                         </span>
                                                         <div className="flex items-center">
                                                             <span className="font-black text-sm text-indigo-500 dark:text-indigo-300">
-                                                                {item.credits ?? '?'}
+                                                                {beans(item.credits ?? '?')}
                                                             </span>
-                                                            <img src="/assets/bean.png" className="w-3.5 h-3.5 ml-1" alt="B" />
+                                                            <img src="/assets/bean.png" className="w-3.5 h-3.5 ml-1" alt={t('B', undefined, 'the Beans sign')} />
                                                         </div>
                                                     </div>
-                                                    <h4 className="font-bold text-nature-950 dark:text-white text-[15px] truncate mb-1">
+                                                    <h4 dir="auto" className="font-bold text-nature-950 dark:text-white text-[15px] truncate mb-1">
                                                         {item.title}
                                                     </h4>
                                                     <p className="text-[11px] text-nature-500 dark:text-nature-400 font-bold uppercase tracking-wide">
-                                                        {item.status === 'pending' ? '🤝 Held in Trust' : '🟢 Active'}
+                                                        {item.status === 'pending' ? t('🤝 Held in Trust') : t('🟢 Active')}
                                                     </p>
                                                 </div>
                                             </div>
@@ -681,10 +715,10 @@ export function MyDealsModal({
                                                         openLightbox(item.photos || [coverImage], item.title, e.currentTarget);
                                                     }}
                                                     onKeyDown={photoKeyDown(item.photos || [coverImage], item.title)}
-                                                    aria-label={`View enlarged photo: ${item.title}`}
+                                                    aria-label={t('View enlarged photo: {title}', { title: item.title })}
                                                     className="w-14 h-14 rounded-xl overflow-hidden border border-nature-100 dark:border-nature-800 shrink-0 cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
                                                 >
-                                                    <img src={listPhotoUrl(coverImage)} alt="Cover" className="w-full h-full object-cover" />
+                                                    <img src={listPhotoUrl(coverImage)} alt={t('Cover', undefined, "a listing's cover photo")} className="w-full h-full object-cover" />
                                                 </button>
                                             ) : (
                                                 <div className="w-14 h-14 rounded-xl bg-nature-100 dark:bg-nature-800 flex items-center justify-center shrink-0">
@@ -697,16 +731,16 @@ export function MyDealsModal({
                                                         item.type === 'offer' ? 'bg-bp-chip-ok-tint text-bp-chip-ok-ink'
                                                         : 'bg-bp-chip-need-tint text-bp-chip-need-ink'
                                                     }`}>
-                                                        {item.type}
+                                                        {postTypeWords(item.type)}
                                                     </span>
                                                     <div className="flex items-center shrink-0 whitespace-nowrap ml-auto">
                                                         <span className="font-black text-sm text-indigo-500 dark:text-indigo-300 whitespace-nowrap shrink-0">
-                                                            {item.credits ?? '?'}
+                                                            {beans(item.credits ?? '?')}
                                                         </span>
-                                                        <img src="/assets/bean.png" className="w-3.5 h-3.5 ml-1 shrink-0" alt="B" />
+                                                        <img src="/assets/bean.png" className="w-3.5 h-3.5 ml-1 shrink-0" alt={t('B', undefined, 'the Beans sign')} />
                                                     </div>
                                                 </div>
-                                                <h4 className="font-bold text-nature-950 dark:text-white text-[15px] line-clamp-2 leading-snug mb-1">
+                                                <h4 dir="auto" className="font-bold text-nature-950 dark:text-white text-[15px] line-clamp-2 leading-snug mb-1">
                                                     {item.title}
                                                 </h4>
                                                 <p className="text-[11px] font-bold uppercase tracking-wide text-bp-ink-warning">

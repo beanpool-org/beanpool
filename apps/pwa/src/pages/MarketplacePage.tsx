@@ -18,9 +18,9 @@ import { YourEvents } from '../components/YourEvents';
 import { CLIENT_POST_TYPES, EVENT_WINDOWS, eventsFeedFilter, formatDistance, isEventOpen, type EventWindow, movedCopyContext } from '../lib/events';
 import { CategoryPickerModal } from '../components/CategoryPickerModal';
 import { MyDealsModal } from '../components/MyDealsModal';
-import { LocalCommunityAction, LocalCommunityLine, DEAL_ACTION_LABEL } from '../components/LocalCommunityMark';
-import { LOCAL_COMMUNITY_LINES, placeShownRoughly, PLACE_WORDS, t } from '@beanpool/core';
-import { NO_BEANS_TERMS_TEXT } from '../lib/visitor-lobby';
+import { LocalCommunityAction, LocalCommunityLine } from '../components/LocalCommunityMark';
+import { LOCAL_COMMUNITY_EMOJI, LOCAL_COMMUNITY_LINES, placeShownRoughly, PLACE_WORDS, formatNumber, t, tn, word, type WordKey } from '@beanpool/core';
+import { Sentence } from '../components/Sentence';
 import { marked, readsOwn, treasuriesFallback, useFeatureMode, useReadsOwn } from '../lib/features';
 import { ProfileGateModal } from '../components/ProfileGateModal';
 import { PricingGuideModal } from '../components/PricingGuideModal';
@@ -63,13 +63,12 @@ import { standingFromRefusal } from '../lib/standing-refusal';
 
 import { marketSearchFromLink, marketSearchToSave, matchesExpandedSearch } from '../lib/search';
 import { SAVE_SEARCH_BUTTON, saveSearchLabel, type HomeSearchSettings } from '@beanpool/core';
-import { getProfileStatus, describeMissing } from '../lib/profile-status';
+import { getProfileStatus, type ProfileStatus } from '../lib/profile-status';
 import { getBlockedUsers, onBlocklistUpdated } from '../lib/blocklist';
 import { VisitorCard, VisitorPostDetail } from '../components/VisitorListing';
-import { VISITOR_LIST_NOTE } from '../lib/visitor-lobby';
 import { shareInterests } from '../lib/home-interests';
 import { accountEpochHolds } from '../lib/account-epoch';
-import { CHILD_SAFETY_REASON, CHILD_SAFETY_HINT, REPORT_REASONS, REPORT_WORDS } from '../lib/reportReasons';
+import { REPORT_REASONS, REPORT_WORDS } from '../lib/reportReasons';
 
 /**
  * The Market as a visitor to the global lobby sees it (design G9a §7, G9b): no identity at all, the node's guest view
@@ -131,33 +130,122 @@ function explainTradeError(err: unknown): string {
         return `🎣 ${raw.replace(/^FLOOR_LOCKED(:\d+){4}:\s*/, '')}`;
     }
     if (raw.startsWith('COVENANT_REQUIRED')) {
-        return '🎣 Post an Offer first — to spend on community credit (take your balance negative) you need at least one active Offer posted, so others can trade with you in return.';
+        return t('🎣 Post an Offer first — to spend on community credit (take your balance negative) you need at least one active Offer posted, so others can trade with you in return.');
     }
     if (raw.startsWith('CONTRIBUTION_REQUIRED')) {
-        return 'List at least one Offer of your own before you can request or accept from others.';
+        return t('List at least one Offer of your own before you can request or accept from others.');
     }
     if (raw.startsWith('HOLIDAY_MODE')) {
-        return '🌴 Holiday mode is on — turn it off in Settings before trading.';
+        return t('🌴 Holiday mode is on — turn it off in Settings before trading.');
     }
     return raw.replace(/^[A-Z_]+:\s*/, '');
 }
 
 /**
- * " (from byron)" for a listing pulled from another community, or "" for a local one (#143 step 4).
+ * A listing tile's screen-reader name: "Open listing: <title>", with " (from byron)" for a listing pulled from another
+ * community (#143 step 4).
  *
- * Needed because the tile's `aria-label` REPLACES its children for a screen reader, so the 🌐 badge inside
- * `MarketplaceCard` is announced to nobody (review finding). Which community a listing comes from is not
+ * The community is needed because the tile's `aria-label` REPLACES its children for a screen reader, so the 🌐 badge
+ * inside `MarketplaceCard` is announced to nobody (review finding). Which community a listing comes from is not
  * decoration here — it decides who the buyer's beans are owed to.
  *
  * Same trimming as the visible badge, and one definition would be better than two; the badge's copy lives
  * inside `MarketplaceCard` and hoisting it is a wider change than this PR should make.
  */
-function remoteOriginLabel(post: any): string {
+function openListingLabel(post: any): string {
+    const title = post?.title ?? '';
     const remote = post?._remoteNode ?? post?.originNode;
     const name = formatNodeName(remote, post?._remoteCallsign);
-    if (!name) return '';
-    return name.startsWith('peer (') ? ` from ${name}` : ` (from ${name})`;
+    if (!name) return t('Open listing: {title}', { title });
+    return name.startsWith('peer (')
+        ? t('Open listing: {title} from {community}', { title, community: name })
+        : t('Open listing: {title} (from {community})', { title, community: name });
 }
+
+/** How long ago a listing was posted (the phone's post/[id].tsx getTimeAgo, the same words). */
+function getTimeAgo(date: Date): string {
+    const secs = Math.floor((Date.now() - date.getTime()) / 1000);
+    if (secs < 60) return t('just now');
+    const mins = Math.floor(secs / 60);
+    if (mins < 60) return t('{n}m ago', { n: mins });
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return t('{n}h ago', { n: hours });
+    const days = Math.floor(hours / 24);
+    return t('{n}d ago', { n: days });
+}
+
+/** A listing's price unit after its amount ("/Hr"), as the phone's Market writes it; nothing for a fixed price. */
+function priceUnit(priceType: string | undefined): string {
+    if (priceType === 'hourly') return t('/Hr', undefined, 'price per hour');
+    if (priceType === 'daily') return t('/Dy', undefined, 'price per day');
+    if (priceType === 'weekly') return t('/Wk', undefined, 'price per week');
+    if (priceType === 'monthly') return t('/Mo', undefined, 'price per month');
+    return '';
+}
+
+/** The label over the hours a payer confirms when releasing a deal priced by the hour, day, week or month. */
+function actualWorkedLabel(priceType: string | undefined): string {
+    if (priceType === 'hourly') return t('ACTUAL HOURS WORKED');
+    if (priceType === 'daily') return t('ACTUAL DAYS WORKED');
+    if (priceType === 'weekly') return t('ACTUAL WEEKS WORKED');
+    if (priceType === 'monthly') return t('ACTUAL MONTHS WORKED');
+    return t('ACTUAL UNITS WORKED');
+}
+
+/** The label over the estimate a member gives when accepting a listing priced by the hour, day, week or month. */
+function estimatedLabel(priceType: string | undefined): string {
+    if (priceType === 'hourly') return t('ESTIMATED HOURS');
+    if (priceType === 'daily') return t('ESTIMATED DAYS');
+    if (priceType === 'weekly') return t('ESTIMATED WEEKS');
+    if (priceType === 'monthly') return t('ESTIMATED MONTHS');
+    return t('ESTIMATED UNITS');
+}
+
+/** An estimate's length in the commitment sentence ("3 hr"); null for a fixed price. */
+function estimateLength(priceType: string | undefined, n: number): string | null {
+    if (priceType === 'hourly') return t('{n} hr', { n }, 'a number of hours');
+    if (priceType === 'daily') return t('{n} d', { n }, 'a number of days');
+    if (priceType === 'weekly') return t('{n} w', { n }, 'a number of weeks');
+    if (priceType === 'monthly') return t('{n} m', { n }, 'a number of months');
+    return null;
+}
+
+/** Why the profile gate stops an accept: the whole sentence for what is missing (lib/profile-status describeMissing). */
+function profileGateSentence(status: ProfileStatus): string {
+    if (status.missingName && status.missingAvatar) return t("Your community likes to know who they're dealing with, so you need a name and a photo before you can accept. It only takes a moment.");
+    if (status.missingName) return t("Your community likes to know who they're dealing with, so you need a name before you can accept. It only takes a moment.");
+    return t("Your community likes to know who they're dealing with, so you need a photo before you can accept. It only takes a moment.");
+}
+
+/** The feed's type pills, shown through t() (the phone's utils/market-filters.ts keys where the words are the same). */
+const TYPE_PILL_WORDS: Record<PostType | 'all' | 'for-you', WordKey> = {
+    all: word('All'),
+    'for-you': word('★ For You'),
+    offer: word('🟢 Offers'),
+    need: word('🟠 Needs'),
+    event: word('Events'),
+    poll: word('🗳️ Polls'),
+};
+
+/**
+ * The date chips under Events, by the id lib/events.ts EVENT_WINDOWS gives them (the same English; the phone's
+ * utils/events.ts keys): shown through t() here, as that list is shared with the map.
+ */
+const EVENT_WINDOW_WORDS: Record<EventWindow, WordKey> = {
+    today: word('Today'),
+    weekend: word('This weekend'),
+    week: word('Next 7 days'),
+    all: word('All'),
+};
+
+/** The headings of List and Compact views (the phone's utils/feed-sections.ts keys). */
+const FEED_SECTION_WORDS = {
+    forYou: word('★ Starred For You'),
+    today: word('Today'),
+    yesterday: word('Yesterday'),
+    thisWeek: word('This Week'),
+    older: word('Older Listings'),
+} as const;
 
 /**
  * The feed's list read for the current filter pills. One definition for the fetch and for deciding whether a
@@ -712,7 +800,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     setMembersOnly(true);
                     setError(null);
                 } else {
-                    setError(e.message || 'Failed to load');
+                    setError(e.message || t('Failed to load'));
                 }
                 throw e;
             } finally {
@@ -1012,7 +1100,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 // the server-side relay can't resolve their node and the message would sit
                 // here undelivered while looking sent. Say so plainly until cross-community
                 // messaging is real.
-                setError('This post is hosted by another community. Messaging across communities isn\'t available yet.');
+                setError(t("This post is hosted by another community. Messaging across communities isn't available yet."));
                 return;
             } else {
                 // Local post — existing flow
@@ -1026,7 +1114,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 if (onNavigate) onNavigate('messages', result.conversation.id);
             }
         } catch (e: any) {
-            setError(e.message || 'Failed to start conversation');
+            setError(e.message || t('Failed to start conversation'));
         } finally {
             setMessaging(false);
         }
@@ -1065,7 +1153,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         }}
                         className="mb-4 min-h-[48px] flex items-center gap-2 text-nature-500 hover:text-nature-700 dark:hover:text-nature-400 font-bold transition-colors cursor-pointer"
                     >
-                        <span className="text-xl leading-none">←</span> Back to Market
+                        <span className="text-xl leading-none">←</span> {t('Back to Market')}
                     </button>
                     <EventDetail
                         post={selectedPost}
@@ -1095,7 +1183,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         }}
                         className="mb-4 flex items-center gap-2 text-nature-500 hover:text-nature-700 dark:hover:text-nature-400 font-bold transition-colors cursor-pointer"
                     >
-                        <span className="text-xl leading-none">←</span> Back to Market
+                        <span className="text-xl leading-none">←</span> {t('Back to Market')}
                     </button>
                     <PollCard
                         post={selectedPost}
@@ -1152,9 +1240,11 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         const isPayee = activeTx
             ? activeTx.sellerPublicKey === identity?.publicKey
             : ((selectedPost.type === 'offer' && isOwnPost) || (selectedPost.type === 'need' && isAcceptedByMe));
-        const targetPeerCallsign = activeTx 
-            ? (isPayer ? activeTx.sellerCallsign || 'Peer' : activeTx.buyerCallsign || 'Peer')
-            : (isOwnPost ? ((selectedPost as any).acceptedByCallsign || 'Peer') : selectedPost.authorCallsign);
+        const targetPeerCallsign = activeTx
+            ? (isPayer ? activeTx.sellerCallsign || t('Peer') : activeTx.buyerCallsign || t('Peer'))
+            : (isOwnPost ? ((selectedPost as any).acceptedByCallsign || t('Peer')) : selectedPost.authorCallsign);
+        // The edit form's type toggle, in the member's language (its loop names its own `t`).
+        const editTypeLabel = { offer: t('🟢 Offer'), need: t('🟠 Need') };
 
         return (
             <div className="p-4 max-w-lg mx-auto pb-24" style={{ paddingBottom: 'calc(var(--bottom-nav-offset) + 4rem)' }}>
@@ -1168,7 +1258,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     }}
                     className="mb-4 flex items-center gap-2 text-nature-500 hover:text-nature-700 dark:hover:text-nature-400 font-bold transition-colors"
                 >
-                    <span className="text-xl leading-none">←</span> Back to Market
+                    <span className="text-xl leading-none">←</span> {t('Back to Market')}
                 </button>
                 
                 {/* Post card */}
@@ -1184,7 +1274,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 className="text-xs font-black uppercase tracking-wider"
                                 style={{ color: isPulsePost ? '#d97706' : typeColor }}
                             >
-                                {isPulsePost ? '🗞️ DAILY PULSE' : `${selectedPost.type === 'offer' ? '🟢 Offer' : '🟠 Need'} · ${cat?.label ?? selectedPost.category}`}
+                                {isPulsePost ? t('🗞️ DAILY PULSE') : t('{type} · {category}', { type: selectedPost.type === 'offer' ? t('🟢 Offer') : t('🟠 Need'), category: cat ? t(cat.label) : selectedPost.category })}
                             </span>
                         </div>
                         <span className="text-xs font-semibold text-nature-500 dark:text-nature-400">{ago}</span>
@@ -1201,9 +1291,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             >
                                 <span className="text-2xl" aria-hidden="true">⏸️</span>
                                 <div>
-                                    <div className="font-bold text-sm text-amber-900 dark:text-amber-100">Enterprise Paused for Season</div>
+                                    <div className="font-bold text-sm text-amber-900 dark:text-amber-100">{t('Enterprise Paused for Season')}</div>
                                     <p className="mt-0.5 text-amber-800 dark:text-amber-200 leading-relaxed font-normal">
-                                        This listing belongs to <strong>{authorEnterpriseInactive.name}</strong>, which is currently paused for the season. Listings cannot be bought right now.
+                                        <Sentence text={t('This listing belongs to {name}, which is currently paused for the season. Listings cannot be bought right now.')} parts={{ name: <strong>{authorEnterpriseInactive.name}</strong> }} />
                                     </p>
                                 </div>
                             </div>
@@ -1216,9 +1306,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             >
                                 <span className="text-2xl" aria-hidden="true">⏳</span>
                                 <div>
-                                    <div className="font-bold text-sm text-rose-900 dark:text-rose-100">Enterprise Winding Up</div>
+                                    <div className="font-bold text-sm text-rose-900 dark:text-rose-100">{t('Enterprise Winding Up')}</div>
                                     <p className="mt-0.5 text-rose-800 dark:text-rose-200 leading-relaxed font-normal">
-                                        This listing belongs to <strong>{authorEnterpriseInactive.name}</strong>, which is winding down. Listings cannot be bought.
+                                        <Sentence text={t('This listing belongs to {name}, which is winding down. Listings cannot be bought.')} parts={{ name: <strong>{authorEnterpriseInactive.name}</strong> }} />
                                     </p>
                                 </div>
                             </div>
@@ -1231,9 +1321,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             >
                                 <span className="text-2xl" aria-hidden="true">🏁</span>
                                 <div>
-                                    <div className="font-bold text-sm">Enterprise Closed</div>
+                                    <div className="font-bold text-sm">{t('Enterprise Closed')}</div>
                                     <p className="mt-0.5 text-stone-600 dark:text-stone-400 leading-relaxed font-normal">
-                                        This listing belongs to <strong>{authorEnterpriseInactive.name}</strong>, which has closed permanently.
+                                        <Sentence text={t('This listing belongs to {name}, which has closed permanently.')} parts={{ name: <strong>{authorEnterpriseInactive.name}</strong> }} />
                                     </p>
                                 </div>
                             </div>
@@ -1241,7 +1331,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
                         <h2 className="text-xl font-bold text-nature-950 dark:text-white mb-3 leading-tight">
                             {selectedPost.status === 'paused' && (
-                                <span className="inline-block align-middle mr-2 px-2 py-0.5 rounded-full text-[11px] font-extrabold uppercase tracking-wide bg-bp-chip-warn-tint text-bp-chip-warn-ink">⏸ Paused</span>
+                                <span className="inline-block align-middle mr-2 px-2 py-0.5 rounded-full text-[11px] font-extrabold uppercase tracking-wide bg-bp-chip-warn-tint text-bp-chip-warn-ink">{t('⏸ Paused')}</span>
                             )}
                             {selectedPost.title}
                         </h2>
@@ -1254,12 +1344,12 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         {(selectedPost.audienceScope === 'group' || !!selectedPost.targetGroupId) && (
                             <div className="p-3 mb-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border-2 border-emerald-500 flex items-center gap-2.5 text-xs text-emerald-900 dark:text-emerald-200 font-bold">
                                 <span className="text-base">🔒</span>
-                                <span>Only {selectedPost.targetGroupName || 'group members'} can see this</span>
+                                <span>{selectedPost.targetGroupName ? t('Only {group} can see this', { group: selectedPost.targetGroupName }) : t('Only group members can see this')}</span>
                             </div>
                         )}
 
                         {selectedPost.description && (
-                            <p className="text-base text-nature-600 dark:text-nature-300 leading-relaxed mb-5 whitespace-pre-wrap">
+                            <p dir="auto" className="text-base text-nature-600 dark:text-nature-300 leading-relaxed mb-5 whitespace-pre-wrap">
                                 {selectedPost.description}
                             </p>
                         )}
@@ -1280,12 +1370,12 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 triggerElement: e.currentTarget,
                                             })
                                         }
-                                        aria-label={`View enlarged photo ${i + 1} of ${selectedPost.photos!.length}: ${selectedPost.title}`}
+                                        aria-label={t('View enlarged photo {n} of {total}: {title}', { n: i + 1, total: selectedPost.photos!.length, title: selectedPost.title })}
                                         className="h-40 w-auto rounded-xl overflow-hidden border border-nature-200 shrink-0 snap-start shadow-sm cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500 transition-transform active:scale-[0.98]"
                                     >
                                         <img
                                             src={photo}
-                                            alt={`photo ${i + 1}`}
+                                            alt={t('photo {n}', { n: i + 1 })}
                                             className="h-40 w-auto object-cover"
                                         />
                                     </button>
@@ -1296,26 +1386,27 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         {/* Credits; where Beans live in a local community, what the description asks in return and the line */}
                         {!isPulsePost && priceMarked && (
                             <div className="bg-oat-50 dark:bg-nature-900 rounded-xl p-4 border border-nature-100 dark:border-nature-800 shadow-inner" data-testid="listing-in-return">
-                                <span className="text-xs font-bold text-nature-500 dark:text-nature-400 uppercase tracking-widest block mb-1">In return</span>
-                                <p className="font-bold text-nature-900 dark:text-white mb-2">{NO_BEANS_TERMS_TEXT}</p>
-                                <LocalCommunityLine feature="beans" text={LOCAL_COMMUNITY_LINES.price} {...markWays} />
+                                <span className="text-xs font-bold text-nature-500 dark:text-nature-400 uppercase tracking-widest block mb-1">{t('In return')}</span>
+                                {/* lib/visitor-lobby.ts NO_BEANS_TERMS_TEXT's words, and the phone's key (utils/market-global.ts). */}
+                                <p className="font-bold text-nature-900 dark:text-white mb-2">{t('Free, a swap, or ask')}</p>
+                                <LocalCommunityLine feature="beans" text={t(LOCAL_COMMUNITY_LINES.price)} {...markWays} />
                             </div>
                         )}
                         {!isPulsePost && !priceMarked && (
                             <div className="bg-oat-50 dark:bg-nature-900 rounded-xl p-4 text-center border border-nature-100 dark:border-nature-800 shadow-inner block">
                                 <span className="text-xs font-bold text-nature-500 dark:text-nature-400 uppercase tracking-widest block mb-1">
-                                    {selectedPost.type === 'offer' ? 'Asking Price' : 'Willing to Pay'}
+                                    {selectedPost.type === 'offer' ? t('Asking Price') : t('Willing to Pay')}
                                 </span>
                                 <div className="text-3xl font-bold text-nature-900 dark:text-white font-mono tracking-tight" style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', flexWrap: 'nowrap' }}>
-                                    <span>{selectedPost.credits}</span>
+                                    <span>{formatNumber(selectedPost.credits)}</span>
                                     <span className="text-xl text-nature-400 font-sans font-medium flex items-center" style={{ flexShrink: 0 }}>
-                                        <img src="/assets/bean.png" style={{ width: '20px', height: '20px', marginLeft: '4px', marginRight: '2px', flexShrink: 0 }} alt="B" />
-                                        {{ fixed: '', hourly: '/Hr', daily: '/Dy', weekly: '/Wk', monthly: '/Mo' }[selectedPost.priceType] || ''}
+                                        <img src="/assets/bean.png" style={{ width: '20px', height: '20px', marginLeft: '4px', marginRight: '2px', flexShrink: 0 }} alt={t('B', undefined, 'the Beans sign')} />
+                                        {priceUnit(selectedPost.priceType)}
                                     </span>
                                 </div>
                                 {selectedPost.credits > 0 && (
                                     <p className="text-nature-400 text-xs mt-1 font-mono">
-                                        ≈ {(selectedPost.credits / 40).toFixed(1)} hrs
+                                        {t('≈ {n} hrs', { n: formatNumber(selectedPost.credits / 40, 1) })}
                                     </p>
                                 )}
                             </div>
@@ -1326,7 +1417,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 {/* Author section */}
                 <div className="bg-white dark:bg-nature-950 rounded-2xl border border-nature-200 dark:border-nature-800 p-4 shadow-sm mb-4">
                     <p className="text-[0.65rem] text-nature-400 dark:text-nature-400 font-bold uppercase tracking-widest mb-3">
-                        Posted by
+                        {t('Posted by')}
                     </p>
                     <button 
                         onClick={() => { if (onOpenProfile) onOpenProfile(selectedPost.authorPublicKey); }}
@@ -1356,23 +1447,23 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 <span className="text-nature-500 text-xs ml-1 font-medium">
                                     {authorAvgRating.count > 0 ? (
                                         <>
-                                            {`${authorAvgRating.average.toFixed(1)} (${authorAvgRating.count})`}
+                                            {t('{average} ({n})', { average: formatNumber(authorAvgRating.average, 1), n: authorAvgRating.count })}
                                             {authorAvgRating.asProvider && authorAvgRating.asProvider.count > 0 && (
                                                 <span className="ml-2 text-[0.65rem] bg-amber-50 dark:bg-amber-950/40 px-1.5 py-0.5 rounded text-amber-700 dark:text-amber-300">
-                                                    📤 {authorAvgRating.asProvider.average.toFixed(1)}
+                                                    📤 {formatNumber(authorAvgRating.asProvider.average, 1)}
                                                 </span>
                                             )}
                                             {authorAvgRating.asReceiver && authorAvgRating.asReceiver.count > 0 && (
                                                 <span className="ml-1 text-[0.65rem] bg-indigo-50 px-1.5 py-0.5 rounded text-indigo-700">
-                                                    📥 {authorAvgRating.asReceiver.average.toFixed(1)}
+                                                    📥 {formatNumber(authorAvgRating.asReceiver.average, 1)}
                                                 </span>
                                             )}
                                         </>
-                                    ) : 'No ratings yet'}
+                                    ) : t('No ratings yet')}
                                 </span>
                             </p>
                             {authorProfile?.bio && (
-                                <p className="text-sm text-nature-600 dark:text-nature-400 leading-snug mb-0">
+                                <p dir="auto" className="text-sm text-nature-600 dark:text-nature-400 leading-snug mb-0">
                                     {authorProfile.bio}
                                 </p>
                             )}
@@ -1400,22 +1491,22 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                          {isPayer ? (
                              <>
                                  <p className="text-emerald-600 dark:text-emerald-400 text-sm font-bold text-center mb-1">
-                                     ✅ Action Required: Release Credits
+                                     {t('✅ Action Required: Release Credits')}
                                  </p>
                                  <p className="text-xs text-nature-500 text-center mb-2 px-4 shadow-sm">
-                                     You are the Payer. Once {targetPeerCallsign} has fulfilled the terms, release the funds held in trust to complete the transaction.
+                                     {t('You are the Payer. Once {name} has fulfilled the terms, release the funds held in trust to complete the transaction.', { name: targetPeerCallsign })}
                                  </p>
-                                 
+
                                  {showCompleteConfirm ? (
                                      <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-xl p-4 shadow-inner mt-2">
                                          <p className="font-bold text-emerald-900 dark:text-emerald-400 mb-2 text-center text-sm">
-                                             Finalize Transaction
+                                             {t('Finalize Transaction')}
                                          </p>
-                                         
+
                                          {selectedPost.priceType !== 'fixed' && (
                                              <div className="mb-3">
                                                  <label className="block text-xs font-bold text-emerald-700 dark:text-emerald-500 mb-1 uppercase tracking-wider">
-                                                     ACTUAL { { hourly: 'HOURS', daily: 'DAYS', weekly: 'WEEKS', monthly: 'MONTHS' }[selectedPost.priceType] || 'UNITS' } WORKED
+                                                     {actualWorkedLabel(selectedPost.priceType)}
                                                  </label>
                                                  <input
                                                      type="number"
@@ -1423,7 +1514,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                      onChange={(e) => setCompleteHours(e.target.value)}
                                                      min="0.5"
                                                      step="0.5"
-                                                     placeholder="e.g. 2.5"
+                                                     placeholder={t('e.g. 2.5')}
                                                      className="w-full bg-white dark:bg-nature-900 border border-emerald-200 dark:border-emerald-800 rounded-lg px-3 py-2 text-nature-900 dark:text-white font-mono text-center focus:ring-2 focus:ring-emerald-400 focus:outline-none"
                                                  />
                                              </div>
@@ -1433,7 +1524,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                              {(() => {
                                                  const hrs = Number(completeHours) || 0;
                                                  const tot = selectedPost.priceType !== 'fixed' ? selectedPost.credits * hrs : selectedPost.credits;
-                                                 return `Transferring ${tot} B to ${targetPeerCallsign}`;
+                                                 return t('Transferring {n} B to {name}', { n: tot, name: targetPeerCallsign });
                                              })()}
                                          </div>
                                          
@@ -1443,7 +1534,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                  disabled={accepting}
                                                  className="flex-1 py-2.5 rounded-lg border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 font-bold hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors text-sm"
                                              >
-                                                 Cancel
+                                                 {t('Cancel')}
                                              </button>
                                              <button
                                                  onClick={async () => {
@@ -1474,7 +1565,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                          setPromptReviewForTx({ txId, targetPubkey, targetCallsign, targetRole });
 
                                                      } catch (e: any) {
-                                                         setError(e.message || 'Failed to complete transaction');
+                                                         setError(e.message || t('Failed to complete transaction'));
                                                      } finally {
                                                          setAccepting(false);
                                                      }
@@ -1486,7 +1577,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                          : 'bg-bp-commit-fill hover:bg-bp-commit-hover'
                                                  }`}
                                              >
-                                                 {accepting ? 'Processing...' : 'Release Credits'}
+                                                 {accepting ? t('Processing...') : t('Release Credits')}
                                              </button>
                                          </div>
                                      </div>
@@ -1503,17 +1594,20 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                              accepting ? 'bg-bp-commit-fill cursor-not-allowed opacity-60' : 'bg-bp-commit-fill hover:bg-bp-commit-hover'
                                          }`}
                                      >
-                                         {accepting ? 'Processing...' : '✅ Release Credits'}
+                                         {accepting ? t('Processing...') : t('✅ Release Credits')}
                                      </button>
                                  )}
                              </>
                          ) : (
                              <>
                                  <p className="text-amber-500 text-sm font-semibold text-center mt-2 mb-2">
-                                     ⏳ Pending Release by {targetPeerCallsign}
+                                     {t('⏳ Pending Release by {name}', { name: targetPeerCallsign })}
                                  </p>
                                  <p className="text-xs text-nature-500 text-center mb-2 px-4 shadow-sm">
-                                      You are the Payee. Fulfill the terms exactly as agreed, and the Payer will release your credits (you will receive net amount minus 1.5% transaction fee <span className="text-emerald-600 dark:text-emerald-500 font-bold">(100% community owned)</span>).
+                                     <Sentence
+                                         text={t('You are the Payee. Fulfill the terms exactly as agreed, and the Payer will release your credits (you will receive net amount minus 1.5% transaction fee {owned}).')}
+                                         parts={{ owned: <span className="text-emerald-600 dark:text-emerald-500 font-bold">{t('(100% community owned)')}</span> }}
+                                     />
                                  </p>
                              </>
                          )}
@@ -1522,7 +1616,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                              onClick={async () => {
                                  const txToCancel = activeTx?.id || selectedPost.pendingTransactionId;
                                  if (!identity || !txToCancel) return;
-                                 if (!confirm('Cancel this transaction and return the post to the market?')) return;
+                                 if (!confirm(t('Cancel this transaction and return the post to the market?'))) return;
                                  setAccepting(true);
                                  try {
                                      await cancelMarketplaceTransaction(txToCancel, identity.publicKey);
@@ -1531,7 +1625,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                      refresh();
                                      onRefreshTransactions?.();
                                  } catch (e: any) {
-                                     setError(e.message || 'Failed to cancel transaction');
+                                     setError(e.message || t('Failed to cancel transaction'));
                                  } finally {
                                      setAccepting(false);
                                  }
@@ -1541,7 +1635,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                  accepting ? 'border-red-200 text-red-300 cursor-not-allowed' : 'border-red-300 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 dark:hover:text-red-300'
                              }`}
                          >
-                             ❌ Cancel Hold
+                             {t('❌ Cancel Hold')}
                          </button>
                      </div>
                  )}
@@ -1550,7 +1644,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 {isOwnPost && selectedPost.type === 'need' && selectedPost.status === 'active' && requests.length > 0 && (
                     <div className="mt-4 bg-oat-50 dark:bg-nature-950 border border-amber-200 dark:border-amber-900/50 rounded-xl p-3 shadow-sm">
                         <p className="font-bold text-amber-800 dark:text-amber-500 text-sm mb-2 text-center">
-                            ✋ Fulfillment Requests ({requests.length})
+                            {t('✋ Fulfillment Requests ({n})', { n: requests.length })}
                         </p>
                         <div className="flex flex-col gap-2">
                             {requests.map((req: any) => (
@@ -1563,10 +1657,13 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             <span className="text-amber-600 dark:text-amber-400">🤝</span> <span className="underline decoration-nature-300 underline-offset-2">{req.sellerCallsign}</span>
                                         </button>
                                         <span className="text-xs text-amber-500 mt-0.5 font-semibold">
-                                            {req.bidderRating?.count > 0 ? `★ ${req.bidderRating.average.toFixed(1)} (${req.bidderRating.count} reviews)` : '☆☆☆☆☆ No ratings yet'}
+                                            {/* The English has always said "reviews" and "hours" whatever the count: both forms keep it. */}
+                                            {req.bidderRating?.count > 0
+                                                ? tn(req.bidderRating.count, '★ {average} ({n} reviews)', '★ {average} ({n} reviews)', { average: formatNumber(req.bidderRating.average, 1) })
+                                                : t('☆☆☆☆☆ No ratings yet')}
                                         </span>
                                         <span className="text-xs text-nature-500 dark:text-nature-400 mt-1">
-                                            {req.hours ? `${req.hours} hours estimated` : 'Offered to fulfill'}
+                                            {req.hours ? tn(req.hours, '{n} hours estimated', '{n} hours estimated') : t('Offered to fulfill')}
                                         </span>
                                     </div>
                                     <div className="flex gap-2">
@@ -1582,7 +1679,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                     // stay stale until its next tick.
                                                     onRefreshTransactions?.();
                                                 } catch (e: any) {
-                                                    setError(e.message || 'Failed to reject offer');
+                                                    setError(e.message || t('Failed to reject offer'));
                                                 } finally {
                                                     setAccepting(false);
                                                 }
@@ -1590,7 +1687,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             disabled={accepting}
                                             className="flex-1 py-1.5 rounded-md border border-nature-200 dark:border-nature-700 text-nature-600 dark:text-nature-400 font-bold text-xs hover:bg-red-50 hover:text-red-600 hover:border-red-200 dark:hover:bg-red-900/30 dark:hover:text-red-300 transition-colors"
                                         >
-                                            Deny
+                                            {t('Deny')}
                                         </button>
                                         <button
                                             onClick={async () => {
@@ -1603,7 +1700,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                     refresh();
                                                     onRefreshTransactions?.();
                                                 } catch (e: any) {
-                                                    setError(e.message || 'Failed to approve offer. Check your balance.');
+                                                    setError(e.message || t('Failed to approve offer. Check your balance.'));
                                                 } finally {
                                                     setAccepting(false);
                                                 }
@@ -1611,7 +1708,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             disabled={accepting}
                                             className="flex-1 py-1.5 rounded-md bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-bold text-xs shadow-sm transition-colors"
                                         >
-                                            Approve & Hold in Trust
+                                            {t('Approve & Hold in Trust')}
                                         </button>
                                     </div>
                                 </div>
@@ -1624,9 +1721,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 {isPulsePost ? (
                     <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 rounded-2xl p-5 text-center my-4 shadow-sm">
                         <span className="text-3xl mb-2 block" aria-hidden="true">🗞️</span>
-                        <h4 className="font-bold text-amber-950 dark:text-amber-100 text-base mb-1">Feeling Inspired?</h4>
+                        <h4 className="font-bold text-amber-950 dark:text-amber-100 text-base mb-1">{t('Feeling Inspired?')}</h4>
                         <p className="text-sm text-amber-900/90 dark:text-amber-200/90 mb-4 leading-relaxed max-w-md mx-auto">
-                            The best way to participate in BeanPool is by offering your skills, surplus produce, or lending tools to your neighbors.
+                            {t('The best way to participate in BeanPool is by offering your skills, surplus produce, or lending tools to your neighbors.')}
                         </p>
                         <button
                             onClick={() => {
@@ -1635,10 +1732,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             }}
                             className="px-6 py-2.5 bg-bp-gold-fill hover:bg-bp-gold-hover text-bp-gold-on font-bold rounded-xl text-sm transition-colors shadow-md inline-flex items-center gap-2"
                         >
-                            <span aria-hidden="true">💡</span> Post Your Own Offer →
+                            <span aria-hidden="true">💡</span> {t('Post Your Own Offer →')}
                         </button>
                         <p className="text-[11px] text-amber-700/80 dark:text-amber-400/80 mt-3 font-medium">
-                            <span aria-hidden="true">🗞️ </span>Daily Pulse — a daily thought for the post-extraction economy
+                            <span aria-hidden="true">🗞️ </span>{t('Daily Pulse — a daily thought for the post-extraction economy')}
                         </p>
                     </div>
                 ) : !isOwnPost && selectedPost.status === 'active' && !isAcceptedByMe && (
@@ -1653,10 +1750,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl p-4 shadow-sm text-center">
                                         <span className="text-4xl block mb-2">⏳</span>
                                         <p className="font-bold text-amber-800 dark:text-amber-500 mb-1">
-                                            Offer Pending Approval
+                                            {t('Offer Pending Approval')}
                                         </p>
                                         <p className="text-xs text-nature-600 dark:text-nature-400 mb-4">
-                                            The author is reviewing your offer to fulfill this need.
+                                            {t('The author is reviewing your offer to fulfill this need.')}
                                         </p>
                                         <button
                                             onClick={async () => {
@@ -1667,7 +1764,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                     setRequests(prev => prev.filter(r => r.id !== myRequest.id));
                                                     onRefreshTransactions?.();
                                                 } catch (e: any) {
-                                                    setError(e.message || 'Failed to cancel request');
+                                                    setError(e.message || t('Failed to cancel request'));
                                                 } finally {
                                                     setAccepting(false);
                                                 }
@@ -1675,7 +1772,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             disabled={accepting}
                                             className="w-full py-2.5 rounded-lg border border-red-200 text-red-600 dark:text-red-300 font-bold hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors text-sm"
                                         >
-                                            {accepting ? 'Canceling...' : 'Cancel Offer'}
+                                            {accepting ? t('Canceling...') : t('Cancel Offer')}
                                         </button>
                                     </div>
                                 );
@@ -1683,18 +1780,20 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
                             // Deals live in a local community: the action keeps its place and words, and opens the sheet.
                             if (dealMarked) {
-                                return <LocalCommunityAction feature="escrow" label={DEAL_ACTION_LABEL} className="w-full py-3.5 text-[15px]" {...markWays} />;
+                                // components/LocalCommunityMark DEAL_ACTION_LABEL's words, in the member's language: the pill after it
+                                // carries the 🏘️ (as the phone's post/[id].tsx).
+                                return <LocalCommunityAction feature="escrow" label={t(LOCAL_COMMUNITY_LINES.dealAction).replace(LOCAL_COMMUNITY_EMOJI, '').trim()} className="w-full py-3.5 text-[15px]" {...markWays} />;
                             }
                             return showAcceptConfirm ? (
                             <div className="bg-oat-50 dark:bg-nature-950 border border-nature-200 dark:border-nature-800 rounded-xl p-4 shadow-inner mt-2">
                                 <p className="font-bold text-nature-900 dark:text-white mb-2 text-center text-sm">
-                                    {selectedPost.type === 'offer' ? 'Accept this Offer?' : 'Offer to Fulfill this Need?'}
+                                    {selectedPost.type === 'offer' ? t('Accept this Offer?') : t('Offer to Fulfill this Need?')}
                                 </p>
-                                
+
                                 {selectedPost.priceType !== 'fixed' && (
                                     <div className="mb-3">
                                         <label className="block text-xs font-bold text-nature-600 dark:text-nature-400 mb-1 uppercase tracking-wider">
-                                            ESTIMATED { { hourly: 'HOURS', daily: 'DAYS', weekly: 'WEEKS', monthly: 'MONTHS' }[selectedPost.priceType] || 'UNITS' }
+                                            {estimatedLabel(selectedPost.priceType)}
                                         </label>
                                         <input
                                             type="number"
@@ -1704,31 +1803,40 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             className="w-full bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-lg px-3 py-2 text-nature-900 dark:text-white font-mono text-center focus:ring-2 focus:ring-amber-400 focus:outline-none"
                                         />
                                         <p className="text-[10px] text-nature-500 mt-1 text-center">
-                                            Credits will be reserved based on this estimate.
+                                            {t('Credits will be reserved based on this estimate.')}
                                         </p>
                                     </div>
                                 )}
-                                
+
                                 <div className="text-center mb-4 text-xs font-medium text-nature-700 dark:text-nature-300 bg-white dark:bg-nature-900 py-3 px-2 rounded-lg border border-nature-100 dark:border-nature-800">
                                     {(() => {
                                         const hrs = Number(acceptHours) || 0;
                                         const tot = selectedPost.priceType !== 'fixed' ? selectedPost.credits * hrs : selectedPost.credits;
-                                        if (tot === 0) return 'This is a free listing (0 B). No credits transferred.';
-                                        
-                                        const duration = selectedPost.priceType !== 'fixed' ? ` (${hrs} ${ { hourly: 'hr', daily: 'd', weekly: 'w', monthly: 'm' }[selectedPost.priceType] })` : '';
-                                        
+                                        if (tot === 0) return t('This is a free listing (0 B). No credits transferred.');
+
+                                        const duration = selectedPost.priceType !== 'fixed' ? estimateLength(selectedPost.priceType, hrs) : null;
+                                        const owned = <span className="text-emerald-600 dark:text-emerald-400 font-bold">{t('(100% community owned)')}</span>;
+
                                         if (selectedPost.type === 'offer') {
                                             const net = Math.round(tot * 0.985 * 100) / 100;
                                             return (
                                                 <span>
-                                                    By proceeding, you commit {tot} B{duration} to a Trust Wallet. When finalized, the provider will receive {net.toFixed(2)} B (net of 1.5% transaction fee <span className="text-emerald-600 dark:text-emerald-400 font-bold">(100% community owned)</span> to fund the Commons Pool).
+                                                    <Sentence
+                                                        text={duration
+                                                            ? t('By proceeding, you commit {total} B ({duration}) to a Trust Wallet. When finalized, the provider will receive {net} B (net of 1.5% transaction fee {owned} to fund the Commons Pool).', { total: tot, duration, net: formatNumber(net, 2) })
+                                                            : t('By proceeding, you commit {total} B to a Trust Wallet. When finalized, the provider will receive {net} B (net of 1.5% transaction fee {owned} to fund the Commons Pool).', { total: tot, net: formatNumber(net, 2) })}
+                                                        parts={{ owned }}
+                                                    />
                                                 </span>
                                             );
                                         } else {
                                             const net = Math.round(tot * 0.985 * 100) / 100;
                                             return (
                                                 <span>
-                                                    You will receive {net.toFixed(2)} B (after 1.5% transaction fee <span className="text-emerald-600 dark:text-emerald-400 font-bold">(100% community owned)</span> is deducted to fund the Commons Pool) when the job is completed.
+                                                    <Sentence
+                                                        text={t('You will receive {net} B (after 1.5% transaction fee {owned} is deducted to fund the Commons Pool) when the job is completed.', { net: formatNumber(net, 2) })}
+                                                        parts={{ owned }}
+                                                    />
                                                 </span>
                                             );
                                         }
@@ -1741,7 +1849,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         disabled={accepting}
                                         className="flex-1 py-2.5 rounded-lg border border-nature-200 dark:border-nature-700 text-nature-600 dark:text-nature-300 font-bold hover:bg-nature-100 dark:hover:bg-nature-800 transition-colors text-sm"
                                     >
-                                        Cancel
+                                        {t('Cancel')}
                                     </button>
                                     <button
                                         onClick={async () => {
@@ -1792,13 +1900,12 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 : 'bg-bp-commit-fill hover:bg-bp-commit-hover'
                                         }`}
                                     >
-                                        {accepting ? 'Processing...' : 'Confirm'}
+                                        {accepting ? t('Processing...') : t('Confirm')}
                                     </button>
                                 </div>
                                 {isRemotePost && (
                                     <p className="mt-2 text-xs text-nature-700 dark:text-nature-400 text-center">
-                                        This listing belongs to another community. Buying it takes a cross-community
-                                        purchase so both communities record it — not this button, yet.
+                                        {t('This listing belongs to another community. Buying it takes a cross-community purchase so both communities record it — not this button, yet.')}
                                     </p>
                                 )}
 
@@ -1824,7 +1931,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 <span aria-hidden="true">🔗 </span>{commissionLink.name}
                                             </span>
                                             <span className="text-xs text-nature-700 dark:text-nature-400 tabular-nums">
-                                                {commissionLink.allowance} 🫘 available
+                                                {t('{n} 🫘 available', { n: commissionLink.allowance })}
                                             </span>
                                         </div>
                                         {/* THE SENTENCE, not a signed number. `redeemable` is the part of the
@@ -1832,9 +1939,12 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             keeper would act at all — "they owe us 480" is a different decision
                                             from "we have discretion to spend 500 we do not have yet". */}
                                         <p className="text-[13px] leading-snug text-nature-700 dark:text-nature-400 mb-2">
+                                            {/* The English has always said "beans" whatever the count: both forms keep it. */}
                                             {commissionLink.redeemable > 0
-                                                ? `${commissionLink.name.replace(/ Link$/, '')} owes this community ${commissionLink.redeemable} beans of work. Commissioning this listing calls some of that in — the beans come from the Commons pot, and the tab comes down.`
-                                                : `Nothing is owed either way right now, so this would open a new tab of ${commissionLink.ceiling > 0 ? `up to ${commissionLink.ceiling} beans` : 'beans'} — within the ceiling set for this link.`}
+                                                ? tn(commissionLink.redeemable, '{community} owes this community {n} beans of work. Commissioning this listing calls some of that in — the beans come from the Commons pot, and the tab comes down.', '{community} owes this community {n} beans of work. Commissioning this listing calls some of that in — the beans come from the Commons pot, and the tab comes down.', { community: commissionLink.name.replace(/ Link$/, '') })
+                                                : commissionLink.ceiling > 0
+                                                    ? tn(commissionLink.ceiling, 'Nothing is owed either way right now, so this would open a new tab of up to {n} beans — within the ceiling set for this link.', 'Nothing is owed either way right now, so this would open a new tab of up to {n} beans — within the ceiling set for this link.')
+                                                    : t('Nothing is owed either way right now, so this would open a new tab of beans — within the ceiling set for this link.')}
                                         </p>
                                         {/* CONTRAST, measured rather than eyeballed. This panel sits on
                                             `bg-oat-50 dark:bg-nature-950`, and the review flagged amber-500 as
@@ -1851,14 +1961,11 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             sentence adds nothing the words do not. */}
                                         {commissionNeeded > commissionLink.allowance ? (
                                             <p className="text-[13px] leading-snug text-amber-700 dark:text-amber-400 font-medium">
-                                                <span aria-hidden="true">⚠️ </span>This listing needs {commissionNeeded} 🫘 with the fee, which is
-                                                more than the {commissionLink.allowance} available. An operator can
-                                                raise the ceiling in Settings.
+                                                <span aria-hidden="true">⚠️ </span>{t('This listing needs {needed} 🫘 with the fee, which is more than the {allowance} available. An operator can raise the ceiling in Settings.', { needed: commissionNeeded, allowance: commissionLink.allowance })}
                                             </p>
                                         ) : commissionNeeded > commissionLink.commonsBalance ? (
                                             <p className="text-[13px] leading-snug text-amber-700 dark:text-amber-400 font-medium">
-                                                <span aria-hidden="true">⚠️ </span>The Commons pot holds {commissionLink.commonsBalance} 🫘, less than
-                                                the {commissionNeeded} this needs. The pot fills from fees and demurrage.
+                                                <span aria-hidden="true">⚠️ </span>{t('The Commons pot holds {pot} 🫘, less than the {needed} this needs. The pot fills from fees and demurrage.', { pot: commissionLink.commonsBalance, needed: commissionNeeded })}
                                             </p>
                                         ) : (
                                             <button
@@ -1887,15 +1994,15 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                         // says: the confirmation should agree with what was pressed.
                                                         setCommissionResult(
                                                             r.status === 'settled'
-                                                                ? `Commissioned. ${r.amount} 🫘 to ${community}, ${r.drawnFromCommons} of it drawn from the Commons.`
+                                                                ? t('Commissioned. {amount} 🫘 to {community}, {drawn} of it drawn from the Commons.', { amount: r.amount, community, drawn: r.drawnFromCommons })
                                                                 : r.status === 'pending'
-                                                                    ? 'Sent — still completing. It will finish on its own, or the beans come back.'
-                                                                    : 'That did not go through, and nothing was spent.'
+                                                                    ? t('Sent — still completing. It will finish on its own, or the beans come back.')
+                                                                    : t('That did not go through, and nothing was spent.')
                                                         );
                                                         refreshCommissionCapacity();
                                                         refresh();
                                                     } catch (e: any) {
-                                                        setCommissionResult(e?.message || 'That commission could not be started.');
+                                                        setCommissionResult(e?.message || t('That commission could not be started.'));
                                                     } finally {
                                                         setCommissioning(false);
                                                     }
@@ -1906,8 +2013,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 }`}
                                             >
                                                 {commissioning
-                                                    ? 'Commissioning…'
-                                                    : `Commission for the community — ${commissionNeeded} 🫘`}
+                                                    ? t('Commissioning…')
+                                                    : t('Commission for the community — {n} 🫘', { n: commissionNeeded })}
                                             </button>
                                         )}
                                         {/* aria-live alongside role="status", which already implies polite — so
@@ -1932,21 +2039,21 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 >
                                     <span>
                                         {authorEnterpriseInactive.status === 'completed'
-                                            ? '🏁 Enterprise Closed'
+                                            ? t('🏁 Enterprise Closed')
                                             : authorEnterpriseInactive.status === 'winding_up'
-                                                ? '⏳ Enterprise Winding Up'
+                                                ? t('⏳ Enterprise Winding Up')
                                                 : authorEnterpriseInactive.paused
-                                                    ? '⏸️ Enterprise Paused for Season'
+                                                    ? t('⏸️ Enterprise Paused for Season')
                                                     : ''}
                                     </span>
                                 </button>
                                 <p className="text-xs text-nature-500 dark:text-nature-400 text-center font-medium">
                                     {authorEnterpriseInactive.status === 'completed'
-                                        ? 'This community enterprise has wound up.'
+                                        ? t('This community enterprise has wound up.')
                                         : authorEnterpriseInactive.status === 'winding_up'
-                                            ? 'This community enterprise is winding down and no longer accepting deals.'
+                                            ? t('This community enterprise is winding down and no longer accepting deals.')
                                             : authorEnterpriseInactive.paused
-                                                ? 'This community enterprise is paused for the season and not taking orders.'
+                                                ? t('This community enterprise is paused for the season and not taking orders.')
                                                 : ''}
                                 </p>
                             </div>
@@ -1956,7 +2063,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     // A name AND a photo are required before you can accept or fulfil.
                                     const status = await getProfileStatus(identity);
                                     if (!status.complete) {
-                                        setProfileGateMsg(`Your community likes to know who they're dealing with, so you need ${describeMissing(status)} before you can accept. It only takes a moment.`);
+                                        setProfileGateMsg(profileGateSentence(status));
                                         return;
                                     }
                                     // Accepting an Offer extracts value → gated. Fulfilling a Need is a contribution → always allowed.
@@ -1973,7 +2080,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         : selectedPost.type === 'offer' ? 'bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on' : 'bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on'
                                 }`}
                             >
-                                 {accepting ? 'Processing...' : (selectedPost.type === 'offer' ? '🤝 Accept Offer' : '✋ Offer to Fulfill')}
+                                 {accepting ? t('Processing...') : (selectedPost.type === 'offer' ? t('🤝 Accept Offer') : t('✋ Offer to Fulfill'))}
                             </button>
                         );
                         })()}
@@ -1991,11 +2098,11 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 messaging || isRemotePost ? 'bg-nature-500 cursor-not-allowed opacity-60' : 'bg-nature-800 hover:bg-nature-900'
                             }`}
                         >
-                            {messaging ? 'Opening chat...' : '💬 Message'}
+                            {messaging ? t('Opening chat...') : t('💬 Message')}
                         </button>
                         {isRemotePost && (
                             <p className="mt-1.5 text-xs text-nature-600 dark:text-nature-400 text-center">
-                                This post is from another community — messaging across communities isn't available yet.
+                                {t("This post is from another community — messaging across communities isn't available yet.")}
                             </p>
                         )}
 
@@ -2008,14 +2115,16 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 ? selectedPost.acceptedBy! 
                                 : selectedPost.authorPublicKey;
                             const targetName = identity.publicKey === selectedPost.authorPublicKey
-                                ? (selectedPost.acceptedByCallsign || 'them')
+                                ? (selectedPost.acceptedByCallsign || t('them', undefined, 'the other member of a trade, name unknown'))
                                 : selectedPost.authorCallsign;
                             // Determine role of target
                             const isOffer = selectedPost.type === 'offer';
                             const targetIsSeller = targetPubkey === selectedPost.authorPublicKey;
-                            const targetRole = targetIsSeller 
-                                ? (isOffer ? 'Provider' : 'Receiver')
-                                : (isOffer ? 'Receiver' : 'Provider');
+                            const provider = t('Provider', undefined, 'trade role');
+                            const receiver = t('Receiver', undefined, 'trade role');
+                            const targetRole = targetIsSeller
+                                ? (isOffer ? provider : receiver)
+                                : (isOffer ? receiver : provider);
                             return (
                                 <>
                                     <button
@@ -2030,13 +2139,21 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                     : 'bg-white dark:bg-nature-900 border-nature-200 dark:border-nature-800 text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-nature-800 shadow-sm')
                                         }`}
                                     >
-                                        {hasExistingRating ? `⭐ Edit rating for ${targetName} (as ${targetRole})` : `⭐ Rate ${targetName} as ${targetRole}`}
+                                        {hasExistingRating
+                                            ? t('⭐ Edit rating for {name} (as {role})', { name: targetName, role: targetRole })
+                                            : t('⭐ Rate {name} as {role}', { name: targetName, role: targetRole })}
                                     </button>
 
                                     {showRatingForm && (
                                         <div className="bg-oat-50 dark:bg-nature-950 border border-nature-200 dark:border-nature-800 rounded-xl p-4 mt-2 shadow-inner">
                                             <p className="text-sm text-nature-600 dark:text-nature-400 mb-3 text-center">
-                                                How was <strong className="text-nature-900 dark:text-text-primary">{targetName}</strong> as a <strong className="text-nature-900 dark:text-text-primary">{targetRole}</strong>?
+                                                <Sentence
+                                                    text={t('How was {name} as a {role}?')}
+                                                    parts={{
+                                                        name: <strong className="text-nature-900 dark:text-text-primary">{targetName}</strong>,
+                                                        role: <strong className="text-nature-900 dark:text-text-primary">{targetRole}</strong>,
+                                                    }}
+                                                />
                                             </p>
                                             <div className="flex justify-center gap-2 mb-3">
                                                 {[1, 2, 3, 4, 5].map(star => (
@@ -2054,7 +2171,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             <textarea
                                                 value={ratingComment}
                                                 onChange={(e) => setRatingComment(e.target.value)}
-                                                placeholder="Leave a comment (optional)..."
+                                                placeholder={t('Leave a comment (optional)...')}
                                                 maxLength={200}
                                                 className="w-full p-2.5 rounded-lg border border-nature-200 bg-white text-nature-900 text-sm dark:bg-bg-input dark:text-text-primary dark:border-nature-500 focus:outline-none focus:ring-2 focus:ring-amber-300 resize-none mb-2"
                                                 rows={2}
@@ -2073,7 +2190,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                         setHasExistingRating(true);
                                                         setShowRatingForm(false);
                                                     } catch (e: any) {
-                                                        alert(e.message || 'Failed to submit rating');
+                                                        alert(e.message || t('Failed to submit rating'));
                                                     } finally {
                                                         setSubmittingRating(false);
                                                     }
@@ -2085,7 +2202,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                         : 'bg-nature-300 text-white cursor-not-allowed'
                                                 }`}
                                             >
-                                                {submittingRating ? 'Submitting...' : myRating < 1 ? 'Tap stars to rate' : (hasExistingRating ? `Update ${myRating}⭐ Rating` : `Submit ${myRating}⭐ Rating`)}
+                                                {submittingRating ? t('Submitting...') : myRating < 1 ? t('Tap stars to rate') : (hasExistingRating ? t('Update {n}⭐ Rating', { n: myRating }) : t('Submit {n}⭐ Rating', { n: myRating }))}
                                             </button>
                                         </div>
                                     )}
@@ -2097,7 +2214,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             onClick={() => { setShowReportForm(!showReportForm); setReportNote(null); }}
                             className="w-full py-2.5 mt-3 rounded-xl border border-nature-200 bg-transparent text-nature-500 font-semibold text-sm hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/30 dark:hover:text-red-300 hover:border-red-200 transition-colors"
                         >
-                            🚩 Report
+                            {t('🚩 Report')}
                         </button>
 
                         {showReportForm && (
@@ -2107,12 +2224,13 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     onChange={(e) => setReportReason(e.target.value)}
                                     className="w-full p-2.5 rounded-lg bg-white border border-red-200 text-nature-900 text-sm dark:bg-bg-input dark:text-text-primary dark:border-red-700 focus:outline-none focus:ring-2 focus:ring-red-300 cursor-pointer mb-2"
                                 >
-                                    <option value="">Select a reason...</option>
-                                    {/* The one shared list (lib/reportReasons.ts), as in ReportModal: "Child safety" is told at once. */}
-                                    {REPORT_REASONS.map((r) => <option key={r} value={r}>{r}</option>)}
+                                    <option value="">{t('Select a reason...')}</option>
+                                    {/* The one shared list (lib/reportReasons.ts), as in ReportModal: "Child safety" is told at once.
+                                        Each sends its English (the node reads it); its label is shown in the member's language. */}
+                                    {REPORT_REASONS.map((r, i) => <option key={r} value={r}>{t(REPORT_REASONS[i])}</option>)}
                                 </select>
                                 <p className="text-xs text-nature-800 dark:text-nature-200 mb-2">
-                                    <span className="font-bold">{CHILD_SAFETY_REASON}:</span> {CHILD_SAFETY_HINT}
+                                    <Sentence text={t('{reason}: {hint}', { hint: t(REPORT_WORDS.childSafetyHint) })} parts={{ reason: <span className="font-bold">{t(REPORT_WORDS.childSafety)}</span> }} />
                                 </p>
                                 <button
                                     onClick={async () => {
@@ -2136,7 +2254,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         reportReason ? 'bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on shadow-sm' : 'bg-nature-300 text-white cursor-not-allowed'
                                     }`}
                                 >
-                                    {submittingReport ? 'Sending...' : 'Submit Report'}
+                                    {submittingReport ? t('Sending...') : t('Submit Report')}
                                 </button>
                             </div>
                         )}
@@ -2169,7 +2287,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 setSelectedPost({ ...selectedPost, status: isPaused ? 'active' : 'paused' });
                                                 refresh();
                                             } catch (e: any) {
-                                                setError(e.message || 'Failed to update offer');
+                                                setError(e.message || t('Failed to update offer'));
                                             } finally {
                                                 setToggling(false);
                                             }
@@ -2181,7 +2299,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 : 'border-amber-300 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/30 dark:hover:text-amber-300'
                                         }`}
                                     >
-                                        {toggling ? 'Updating…' : selectedPost.status === 'paused' ? '▶️ Activate Offer' : '⏸️ Pause Offer'}
+                                        {toggling ? t('Updating…') : selectedPost.status === 'paused' ? t('▶️ Activate Offer') : t('⏸️ Pause Offer')}
                                     </button>
                                 )}
                                 <button
@@ -2198,12 +2316,12 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     }}
                                     className="w-full py-3.5 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover font-bold text-bp-cta-on text-[15px] transition-all shadow-md"
                                 >
-                                    ✏️ Edit Post
+                                    {t('✏️ Edit Post')}
                                 </button>
                                 <button
                                     onClick={async () => {
                                         if (!identity || !selectedPost) return;
-                                        if (!confirm('Delete this post?')) return;
+                                        if (!confirm(t('Delete this post?'))) return;
                                         setDeleting(selectedPost.id);
                                         try {
                                             await removeMarketplacePost(selectedPost.id, identity.publicKey);
@@ -2211,7 +2329,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             setSelectedTxId(null);
                                             refresh();
                                         } catch (e: any) {
-                                            setError(e.message || 'Failed to delete');
+                                            setError(e.message || t('Failed to delete'));
                                         } finally {
                                             setDeleting(null);
                                         }
@@ -2221,12 +2339,12 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         deleting === selectedPost.id ? 'border-red-200 text-red-300 cursor-not-allowed' : 'border-red-300 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 dark:hover:text-red-300'
                                     }`}
                                 >
-                                    {deleting === selectedPost.id ? 'Deleting...' : '🗑️ Delete Post'}
+                                    {deleting === selectedPost.id ? t('Deleting...') : t('🗑️ Delete Post')}
                                 </button>
                             </>
                         ) : (
                             <div className="bg-white dark:bg-nature-950 border border-nature-200 dark:border-nature-800 rounded-2xl p-5 shadow-sm">
-                                <h3 className="font-bold text-lg text-nature-950 dark:text-white mb-4 tracking-tight">✏️ Edit Post</h3>
+                                <h3 className="font-bold text-lg text-nature-950 dark:text-white mb-4 tracking-tight">{t('✏️ Edit Post')}</h3>
 
                                 {/* Type */}
                                 <div className="flex gap-2 mb-4">
@@ -2240,7 +2358,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                     : 'bg-white dark:bg-nature-900 border-nature-200 dark:border-nature-800 text-nature-500 dark:text-nature-400 hover:bg-oat-50 dark:hover:bg-nature-800 dark:hover:text-nature-300'
                                             }`}
                                         >
-                                            {t === 'offer' ? '🟢 Offer' : '🟠 Need'}
+                                            {editTypeLabel[t]}
                                         </button>
                                     ))}
                                 </div>
@@ -2253,7 +2371,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     style={inputStyle}
                                 >
                                     {MARKETPLACE_CATEGORIES.map(cat => (
-                                        <option key={cat.id} value={cat.id}>{cat.emoji} {cat.label}</option>
+                                        <option key={cat.id} value={cat.id}>{t('{emoji} {label}', { emoji: cat.emoji, label: t(cat.label) })}</option>
                                     ))}
                                 </select>
 
@@ -2261,7 +2379,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 <input
                                     value={editTitle}
                                     onChange={(e) => setEditTitle(e.target.value)}
-                                    placeholder="Title"
+                                    placeholder={t('Title')}
                                     className="w-full mb-3 py-3 px-4 rounded-xl border border-nature-200 bg-white text-nature-900 text-[15px] dark:bg-bg-input dark:text-text-primary dark:border-nature-500 focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm"
                                     style={inputStyle}
                                 />
@@ -2270,7 +2388,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 <textarea
                                     value={editDescription}
                                     onChange={(e) => setEditDescription(e.target.value)}
-                                    placeholder="Description"
+                                    placeholder={t('Description')}
                                     className="w-full mb-3 py-3 px-4 rounded-xl border border-nature-200 bg-white text-nature-900 text-[15px] dark:bg-bg-input dark:text-text-primary dark:border-nature-500 focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm min-h-[100px] resize-y"
                                     style={{ ...inputStyle, minHeight: '100px' }}
                                 />
@@ -2281,7 +2399,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         type="number"
                                         value={editCredits}
                                         onChange={(e) => setEditCredits(Number(e.target.value) || 0)}
-                                        placeholder="Credits (B)"
+                                        placeholder={t('Credits (B)')}
                                         className="flex-1 py-3 px-4 rounded-xl border border-nature-200 bg-white text-nature-900 text-[15px] dark:bg-bg-input dark:text-text-primary dark:border-nature-500 focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm min-w-0"
                                         style={{...inputStyle, marginBottom: 0, width: undefined}}
                                     />
@@ -2291,11 +2409,11 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         className="w-28 shrink-0 py-3 px-4 rounded-xl border border-nature-200 bg-white text-nature-900 text-[15px] dark:bg-bg-input dark:text-text-primary dark:border-nature-500 focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm appearance-auto cursor-pointer"
                                         style={{...inputStyle, marginBottom: 0, width: undefined}}
                                     >
-                                        <option value="fixed">Total</option>
-                                        <option value="hourly">/ Hr</option>
-                                        <option value="daily">/ Dy</option>
-                                        <option value="weekly">/ Wk</option>
-                                        <option value="monthly">/ Mo</option>
+                                        <option value="fixed">{t('Total', undefined, 'a price for the whole job')}</option>
+                                        <option value="hourly">{t('/ Hr', undefined, 'price per hour')}</option>
+                                        <option value="daily">{t('/ Dy', undefined, 'price per day')}</option>
+                                        <option value="weekly">{t('/ Wk', undefined, 'price per week')}</option>
+                                        <option value="monthly">{t('/ Mo', undefined, 'price per month')}</option>
                                     </select>
                                 </div>
 
@@ -2314,22 +2432,22 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             </svg>
                                         </div>
                                         <div className="flex flex-col">
-                                            <span className="text-[14px] font-bold text-nature-900 dark:text-white group-hover:text-terra-600 dark:group-hover:text-terra-400 transition-colors">Recurring Need / Offer</span>
-                                            <span className="text-[11px] text-nature-500 dark:text-nature-400 font-medium">Post remains active after completion for repeat business.</span>
+                                            <span className="text-[14px] font-bold text-nature-900 dark:text-white group-hover:text-terra-600 dark:group-hover:text-terra-400 transition-colors">{t('Recurring Need / Offer')}</span>
+                                            <span className="text-[11px] text-nature-500 dark:text-nature-400 font-medium">{t('Post remains active after completion for repeat business.')}</span>
                                         </div>
                                     </label>
                                 </div>
 
                                 {/* Photos */}
                                 <div className="mb-5">
-                                    <p className="text-xs font-bold text-nature-400 uppercase tracking-widest mb-2">Photos ({editPhotos.length}/5)</p>
+                                    <p className="text-xs font-bold text-nature-400 uppercase tracking-widest mb-2">{t('Photos ({n}/{max})', { n: editPhotos.length, max: 5 })}</p>
                                     <div className="flex gap-2 flex-wrap">
                                         {editPhotos.map((photo, i) => (
                                             <div key={i} className="relative">
-                                                <img src={photo} alt={`photo ${i+1}`} className="w-16 h-16 object-cover rounded-xl border border-nature-200 shadow-sm" />
+                                                <img src={photo} alt={t('photo {n}', { n: i + 1 })} className="w-16 h-16 object-cover rounded-xl border border-nature-200 shadow-sm" />
                                                 <button
                                                     onClick={() => setEditPhotos(editPhotos.filter((_, j) => j !== i))}
-                                                    aria-label="Remove photo"
+                                                    aria-label={t('Remove photo')}
                                                     className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-bp-danger-fill hover:bg-bp-danger-hover border-none text-bp-danger-on text-[10px] flex items-center justify-center cursor-pointer shadow-sm transition-colors focus-visible:ring-2 focus-visible:ring-red-500"
                                                 >
                                                     ✕
@@ -2378,7 +2496,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         onClick={() => setEditMode(false)}
                                         className="flex-1 py-3 is-bold rounded-xl border border-nature-300 text-nature-600 bg-white hover:bg-nature-50 dark:bg-nature-900 dark:text-nature-200 dark:border-nature-600 dark:hover:bg-nature-800 transition-colors text-[15px] font-bold shadow-sm"
                                     >
-                                        Cancel
+                                        {t('Cancel')}
                                     </button>
                                     <button
                                         onClick={async () => {
@@ -2399,7 +2517,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 setEditMode(false);
                                                 refresh();
                                             } catch (e: any) {
-                                                setError(e.message || 'Failed to save');
+                                                setError(e.message || t('Failed to save'));
                                             } finally {
                                                 setSaving(false);
                                             }
@@ -2409,7 +2527,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             saving || !editTitle.trim() ? 'bg-nature-300 text-white cursor-not-allowed' : 'bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on'
                                         }`}
                                     >
-                                        {saving ? 'Saving...' : '💾 Save'}
+                                        {saving ? t('Saving...') : t('💾 Save')}
                                     </button>
                                 </div>
                             </div>
@@ -2421,11 +2539,14 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 {!isOwnPost && Boolean(selectedPost.targetGroupId && userGroups.some(g => g.id === selectedPost.targetGroupId && (g.viewerRole === 'convenor' || (g as any).isConvenor))) && (
                     <div className="mt-4 p-4 rounded-2xl border border-emerald-300 dark:border-emerald-800/60 bg-emerald-50/50 dark:bg-emerald-950/20 space-y-2">
                         <p className="text-xs font-bold text-emerald-800 dark:text-emerald-300">
-                            🛡️ Convenor Moderation ({selectedPost.targetGroupName || 'Group'})
+                            {t('🛡️ Convenor Moderation ({group})', { group: selectedPost.targetGroupName || t('Group') })}
                         </p>
                         <button
                             onClick={async () => {
-                                if (!confirm(`Delete this post as Convenor of ${selectedPost.targetGroupName || 'the group'}? This action cannot be undone.`)) return;
+                                const question = selectedPost.targetGroupName
+                                    ? t('Delete this post as Convenor of {group}? This action cannot be undone.', { group: selectedPost.targetGroupName })
+                                    : t('Delete this post as Convenor of the group? This action cannot be undone.');
+                                if (!confirm(question)) return;
                                 setDeleting(selectedPost.id);
                                 try {
                                     await deleteGroupPost(selectedPost.targetGroupId!, selectedPost.id);
@@ -2433,7 +2554,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     setSelectedTxId(null);
                                     refresh();
                                 } catch (e: any) {
-                                    setError(e.message || 'Failed to delete post as convenor');
+                                    setError(e.message || t('Failed to delete post as convenor'));
                                 } finally {
                                     setDeleting(null);
                                 }
@@ -2443,7 +2564,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 deleting === selectedPost.id ? 'opacity-50 cursor-not-allowed' : ''
                             }`}
                         >
-                            {deleting === selectedPost.id ? 'Deleting...' : '🗑️ Delete Group Post (Convenor)'}
+                            {deleting === selectedPost.id ? t('Deleting...') : t('🗑️ Delete Group Post (Convenor)')}
                         </button>
                     </div>
                 )}
@@ -2471,13 +2592,15 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     // "Save this search to Home": a member's search, Offers and Needs only (not under Events or Polls).
     const toSave = onSaveSearch && !isVisitor && isMember !== false
         ? marketSearchToSave({ type: typeFilter, category: categoryFilter, radiusKm: radiusSettings?.radiusKm }, searchQuery) : null;
+    // The category the Category chip names while one is picked.
+    const filterCategory = MARKETPLACE_CATEGORIES_BY_ID.get(categoryFilter);
 
     // =================== LIST VIEW ===================
     return (
         <div className="px-3 md:px-6 pt-4 pb-24 max-w-7xl mx-auto w-full">
             {/* Radius Picker Full Screen */}
             {showRadiusPicker && (
-                <Suspense fallback={<div className="flex-1 flex items-center justify-center">Loading Location Services...</div>}>
+                <Suspense fallback={<div className="flex-1 flex items-center justify-center">{t('Loading Location Services...')}</div>}>
                     <RadiusPickerPage
                         initial={radiusSettings}
                         defaultRadius={nodeConfig?.serviceRadius?.radiusKm}
@@ -2503,7 +2626,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         <input
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
-                            placeholder="Search marketplace..."
+                            placeholder={t('Search marketplace...')}
                             className="w-full py-2 pl-10 pr-4 rounded-full border border-nature-200 dark:border-nature-600 bg-white dark:bg-nature-900 text-nature-900 dark:text-white text-[14px] font-medium focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm transition-all hover:shadow-md"
                         />
                     </div>
@@ -2514,7 +2637,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         onClick={() => setShowDealsModal(true)}
                         className="h-9 px-3 rounded-full border border-amber-300 dark:border-amber-700 bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-400 text-xs font-black whitespace-nowrap shadow-sm transition-all flex items-center gap-1.5 hover:bg-amber-200 dark:hover:bg-amber-900/60 hover:shadow-md cursor-pointer"
                     >
-                        🤝 My Deals
+                        {t('🤝 My Deals')}
                         {pendingDealsCount > 0 && (
                             <span className="bg-bp-danger-fill text-bp-danger-on text-[9px] font-black px-1.5 py-0.5 rounded-full shadow-sm">
                                 {pendingDealsCount}
@@ -2530,8 +2653,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             return next;
                         })}
                         className="w-9 h-9 rounded-full flex-shrink-0 border bg-white dark:bg-nature-900 border-nature-200 dark:border-nature-800 text-nature-600 dark:text-nature-300 hover:bg-oat-50 dark:hover:bg-nature-800 transition-colors shadow-sm flex items-center justify-center text-md hover:shadow-md cursor-pointer"
-                        title={viewMode === 'grid' ? "Switch to List View" : (viewMode === 'list' ? "Switch to Compact View" : "Switch to Card View")}
-                        aria-label={viewMode === 'grid' ? "Switch to List View" : (viewMode === 'list' ? "Switch to Compact View" : "Switch to Card View")}
+                        title={viewMode === 'grid' ? t('Switch to List View') : (viewMode === 'list' ? t('Switch to Compact View') : t('Switch to Card View'))}
+                        aria-label={viewMode === 'grid' ? t('Switch to List View') : (viewMode === 'list' ? t('Switch to Compact View') : t('Switch to Card View'))}
                     >
                         {viewMode === 'grid' ? '⊞' : (viewMode === 'list' ? '☰' : '▤')}
                     </button>
@@ -2553,27 +2676,29 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 {/* Row 2: Full-Width Type Segmented Control. Six types: two rows of three on a phone, so every type
                     stays on screen at 320px with large text; one row from sm up. */}
                 <div data-testid="feed-type-filter" className="w-full bg-nature-100 dark:bg-nature-900/60 rounded-2xl p-0.5 grid grid-cols-3 sm:grid-cols-6 gap-0.5 mt-0.5 mb-1 shadow-inner border border-nature-200/50 dark:border-nature-800/40">
-                    {(['all', 'for-you', 'offer', 'need', 'event', 'poll'] as const).map((t) => {
-                        const isSelected = typeFilter === t;
+                    {(['all', 'for-you', 'offer', 'need', 'event', 'poll'] as const).map((kind) => {
+                        const isSelected = typeFilter === kind;
                         let activeStyles = 'bg-nature-800 dark:bg-white text-white dark:text-nature-900 border border-nature-900/10 shadow-sm scale-[1.01]';
-                        if (t === 'offer') activeStyles = 'bg-bp-commit-fill text-bp-commit-on border border-emerald-700/25 shadow-sm scale-[1.01]';
-                        if (t === 'need') activeStyles = 'bg-bp-cta-fill text-bp-cta-on border border-terra-700/25 shadow-sm scale-[1.01]';
-                        if (t === 'poll') activeStyles = 'bg-purple-600 dark:bg-purple-600 text-white border border-purple-700/25 shadow-sm scale-[1.01]';
-                        if (t === 'event') activeStyles = 'bg-violet-700 dark:bg-violet-600 text-white border border-violet-800/25 shadow-sm scale-[1.01]';
-                        if (t === 'for-you') activeStyles = 'bg-violet-600 dark:bg-violet-600 text-white border border-violet-700/25 shadow-sm scale-[1.01]';
+                        if (kind === 'offer') activeStyles = 'bg-bp-commit-fill text-bp-commit-on border border-emerald-700/25 shadow-sm scale-[1.01]';
+                        if (kind === 'need') activeStyles = 'bg-bp-cta-fill text-bp-cta-on border border-terra-700/25 shadow-sm scale-[1.01]';
+                        if (kind === 'poll') activeStyles = 'bg-purple-600 dark:bg-purple-600 text-white border border-purple-700/25 shadow-sm scale-[1.01]';
+                        if (kind === 'event') activeStyles = 'bg-violet-700 dark:bg-violet-600 text-white border border-violet-800/25 shadow-sm scale-[1.01]';
+                        if (kind === 'for-you') activeStyles = 'bg-violet-600 dark:bg-violet-600 text-white border border-violet-700/25 shadow-sm scale-[1.01]';
 
                         return (
                             <button
-                                key={t}
+                                key={kind}
                                 aria-pressed={isSelected}
-                                onClick={() => setTypeFilter(typeFilter === t ? 'all' : t)}
-                                className={`min-w-0 min-h-[48px] px-1 py-1.5 text-center rounded-xl text-xs font-black transition-all duration-305 flex items-center justify-center gap-1 border-0 cursor-pointer whitespace-nowrap ${
+                                onClick={() => setTypeFilter(typeFilter === kind ? 'all' : kind)}
+                                // A word longer than the English wraps inside its pill rather than running into the next
+                                // one (words S3); the English fits on one line as before.
+                                className={`min-w-0 min-h-[48px] px-1 py-1.5 text-center rounded-xl text-xs font-black break-words transition-all duration-305 flex items-center justify-center gap-1 border-0 cursor-pointer ${
                                     isSelected 
                                         ? activeStyles 
                                         : 'bg-transparent text-nature-500 dark:text-nature-400 hover:text-nature-800 dark:hover:text-nature-200 hover:bg-white/40 dark:hover:bg-nature-800/30'
                                 }`}
                             >
-                                {t === 'all' ? 'All' : t === 'for-you' ? '★ For You' : t === 'offer' ? '🟢 Offers' : t === 'need' ? '🟠 Needs' : t === 'event' ? 'Events' : '🗳️ Polls'}
+                                {t(TYPE_PILL_WORDS[kind])}
                             </button>
                         );
                     })}
@@ -2596,9 +2721,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 ? 'bg-bp-commit-fill text-bp-commit-on border-emerald-700/25 shadow-sm'
                                 : 'bg-transparent text-nature-500 dark:text-nature-400 border-nature-200 dark:border-nature-800 hover:text-nature-800 dark:hover:text-nature-200'
                         }`}
-                        title="Hide listings that also need cash for fuel or materials"
+                        title={t('Hide listings that also need cash for fuel or materials')}
                     >
-                        🫘 Beans only{beansOnly ? ' ✓' : ''}
+                        {beansOnly ? t('🫘 Beans only ✓') : t('🫘 Beans only')}
                     </button>
                     )}
 
@@ -2612,7 +2737,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 : 'bg-white dark:bg-nature-900 text-emerald-700 dark:text-emerald-400 border-emerald-300/50 hover:bg-emerald-50 dark:hover:bg-emerald-900/20'
                         }`}
                     >
-                        🌱 New members{foundingOnly ? ' ✓' : ''}
+                        {foundingOnly ? t('🌱 New members ✓') : t('🌱 New members')}
                     </button>
                     )}
 
@@ -2620,9 +2745,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     <button
                         onClick={() => setShowPricingGuide(true)}
                         className="px-3 py-1 rounded-full text-xs font-extrabold border transition-colors cursor-pointer bg-white dark:bg-nature-900 text-indigo-700 dark:text-indigo-300 border-indigo-300/50 hover:bg-indigo-50 dark:hover:bg-indigo-900/20"
-                        title="Browse benchmark community prices"
+                        title={t('Browse benchmark community prices')}
                     >
-                        💡 Pricing Guide
+                        {t('💡 Pricing Guide')}
                     </button>
                     )}
                     </>)}
@@ -2637,9 +2762,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         ? 'bg-bp-commit-fill text-bp-commit-on border-emerald-700/25 shadow-sm'
                                         : 'bg-white dark:bg-nature-900 text-nature-600 dark:text-nature-400 border-nature-200 dark:border-nature-600'
                                 }`}
-                                aria-label="Filter feed by group"
+                                aria-label={t('Filter feed by group')}
                             >
-                                <option value="all">👥 All Groups & Public</option>
+                                <option value="all">{t('👥 All Groups & Public')}</option>
                                 {userGroups.map((g) => (
                                     <option key={g.id} value={g.id}>
                                         👥 {g.name}
@@ -2655,7 +2780,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     <div
                         data-testid="feed-event-window-chips"
                         role="group"
-                        aria-label="Filter events by date"
+                        aria-label={t('Filter events by date')}
                         className="flex flex-nowrap gap-2 overflow-x-auto overscroll-x-contain mt-0.5 mb-2.5 pb-0.5"
                         style={{ scrollbarWidth: 'none' }}
                     >
@@ -2671,7 +2796,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         : 'bg-white dark:bg-nature-900 border-nature-200 dark:border-nature-700 text-nature-800 dark:text-oat-50'
                                 }`}
                             >
-                                {w.label}
+                                {t(EVENT_WINDOW_WORDS[w.id])}
                             </button>
                         ))}
                     </div>
@@ -2691,13 +2816,13 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     >
                         {(MARKETPLACE_CATEGORIES_BY_ID.get(categoryFilter)?.emoji) || '🏷️'}
                         <span className="truncate">
-                            {categoryFilter !== 'all' ? MARKETPLACE_CATEGORIES_BY_ID.get(categoryFilter)?.label : 'Category'}
+                            {categoryFilter !== 'all' ? (filterCategory ? t(filterCategory.label) : undefined) : t('Category')}
                         </span>
                         {categoryFilter !== 'all' ? (
                             <span
                                 role="button"
                                 tabIndex={0}
-                                aria-label="Clear category filter"
+                                aria-label={t('Clear category filter')}
                                 onClick={(e) => { e.stopPropagation(); setCategoryFilter('all'); }}
                                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); setCategoryFilter('all'); } }}
                                 className="ml-1 bg-white/20 hover:bg-white/30 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full flex items-center justify-center cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
@@ -2720,13 +2845,13 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     >
                         <span>📍</span>
                         <span className="truncate">
-                            {radiusSettings ? (radiusSettings.radiusKm < 1 ? `${Math.round(radiusSettings.radiusKm * 1000)}m` : `${radiusSettings.radiusKm}km`) : 'Distance'}
+                            {radiusSettings ? (radiusSettings.radiusKm < 1 ? t('{n}m', { n: Math.round(radiusSettings.radiusKm * 1000) }) : t('{n}km', { n: radiusSettings.radiusKm })) : t('Distance')}
                         </span>
                         {radiusSettings ? (
                             <span
                                 role="button"
                                 tabIndex={0}
-                                aria-label="Clear distance filter"
+                                aria-label={t('Clear distance filter')}
                                 onClick={(e) => { e.stopPropagation(); setRadiusSettings(null); clearRadiusSettings(); }}
                                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); setRadiusSettings(null); clearRadiusSettings(); } }}
                                 className="ml-1 bg-white/20 hover:bg-white/30 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full flex items-center justify-center cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
@@ -2745,7 +2870,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 {peerNodes.length > 0 && (
                     <div className="flex gap-2 mt-2 overflow-x-auto pb-1 scrollbar-hide">
                         <span className="px-3 py-1.5 rounded-lg border-2 border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 text-xs font-black uppercase tracking-widest whitespace-nowrap inline-flex items-center shadow-sm">
-                            🏠 Internal
+                            {t('🏠 Internal')}
                         </span>
                         {peerNodes.map(peer => {
                             const isOn = enabledPeers.has(peer.publicUrl);
@@ -2783,7 +2908,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
             {/* Posts */}
             {loading ? (
-                <p className="text-nature-500 text-center py-8">Loading...</p>
+                <p className="text-nature-500 text-center py-8">{t('Loading...')}</p>
             ) : membersOnly ? null : (() => {
                 let filtered = posts.filter(p => {
                     if (p.type === 'poll') {
@@ -2895,28 +3020,28 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     <p data-testid="market-near-line" className="m-0 mb-2 px-1 text-sm text-nature-600 dark:text-nature-300 flex flex-wrap items-center gap-x-2 gap-y-1">
                         {near?.from === 'area' ? (
                             <>
-                                <span>{`Nearest to your area first, within ${formatDistance(near.radiusKm)}.`}</span>
-                                <button type="button" onClick={() => setEverywhere(true)} className="min-h-[44px] px-2 font-bold underline text-nature-800 dark:text-nature-100 cursor-pointer">Show everywhere</button>
+                                <span>{t('Nearest to your area first, within {distance}.', { distance: formatDistance(near.radiusKm) })}</span>
+                                <button type="button" onClick={() => setEverywhere(true)} className="min-h-[44px] px-2 font-bold underline text-nature-800 dark:text-nature-100 cursor-pointer">{t('Show everywhere')}</button>
                             </>
                         ) : near ? (
                             // Not the setting's label: the picker sets it to "<n>km radius", never a place's name.
-                            <span>{`Nearest first, within ${formatDistance(near.radiusKm)} of the place you picked.`}</span>
+                            <span>{t('Nearest first, within {distance} of the place you picked.', { distance: formatDistance(near.radiusKm) })}</span>
                         ) : areaStanding ? (
                             <span>{areaStanding}</span>
                         ) : areaFailed && !everywhere ? (
                             <>
-                                <span>Couldn't check your area just now, so this is the newest from everywhere.</span>
-                                <button type="button" onClick={() => setAreaTry(n => n + 1)} className="min-h-[44px] px-2 font-bold underline text-nature-800 dark:text-nature-100 cursor-pointer">Try again</button>
+                                <span>{t("Couldn't check your area just now, so this is the newest from everywhere.")}</span>
+                                <button type="button" onClick={() => setAreaTry(n => n + 1)} className="min-h-[44px] px-2 font-bold underline text-nature-800 dark:text-nature-100 cursor-pointer">{t('Try again')}</button>
                             </>
                         ) : everywhere && memberArea ? (
                             <>
-                                <span>Newest from everywhere.</span>
-                                <button type="button" onClick={() => setEverywhere(false)} className="min-h-[44px] px-2 font-bold underline text-nature-800 dark:text-nature-100 cursor-pointer">Near your area</button>
+                                <span>{t('Newest from everywhere.')}</span>
+                                <button type="button" onClick={() => setEverywhere(false)} className="min-h-[44px] px-2 font-bold underline text-nature-800 dark:text-nature-100 cursor-pointer">{t('Near your area')}</button>
                             </>
                         ) : (
                             <>
-                                <span>Newest from everywhere.</span>
-                                <button type="button" onClick={() => setShowRadiusPicker(true)} className="min-h-[44px] px-2 font-bold underline text-nature-800 dark:text-nature-100 cursor-pointer">See what's near you</button>
+                                <span>{t('Newest from everywhere.')}</span>
+                                <button type="button" onClick={() => setShowRadiusPicker(true)} className="min-h-[44px] px-2 font-bold underline text-nature-800 dark:text-nature-100 cursor-pointer">{t("See what's near you")}</button>
                             </>
                         )}
                     </p>
@@ -2935,7 +3060,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     // alone on row 1, so there it sits on a row of its own above the cards.
                     const note = (
                         <p data-testid="visitor-list-note" className="col-span-full sm:order-first m-0 px-1 text-sm font-semibold text-nature-600 dark:text-nature-300">
-                            {VISITOR_LIST_NOTE}
+                            {/* lib/visitor-lobby.ts VISITOR_LIST_NOTE's words, in the visitor's language. */}
+                            {t('Names, photos of people and exact places appear when you join.')}
                         </p>
                     );
                     return (
@@ -2945,12 +3071,12 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             {filtered.length === 0 ? (
                                 <div className="bg-white dark:bg-nature-950 border border-nature-200 dark:border-nature-800 rounded-3xl p-8 mt-2 text-center">
                                     <h4 className="font-bold text-lg text-nature-900 dark:text-white mb-2">
-                                        {posts.length > 0 || searchQuery.trim() ? 'No items found' : 'Nothing posted here yet'}
+                                        {posts.length > 0 || searchQuery.trim() ? t('No items found') : t('Nothing posted here yet')}
                                     </h4>
                                     <p className="text-nature-500 dark:text-nature-400 text-sm m-0">
                                         {searchQuery.trim()
-                                            ? `No matches for "${searchQuery}".`
-                                            : posts.length > 0 ? 'Try adjusting your filters.' : 'Join to post the first offer.'}
+                                            ? t('No matches for "{query}".', { query: searchQuery })
+                                            : posts.length > 0 ? t('Try adjusting your filters.') : t('Join to post the first offer.')}
                                     </p>
                                 </div>
                             ) : (
@@ -2963,7 +3089,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 // As the member grid's tiles: the card holds blocks, so a role, not a <button>.
                                                 <div role="button" tabIndex={0} onClick={() => setSelectedPost(post)}
                                                     onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedPost(post); } }}
-                                                    aria-label={`Open poll: ${post.title}`}
+                                                    aria-label={t('Open poll: {title}', { title: post.title })}
                                                     className="self-start rounded-2xl cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500">
                                                     <PollCard post={post} visitor viewMode="list" informal={informalPolls} localWays={markWays} />
                                                 </div>
@@ -2990,13 +3116,13 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         onClick={() => setIsCustomizerExpanded(false)}
                                         className="absolute top-3 right-3 text-[10px] font-black text-violet-700 hover:text-violet-900 dark:text-violet-400 dark:hover:text-violet-300 bg-violet-100 dark:bg-violet-900/60 px-2 py-1 rounded-lg transition-colors cursor-pointer border-0"
                                     >
-                                        ✕ HIDE
+                                        {t('✕ HIDE')}
                                     </button>
                                     <h4 className="text-xs font-black text-violet-800 dark:text-violet-400 uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
-                                        <span>★</span> Customize Interests
+                                        <span>★</span> {t('Customize Interests')}
                                     </h4>
                                     <p className="text-nature-500 dark:text-nature-400 text-xs mb-3">
-                                        Select categories to prioritize in your personalized "★ For You" feed.
+                                        {t('Select categories to prioritize in your personalized "★ For You" feed.')}
                                     </p>
                                     <div className="flex flex-wrap gap-1.5">
                                         {MARKETPLACE_CATEGORIES.map(cat => {
@@ -3012,7 +3138,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                     }`}
                                                 >
                                                     <span>{cat.emoji}</span>
-                                                    <span>{cat.label}</span>
+                                                    <span>{t(cat.label)}</span>
                                                     {isFav && <span className="text-[9px]">★</span>}
                                                 </button>
                                             );
@@ -3027,13 +3153,13 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     <div className="flex items-center gap-2 overflow-hidden">
                                         <span className="text-violet-600 dark:text-violet-400 font-bold">★</span>
                                         <span className="truncate">
-                                            Prioritizing: {favCategories.length > 0 
-                                                ? favCategories.map(id => MARKETPLACE_CATEGORIES_BY_ID.get(id)?.emoji || '').join(' ')
-                                                : 'None selected yet'}
+                                            {favCategories.length > 0
+                                                ? t('Prioritizing: {emojis}', { emojis: favCategories.map(id => MARKETPLACE_CATEGORIES_BY_ID.get(id)?.emoji || '').join(' ') })
+                                                : t('Prioritizing: None selected yet')}
                                         </span>
                                     </div>
                                     <span className="text-[10px] font-black uppercase tracking-wider text-violet-700 dark:text-violet-400 bg-violet-100/85 dark:bg-violet-900/40 px-2 py-0.5 rounded-lg flex-shrink-0">
-                                        ⚙️ Customize
+                                        {t('⚙️ Customize')}
                                     </span>
                                 </div>
                             )
@@ -3046,15 +3172,15 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     <span className="text-lg">🔥</span>
                                     <div className="flex flex-col">
                                         <span className="text-xs font-bold text-orange-950 dark:text-orange-400">
-                                            {freshTodayCount} fresh listing{freshTodayCount > 1 ? 's' : ''} posted today!
+                                            {tn(freshTodayCount, '{n} fresh listing posted today!', '{n} fresh listings posted today!')}
                                         </span>
                                         <span className="text-[10px] text-orange-600/80 dark:text-orange-300 font-medium">
-                                            Scroll down to explore what is new in the community.
+                                            {t('Scroll down to explore what is new in the community.')}
                                         </span>
                                     </div>
                                 </div>
                                 <span className="text-[10px] font-bold text-bp-chip-need-ink bg-bp-chip-need-tint px-2 py-0.5 rounded-full">
-                                    LIVE
+                                    {t('LIVE')}
                                 </span>
                             </div>
                         )}
@@ -3095,11 +3221,11 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     <div className="text-5xl opacity-30 mb-4" aria-hidden="true">
                                         {searchQuery.trim() ? '🔍' : radiusSettings ? '📍' : '🛒'}
                                     </div>
-                                    <h4 className="font-bold text-lg text-nature-900 dark:text-white mb-2">No items found</h4>
+                                    <h4 className="font-bold text-lg text-nature-900 dark:text-white mb-2">{t('No items found')}</h4>
                                     <p className="text-nature-500 dark:text-nature-400 text-sm">
                                         {searchQuery.trim()
-                                            ? `No matches for "${searchQuery}".`
-                                            : 'Try adjusting your filters or expanding your search to see more results.'}
+                                            ? t('No matches for "{query}".', { query: searchQuery })
+                                            : t('Try adjusting your filters or expanding your search to see more results.')}
                                     </p>
                                 </div>
                             ) : (
@@ -3156,7 +3282,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 onKeyDown={isPulse ? undefined : (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedPost(post); } }}
                                                 role={isPulse ? undefined : "button"}
                                                 tabIndex={isPulse ? undefined : 0}
-                                                aria-label={isPulse ? `Daily Pulse: ${post.title}` : `Open listing: ${post.title}${remoteOriginLabel(post)}`}
+                                                aria-label={isPulse ? t('Daily Pulse: {title}', { title: post.title }) : openListingLabel(post)}
                                                 // No `h-full`: the tile keeps its own height rather than stretching to
                                                 // whatever shares its row (see MarketplaceCard's grid return).
                                                 // `self-start` is the other half of that: this div is the grid
@@ -3267,7 +3393,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                     onKeyDown={isPulse ? undefined : (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedPost(post); } }}
                                                     role={isPulse ? undefined : "button"}
                                                     tabIndex={isPulse ? undefined : 0}
-                                                    aria-label={isPulse ? `Daily Pulse: ${post.title}` : `Open listing: ${post.title}${remoteOriginLabel(post)}`}
+                                                    aria-label={isPulse ? t('Daily Pulse: {title}', { title: post.title }) : openListingLabel(post)}
                                                     className={`rounded-xl ${isPulse ? '' : 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500'}`}
                                                 >
                                                     <MarketplaceCard
@@ -3302,15 +3428,15 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             };
 
                             if (typeFilter === 'for-you') {
-                                return renderSection('★ Starred For You', filtered);
+                                return renderSection(t(FEED_SECTION_WORDS.forYou), filtered);
                             }
 
                             return (
                                 <>
-                                    {renderSection('Today', today)}
-                                    {renderSection('Yesterday', yesterday)}
-                                    {renderSection('This Week', thisWeek)}
-                                    {renderSection('Older Listings', older)}
+                                    {renderSection(t(FEED_SECTION_WORDS.today), today)}
+                                    {renderSection(t(FEED_SECTION_WORDS.yesterday), yesterday)}
+                                    {renderSection(t(FEED_SECTION_WORDS.thisWeek), thisWeek)}
+                                    {renderSection(t(FEED_SECTION_WORDS.older), older)}
                                 </>
                             );
                         })()}
@@ -3325,9 +3451,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     <div role="dialog" aria-modal="true" aria-labelledby="post-release-review-title" className="w-full max-w-sm bg-white dark:bg-nature-900 rounded-3xl shadow-2xl border border-nature-200 dark:border-nature-800 overflow-hidden animate-in slide-in-from-bottom-4 zoom-in-95 duration-300">
                         <div className="p-6 text-center">
                             <div className="text-4xl mb-4" aria-hidden="true">🎉</div>
-                            <h3 id="post-release-review-title" className="text-xl font-black text-nature-900 dark:text-white mb-2">Deal Complete!</h3>
+                            <h3 id="post-release-review-title" className="text-xl font-black text-nature-900 dark:text-white mb-2">{t('Deal Complete!')}</h3>
                             <p className="text-nature-600 dark:text-nature-400 text-sm mb-6">
-                                How was your experience with <strong>{promptReviewForTx.targetCallsign}</strong>?
+                                <Sentence text={t('How was your experience with {name}?')} parts={{ name: <strong>{promptReviewForTx.targetCallsign}</strong> }} />
                             </p>
 
                             <div className="flex justify-center gap-2 mb-4 drop-shadow-sm">
@@ -3336,7 +3462,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         key={star}
                                         type="button"
                                         onClick={() => setReviewStars(star)}
-                                        aria-label={`Rate ${star} star${star === 1 ? '' : 's'}`}
+                                        aria-label={tn(star, 'Rate {n} star', 'Rate {n} stars')}
                                         className="text-4xl hover:scale-110 transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 rounded-lg"
                                     >
                                         <span className={star <= reviewStars ? "text-amber-400" : "text-nature-200 dark:text-nature-500"}>★</span>
@@ -3347,7 +3473,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             <textarea
                                 value={reviewComment}
                                 onChange={e => setReviewComment(e.target.value)}
-                                placeholder="Write a short review (optional)..."
+                                placeholder={t('Write a short review (optional)...')}
                                 className="w-full p-3 bg-nature-50 border border-nature-200 dark:bg-nature-950 dark:border-nature-800 rounded-xl text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 mb-6 font-medium text-nature-900 dark:text-white resize-none"
                                 rows={3}
                             />
@@ -3358,7 +3484,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     onClick={() => setPromptReviewForTx(null)}
                                     className="flex-1 py-3 text-nature-600 dark:text-nature-300 text-sm font-bold bg-nature-100 hover:bg-nature-200 dark:bg-nature-800 dark:hover:bg-nature-700 dark:hover:text-nature-200 rounded-xl transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500"
                                 >
-                                    Skip for now
+                                    {t('Skip for now')}
                                 </button>
                                 <button
                                     type="button"
@@ -3384,7 +3510,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 setAuthorRatingsCache(prev => ({ ...prev, [ratedPubkey]: freshRating }));
                                             }).catch(() => {});
                                         } catch (e: any) {
-                                            alert(e.message || 'Failed to submit review');
+                                            alert(e.message || t('Failed to submit review'));
                                         } finally {
                                             setSubmittingReview(false);
                                         }
@@ -3393,7 +3519,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         submittingReview ? 'bg-bp-gold-fill opacity-75 cursor-not-allowed' : 'bg-bp-gold-fill hover:bg-bp-gold-hover hover:-translate-y-0.5'
                                     }`}
                                 >
-                                    {submittingReview ? 'Submitting...' : 'Submit Rating'}
+                                    {submittingReview ? t('Submitting...') : t('Submit Rating')}
                                 </button>
                             </div>
                         </div>
@@ -3408,7 +3534,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     className="fixed bottom-[calc(var(--bottom-nav-offset)+1.25rem)] md:bottom-6 right-4 z-50 flex items-center justify-center gap-1.5 px-4 py-3 bg-gradient-to-r from-terra-500 to-terra-600 hover:from-terra-600 hover:to-terra-700 dark:from-terra-700 dark:to-terra-800 dark:hover:from-terra-800 dark:hover:to-terra-900 text-white font-bold rounded-full shadow-[0_6px_20px_rgb(203,83,38,0.35)] hover:shadow-[0_8px_25px_rgb(203,83,38,0.45)] transition-all hover:-translate-y-1 group text-sm"
                     style={{ bottom: 'calc(var(--bottom-nav-offset) + 1.25rem)' }}
                 >
-                    <span className="text-lg leading-none block group-hover:rotate-90 transition-transform duration-300">+</span> ADD POST
+                    <span className="text-lg leading-none block group-hover:rotate-90 transition-transform duration-300">+</span> {t('ADD POST')}
                 </button>
             )}
             {/* Modals */}
@@ -3468,21 +3594,21 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" onClick={() => setShowContributionRequired(false)}>
                     <div className="bg-white dark:bg-nature-900 rounded-2xl p-6 max-w-sm w-full shadow-xl" onClick={e => e.stopPropagation()}>
                         <div className="text-center text-3xl mb-2">🔒</div>
-                        <h3 className="text-center font-extrabold text-nature-900 dark:text-white text-lg mb-2">Contribution Required</h3>
+                        <h3 className="text-center font-extrabold text-nature-900 dark:text-white text-lg mb-2">{t('Contribution Required')}</h3>
                         <p className="text-sm text-nature-600 dark:text-nature-300 text-center leading-snug mb-5">
-                            To accept Offers or post Needs, first list at least one Offer detailing what you can contribute to the community. (Or ask an Elder to vouch for you.)
+                            {t('To accept Offers or post Needs, first list at least one Offer detailing what you can contribute to the community. (Or ask an Elder to vouch for you.)')}
                         </p>
                         <button
                             onClick={() => { setShowContributionRequired(false); onNavigate?.('map-post'); }}
                             className="w-full py-3 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-bold transition-colors mb-2"
                         >
-                            ➕ Create an Offer
+                            {t('➕ Create an Offer')}
                         </button>
                         <button
                             onClick={() => setShowContributionRequired(false)}
                             className="w-full py-2.5 rounded-xl border border-nature-200 dark:border-nature-700 text-nature-600 dark:text-nature-300 font-bold hover:bg-nature-100 dark:hover:bg-nature-800 transition-colors text-sm"
                         >
-                            Not now
+                            {t('Not now')}
                         </button>
                     </div>
                 </div>
@@ -3500,15 +3626,4 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             )}
         </div>
     );
-}
-
-function getTimeAgo(date: Date): string {
-    const secs = Math.floor((Date.now() - date.getTime()) / 1000);
-    if (secs < 60) return 'just now';
-    const mins = Math.floor(secs / 60);
-    if (mins < 60) return `${mins}m ago`;
-    const hours = Math.floor(mins / 60);
-    if (hours < 24) return `${hours}h ago`;
-    const days = Math.floor(hours / 24);
-    return `${days}d ago`;
 }

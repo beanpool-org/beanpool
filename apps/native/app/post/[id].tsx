@@ -38,7 +38,7 @@ import { useReaderFeatures } from '../../utils/use-reader-features';
 import { readsOwn } from '../../utils/reads-own';
 import { showcaseMode } from '../../utils/node-profile';
 import { LocalCommunityMark } from '../../components/showcase/LocalCommunityMark';
-import { LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_EMOJI, placeShownRoughly, PLACE_WORDS, formatNumber, t, tn, upperCase } from '@beanpool/core';
+import { LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_EMOJI, placeShownRoughly, PLACE_WORDS, formatNumber, t, tn, upperCase, parseAmount, amountRefusalWords, ANY_DECIMALS } from '@beanpool/core';
 import { Sentence } from '../../components/Sentence';
 import { hostLetsInDefault } from '../../utils/events';
 import { marketShowsBeans, NO_BEANS_TERMS, NO_BEANS_EDIT_NOTE, noBeansTermsNote } from '../../utils/market-global';
@@ -765,7 +765,8 @@ export default function PostDetailModal() {
         setEditCategory(post.category);
         setEditTitle(post.title);
         setEditDescription(post.description || '');
-        setEditCredits(String(post.credits));
+        // In the language's way ("12,5"), so it reads back as the same price.
+        setEditCredits(formatNumber(post.credits));
         setEditPriceType(post.price_type || 'fixed');
         setEditRepeatable(!!post.repeatable);
         setEditPhotos(photos);
@@ -774,6 +775,10 @@ export default function PostDetailModal() {
 
     const handleSave = async () => {
         if (!editTitle.trim()) { Alert.alert(t('Error'), t('Title is required')); return; }
+        // The price in the language's decimal mark (core parseAmount): fr "12,5" is 12.5, never saved as 0. Any decimals, as
+        // before; an empty box is 0, as before.
+        const price = showsBeans ? parseAmount(editCredits, undefined, ANY_DECIMALS) : null;
+        if (price && !price.ok && price.refusal !== 'empty') { Alert.alert(t('Error'), amountRefusalWords(price.refusal)); return; }
         setSaving(true);
         try {
             await updatePost(post.id, {
@@ -781,7 +786,7 @@ export default function PostDetailModal() {
                 category: editCategory,
                 title: editTitle.trim(),
                 description: editDescription.trim(),
-                credits: showsBeans ? Number(editCredits) || 0 : 0,
+                credits: price?.ok ? price.value : 0,
                 price_type: editPriceType,
                 repeatable: editRepeatable,
                 photos: editPhotos.length > 0 ? JSON.stringify(editPhotos) : null,
@@ -1137,7 +1142,7 @@ export default function PostDetailModal() {
                                                         : post.price_type === 'monthly' ? t('CONFIRM ACTUAL MONTHS WORKED')
                                                         : t('CONFIRM ACTUAL UNITS WORKED')
                                                 }</Text>
-                                                <TextInput accessibilityLabel={t('Actual time worked')} style={styles.confirmBoxInput} value={completeHours} onChangeText={setCompleteHours} keyboardType="numeric" placeholder={t('e.g. 2.5')} placeholderTextColor={colors.text.muted} />
+                                                <TextInput accessibilityLabel={t('Actual time worked')} style={styles.confirmBoxInput} value={completeHours} onChangeText={setCompleteHours} keyboardType="numeric" placeholder={t('e.g. {amount}', { amount: 2.5 })} placeholderTextColor={colors.text.muted} />
                                                 <Text style={{ color: colors.text.secondary, fontSize: 12, textAlign: 'center', marginTop: 4, paddingHorizontal: 12 }}>
                                                     {t('Adjust the final time up or down if the scope changed. The final credits released will be calculated automatically.')}
                                                 </Text>
@@ -1154,12 +1159,16 @@ export default function PostDetailModal() {
                                                     return;
                                                 }
                                                 if (!identity) return;
+                                                // Hours in the language's decimal mark (core parseAmount): fr "2,5" is 2.5, never sent as no hours.
+                                                const hoursRead = post.price_type !== 'fixed' ? parseAmount(completeHours, undefined, ANY_DECIMALS) : null;
+                                                if (hoursRead && !hoursRead.ok) { Alert.alert(t('Error'), amountRefusalWords(hoursRead.refusal)); return; }
+                                                const finalHours = hoursRead?.ok ? hoursRead.value : undefined;
                                                 setAccepting(true);
                                                 try {
                                                     if (isOperatorOfAuthor) {
-                                                        await treasuryComplete(post.author_pubkey, txToComplete, post.price_type !== 'fixed' ? Number(completeHours) : undefined);
+                                                        await treasuryComplete(post.author_pubkey, txToComplete, finalHours);
                                                     } else {
-                                                        await completeMarketplaceTransaction(txToComplete, identity.publicKey, post.price_type !== 'fixed' ? Number(completeHours) : undefined);
+                                                        await completeMarketplaceTransaction(txToComplete, identity.publicKey, finalHours);
                                                     }
                                                     setShowCompleteConfirm(false);
                                                     
@@ -1177,7 +1186,7 @@ export default function PostDetailModal() {
                                         </View>
                                     </View>
                                 ) : (
-                                    <Pressable accessibilityRole="button" style={[styles.acceptBtn, styles.acceptBtnOffer]} onPress={() => { setShowCompleteConfirm(true); if(post.price_type !== 'fixed' && !completeHours) setCompleteHours(activeTx?.hours ? String(activeTx.hours) : '1'); }}>
+                                    <Pressable accessibilityRole="button" style={[styles.acceptBtn, styles.acceptBtnOffer]} onPress={() => { setShowCompleteConfirm(true); if(post.price_type !== 'fixed' && !completeHours) setCompleteHours(activeTx?.hours ? formatNumber(activeTx.hours) : '1'); }}>
                                         <Text style={styles.acceptBtnText}>{t('✅ Release Credits')}</Text>
                                     </Pressable>
                                 )}
@@ -1482,9 +1491,12 @@ export default function PostDetailModal() {
                                     <Pressable accessibilityRole="button" style={[styles.confirmActionBtn, styles.confirmActionBtnGreen]} disabled={accepting || (post.price_type !== 'fixed' && !acceptHours)} onPress={async () => {
                                         if (accepting) return;
                                         if (!identity || !post.id) return;
+                                        // Hours in the language's decimal mark (core parseAmount): fr "2,5" is 2.5, never sent as no hours.
+                                        const hoursRead = post.price_type !== 'fixed' ? parseAmount(acceptHours, undefined, ANY_DECIMALS) : null;
+                                        if (hoursRead && !hoursRead.ok) { Alert.alert(t('Error'), amountRefusalWords(hoursRead.refusal)); return; }
                                         setAccepting(true);
                                         try {
-                                            const estimatedHrs = post.price_type !== 'fixed' ? Number(acceptHours) : undefined;
+                                            const estimatedHrs = hoursRead?.ok ? hoursRead.value : undefined;
                                             if (isOffer) {
                                                 await acceptMarketplacePost(post.id, identity.publicKey, estimatedHrs);
                                             } else {
@@ -1492,8 +1504,8 @@ export default function PostDetailModal() {
                                                 // Optimistically add to local state
                                                 setRequests(prev => [...prev, {
                                                     id: Crypto.randomUUID(), post_id: post.id, buyer_pubkey: post.author_pubkey, seller_pubkey: identity.publicKey,
-                                                    credits: post.price_type === 'fixed' ? post.credits : post.credits * Number(acceptHours),
-                                                    hours: post.price_type === 'fixed' ? null : Number(acceptHours), status: 'requested'
+                                                    credits: post.price_type === 'fixed' ? post.credits : post.credits * (estimatedHrs ?? 0),
+                                                    hours: post.price_type === 'fixed' ? null : estimatedHrs, status: 'requested'
                                                 }]);
                                             }
                                             setShowAcceptConfirm(false);

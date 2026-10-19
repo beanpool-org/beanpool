@@ -5,7 +5,7 @@ import {
     type DecisionEffect,
 } from '../lib/api';
 import { type BeanPoolIdentity } from '../lib/identity';
-import { keeperWords } from '@beanpool/core';
+import { keeperWords, amountRefusalWords, ANY_DECIMALS, isAmbiguousAmount, parseAmount } from '@beanpool/core';
 
 interface Props {
     isOpen: boolean;
@@ -129,7 +129,14 @@ export function ProposeDecisionModal({
 
         let params: any = {};
         if (effect === 'grant_enterprise' || effect === 'grant_hardship') {
-            const amount = Number(grantAmount);
+            // The language's decimal mark (core parseAmount): fr "12,5" is 12.5; "1.000", which could be a thousand, is refused
+            // in words that say so. The node's cents rule decides the decimals, as before.
+            const read = parseAmount(grantAmount, undefined, ANY_DECIMALS);
+            if (!read.ok && isAmbiguousAmount(read.refusal)) {
+                setError(amountRefusalWords(read.refusal));
+                return;
+            }
+            const amount = read.ok ? read.value : NaN;
             if (!amount || amount <= 0) {
                 setError('Please enter a valid positive grant amount in Beans.');
                 return;
@@ -377,7 +384,8 @@ export function ProposeDecisionModal({
                                 Grant Amount (Beans)
                             </label>
                             <input
-                                type="number"
+                                type="text"
+                                inputMode="decimal"
                                 value={grantAmount}
                                 onChange={(e) => setGrantAmount(e.target.value)}
                                 placeholder="e.g. 250"
@@ -402,7 +410,8 @@ export function ProposeDecisionModal({
                                 Hardship Amount (Beans)
                             </label>
                             <input
-                                type="number"
+                                type="text"
+                                inputMode="decimal"
                                 value={grantAmount}
                                 onChange={(e) => setGrantAmount(e.target.value)}
                                 placeholder="e.g. 100"

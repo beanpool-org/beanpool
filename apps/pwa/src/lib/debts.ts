@@ -5,6 +5,7 @@
  * entry's debt history, work off, settle, forgive) is on the phone's names list: the web app has no names list.
  * Amounts are Beans to the cent.
  */
+import { parseAmount } from '@beanpool/core';
 import { request } from './api';
 import { confirmPayment, sendConfirmedPayment, isNoAnswer, type ConfirmedPayment } from './payment-request';
 
@@ -52,11 +53,14 @@ export function beans(n: number): string {
     return `${cents % 100 === 0 ? String(cents / 100) : (cents / 100).toFixed(2)} Beans`;
 }
 
-/** Beans typed by a member, to the cent; null if it isn't an amount above 0 with at most two decimals. */
+/**
+ * Beans typed by a member, to the cent; null if it isn't an amount above 0 with at most two decimals. Read as every
+ * typed amount is (core parseAmount): the language's decimal mark and digits; "1.000" or "1,000" is refused, never a guess.
+ */
 export function parseBeans(text: string): number | null {
-    const t = text.trim().replace(',', '.');
-    if (!/^\d+(\.\d{1,2})?$/.test(t)) return null;
-    const n = Math.round(Number(t) * 100) / 100;
+    const read = parseAmount(text);
+    if (!read.ok) return null;
+    const n = Math.round(read.value * 100) / 100;
     return n > 0 ? n : null;
 }
 

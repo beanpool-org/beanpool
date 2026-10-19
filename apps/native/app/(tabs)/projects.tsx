@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, Pressable, Image, Alert, DeviceEventEmitter, RefreshControl, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Pressable, Alert, DeviceEventEmitter, RefreshControl, ScrollView } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { getBalance, getTreasuries, getDecisions, getAllCommunityMembers, fetchGroups, type DecisionWithTally, type MyPoolVoting, type TreasurySummary, type GroupItem } from '../../utils/db';
@@ -92,7 +92,6 @@ export default function ProjectsScreen() {
     const kindChips = groupKindChips(reader.effective);
     const [showCommonsInfo, setShowCommonsInfo] = useState(false);
     const [showDecisionsSheet, setShowDecisionsSheet] = useState(false);
-    const [treasuries, setTreasuries] = useState<any[]>([]);
     const [membersList, setMembersList] = useState<Array<{ publicKey: string; callsign?: string; balance?: number }>>([]);
     const [pickedSection, setActiveSection] = useState<CommonsSection | null>(null);
     // The kind chip over the one Groups list: projects, enterprises, chat groups, or all of them.
@@ -146,19 +145,8 @@ export default function ProjectsScreen() {
         headerInfo: { marginBottom: 16 },
         headerDesc: { fontSize: 14, color: colors.text.secondary, lineHeight: 20 },
         infoBtn: { padding: 4 },
-        // Labels in capitals are written so by inCapitalsOf (the language's way), never a textTransform (the phone's).
-        treasuryPanelLabel: { fontSize: 11, color: colors.text.secondary, fontWeight: '700', letterSpacing: 0.5, marginBottom: 8 },
-        treasuryCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface.card, borderRadius: 12, padding: 10, marginBottom: 8, borderWidth: 1, borderColor: colors.border.default },
-        treasuryAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.surface.subtle },
-        treasuryAvatarPlaceholder: { alignItems: 'center', justifyContent: 'center' },
-        treasuryName: { fontSize: 14, fontWeight: '700', color: colors.text.heading },
-        treasuryMeta: { fontSize: 12, color: colors.text.secondary, marginTop: 2 },
-        treasuryBalance: { fontSize: 14, fontWeight: '800' },
-        treasuryBalancePos: { color: colors.brand.primary },
-        treasuryBalanceNeg: { color: colors.feedback.warning.fg },
-        operatorBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.brand.tint, borderRadius: 10, padding: 8, marginTop: 2 },
-        operatorBadgeText: { fontSize: 12, color: colors.brand.primary, fontWeight: '600', flex: 1 },
 
+        // Labels in capitals are written so by inCapitalsOf (the language's way), never a textTransform (the phone's).
         statCardRow: { flexDirection: 'row', gap: 10, marginBottom: 12 },
         statCard: { flex: 1, minWidth: 0, backgroundColor: colors.surface.card, borderRadius: 14, padding: 12, borderWidth: 1, borderColor: colors.border.default },
         statCardLabel: { fontSize: 11, color: colors.text.secondary, fontWeight: '700', letterSpacing: 0.5, marginBottom: 6 },
@@ -618,43 +606,7 @@ export default function ProjectsScreen() {
                                     ))}
                                 </ScrollView>
                                 )}
-
-                                {/* Community Treasuries — the Commons' trading accounts (eggs, etc.) */}
-                                {treasuries.length > 0 && kindChips.length > 0 && (groupKind === 'all' || groupKind === 'enterprises') && (
-                                    <View style={{ marginBottom: 12 }}>
-                                        <Text style={styles.treasuryPanelLabel}>{inCapitalsOf(t("🏛️ The Commons' enterprises"))}</Text>
-                                        {treasuries.map((tr: any, index: number) => (
-                                            <Pressable
-                                                key={tr.publicKey || `treasury-${index}`}
-                                                style={styles.treasuryCard}
-                                                accessibilityRole="button"
-                                                accessibilityLabel={t('Open {name}', { name: tr.name })}
-                                                onPress={() => {
-                                                    if (!tr.publicKey) return;
-                                                    router.push({ pathname: '/treasury-detail', params: { publicKey: tr.publicKey, name: tr.name, avatar: tr.avatar } });
-                                                }}
-                                            >
-                                                {tr.avatar ? (
-                                                    <Image source={{ uri: tr.avatar }} style={styles.treasuryAvatar} />
-                                                ) : (
-                                                    <View style={[styles.treasuryAvatar, styles.treasuryAvatarPlaceholder]}><Text style={{ fontSize: 18 }}>🏛️</Text></View>
-                                                )}
-                                                <View style={{ flex: 1, marginLeft: 10, minWidth: 0 }}>
-                                                    <Text style={styles.treasuryName} numberOfLines={1}>{tr.name}</Text>
-                                                    <Text style={styles.treasuryMeta}>{tn(tr.liveOffers ?? 0, '{n} live offer', '{n} live offers')}</Text>
-                                                </View>
-                                                <Text style={[styles.treasuryBalance, tr.balance < 0 ? styles.treasuryBalanceNeg : styles.treasuryBalancePos]}>{formatNumber(tr.balance)} 🫘</Text>
-                                                <MaterialCommunityIcons name="chevron-right" size={20} color={colors.text.muted} style={{ marginLeft: 4 }} />
-                                            </Pressable>
-                                        ))}
-                                        {balanceState.canOperate && (
-                                            <View style={styles.operatorBadge}>
-                                                <MaterialCommunityIcons name="shield-account" size={14} color={colors.brand.primary} />
-                                                <Text style={styles.operatorBadgeText}>{t('You can act for these enterprises — post their offers & pay tenders')}</Text>
-                                            </View>
-                                        )}
-                                    </View>
-                                )}
+                                {/* The enterprises are the list's own rows below (EnterpriseCard), as on the web's Commons. */}
                             </View>
                         )}
                     </View>
@@ -734,7 +686,7 @@ export default function ProjectsScreen() {
                     onCreated={loadData}
                     identity={identity}
                     commonsBalance={balanceState.commons || 0}
-                    treasuries={treasuries}
+                    treasuries={enterprises}
                     members={membersList}
                 />
             )}

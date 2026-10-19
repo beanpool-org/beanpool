@@ -143,9 +143,10 @@ export function mayMakeOfflineTicket(features: NodeFeatures | null | undefined, 
 
 /**
  * The join's pre-flight (GET /api/invite/check, reason `admins_only`): an offline ticket a member made, where only the
- * community's admins bring people in now. The node refuses it at the join too (apps/server config/door.ts).
+ * community's admins bring people in now. The node refuses it at the join too (apps/server config/door.ts). A word() key:
+ * the welcome screen shows it with t().
  */
-export const MEMBER_TICKET_REFUSED_TEXT = 'This invite was made by a member, and in this community only its admins bring people in now. Ask an admin for a fresh invite.';
+export const MEMBER_TICKET_REFUSED_TEXT = word('This invite was made by a member, and in this community only its admins bring people in now. Ask an admin for a fresh invite.');
 
 /**
  * Why no offline ticket was made where only admins invite. `role`: what the node last said for this member (heard now or

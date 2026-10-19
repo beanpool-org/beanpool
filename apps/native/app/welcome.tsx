@@ -17,7 +17,8 @@ import {
 import { rekeySlotStore } from '../utils/rekey-slot-store';
 import { GLOBAL_NODE_URL, GLOBAL_DOOR_MESSAGES, beansOn, checkGlobalDoor, getCachedNodeProfile, wordsDoorOn } from '../utils/node-profile';
 // t comes from useWords() inside the screen (live in the member's language), not core's device-language t.
-import { lowercaseRecoveryWords, photoStepNote } from '@beanpool/core';
+import { DATE_WORDS, lowercaseRecoveryWords, photoStepNote, type Lang } from '@beanpool/core';
+import { welcomeLineWords } from '../components/welcome/welcome-lines';
 import { askGlobalDoorOffer, globalDoorOffer, rememberGlobalDoor } from '../utils/global-door-offer';
 import type { GlobalDoorState } from '../utils/global-entry';
 import { WelcomeDoors } from '../components/WelcomeDoors';
@@ -93,42 +94,48 @@ import { Sentence } from '../components/Sentence';
 // rejection rather than crash with an unhandled promise warning.
 const openLink = (url: string) => Linking.openURL(url).catch((err) => console.warn('Failed to open URL', err));
 
-// Friendly Step-1 rejection copy for a dud invite. Reasons come from
-// /api/invite/check; anything unrecognised falls back to the generic line.
-function inviteProblemMessage(reason?: string): string {
-    switch (reason) {
-        case 'used':
-            return 'This invite has already been used — each one works exactly once. Ask whoever invited you to send a fresh one (it only takes them a minute).';
-        case 'expired':
-            return 'This invite has expired — invites last 30 days. Ask whoever invited you to send a fresh one (it only takes them a minute).';
-        case 'unknown_inviter':
-            return "This community doesn't know the person who made this invite. Double-check you're joining the right community, or ask for a fresh invite.";
-        case 'admins_only':
-            return MEMBER_TICKET_REFUSED_TEXT;
-        default:
-            return "That invite wasn't recognised by your community. Double-check the code, or ask whoever invited you for a fresh one.";
-    }
-}
-
-/**
- * "March 2026" from whatever the node stored, or '' if it is unusable.
- *
- * Month and year only: the day adds nothing to telling two namesakes apart, and a precise join
- * date is more than a public lookup needs to hand out about somebody.
- */
-function joinedLabel(joinedAt: string | null | undefined): string {
-    if (!joinedAt) return '';
-    const d = new Date(joinedAt);
-    if (isNaN(d.getTime())) return '';
-    return d.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
-}
+/** utils/invite-entries.ts's sentence for a member's invite where only admins invite now: a word() key, shown with t(). */
+const INVITE_ENTRY_WORDS = { memberTicketRefused: MEMBER_TICKET_REFUSED_TEXT } as const;
 
 export default function WelcomeScreen() {
     // Onboarding follows light/dark like the rest of the app: the classic light tokens in light (exactly as before),
     // the app's dark tokens in dark. See utils/onboarding-colors.ts.
     const { colors, dark } = useOnboardingColors();
     // The member's language, live: the first screen's switch and Settings → Language re-render this screen in it.
-    const { t } = useWords();
+    const { t, lang } = useWords();
+
+    // Friendly Step-1 rejection copy for a dud invite. Reasons come from
+    // /api/invite/check; anything unrecognised falls back to the generic line.
+    // In the screen, not above it: its sentences are the screen's t()'s.
+    function inviteProblemMessage(reason?: string): string {
+        switch (reason) {
+            case 'used':
+                return t('This invite has already been used — each one works exactly once. Ask whoever invited you to send a fresh one (it only takes them a minute).');
+            case 'expired':
+                return t('This invite has expired — invites last 30 days. Ask whoever invited you to send a fresh one (it only takes them a minute).');
+            case 'unknown_inviter':
+                return t("This community doesn't know the person who made this invite. Double-check you're joining the right community, or ask for a fresh invite.");
+            case 'admins_only':
+                return t(INVITE_ENTRY_WORDS.memberTicketRefused);
+            default:
+                return t("That invite wasn't recognised by your community. Double-check the code, or ask whoever invited you for a fresh one.");
+        }
+    }
+
+    /**
+     * "March 2026" from whatever the node stored, or '' if it is unusable.
+     *
+     * Month and year only: the day adds nothing to telling two namesakes apart, and a precise join
+     * date is more than a public lookup needs to hand out about somebody. The month's name is the language's own
+     * (core's date tables, never Intl), and the language orders the two.
+     */
+    function joinedLabel(joinedAt: string | null | undefined): string {
+        if (!joinedAt) return '';
+        const d = new Date(joinedAt);
+        if (isNaN(d.getTime())) return '';
+        const month = (DATE_WORDS[lang as Lang] ?? DATE_WORDS.en)!.monthsStandalone[d.getMonth()];
+        return t('{month} {year}', { month, year: String(d.getFullYear()) }, 'a month and year: "joined March 2026"');
+    }
     const { styles, profileStyles, stepperStyles, guideStyles } = useMemo(() => makeStyles(colors, dark), [colors, dark]);
     // Accent ink for text and spinners on the page; filled blue buttons keep blue600 under white text in both.
     const accentInk = dark ? palette.blue400 : palette.blue600;
@@ -571,9 +578,9 @@ export default function WelcomeScreen() {
         }
         if (source === 'home') {
             Alert.alert(
-                'No invite found',
-                "Your clipboard doesn't have a BeanPool invite on it. No worries — you can paste or type the code on the next screen.",
-                [{ text: 'OK', onPress: () => setMode('create') }]
+                t('No invite found'),
+                t("Your clipboard doesn't have a BeanPool invite on it. No worries — you can paste or type the code on the next screen."),
+                [{ text: t('OK'), onPress: () => setMode('create') }]
             );
             return;
         }
@@ -585,8 +592,8 @@ export default function WelcomeScreen() {
             setInviteCode(content);
         } else {
             Alert.alert(
-                'No invite found',
-                'Your clipboard has something else on it. You can type or paste your invite code below instead.'
+                t('No invite found'),
+                t('Your clipboard has something else on it. You can type or paste your invite code below instead.')
             );
         }
     }
@@ -609,7 +616,7 @@ export default function WelcomeScreen() {
             origin = extractNodeOrigin(fullUrl);
         } catch (e) {
             if (e instanceof UnsafeNodeAddressError) {
-                Alert.alert('Invite not used', e.message);
+                Alert.alert(t('Invite not used'), welcomeLineWords(e.message));
                 return;
             }
             throw e;
@@ -624,18 +631,18 @@ export default function WelcomeScreen() {
             setInviteCode(fullUrl);
         }
         setMode('create');
-    }, []);
+    }, [t]);
 
     const handlePasteInvite = async () => {
         try {
             const content = (await Clipboard.getStringAsync())?.trim() || '';
             if (!content) {
-                Alert.alert("Nothing to paste", "Your clipboard is empty.");
+                Alert.alert(t('Nothing to paste'), t('Your clipboard is empty.'));
                 return;
             }
             await applyInviteContent(content, 'join');
         } catch (e) {
-            Alert.alert("Failed to read clipboard", "Please try pasting the link manually.");
+            Alert.alert(t('Failed to read clipboard'), t('Please try pasting the link manually.'));
         }
     };
 
@@ -876,11 +883,11 @@ export default function WelcomeScreen() {
         // A second tap while Next is out starts nothing, not even its checks below.
         if (nextOutRef.current) return;
         if (!inviteCode.trim()) {
-            setError('An invite code is required to join the network.');
+            setError(t('An invite code is required to join the network.'));
             return;
         }
         if (callsign.trim().length < 2) {
-            setError('Callsign must be at least 2 characters.');
+            setError(t('Callsign must be at least 2 characters.'));
             return;
         }
         const rawInvite = inviteCode.trim();
@@ -889,22 +896,22 @@ export default function WelcomeScreen() {
             extractedOrigin = extractNodeOrigin(rawInvite);
         } catch (e) {
             if (e instanceof UnsafeNodeAddressError) {
-                setError(e.message);
+                setError(welcomeLineWords(e.message));
                 return;
             }
             throw e;
         }
         const nodeUrl = normalizeNodeUrl(extractedOrigin || createAnchorUrl.trim() || (__DEV__ ? 'https://127.0.0.1:8443' : ''));
         if (!nodeUrl) {
-            setError('Enter your community node address — you need it to connect to your community.');
+            setError(t('Enter your community node address — you need it to connect to your community.'));
             return;
         }
         if (!looksLikeNodeAddress(nodeUrl)) {
-            setError("That doesn't look right. Try your community name, like mullum, or its full address.");
+            setError(t("That doesn't look right. Try your community name, like mullum, or its full address."));
             return;
         }
         if (shouldBlockCleartextNodeUrl(nodeUrl)) {
-            setError('That node address is insecure (http on a public host). Ask your inviter for the https:// address.');
+            setError(t('That node address is insecure (http on a public host). Ask your inviter for the https:// address.'));
             return;
         }
 
@@ -967,7 +974,7 @@ export default function WelcomeScreen() {
                         // No longer than the redeem keeps, as the field is: a tapped suggestion is sent as it was checked and shown.
                         const sugg = await suggestCallsigns(callsign.trim(), 3, nodeUrl, MAX_JOIN_NAME, { signal: nameCheck.signal, signer: storedIdentity ?? undefined });
                         setCallsignSuggestions(sugg);
-                        setError(`"${callsign.trim()}" is already taken in this community. Pick one of the suggestions below, or choose another name.`);
+                        setError(t('"{name}" is already taken in this community. Pick one of the suggestions below, or choose another name.', { name: callsign.trim() }));
                         return;
                     }
                 } finally {
@@ -1039,7 +1046,8 @@ export default function WelcomeScreen() {
                     setError(t("BeanPool can't read the account on this phone. Restart and try again, or restore with your 12 words."));
                     return;
                 }
-                setError(`Failed to register identity: ${err?.message || err}`);
+                // The reason: a lower layer's sentence in the member's language, or the node's own words as they came.
+                setError(t('Failed to register identity: {reason}', { reason: welcomeLineWords(String(err?.message || err)) }));
                 console.error(err);
             }
         });
@@ -2563,7 +2571,8 @@ export default function WelcomeScreen() {
                         {error && (
                             <View style={{ marginBottom: 12 }}>
                                 <Text style={styles.error}>{error}</Text>
-                                {(error.includes('already been used') || error.includes('already used')) && (
+                                {/* A spent invite: said by the node in English, or by this screen in the member's language. */}
+                                {(error.includes('already been used') || error.includes('already used') || error === inviteProblemMessage('used')) && (
                                     <Pressable
                                         style={{ marginTop: 8, paddingVertical: 10, paddingHorizontal: 14, backgroundColor: dark ? colors.feedback.info.bg : (palette.blue50 || '#eff6ff'), borderRadius: 8, borderWidth: 1, borderColor: dark ? colors.feedback.info.border : (palette.blue200 || '#bfdbfe'), alignItems: 'center' }}
                                         onPress={() => leaveUnlessNextIsOut(nextOutRef, () => {

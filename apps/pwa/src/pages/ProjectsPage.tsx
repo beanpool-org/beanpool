@@ -383,8 +383,10 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                 No ground of its own, nor the two rows under it: the screen sits on the doodle wallpaper
                 like Home and the Market (index.css "Doodle wallpaper"); the cards keep their fills. */}
             <header className="px-4 pt-4 pb-3 flex flex-col gap-3">
-                {/* min-w-0 and break-words: a longer language's title and button wrap where they are, never off a 320 px screen. */}
-                <div className={`max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full flex justify-between items-center gap-3 ${decisionsMode === 'preview' && activeSection === 'decide' ? 'flex-wrap' : ''}`}>
+                {/* min-w-0 and break-words: a longer language's title and button wrap where they are, never off a 320 px screen.
+                    The button is not min-w-0 (max 50 %, so a longer language's word still breaks), and the row has no gap
+                    beside it, as before: English's "Commons" and "Propose" both stay whole at 320 px with 1.3x text. */}
+                <div className={`max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full flex justify-between items-center ${decisionsMode === 'preview' && activeSection === 'decide' ? 'flex-wrap gap-3' : ''}`}>
                     <div className="min-w-0">
                         <h1 className="text-xl font-bold text-nature-950 dark:text-white tracking-tight flex items-center gap-2">
                             <span>🌱</span> <span className="min-w-0 break-words">{t('The Commons')}</span>
@@ -419,7 +421,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                         setCreateError(null);
                                     }
                                 }}
-                                className="min-w-0 max-w-[50%] break-words leading-tight bg-bp-sage-fill hover:bg-bp-sage-hover text-bp-sage-on px-4 py-2 rounded-xl font-bold text-sm shadow-md transition-all active:scale-95"
+                                className="max-w-[50%] break-words leading-tight bg-bp-sage-fill hover:bg-bp-sage-hover text-bp-sage-on px-4 py-2 rounded-xl font-bold text-sm shadow-md transition-all active:scale-95"
                             >
                                 {activeSection === 'groups' ? t('+ Create Group') : t('+ Propose')}
                             </button>

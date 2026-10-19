@@ -6,8 +6,9 @@
 // that is watched is never in it, nor any address, version or IP; GET /api/registrar/status.json serves it with cache
 // headers (404 before the first tick and with no KV); an incident begins at the first of two failed looks and ends at the
 // first answer, and the registrar's missed ticks are one; the first tick names the log's last incidents, so the page
-// never says "no incident since" over one; a tick whose status write failed loses nothing; a quiet tick
-// spends 2 D1 queries on it; status.json is bounded; /admin links the page.
+// never says "no incident since" over one; a tick whose status write failed loses nothing — its counts, nor an incident
+// it began or ended (the next tick derives them from watch_log); a quiet tick spends 2 D1 queries on it, the tick after
+// a lost write 3; status.json is bounded; /admin links the page.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -372,6 +373,23 @@ test("the registrar: the first tick back after missed ticks loses its status wri
     } finally { r.done(); }
 });
 
+test("the registrar: a lost write's gap is counted from the tick that ran before the last status.json, when that tick's own looks were lost", async () => {
+    const r = await room();
+    try {
+        await r.tick();
+        const t1 = r.nowS();
+        const prepare = r.w.env.DB.prepare.bind(r.w.env.DB);
+        r.w.env.DB.prepare = (sql) => { if (/INSERT INTO watch_log/.test(sql)) throw new Error('D1: unavailable'); return prepare(sql); };
+        await r.tick();   // no look recorded, and status.json written all the same
+        assert.equal(r.doc().at, t1 + 300);
+        r.w.env.DB.prepare = prepare;
+        r.w.beforeRun(/INSERT INTO watch_days/, refuse);
+        await r.tick(1200);   // three more slots with no tick, and this tick's status write refused
+        await r.tick();
+        assert.deepEqual(r.server('registrar').incident, { began_at: t1 + 300, ended_at: t1 + 1500, why: 'checks-missed' });
+    } finally { r.done(); }
+});
+
 test('an answer and the next failed look both lose their status writes: the outage after is its own incident, never merged into the one before', async () => {
     const r = await room();
     try {
@@ -412,6 +430,34 @@ test('status.json never written since the first tick (KV refusing its writes): t
         await r.tick();
         assert.deepEqual(r.server('global').incident, { began_at: t0 + 300, ended_at: t0 + 900, why: 'unreachable' });
         assert.deepEqual(r.server('registrar').incident, LOG_REGISTRAR, "the registrar's: still the log's");
+    } finally { r.done(); }
+});
+
+test('an outage older than watch_log (30 days) keeps its start when the incidents are derived again, after a lost write too; its first answer ends it', async () => {
+    const r = await room({ log: false });
+    try {
+        const began = T0S - 40 * 86400;
+        const mark = r.w.sqlite.prepare('INSERT INTO watch_marks (key, since, value) VALUES (?, ?, ?)');
+        mark.run('status:since', T0S - 30 * 86400, null);
+        mark.run('status:incident:test', began, JSON.stringify({ ended: null, status: 'unreachable' }));
+        const ins = r.w.sqlite.prepare('INSERT INTO watch_log (ran_at, target, ok, ms, status) VALUES (?,?,?,?,?)');
+        for (let i = 288; i >= 1; i--) { ins.run(T0S - i * 300, 'test', 0, null, 'timed out'); ins.run(T0S - i * 300, 'global', 1, 40, 'HTTP 200'); }
+        r.kv.m.set('status.json', JSON.stringify({ v: 1, at: T0S - 300 }));
+        r.servers['test.watch.test'].fail = 'timeout';
+        await r.tick();
+        const open = { began_at: began, ended_at: null, why: 'unreachable' };
+        assert.deepEqual(r.server('test').incident, open);
+        r.servers['global.watch.test'].fail = 503;
+        await r.tick(); await r.tick();
+        assert.equal(r.server('global').incident?.ended_at, null, 'global begins one: the incidents are derived again');
+        assert.deepEqual(r.server('test').incident, open, "test's still as it began, not watch_log's oldest look");
+        r.w.beforeRun(/INSERT INTO watch_days/, refuse);
+        await r.tick();
+        await r.tick();
+        assert.deepEqual(r.server('test').incident, open, 'and after a lost write');
+        r.servers['test.watch.test'].fail = null;
+        await r.tick();
+        assert.deepEqual(r.server('test').incident, { ...open, ended_at: r.nowS() });
     } finally { r.done(); }
 });
 

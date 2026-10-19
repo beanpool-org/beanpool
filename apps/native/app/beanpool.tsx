@@ -99,7 +99,8 @@ export default function BeanPoolSheet() {
         chevron: { flexShrink: 0 },
         statusRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 },
         dot: { width: 10, height: 10, borderRadius: 5, flexShrink: 0 },
-        shareBtn: { minWidth: 48, minHeight: 48, paddingHorizontal: 12, borderRadius: 24, borderWidth: 1, borderColor: colors.border.strong, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+        // Capped, its word shrinking to fit, so a longer language's "Share" leaves the website's line room at 320 dp.
+        shareBtn: { minWidth: 48, maxWidth: 104, minHeight: 48, paddingHorizontal: 12, borderRadius: 24, borderWidth: 1, borderColor: colors.border.strong, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
         shareText: { fontSize: 14, fontWeight: '600', color: colors.text.body },
         community: { paddingHorizontal: 4, paddingTop: 4 },
         communityName: { fontSize: 24, fontWeight: '800', color: colors.text.heading, letterSpacing: -0.3 },
@@ -110,7 +111,8 @@ export default function BeanPoolSheet() {
         cta: { flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'flex-start', minHeight: 48, paddingHorizontal: 16, borderRadius: 24, borderWidth: 1, marginTop: 12 },
         ctaGuest: { backgroundColor: colors.feedback.warning.bg, borderColor: colors.feedback.warning.border },
         ctaNone: { backgroundColor: colors.feedback.danger.bg, borderColor: colors.feedback.danger.border },
-        ctaText: { fontSize: 15, fontWeight: '700' },
+        // Shrinks beside its icon: a longer language's words wrap inside the button rather than past the screen's edge.
+        ctaText: { fontSize: 15, fontWeight: '700', flexShrink: 1 },
         empty: { fontSize: 15, color: colors.text.body, lineHeight: 22, padding: 16 },
         foot: { fontSize: 12, color: colors.text.muted, textAlign: 'center', marginTop: 24, lineHeight: 18 },
     }));
@@ -427,7 +429,7 @@ export default function BeanPoolSheet() {
                                             accessibilityRole="button"
                                             accessibilityLabel={t('Share beanpool.org')}
                                         >
-                                            <Text style={styles.shareText}>{t('Share')}</Text>
+                                            <Text style={styles.shareText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Share')}</Text>
                                         </Pressable>
                                     </View>
                                 );

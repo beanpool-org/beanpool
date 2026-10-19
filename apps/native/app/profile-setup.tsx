@@ -408,7 +408,8 @@ return StyleSheet.create({
     steps: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
     stepDot: { width: 26, height: 4, borderRadius: 2, backgroundColor: colors.border.strong, marginRight: 6 },
     stepDotActive: { backgroundColor: palette.blue600 },
-    stepLabel: { marginLeft: 6, fontSize: 12, color: colors.text.secondary },
+    // Shrinks beside the dots, so a longer language's "Step 2 of 4" wraps rather than running off the edge.
+    stepLabel: { marginLeft: 6, fontSize: 12, color: colors.text.secondary, flexShrink: 1 },
     card: { backgroundColor: colors.surface.card, borderRadius: 16, padding: 20 },
     title: { fontSize: 24, fontWeight: '800', color: colors.text.heading, marginBottom: 6 },
     subtitle: { fontSize: 14, color: colors.text.secondary, marginBottom: 16, lineHeight: 20 },

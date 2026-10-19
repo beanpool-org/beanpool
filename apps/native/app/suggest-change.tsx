@@ -29,7 +29,8 @@ export default function SuggestChangeScreen() {
         header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.border.default, backgroundColor: theme === 'dark' ? colors.surface.card : colors.text.heading },
         backButton: { width: 48, height: 48, justifyContent: 'center', alignItems: 'flex-start' },
         // Written in capitals in the words themselves (never textTransform: Android upper-cases by the phone's locale, not
-        // the member's language, so a Turkish "i" would lose its dot).
+        // the member's language, so a Turkish "i" would lose its dot). One line in English; a longer language's takes two,
+        // shrinking a little, rather than being cut between Close and the spacer.
         headerTitle: { flex: 1, textAlign: 'center', fontSize: 16, fontWeight: 'bold', color: colors.brand.primary, letterSpacing: 0.5 },
         scroll: { padding: 20 },
         infoBox: { flexDirection: 'row', backgroundColor: colors.brand.tint, padding: 14, borderRadius: 12, marginBottom: 22, borderWidth: 1, borderColor: colors.brand.primary },
@@ -98,7 +99,7 @@ export default function SuggestChangeScreen() {
                 <Pressable onPress={() => router.back()} style={styles.backButton} accessibilityRole="button" accessibilityLabel={t('Close')}>
                     <MaterialCommunityIcons name="close" size={26} color={colors.text.inverse} />
                 </Pressable>
-                <Text style={styles.headerTitle} numberOfLines={1}>{t('SUGGEST A CHANGE')}</Text>
+                <Text style={styles.headerTitle} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.75} accessibilityRole="header">{t('SUGGEST A CHANGE')}</Text>
                 <View style={{ width: 48 }} />
             </View>
 

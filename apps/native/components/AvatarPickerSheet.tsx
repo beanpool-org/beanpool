@@ -288,10 +288,12 @@ const makeStyles = (tone: ReturnType<typeof tonesFor>) => StyleSheet.create({
         borderBottomWidth: 1,
         borderBottomColor: tone.line,
     },
+    // Shrinks beside the close button: a longer language's title wraps rather than pushing ✕ off the sheet.
     title: {
         fontSize: 18,
         fontWeight: '700',
         color: tone.title,
+        flexShrink: 1,
     },
     closeButton: {
         width: 32,

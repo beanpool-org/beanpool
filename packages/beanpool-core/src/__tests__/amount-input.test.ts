@@ -3,7 +3,7 @@
  * guess) for anything that could mean two numbers.
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import { parseAmount, amountRefusalWords, decimalMarkOf, AMOUNT_DIGITS, type AmountRefusal } from '../amount-input';
+import { parseAmount, amountRefusalWords, decimalMarkOf, isAmbiguousAmount, ANY_DECIMALS, AMOUNT_DIGITS, type AmountRefusal } from '../amount-input';
 import { DATE_WORDS, LANGS, formatNumber, setLanguage, type Lang } from '../words';
 
 const value = (text: string, lang: Lang | 'xx', maxDecimals?: number) => {
@@ -140,18 +140,18 @@ describe("the language's digits", () => {
 
 describe('refused, never guessed', () => {
     const cases: Array<[AmountRefusal, Lang, string[]]> = [
-        ['empty', 'en', ['', '   ', '‏', ' ']],
+        ['empty', 'en', ['', '   ', '\u200F', '\u00A0']],
         ['empty', 'fr', ['', ' ']],
         ['not-a-number', 'en', ['abc', '12abc', '1e3', '0x10', '.', ',', '+', '-', 'Infinity', 'NaN', '12-5', '$12', '12B', '1/2', '+-5']],
         ['not-a-number', 'fr', ['douze', '12,5€', '1e3']],
         ['two-separators', 'en', ['1.2.3', '12..5', '1,2,3']],
         ['two-separators', 'fr', ['1,2,3', '12,,5']],
-        ['grouped', 'fr', ['1.000,5', '1,000.5', '1 000', '1 000,5', '1 000', '1.000', '12.500', '1.000.000', "1'000"]],
+        ['grouped', 'fr', ['1.000,5', '1,000.5', '1 000', '1\u202F000,5', '1\u00A0000', '1.000', '12.500', '1.000.000', "1'000"]],
         ['grouped', 'de', ['1.000', '1.000,50', '10.000']],
         ['grouped', 'en', ['1,000', '1,000.5', '1.000,5', '1,000,000', '12 500']],
         ['grouped', 'hi', ['1,00,000', '1,000']],
-        ['negative', 'en', ['-5', '−5', '-0', '-12.5']],
-        ['negative', 'fr', ['-12,5', '−12,5']],
+        ['negative', 'en', ['-5', '\u22125', '-0', '-12.5']],
+        ['negative', 'fr', ['-12,5', '\u221212,5']],
         ['too-many-decimals', 'en', ['12.345', '1.000', '12.500', '0.001', '1,2345']],
         ['too-many-decimals', 'fr', ['12,345', '1,000', '1.2345']],
     ];
@@ -166,6 +166,18 @@ describe('refused, never guessed', () => {
         expect(value('1.333', 'fr', Infinity)).toBe('grouped');
         expect(value('1,333', 'en', Infinity)).toBe('grouped');
         expect(value('2,5', 'en', Infinity)).toBe(2.5);
+    });
+
+    it('ANY_DECIMALS: en reads exactly as parseFloat for any decimals, so a door\'s own cents guard still decides', () => {
+        for (const typed of ['1.234', '1.000', '12.500', '0.001', '12.5', '5']) {
+            expect(parseAmount(typed, 'en', ANY_DECIMALS)).toEqual({ ok: true, value: parseFloat(typed) });
+        }
+        expect(parseAmount('1.000', 'fr', ANY_DECIMALS)).toEqual({ ok: false, refusal: 'grouped' });
+    });
+
+    it('only "could mean two numbers" needs the parser\'s words; a door says "not an amount" its own way', () => {
+        expect((['grouped', 'two-separators'] as AmountRefusal[]).every(isAmbiguousAmount)).toBe(true);
+        expect((['empty', 'not-a-number', 'negative', 'too-many-decimals'] as AmountRefusal[]).some(isAmbiguousAmount)).toBe(false);
     });
 
     it('never throws, whatever it is given', () => {

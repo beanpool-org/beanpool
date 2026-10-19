@@ -37,7 +37,7 @@ function propValue(text: string, prop: string): string {
 
 describe('the Ledger header scrolls with the page', () => {
     // What sits between the page title and the end of the keyboard-avoiding area: the fixed part of the page.
-    const fixed = src.slice(src.indexOf('<PageTitle title="Ledger"'), src.indexOf('</KeyboardAvoidingView>'));
+    const fixed = src.slice(src.indexOf("<PageTitle title={t('Ledger')}"), src.indexOf('</KeyboardAvoidingView>'));
 
     it('the shared header is drawn once, inside the one list’s header, and nothing pins it (#1633 review r4180150904)', () => {
         expect(fixed.match(/renderLedgerHeader\(\)/g)?.length).toBe(1);

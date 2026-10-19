@@ -63,20 +63,6 @@ const LEDGER_PERIOD_WORDS: Readonly<Record<'all' | '30d' | '90d' | '365d', WordK
     '365d': word('1y'),
 };
 
-/**
- * The Market's categories by id, for the post form's picker (the same English keys as the Market's own: lib/marketplace.ts
- * labels them with word() in sweep W1). A category this table does not know shows its label as the table wrote it.
- */
-const CATEGORY_WORDS: Readonly<Record<string, WordKey>> = {
-    food: word('Food & Produce'), services: word('Services'), labour: word('Labour'), tools: word('Tools'), goods: word('Goods'),
-    garden: word('Garden'), housing: word('Housing'), transport: word('Transport'), education: word('Education'), arts: word('Arts'),
-    health: word('Health & Wellness'), care: word('Care & Support'), animals: word('Animals'), tech: word('Tech & Digital'),
-    energy: word('Energy'), mindset: word('Mindset & Philosophy'), general: word('General'),
-};
-function categoryWords(c: { id: string; label: string }): string {
-    return Object.prototype.hasOwnProperty.call(CATEGORY_WORDS, c.id) ? t(CATEGORY_WORDS[c.id]) : c.label;
-}
-
 /** A listing's price unit on this page ("/hourly"); a type the page does not know reads as the node sent it. */
 function priceTypeWords(priceType: string): string {
     if (priceType === 'hourly') return t('/hourly', undefined, 'price type');
@@ -2670,7 +2656,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                     >
                                         {MARKETPLACE_CATEGORIES.map((c) => (
                                             <option key={c.id} value={c.id}>
-                                                {c.emoji} {categoryWords(c)}
+                                                {t('{emoji} {label}', { emoji: c.emoji, label: t(c.label) })}
                                             </option>
                                         ))}
                                     </select>

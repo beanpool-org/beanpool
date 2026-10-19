@@ -167,7 +167,7 @@ describe('the enterprise page in the pseudo-locale', () => {
         fireEvent.click(screen.getByRole('button', { name: new RegExp(xx('Post Offer').replace(/[[\]~]/g, '.')) }));
         const form = screen.getByRole('dialog');
         expect(within(form).getByRole('heading', { name: xx('Post Enterprise Offer') })).toBeInTheDocument();
-        expect(within(form).getByRole('option', { name: `🥕 ${xx('Food & Produce')}` })).toBeInTheDocument();
+        expect(within(form).getByRole('option', { name: xx('{emoji} {label}').replace('{emoji}', '🥕').replace('{label}', xx('Food & Produce')) })).toBeInTheDocument();
         expect(clean(INITIALS)).toEqual([]);
         fireEvent.click(within(form).getByRole('button', { name: xx('Cancel') }));
 

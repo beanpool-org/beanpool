@@ -385,9 +385,11 @@ describe('Settings in the pseudo-locale: every word on it came through t() (word
         expect(host.textContent).toContain(pseudoLocalise('COMMUNITY KEYS'));
         expect(host.textContent).toContain(pseudoLocalise('{n} active sessions • Started {when}').split('{n}')[0]);
         expect(bypassing()).toEqual([]);
+        // The emergency Stop buttons are named by their visible words, one key each, in any language (WCAG 2.5.3).
+        for (const words of ['Stop It Now', 'Stop']) expect(row(words)?.getAttribute('aria-label'), words).toBe(pseudoLocalise(words));
         // Their questions and answers.
-        await click(row('🛑 Stop It Now'), 'Stop It Now');
-        await click(row('🛑 Stop'), 'Stop (the vault)');
+        await click(row('Stop It Now'), 'Stop It Now');
+        await click(row('Stop'), 'Stop (the vault)');
         await click(row("Yes, it's me"), "Yes, it's me");
         await click(row('Remove it instead'), 'Remove it instead');
         await click(row('Sign out everywhere'), 'Sign out everywhere');

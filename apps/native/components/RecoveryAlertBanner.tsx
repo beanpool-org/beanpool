@@ -344,12 +344,13 @@ export function RecoveryAlertBanner({ onStopSuccess }: RecoveryAlertBannerProps 
                             disabled={busy}
                             activeOpacity={0.7}
                             accessibilityRole="button"
-                            // The visible text, so a speech-control user saying "tap Stop" hits it (WCAG 2.5.3).
+                            // The visible text, so a speech-control user saying "tap Stop" hits it (WCAG 2.5.3): one
+                            // key for both, the emoji outside it, so no translation can make them two names.
                             accessibilityLabel={busy ? t('Working') : t('Stop')}
                             accessibilityHint={t('Stops the restore with {name}', { name })}
                             accessibilityState={{ disabled: busy, busy }}
                         >
-                            {busy ? <ActivityIndicator size="small" color={palette.white} /> : <Text style={styles.stopButtonText}>{t('🛑 Stop')}</Text>}
+                            {busy ? <ActivityIndicator size="small" color={palette.white} /> : <Text style={styles.stopButtonText}><Text>🛑</Text> {t('Stop')}</Text>}
                         </TouchableOpacity>
                         <TouchableOpacity
                             style={styles.itsMeButton}
@@ -388,7 +389,7 @@ export function RecoveryAlertBanner({ onStopSuccess }: RecoveryAlertBannerProps 
                         activeOpacity={0.7}
                         accessibilityRole="button"
                         // Must be the VISIBLE text: this is the emergency control, and a speech-
-                        // control user saying "tap Stop It Now" has to hit it (WCAG 2.5.3).
+                        // control user saying "tap Stop It Now" has to hit it (WCAG 2.5.3). One key for both.
                         accessibilityLabel={stopping ? t('Stopping recovery') : t('Stop It Now')}
                         accessibilityHint={t('Cancels active recovery sessions')}
                         accessibilityState={{ disabled: stopping, busy: stopping }}
@@ -396,7 +397,7 @@ export function RecoveryAlertBanner({ onStopSuccess }: RecoveryAlertBannerProps 
                         {stopping ? (
                             <ActivityIndicator size="small" color={palette.white} />
                         ) : (
-                            <Text style={styles.stopButtonText}>{t('🛑 Stop It Now')}</Text>
+                            <Text style={styles.stopButtonText}><Text>🛑</Text> {t('Stop It Now')}</Text>
                         )}
                     </TouchableOpacity>
                 </View>

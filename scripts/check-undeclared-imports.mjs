@@ -64,6 +64,7 @@ const WORKSPACES = [
   },
   {
     path: 'apps/pwa',
+    testFilePattern: /(^|\/)[^/]*\.test-support\.ts$/,
   },
   {
     // Guarded first, and specifically against the workspace hoisting trap.

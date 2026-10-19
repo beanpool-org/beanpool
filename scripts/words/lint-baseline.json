@@ -6,8 +6,8 @@
     "apps/native/components": 1,
     "apps/native/components/showcase": 6,
     "apps/native/utils": 3,
-    "apps/pwa/src": 22,
-    "apps/pwa/src/components": 681,
-    "apps/pwa/src/pages": 728
+    "apps/pwa/src": 4,
+    "apps/pwa/src/components": 471,
+    "apps/pwa/src/pages": 478
   }
 }

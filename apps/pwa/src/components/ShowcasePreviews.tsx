@@ -38,7 +38,7 @@ function ago(days: number): string {
 function ExampleChip() {
     return (
         <span className="inline-flex shrink-0 items-center rounded-full border border-dashed border-nature-400 dark:border-nature-500 px-2 py-0.5 text-[11px] font-black uppercase text-nature-600 dark:text-nature-300">
-            Example
+            {t('Example')}
         </span>
     );
 }
@@ -250,16 +250,16 @@ export function CommonsPreview({ enterprises = true, onOpenEnterprise, ...ways }
             <SampleHeader />
             <section className={`${CARD} mb-4`}>
                 <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs font-bold uppercase tracking-wide text-nature-500 dark:text-nature-400">Commons pool</p>
-                    <button type="button" onClick={() => setCommonsInfo(true)} className="-my-2 -mr-2 inline-flex min-h-[44px] min-w-[44px] items-center justify-center shrink-0 text-sm font-semibold text-blue-700 dark:text-blue-300" aria-label="How the Commons works">ⓘ</button>
+                    <p className="text-xs font-bold uppercase tracking-wide text-nature-500 dark:text-nature-400">{t('Commons pool')}</p>
+                    <button type="button" onClick={() => setCommonsInfo(true)} className="-my-2 -mr-2 inline-flex min-h-[44px] min-w-[44px] items-center justify-center shrink-0 text-sm font-semibold text-blue-700 dark:text-blue-300" aria-label={t('How the Commons works')}>ⓘ</button>
                 </div>
-                <p className="text-2xl font-black text-nature-900 dark:text-nature-50">{S.pool} Beans</p>
+                <p className="text-2xl font-black text-nature-900 dark:text-nature-50">{tn(S.pool, '{n} Beans', '{n} Beans')}</p>
             </section>
             <section className="mb-4 space-y-3" data-testid="sample-enterprise">
                 <EnterpriseCard treasury={bakery} onOpen={onOpenEnterprise} sample />
                 <div className="flex flex-col gap-2 sm:flex-row">
-                    <LocalCommunityAction feature="enterprises" label="Pledge" className="w-full" {...ways} />
-                    <LocalCommunityAction feature="enterprises" label="Pause" className="w-full" {...ways} />
+                    <LocalCommunityAction feature="enterprises" label={t('Pledge')} className="w-full" {...ways} />
+                    <LocalCommunityAction feature="enterprises" label={t('Pause')} className="w-full" {...ways} />
                 </div>
             </section>
             <section className="mb-4" data-testid="sample-project">

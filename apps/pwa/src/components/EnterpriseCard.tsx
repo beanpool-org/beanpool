@@ -50,7 +50,7 @@ export function EnterpriseCard({ treasury: t, onOpen, sample = false }: { treasu
                     onOpen?.(t.publicKey);
                 }
             }}
-            className="bg-nature-900 border border-nature-800 hover:border-emerald-500/50 focus:outline-none focus:ring-2 focus:ring-emerald-500 rounded-2xl p-5 transition-all cursor-pointer shadow-sm hover:shadow-md flex flex-col justify-between group"
+            className="bg-nature-900 border border-nature-800 hover:border-emerald-500/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-2xl p-5 transition-all cursor-pointer shadow-sm hover:shadow-md flex flex-col justify-between group"
         >
             <div className="space-y-3">
                 {/* Example Valley's: the pill on its own row, the card's full width (beside the name it ran past the card at 320 px). */}
@@ -66,7 +66,7 @@ export function EnterpriseCard({ treasury: t, onOpen, sample = false }: { treasu
                                 className="w-full h-full object-cover"
                             />
                         ) : (
-                            <span>🌱</span>
+                            <span aria-hidden="true">🌱</span>
                         )}
                     </div>
                     <div className="flex-1 min-w-0">
@@ -78,12 +78,12 @@ export function EnterpriseCard({ treasury: t, onOpen, sample = false }: { treasu
                             </h3>
                             {t.paused && t.status !== 'winding_up' && t.status !== 'completed' && (
                                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-amber-500/20 text-amber-400 border-amber-500/40">
-                                    ⏸️ Paused
+                                    <span aria-hidden="true">⏸️ </span>Paused
                                 </span>
                             )}
                             {t.status === 'winding_up' && (
                                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-rose-500/20 text-rose-400 border-rose-500/40">
-                                    ⏳ Winding up
+                                    <span aria-hidden="true">⏳ </span>Winding up
                                 </span>
                             )}
                             {t.status === 'completed' && (
@@ -93,15 +93,15 @@ export function EnterpriseCard({ treasury: t, onOpen, sample = false }: { treasu
                             )}
                             {isFunded ? (
                                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-emerald-950/50 text-emerald-300 border-emerald-800/60">
-                                    🎉 Funded
+                                    <span aria-hidden="true">🎉 </span>Funded
                                 </span>
                             ) : hasGoal || t.lifecycle === 'bounded' ? (
                                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-amber-950/50 text-amber-300 border-amber-800/60">
-                                    🌱 Project
+                                    <span aria-hidden="true">🌱 </span>Project
                                 </span>
                             ) : (
                                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-blue-950/50 text-blue-300 border-blue-800/60">
-                                    🏛️ Enterprise
+                                    <span aria-hidden="true">🏛️ </span>Enterprise
                                 </span>
                             )}
                         </div>
@@ -134,7 +134,7 @@ export function EnterpriseCard({ treasury: t, onOpen, sample = false }: { treasu
                 {/* Financial Ceiling indicator if surplus exists */}
                 {t.earnedSurplus != null && t.earnedSurplus > 0 && (
                     <div className="flex items-center gap-1 text-[11px] text-emerald-400">
-                        <span>📈</span>
+                        <span aria-hidden="true">📈</span>
                         <span>Earned Surplus: {t.earnedSurplus} 🫘</span>
                     </div>
                 )}
@@ -167,7 +167,7 @@ export function EnterpriseCard({ treasury: t, onOpen, sample = false }: { treasu
                             </span>
                             {daysRemaining && (
                                 <span className={`text-[11px] font-bold ${daysRemaining === 'Expired' ? 'text-red-400' : 'text-nature-400'}`}>
-                                    ⏳ {daysRemaining}
+                                    <span aria-hidden="true">⏳ </span>{daysRemaining}
                                 </span>
                             )}
                         </div>
@@ -184,7 +184,7 @@ export function EnterpriseCard({ treasury: t, onOpen, sample = false }: { treasu
                                 aria-hidden="true"
                                 className="w-full mt-2 py-2 px-3 rounded-xl bg-bp-commit-fill text-bp-commit-on font-bold text-xs shadow-sm flex items-center justify-center gap-1.5 pointer-events-none"
                             >
-                                <span>🌱</span> Pledge Beans
+                                <span aria-hidden="true">🌱</span> Pledge Beans
                             </div>
                         )}
                     </div>

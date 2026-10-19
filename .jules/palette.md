@@ -254,3 +254,7 @@ handler *and* an explicit close button *and* `type="button"`. One open nit worth
 ## 2026-10-19 - HeaderTitle ARIA Button Semantics & Keyboard Navigation
 **Learning:** `HeaderControls.tsx` rendered the `HeaderTitle` span with an `onClick` handler (to toggle community status) without keyboard navigation (`role="button"`, `tabIndex={0}`, `onKeyDown` Enter/Space key listener) or focus ring indicators.
 **Action:** Added conditional `role="button"`, `tabIndex={0}`, `onKeyDown` handler (triggering `onClick` on Enter/Space), and `focus-visible:ring-2 focus-visible:ring-bp-gold-fill` focus ring styling to `HeaderTitle` when `onClick` is provided, and added test coverage in `HeaderControls.test.tsx`.
+
+## 2026-10-20 - EnterpriseCard Focus Rings & Decorative Emoji Accessibility
+**Learning:** `EnterpriseCard.tsx` card container used `focus:outline-none focus:ring-2 focus:ring-emerald-500` which applied focus ring outlines on click, and rendered raw decorative emojis (`🌱`, `⏸️`, `⏳`, `🎉`, `🏛️`, `📈`) exposed to screen readers without `aria-hidden="true"`.
+**Action:** Replaced `focus:outline-none focus:ring-2` with `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500`, wrapped decorative emojis in `<span aria-hidden="true">`, and added `EnterpriseCard.test.tsx` verifying focus rings, keyboard interactions, and emoji hiding.

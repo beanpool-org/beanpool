@@ -3,6 +3,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ProposeDecisionModal } from './ProposeDecisionModal';
 import { createDecision } from '../lib/api';
+import { setLanguage } from '@beanpool/core';
 
 vi.mock('../lib/api', () => ({
     createDecision: vi.fn(),
@@ -217,5 +218,28 @@ describe('ProposeDecisionModal Accessibility & UX', () => {
         expect(vi.mocked(createDecision)).toHaveBeenCalledWith(expect.objectContaining({ effect: 'grant_enterprise', params: { amount: 124.5 } }));
         expect(onCreated).not.toHaveBeenCalled();
         expect(screen.getByRole('dialog')).toBeInTheDocument();
+    });
+
+    it('reads the grant in the member\'s language (#2202): fr "124,5" is 124.5, and "1.000" is refused, never a guess', async () => {
+        setLanguage('fr');
+        try {
+            render(<ProposeDecisionModal isOpen={true} onClose={vi.fn()} onCreated={vi.fn()} identity={mockIdentity} commonsBalance={2000} />);
+            fireEvent.click(screen.getByRole('button', { name: /Commons Pool/i }));
+            fireEvent.change(screen.getByPlaceholderText('e.g. Grant 200 beans to the Tool Library'), { target: { value: 'Seed money' } });
+            fireEvent.change(screen.getByPlaceholderText(/Explain why this decision is needed/), { target: { value: 'For the tool library roof' } });
+            fireEvent.change(screen.getByPlaceholderText('Enter its public key...'), { target: { value: 'ab'.repeat(32) } });
+            const amount = screen.getByPlaceholderText('e.g. 250') as HTMLInputElement;
+            expect(amount.type).toBe('text');
+            fireEvent.change(amount, { target: { value: '1.000' } });
+            fireEvent.click(screen.getByRole('button', { name: 'Submit Decision' }));
+            expect(await screen.findByText(/without thousands separators/)).toBeInTheDocument();
+            expect(vi.mocked(createDecision)).not.toHaveBeenCalled();
+            vi.mocked(createDecision).mockResolvedValueOnce({ success: true } as any);
+            fireEvent.change(amount, { target: { value: '124,5' } });
+            fireEvent.click(screen.getByRole('button', { name: 'Submit Decision' }));
+            await vi.waitFor(() => expect(vi.mocked(createDecision)).toHaveBeenCalledWith(expect.objectContaining({ effect: 'grant_enterprise', params: { amount: 124.5 } })));
+        } finally {
+            setLanguage('en');
+        }
     });
 });

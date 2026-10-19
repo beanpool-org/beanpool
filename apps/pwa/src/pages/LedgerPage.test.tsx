@@ -7,7 +7,9 @@ beforeEach(() => forgetRecentLookups());
 import React from 'react';
 import { LedgerPage } from './LedgerPage';
 import type { BeanPoolIdentity } from '../lib/identity';
-import { getBalance, getMembers, getMemberCards, getTransactions } from '../lib/api';
+import { getBalance, getMembers, getMemberCards, getTransactions, sendTransfer } from '../lib/api';
+import { addDateWords, setLanguage } from '@beanpool/core';
+import { dateWords as frDates } from '@beanpool/core/words-dates/fr';
 import { onSyncActivity } from '../lib/sync';
 import { getBlockedUsers } from '../lib/blocklist';
 
@@ -584,5 +586,67 @@ describe('the Ledger before the node has said what Beans are here', () => {
         } finally {
             vi.useRealTimers();
         }
+    });
+});
+
+describe('Send Beans reads the amount in the member\'s language (#2202)', () => {
+    const DANA = 'd'.repeat(64);
+    beforeEach(() => {
+        vi.clearAllMocks();
+        vi.mocked(getBalance).mockResolvedValue({ balance: 100, earnedCredit: 2, floor: 0, commonsBalance: 0, callsign: 'Visitor', tier: { name: 'Newcomer' } } as any);
+        vi.mocked(getBlockedUsers).mockReturnValue([]);
+        vi.mocked(getMembers).mockResolvedValue([{ publicKey: DANA, callsign: 'Dana' }] as any);
+        vi.mocked(sendTransfer).mockResolvedValue({} as any);
+    });
+    afterEach(() => setLanguage('en'));
+
+    /** Opens Send Beans in `lang`, picks Dana and types `amount`; returns the "Recipient receives" line, or null. */
+    async function typeIn(lang: 'en' | 'fr', amount: string) {
+        // The web app loads a language's number words with its catalogs (lib/language.ts); here, French's directly.
+        if (lang === 'fr') addDateWords('fr', frDates);
+        setLanguage(lang);
+        render(<LedgerPage identity={identity} isMember={true} />);
+        await waitFor(() => expect(getMembers).toHaveBeenCalled());
+        fireEvent.click(await screen.findByRole('button', { name: /Wallet/ }));
+        fireEvent.click(await screen.findByRole('button', { name: /Send Beans/ }));
+        fireEvent.click(screen.getByRole('button', { name: /Select recipient/ }));
+        fireEvent.click(await screen.findByText('Dana'));
+        fireEvent.change(screen.getByPlaceholderText('Amount (B)'), { target: { value: amount } });
+        return screen.queryByText('Recipient receives:')?.parentElement?.textContent ?? null;
+    }
+    const confirm = async () => { await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Confirm Transfer' })); }); };
+
+    it('the amount box keeps what was typed: text with a decimal pad, not a number box that empties "12,5"', async () => {
+        await typeIn('fr', '12,5');
+        const box = screen.getByPlaceholderText('Amount (B)') as HTMLInputElement;
+        expect(box.type).toBe('text');
+        expect(box.inputMode).toBe('decimal');
+        expect(box.value).toBe('12,5');
+    });
+
+    it('fr "12,5": the confirmation reads 12,50 B and 12.5 Beans are sent', async () => {
+        expect(await typeIn('fr', '12,5')).toContain('12,50 B');
+        await confirm();
+        expect(sendTransfer).toHaveBeenCalledWith('viewer-pubkey', DANA, 12.5, '');
+    });
+
+    it('en "12.5" exactly as before: 12.50 B shown, 12.5 sent', async () => {
+        expect(await typeIn('en', '12.5')).toContain('12.50 B');
+        await confirm();
+        expect(sendTransfer).toHaveBeenCalledWith('viewer-pubkey', DANA, 12.5, '');
+    });
+
+    it('fr "1.000" could be a thousand or one: no confirmation line, nothing sent, and words that say why', async () => {
+        expect(await typeIn('fr', '1.000')).toBeNull();
+        await confirm();
+        expect(sendTransfer).not.toHaveBeenCalled();
+        expect(screen.getByText('Type the amount without thousands separators, like 1000,5.')).toBeInTheDocument();
+    });
+
+    it('en "1.234" still gets the cents guard\'s words, and nothing is sent', async () => {
+        await typeIn('en', '1.234');
+        await confirm();
+        expect(sendTransfer).not.toHaveBeenCalled();
+        expect(screen.getByText('The amount is a number of Beans above 0, to the cent.')).toBeInTheDocument();
     });
 });

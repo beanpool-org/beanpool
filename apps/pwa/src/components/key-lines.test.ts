@@ -175,7 +175,7 @@ describe('key-lines.ts', () => {
     });
 
     it("an owner's 12 words: the date and the count are said again as lib/owner-words.ts says them, in English", () => {
-        const at = Date.UTC(2026, 9, 3, 12);
+        const at = new Date(2026, 9, 3, 12).getTime();
         expect(ownerWordsCheckedWords(at)).toMatch(/^12 words checked 3 Oct 2026$/);
         expect(OWNER_WORDS_COPY.checked(at)).toMatch(/^12 words checked /);
         for (const n of [0, 1, 2, 11, 13]) expect(ownerWordsCountWords(n)).toBe(OWNER_WORDS_COPY.count(n));

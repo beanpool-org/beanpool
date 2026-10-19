@@ -192,7 +192,7 @@ describe("an owner's 12 words (OwnerWordsCheck, OwnerWordsPrompt)", () => {
     });
 
     it('in English: when they were checked, as the phone says it', async () => {
-        nodeSays({ owner: true, wordsCheckedAt: Date.UTC(2026, 9, 3, 12) });
+        nodeSays({ owner: true, wordsCheckedAt: new Date(2026, 9, 3, 12).getTime() });
         render(<OwnerWordsCheck identity={OWNER} />);
         expect(await screen.findByText('12 words checked 3 Oct 2026')).toBeInTheDocument();
         expect(bracketed()).toBe(0);

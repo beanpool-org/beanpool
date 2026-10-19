@@ -10,7 +10,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 const INFO = vi.hoisted(() => ({ features: {} as Record<string, unknown> }));
 vi.mock('../lib/api', async (importOriginal) => {
     const actual = await importOriginal<typeof import('../lib/api')>();
-    const at = '2026-10-03T12:00:00.000Z';
+    const at = new Date(2026, 9, 3, 12).toISOString();
     return {
         ...actual,
         generateInvite: vi.fn(async () => ({ success: true, invite: { code: 'INV-NEW1-CODE', createdBy: 'me', createdAt: at, usedBy: null, usedAt: null } })),

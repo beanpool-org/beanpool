@@ -4,7 +4,9 @@
  * library's sage ink (docs/brand-colours.md): the blue it had read 2.07:1 on dark's --bg-secondary (rehearsal 14 Oct S12).
  */
 import { useState } from 'react';
+import { t } from '@beanpool/core';
 import { KIT_WEB_FAILED_LINE, KIT_WEB_LABEL, KIT_WEB_WARNING, printRecoveryKit } from '../lib/recovery-kit';
+import { keyLineWords } from './key-lines';
 
 const target = {
     width: '100%', minHeight: 44, padding: '0.6rem 0.75rem', borderRadius: 10, fontSize: '0.9rem', fontWeight: 700,
@@ -26,24 +28,24 @@ export function RecoveryKitButton({ words, print }: { words: readonly string[] |
             {!asking ? (
                 <button type="button" onClick={() => { setFailed(false); setAsking(true); }}
                     style={{ ...target, border: '1px solid var(--bp-ink-accent)', background: 'transparent', color: 'var(--bp-ink-accent)' }}>
-                    <span aria-hidden="true">🖨️ </span>{KIT_WEB_LABEL}
+                    <span aria-hidden="true">🖨️ </span>{keyLineWords(KIT_WEB_LABEL)}
                 </button>
             ) : (
-                <div role="group" aria-label={KIT_WEB_LABEL}>
-                    <p style={{ fontSize: '0.8rem', lineHeight: 1.5, margin: '0 0 0.5rem', overflowWrap: 'anywhere' }}>{KIT_WEB_WARNING}</p>
+                <div role="group" aria-label={keyLineWords(KIT_WEB_LABEL)}>
+                    <p style={{ fontSize: '0.8rem', lineHeight: 1.5, margin: '0 0 0.5rem', overflowWrap: 'anywhere' }}>{keyLineWords(KIT_WEB_WARNING)}</p>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
                         <button type="button" onClick={() => setAsking(false)}
                             style={{ ...target, flex: '1 1 8em', width: 'auto', border: '1px solid var(--text-muted, #888)', background: 'transparent', color: 'inherit' }}>
-                            Cancel
+                            {t('Cancel')}
                         </button>
                         <button type="button" onClick={onContinue}
                             style={{ ...target, flex: '1 1 8em', width: 'auto', border: 'none', background: 'var(--bp-info-fill)', color: 'var(--bp-info-on)' }}>
-                            Continue
+                            {t('Continue')}
                         </button>
                     </div>
                 </div>
             )}
-            {failed && <p role="alert" style={{ color: 'var(--bp-ink-danger)', fontSize: '0.8rem', lineHeight: 1.5, margin: '0.5rem 0 0' }}>{KIT_WEB_FAILED_LINE}</p>}
+            {failed && <p role="alert" style={{ color: 'var(--bp-ink-danger)', fontSize: '0.8rem', lineHeight: 1.5, margin: '0.5rem 0 0' }}>{keyLineWords(KIT_WEB_FAILED_LINE)}</p>}
         </div>
     );
 }

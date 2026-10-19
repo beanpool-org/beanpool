@@ -5,12 +5,13 @@
  * community's own words. English is exactly what the lib file wrote. So a sentence changed in a lib file fails here,
  * rather than quietly showing English.
  */
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import ts from 'typescript';
 import { setLanguage } from '@beanpool/core';
-import { KEY_FIXED_LINES, keyLineWords, twoSentences } from './key-lines';
+import { KEY_FIXED_LINES, keyLineWords, ownerWordsCheckedWords, ownerWordsCountWords, signInNamesWords, twoSentences } from './key-lines';
+import { signInNames } from '../lib/join-recovery';
 import { outsideBrackets } from '../words-xx.test-support';
 import {
     doorOutcome, doorRefusalMessage, matchAuthReturn, refusalMessage, tryAgainIn, withRetryAfter, wordsWorkRefusal,
@@ -21,9 +22,17 @@ import { aboutTime, busySentence, signInBusySentence, WORK_CANT_RUN } from '../l
 import { releaseRefusalMessage, sessionRefusalMessage } from '../lib/web-restore';
 import { leaveForLink, linkRefusalMessage, linkResultMessage } from '../lib/link-signin';
 import { WEB_REKEY_TEXT } from '../lib/web-rekey';
+import { approveUnlock, lookupUnlock, pasteProblemMessage, unlockRefusalMessage } from '../lib/takeover-unlock';
+import { OWNER_WORDS_COPY } from '../lib/owner-words';
+import { KIT_WEB_FAILED_LINE, KIT_WEB_LABEL, KIT_WEB_WARNING } from '../lib/recovery-kit';
 
 /** The lib files key-lines.ts reads (its header names them). */
-const LIB_FILES = ['web-join.ts', 'identity.ts', 'door-work.ts', 'words-work.ts', 'web-restore.ts', 'link-signin.ts', 'web-rekey.ts'];
+const LIB_FILES = [
+    'web-join.ts', 'identity.ts', 'door-work.ts', 'words-work.ts', 'web-restore.ts', 'link-signin.ts', 'web-rekey.ts', 'takeover-unlock.ts',
+    'owner-words.ts', 'recovery-kit.ts',
+];
+const HOST = 'standby.example.org';
+const UNLOCK_REFUSALS = ['not-a-recipient', 'wrong-community', 'wrong-signer', 'wrong-envelope', 'bad-signature', 'wrong-kind', 'expired', 'used', 'closed', 'unknown-session', 'malformed'] as const;
 const PROVIDERS: JoinProvider[] = ['google', 'apple', 'facebook'];
 const NAMES = ['Google', 'Apple', 'Facebook', 'Alice', 'Maria José', 'Bob. Use your 12 words'];
 
@@ -87,10 +96,30 @@ function libSentences(): string[] {
     }
     for (const m of [60, 300, 5400, 7200, 3 * 3600]) out.push(tryAgainIn(m));
     out.push(NO_STORAGE_SENTENCE, STORE_WOULD_NOT_OPEN_SENTENCE, WORK_CANT_RUN, WRONG_CLOCK, PRIVATE_PREVIEW_MESSAGE, ...Object.values(WEB_REKEY_TEXT));
+    out.push(pasteProblemMessage('malformed'), pasteProblemMessage('not-unlock'));
+    for (const v of Object.values(OWNER_WORDS_COPY) as unknown[]) if (typeof v === 'string') out.push(v);
+    out.push(KIT_WEB_LABEL, KIT_WEB_WARNING, KIT_WEB_FAILED_LINE);
+    for (const r of UNLOCK_REFUSALS) out.push(unlockRefusalMessage(r as never, HOST));
     return [...new Set(out)];
 }
 
-afterEach(() => setLanguage('en'));
+/** lib/takeover-unlock.ts's sentences for a server that answers with no words of its own, or not at all. */
+async function unlockAnswers(): Promise<string[]> {
+    const qr = { serverUrl: `https://${HOST}`, sessionId: 's1', purpose: 'takeover' } as never;
+    const out: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 500 })));
+    const look = await lookupUnlock(qr, { publicKey: 'k', privateKey: 'p' }, null);
+    if ('message' in look) out.push(look.message);
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error(''); }));
+    const gone = await lookupUnlock(qr, { publicKey: 'k', privateKey: 'p' }, null);
+    if ('message' in gone) out.push(gone.message);
+    const refused = await approveUnlock(qr, { header: {} } as never, { publicKey: 'k', privateKey: 'not a key' });
+    if ('message' in refused) out.push(refused.message);
+    vi.unstubAllGlobals();
+    return out;
+}
+
+afterEach(() => { setLanguage('en'); vi.unstubAllGlobals(); });
 
 describe('key-lines.ts', () => {
     it('every whole sentence it knows is one a key-path lib file writes, word for word (a literal, or a builder\'s for one case)', () => {
@@ -110,6 +139,14 @@ describe('key-lines.ts', () => {
         setLanguage('xx');
         const left = libSentences().filter((s) => outsideBrackets(keyLineWords(s), NAMES));
         expect(left).toEqual([]);
+    });
+
+    it('a server that answers with no words of its own, or not at all, or a key that did not open: read back by its address', async () => {
+        const said = await unlockAnswers();
+        expect(said).toEqual([`${HOST} did not answer (500).`, `Could not reach ${HOST}.`, "This browser's key did not open its part of the lock. Try another owner, or the recovery code."]);
+        for (const s of said) expect(keyLineWords(s)).toBe(s);
+        setLanguage('xx');
+        expect(said.filter((s) => outsideBrackets(keyLineWords(s), [HOST]))).toEqual([]);
     });
 
     it('a community\'s own words are shown as they came; a wait after them is translated', () => {
@@ -135,6 +172,26 @@ describe('key-lines.ts', () => {
         const words = 'abandon ability able about above absent absorb abstract absurd abuse access accident';
         expect(keyLineWords(words)).toBe(words);
         expect(keyLineWords('RK-7KQ2M9XH')).toBe('RK-7KQ2M9XH');
+    });
+
+    it("an owner's 12 words: the date and the count are said again as lib/owner-words.ts says them, in English", () => {
+        const at = Date.UTC(2026, 9, 3, 12);
+        expect(ownerWordsCheckedWords(at)).toMatch(/^12 words checked 3 Oct 2026$/);
+        expect(OWNER_WORDS_COPY.checked(at)).toMatch(/^12 words checked /);
+        for (const n of [0, 1, 2, 11, 13]) expect(ownerWordsCountWords(n)).toBe(OWNER_WORDS_COPY.count(n));
+        setLanguage('xx');
+        expect(outsideBrackets(ownerWordsCheckedWords(at))).toBe(false);
+        expect(outsideBrackets(ownerWordsCountWords(3))).toBe(false);
+    });
+
+    it('a list of sign-ins: "Google", "Google and Apple", "Google, Apple and Facebook", the joining words translated', () => {
+        for (const providers of [['google'], ['google', 'apple'], ['google', 'apple', 'facebook']]) {
+            const english = signInNames(providers)!;
+            expect(signInNamesWords(english)).toBe(english);
+            setLanguage('xx');
+            expect(outsideBrackets(signInNamesWords(english), NAMES)).toBe(false);
+            setLanguage('en');
+        }
     });
 
     it('two sentences, one after the other, read as they always did in English', () => {

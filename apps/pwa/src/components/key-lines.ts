@@ -6,7 +6,8 @@
  * recovery-path-files.test.ts): lib/web-join.ts (signs the door's requests), lib/identity.ts (keeps the key and its
  * words), lib/door-work.ts and lib/words-work.ts (the door's work, signed with the joining key), lib/web-restore.ts (opens
  * a sign-in's copy of the account), lib/link-signin.ts (seals the account to a sign-in), lib/web-rekey.ts (signs a re-key
- * ask). The screens translate those
+ * ask), lib/takeover-unlock.ts (opens an owner's part of a community's locked keys), lib/owner-words.ts (checks an
+ * owner's 12 words), lib/recovery-kit.ts (prints the 12 words). The screens translate those
  * files' sentences here: by the exact English (the key IS the English), or by the English with a sign-in's name, a member's
  * name, a status or a time in it, built again word for word. Nothing here imports those files at runtime:
  * key-lines.test.ts holds every sentence to the constant or builder it stands for, so a sentence changed there fails a
@@ -15,7 +16,7 @@
  * Anything else (a community's own words, a sign-in provider's own error, a member's name) is shown exactly as given.
  * The 12 words, codes and keys are never looked up: a name or a number is only put into a sentence.
  */
-import { t, tn, word, type WordKey } from '@beanpool/core';
+import { formatDate, t, tn, word, type WordKey } from '@beanpool/core';
 
 /** Whole sentences, by their English. */
 const FIXED: Readonly<Record<string, WordKey>> = {
@@ -54,6 +55,36 @@ const FIXED: Readonly<Record<string, WordKey>> = {
     'That code isn’t valid any more. Ask the admin for a new one.': word('That code isn’t valid any more. Ask the admin for a new one.'),
     'That code is for another community. Open the link your admin gave you, or ask them for a new code.': word('That code is for another community. Open the link your admin gave you, or ask them for a new code.'),
     'Couldn’t reach your community. Check your connection: you can try again, and the code still works until it expires.': word('Couldn’t reach your community. Check your connection: you can try again, and the code still works until it expires.'),
+    // lib/takeover-unlock.ts: a take-over or restore code pasted into Settings, and why the browser won't open the keys.
+    "That looks like a take-over code but part of it is missing. Copy it again from the server's screen.": word("That looks like a take-over code but part of it is missing. Copy it again from the server's screen."),
+    "That isn't a take-over code. On the standby's Settings, choose “Take over with an owner's phone” and copy the code it shows.": word("That isn't a take-over code. On the standby's Settings, choose “Take over with an owner's phone” and copy the code it shows."),
+    'These keys belong to another community, not the one this app is in. Nothing was opened.': word('These keys belong to another community, not the one this app is in. Nothing was opened.'),
+    'That code is for a different kind of unlock than the server sent. Start again on the server.': word('That code is for a different kind of unlock than the server sent. Start again on the server.'),
+    'That code has run out or was already used. Start again on the server and copy the new code.': word('That code has run out or was already used. Start again on the server and copy the new code.'),
+    "The server's answer could not be read. Start again on the server.": word("The server's answer could not be read. Start again on the server."),
+    "This browser's key did not open its part of the lock. Try another owner, or the recovery code.": word("This browser's key did not open its part of the lock. Try another owner, or the recovery code."),
+    // lib/owner-words.ts OWNER_WORDS_COPY: an owner's 12 words check and its prompt (those with a date or a count in
+    // them are said again where shown: OwnerWordsCheck).
+    'Check your 12 words': word('Check your 12 words'),
+    "You're an owner of this community. Its take-over keys and backups are locked to your account. If you lose this device, your 12 words are what get you back in — so check you still have the right ones.": word("You're an owner of this community. Its take-over keys and backups are locked to your account. If you lose this device, your 12 words are what get you back in — so check you still have the right ones."),
+    "Your 12 words aren't checked. If you lose this device you couldn't take over the server or open a backup.": word("Your 12 words aren't checked. If you lose this device you couldn't take over the server or open a backup."),
+    'Your words stay in this browser. They are never sent or saved.': word('Your words stay in this browser. They are never sent or saved.'),
+    'These are the right words.': word('These are the right words.'),
+    'These are the right words. Your community can see you checked them today.': word('These are the right words. Your community can see you checked them today.'),
+    "These are the right words. We couldn't tell your community's server just now; check again later to record it.": word("These are the right words. We couldn't tell your community's server just now; check again later to record it."),
+    "These aren't the words for this account.": word("These aren't the words for this account."),
+    "Can't find them? If this browser still has them, View Recovery Phrase (below) shows them.": word("Can't find them? If this browser still has them, View Recovery Phrase (below) shows them."),
+    "Can't find them? They aren't saved in this browser, so View Recovery Phrase can't show them.": word("Can't find them? They aren't saved in this browser, so View Recovery Phrase can't show them."),
+    "Your 12 words aren't checked": word("Your 12 words aren't checked"),
+    "If you lose this device you couldn't take over the server or open a backup.": word("If you lose this device you couldn't take over the server or open a backup."),
+    'Time to check your 12 words': word('Time to check your 12 words'),
+    "It's a year since you last checked them. If you lose this device, they're how you'd take over the server or open a backup.": word("It's a year since you last checked them. If you lose this device, they're how you'd take over the server or open a backup."),
+    'Check now': word('Check now'),
+    Later: word('Later'),
+    // lib/recovery-kit.ts: the printed kit, from the 12 words.
+    'Print or save your recovery kit': word('Print or save your recovery kit'),
+    'Keep this page or file off cloud backups and chats. Anyone who has it can sign in as you.': word('Keep this page or file off cloud backups and chats. Anyone who has it can sign in as you.'),
+    'The recovery kit couldn’t be made in this browser. Write the 12 words down instead.': word('The recovery kit couldn’t be made in this browser. Write the 12 words down instead.'),
     // lib/web-restore.ts: a restore with a sign-in.
     'That restore timed out on the community. Start again.': word('That restore timed out on the community. Start again.'),
     'Too many tries from this network. Please try again later.': word('Too many tries from this network. Please try again later.'),
@@ -151,6 +182,21 @@ const FILLED: ReadonlyArray<{ pattern: RegExp; words: (m: RegExpMatchArray) => s
         pattern: /^The community could not start a restore \((\d+)\)\. Please try again in a minute\.$/,
         words: (m) => t('The community could not start a restore ({status}). Please try again in a minute.', { status: m[1] }),
     },
+    // lib/takeover-unlock.ts: a server by its address (the phone's takeover-unlock.ts says the last three the same).
+    {
+        pattern: /^These keys are not locked to you, so this browser can't open them\. Another owner of your community can, or the printed recovery code on (\S+)\.$/,
+        words: (m) => t("These keys are not locked to you, so this browser can't open them. Another owner of your community can, or the printed recovery code on {host}.", { host: m[1] }),
+    },
+    {
+        pattern: /^These take-over keys were not locked by your community's server, so this browser will not open them for (\S+)\.$/,
+        words: (m) => t("These take-over keys were not locked by your community's server, so this browser will not open them for {host}.", { host: m[1] }),
+    },
+    {
+        pattern: /^(\S+) sent keys that do not match its screen, or that have been altered\. Nothing was opened\. Start again on the server\.$/,
+        words: (m) => t('{host} sent keys that do not match its screen, or that have been altered. Nothing was opened. Start again on the server.', { host: m[1] }),
+    },
+    { pattern: /^(\S+) did not answer \((\d+)\)\.$/, words: (m) => t('{host} did not answer ({status}).', { host: m[1], status: m[2] }) },
+    { pattern: /^Could not reach (\S+)\.$/, words: (m) => t('Could not reach {host}.', { host: m[1] }) },
     // lib/link-signin.ts: adding a sign-in, and what became of it.
     {
         pattern: new RegExp(`^${PROVIDER} sign-in isn't available here\\.$`),
@@ -187,6 +233,25 @@ const FILLED: ReadonlyArray<{ pattern: RegExp; words: (m: RegExpMatchArray) => s
  * two, each in the member's language. The first may be the community's own words, shown as they came.
  */
 const WITH_WAIT = /^([\s\S]+?) (Try again in (?:\d+ minutes?|about an hour|about \d+ hours)\.)$/;
+
+/** lib/owner-words.ts OWNER_WORDS_COPY.checked: when the owner last checked their 12 words, as the phone's OwnerWordsCard. */
+export function ownerWordsCheckedWords(ms: number): string {
+    return t('12 words checked {date}', { date: formatDate(new Date(ms), 'day-month-year') });
+}
+
+/** lib/owner-words.ts OWNER_WORDS_COPY.count: the words typed weren't twelve (the phone's key-lines says it the same). */
+export function ownerWordsCountWords(n: number): string {
+    return tn(n, "That's {n} word. Type all 12, in order.", "That's {n} words. Type all 12, in order.");
+}
+
+/**
+ * lib/join-recovery.ts signInNames's list ("Google", "Google and Apple", "Google, Apple and Facebook") in the member's
+ * language, as the phone's settings-lines.ts listNameWords says a list. The names are the sign-ins' own.
+ */
+export function signInNamesWords(english: string): string {
+    const m = english.match(/^(.+) and (Google|Apple|Facebook)$/);
+    return m ? t('{items} and {last}', { items: m[1], last: m[2] }) : english;
+}
 
 /**
  * Two whole sentences, one after the other: a language that writes no space between sentences (Chinese, Japanese)

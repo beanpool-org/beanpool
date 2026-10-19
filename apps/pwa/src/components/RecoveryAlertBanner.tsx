@@ -1,10 +1,16 @@
 import { useEffect, useState, useCallback } from 'react';
+import { formatDate, t, tn } from '@beanpool/core';
 import type { BeanPoolIdentity } from '../lib/identity';
 import {
     getMyActiveRecoveryCollections,
     stopEveryRecoveryCollection,
 } from '../lib/api';
 import { withJitter } from '../lib/jitter';
+
+/** A moment as the banner says it: "19 Oct, 14:05" (core's formatDate, as the phone's banner; it was the browser's own). */
+function momentWords(d: Date): string {
+    return t('{date}, {time}', { date: formatDate(d, 'day-month'), time: formatDate(d, 'time') });
+}
 
 interface RecoverySession {
     collectionId: string;
@@ -106,9 +112,7 @@ export function RecoveryAlertBanner({ onStopSuccess, onActionTaken }: RecoveryAl
 
     const handleStopIt = async () => {
         const confirmed = window.confirm(
-            '🛑 Stop Recovery Attempt\n\n' +
-            'This will cancel all active recovery sessions, preventing any further fragment releases.\n\n' +
-            'Do this only if you did NOT start this recovery.'
+            t('🛑 Stop Recovery Attempt\n\nThis will cancel all active recovery sessions, preventing any further fragment releases.\n\nDo this only if you did NOT start this recovery.'),
         );
         if (!confirmed) return;
 
@@ -120,14 +124,14 @@ export function RecoveryAlertBanner({ onStopSuccess, onActionTaken }: RecoveryAl
                 setLiveCount(0);
                 onStopSuccess?.();
                 onActionTaken?.();
-                alert('✅ Recovery Stopped: All active recovery sessions have been cancelled.');
+                alert(t('✅ Recovery Stopped: All active recovery sessions have been cancelled.'));
             } else {
                 // Not "all cancelled" when some are not: read again, so the banner shows what is live.
                 void checkAlerts();
-                alert(`Not all stopped: ${left} recovery session${left === 1 ? ' is' : 's are'} still active. Tap Stop It Now again.`);
+                alert(tn(left, 'Not all stopped: {n} recovery session is still active. Tap Stop It Now again.', 'Not all stopped: {n} recovery sessions are still active. Tap Stop It Now again.'));
             }
         } catch {
-            alert('Failed to stop recovery. Please try again.');
+            alert(t('Failed to stop recovery. Please try again.'));
         } finally {
             setStopping(false);
         }
@@ -142,7 +146,7 @@ export function RecoveryAlertBanner({ onStopSuccess, onActionTaken }: RecoveryAl
     }
 
     return (
-        <div className="space-y-3 mb-4 w-full" role="region" aria-live="assertive" aria-label="Account recovery alert">
+        <div className="space-y-3 mb-4 w-full" role="region" aria-live="assertive" aria-label={t('Account recovery alert')}>
             {/* DANGER BANNER: Own account being recovered */}
             {sessions.length > 0 && (
                 <div className="bg-red-50 dark:bg-red-950/60 border-2 border-red-500/70 dark:border-red-600/80 rounded-2xl p-4 sm:p-5 shadow-md">
@@ -150,14 +154,15 @@ export function RecoveryAlertBanner({ onStopSuccess, onActionTaken }: RecoveryAl
                         <span className="text-2xl flex-shrink-0" aria-hidden="true">🚨</span>
                         <div className="flex-1 min-w-0">
                             <h4 className="text-sm sm:text-base font-extrabold text-red-900 dark:text-red-200 leading-snug">
-                                Someone is recovering your account
+                                {t('Someone is recovering your account')}
                             </h4>
                             <p className="text-xs sm:text-sm text-red-800 dark:text-red-300 mt-1 leading-relaxed">
-                                A device is trying to restore access to your account. If this is not you, stop it immediately.
+                                {t('A device is trying to restore access to your account. If this is not you, stop it immediately.')}
                             </p>
                             <div className="text-[11px] text-red-600 dark:text-red-400 mt-1 font-medium">
-                                {liveCount} active session{liveCount > 1 ? 's' : ''}
-                                {sessions[0].createdAt ? ` • Started ${new Date(sessions[0].createdAt).toLocaleString()}` : ''}
+                                {sessions[0].createdAt
+                                    ? tn(liveCount, '{n} active session • Started {when}', '{n} active sessions • Started {when}', { when: momentWords(new Date(sessions[0].createdAt)) })
+                                    : tn(liveCount, '{n} active session', '{n} active sessions')}
                             </div>
 
                             <div className="mt-3">
@@ -171,10 +176,10 @@ export function RecoveryAlertBanner({ onStopSuccess, onActionTaken }: RecoveryAl
                                     {stopping ? (
                                         <>
                                             <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" aria-hidden="true" />
-                                            <span>Stopping Recovery...</span>
+                                            <span>{t('Stopping Recovery...')}</span>
                                         </>
                                     ) : (
-                                        <span><span aria-hidden="true">🛑</span> Stop It Now</span>
+                                        <span><span aria-hidden="true">🛑</span> {t('Stop It Now')}</span>
                                     )}
                                 </button>
                             </div>

@@ -9,6 +9,7 @@ import {
     type OwnerWordsStatus,
 } from '../lib/owner-words';
 import { runLockOpenCheck } from '../lib/takeover-unlock';
+import { keyLineWords } from './key-lines';
 
 export function OwnerWordsPrompt({ publicKey, onCheckNow, identity }: {
     publicKey: string | null | undefined;
@@ -35,12 +36,12 @@ export function OwnerWordsPrompt({ publicKey, onCheckNow, identity }: {
     const renew = !!status.wordsCheckedAt;
 
     return (
-        <div role="region" aria-label={COPY.title} className="mb-3 p-4 rounded-2xl border border-amber-300 bg-amber-50 dark:bg-amber-950 dark:border-amber-800">
+        <div role="region" aria-label={keyLineWords(COPY.title)} className="mb-3 p-4 rounded-2xl border border-amber-300 bg-amber-50 dark:bg-amber-950 dark:border-amber-800">
             <div className="font-bold text-[15px] text-amber-900 dark:text-amber-200 break-words">
-                {renew ? COPY.promptTitleRenew : COPY.promptTitleNever}
+                {keyLineWords(renew ? COPY.promptTitleRenew : COPY.promptTitleNever)}
             </div>
             <p className="mt-1 text-sm leading-relaxed text-nature-800 dark:text-nature-100">
-                {renew ? COPY.promptBodyRenew : COPY.promptBodyNever}
+                {keyLineWords(renew ? COPY.promptBodyRenew : COPY.promptBodyNever)}
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
                 <button
@@ -48,14 +49,14 @@ export function OwnerWordsPrompt({ publicKey, onCheckNow, identity }: {
                     onClick={() => { setShow(false); onCheckNow(); }}
                     className="flex-grow basis-[120px] min-h-[48px] px-4 py-3 rounded-xl bg-bp-commit-fill text-bp-commit-on font-bold text-[15px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2"
                 >
-                    {COPY.checkNow}
+                    {keyLineWords(COPY.checkNow)}
                 </button>
                 <button
                     type="button"
                     onClick={() => { setShow(false); rememberLater(publicKey, status); }}
                     className="flex-grow basis-[120px] min-h-[48px] px-4 py-3 rounded-xl border border-nature-300 dark:border-nature-700 bg-white dark:bg-nature-900 text-nature-800 dark:text-nature-100 font-semibold text-[15px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2"
                 >
-                    {COPY.later}
+                    {keyLineWords(COPY.later)}
                 </button>
             </div>
         </div>

@@ -7,10 +7,12 @@
  * who is not an owner sees any of this, and nothing waits on it.
  */
 import { useEffect, useRef, useState } from 'react';
+import { t } from '@beanpool/core';
 import {
     OWNER_WORDS_COPY as COPY, checkMyWords, fetchOwnerWordsStatus, sendOwnerWordsAttestation, typedWordCount,
     type OwnerWordsStatus,
 } from '../lib/owner-words';
+import { keyLineWords, ownerWordsCheckedWords, ownerWordsCountWords } from './key-lines';
 
 type Outcome = 'match' | 'mismatch' | 'count' | null;
 type RecordState = 'none' | 'sending' | 'saved' | 'failed';
@@ -47,7 +49,8 @@ export function OwnerWordsCheck({ identity, startOpen = false, hasWords = true }
     if (!status?.owner || !identity) return null;
 
     const count = typedWordCount(typed);
-    const statusLine = status.wordsCheckedAt ? COPY.checked(status.wordsCheckedAt) : COPY.notChecked;
+    // OWNER_WORDS_COPY's sentences in the member's language (components/key-lines.ts; the date by core's formatDate).
+    const statusLine = status.wordsCheckedAt ? ownerWordsCheckedWords(status.wordsCheckedAt) : keyLineWords(COPY.notChecked);
 
     const close = () => { setTyped(''); setOutcome(null); setRecord('none'); setOpen(false); };
 
@@ -76,18 +79,18 @@ export function OwnerWordsCheck({ identity, startOpen = false, hasWords = true }
         if (at !== null) setStatus({ owner: true, wordsCheckedAt: at });
     };
 
-    const matchText = record === 'saved' ? COPY.matchSaved : record === 'failed' ? COPY.matchNotSaved : COPY.match;
+    const matchText = keyLineWords(record === 'saved' ? COPY.matchSaved : record === 'failed' ? COPY.matchNotSaved : COPY.match);
 
     return (
         <div data-testid="owner-words-check">
             <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-400 mb-2 px-1">
-                COMMUNITY KEYS
+                {t('COMMUNITY KEYS')}
             </div>
             <div className="bg-white dark:bg-nature-900 rounded-2xl shadow-sm border border-nature-200 dark:border-nature-800 p-4 space-y-3">
                 <div className="flex items-start gap-3 min-w-0">
                     <span aria-hidden="true">🔑</span>
                     <div className="min-w-0">
-                        <div className="font-bold text-[15px] text-nature-900 dark:text-white break-words">{COPY.title}</div>
+                        <div className="font-bold text-[15px] text-nature-900 dark:text-white break-words">{keyLineWords(COPY.title)}</div>
                         <div className={`text-sm mt-0.5 leading-relaxed break-words ${status.wordsCheckedAt ? 'text-nature-600 dark:text-nature-300' : 'text-amber-800 dark:text-amber-300'}`}>
                             {statusLine}
                         </div>
@@ -100,13 +103,13 @@ export function OwnerWordsCheck({ identity, startOpen = false, hasWords = true }
                         onClick={() => setOpen(true)}
                         className="w-full min-h-[48px] px-4 py-3 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-bold text-[15px]"
                     >
-                        {COPY.checkNow}
+                        {keyLineWords(COPY.checkNow)}
                     </button>
                 ) : (
                     <div className="space-y-3">
-                        <p className="text-sm leading-relaxed text-nature-700 dark:text-nature-200">{COPY.why}</p>
+                        <p className="text-sm leading-relaxed text-nature-700 dark:text-nature-200">{keyLineWords(COPY.why)}</p>
                         <label className="block text-xs font-bold uppercase tracking-wider text-nature-500 dark:text-nature-400" htmlFor="owner-words-input">
-                            Your 12 words, in order
+                            {t('Your 12 words, in order')}
                         </label>
                         <textarea
                             id="owner-words-input"
@@ -123,16 +126,16 @@ export function OwnerWordsCheck({ identity, startOpen = false, hasWords = true }
                             placeholder="word word word …"
                             className="w-full min-h-[120px] p-3 rounded-xl border border-nature-300 dark:border-nature-700 bg-white dark:bg-nature-950 text-nature-900 dark:text-white text-base leading-relaxed"
                         />
-                        <div className="text-sm text-nature-600 dark:text-nature-300 leading-relaxed">{count} of 12 words · {COPY.stays}</div>
+                        <div className="text-sm text-nature-600 dark:text-nature-300 leading-relaxed">{t('{n} of 12 words · {stays}', { n: count, stays: keyLineWords(COPY.stays) })}</div>
 
                         {outcome === 'match' && (
                             <div role="status" className="p-3 rounded-xl border border-emerald-300 bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:border-emerald-800 dark:text-emerald-200 font-semibold text-sm">
-                                {record === 'sending' ? COPY.match : matchText}
+                                {record === 'sending' ? keyLineWords(COPY.match) : matchText}
                             </div>
                         )}
                         {(outcome === 'mismatch' || outcome === 'count') && (
                             <div role="status" className="p-3 rounded-xl border border-red-300 bg-red-50 text-red-800 dark:bg-red-950 dark:border-red-800 dark:text-red-200 font-semibold text-sm">
-                                {outcome === 'mismatch' ? COPY.mismatch : COPY.count(countSeen)}
+                                {outcome === 'mismatch' ? keyLineWords(COPY.mismatch) : ownerWordsCountWords(countSeen)}
                             </div>
                         )}
 
@@ -144,7 +147,7 @@ export function OwnerWordsCheck({ identity, startOpen = false, hasWords = true }
                                     disabled={busy || count === 0}
                                     className="flex-grow basis-[140px] min-h-[48px] px-4 py-3 rounded-xl bg-bp-commit-fill text-bp-commit-on font-bold text-[15px] disabled:opacity-50"
                                 >
-                                    {busy ? 'Checking…' : 'Check my words'}
+                                    {busy ? t('Checking…') : t('Check my words')}
                                 </button>
                             )}
                             <button
@@ -152,10 +155,10 @@ export function OwnerWordsCheck({ identity, startOpen = false, hasWords = true }
                                 onClick={close}
                                 className="flex-grow basis-[140px] min-h-[48px] px-4 py-3 rounded-xl border border-nature-300 dark:border-nature-700 text-nature-800 dark:text-nature-100 font-semibold text-[15px]"
                             >
-                                {outcome === 'match' ? 'Done' : 'Close'}
+                                {outcome === 'match' ? t('Done') : t('Close')}
                             </button>
                         </div>
-                        <p className="text-xs text-nature-500 dark:text-nature-400 leading-relaxed">{hasWords ? COPY.findThem : COPY.findThemNotHere}</p>
+                        <p className="text-xs text-nature-500 dark:text-nature-400 leading-relaxed">{keyLineWords(hasWords ? COPY.findThem : COPY.findThemNotHere)}</p>
                     </div>
                 )}
             </div>

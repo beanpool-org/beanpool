@@ -15,7 +15,7 @@ import { ed25519 } from '@noble/curves/ed25519.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import {
     DATE_WORDS, LANGS, LANGUAGE_HEADER, PLURAL_CATEGORIES, PLURAL_RULES, PSEUDO_LANG, canonicalLang, currentLanguage, formatCount, formatDate,
-    formatNumber, isLang, normaliseLang, pluralCategory, pluralKey, pseudoLocalise, setLanguage, t, timeAgo, tn, withDigits, word,
+    formatNumber, isLang, normaliseLang, pluralCategory, pluralKey, pseudoLocalise, setLanguage, t, timeAgo, tn, upperCase, withDigits, word,
     wordKey, wordsFor, type Lang, type UiLang,
 } from '../words.js';
 import { allowedPluralForms, callKey, callProblem, checkCatalog } from '../words-check.js';
@@ -446,6 +446,27 @@ describe('dates and numbers from tables', () => {
         expect(formatCount(2310)).toBe('2,310');
         setLanguage('ru');
         expect([formatCount(2310), formatCount(12.5), formatCount(2310, 'en')]).toEqual(['2310', '12,5', '2,310']);
+    });
+
+    it('words in capitals: the language\'s rule, as ICU\'s toLocaleUpperCase writes it, never the English one', () => {
+        // Turkish: a dotted i is a dotted capital; a dotless ı stays dotless.
+        expect(upperCase('i', 'tr')).toBe('İ');
+        expect(upperCase('İlanlar için', 'tr')).toBe('İLANLAR İÇİN');
+        expect(upperCase('ılık', 'tr')).toBe('ILIK');
+        expect(upperCase('i')).toBe('I');
+        // Greek: capitals drop the accents and keep the dialytika.
+        expect(upperCase('Προσφορά', 'el')).toBe('ΠΡΟΣΦΟΡΑ');
+        expect(upperCase('Μαΐου', 'el')).toBe('ΜΑΪΟΥ');
+        for (const [lang, words] of [['tr', ['ilan', 'İstek', 'Çiftçi işi', 'ıhlamur']], ['el', ['Προσφορά', 'Ανάγκη', 'Τρόφιμα & ποτά', 'Μαΐου', 'ήταν']], ['de', ['Straße']], ['ru', ['Предложение']]] as const) {
+            for (const w of words) expect([lang, w, upperCase(w, lang)]).toEqual([lang, w, w.toLocaleUpperCase(lang)]);
+        }
+        // No lang: the current one.
+        setLanguage('tr');
+        expect(upperCase('i')).toBe('İ');
+        setLanguage('el');
+        expect(upperCase('Ανάγκη')).toBe('ΑΝΑΓΚΗ');
+        setLanguage(PSEUDO_LANG);
+        expect(upperCase('[ilan~]')).toBe('[ILAN~]');
     });
 
     it('a tag that is not one of LANGS reads English and never throws (N-a: a stale stored tag must not break every date)', () => {

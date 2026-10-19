@@ -531,6 +531,15 @@ export function formatCount(n: number, lang?: UiLang): string {
 }
 
 /**
+ * Words in capitals the language's way (DateWords.caps), in `lang` or the current language: Turkish "i" is "İ", Greek
+ * drops its accents. Never `.toUpperCase()` on a translated sentence, which is the English rule in every language; a
+ * code, an id or hex stays on toUpperCase.
+ */
+export function upperCase(text: string, lang?: UiLang): string {
+    return inCapitals(text, dateWordsOf(lang ?? active.lang).caps);
+}
+
+/**
  * A date from the tables, never Intl, in `opts.lang` or the current language. en reads exactly as the apps always
  * have: "3 Oct", "3 Oct 2026", "Sat 3 Oct", "Sat", "9:05" (24 h, hour unpadded).
  */

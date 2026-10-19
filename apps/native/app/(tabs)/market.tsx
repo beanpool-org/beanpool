@@ -54,7 +54,7 @@ import { ExampleListings } from '../../components/ExampleListings';
 import { exampleListingsOn, showExampleListings } from '../../utils/example-listings';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { listPhotoUrl, readsOwnData, t, tn, word, type WordKey } from '@beanpool/core';
+import { listPhotoUrl, readsOwnData, t, tn, upperCase, word, type WordKey } from '@beanpool/core';
 
 /** The For You interests' categories. Labels are word() keys (the same as constants/categories.ts), shown through t(). */
 export const MARKETPLACE_CATEGORIES: ReadonlyArray<{ id: string; emoji: string; label: WordKey }> = [
@@ -1457,7 +1457,7 @@ export default function MarketScreen() {
             const heading: { title: WordKey } = item;
             return (
                 <View style={styles.sectionHeader}>
-                    <Text style={styles.sectionHeaderText}>{t(heading.title).toUpperCase()}</Text>
+                    <Text style={styles.sectionHeaderText}>{upperCase(t(heading.title))}</Text>
                     <View style={styles.sectionHeaderLine} />
                 </View>
             );

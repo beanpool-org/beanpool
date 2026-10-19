@@ -28,7 +28,7 @@ import {
     successionDeadlineText, myChoice, successionHeading, successionExplainer, type KeeperChangeLite,
 } from '../utils/keeper-governance';
 import { decodeBase64, decodeUtf8 } from '../utils/crypto';
-import { groupKindLine, isWholeCents, keeperWords, t, isSampleId } from '@beanpool/core';
+import { groupKindLine, isWholeCents, keeperWords, t, isSampleId, upperCase } from '@beanpool/core';
 import { loadIdentity } from '../utils/identity';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { EnterpriseDecisions } from '../components/EnterpriseDecisions';
@@ -1205,7 +1205,7 @@ export default function TreasuryDetailScreen() {
                         {/* Ask to Join as a Keeper (for non-keepers when enterprise is not completed) */}
                         {isEffectivePreview ? (
                             <View style={styles.joinCard}>
-                                <Text style={styles.joinTitle}>🤝 {t('Ask to join as a {keeper}', { keeper: kw.keeper }).toUpperCase()}</Text>
+                                <Text style={styles.joinTitle}>🤝 {upperCase(t('Ask to join as a {keeper}', { keeper: kw.keeper }))}</Text>
                                 <Text style={styles.joinDesc}>
                                     {t('Help run this {kind}. You can back it with your earned trading standing to expand its credit floor.', { kind: kw.kind })}
                                 </Text>

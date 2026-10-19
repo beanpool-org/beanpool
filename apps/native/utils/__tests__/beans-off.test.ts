@@ -205,7 +205,8 @@ describe('the screens draw Beans only behind beansOn (source check)', () => {
             expect(at(figure)).toBeGreaterThan(open);
             expect(at(figure)).toBeLessThan(other);
         }
-        expect(at('{NO_BEANS_GUIDE_CARD.text}')).toBeGreaterThan(other);
+        // Drawn in the member's language (words S3e): the card's words are word() keys, t()'d where shown.
+        expect(at('{t(NO_BEANS_GUIDE_CARD.text)}')).toBeGreaterThan(other);
         expect(block(guide, '{beansOn && (')).toContain('tab to send credits');
         // The join wizard says the same thing on the same kind of community.
         const welcome = read('app/welcome.tsx');

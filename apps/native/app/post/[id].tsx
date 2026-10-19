@@ -38,7 +38,7 @@ import { useReaderFeatures } from '../../utils/use-reader-features';
 import { readsOwn } from '../../utils/reads-own';
 import { showcaseMode } from '../../utils/node-profile';
 import { LocalCommunityMark } from '../../components/showcase/LocalCommunityMark';
-import { LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_EMOJI, placeShownRoughly, PLACE_WORDS, formatNumber, t, tn } from '@beanpool/core';
+import { LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_EMOJI, placeShownRoughly, PLACE_WORDS, formatNumber, t, tn, upperCase } from '@beanpool/core';
 import { Sentence } from '../../components/Sentence';
 import { hostLetsInDefault } from '../../utils/events';
 import { marketShowsBeans, NO_BEANS_TERMS, NO_BEANS_EDIT_NOTE, noBeansTermsNote } from '../../utils/market-global';
@@ -984,8 +984,8 @@ export default function PostDetailModal() {
                         <Text style={styles.catEmoji}>{isPulsePost ? '🗞️' : emoji}</Text>
                         <Text style={[styles.catLabel, { color: isPulsePost ? colors.feedback.warning.fg : (isOffer ? colors.brand.primary : colors.market.need.fg) }]} numberOfLines={1}>
                             {isPulsePost ? t('● DAILY PULSE') : post.repeatable
-                                ? t('● {type} · {category} · RECURRING', { type: isOffer ? t('OFFER') : t('NEED'), category: categoryLabel(post.category).toUpperCase() })
-                                : t('● {type} · {category}', { type: isOffer ? t('OFFER') : t('NEED'), category: categoryLabel(post.category).toUpperCase() })}
+                                ? t('● {type} · {category} · RECURRING', { type: isOffer ? t('OFFER') : t('NEED'), category: upperCase(categoryLabel(post.category)) })
+                                : t('● {type} · {category}', { type: isOffer ? t('OFFER') : t('NEED'), category: upperCase(categoryLabel(post.category)) })}
                         </Text>
                     </View>
                     <Text style={styles.timeAgo} numberOfLines={1}>{getTimeAgo(post.created_at)}</Text>

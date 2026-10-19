@@ -2152,11 +2152,12 @@ export default function SettingsScreen() {
                                     onPress={hasMnemonic(identity) ? handleRevealWords : openViewWords}
                                     disabled={revealLoading}
                                     accessibilityRole="button"
-                                    accessibilityLabel={t("Show my 12 recovery words")}
+                                    // The visible words, one key for both, the emoji outside it (WCAG 2.5.3).
+                                    accessibilityLabel={t("Show My 12 Recovery Words")}
                                     accessibilityHint={hasMnemonic(identity) ? undefined : settingsLineWords(NO_WORDS_MENU.sub)}
                                 >
                                     <Text style={{ color: colors.text.heading, fontWeight: '600', fontSize: 15 }}>
-                                        {t("👁️ Show My 12 Recovery Words")}
+                                        <Text>👁️</Text> {t("Show My 12 Recovery Words")}
                                     </Text>
                                 </Pressable>
                             ) : (
@@ -2897,10 +2898,12 @@ export default function SettingsScreen() {
                                         setWipeType('local');
                                     }}
                                     accessibilityRole="button"
-                                    accessibilityLabel={t("Sign out of this device only")}
+                                    // The visible words, one key for both, the arrow outside it (WCAG 2.5.3).
+                                    accessibilityLabel={t("Sign Out (Device Only)")}
+                                    accessibilityHint={t("Opens the confirmation to sign out of this device")}
                                 >
                                     <Text style={{ color: colors.text.heading, fontSize: 13, fontWeight: 'bold' }}>
-                                        {t("Sign Out (Device Only) →")}
+                                        {t("Sign Out (Device Only)")} <Text>→</Text>
                                     </Text>
                                 </Pressable>
                             </View>
@@ -2933,16 +2936,18 @@ export default function SettingsScreen() {
                                         askDeletePlan();
                                     }}
                                     accessibilityRole="button"
-                                    accessibilityLabel={t("Permanently delete account and node data")}
+                                    // The visible words, one key for both, the arrow outside it (WCAG 2.5.3); the rest in the hint.
+                                    accessibilityLabel={t("Permanently Delete Account")}
+                                    accessibilityHint={t("Opens the confirmation to delete your account and node data")}
                                 >
                                     <Text style={{ color: '#ffffff', fontSize: 13, fontWeight: 'bold' }}>
-                                        {t("Permanently Delete Account →")}
+                                        {t("Permanently Delete Account")} <Text>→</Text>
                                     </Text>
                                 </Pressable>
                             </View>
 
                             <Pressable style={styles.backBtn} onPress={() => setMode('menu')} accessibilityRole="button" accessibilityLabel={t("Back to Settings")}>
-                                <Text style={styles.backBtnText}>{t("← Back to Settings")}</Text>
+                                <Text style={styles.backBtnText}><Text>←</Text> {t("Back to Settings")}</Text>
                             </Pressable>
                         </View>
                     )}
@@ -2964,9 +2969,9 @@ export default function SettingsScreen() {
                                         style={{ backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.feedback.warning.border, padding: 10, borderRadius: 8, alignItems: 'center', minHeight: 44, justifyContent: 'center' }}
                                         onPress={() => { setSeedConfirm(''); setSeedVisible(false); setMode('seed'); }}
                                         accessibilityRole="button"
-                                        accessibilityLabel={t("View recovery words first")}
+                                        accessibilityLabel={t("View Recovery Words First")}
                                     >
-                                        <Text style={{ color: colors.feedback.warning.fg, fontSize: 13, fontWeight: '700' }}>{t("🔑 View Recovery Words First")}</Text>
+                                        <Text style={{ color: colors.feedback.warning.fg, fontSize: 13, fontWeight: '700' }}><Text>🔑</Text> {t("View Recovery Words First")}</Text>
                                     </Pressable>
                                 </View>
                             ) : (
@@ -3003,16 +3008,18 @@ export default function SettingsScreen() {
                                 onPress={handleLocalWipe} 
                                 disabled={advancedLoading || wipeConfirm !== 'WIPE'} 
                                 accessibilityRole="button"
-                                accessibilityLabel={t("Confirm sign out of this device")}
+                                // The visible words, one key for both, the emoji outside it (WCAG 2.5.3); the rest in the hint.
+                                accessibilityLabel={advancedLoading ? t('Signing Out...') : t('Confirm Sign Out')}
+                                accessibilityHint={t('Signs you out of this device')}
                                 accessibilityState={{ disabled: advancedLoading || wipeConfirm !== 'WIPE' }}
                             >
                                 <Text style={[styles.dangerBtnText, { color: theme === 'dark' ? '#000000' : '#ffffff' }]}>
-                                    {advancedLoading ? t('Signing Out...') : t('🚪 Confirm Sign Out')}
+                                    {advancedLoading ? t('Signing Out...') : <><Text>🚪</Text> {t('Confirm Sign Out')}</>}
                                 </Text>
                             </Pressable>
 
-                            <Pressable style={styles.backBtn} onPress={() => setWipeType('options')} accessibilityRole="button" accessibilityLabel={t("Choose another option")}>
-                                <Text style={styles.backBtnText}>{t("← Choose Another Option")}</Text>
+                            <Pressable style={styles.backBtn} onPress={() => setWipeType('options')} accessibilityRole="button" accessibilityLabel={t("Choose Another Option")}>
+                                <Text style={styles.backBtnText}><Text>←</Text> {t("Choose Another Option")}</Text>
                             </Pressable>
                         </View>
                     )}
@@ -3074,9 +3081,9 @@ export default function SettingsScreen() {
                                             style={{ backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.feedback.warning.border, padding: 10, borderRadius: 8, alignItems: 'center', minHeight: 44, justifyContent: 'center' }}
                                             onPress={() => { setSeedConfirm(''); setSeedVisible(false); setMode('seed'); }}
                                             accessibilityRole="button"
-                                            accessibilityLabel={t("View recovery words first")}
+                                            accessibilityLabel={t("View Recovery Words First")}
                                         >
-                                            <Text style={{ color: colors.feedback.warning.fg, fontSize: 13, fontWeight: '700' }}>{t("🔑 View Recovery Words First")}</Text>
+                                            <Text style={{ color: colors.feedback.warning.fg, fontSize: 13, fontWeight: '700' }}><Text>🔑</Text> {t("View Recovery Words First")}</Text>
                                         </Pressable>
                                     </View>
                                 ) : (
@@ -3111,19 +3118,20 @@ export default function SettingsScreen() {
                                     onPress={handleNodePurge}
                                     disabled={purgeBlocked}
                                     accessibilityRole="button"
-                                    accessibilityLabel={t("Permanently purge account from node")}
+                                    // The visible words, one key for both, the emoji outside it (WCAG 2.5.3); "from node" is the hint's.
+                                    accessibilityLabel={advancedLoading ? t('Purging Account...') : t('Permanently Purge Account')}
                                     accessibilityHint={deletePlan?.kind === 'this-one'
                                         ? t('Irreversibly deletes account data at this community; this phone keeps your key for your other communities')
                                         : t('Irreversibly deletes account data from the community node and wipes this phone')}
                                     accessibilityState={{ disabled: purgeBlocked }}
                                 >
                                     <Text style={styles.dangerBtnText}>
-                                        {advancedLoading ? t('Purging Account...') : t('🔥 Permanently Purge Account')}
+                                        {advancedLoading ? t('Purging Account...') : <><Text>🔥</Text> {t('Permanently Purge Account')}</>}
                                     </Text>
                                 </Pressable>
 
-                                <Pressable style={styles.backBtn} onPress={() => setWipeType('options')} accessibilityRole="button" accessibilityLabel={t("Choose another option")}>
-                                    <Text style={styles.backBtnText}>{t("← Choose Another Option")}</Text>
+                                <Pressable style={styles.backBtn} onPress={() => setWipeType('options')} accessibilityRole="button" accessibilityLabel={t("Choose Another Option")}>
+                                    <Text style={styles.backBtnText}><Text>←</Text> {t("Choose Another Option")}</Text>
                                 </Pressable>
                             </View>
                         );

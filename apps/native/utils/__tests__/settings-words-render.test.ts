@@ -172,6 +172,7 @@ const node = vi.hoisted(() => ({
     role: null as null | 'owner' | 'admin' | 'moderator',
     ownerChecked: null as number | null,
     blocked: [] as string[],
+    lastPlan: false,
 }));
 const vault = vi.hoisted(() => ({ on: false, holds: [] as any[], offer: null as any, note: null as null | string }));
 vi.mock('../db', () => ({
@@ -191,10 +192,16 @@ vi.mock('../db', () => ({
 }));
 vi.mock('../blocklist', () => ({ getBlockedUsers: async () => node.blocked, unblockUser: async () => {}, clearBlocklist: async () => {}, BLOCKLIST_UPDATED_EVENT: 'blocklist_updated' }));
 vi.mock('../crypto', () => ({ buildSignedHeaders: async () => ({}) }));
-vi.mock('../node-post', () => ({
-    signedPost: async () => new Response(JSON.stringify({ keepers: [], enrolledSso: [], threshold: 1, recoverable: false, total: 0 }), { status: 200 }),
-    anchorUrl: async () => store.map.get('beanpool_anchor_url') ?? null,
-}));
+vi.mock('../node-post', async (importOriginal) => {
+    const { PURGE_NO_ANSWER, PURGE_TIMEOUT_MS } = await importOriginal<typeof import('../node-post')>();
+    return {
+        signedPost: async () => new Response(JSON.stringify({ keepers: [], enrolledSso: [], threshold: 1, recoverable: false, total: 0 }), { status: 200 }),
+        anchorUrl: async () => store.map.get('beanpool_anchor_url') ?? null,
+        // The node doesn't answer the delete in time: what purgeAccountOnNode throws then.
+        purgeAccountOnNode: async () => { throw new Error(PURGE_NO_ANSWER); },
+        PURGE_NO_ANSWER, PURGE_TIMEOUT_MS,
+    };
+});
 vi.mock('../membership-probe', () => ({ fetchMembership: async () => ({ ok: true, json: async () => ({ isMember: true }) }) }));
 vi.mock('../node-admin', () => ({
     fetchMyNodeRole: async () => ({ role: node.role, communityName: 'Mullum Commons' }),
@@ -237,7 +244,9 @@ vi.mock('../keeper-enrolment', async () => {
 vi.mock('../vault-move', () => ({ vaultMoveOffer: async () => vault.offer, finishMove: async () => {}, moveLater: async () => {}, removeInstead: async () => true }));
 vi.mock('../delete-here', async (importOriginal) => ({
     ...(await importOriginal<Record<string, unknown>>()),
-    planDelete: async () => ({ kind: 'this-one', here: NODE, hereName: 'Mullum Commons', keeps: [{ url: 'https://castle.example', name: 'Castlemaine', membership: 'member' }, { url: 'https://hills.example', name: 'Hills', membership: 'unreachable' }], next: { url: 'https://castle.example', name: 'Castlemaine', membership: 'member' } }),
+    planDelete: async () => (node.lastPlan
+        ? { kind: 'last', here: NODE, hereName: 'Mullum Commons' }
+        : { kind: 'this-one', here: NODE, hereName: 'Mullum Commons', keeps: [{ url: 'https://castle.example', name: 'Castlemaine', membership: 'member' }, { url: 'https://hills.example', name: 'Hills', membership: 'unreachable' }], next: { url: 'https://castle.example', name: 'Castlemaine', membership: 'member' } }),
 }));
 vi.mock('../../services/pillar-sync', () => ({
     requestSync: async () => {}, isPillarSyncActive: () => false, syncLandedOnThisCopy: async () => false, PILLAR_SYNC_ENDED: 'pillar_sync_ended',
@@ -282,6 +291,7 @@ beforeEach(() => {
     node.role = null;
     node.ownerChecked = null;
     node.blocked = [];
+    node.lastPlan = false;
     vault.on = false;
     vault.holds = [];
     vault.offer = null;
@@ -321,6 +331,17 @@ const row = (english: string, lang: UiLang = 'xx') => {
     return Array.from(host.querySelectorAll('button')).find((b) => (b.textContent ?? '').includes(shown)) ?? null;
 };
 const byLabel = (label: string) => host.querySelector(`[aria-label="${label.replace(/"/g, '\\"')}"]`);
+/** A button's visible words: its text without the emoji or arrow drawn beside them. */
+const visibleWords = (b: Element | null) => (b?.textContent ?? '').replace(/^[^\p{L}\p{N}[]+|[^\p{L}\p{N}\]]+$/gu, '');
+/** Each button is named by its visible words, one key for both, in the language drawn (WCAG 2.5.3). */
+function namedByItsWords(...words: string[]) {
+    for (const english of words) {
+        const b = row(english);
+        expect(b, english).toBeTruthy();
+        expect(visibleWords(b), english).toBe(pseudoLocalise(english));
+        expect(b!.getAttribute('aria-label'), english).toBe(visibleWords(b));
+    }
+}
 
 /** Text with letters outside a pseudo-locale bracket, once what others wrote is taken out. */
 function outsideBrackets(text: string | null | undefined): boolean {
@@ -406,7 +427,8 @@ describe('Settings in the pseudo-locale: every word on it came through t() (word
         expect(host.textContent).toContain(pseudoLocalise('🛡️ Account Protection'));
         expect(host.textContent).toContain(pseudoLocalise('Getting back in with a sign-in is paused for a little while. Your 12 words work any time.'));
         expect(bypassing(), 'before Show').toEqual([]);
-        await click(row('👁️ Show My 12 Recovery Words'), 'Show');
+        namedByItsWords('Show My 12 Recovery Words');
+        await click(row('Show My 12 Recovery Words'), 'Show');
         expect(host.textContent).toContain('apple');
         expect(byLabel(pseudoLocalise('Word {n}: {word}').replace('{n}', '1').replace('{word}', 'apple'))).not.toBeNull();
         await click(row('📋 Copy Words'), 'Copy');
@@ -472,19 +494,46 @@ describe('Settings in the pseudo-locale: every word on it came through t() (word
         await click(row('Account Deletion & Sign Out'), 'Account Deletion & Sign Out');
         expect(host.textContent).toContain(pseudoLocalise('Remove from This Device Only'));
         expect(bypassing(), 'options').toEqual([]);
-        await click(byLabel(pseudoLocalise('Sign out of this device only')), 'Sign out of this device only');
+        // The final-confirmation buttons are named by their visible words; what else the name said is in the hint.
+        namedByItsWords('Sign Out (Device Only)', 'Permanently Delete Account', 'Back to Settings');
+        expect(row('Permanently Delete Account')?.getAttribute('data-hint')).toBe(pseudoLocalise('Opens the confirmation to delete your account and node data'));
+        await click(row('Sign Out (Device Only)'), 'Sign Out (Device Only)');
         expect(host.textContent).toContain(pseudoLocalise("TYPE '{word}' TO CONFIRM DEVICE SIGN OUT").replace('{word}', 'WIPE'));
         await type(host.querySelector('input'), 'WIPE');
-        await click(row('🚪 Confirm Sign Out'), 'Confirm Sign Out');
+        namedByItsWords('View Recovery Words First', 'Confirm Sign Out', 'Choose Another Option');
+        expect(row('Confirm Sign Out')?.getAttribute('data-hint')).toBe(pseudoLocalise('Signs you out of this device'));
+        await click(row('Confirm Sign Out'), 'Confirm Sign Out');
         expect(bypassing(), 'device sign-out').toEqual([]);
-        await click(row('← Choose Another Option'), 'Choose Another Option');
-        await click(byLabel(pseudoLocalise('Permanently delete account and node data')), 'Permanently delete');
+        await click(row('Choose Another Option'), 'Choose Another Option');
+        await click(row('Permanently Delete Account'), 'Permanently Delete Account');
         await settle();
         expect(host.textContent).toContain(pseudoLocalise("{here} goes from this phone's list, with its copy on this phone, and the app opens {next}.").replace('{here}', 'Mullum Commons').replace('{next}', 'Castlemaine'));
         await type(host.querySelector('input'), 'DELETE');
-        await click(row('🔥 Permanently Purge Account'), 'Permanently Purge Account');
+        namedByItsWords('Permanently Purge Account', 'Choose Another Option');
+        await click(row('Permanently Purge Account'), 'Permanently Purge Account');
         expect(alerts.said).toContain(pseudoLocalise('Permanent Node Purge'));
         expect(bypassing(), 'delete').toEqual([]);
+
+        // The community doesn't answer in time: the purge's own sentence is in the member's language too, whole.
+        const purge = alerts.buttons.find((b) => b.text === pseudoLocalise('Permanently Purge'));
+        expect(purge).toBeTruthy();
+        await act(async () => { await purge!.onPress?.(); });
+        await settle();
+        const { PURGE_NO_ANSWER } = await vi.importActual<typeof import('../node-post')>('../node-post');
+        expect(alerts.said).toContain(pseudoLocalise('Purge Failed'));
+        expect(alerts.said).toContain(pseudoLocalise("{reason}\n\nThis phone's key and 12 words were not touched.").replace('{reason}', pseudoLocalise(PURGE_NO_ANSWER)));
+        expect(bypassing(), 'purge timed out').toEqual([]);
+    });
+
+    it('the permanent delete at the last community on the phone: View Recovery Words First is named by its words', async () => {
+        node.lastPlan = true;
+        await renderIn('xx');
+        await click(row('Account Deletion & Sign Out'), 'Account Deletion & Sign Out');
+        await click(row('Permanently Delete Account'), 'Permanently Delete Account');
+        await settle();
+        expect(host.textContent).toContain(pseudoLocalise("{here} is the last community on this phone where you are a member, so this phone's key and 12 words go too. Only go ahead if you have written your 12 words down: they are the way back into any other community you belong to.").replace('{here}', 'Mullum Commons'));
+        namedByItsWords('View Recovery Words First', 'Permanently Purge Account', 'Choose Another Option');
+        expect(bypassing()).toEqual([]);
     });
 
     it('Manage Blocked Users: a blocked friend, "Also remove from friends" and its question', async () => {

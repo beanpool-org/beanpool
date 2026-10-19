@@ -4994,7 +4994,7 @@
   "🔑 Recover Identity": "🔑 Ibalik ang Pagkakakilanlan",
   "Will connect to {address} — if your community is hosted elsewhere, enter its full address instead.": "Kukonekta sa {address} — kung naka-host sa ibang lugar ang iyong komunidad, ilagay ang buong address nito sa halip.",
   "Required — the community node that holds your account. Your name and picture come back automatically once you're in. Ask whoever invited you if you're unsure.": "Kailangan — ang server ng komunidad na may hawak ng iyong account. Awtomatikong babalik ang iyong pangalan at larawan kapag nakapasok ka na. Kung hindi ka sigurado, itanong sa nag-imbita sa iyo.",
-  "Recovering identity...": "Ibinabalik ang pagkakakilanlan...",
+  "Recovering identity...": "Ibinabalik ang account...",
   "Recover Identity": "Ibalik ang Pagkakakilanlan",
   "Back to Restore Options": "Bumalik sa Mga Opsyon sa Pagbabalik",
   "← Back to Restore Options": "← Bumalik sa Mga Opsyon sa Pagbabalik",

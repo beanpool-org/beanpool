@@ -61,7 +61,7 @@ const ROOT = path.resolve(__dirname, '../..');
 const SOURCES = [
     'utils/node-profile.ts', 'utils/global-join.ts', 'utils/door-work.ts', 'utils/sso-recovery.ts', 'utils/sso-signin.ts',
     'utils/sso-sheet-connect.ts', 'utils/keeper-enrolment.ts', 'utils/no-words-copy.ts', 'utils/words-on-screen.ts',
-    'utils/words-clipboard.ts', 'utils/recovery-kit.ts', 'utils/protection-state.ts',
+    'utils/words-clipboard.ts', 'utils/recovery-kit.ts', 'utils/protection-state.ts', 'utils/vault.ts',
 ];
 
 /** Every string a source writes: literals, pieces joined with `+` read whole, and templates with `{x}` for each `${…}`. */
@@ -131,6 +131,8 @@ describe('the lower layers\' whole sentences', () => {
             'Connecting to node recovery session...', 'Account restored successfully!', 'Node returned an empty sign-in nonce.',
             "Google's sign-in page could not open on this phone. Try again.", "The phone's lock was not passed, so no sign-in was linked.",
             'No node configured yet.', 'The sign-in could not be linked.',
+            // utils/vault.ts subjectOf: Recover with a sign-in whose token names no account (PR #2206 review).
+            "That sign-in didn't say which account it was, so it can't be used. Try again.",
         ]) heldTo(english, () => welcomeLineWords(english));
     });
 

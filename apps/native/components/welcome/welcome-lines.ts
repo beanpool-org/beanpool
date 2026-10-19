@@ -63,6 +63,8 @@ const FIXED: Readonly<Record<string, WordKey>> = {
     'Collecting node fragment...': word('Collecting node fragment...'),
     'Account restored successfully!': word('Account restored successfully!'),
     'Could not determine user identifier for this sign-in.': word('Could not determine user identifier for this sign-in.'),
+    // utils/vault.ts subjectOf: the key vault's restore, from a sign-in whose token names no account.
+    "That sign-in didn't say which account it was, so it can't be used. Try again.": word("That sign-in didn't say which account it was, so it can't be used. Try again."),
     'Sign-in token does not contain a valid subject claim (sub).': word('Sign-in token does not contain a valid subject claim (sub).'),
     "Your community's copy didn't open on this phone, so nothing was changed. Start again, or use your 12 words.": word("Your community's copy didn't open on this phone, so nothing was changed. Start again, or use your 12 words."),
     "Getting back in with a sign-in goes through BeanPool's key vault in this version of the app. Your 12 words work any time.": word("Getting back in with a sign-in goes through BeanPool's key vault in this version of the app. Your 12 words work any time."),

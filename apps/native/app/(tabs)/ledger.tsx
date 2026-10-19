@@ -23,7 +23,7 @@ import { useTheme, useStyles } from '../ThemeContext';
 import { palette } from '../../constants/colors';
 import {
     PER_COUNTERPARTY_VOLUME_CAP, PROTOCOL_CONSTANTS, TIER_LEVELS, memberLevel, monthlyCirculation, CIRCULATION_FREE_BEANS, isWholeCents,
-    t, tn, word, formatDate, formatNumber, type TierName, type WordKey,
+    t, tn, word, formatDate, formatNumber, parseAmount, amountRefusalWords, isAmbiguousAmount, ANY_DECIMALS, type TierName, type WordKey,
 } from '@beanpool/core';
 import { TIER_WORDS } from '../../utils/trust-tier';
 import { richWords } from '../../components/info-content/rich-words';
@@ -451,10 +451,17 @@ export default function LedgerScreen() {
         }, [identity, beansMode])
     );
 
+    // The typed amount, read once (core parseAmount): what handleSend sends is what "Recipient receives" shows. The
+    // decimals are the cents guard's below, as they were parseFloat's.
+    const sendRead = parseAmount(sendAmount, undefined, ANY_DECIMALS);
+
     const handleSend = async () => {
         if (preview) return;
         if (!sendTo || !sendAmount || !identity?.publicKey) return;
-        const amount = parseFloat(sendAmount);
+        // The amount as the confirmation line shows it (sendRead): the language's decimal mark, never parseFloat's "12,5" → 12.
+        // What could be a thousand ("1.000" in French) is refused in words that say so; anything else not an amount, as before.
+        if (!sendRead.ok && isAmbiguousAmount(sendRead.refusal)) { setSendError(amountRefusalWords(sendRead.refusal)); return; }
+        const amount = sendRead.ok ? sendRead.value : NaN;
         if (isNaN(amount) || amount <= 0) { setSendError(t('Enter a valid amount')); return; }
         // To the cent, as the node takes it (core isWholeCents): 1.234 is refused here, in words, before anything is sent.
         if (!isWholeCents(amount)) { setSendError(t('The amount is a number of Beans above 0, to the cent.')); return; }
@@ -926,7 +933,7 @@ export default function LedgerScreen() {
                         <TextInput style={styles.sendInput} accessibilityLabel={t('Amount to send')} placeholder={t('Amount')} placeholderTextColor={colors.text.muted} keyboardType="numeric" value={sendAmount} onChangeText={setSendAmount} />
                         <TextInput style={styles.sendInput} accessibilityLabel={t('Memo')} placeholder={t('Memo (optional)')} placeholderTextColor={colors.text.muted} value={sendMemo} onChangeText={setSendMemo} />
                         {(() => {
-                            const parsedAmount = parseFloat(sendAmount);
+                            const parsedAmount = sendRead.ok ? sendRead.value : NaN;
                             if (!isNaN(parsedAmount) && parsedAmount > 0) {
                                 return (
                                     <View style={styles.taxBreakdown}>

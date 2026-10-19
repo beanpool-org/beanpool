@@ -28,7 +28,7 @@ import { useMembersOnDemand, useMemberSearch, getMembersWhole, MEMBERS_SEARCH_MI
 import { creditLineCard, knownFrozenPartNote, frozenDebitLine, KNOWN_FROZEN_TITLE, KNOWN_FROZEN_BODY } from '../lib/credit-line-card';
 import { LocalCommunityAction, LocalCommunityStrip, type LocalCommunityWays } from '../components/LocalCommunityMark';
 import { SampleHeader, sampleLedger, type LedgerRowView } from '../components/ShowcasePreviews';
-import { t, isWholeCents, monthlyCirculation, CIRCULATION_FREE_BEANS } from '@beanpool/core';
+import { t, isWholeCents, monthlyCirculation, CIRCULATION_FREE_BEANS, formatNumber, amountRefusalWords, ANY_DECIMALS, isAmbiguousAmount, parseAmount } from '@beanpool/core';
 import { useReadsOwn, resetReaderFeaturesOnce } from '../lib/features';
 import { resetCommunityInfoOnce } from '../lib/visitor-lobby-gate';
 
@@ -306,23 +306,33 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
         };
     }, [refresh, preview]);
 
+    // The typed amount, read once (core parseAmount): what handleSend sends is what "Recipient receives" shows, in the
+    // language's decimal mark (fr "12,5" is 12.5). The decimals are the cents guard's below, as they were Number()'s.
+    const sendRead = parseAmount(sendAmount, undefined, ANY_DECIMALS);
+
     async function handleSend() {
         if (!sendTo || !sendAmount) return;
+        // What could be a thousand ("1.000" in French) is refused in words that say so; anything else not an amount, as before.
+        if (!sendRead.ok && isAmbiguousAmount(sendRead.refusal)) {
+            setError(amountRefusalWords(sendRead.refusal));
+            return;
+        }
+        const amount = sendRead.ok ? sendRead.value : NaN;
         // To the cent, as the node takes it (core isWholeCents): 1.234 is refused here, in words, before anything is sent.
-        if (!isWholeCents(Number(sendAmount))) {
+        if (!isWholeCents(amount)) {
             setError(t('The amount is a number of Beans above 0, to the cent.'));
             return;
         }
         // Sends are positive-balance only — you can only send beans you actually hold. Your credit
         // line (overdraft) is for trading, not for gifting yourself into debt.
-        if (Number(sendAmount) > balance) {
+        if (amount > balance) {
             setError(`You can only send beans you hold — your balance is ${balance.toFixed(2)}B.`);
             return;
         }
         setSending(true);
         setError(null);
         try {
-            await sendTransfer(myKey, sendTo, Number(sendAmount), sendMemo);
+            await sendTransfer(myKey, sendTo, amount, sendMemo);
             setShowSend(false);
             setSendTo('');
             setSendAmount('');
@@ -816,13 +826,14 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                                     )}
                                 </div>
 
+                                {/* Text, not type="number": a number box reads "12,5" by the browser's language, not the member's,
+                                    and hands back "" for it; parseAmount reads what was typed (#2202). */}
                                 <input
-                                    type="number"
+                                    type="text"
+                                    inputMode="decimal"
                                     placeholder="Amount (B)"
                                     value={sendAmount}
                                     onChange={(e) => setSendAmount(e.target.value)}
-                                    min="0.01"
-                                    step="0.01"
                                     className="w-full p-3.5 rounded-xl border border-nature-200 dark:border-nature-800 bg-white dark:bg-nature-950 text-nature-900 dark:text-white text-[15px] font-medium mb-3 focus:ring-2 focus:ring-[#d97757] outline-none shadow-sm transition-all"
                                 />
                                 <input
@@ -833,14 +844,14 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                                     className="w-full p-3.5 rounded-xl border border-nature-200 dark:border-nature-800 bg-white dark:bg-nature-950 text-nature-900 dark:text-white text-[15px] font-medium mb-4 focus:ring-2 focus:ring-[#d97757] outline-none shadow-sm transition-all"
                                 />
                                 {(() => {
-                                    const parsedAmount = parseFloat(sendAmount);
+                                    const parsedAmount = sendRead.ok ? sendRead.value : NaN;
                                     if (!isNaN(parsedAmount) && parsedAmount > 0) {
                                         // Peer transfers are fee-free — recipient receives the full amount.
                                         return (
                                             <div className="bg-nature-100 dark:bg-nature-900 rounded-xl p-3 mb-4 text-xs space-y-1.5 border border-nature-200 dark:border-nature-800">
                                                 <div className="flex justify-between items-center text-nature-700 dark:text-nature-300">
                                                     <span>Recipient receives:</span>
-                                                    <span className="font-mono font-bold text-nature-950 dark:text-white">{parsedAmount.toFixed(2)} B</span>
+                                                    <span className="font-mono font-bold text-nature-950 dark:text-white">{formatNumber(parsedAmount, 2)} B</span>
                                                 </div>
                                             </div>
                                         );

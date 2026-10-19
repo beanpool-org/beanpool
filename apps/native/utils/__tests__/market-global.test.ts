@@ -270,7 +270,9 @@ describe('the screens draw Beans only behind that rule (source check)', () => {
         // The card's condition, then its View, label and row, then the figure.
         expect(lines.slice(i - 5, i).join('\n')).toContain('{!isPulsePost && showsBeans && (');
         expect(src).toContain('{!showsBeans ? (');
-        expect(src).toContain("credits: showsBeans ? Number(editCredits) || 0 : 0,");
+        // Beans off: no price is read, and the post is saved at 0 (the price read in the language's way since #2202).
+        expect(src).toContain('const price = showsBeans ? parseAmount(editCredits, undefined, ANY_DECIMALS) : null;');
+        expect(src).toContain('credits: price?.ok ? price.value : 0,');
         expect(src).toContain('!isOwnPost && post.status === \'active\' && !isAcceptedByMe && escrowOn && (');
     });
 

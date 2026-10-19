@@ -786,8 +786,9 @@ describe('the enterprise page follows a language picked in Settings', () => {
         await renderIn('fr');
         await click(buttonWith(inFr('Release Payment ({amount} 🫘)').replace('{amount}', '30')), 'Release Payment');
         const hours = host.querySelector('[data-modal] input') as HTMLInputElement | null;
-        expect(fr['e.g. 2.5']).toBe('ex. 2,5');
-        expect(hours?.getAttribute('placeholder')).toBe(fr['e.g. 2.5']);
+        // The translator's words around the number, and the number in the language's way (formatNumber, #2202).
+        expect(fr['e.g. {amount}']).toBe('ex. {amount}');
+        expect(hours?.getAttribute('placeholder')).toBe('ex. 2,5');
         await act(async () => {
             Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(hours, '2,5');
             hours!.dispatchEvent(new Event('input', { bubbles: true }));

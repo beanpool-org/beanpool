@@ -44,8 +44,10 @@ import {
     CATEGORIES,
     PLATFORMS,
     platformMeta,
+    platformName,
     categoryMeta,
     isWebUrl,
+    t,
 } from '@beanpool/core';
 import { lightColors } from '../constants/colors';
 import { useIdentity } from './IdentityContext';
@@ -111,20 +113,20 @@ export default function PulseIntakeScreen() {
      */
     const loadChannels = useCallback(async () => {
         if (!identity) {
-            setChannelError('No identity available on this device.');
+            setChannelError(t('No identity available on this device.'));
             setLoadingChannels(false);
             return;
         }
         try {
             const url = await anchorUrl();
             if (!url) {
-                setChannelError('No community node configured.');
+                setChannelError(t('No community node configured.'));
                 setLoadingChannels(false);
                 return;
             }
             const res = await signedPost(url, '/api/channels/mine', {}, identity);
             const data = await res.json().catch(() => ({}));
-            if (!res.ok) throw new Error(data?.message || 'Could not load your channels.');
+            if (!res.ok) throw new Error(data?.message || t('Could not load your channels.'));
             const list: Channel[] = data.channels || [];
             setChannels(list);
             setChannelError(null);
@@ -137,7 +139,7 @@ export default function PulseIntakeScreen() {
                 setSelectedCategory(list[0].category);
             }
         } catch (e: any) {
-            setChannelError(e?.message || 'Failed to load channels.');
+            setChannelError(e?.message || t('Failed to load channels.'));
         } finally {
             setLoadingChannels(false);
         }
@@ -166,7 +168,7 @@ export default function PulseIntakeScreen() {
 
         try {
             const serverUrl = await anchorUrl();
-            if (!serverUrl) throw new Error('No community node available.');
+            if (!serverUrl) throw new Error(t('No community node available.'));
 
             const res = await signedPost(
                 serverUrl,
@@ -180,7 +182,7 @@ export default function PulseIntakeScreen() {
 
             const data = await res.json().catch(() => ({}));
             if (!res.ok) {
-                throw new Error(data?.message || data?.error || 'Could not preview post URL.');
+                throw new Error(data?.message || data?.error || t('Could not preview post URL.'));
             }
 
             const p = data.preview;
@@ -206,7 +208,7 @@ export default function PulseIntakeScreen() {
                 }
             }
         } catch (e: any) {
-            setUrlError(e?.message || 'Unable to resolve post preview.');
+            setUrlError(e?.message || t('Unable to resolve post preview.'));
             setPreviewData(null);
         } finally {
             setResolving(false);
@@ -279,15 +281,15 @@ export default function PulseIntakeScreen() {
     const handleSubmit = async () => {
         if (!identity) return;
         if (!urlInput.trim()) {
-            setUrlError('Please enter a post URL.');
+            setUrlError(t('Please enter a post URL.'));
             return;
         }
         if (!selectedChannelId) {
-            setSubmitError('Please select which of your channels this post belongs to.');
+            setSubmitError(t('Please select which of your channels this post belongs to.'));
             return;
         }
         if (!isOptedIn) {
-            setSubmitError('Review toggle is currently opted out. Toggle "Publish to Pulse" to submit.');
+            setSubmitError(t('Review toggle is currently opted out. Toggle "Publish to Pulse" to submit.'));
             return;
         }
 
@@ -296,7 +298,7 @@ export default function PulseIntakeScreen() {
 
         try {
             const serverUrl = await anchorUrl();
-            if (!serverUrl) throw new Error('No community node available.');
+            if (!serverUrl) throw new Error(t('No community node available.'));
 
             const res = await signedPost(
                 serverUrl,
@@ -314,7 +316,7 @@ export default function PulseIntakeScreen() {
 
             const data = await res.json().catch(() => ({}));
             if (!res.ok) {
-                throw new Error(data?.message || data?.error || 'Could not submit post to Pulse.');
+                throw new Error(data?.message || data?.error || t('Could not submit post to Pulse.'));
             }
 
             void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
@@ -329,7 +331,7 @@ export default function PulseIntakeScreen() {
                 }
             }, 1200);
         } catch (e: any) {
-            setSubmitError(e?.message || 'Submission failed. Please check the details and retry.');
+            setSubmitError(e?.message || t('Submission failed. Please check the details and retry.'));
             void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
         } finally {
             setSubmitting(false);
@@ -353,14 +355,14 @@ export default function PulseIntakeScreen() {
                         style={styles.backButton}
                         hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                         accessibilityRole="button"
-                        accessibilityLabel="Go back"
+                        accessibilityLabel={t('Go back')}
                     >
                         <Text style={styles.backIcon} allowFontScaling={false}>←</Text>
-                        <Text style={styles.backText}>Back</Text>
+                        <Text style={styles.backText}>{t('Back')}</Text>
                     </Pressable>
 
                     <Text style={styles.headerTitle} numberOfLines={1}>
-                        Add to Pulse
+                        {t('Add to Pulse')}
                     </Text>
                     <View style={styles.headerSpacer} />
                 </View>
@@ -372,24 +374,24 @@ export default function PulseIntakeScreen() {
                 >
                     {/* Intro subtitle */}
                     <Text style={styles.introText}>
-                        Share a single post or video from your external channels to your local community feed.
+                        {t('Share a single post or video from your external channels to your local community feed.')}
                     </Text>
 
                     {/* No Channels Notice */}
                     {!loadingChannels && channels.length === 0 ? (
                         <View style={styles.noChannelsCard} accessibilityRole="alert">
                             <Text style={styles.noChannelsIcon} allowFontScaling={false}>ℹ️</Text>
-                            <Text style={styles.noChannelsTitle}>No Channels Connected</Text>
+                            <Text style={styles.noChannelsTitle}>{t('No Channels Connected')}</Text>
                             <Text style={styles.noChannelsBody}>
-                                To share a post, you need to add your Instagram, TikTok, YouTube, or Blog channel first.
+                                {t('To share a post, you need to add your Instagram, TikTok, YouTube, or Blog channel first.')}
                             </Text>
                             <Pressable
                                 onPress={() => router.push('/channels')}
                                 style={styles.addChannelButton}
                                 accessibilityRole="button"
-                                accessibilityLabel="Manage Channels"
+                                accessibilityLabel={t('Manage Channels')}
                             >
-                                <Text style={styles.addChannelButtonText}>Add a Channel</Text>
+                                <Text style={styles.addChannelButtonText}>{t('Add a Channel')}</Text>
                             </Pressable>
                         </View>
                     ) : null}
@@ -403,15 +405,15 @@ export default function PulseIntakeScreen() {
                     {/* URL Input Section */}
                     <View style={styles.section}>
                         <View style={styles.sectionHeaderRow}>
-                            <Text style={styles.label}>Post URL</Text>
+                            <Text style={styles.label}>{t('Post URL')}</Text>
                             <Pressable
                                 onPress={pasteFromClipboard}
                                 style={styles.pasteButton}
                                 hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                                 accessibilityRole="button"
-                                accessibilityLabel="Paste link from clipboard"
+                                accessibilityLabel={t('Paste link from clipboard')}
                             >
-                                <Text style={styles.pasteText}>Paste</Text>
+                                <Text style={styles.pasteText}>{t('Paste')}</Text>
                             </Pressable>
                         </View>
 
@@ -419,7 +421,7 @@ export default function PulseIntakeScreen() {
                             style={[styles.input, urlError ? styles.inputError : null]}
                             value={urlInput}
                             onChangeText={handleUrlChange}
-                            placeholder="https://instagram.com/p/... or tiktok.com/..."
+                            placeholder={t('https://instagram.com/p/... or tiktok.com/...')}
                             placeholderTextColor={colors.text.muted}
                             autoCapitalize="none"
                             autoCorrect={false}
@@ -440,7 +442,7 @@ export default function PulseIntakeScreen() {
                         {resolving ? (
                             <View style={styles.resolvingRow}>
                                 <ActivityIndicator size="small" color={colors.brand.primary} />
-                                <Text style={styles.resolvingText}>Resolving post preview...</Text>
+                                <Text style={styles.resolvingText}>{t('Resolving post preview...')}</Text>
                             </View>
                         ) : null}
                     </View>
@@ -448,12 +450,13 @@ export default function PulseIntakeScreen() {
                     {/* Channel Selector Section (if member has channels) */}
                     {channels.length > 0 ? (
                         <View style={styles.section}>
-                            <Text style={styles.label}>Post from Channel</Text>
+                            <Text style={styles.label}>{t('Post from Channel')}</Text>
                             <View style={styles.chipsRow}>
                                 {channels.map((ch) => {
                                     const meta = platformMeta(ch.platform);
                                     const isSelected = selectedChannelId === ch.id;
-                                    const handleText = ch.handle ? ` · ${ch.handle}` : '';
+                                    // A platform's name (a brand as written, our own words translated) and the member's handle.
+                                    const chipText = ch.handle ? `${platformName(ch.platform)} · ${ch.handle}` : platformName(ch.platform);
 
                                     return (
                                         <Pressable
@@ -469,7 +472,7 @@ export default function PulseIntakeScreen() {
                                             ]}
                                             accessibilityRole="radio"
                                             accessibilityState={{ selected: isSelected }}
-                                            accessibilityLabel={`${meta.label}${handleText}`}
+                                            accessibilityLabel={chipText}
                                         >
                                             <Text style={styles.chipIcon} allowFontScaling={false}>
                                                 {meta.icon}
@@ -481,7 +484,7 @@ export default function PulseIntakeScreen() {
                                                 ]}
                                                 numberOfLines={1}
                                             >
-                                                {meta.label}{handleText}
+                                                {chipText}
                                             </Text>
                                         </Pressable>
                                     );
@@ -493,7 +496,7 @@ export default function PulseIntakeScreen() {
                     {/* Category Selector Section */}
                     {channels.length > 0 ? (
                         <View style={styles.section}>
-                            <Text style={styles.label}>Category</Text>
+                            <Text style={styles.label}>{t('Category')}</Text>
                             <View style={styles.chipsRow}>
                                 {CATEGORIES.map((cat) => {
                                     const isSelected = selectedCategory === cat.id;
@@ -508,7 +511,7 @@ export default function PulseIntakeScreen() {
                                             ]}
                                             accessibilityRole="radio"
                                             accessibilityState={{ selected: isSelected }}
-                                            accessibilityLabel={cat.label}
+                                            accessibilityLabel={t(cat.label)}
                                         >
                                             <Text style={styles.chipIcon} allowFontScaling={false}>
                                                 {cat.icon}
@@ -520,7 +523,7 @@ export default function PulseIntakeScreen() {
                                                 ]}
                                                 numberOfLines={1}
                                             >
-                                                {cat.label}
+                                                {t(cat.label)}
                                             </Text>
                                         </Pressable>
                                     );
@@ -532,7 +535,7 @@ export default function PulseIntakeScreen() {
                     {/* Review List & Facade Preview Card */}
                     {previewData ? (
                         <View style={styles.section}>
-                            <Text style={styles.label}>Review & Confirm</Text>
+                            <Text style={styles.label}>{t('Review & Confirm')}</Text>
                             <PulsePreviewCard
                                 preview={{
                                     ...previewData,
@@ -559,7 +562,7 @@ export default function PulseIntakeScreen() {
                         <View style={styles.successBanner} accessibilityRole="alert">
                             <Text style={styles.successIcon} allowFontScaling={false}>✓</Text>
                             <Text style={styles.successText}>
-                                Post shared to The Pulse! Returning to channels...
+                                {t('Post shared to The Pulse! Returning to channels...')}
                             </Text>
                         </View>
                     ) : null}
@@ -575,13 +578,13 @@ export default function PulseIntakeScreen() {
                                 pressed && styles.submitButtonPressed,
                             ]}
                             accessibilityRole="button"
-                            accessibilityLabel="Share to Pulse"
+                            accessibilityLabel={t('Share to Pulse')}
                         >
                             {submitting ? (
                                 <ActivityIndicator size="small" color={colors.text.inverse} />
                             ) : (
                                 <Text style={styles.submitButtonText}>
-                                    {previewData?.isDuplicate ? 'Update on Pulse' : 'Share to Pulse'}
+                                    {previewData?.isDuplicate ? t('Update on Pulse') : t('Share to Pulse')}
                                 </Text>
                             )}
                         </Pressable>

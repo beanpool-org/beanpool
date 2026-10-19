@@ -25,7 +25,7 @@ import { useCommunityInfo } from '../lib/features';
 import { globalCommunityLink, isAppsGlobal, phoneLaterLines } from '../lib/global-entry';
 import { webAppAddress, webAppHost } from '../lib/former-address';
 import { RecoveryKitButton } from '../components/RecoveryKitButton';
-import { NO_WORDS_HERE, SignInRecoveryLine, waysBackWithoutWords } from '../components/SignInRecoveryLine';
+import { noWordsHere, SignInRecoveryLine, waysBackWithoutWords } from '../components/SignInRecoveryLine';
 import { resolveAvatarUrl } from '../lib/avatar';
 import {
     DEFAULT_REMINDER_OFFSETS, REMINDER_OFFSETS, REMINDER_PREF_KEY, normaliseReminderOffsets, parseReminderOffsets,
@@ -1231,7 +1231,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                         <p data-testid="sign-out-device-way-back" className="text-xs text-nature-600 dark:text-nature-400 leading-relaxed m-0">
                                             {hasWords
                                                 ? t('Signs out and clears local browser storage. Your account and listings remain safely stored on the community node and can be restored anytime with your 12-word recovery phrase.')
-                                                : t('Signs out and clears local browser storage. Your account and listings remain safely stored on the community node. {noWords} {waysBack}', { noWords: NO_WORDS_HERE, waysBack: waysBackWithoutWords(signInRecovery) })}
+                                                : t('Signs out and clears local browser storage. Your account and listings remain safely stored on the community node. {noWords} {waysBack}', { noWords: noWordsHere(), waysBack: waysBackWithoutWords(signInRecovery) })}
                                         </p>
                                         <button
                                             onClick={() => setDeletionMode('confirm_local')}
@@ -1267,7 +1267,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                     <p data-testid="sign-out-device-confirm" className="text-xs text-nature-600 dark:text-nature-400 leading-relaxed m-0">
                                         {hasWords
                                             ? t('Are you sure you want to remove your account from this device? Ensure you have written down your 12-word recovery phrase if you plan to sign in again later.')
-                                            : t('Are you sure you want to remove your account from this device? {noWords} {waysBack}', { noWords: NO_WORDS_HERE, waysBack: waysBackWithoutWords(signInRecovery) })}
+                                            : t('Are you sure you want to remove your account from this device? {noWords} {waysBack}', { noWords: noWordsHere(), waysBack: waysBackWithoutWords(signInRecovery) })}
                                     </p>
                                     <div className="flex gap-3 pt-2">
                                         <button

@@ -3,8 +3,8 @@
  * database diagnostics, notification preferences, and subsystem controls.
  */
 
-import { AREA_STEP_WORDS, LANGS, describeArea, isLang, t } from '@beanpool/core';
-import { AreaStep } from '../components/AreaStep';
+import { AREA_STEP_WORDS, LANGS, describeArea, formatNumber, isLang, t, tn } from '@beanpool/core';
+import { AreaStep, areaFailureWords } from '../components/AreaStep';
 import { readMyArea, recallAreaPlace, rememberAreaPlace, senderForMe, useNearbyLimits, writeArea, type MemberArea } from '../lib/member-area';
 import { useState, useEffect, useRef } from 'react';
 import { type BeanPoolIdentity, wipeIdentity, getMnemonic, hasMnemonic, seedViewedKey } from '../lib/identity';
@@ -29,7 +29,6 @@ import { NO_WORDS_HERE, SignInRecoveryLine, waysBackWithoutWords } from '../comp
 import { resolveAvatarUrl } from '../lib/avatar';
 import {
     DEFAULT_REMINDER_OFFSETS, REMINDER_OFFSETS, REMINDER_PREF_KEY, normaliseReminderOffsets, parseReminderOffsets,
-    reminderOffsetLabel,
 } from '../lib/event-extras';
 import { ProfilePage } from './ProfilePage';
 import { type ThemePreference, THEME_PREFERENCE_OPTIONS } from '../lib/useTheme';
@@ -50,6 +49,8 @@ import { ArchetypeQuizModal } from '../components/ArchetypeQuizModal';
 import { SuggestChangeForm } from '../components/SuggestChangeForm';
 import { parseArchetype, ARCHETYPES, FEEDBACK_LIVE, BEANPOOL_WEBSITE_URL, beanPoolSettingsEntries, type QuizResult } from '@beanpool/core';
 import { MemberGuide } from '../components/MemberGuide';
+import { BoldWords } from '../components/BoldWords';
+import { Sentence } from '../components/Sentence';
 import { loadBlocklist, unblockUser, clearBlocklist, onBlocklistUpdated, getBlocklistFullNote } from '../lib/blocklist';
 import { clearSyncCursor } from '../lib/sync';
 import { WEB_COPY_CLEARS_LINE, anotherCopyMade, copyWordsForAMinute, leftTheWordsScreen } from '../lib/words-clipboard';
@@ -70,6 +71,19 @@ interface Props {
     openOwnerWordsCheck?: boolean;
     /** A sign-in that came back to be added to this account (App.tsx, lib/link-signin.ts): what came of it. */
     linkResult?: LinkResult | null;
+}
+
+/** One reminder offset as the tick row says it: the phone's words (components/settings/settings-lines.ts reminderBeforeWords). */
+function reminderBeforeWords(minutes: number): string {
+    switch (minutes) {
+        case 10080: return t('1 week before');
+        case 1440: return t('1 day before');
+        case 120: return t('2 hours before');
+        case 60: return t('1 hour before');
+        case 30: return t('30 minutes before');
+        // lib/event-extras writes any other offset as "{n} minutes", one form for both.
+        default: return tn(minutes, '{n} minutes before', '{n} minutes before');
+    }
 }
 
 function ToggleSwitch({
@@ -171,13 +185,13 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
         });
     };
     useEffect(() => { if (areaLimits) loadMyArea(); }, [areaLimits]);
-    const areaLine = !areaLoaded ? 'Checking…' : areaRefusal ?? (myArea === undefined ? "Couldn't check right now" : describeArea(myArea, recallAreaPlace()));
+    const areaLine = !areaLoaded ? t('Checking…') : areaRefusal ?? (myArea === undefined ? t("Couldn't check right now") : describeArea(myArea, recallAreaPlace()));
     const clearMyArea = async () => {
         setAreaClearing(true);
         setAreaError(null);
         const result = await writeArea(senderForMe, null);
         setAreaClearing(false);
-        if (!result.ok) { setAreaError(result.error); return; }
+        if (!result.ok) { setAreaError(areaFailureWords(result.error)); return; }
         rememberAreaPlace(null);
         setMyArea(null);
     };
@@ -258,7 +272,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
             await updateNotificationPreferences(identity.publicKey, { show_as_connection_in_common: next });
         } catch (e: any) {
             setShowAsConnection(!next);
-            setShowAsConnectionError(e?.message || 'Your community could not save that. Try again.');
+            setShowAsConnectionError(e?.message || t('Your community could not save that. Try again.'));
         }
     };
 
@@ -270,7 +284,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
             await setHolidayModeApi(next);
             setHolidayMode(next);
         } catch (e) {
-            window.alert(e instanceof Error ? e.message : 'Could not update holiday mode.');
+            window.alert(e instanceof Error ? e.message : t('Could not update holiday mode.'));
         } finally {
             setHolidayLoading(false);
         }
@@ -399,7 +413,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
         try {
             await showBlockedList(await loadBlocklist());
         } catch (e: any) {
-            setBlockedListError(e?.message || 'Couldn’t load your blocked members from your community. Try again.');
+            setBlockedListError(e?.message || t('Couldn’t load your blocked members from your community. Try again.'));
         } finally {
             setLoadingBlockedList(false);
         }
@@ -422,14 +436,14 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
         try {
             await unblockUser(pubkey);
         } catch (e: any) {
-            setBlockedActionError(e?.message || 'That did not go through. Please try again.');
+            setBlockedActionError(e?.message || t('That did not go through. Please try again.'));
         } finally {
             setBlockedBusy(null);
         }
     };
 
     const removeBlockedFriend = async (pubkey: string, callsign: string) => {
-        if (!window.confirm(`Remove ${callsign} from your friends? They stay blocked. They can notice a removal.`)) return;
+        if (!window.confirm(t('Remove {name} from your friends? They stay blocked. They can notice a removal.', { name: callsign }))) return;
         setBlockedActionError(null);
         setBlockedBusy(`friend:${pubkey}`);
         try {
@@ -438,21 +452,21 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
             setRemovedFriends(prev => new Set(prev).add(pubkey));
         } catch (e: any) {
             setBlockedActionError(e instanceof TypeError
-                ? 'Couldn’t reach your community, so they are still your friend. Check your connection and try again.'
-                : (e?.message || 'That did not go through, so they are still your friend. Please try again.'));
+                ? t('Couldn’t reach your community, so they are still your friend. Check your connection and try again.')
+                : (e?.message || t('That did not go through, so they are still your friend. Please try again.')));
         } finally {
             setBlockedBusy(null);
         }
     };
 
     const unblockEveryone = async () => {
-        if (!window.confirm('Are you sure you want to unblock all members?')) return;
+        if (!window.confirm(t('Are you sure you want to unblock all members?'))) return;
         setBlockedActionError(null);
         setBlockedBusy('all');
         try {
             await clearBlocklist();
         } catch (e: any) {
-            setBlockedActionError(e?.message || 'That did not go through. Please try again.');
+            setBlockedActionError(e?.message || t('That did not go through. Please try again.'));
         } finally {
             setBlockedBusy(null);
         }
@@ -462,7 +476,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
 
     // Database Diagnostics
     const [diagLoading, setDiagLoading] = useState(false);
-    const [storageEstimate, setStorageEstimate] = useState<string>('Detecting...');
+    const [storageEstimate, setStorageEstimate] = useState<string>(() => t('Detecting...'));
     const [dbStats, setDbStats] = useState<any>(null);
 
     const loadDiagnostics = async () => {
@@ -473,13 +487,12 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
             if (navigator.storage && navigator.storage.estimate) {
                 const est = await navigator.storage.estimate();
                 if (est.usage) {
-                    const mb = (est.usage / (1024 * 1024)).toFixed(2);
-                    setStorageEstimate(`${mb} MB`);
+                    setStorageEstimate(t('{size} MB', { size: formatNumber(est.usage / (1024 * 1024), 2) }));
                 } else {
-                    setStorageEstimate('< 1 MB');
+                    setStorageEstimate(t('< 1 MB'));
                 }
             } else {
-                setStorageEstimate('Local Web Storage');
+                setStorageEstimate(t('Local Web Storage'));
             }
 
             let memberCount = 0;
@@ -655,17 +668,17 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
         try {
             // Signed with the key it names (the node registers no key a redeem isn't signed by).
             await redeemInvite(redeemInviteCode.trim(), identity.publicKey, identity.callsign, identity);
-            setSuccess('Invite redeemed successfully on current node!');
+            setSuccess(t('Invite redeemed successfully on current node!'));
             setRedeemInviteCode('');
         } catch (e: any) {
-            setError(e.message || 'Redemption failed.');
+            setError(e.message || t('Redemption failed.'));
         } finally {
             setRedeemLoading(false);
         }
     }
 
     async function handleForceResync() {
-        if (window.confirm("Are you sure you want to clear the local client cache and force a complete resync from this community node?")) {
+        if (window.confirm(t('Are you sure you want to clear the local client cache and force a complete resync from this community node?'))) {
             setLoading(true);
             setError(null);
             setSuccess(null);
@@ -681,7 +694,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                 localStorage.removeItem('bp_peer_prefs');
                 localStorage.removeItem('beanpool-privacy-tier');
 
-                setSuccess('Cache cleared. Resynced & reloading application...');
+                setSuccess(t('Cache cleared. Resynced & reloading application...'));
                 setTimeout(() => {
                     // Cleared AGAIN immediately before the reload. The WebSocket stays open
                     // during this 1.5s message, so a broadcast arriving in the meantime runs a
@@ -692,7 +705,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                     window.location.reload();
                 }, 1500);
             } catch (e: any) {
-                setError("Resync failed: " + e.message);
+                setError(t('Resync failed: {error}', { error: e.message }));
                 setLoading(false);
             }
         }
@@ -713,22 +726,26 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                         onClick={onBack}
                         className="text-nature-600 dark:text-nature-400 font-semibold text-sm cursor-pointer border-none bg-transparent hover:text-nature-900 dark:hover:text-white"
                     >
-                        ← Back
+                        {t('← Back')}
                     </button>
                     <h2 className="flex-1 text-center text-xl font-bold text-nature-950 dark:text-white tracking-tight m-0 transition-colors">
-                        Settings
+                        {t('Settings')}
                     </h2>
                     <div className="w-12" />
                 </div>
 
                 {/* Identity Card */}
                 <div className="bg-white dark:bg-nature-900 rounded-2xl p-6 mb-6 shadow-soft border border-nature-200 dark:border-nature-800 transition-colors relative">
-                    <button
-                        onClick={() => setMode('profile')}
-                        className="absolute top-4 right-4 text-xs font-bold text-terra-600 dark:text-terra-400 bg-terra-50 dark:bg-terra-900/30 px-3 py-1.5 rounded-full border border-terra-200 dark:border-terra-800/60 cursor-pointer hover:bg-terra-100 dark:hover:bg-terra-900/60 dark:hover:text-terra-300 transition-all"
-                    >
-                        ✏️ Edit Profile
-                    </button>
+                    {/* In the card's flow, above the photo: a longer language's words (ru "Редактировать профиль") ran over the
+                        photo when it sat in the corner (e2e/words-w3-screens-check.mjs). */}
+                    <div className="flex justify-end -mt-2 -mr-2 mb-1">
+                        <button
+                            onClick={() => setMode('profile')}
+                            className="max-w-full break-words text-xs font-bold text-terra-600 dark:text-terra-400 bg-terra-50 dark:bg-terra-900/30 px-3 py-1.5 rounded-full border border-terra-200 dark:border-terra-800/60 cursor-pointer hover:bg-terra-100 dark:hover:bg-terra-900/60 dark:hover:text-terra-300 transition-all"
+                        >
+                            {t('✏️ Edit Profile')}
+                        </button>
+                    </div>
                     <div className="flex justify-center mb-4">
                         <div className="w-20 h-20 rounded-full border-4 border-terra-300 dark:border-terra-600 flex items-center justify-center text-3xl bg-oat-50 dark:bg-nature-800 shadow-inner overflow-hidden transition-colors">
                             {profile?.avatar ? (
@@ -745,17 +762,17 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                         {profile?.bio && <div className="text-xs text-nature-500 dark:text-nature-400 italic mt-1">{profile.bio}</div>}
                     </div>
 
-                    <div className="text-xs font-semibold uppercase tracking-wider text-nature-500 dark:text-nature-400 mb-1">Public Key</div>
+                    <div className="text-xs font-semibold uppercase tracking-wider text-nature-500 dark:text-nature-400 mb-1">{t('Public Key')}</div>
                     <div className="text-sm font-mono text-terra-600 dark:text-terra-400 bg-terra-50 dark:bg-terra-900/30 px-3 py-2 rounded-lg border border-terra-100 dark:border-terra-800/50 transition-colors break-all mb-3 flex items-center justify-between">
                         <span>{fingerprint}</span>
                         <button
                             onClick={() => {
                                 anotherCopyMade();
                                 navigator.clipboard.writeText(identity.publicKey);
-                                alert('Public Key copied to clipboard');
+                                alert(t('Public Key copied to clipboard'));
                             }}
                             className="text-xs border-none bg-transparent cursor-pointer"
-                            title="Copy Public Key"
+                            title={t('Copy Public Key')}
                         >
                             📋
                         </button>
@@ -763,9 +780,9 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
 
                     {/* Two versions, named: the node you are talking to, and the app in this
                         browser. Collapsing them into one number hides a stale cached bundle. */}
-                    <div className="flex justify-between items-center gap-2 text-xs text-nature-500 dark:text-nature-400 pt-2 border-t border-nature-100 dark:border-nature-800">
-                        <span className="truncate">Node: <code className="font-mono text-nature-700 dark:text-nature-300">{window.location.host}</code>{nodeVersion && <span className="font-mono ml-1">v{nodeVersion}</span>}</span>
-                        <span className="whitespace-nowrap" aria-label={`App version ${__APP_VERSION__}`}>App v{__APP_VERSION__}</span>
+                    <div className="flex flex-wrap justify-between items-center gap-x-2 gap-y-1 text-xs text-nature-500 dark:text-nature-400 pt-2 border-t border-nature-100 dark:border-nature-800">
+                        <span className="min-w-0 break-words"><Sentence text={t('Node: {address}')} parts={{ address: <code className="font-mono text-nature-700 dark:text-nature-300 break-all">{window.location.host}</code> }} />{nodeVersion && <span className="font-mono ml-1">{t('v{version}', { version: nodeVersion })}</span>}</span>
+                        <span className="whitespace-nowrap" aria-label={t('App version {version}', { version: __APP_VERSION__ })}>{t('App v{version}', { version: __APP_VERSION__ })}</span>
                     </div>
                 </div>
 
@@ -790,7 +807,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                         {/* ─── COMMUNITY WORKING STYLE ─── */}
                         <div>
                             <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-400 mb-2 px-1">
-                                COMMUNITY WORKING STYLE
+                                {t('COMMUNITY WORKING STYLE')}
                             </div>
                             {(() => {
                                 const parsed = parseArchetype(profile?.archetype);
@@ -804,38 +821,38 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                                 <span className="text-3xl select-none" aria-hidden="true">{primary.emoji}</span>
                                                 <div className="flex-1 min-w-0">
                                                     <div className="flex items-center justify-between gap-2">
-                                                        <span className="text-[15px] font-bold text-nature-950 dark:text-white truncate">
-                                                            {primary.name}
+                                                        <span className="min-w-0 text-[15px] font-bold text-nature-950 dark:text-white break-words">
+                                                            {t(primary.name)}
                                                         </span>
                                                         <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-bp-chip-ok-tint text-bp-chip-ok-ink border border-transparent shrink-0">
-                                                            {parsed.mode === 'deep' ? '27 Qs' : '9 Qs'}
+                                                            {parsed.mode === 'deep' ? t('27 Qs') : t('9 Qs')}
                                                         </span>
                                                     </div>
-                                                    <div className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 truncate">
-                                                        {primary.tagline}
+                                                    <div className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 break-words">
+                                                        {t(primary.tagline)}
                                                     </div>
                                                 </div>
                                             </div>
 
                                             <p className="text-xs sm:text-sm text-nature-600 dark:text-nature-400 leading-relaxed m-0">
-                                                {primary.description}
+                                                {t(primary.description)}
                                             </p>
 
                                             {secondary && (
                                                 <div className="inline-block px-3 py-1 rounded-full bg-oat-100 dark:bg-nature-800 text-xs font-semibold text-nature-800 dark:text-nature-300 border border-nature-200 dark:border-nature-700">
-                                                    Secondary Rhythm: {secondary.emoji} {secondary.name}
+                                                    {t('Secondary Rhythm: {emoji} {name}', { emoji: secondary.emoji, name: t(secondary.name) })}
                                                 </div>
                                             )}
 
                                             <div className="border-t border-nature-100 dark:border-nature-800 pt-3">
                                                 <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-400 mb-2">
-                                                    🌟 What you tend to enjoy
+                                                    {t('🌟 What you tend to enjoy')}
                                                 </div>
                                                 <ul className="space-y-1.5 m-0 p-0 list-none">
-                                                    {primary.superpowers.map((p, i) => (
+                                                    {primary.superpowers.map((_, i) => (
                                                         <li key={i} className="flex items-start gap-2 text-xs text-nature-700 dark:text-nature-300">
                                                             <span className="text-emerald-600 dark:text-emerald-400 font-bold shrink-0">•</span>
-                                                            <span>{p}</span>
+                                                            <span>{t(primary.superpowers[i])}</span>
                                                         </li>
                                                     ))}
                                                 </ul>
@@ -845,28 +862,28 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                                 {parsed.mode === 'quick' && (
                                                     <button
                                                         type="button"
-                                                        aria-label="Take the longer 27 question quiz for a more accurate result"
+                                                        aria-label={t('Take the longer 27 question quiz for a more accurate result')}
                                                         onClick={() => {
                                                             setQuizInitialMode('deep');
                                                             setShowQuizModal(true);
                                                         }}
-                                                        className="flex-1 min-w-0 py-2.5 px-3 rounded-xl text-xs font-bold bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on border-none cursor-pointer transition-colors shadow-sm truncate"
+                                                        className="flex-1 min-w-0 py-2.5 px-3 rounded-xl text-xs font-bold bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on border-none cursor-pointer transition-colors shadow-sm break-words"
                                                     >
-                                                        🧭 More accurate
+                                                        {t('🧭 More accurate')}
                                                     </button>
                                                 )}
                                                 <button
                                                     type="button"
-                                                    aria-label="Retake community working style quiz"
+                                                    aria-label={t('Retake community working style quiz')}
                                                     onClick={() => {
                                                         setQuizInitialMode('quick');
                                                         setShowQuizModal(true);
                                                     }}
-                                                    className={`min-w-0 py-2.5 px-3 rounded-xl text-xs font-bold border border-nature-200 dark:border-nature-700 bg-nature-50 dark:bg-nature-800 hover:bg-nature-100 dark:hover:bg-nature-700 text-nature-800 dark:text-nature-200 cursor-pointer transition-colors shadow-sm truncate ${
+                                                    className={`min-w-0 py-2.5 px-3 rounded-xl text-xs font-bold border border-nature-200 dark:border-nature-700 bg-nature-50 dark:bg-nature-800 hover:bg-nature-100 dark:hover:bg-nature-700 text-nature-800 dark:text-nature-200 cursor-pointer transition-colors shadow-sm break-words ${
                                                         parsed.mode === 'quick' ? 'flex-1' : 'w-full'
                                                     }`}
                                                 >
-                                                    🔄 Retake
+                                                    {t('🔄 Retake')}
                                                 </button>
                                             </div>
                                         </div>
@@ -881,23 +898,23 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                             </div>
                                             <div className="flex-1 min-w-0">
                                                 <div className="text-[15px] font-bold text-nature-950 dark:text-white mb-1">
-                                                    How you like to work
+                                                    {t('How you like to work')}
                                                 </div>
                                                 <p className="text-xs text-nature-600 dark:text-nature-400 leading-normal m-0">
-                                                    Take the 60-second quiz on how you prefer to work, and get tips for working well with neighbours.
+                                                    {t('Take the 60-second quiz on how you prefer to work, and get tips for working well with neighbours.')}
                                                 </p>
                                             </div>
                                         </div>
                                         <button
                                             type="button"
-                                            aria-label="Take 60-second community working style quiz"
+                                            aria-label={t('Take 60-second community working style quiz')}
                                             onClick={() => {
                                                 setQuizInitialMode('quick');
                                                 setShowQuizModal(true);
                                             }}
                                             className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on border-none cursor-pointer transition-colors shadow-sm"
                                         >
-                                            ⚡ Take 60s Quiz
+                                            {t('⚡ Take 60s Quiz')}
                                         </button>
                                     </div>
                                 );
@@ -907,7 +924,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                         {/* ─── ACCOUNT & IDENTITY ─── */}
                         <div>
                             <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-400 mb-2 px-1">
-                                ACCOUNT & IDENTITY
+                                {t('ACCOUNT & IDENTITY')}
                             </div>
                             <div className="space-y-2.5">
 
@@ -915,19 +932,19 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                 {!seedViewed && hasWords && (
                                     <div role="alert" className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-700 space-y-2">
                                         <p className="text-sm font-bold text-amber-900 dark:text-amber-300">
-                                            <span aria-hidden="true">⚠️</span> You haven't saved your recovery phrase yet
+                                            <span aria-hidden="true">⚠️</span> {t("You haven't saved your recovery phrase yet")}
                                         </p>
                                         <p className="text-xs text-amber-800 dark:text-amber-400 leading-relaxed">
                                             {signInRecoveryNames
-                                                ? <>Your 12 words bring your account back on any device, and so does signing in with {signInRecoveryNames}.</>
-                                                : <>Your 12 words are the <strong>only</strong> way to recover your account.</>}
-                                            {' '}Browsers can clear site data without warning — Safari does it after 7 days of inactivity.
+                                                ? <>{t('Your 12 words bring your account back on any device, and so does signing in with {names}.', { names: signInRecoveryNames })}</>
+                                                : <BoldWords text={t('Your 12 words are the **only** way to recover your account.')} />}
+                                            {' '}<>{t('Browsers can clear site data without warning — Safari does it after 7 days of inactivity.')}</>
                                         </p>
                                         <button
                                             onClick={() => setMode('seed')}
                                             className="mt-1 min-h-[44px] px-4 py-2.5 rounded-xl text-xs font-bold bg-bp-gold-fill hover:bg-bp-gold-hover text-bp-gold-on border-none cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
                                         >
-                                            View & Save Recovery Phrase
+                                            {t('View & Save Recovery Phrase')}
                                         </button>
                                     </div>
                                 )}
@@ -938,8 +955,8 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                     >
                                         <span className="text-xl">✨</span>
                                         <div className="flex-1">
-                                            <div className="text-[15px] font-bold">Re-run Setup</div>
-                                            <div className="text-xs font-normal text-nature-500 dark:text-nature-300">Update your name & photo, and how BeanPool works</div>
+                                            <div className="text-[15px] font-bold">{t('Re-run Setup')}</div>
+                                            <div className="text-xs font-normal text-nature-500 dark:text-nature-300">{t('Update your name & photo, and how BeanPool works')}</div>
                                         </div>
                                         <span className="text-nature-400 dark:text-nature-300 group-hover:translate-x-1 transition-transform">→</span>
                                     </button>
@@ -953,9 +970,9 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                 >
                                     <span className="text-xl">🔑</span>
                                     <div className="flex-1">
-                                        <div className="text-[15px] font-bold">View Recovery Phrase</div>
+                                        <div className="text-[15px] font-bold">{t('View Recovery Phrase')}</div>
                                         <div className="text-xs font-normal text-nature-500 dark:text-nature-300">
-                                            {hasWords ? 'View your 12-word backup seed' : 'Not saved in this browser'}
+                                            {hasWords ? t('View your 12-word backup seed') : t('Not saved in this browser')}
                                         </div>
                                     </div>
                                     <span className="text-nature-400 dark:text-nature-300 group-hover:translate-x-1 transition-transform">→</span>
@@ -967,7 +984,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                         {/* ─── APP SETTINGS ─── */}
                         <div>
                             <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-400 mb-2 px-1">
-                                APP SETTINGS
+                                {t('APP SETTINGS')}
                             </div>
                             <div className="space-y-2.5">
                                 {/* Appearance: follow the device, or always light / dark */}
@@ -975,12 +992,12 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                     <div className="flex items-center gap-3">
                                         <span className="text-xl">🌙</span>
                                         <div>
-                                            <div className="text-[15px] font-bold text-nature-900 dark:text-white">Appearance</div>
-                                            <div className="text-xs text-nature-500 dark:text-nature-400">Light or dark, or the same as your device</div>
+                                            <div className="text-[15px] font-bold text-nature-900 dark:text-white">{t('Appearance')}</div>
+                                            <div className="text-xs text-nature-500 dark:text-nature-400">{t('Light or dark, or the same as your device')}</div>
                                         </div>
                                     </div>
-                                    <div role="radiogroup" aria-label="Appearance" className="mt-3 flex gap-1 p-1 rounded-xl bg-nature-100 dark:bg-nature-800">
-                                        {THEME_PREFERENCE_OPTIONS.map(({ value, label }) => {
+                                    <div role="radiogroup" aria-label={t('Appearance')} className="mt-3 flex gap-1 p-1 rounded-xl bg-nature-100 dark:bg-nature-800">
+                                        {THEME_PREFERENCE_OPTIONS.map(({ value }, i) => {
                                             const selected = themePreference === value;
                                             return (
                                                 <button
@@ -989,11 +1006,11 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                                     role="radio"
                                                     aria-checked={selected}
                                                     onClick={() => onThemePreferenceChange(value)}
-                                                    className={`flex-1 min-h-[48px] px-1.5 py-1.5 rounded-lg text-[13px] text-center leading-tight cursor-pointer transition-colors ${selected
+                                                    className={`flex-1 min-w-0 min-h-[48px] px-1.5 py-1.5 rounded-lg text-[13px] text-center leading-tight break-words cursor-pointer transition-colors ${selected
                                                         ? 'bg-white dark:bg-nature-950 border border-nature-500 font-bold text-nature-900 dark:text-white'
                                                         : 'border border-transparent font-medium text-nature-600 dark:text-nature-300'}`}
                                                 >
-                                                    {label}
+                                                    {t(THEME_PREFERENCE_OPTIONS[i].label)}
                                                 </button>
                                             );
                                         })}
@@ -1008,8 +1025,8 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                     <label className="flex items-center gap-3 cursor-pointer">
                                         <span className="text-xl">🎨</span>
                                         <div className="flex-1">
-                                            <div className="text-[15px] font-bold text-nature-900 dark:text-white">Background pattern</div>
-                                            <div className="text-xs text-nature-500 dark:text-nature-400">Doodles behind the app, or a plain background</div>
+                                            <div className="text-[15px] font-bold text-nature-900 dark:text-white">{t('Background pattern')}</div>
+                                            <div className="text-xs text-nature-500 dark:text-nature-400">{t('Doodles behind the app, or a plain background')}</div>
                                         </div>
                                         <input
                                             type="checkbox"
@@ -1030,8 +1047,8 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                 >
                                     <span className="text-xl">🔔</span>
                                     <div className="flex-1">
-                                        <div className="text-[15px] font-bold">Notification Preferences</div>
-                                        <div className="text-xs font-normal text-nature-500 dark:text-nature-300">Phone app push notification settings</div>
+                                        <div className="text-[15px] font-bold">{t('Notification Preferences')}</div>
+                                        <div className="text-xs font-normal text-nature-500 dark:text-nature-300">{t('Phone app push notification settings')}</div>
                                     </div>
                                     <span className="text-nature-400 dark:text-nature-300 group-hover:translate-x-1 transition-transform">→</span>
                                 </button>
@@ -1045,7 +1062,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                     >
                                         <span className="text-xl">📍</span>
                                         <div className="flex-1 min-w-0">
-                                            <div className="text-[15px] font-bold">{AREA_STEP_WORDS.settingsRow}</div>
+                                            <div className="text-[15px] font-bold">{t(AREA_STEP_WORDS.settingsRow)}</div>
                                             <div className="text-xs font-normal text-nature-500 dark:text-nature-300 break-words">{areaLine}</div>
                                         </div>
                                         <span className="text-nature-400 dark:text-nature-300 group-hover:translate-x-1 transition-transform">→</span>
@@ -1057,14 +1074,14 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                     <div className="flex items-center gap-3">
                                         <span className="text-xl">🗺️</span>
                                         <div>
-                                            <div className="text-[15px] font-bold text-nature-900 dark:text-white">Modern Map Pins</div>
-                                            <div className="text-xs text-nature-500 dark:text-nature-400">Toggle custom pin markers</div>
+                                            <div className="text-[15px] font-bold text-nature-900 dark:text-white">{t('Modern Map Pins')}</div>
+                                            <div className="text-xs text-nature-500 dark:text-nature-400">{t('Toggle custom pin markers')}</div>
                                         </div>
                                     </div>
                                     <ToggleSwitch
                                         checked={useModernMarkers}
                                         onChange={handleToggleModernMarkers}
-                                        label="Modern Map Pins"
+                                        label={t('Modern Map Pins')}
                                         activeBgClass="bg-bp-commit-fill border-bp-commit-fill"
                                     />
                                 </div>
@@ -1074,9 +1091,9 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                     <div className="flex items-center gap-3">
                                         <span className="text-xl">🌴</span>
                                         <div>
-                                            <div className="text-[15px] font-bold text-nature-900 dark:text-white">Holiday Mode</div>
+                                            <div className="text-[15px] font-bold text-nature-900 dark:text-white">{t('Holiday Mode')}</div>
                                             <div className="text-xs text-nature-500 dark:text-nature-400">
-                                                {holidayMode ? "Away — offers hidden" : 'Hide offers & pause requests'}
+                                                {holidayMode ? t('Away — offers hidden') : t('Hide offers & pause requests')}
                                             </div>
                                         </div>
                                     </div>
@@ -1084,7 +1101,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                         checked={holidayMode}
                                         onChange={handleToggleHoliday}
                                         disabled={holidayLoading}
-                                        label="Holiday Mode"
+                                        label={t('Holiday Mode')}
                                         activeBgClass="bg-bp-gold-fill border-bp-gold-fill"
                                     />
                                 </div>
@@ -1098,7 +1115,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                         {/* ─── LEGAL & PRIVACY ─── */}
                         <div>
                             <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-400 mb-2 px-1">
-                                LEGAL & PRIVACY
+                                {t('LEGAL & PRIVACY')}
                             </div>
                             <div className="bg-white dark:bg-nature-900 rounded-2xl shadow-sm border border-nature-200 dark:border-nature-800 overflow-hidden divide-y divide-nature-100 dark:divide-nature-800">
                                 <button
@@ -1106,35 +1123,35 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                     onClick={() => setMode('blocked-users')}
                                     className="w-full p-4 text-nature-900 dark:text-white font-bold text-[15px] flex items-center justify-between hover:bg-nature-50 dark:hover:bg-nature-800 transition-colors bg-transparent border-none cursor-pointer text-left"
                                 >
-                                    <span className="flex items-center gap-3">🚫 Manage Blocked Members</span>
+                                    <span className="flex items-center gap-3">🚫 <>{t('Manage Blocked Members')}</></span>
                                     <span className="text-nature-400 dark:text-nature-300">›</span>
                                 </button>
                                 {showAsConnection !== null && (
                                     <div className="p-4 flex items-center justify-between gap-3" data-testid="show-as-connection">
                                         <span className="min-w-0">
-                                            <span className="block text-text-primary font-bold text-[15px]">🤝 Show me as a connection in common</span>
-                                            <span className="block text-text-muted text-[12px] mt-0.5">When you and two people are friends both ways, each can see your name on the other's profile</span>
+                                            <span className="block text-text-primary font-bold text-[15px]">🤝 <>{t('Show me as a connection in common')}</></span>
+                                            <span className="block text-text-muted text-[12px] mt-0.5">{t("When you and two people are friends both ways, each can see your name on the other's profile")}</span>
                                             {showAsConnectionError && <span role="alert" className="block text-text-primary text-[12px] mt-1 font-semibold">{showAsConnectionError}</span>}
                                         </span>
                                         <ToggleSwitch
                                             checked={showAsConnection}
                                             onChange={handleToggleShowAsConnection}
-                                            label="Show me as a connection in common"
+                                            label={t('Show me as a connection in common')}
                                             activeBgClass="bg-accent border-accent"
                                             inactiveBgClass="bg-bg-hover border-border-primary"
                                         />
                                     </div>
                                 )}
                                 <a href="https://beanpool.org/privacy.html" target="_blank" rel="noopener noreferrer" className="p-4 text-nature-900 dark:text-white font-bold text-[15px] flex items-center justify-between hover:bg-nature-50 dark:hover:bg-nature-800 transition-colors no-underline">
-                                    <span className="flex items-center gap-3">🛡️ Privacy Policy</span>
+                                    <span className="flex items-center gap-3">🛡️ <>{t('Privacy Policy')}</></span>
                                     <span className="text-nature-400 dark:text-nature-300">›</span>
                                 </a>
                                 <a href="https://beanpool.org/terms.html" target="_blank" rel="noopener noreferrer" className="p-4 text-nature-900 dark:text-white font-bold text-[15px] flex items-center justify-between hover:bg-nature-50 dark:hover:bg-nature-800 transition-colors no-underline">
-                                    <span className="flex items-center gap-3">⚖️ Terms of Service & EULA</span>
+                                    <span className="flex items-center gap-3">⚖️ <>{t('Terms of Service & EULA')}</></span>
                                     <span className="text-nature-400 dark:text-nature-300">›</span>
                                 </a>
                                 <a href="https://beanpool.org/safety.html" target="_blank" rel="noopener noreferrer" className="p-4 text-nature-900 dark:text-white font-bold text-[15px] flex items-center justify-between hover:bg-nature-50 dark:hover:bg-nature-800 transition-colors no-underline">
-                                    <span className="flex items-center gap-3">🚸 Child Safety Standards</span>
+                                    <span className="flex items-center gap-3">🚸 <>{t('Child Safety Standards')}</></span>
                                     <span className="text-nature-400 dark:text-nature-300">›</span>
                                 </a>
                             </div>
@@ -1143,7 +1160,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                         {/* ─── SYSTEM ─── */}
                         <div>
                             <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-400 mb-2 px-1">
-                                SYSTEM
+                                {t('SYSTEM')}
                             </div>
                             <div className="space-y-2.5">
                                 <button
@@ -1152,8 +1169,8 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                 >
                                     <span className="text-xl">📊</span>
                                     <div className="flex-1">
-                                        <div className="text-[15px] font-bold">Database Health & Stats</div>
-                                        <div className="text-xs font-normal text-nature-500 dark:text-nature-300">Local storage metrics & integrity checks</div>
+                                        <div className="text-[15px] font-bold">{t('Database Health & Stats')}</div>
+                                        <div className="text-xs font-normal text-nature-500 dark:text-nature-300">{t('Local storage metrics & integrity checks')}</div>
                                     </div>
                                     <span className="text-nature-400 dark:text-nature-300 group-hover:translate-x-1 transition-transform">→</span>
                                 </button>
@@ -1164,8 +1181,8 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                 >
                                     <span className="text-xl">⚙️</span>
                                     <div className="flex-1">
-                                        <div className="text-[15px] font-bold">Advanced / Subsystem</div>
-                                        <div className="text-xs font-normal text-nature-500 dark:text-nature-300">Node management & cache controls</div>
+                                        <div className="text-[15px] font-bold">{t('Advanced / Subsystem')}</div>
+                                        <div className="text-xs font-normal text-nature-500 dark:text-nature-300">{t('Node management & cache controls')}</div>
                                     </div>
                                     <span className="text-nature-400 dark:text-nature-300 group-hover:translate-x-1 transition-transform">→</span>
                                 </button>
@@ -1175,7 +1192,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                         {/* ─── DANGER ZONE: GRANULAR ACCOUNT DELETION (#99) ─── */}
                         <div>
                             <div className="text-xs font-bold uppercase tracking-wider text-red-500 dark:text-red-400 mb-2 px-1">
-                                DANGER ZONE
+                                {t('DANGER ZONE')}
                             </div>
 
                             {deletionMode === 'none' && (
@@ -1187,7 +1204,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                     }}
                                     className="w-full p-4 rounded-2xl bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 font-bold border border-red-200 dark:border-red-800 shadow-sm hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors text-left flex items-center justify-between cursor-pointer"
                                 >
-                                    <span className="flex items-center gap-3">⚠️ Account Deletion & Sign Out</span>
+                                    <span className="flex items-center gap-3">⚠️ <>{t('Account Deletion & Sign Out')}</></span>
                                     <span>→</span>
                                 </button>
                             )}
@@ -1196,47 +1213,47 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                 <div className="bg-red-50/70 dark:bg-red-950/30 rounded-2xl p-5 border-2 border-red-200 dark:border-red-900 space-y-4">
                                     <div className="flex items-center justify-between">
                                         <h4 className="text-red-900 dark:text-red-300 font-bold text-sm m-0">
-                                            Choose an Action
+                                            {t('Choose an Action')}
                                         </h4>
                                         <button
                                             onClick={() => setDeletionMode('none')}
                                             className="text-xs text-nature-500 dark:text-nature-400 hover:text-nature-900 dark:hover:text-white bg-transparent border-none cursor-pointer"
                                         >
-                                            ✕ Cancel
+                                            {t('✕ Cancel')}
                                         </button>
                                     </div>
 
                                     {/* Option 1: Device Wipe Only */}
                                     <div className="bg-white dark:bg-nature-900 p-4 rounded-xl border border-nature-200 dark:border-nature-800 space-y-2">
                                         <div className="font-bold text-sm text-nature-900 dark:text-white flex items-center gap-2">
-                                            <span>🚪</span> Remove from This Device Only
+                                            <span>🚪</span> {t('Remove from This Device Only')}
                                         </div>
                                         <p data-testid="sign-out-device-way-back" className="text-xs text-nature-600 dark:text-nature-400 leading-relaxed m-0">
                                             {hasWords
-                                                ? 'Signs out and clears local browser storage. Your account and listings remain safely stored on the community node and can be restored anytime with your 12-word recovery phrase.'
-                                                : `Signs out and clears local browser storage. Your account and listings remain safely stored on the community node. ${NO_WORDS_HERE} ${waysBackWithoutWords(signInRecovery)}`}
+                                                ? t('Signs out and clears local browser storage. Your account and listings remain safely stored on the community node and can be restored anytime with your 12-word recovery phrase.')
+                                                : t('Signs out and clears local browser storage. Your account and listings remain safely stored on the community node. {noWords} {waysBack}', { noWords: NO_WORDS_HERE, waysBack: waysBackWithoutWords(signInRecovery) })}
                                         </p>
                                         <button
                                             onClick={() => setDeletionMode('confirm_local')}
                                             className="mt-2 w-full py-2.5 rounded-xl bg-nature-100 dark:bg-nature-800 text-nature-800 dark:text-nature-200 font-bold text-xs border-none cursor-pointer hover:bg-nature-200 dark:hover:bg-nature-700 transition-colors"
                                         >
-                                            Sign Out (Device Only)
+                                            {t('Sign Out (Device Only)')}
                                         </button>
                                     </div>
 
                                     {/* Option 2: Full Node Data Purge */}
                                     <div className="bg-red-50 dark:bg-red-900/20 p-4 rounded-xl border border-red-300 dark:border-red-800 space-y-2">
                                         <div className="font-bold text-sm text-red-900 dark:text-red-300 flex items-center gap-2">
-                                            <span>🗑️</span> Permanently Delete Account & Node Data
+                                            <span>🗑️</span> {t('Permanently Delete Account & Node Data')}
                                         </div>
                                         <p data-testid="delete-card-line" className="text-xs text-red-800 dark:text-red-400 leading-relaxed m-0">
-                                            {WEB_DELETE_CARD_LINE} <strong>Cannot be undone, even with your 12-word phrase.</strong>
+                                            {WEB_DELETE_CARD_LINE} <strong>{t('Cannot be undone, even with your 12-word phrase.')}</strong>
                                         </p>
                                         <button
                                             onClick={openPurge}
                                             className="mt-2 w-full py-2.5 rounded-xl bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on font-bold text-xs border-none cursor-pointer transition-colors shadow-sm"
                                         >
-                                            Permanently Delete Account
+                                            {t('Permanently Delete Account')}
                                         </button>
                                     </div>
                                 </div>
@@ -1245,12 +1262,12 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                             {deletionMode === 'confirm_local' && (
                                 <div className="bg-white dark:bg-nature-900 rounded-2xl p-5 border-2 border-nature-200 dark:border-nature-700 space-y-3">
                                     <h4 className="text-nature-900 dark:text-white font-bold text-sm m-0">
-                                        🚪 Confirm Device Sign Out
+                                        {t('🚪 Confirm Device Sign Out')}
                                     </h4>
                                     <p data-testid="sign-out-device-confirm" className="text-xs text-nature-600 dark:text-nature-400 leading-relaxed m-0">
                                         {hasWords
-                                            ? 'Are you sure you want to remove your account from this device? Ensure you have written down your 12-word recovery phrase if you plan to sign in again later.'
-                                            : `Are you sure you want to remove your account from this device? ${NO_WORDS_HERE} ${waysBackWithoutWords(signInRecovery)}`}
+                                            ? t('Are you sure you want to remove your account from this device? Ensure you have written down your 12-word recovery phrase if you plan to sign in again later.')
+                                            : t('Are you sure you want to remove your account from this device? {noWords} {waysBack}', { noWords: NO_WORDS_HERE, waysBack: waysBackWithoutWords(signInRecovery) })}
                                     </p>
                                     <div className="flex gap-3 pt-2">
                                         <button
@@ -1258,7 +1275,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                             disabled={isPurging}
                                             className="flex-1 py-2.5 rounded-xl bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 font-bold border-none cursor-pointer disabled:cursor-not-allowed text-xs"
                                         >
-                                            Cancel
+                                            {t('Cancel')}
                                         </button>
                                         <button
                                             onClick={async () => {
@@ -1275,7 +1292,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                             disabled={isPurging}
                                             className="flex-1 py-2.5 rounded-xl bg-nature-900 dark:bg-white text-white dark:text-nature-900 font-bold border-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed text-xs"
                                         >
-                                            {isPurging ? 'Signing Out...' : 'Confirm Sign Out'}
+                                            {isPurging ? t('Signing Out...') : t('Confirm Sign Out')}
                                         </button>
                                     </div>
                                 </div>
@@ -1289,18 +1306,22 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                 return (
                                     <div className="bg-red-50 dark:bg-red-900/20 rounded-2xl p-5 border-2 border-red-300 dark:border-red-700 space-y-3">
                                         <h4 className="text-red-900 dark:text-red-300 font-bold text-sm m-0">
-                                            ⚠️ Irreversible Node Purge
+                                            {t('⚠️ Irreversible Node Purge')}
                                         </h4>
                                         <p className="text-xs text-red-800 dark:text-red-400 leading-relaxed m-0">
-                                            Type your callsign <strong>{identity?.callsign || 'CALLSIGN'}</strong> or <strong>DELETE</strong> to confirm permanent deletion of your account from this community node:
+                                            {/* DELETE is what the member types (the code compares it), so it is never translated. */}
+                                            <Sentence
+                                                text={t('Type your callsign {name} or {word} to confirm permanent deletion of your account from this community node:')}
+                                                parts={{ name: <strong>{identity?.callsign || 'CALLSIGN'}</strong>, word: <strong>DELETE</strong> }}
+                                            />
                                         </p>
                                         <input
                                             id="purge-callsign-input"
                                             type="text"
                                             value={purgeCallsignInput}
                                             onChange={(e) => setPurgeCallsignInput(e.target.value)}
-                                            placeholder={`Type "${identity?.callsign || ''}" or "DELETE"`}
-                                            aria-label={`Type callsign ${identity?.callsign || ''} or DELETE to confirm permanent deletion`}
+                                            placeholder={t('Type "{name}" or "{word}"', { name: identity?.callsign || '', word: 'DELETE' })}
+                                            aria-label={t('Type callsign {name} or {word} to confirm permanent deletion', { name: identity?.callsign || '', word: 'DELETE' })}
                                             aria-invalid={Boolean(purgeError)}
                                             aria-describedby={purgeError ? 'purge-error-alert' : undefined}
                                             disabled={isPurging}
@@ -1331,12 +1352,12 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                                 disabled={isPurging}
                                                 className="flex-1 py-2.5 rounded-xl bg-white dark:bg-nature-900 text-nature-700 dark:text-nature-300 font-bold border border-nature-200 dark:border-nature-700 cursor-pointer disabled:cursor-not-allowed text-xs"
                                             >
-                                                Cancel
+                                                {t('Cancel')}
                                             </button>
                                             <button
                                                 onClick={async () => {
                                                     if (!isPurgeConfirmed) {
-                                                        setPurgeError(`Please type "${identity?.callsign || ''}" or "DELETE" exactly to confirm.`);
+                                                        setPurgeError(t('Please type "{name}" or "{word}" exactly to confirm.', { name: identity?.callsign || '', word: 'DELETE' }));
                                                         return;
                                                     }
                                                     // The screen said what stays; exactly that happens.
@@ -1356,7 +1377,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                                         if (plan.kind === 'this-one') {
                                                             // The page's own community keeps the key: back to it, key and settings kept.
                                                             await leaveThisCommunity();
-                                                            setPurgedNote(`Account deleted at ${hostOf(plan.here)}. This browser keeps your key for ${hostOf(plan.keeps.url)}. Reloading app...`);
+                                                            setPurgedNote(t('Account deleted at {here}. This browser keeps your key for {kept}. Reloading app...', { here: hostOf(plan.here), kept: hostOf(plan.keeps.url) }));
                                                         } else {
                                                             try {
                                                                 await wipeIdentity();
@@ -1376,7 +1397,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                                 disabled={isPurging || !isPurgeConfirmed || !deletePlan}
                                                 className="flex-1 py-2.5 rounded-xl bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on font-bold border-none transition-colors text-xs shadow-sm cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
                                             >
-                                                {isPurging ? 'Purging...' : '🔥 Purge Account'}
+                                                {isPurging ? t('Purging...') : t('🔥 Purge Account')}
                                             </button>
                                         </div>
                                     </div>
@@ -1386,7 +1407,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                             {deletionMode === 'purged' && (
                                 <div className="bg-red-100 dark:bg-red-900/30 rounded-2xl p-4 text-center border border-red-200 dark:border-red-800">
                                     <p className="text-red-800 dark:text-red-400 font-bold text-xs m-0">
-                                        {purgedNote ?? 'Account data purged. Reloading app...'}
+                                        {purgedNote ?? t('Account data purged. Reloading app...')}
                                     </p>
                                 </div>
                             )}
@@ -1397,20 +1418,18 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                 {/* ─── MODE: VIEW RECOVERY PHRASE (SEED) ─── */}
                 {mode === 'seed' && (
                     <div className="bg-white dark:bg-nature-900 rounded-2xl p-6 shadow-soft border border-nature-200 dark:border-nature-800">
-                        <h3 className="text-lg font-bold text-nature-950 dark:text-white mb-2">🔑 Recovery Phrase</h3>
+                        <h3 className="text-lg font-bold text-nature-950 dark:text-white mb-2">{t('🔑 Recovery Phrase')}</h3>
                         <p className="text-xs text-nature-500 dark:text-nature-400 mb-3 leading-relaxed">
-                            Your 12-word recovery phrase allows you to restore your identity on any device. Anyone with these words can control your account. Keep them secret and offline.
+                            {t('Your 12-word recovery phrase allows you to restore your identity on any device. Anyone with these words can control your account. Keep them secret and offline.')}
                         </p>
 
                         {/* Browser eviction warning: to write down the words shown below, so only when there are some */}
                         {hasWords && <div className="bg-amber-50 dark:bg-amber-950/30 p-3 rounded-xl border border-amber-200 dark:border-amber-800 mb-5">
                             <p className="text-xs font-semibold text-amber-800 dark:text-amber-300 mb-1">
-                                ⚠️ Browser storage is not permanent
+                                {t('⚠️ Browser storage is not permanent')}
                             </p>
                             <p className="text-[11px] text-amber-700 dark:text-amber-400 leading-relaxed">
-                                Safari clears site data after <strong>7 days of inactivity</strong>, and clearing browsing data
-                                wipes your local keys. Write these words on paper — it's the only offline backup
-                                that can't be wiped by your browser.
+                                <BoldWords text={t("Safari clears site data after **7 days of inactivity**, and clearing browsing data wipes your local keys. Write these words on paper — it's the only offline backup that can't be wiped by your browser.")} />
                             </p>
                         </div>}
 
@@ -1432,7 +1451,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                         </div>
                                     )) : (
                                         <div className="col-span-3 flex items-center justify-center text-xs text-nature-400 animate-pulse">
-                                            Reading your recovery phrase…
+                                            {t('Reading your recovery phrase…')}
                                         </div>
                                     )}
                                 </div>
@@ -1443,7 +1462,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                     onClick={handleCopySeed}
                                     className="w-full py-3 mb-2 rounded-xl font-bold bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on border-none cursor-pointer transition-colors text-sm shadow-sm"
                                 >
-                                    {seedCopied ? '✅ Copied to Clipboard!' : '📋 Copy All Words'}
+                                    {seedCopied ? t('✅ Copied to Clipboard!') : t('📋 Copy All Words')}
                                 </button>
                                 <p data-testid="seed-copy-clears" className="text-[11px] text-nature-500 dark:text-nature-400 leading-relaxed mb-4">
                                     {WEB_COPY_CLEARS_LINE}{' '}
@@ -1454,9 +1473,9 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                             // Not "generated without seed phrase storage": most often it was brought back from a sign-in copy
                             // that did not carry them (web-restore.ts). What brings it back if this browser is cleared.
                             <div data-testid="seed-not-here" className="bg-amber-50 dark:bg-amber-950/30 p-4 rounded-xl text-xs leading-relaxed text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 mb-6 space-y-1.5">
-                                <p className="font-bold m-0">Your 12 words aren't saved in this browser, so they can't be shown here.</p>
+                                <p className="font-bold m-0">{t("Your 12 words aren't saved in this browser, so they can't be shown here.")}</p>
                                 <p className="m-0">{waysBackWithoutWords(signInRecovery)}</p>
-                                <p className="m-0">Browsers can clear saved data without warning: Safari does it after 7 days without a visit.</p>
+                                <p className="m-0">{t('Browsers can clear saved data without warning: Safari does it after 7 days without a visit.')}</p>
                             </div>
                         )}
 
@@ -1464,7 +1483,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                             onClick={() => setMode('menu')}
                             className="w-full py-3 rounded-xl font-semibold bg-oat-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-none cursor-pointer hover:bg-oat-200 dark:hover:bg-nature-700 dark:hover:text-nature-200 transition-colors text-sm"
                         >
-                            ← Back to Settings
+                            {t('← Back to Settings')}
                         </button>
                     </div>
                 )}
@@ -1474,20 +1493,20 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                 {/* ─── MODE: DATABASE DIAGNOSTICS & HEALTH ─── */}
                 {mode === 'diagnostics' && (
                     <div className="bg-white dark:bg-nature-900 rounded-2xl p-6 shadow-soft border border-nature-200 dark:border-nature-800">
-                        <h3 className="text-lg font-bold text-nature-950 dark:text-white mb-2">📊 Database Diagnostics & Health</h3>
+                        <h3 className="text-lg font-bold text-nature-950 dark:text-white mb-2">{t('📊 Database Diagnostics & Health')}</h3>
                         <p className="text-xs text-nature-500 dark:text-nature-400 mb-5 leading-relaxed">
-                            Transparency metrics for your local off-grid database cache. Structural check verifies zero data corruption.
+                            {t('Transparency metrics for your local off-grid database cache. Structural check verifies zero data corruption.')}
                         </p>
 
                         {diagLoading ? (
-                            <div className="py-10 text-center text-sm text-nature-500 dark:text-nature-400 animate-pulse">Running Structural Integrity Check...</div>
+                            <div className="py-10 text-center text-sm text-nature-500 dark:text-nature-400 animate-pulse">{t('Running Structural Integrity Check...')}</div>
                         ) : (
                             <>
                                 {/* Status Banner */}
                                 <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 p-4 rounded-xl flex items-center justify-between mb-5">
-                                    <span className="text-xs font-bold text-nature-700 dark:text-nature-300">Database Status:</span>
+                                    <span className="text-xs font-bold text-nature-700 dark:text-nature-300">{t('Database Status:')}</span>
                                     <span className="text-xs font-extrabold text-emerald-700 dark:text-emerald-300 px-3 py-1 bg-emerald-100 dark:bg-emerald-900/40 rounded-full border border-emerald-300 dark:border-emerald-700">
-                                        🟢 Healthy & Synced
+                                        {t('🟢 Healthy & Synced')}
                                     </span>
                                 </div>
 
@@ -1496,34 +1515,34 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                     <div className="p-3.5 rounded-xl border border-nature-200 dark:border-nature-800 bg-oat-50/50 dark:bg-nature-950/50">
                                         <div className="text-xl mb-1">👥</div>
                                         <div className="text-lg font-black text-nature-900 dark:text-white">{dbStats?.members ?? 0}</div>
-                                        <div className="text-[11px] text-nature-500 dark:text-nature-400 font-semibold">Community Members</div>
+                                        <div className="text-[11px] text-nature-500 dark:text-nature-400 font-semibold">{t('Community Members')}</div>
                                     </div>
                                     <div className="p-3.5 rounded-xl border border-nature-200 dark:border-nature-800 bg-oat-50/50 dark:bg-nature-950/50">
                                         <div className="text-xl mb-1">🛒</div>
                                         <div className="text-lg font-black text-nature-900 dark:text-white">{dbStats?.posts ?? 0}</div>
-                                        <div className="text-[11px] text-nature-500 dark:text-nature-400 font-semibold">Active Posts</div>
+                                        <div className="text-[11px] text-nature-500 dark:text-nature-400 font-semibold">{t('Active Posts')}</div>
                                     </div>
                                     <div className="p-3.5 rounded-xl border border-nature-200 dark:border-nature-800 bg-oat-50/50 dark:bg-nature-950/50">
                                         <div className="text-xl mb-1">💸</div>
                                         <div className="text-lg font-black text-nature-900 dark:text-white">{dbStats?.transactions ?? 0}</div>
-                                        <div className="text-[11px] text-nature-500 dark:text-nature-400 font-semibold">Ledger Deals</div>
+                                        <div className="text-[11px] text-nature-500 dark:text-nature-400 font-semibold">{t('Ledger Deals')}</div>
                                     </div>
                                     <div className="p-3.5 rounded-xl border border-nature-200 dark:border-nature-800 bg-oat-50/50 dark:bg-nature-950/50">
                                         <div className="text-xl mb-1">💬</div>
                                         <div className="text-lg font-black text-nature-900 dark:text-white">{dbStats?.messages ?? 0}</div>
-                                        <div className="text-[11px] text-nature-500 dark:text-nature-400 font-semibold">Messages</div>
+                                        <div className="text-[11px] text-nature-500 dark:text-nature-400 font-semibold">{t('Messages')}</div>
                                     </div>
                                 </div>
 
                                 {/* Storage info */}
                                 <div className="p-4 rounded-xl border border-nature-200 dark:border-nature-800 bg-oat-50/50 dark:bg-nature-950/50 mb-5 text-xs space-y-1.5">
-                                    <div className="flex justify-between">
-                                        <span className="text-nature-500 dark:text-nature-400">Storage Usage:</span>
+                                    <div className="flex flex-wrap justify-between gap-x-2">
+                                        <span className="text-nature-500 dark:text-nature-400">{t('Storage Usage:')}</span>
                                         <span className="font-bold text-nature-900 dark:text-white">{storageEstimate}</span>
                                     </div>
-                                    <div className="flex justify-between">
-                                        <span className="text-nature-500 dark:text-nature-400">Active Node:</span>
-                                        <span className="font-mono text-nature-900 dark:text-white">{window.location.origin}</span>
+                                    <div className="flex flex-wrap justify-between gap-x-2">
+                                        <span className="text-nature-500 dark:text-nature-400">{t('Active Node:')}</span>
+                                        <span className="min-w-0 font-mono text-nature-900 dark:text-white break-all">{window.location.origin}</span>
                                     </div>
                                 </div>
 
@@ -1531,14 +1550,14 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                     onClick={loadDiagnostics}
                                     className="w-full py-3 mb-3 rounded-xl font-bold bg-nature-900 text-white dark:bg-white dark:text-nature-900 border-none cursor-pointer text-xs"
                                 >
-                                    🔄 Re-Run Structural Diagnostic Check
+                                    {t('🔄 Re-Run Structural Diagnostic Check')}
                                 </button>
 
                                 <button
                                     onClick={handleForceResync}
                                     className="w-full py-3 mb-6 rounded-xl font-bold bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800 cursor-pointer text-xs"
                                 >
-                                    ⚡ Force Clear & Re-Sync Database
+                                    {t('⚡ Force Clear & Re-Sync Database')}
                                 </button>
                             </>
                         )}
@@ -1547,7 +1566,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                             onClick={() => setMode('menu')}
                             className="w-full py-3 rounded-xl font-semibold bg-oat-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-none cursor-pointer hover:bg-oat-200 dark:hover:bg-nature-700 dark:hover:text-nature-200 transition-colors text-sm"
                         >
-                            ← Back to Settings
+                            {t('← Back to Settings')}
                         </button>
                     </div>
                 )}
@@ -1555,7 +1574,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                 {/* ─── MODE: YOUR AREA ─── */}
                 {mode === 'area' && areaLimits && (
                     <div className="bg-white dark:bg-nature-900 rounded-2xl p-6 shadow-soft border border-nature-200 dark:border-nature-800" data-testid="settings-area">
-                        <h3 className="text-lg font-bold text-nature-950 dark:text-white mb-1">📍 {AREA_STEP_WORDS.settingsRow}</h3>
+                        <h3 className="text-lg font-bold text-nature-950 dark:text-white mb-1">📍 <>{t(AREA_STEP_WORDS.settingsRow)}</></h3>
                         <p className="text-[15px] font-semibold text-nature-900 dark:text-white mb-3 break-words" data-testid="settings-area-current">{areaLine}</p>
                         {myArea && (
                             <button
@@ -1564,7 +1583,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                 disabled={areaClearing}
                                 className="w-full min-h-[44px] mb-3 rounded-xl font-semibold border border-red-300 dark:border-red-800 text-red-600 dark:text-red-300 bg-transparent cursor-pointer text-sm disabled:opacity-50"
                             >
-                                {areaClearing ? 'Clearing…' : 'Clear'}
+                                {areaClearing ? t('Clearing…') : t('Clear')}
                             </button>
                         )}
                         {areaError && <p role="alert" className="text-sm text-red-600 dark:text-red-300 mb-3">{areaError}</p>}
@@ -1572,7 +1591,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                             send={senderForMe}
                             limits={areaLimits}
                             hideTitle
-                            skipLabel="← Back to Settings"
+                            skipLabel={t('← Back to Settings')}
                             onSkip={() => setMode('menu')}
                             onSaved={(a, placeName) => { rememberAreaPlace(placeName); setAreaRefusal(null); setMyArea(a); setAreaLoaded(true); setMode('menu'); }}
                         />
@@ -1582,51 +1601,51 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                 {/* ─── MODE: NOTIFICATION PREFERENCES ─── */}
                 {mode === 'notifications' && (
                     <div className="bg-white dark:bg-nature-900 rounded-2xl p-6 shadow-soft border border-nature-200 dark:border-nature-800">
-                        <h3 className="text-lg font-bold text-nature-950 dark:text-white mb-2">🔔 Notification Preferences</h3>
+                        <h3 className="text-lg font-bold text-nature-950 dark:text-white mb-2">{t('🔔 Notification Preferences')}</h3>
                         <div className="p-3.5 mb-5 rounded-xl bg-amber-50/80 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 text-xs text-amber-900 dark:text-amber-200 leading-relaxed">
                             <div className="font-bold flex items-center gap-1.5 mb-1 text-amber-800 dark:text-amber-300">
-                                <span>📱</span> Phone App Only
+                                <span>📱</span> {t('Phone App Only')}
                             </div>
-                            These preferences govern push notifications delivered to the mobile app for this account. Web browsers do not receive push notifications.
+                            <>{t('These preferences govern push notifications delivered to the mobile app for this account. Web browsers do not receive push notifications.')}</>
                         </div>
 
                         {notifLoading ? (
-                            <div className="py-8 text-center text-sm text-nature-400 animate-pulse">Loading preferences...</div>
+                            <div className="py-8 text-center text-sm text-nature-400 animate-pulse">{t('Loading preferences...')}</div>
                         ) : (
                             <div className="space-y-4 mb-6">
                                 <div className="flex justify-between items-center p-4 rounded-xl border border-nature-200 dark:border-nature-800">
                                     <div>
-                                        <div className="text-sm font-bold text-nature-900 dark:text-white">Chat Messages</div>
-                                        <div className="text-xs text-nature-500 dark:text-nature-400">Push alerts on your phone when someone messages you</div>
+                                        <div className="text-sm font-bold text-nature-900 dark:text-white">{t('Chat Messages')}</div>
+                                        <div className="text-xs text-nature-500 dark:text-nature-400">{t('Push alerts on your phone when someone messages you')}</div>
                                     </div>
                                     <ToggleSwitch
                                         checked={notifChat}
                                         onChange={() => handleToggleNotif('chat')}
-                                        label="Chat Messages Notifications"
+                                        label={t('Chat Messages Notifications')}
                                     />
                                 </div>
 
                                 <div className="flex justify-between items-center p-4 rounded-xl border border-nature-200 dark:border-nature-800">
                                     <div>
-                                        <div className="text-sm font-bold text-nature-900 dark:text-white">Marketplace Activity</div>
-                                        <div className="text-xs text-nature-500 dark:text-nature-400">Push alerts on your phone for new offers & needs in your area</div>
+                                        <div className="text-sm font-bold text-nature-900 dark:text-white">{t('Marketplace Activity')}</div>
+                                        <div className="text-xs text-nature-500 dark:text-nature-400">{t('Push alerts on your phone for new offers & needs in your area')}</div>
                                     </div>
                                     <ToggleSwitch
                                         checked={notifMarketplace}
                                         onChange={() => handleToggleNotif('marketplace')}
-                                        label="Marketplace Activity Notifications"
+                                        label={t('Marketplace Activity Notifications')}
                                     />
                                 </div>
 
                                 <div className="flex justify-between items-center p-4 rounded-xl border border-nature-200 dark:border-nature-800">
                                     <div>
-                                        <div className="text-sm font-bold text-nature-900 dark:text-white">Escrow & Deals</div>
-                                        <div className="text-xs text-nature-500 dark:text-nature-400">Push alerts on your phone for trade updates & credit transfers</div>
+                                        <div className="text-sm font-bold text-nature-900 dark:text-white">{t('Escrow & Deals')}</div>
+                                        <div className="text-xs text-nature-500 dark:text-nature-400">{t('Push alerts on your phone for trade updates & credit transfers')}</div>
                                     </div>
                                     <ToggleSwitch
                                         checked={notifEscrow}
                                         onChange={() => handleToggleNotif('escrow')}
-                                        label="Escrow & Deals Notifications"
+                                        label={t('Escrow & Deals Notifications')}
                                     />
                                 </div>
 
@@ -1636,9 +1655,9 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                     reaches a phone with that switch on — which the line below says. */}
                                 <div className="p-4 rounded-xl border border-nature-200 dark:border-nature-800">
                                     <fieldset className="m-0 p-0 border-0 flex flex-col gap-1">
-                                        <legend className="text-sm font-bold text-nature-900 dark:text-white p-0">Event reminders</legend>
+                                        <legend className="text-sm font-bold text-nature-900 dark:text-white p-0">{t('Event reminders')}</legend>
                                         <p className="m-0 mb-3 text-xs text-nature-500 dark:text-nature-400">
-                                            How long before an event you are going to, or interested in, starts. You can change it on any one event.
+                                            {t('How long before an event you are going to, or interested in, starts. You can change it on any one event.')}
                                         </p>
                                         {REMINDER_OFFSETS.map(minutes => (
                                             <label key={minutes} className="flex items-center gap-2 min-h-[48px] text-sm font-semibold text-nature-800 dark:text-nature-200 cursor-pointer">
@@ -1648,7 +1667,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                                     checked={eventReminders.includes(minutes)}
                                                     onChange={() => handleToggleReminder(minutes)}
                                                 />
-                                                {reminderOffsetLabel(minutes)} before
+                                                {reminderBeforeWords(minutes)}
                                             </label>
                                         ))}
                                         <label className="flex items-center gap-2 min-h-[48px] text-sm font-semibold text-nature-800 dark:text-nature-200 cursor-pointer">
@@ -1658,11 +1677,11 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                                 checked={eventReminders.length === 0}
                                                 onChange={() => { if (eventReminders.length > 0) handleRemindersOff(); }}
                                             />
-                                            Off
+                                            {t('Off', undefined, 'event reminders')}
                                         </label>
                                     </fieldset>
                                     <p className="m-0 mt-2 text-xs text-nature-500 dark:text-nature-400">
-                                        Reminders arrive with your Marketplace alerts, so they stop if you switch those off.
+                                        {t('Reminders arrive with your Marketplace alerts, so they stop if you switch those off.')}
                                     </p>
                                 </div>
                             </div>
@@ -1672,7 +1691,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                             onClick={() => setMode('menu')}
                             className="w-full py-3 rounded-xl font-semibold bg-oat-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-none cursor-pointer hover:bg-oat-200 dark:hover:bg-nature-700 dark:hover:text-nature-200 transition-colors text-sm"
                         >
-                            ← Back to Settings
+                            {t('← Back to Settings')}
                         </button>
                     </div>
                 )}
@@ -1685,10 +1704,9 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                 {/* ─── MODE: BLOCKED MEMBERS ─── */}
                 {mode === 'blocked-users' && (
                     <div className="bg-white dark:bg-nature-900 rounded-2xl p-6 shadow-soft border border-nature-200 dark:border-nature-800">
-                        <h3 className="text-lg font-bold text-nature-950 dark:text-white mb-2">🚫 Blocked Members</h3>
+                        <h3 className="text-lg font-bold text-nature-950 dark:text-white mb-2">{t('🚫 Blocked Members')}</h3>
                         <p className="text-xs text-nature-500 dark:text-nature-400 mb-5 leading-relaxed">
-                            Members you have blocked cannot message you, and their posts and profiles are hidden from your feed.
-                            Your community keeps this list with your account, so it comes back when you sign in on any browser. Its operator can see it.
+                            {t('Members you have blocked cannot message you, and their posts and profiles are hidden from your feed. Your community keeps this list with your account, so it comes back when you sign in on any browser. Its operator can see it.')}
                         </p>
 
                         {blockedListError && (
@@ -1699,7 +1717,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                     onClick={() => loadBlockedList()}
                                     className="px-3 py-1.5 rounded-lg bg-white dark:bg-nature-900 border border-red-300 dark:border-red-700 text-red-700 dark:text-red-300 font-bold cursor-pointer"
                                 >
-                                    Try again
+                                    {t('Try again')}
                                 </button>
                             </div>
                         )}
@@ -1711,12 +1729,12 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                         )}
 
                         {loadingBlockedList ? (
-                            <div className="py-8 text-center text-sm text-nature-400 animate-pulse">Loading blocked members...</div>
+                            <div className="py-8 text-center text-sm text-nature-400 animate-pulse">{t('Loading blocked members...')}</div>
                         ) : blockedUsersList.length === 0 && blockedListError ? null : blockedUsersList.length === 0 ? (
                             <div className="text-center py-10 text-nature-500 dark:text-nature-400">
                                 <p className="text-3xl mb-2">🕊️</p>
-                                <p className="text-sm font-semibold text-nature-800 dark:text-white">No blocked members</p>
-                                <p className="text-xs mt-1 text-nature-500 dark:text-nature-400">You haven't blocked anyone yet.</p>
+                                <p className="text-sm font-semibold text-nature-800 dark:text-white">{t('No blocked members')}</p>
+                                <p className="text-xs mt-1 text-nature-500 dark:text-nature-400">{t("You haven't blocked anyone yet.")}</p>
                             </div>
                         ) : (
                             <div className="space-y-4 mb-6">
@@ -1738,23 +1756,23 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                                     disabled={blockedBusy !== null}
                                                     className="bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-300 border border-red-200 dark:border-red-800 rounded-lg px-3 py-1.5 text-xs font-bold hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors cursor-pointer shrink-0 disabled:opacity-60 disabled:cursor-default"
                                                 >
-                                                    {blockedBusy === item.pubkey ? 'Unblocking…' : 'Unblock'}
+                                                    {blockedBusy === item.pubkey ? t('Unblocking…') : t('Unblock')}
                                                 </button>
                                             </div>
                                             {blockedFriends.has(item.pubkey) ? (
                                                 <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5">
-                                                    <p className="text-xs text-nature-600 dark:text-nature-300 m-0">Still your friend. They can notice a removal.</p>
+                                                    <p className="text-xs text-nature-600 dark:text-nature-300 m-0">{t('Still your friend. They can notice a removal.')}</p>
                                                     <button
                                                         type="button"
                                                         onClick={() => removeBlockedFriend(item.pubkey, item.callsign || item.pubkey.slice(0, 8))}
                                                         disabled={blockedBusy !== null}
                                                         className="bg-oat-100 dark:bg-nature-800 text-nature-800 dark:text-nature-100 border border-nature-300 dark:border-nature-600 rounded-lg px-3 py-1.5 text-xs font-bold hover:bg-oat-200 dark:hover:bg-nature-700 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-default"
                                                     >
-                                                        {blockedBusy === `friend:${item.pubkey}` ? 'Removing…' : 'Also remove from friends'}
+                                                        {blockedBusy === `friend:${item.pubkey}` ? t('Removing…') : t('Also remove from friends')}
                                                     </button>
                                                 </div>
                                             ) : removedFriends.has(item.pubkey) ? (
-                                                <p className="mt-2 text-xs text-nature-600 dark:text-nature-300 m-0">No longer your friend. Still blocked.</p>
+                                                <p className="mt-2 text-xs text-nature-600 dark:text-nature-300 m-0">{t('No longer your friend. Still blocked.')}</p>
                                             ) : null}
                                         </div>
                                     ))}
@@ -1766,7 +1784,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                     disabled={blockedBusy !== null}
                                     className="w-full py-2.5 rounded-xl text-xs font-bold text-red-600 dark:text-red-300 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/50 hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-default"
                                 >
-                                    {blockedBusy === 'all' ? 'Unblocking…' : 'Unblock All'}
+                                    {blockedBusy === 'all' ? t('Unblocking…') : t('Unblock All')}
                                 </button>
                             </div>
                         )}
@@ -1775,7 +1793,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                             onClick={() => setMode('menu')}
                             className="w-full py-3 rounded-xl font-semibold bg-oat-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-none cursor-pointer hover:bg-oat-200 dark:hover:bg-nature-700 dark:hover:text-nature-200 transition-colors text-sm"
                         >
-                            ← Back to Settings
+                            {t('← Back to Settings')}
                         </button>
                     </div>
                 )}
@@ -1783,16 +1801,16 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                 {/* ─── MODE: ADVANCED / SUBSYSTEM ─── */}
                 {mode === 'advanced' && (
                     <div className="bg-white dark:bg-nature-900 rounded-2xl p-6 shadow-soft border border-nature-200 dark:border-nature-800">
-                        <h3 className="text-lg font-bold text-nature-950 dark:text-white mb-3 m-0">⚙️ Advanced Settings</h3>
+                        <h3 className="text-lg font-bold text-nature-950 dark:text-white mb-3 m-0">{t('⚙️ Advanced Settings')}</h3>
                         <p className="text-nature-600 dark:text-nature-400 text-xs mb-5 leading-relaxed">
-                            Manage referral connections and client-side database/state cache sync.
+                            {t('Manage referral connections and client-side database/state cache sync.')}
                         </p>
 
                         {/* Node Connection: the editor in a development build; a stored address said, with Reset, in any build */}
                         {(showNodeUrlEditor || storedNodeUrl) && (
                         <div className="mb-6 border-b border-nature-100 dark:border-nature-800 pb-6">
                             {showNodeUrlEditor ? (
-                                <h4 className="text-xs font-bold uppercase tracking-wider text-nature-800 dark:text-nature-200 mb-2">🌐 Sovereign Node Connection</h4>
+                                <h4 className="text-xs font-bold uppercase tracking-wider text-nature-800 dark:text-nature-200 mb-2">{t('🌐 Sovereign Node Connection')}</h4>
                             ) : (
                                 <h4 className="text-xs font-bold uppercase tracking-wider text-nature-800 dark:text-nature-200 mb-2">{t('Community address')}</h4>
                             )}
@@ -1815,13 +1833,13 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                 type="text"
                                 value={customNodeUrl}
                                 onChange={(e) => { setCustomNodeUrl(e.target.value); setNodeTestResult(null); }}
-                                placeholder="Node API URL (e.g. https://mullum1.beanpool.org)"
+                                placeholder={t('Node API URL (e.g. https://mullum1.beanpool.org)')}
                                 className="w-full py-2.5 px-4 mb-3 rounded-xl border border-nature-200 dark:border-nature-800 bg-oat-50/50 dark:bg-nature-950/50 text-nature-900 dark:text-white font-mono text-xs"
                                 autoCapitalize="none"
                             />
                             {nodeTestResult && (
                                 <div className={`p-3 rounded-xl mb-3 text-xs font-mono border ${nodeTestResult.ok ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800' : 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:border-red-900'}`}>
-                                    {nodeTestResult.ok ? `✅ Connected to "${nodeTestResult.callsign}" (${nodeTestResult.latencyMs}ms)` : `❌ ${nodeTestResult.error}`}
+                                    {nodeTestResult.ok ? t('✅ Connected to "{name}" ({ms}ms)', { name: nodeTestResult.callsign ?? '', ms: nodeTestResult.latencyMs ?? '' }) : `❌ ${nodeTestResult.error}`}
                                 </div>
                             )}
                             <div className="flex gap-2">
@@ -1830,13 +1848,13 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                     disabled={testingNode || !customNodeUrl.trim()}
                                     className="flex-1 py-2.5 rounded-xl text-xs font-bold bg-oat-100 dark:bg-nature-800 text-nature-800 dark:text-nature-200 border-none cursor-pointer"
                                 >
-                                    {testingNode ? 'Testing...' : '🧪 Test'}
+                                    {testingNode ? t('Testing...') : t('🧪 Test')}
                                 </button>
                                 <button
                                     onClick={handleSaveNodeUrl}
                                     className="flex-1 py-2.5 rounded-xl text-xs font-bold bg-nature-900 dark:bg-white text-white dark:text-nature-900 border-none cursor-pointer"
                                 >
-                                    💾 Save & Connect
+                                    {t('💾 Save & Connect')}
                                 </button>
                             </div>
                             </>)}
@@ -1845,14 +1863,14 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
 
                         {/* Private Key Reveal */}
                         <div className="mb-6 border-b border-nature-100 dark:border-nature-800 pb-6">
-                            <h4 className="text-xs font-bold uppercase tracking-wider text-nature-800 dark:text-nature-200 mb-2">🔑 Raw Private Key</h4>
+                            <h4 className="text-xs font-bold uppercase tracking-wider text-nature-800 dark:text-nature-200 mb-2">{t('🔑 Raw Private Key')}</h4>
                             <div className="flex items-center justify-between mb-2">
-                                <span className="text-xs text-nature-500 dark:text-nature-400">View underlying Ed25519 secret seed</span>
+                                <span className="text-xs text-nature-500 dark:text-nature-400">{t('View underlying Ed25519 secret seed')}</span>
                                 <button
                                     onClick={() => setShowPrivateKey(!showPrivateKey)}
                                     className="text-xs font-bold text-terra-600 dark:text-terra-400 bg-terra-50 dark:bg-terra-900/30 px-3 py-1 rounded-lg border border-terra-200 cursor-pointer"
                                 >
-                                    {showPrivateKey ? 'Hide' : 'Reveal'}
+                                    {showPrivateKey ? t('Hide') : t('Reveal')}
                                 </button>
                             </div>
                             {showPrivateKey && (
@@ -1864,12 +1882,12 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
 
                         {/* Redeem Invite */}
                         <div className="mb-6 border-b border-nature-100 dark:border-nature-800 pb-6">
-                            <h4 className="text-xs font-bold uppercase tracking-wider text-nature-800 dark:text-nature-200 mb-2">🎟️ Redeem Invite Code</h4>
+                            <h4 className="text-xs font-bold uppercase tracking-wider text-nature-800 dark:text-nature-200 mb-2">{t('🎟️ Redeem Invite Code')}</h4>
                             <input
                                 type="text"
                                 value={redeemInviteCode}
                                 onChange={(e) => setRedeemInviteCode(e.target.value)}
-                                placeholder="Enter Invite Code (e.g. BP-7K3X-9M2W)"
+                                placeholder={t('Enter Invite Code (e.g. BP-7K3X-9M2W)')}
                                 className="w-full py-2.5 px-4 mb-3 rounded-xl border border-nature-200 dark:border-nature-800 bg-oat-50/50 dark:bg-nature-950/50 text-nature-900 dark:text-white font-mono text-xs"
                             />
                             <button
@@ -1877,7 +1895,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                 disabled={redeemLoading || !redeemInviteCode.trim()}
                                 className="w-full py-2.5 rounded-xl font-bold bg-nature-900 text-white dark:bg-white dark:text-nature-900 border-none cursor-pointer text-xs"
                             >
-                                {redeemLoading ? 'Redeeming...' : 'Redeem Code'}
+                                {redeemLoading ? t('Redeeming...') : t('Redeem Code')}
                             </button>
                         </div>
 
@@ -1888,7 +1906,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                             onClick={() => setMode('menu')}
                             className="w-full py-3 rounded-xl font-semibold bg-oat-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-none cursor-pointer text-sm"
                         >
-                            ← Back to Settings
+                            {t('← Back to Settings')}
                         </button>
                     </div>
                 )}
@@ -1933,16 +1951,16 @@ export function BeanPoolSettingsGroup({ onHelp, onSuggest, feedbackLive = FEEDBA
     return (
         <div>
             <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-400 mb-2 px-1">
-                BEANPOOL
+                {t('BEANPOOL')}
             </div>
             <div className="bg-white dark:bg-nature-900 rounded-2xl shadow-sm border border-nature-200 dark:border-nature-800 overflow-hidden divide-y divide-nature-100 dark:divide-nature-800">
                 {beanPoolSettingsEntries(feedbackLive).map(entry => {
                     if (entry === 'help') return (
-                        <button key={entry} type="button" onClick={onHelp} className={rowClass} aria-label="BeanPool: help and how it works">
+                        <button key={entry} type="button" onClick={onHelp} className={rowClass} aria-label={t('BeanPool: help and how it works')}>
                             <span className="text-xl" aria-hidden="true">🫘</span>
                             <span className="flex-1 min-w-0">
-                                <span className="block">Help & how it works</span>
-                                <span className="block text-xs font-normal text-nature-600 dark:text-nature-300">How to use every part of the app, the rules, questions</span>
+                                <span className="block">{t('Help & how it works')}</span>
+                                <span className="block text-xs font-normal text-nature-600 dark:text-nature-300">{t('How to use every part of the app, the rules, questions')}</span>
                             </span>
                             <span className="text-nature-400 dark:text-nature-300" aria-hidden="true">›</span>
                         </button>
@@ -1951,18 +1969,18 @@ export function BeanPoolSettingsGroup({ onHelp, onSuggest, feedbackLive = FEEDBA
                         <button key={entry} type="button" onClick={onSuggest} className={rowClass}>
                             <span className="text-xl" aria-hidden="true">💬</span>
                             <span className="flex-1 min-w-0">
-                                <span className="block">Suggest a change</span>
-                                <span className="block text-xs font-normal text-nature-600 dark:text-nature-300">Ideas and problems go to the BeanPool project team</span>
+                                <span className="block">{t('Suggest a change')}</span>
+                                <span className="block text-xs font-normal text-nature-600 dark:text-nature-300">{t('Ideas and problems go to the BeanPool project team')}</span>
                             </span>
                             <span className="text-nature-400 dark:text-nature-300" aria-hidden="true">›</span>
                         </button>
                     );
                     return (
-                        <a key={entry} href={BEANPOOL_WEBSITE_URL} target="_blank" rel="noopener noreferrer" className={rowClass} aria-label="beanpool.org, opens in a new tab">
+                        <a key={entry} href={BEANPOOL_WEBSITE_URL} target="_blank" rel="noopener noreferrer" className={rowClass} aria-label={t('beanpool.org, opens in a new tab')}>
                             <span className="text-xl" aria-hidden="true">🌐</span>
                             <span className="flex-1 min-w-0">
                                 <span className="block">beanpool.org</span>
-                                <span className="block text-xs font-normal text-nature-600 dark:text-nature-300">The BeanPool project website</span>
+                                <span className="block text-xs font-normal text-nature-600 dark:text-nature-300">{t('The BeanPool project website')}</span>
                             </span>
                             <span className="text-nature-400 dark:text-nature-300" aria-hidden="true">↗</span>
                         </a>

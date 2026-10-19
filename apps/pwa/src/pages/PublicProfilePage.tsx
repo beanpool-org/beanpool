@@ -8,7 +8,7 @@ import { type BeanPoolIdentity } from '../lib/identity';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { ChannelChips } from '../components/ChannelChips';
 import { ArchetypeQuizModal } from '../components/ArchetypeQuizModal';
-import { parseArchetype, calculateSynergy, ARCHETYPES, listPhotoUrl, type QuizResult } from '@beanpool/core';
+import { parseArchetype, calculateSynergy, ARCHETYPES, formatDate, formatNumber, listPhotoUrl, t, tn, word, type QuizResult } from '@beanpool/core';
 import { buildSynergyCollabMessage, buildSynergyNudgeMessage, setChatPrefill } from '../lib/archetypes';
 import { isUserBlocked, blockUser, unblockUser, onBlocklistUpdated, getBlocklistFullNote } from '../lib/blocklist';
 import { ReportModal } from '../components/ReportModal';
@@ -16,6 +16,14 @@ import { ImageLightbox } from '../components/ImageLightbox';
 import { marked, readsOwn, useFeatureMode } from '../lib/features';
 import { LocalCommunityLine } from '../components/LocalCommunityMark';
 import { LOCAL_COMMUNITY_LINES } from '@beanpool/core';
+import { Sentence } from '../components/Sentence';
+
+/** A vouch's three levels, and the credit floor each hands out. The names are word() keys, shown through t(). */
+const VOUCH_LEVELS = [
+    { level: 1, label: word('Light', 'vouch level'), amount: '−25' },
+    { level: 2, label: word('Standard', 'vouch level'), amount: '−50' },
+    { level: 3, label: word('Deep', 'vouch level'), amount: '−100' },
+] as const;
 
 interface Props {
     identity: BeanPoolIdentity;
@@ -92,9 +100,9 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
 
     const handleBlock = async () => {
         if (isBlocking) return;
-        const targetName = profile?.callsign || 'this user';
+        const targetName = profile?.callsign || t('this user');
         const confirmed = window.confirm(
-            `Block ${targetName}?\n\nThis will instantly hide all posts, offers, and messages from ${targetName}, and notify moderation.`
+            t('Block {name}?\n\nThis will instantly hide all posts, offers, and messages from {name}, and notify moderation.', { name: targetName })
         );
         if (!confirmed) return;
 
@@ -102,9 +110,9 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
             setIsBlocking(true);
             await blockUser(pubkey, identity.publicKey, 'Abusive user reported via Trust Profile');
             setIsBlocked(true);
-            alert(`${targetName} has been blocked and removed from your feed.`);
+            alert(t('{name} has been blocked and removed from your feed.', { name: targetName }));
         } catch (e: any) {
-            alert(e?.message || 'Failed to block user. Please try again.');
+            alert(e?.message || t('Failed to block user. Please try again.'));
         } finally {
             setIsBlocking(false);
         }
@@ -112,15 +120,15 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
 
     const handleUnblock = async () => {
         if (isBlocking) return;
-        const targetName = profile?.callsign || 'this user';
-        if (!window.confirm(`Unblock ${targetName}?`)) return;
+        const targetName = profile?.callsign || t('this user');
+        if (!window.confirm(t('Unblock {name}?', { name: targetName }))) return;
         try {
             setIsBlocking(true);
             await unblockUser(pubkey);
             setIsBlocked(false);
-            alert(`${targetName} has been unblocked.`);
+            alert(t('{name} has been unblocked.', { name: targetName }));
         } catch (e: any) {
-            alert(e?.message || 'Failed to unblock. Please try again.');
+            alert(e?.message || t('Failed to unblock. Please try again.'));
         } finally {
             setIsBlocking(false);
         }
@@ -217,7 +225,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
             const fresh = await getMemberProfile(pubkey, identity.publicKey).catch(() => null);
             if (fresh) setProfile(fresh);
         } catch (e) {
-            alert(e instanceof Error ? e.message : 'Could not vouch for this member');
+            alert(e instanceof Error ? e.message : t('Could not vouch for this member'));
         } finally {
             setVouching(false);
         }
@@ -242,35 +250,35 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                     </svg>
-                    Back
+                    {t('Back')}
                 </button>
                 <div className="flex-1 min-w-0 truncate text-center font-bold text-nature-900 dark:text-white text-base sm:text-lg">
-                    {isSelf ? 'My Profile' : <><span className="sm:hidden">Profile</span><span className="hidden sm:inline">Trust Profile</span></>}
+                    {isSelf ? t('My Profile') : <><span className="sm:hidden">{t('Profile')}</span><span className="hidden sm:inline">{t('Trust Profile')}</span></>}
                 </div>
                 {isSelf ? (
                     <button 
                         onClick={onEditProfile}
                         className="shrink-0 min-h-[48px] flex items-center gap-1 px-3 py-1 rounded-lg border border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 font-extrabold text-sm cursor-pointer hover:bg-emerald-100/50 dark:hover:bg-emerald-950/40"
                     >
-                        ✏️ Edit
+                        {t('✏️ Edit')}
                     </button>
                 ) : (
                     <div className="shrink-0 flex items-center gap-1.5">
                         <button
                             type="button"
                             onClick={() => setShowReportModal(true)}
-                            title="Report member"
-                            aria-label={`Report user ${profile?.callsign || ''}`}
+                            title={t('Report member')}
+                            aria-label={t('Report user {name}', { name: profile?.callsign || '' })}
                             className="min-h-[48px] min-w-[48px] px-2.5 py-1 rounded-lg border border-nature-300 dark:border-nature-700 bg-white/80 dark:bg-nature-800 text-nature-600 dark:text-nature-300 font-bold text-xs cursor-pointer hover:bg-nature-100 dark:hover:bg-nature-700 dark:hover:text-nature-200 transition-colors flex items-center justify-center gap-1"
                         >
-                            <span aria-hidden="true">🚩</span><span className="hidden sm:inline">Report</span>
+                            <span aria-hidden="true">🚩</span><span className="hidden sm:inline">{t('Report')}</span>
                         </button>
                         <button
                             type="button"
                             onClick={isBlocked ? handleUnblock : handleBlock}
                             disabled={isBlocking}
-                            title={isBlocked ? 'Unblock member' : 'Block member'}
-                            aria-label={`${isBlocked ? 'Unblock' : 'Block'} user ${profile?.callsign || ''}`}
+                            title={isBlocked ? t('Unblock member') : t('Block member')}
+                            aria-label={isBlocked ? t('Unblock user {name}', { name: profile?.callsign || '' }) : t('Block user {name}', { name: profile?.callsign || '' })}
                             className={`min-h-[48px] min-w-[48px] px-2.5 py-1 rounded-lg border font-bold text-xs cursor-pointer transition-colors flex items-center justify-center gap-1 ${
                                 isBlocked
                                     ? 'border-nature-300 dark:border-nature-700 bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 hover:bg-nature-200 dark:hover:bg-nature-700 dark:hover:text-nature-200'
@@ -278,7 +286,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                             }`}
                         >
                             <span aria-hidden="true">{isBlocked ? '🛡️' : '🚫'}</span>
-                            <span className="hidden sm:inline">{isBlocking ? (isBlocked ? 'Unblocking…' : 'Blocking…') : isBlocked ? 'Unblock' : 'Block'}</span>
+                            <span className="hidden sm:inline">{isBlocking ? (isBlocked ? t('Unblocking…') : t('Blocking…')) : isBlocked ? t('Unblock') : t('Block')}</span>
                         </button>
                     </div>
                 )}
@@ -296,15 +304,15 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                         isOpen: true,
                                         photos: [avatarResolved],
                                         initialIndex: 0,
-                                        title: profile?.callsign || 'Member',
-                                        subtitle: 'Profile Photo',
+                                        title: profile?.callsign || t('Member'),
+                                        subtitle: t('Profile Photo'),
                                         triggerElement: e.currentTarget,
                                     })
                                 }
-                                aria-label={`View enlarged photo: ${profile?.callsign || 'Member'}`}
+                                aria-label={t('View enlarged photo: {title}', { title: profile?.callsign || t('Member') })}
                                 className="w-full h-full block cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500 rounded-full overflow-hidden"
                             >
-                                <img src={avatarResolved} alt="avatar" className="w-full h-full object-cover" />
+                                <img src={avatarResolved} alt={t('avatar')} className="w-full h-full object-cover" />
                             </button>
                         ) : (
                             <span className="text-4xl font-bold text-nature-400 dark:text-nature-400">{initial}</span>
@@ -312,7 +320,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                     </div>
                     
                     <div className="text-2xl font-black text-nature-900 dark:text-white flex items-center gap-2">
-                        {profile?.callsign || 'Loading...'}
+                        {profile?.callsign || t('Loading...')}
                         <span className="text-emerald-500">✓</span>
                     </div>
                     
@@ -322,13 +330,13 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
 
                     {profile?.joinedAt && (
                         <div className="text-xs text-nature-500 dark:text-nature-400 font-semibold mt-2">
-                            📅 Joined {new Date(profile.joinedAt).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
+                            {t('📅 Joined {date}', { date: formatDate(new Date(profile.joinedAt), 'month-year', { width: 'long' }) })}
                         </div>
                     )}
 
                     {profile?.elderVouchedBy && (
                         <div className="mt-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-100 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 text-amber-700 dark:text-amber-300 text-xs font-bold">
-                            🤝 Vouched by {profile.elderVouchedByCallsign || 'a sponsor'}
+                            {profile.elderVouchedByCallsign ? t('🤝 Vouched by {name}', { name: profile.elderVouchedByCallsign }) : t('🤝 Vouched by a sponsor')}
                         </div>
                     )}
 
@@ -344,7 +352,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                     {!isSelf && (
                         isBlocked ? (
                             <div className="mt-6 px-4 py-2.5 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 text-red-600 dark:text-red-400 text-xs font-bold flex flex-wrap items-center gap-2 break-words">
-                                <span>🚫</span> <span className="min-w-0 flex-1 break-words">You have blocked this member. Messaging is disabled.</span>
+                                <span>🚫</span> <span className="min-w-0 flex-1 break-words">{t('You have blocked this member. Messaging is disabled.')}</span>
                             </div>
                         ) : (
                             <button 
@@ -354,28 +362,28 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                                 </svg>
-                                Send Message
+                                {t('Send Message')}
                             </button>
                         )
                     )}
 
                     {canVouch && (
                         <div className="mt-3 w-full max-w-sm">
-                            <div className="text-xs font-semibold text-nature-500 dark:text-nature-400 text-center mb-1.5">🤝 Vouch — extend a credit line (no beans leave your wallet)</div>
+                            <div className="text-xs font-semibold text-nature-500 dark:text-nature-400 text-center mb-1.5">{t('🤝 Vouch — extend a credit line (no beans leave your wallet)')}</div>
                             <div className="flex gap-2 justify-center">
-                                {([[1, 'Light', '−25'], [2, 'Standard', '−50'], [3, 'Deep', '−100']] as const).map(([lvl, label, amt]) => (
+                                {VOUCH_LEVELS.map(({ level: lvl, amount: amt }, i) => (
                                     <button
                                         key={lvl}
                                         onClick={() => handleVouch(lvl)}
                                         disabled={vouching}
                                         className="flex-1 bg-bp-gold-fill hover:bg-bp-gold-hover disabled:opacity-60 text-bp-gold-on border-none rounded-xl px-3 py-2 font-bold cursor-pointer shadow-sm transition-transform active:scale-95 flex flex-col items-center leading-tight"
                                     >
-                                        <span className="text-[13px]">{label}</span>
+                                        <span className="text-[13px]">{t(VOUCH_LEVELS[i].label)}</span>
                                         <span className="text-[11px] opacity-90 font-mono">{amt}</span>
                                     </button>
                                 ))}
                             </div>
-                            {vouching && <div className="text-xs text-center text-nature-400 mt-1">Vouching…</div>}
+                            {vouching && <div className="text-xs text-center text-nature-400 mt-1">{t('Vouching…')}</div>}
                         </div>
                     )}
                 </div>
@@ -395,37 +403,37 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                 <div className="flex items-center gap-3">
                                     <span className="text-3xl select-none" aria-hidden="true">{synergy.emoji}</span>
                                     <div className="flex-1 min-w-0">
-                                        <div className="text-base font-extrabold text-nature-950 dark:text-white truncate">
-                                            {synergy.title}
+                                        <div className="text-base font-extrabold text-nature-950 dark:text-white break-words">
+                                            {t(synergy.title)}
                                         </div>
                                         <div className="text-xs font-bold text-emerald-600 dark:text-emerald-400 break-words">
-                                            {synergy.headline}
+                                            {t(synergy.headline)}
                                         </div>
                                     </div>
                                 </div>
 
                                 <p className="text-xs sm:text-sm text-nature-600 dark:text-nature-300 leading-relaxed m-0">
-                                    {synergy.summary}
+                                    {t(synergy.summary)}
                                 </p>
 
                                 <div className="space-y-1.5 pt-1">
-                                    {synergy.strengths.map((str: string, idx: number) => (
+                                    {synergy.strengths.map((_, idx: number) => (
                                         <div key={idx} className="flex items-start gap-2 text-xs text-nature-700 dark:text-nature-300">
                                             <span className="text-emerald-600 dark:text-emerald-400 font-bold shrink-0">✓</span>
-                                            <span>{str}</span>
+                                            <span>{t(synergy.strengths[idx])}</span>
                                         </div>
                                     ))}
                                 </div>
 
                                 {synergy.collaborationTip && (
                                     <div className="p-3 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200/80 dark:border-emerald-900/40 text-xs text-emerald-900 dark:text-emerald-300 leading-normal">
-                                        💡 <strong className="font-bold">Collaboration tip:</strong> {synergy.collaborationTip}
+                                        💡 <strong className="font-bold">{t('Collaboration tip:')}</strong> <>{t(synergy.collaborationTip)}</>
                                     </div>
                                 )}
 
                                 <button
                                     type="button"
-                                    aria-label={`Collaborate with ${profile?.callsign || 'member'}`}
+                                    aria-label={t('Collaborate with {name}', { name: profile?.callsign || t('member') })}
                                     onClick={() => {
                                         const message = buildSynergyCollabMessage(profile?.callsign);
                                         setChatPrefill(message, pubkey);
@@ -433,7 +441,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                     }}
                                     className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on border-none cursor-pointer transition-colors shadow-sm mt-1"
                                 >
-                                    💬 Collaborate with {profile?.callsign || 'Member'}
+                                    {t('💬 Collaborate with {name}', { name: profile?.callsign || t('Member') })}
                                 </button>
                             </div>
                         );
@@ -445,22 +453,22 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                 <div className="flex items-center gap-2">
                                     <span className="text-xl" aria-hidden="true">✨</span>
                                     <div className="text-[15px] font-bold text-nature-950 dark:text-white">
-                                        Collaboration Chemistry
+                                        {t('Collaboration Chemistry')}
                                     </div>
                                 </div>
                                 <p className="text-xs sm:text-sm text-nature-600 dark:text-nature-400 leading-relaxed m-0">
-                                    Take the 60-second quiz to get tips for working with {profile?.callsign || 'this member'}.
+                                    {t('Take the 60-second quiz to get tips for working with {name}.', { name: profile?.callsign || t('this member') })}
                                 </p>
                                 <button
                                     type="button"
-                                    aria-label="Take 60 second quiz to discover collaboration synergy"
+                                    aria-label={t('Take 60 second quiz to discover collaboration synergy')}
                                     onClick={() => {
                                         setQuizInitialMode('quick');
                                         setShowQuizModal(true);
                                     }}
                                     className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on border-none cursor-pointer transition-colors shadow-sm mt-1"
                                 >
-                                    ⚡ Take 60s Quiz
+                                    {t('⚡ Take 60s Quiz')}
                                 </button>
                             </div>
                         );
@@ -472,15 +480,15 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                 <div className="flex items-center gap-2">
                                     <span className="text-xl" aria-hidden="true">✨</span>
                                     <div className="text-[15px] font-bold text-nature-950 dark:text-white">
-                                        Collaboration Chemistry
+                                        {t('Collaboration Chemistry')}
                                     </div>
                                 </div>
                                 <p className="text-xs sm:text-sm text-nature-600 dark:text-nature-400 leading-relaxed m-0">
-                                    {profile?.callsign || 'This member'} hasn't taken the working style quiz yet. Send a friendly nudge in chat to get tips for working together.
+                                    {t("{name} hasn't taken the working style quiz yet. Send a friendly nudge in chat to get tips for working together.", { name: profile?.callsign || t('This member') })}
                                 </p>
                                 <button
                                     type="button"
-                                    aria-label={`Nudge ${profile?.callsign || 'member'} to take the working style quiz`}
+                                    aria-label={t('Nudge {name} to take the working style quiz', { name: profile?.callsign || t('member') })}
                                     onClick={() => {
                                         const message = buildSynergyNudgeMessage(profile?.callsign);
                                         setChatPrefill(message, pubkey);
@@ -488,7 +496,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                     }}
                                     className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on border-none cursor-pointer transition-colors shadow-sm mt-1"
                                 >
-                                    💬 Nudge {profile?.callsign || 'Member'} in Chat
+                                    {t('💬 Nudge {name} in Chat', { name: profile?.callsign || t('Member') })}
                                 </button>
                             </div>
                         );
@@ -500,22 +508,22 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                 <div className="flex items-center gap-2">
                                     <span className="text-xl" aria-hidden="true">✨</span>
                                     <div className="text-[15px] font-bold text-nature-950 dark:text-white">
-                                        Collaboration Chemistry
+                                        {t('Collaboration Chemistry')}
                                     </div>
                                 </div>
                                 <p className="text-xs sm:text-sm text-nature-600 dark:text-nature-400 leading-relaxed m-0">
-                                    Take the 60-second quiz to get tips for working with {profile?.callsign || 'this member'}.
+                                    {t('Take the 60-second quiz to get tips for working with {name}.', { name: profile?.callsign || t('this member') })}
                                 </p>
                                 <button
                                     type="button"
-                                    aria-label="Take 60 second quiz to discover collaboration synergy"
+                                    aria-label={t('Take 60 second quiz to discover collaboration synergy')}
                                     onClick={() => {
                                         setQuizInitialMode('quick');
                                         setShowQuizModal(true);
                                     }}
                                     className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on border-none cursor-pointer transition-colors shadow-sm mt-1"
                                 >
-                                    ⚡ Take 60s Quiz
+                                    {t('⚡ Take 60s Quiz')}
                                 </button>
                             </div>
                         );
@@ -543,13 +551,13 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                             <span className="text-3xl select-none">{balanceInfo.tier?.emoji || '🌱'}</span>
                             <div className="min-w-0">
                                 <h4 className="font-extrabold text-nature-950 dark:text-white text-base truncate">{balanceInfo.tier?.name || 'Member'}</h4>
-                                <p className="text-xs text-nature-700 dark:text-nature-400 mt-0.5">{Math.round(balanceInfo.earnedCredit || 0)} trust points</p>
+                                <p className="text-xs text-nature-700 dark:text-nature-400 mt-0.5">{tn(Math.round(balanceInfo.earnedCredit || 0), '{n} trust points', '{n} trust points')}</p>
                             </div>
                         </div>
                         <div className="flex items-center gap-1.5">
                             <div className="text-right">
-                                <span className="font-black text-emerald-600 dark:text-emerald-400 text-[15px]">{balanceInfo.balance >= 0 ? '+' : ''}{balanceInfo.balance.toFixed(1)}</span>
-                                <p className="text-[10px] font-bold text-nature-400 uppercase tracking-wider">Beans</p>
+                                <span className="font-black text-emerald-600 dark:text-emerald-400 text-[15px]">{balanceInfo.balance >= 0 ? '+' : ''}{formatNumber(balanceInfo.balance, 1)}</span>
+                                <p className="text-[10px] font-bold text-nature-400 uppercase tracking-wider">{t('Beans')}</p>
                             </div>
                             <svg className="w-5 h-5 text-nature-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -566,14 +574,14 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                             className="flex-1 flex flex-col items-center border-none bg-transparent cursor-pointer hover:opacity-85"
                         >
                             <span className="text-xl font-black text-nature-950 dark:text-white">{friendsCount}</span>
-                            <span className="text-[10px] font-bold text-nature-400 uppercase mt-0.5">Friends</span>
+                            <span className="text-[10px] font-bold text-nature-400 uppercase mt-0.5">{t('Friends')}</span>
                         </button>
                         <div className="w-[1px] h-8 bg-nature-200 dark:bg-nature-800" />
                         <div className="flex-1 flex flex-col items-center">
                             <span className="text-xl font-black text-nature-950 dark:text-white">
                                 {balanceInfo?.trustStats?.tradeCount ?? 0}
                             </span>
-                            <span className="text-[10px] font-bold text-nature-400 uppercase mt-0.5">Trades</span>
+                            <span className="text-[10px] font-bold text-nature-400 uppercase mt-0.5">{t('Trades')}</span>
                         </div>
                     </div>
                 )}
@@ -591,64 +599,64 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                 <div className="flex items-center gap-3">
                                     <span className="text-3xl select-none" aria-hidden="true">{primary.emoji}</span>
                                     <div className="flex-1 min-w-0">
-                                        <div className="text-base font-extrabold text-nature-950 dark:text-white truncate">
-                                            {primary.name}
+                                        <div className="text-base font-extrabold text-nature-950 dark:text-white break-words">
+                                            {t(primary.name)}
                                         </div>
-                                        <div className="text-xs font-bold text-emerald-600 dark:text-emerald-400 truncate">
-                                            {primary.tagline}
+                                        <div className="text-xs font-bold text-emerald-600 dark:text-emerald-400 break-words">
+                                            {t(primary.tagline)}
                                         </div>
                                     </div>
                                 </div>
 
                                 <p className="text-xs sm:text-sm text-nature-600 dark:text-nature-300 leading-relaxed m-0">
-                                    {primary.description}
+                                    {t(primary.description)}
                                 </p>
 
                                 {secondary && (
                                     <div className="text-xs font-semibold text-nature-700 dark:text-nature-300">
-                                        Secondary rhythm: {secondary.emoji} {secondary.name}
+                                        {t('Secondary rhythm: {emoji} {name}', { emoji: secondary.emoji, name: t(secondary.name) })}
                                     </div>
                                 )}
 
                                 <div className="space-y-1.5 pt-1">
-                                    {primary.superpowers.map((sp: string, idx: number) => (
+                                    {primary.superpowers.map((_, idx: number) => (
                                         <div key={idx} className="flex items-start gap-2 text-xs text-nature-700 dark:text-nature-300">
                                             <span className="text-emerald-600 dark:text-emerald-400 font-bold shrink-0">✓</span>
-                                            <span>{sp}</span>
+                                            <span>{t(primary.superpowers[idx])}</span>
                                         </div>
                                     ))}
                                 </div>
 
                                 <div className="p-3 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200/80 dark:border-emerald-900/40 text-xs text-emerald-900 dark:text-emerald-300 leading-normal">
-                                    💡 <strong className="font-bold">How you work best:</strong> {primary.collaborationStyle}
+                                    💡 <strong className="font-bold">{t('How you work best:')}</strong> <>{t(primary.collaborationStyle)}</>
                                 </div>
 
                                 <div className="flex gap-2 pt-2">
                                     {mine.mode === 'quick' && (
                                         <button
                                             type="button"
-                                            aria-label="Take the longer 27 question quiz for a more accurate result"
+                                            aria-label={t('Take the longer 27 question quiz for a more accurate result')}
                                             onClick={() => {
                                                 setQuizInitialMode('deep');
                                                 setShowQuizModal(true);
                                             }}
-                                            className="flex-1 py-2.5 px-3 rounded-xl text-xs font-bold bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on border-none cursor-pointer transition-colors shadow-sm truncate"
+                                            className="flex-1 py-2.5 px-3 rounded-xl text-xs font-bold bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on border-none cursor-pointer transition-colors min-w-0 shadow-sm break-words"
                                         >
-                                            🧭 More accurate
+                                            {t('🧭 More accurate')}
                                         </button>
                                     )}
                                     <button
                                         type="button"
-                                        aria-label="Retake community working style quiz"
+                                        aria-label={t('Retake community working style quiz')}
                                         onClick={() => {
                                             setQuizInitialMode('quick');
                                             setShowQuizModal(true);
                                         }}
-                                        className={`py-2.5 px-3 rounded-xl text-xs font-bold border border-nature-200 dark:border-nature-700 bg-nature-50 dark:bg-nature-800 hover:bg-nature-100 dark:hover:bg-nature-700 text-nature-800 dark:text-nature-200 cursor-pointer transition-colors shadow-sm truncate ${
+                                        className={`py-2.5 px-3 rounded-xl text-xs font-bold border border-nature-200 dark:border-nature-700 bg-nature-50 dark:bg-nature-800 hover:bg-nature-100 dark:hover:bg-nature-700 text-nature-800 dark:text-nature-200 cursor-pointer transition-colors min-w-0 shadow-sm break-words ${
                                             mine.mode === 'quick' ? 'flex-1' : 'w-full'
                                         }`}
                                     >
-                                        🔄 Retake
+                                        {t('🔄 Retake')}
                                     </button>
                                 </div>
                             </div>
@@ -660,22 +668,22 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                             <div className="flex items-center gap-2">
                                 <span className="text-xl" aria-hidden="true">✨</span>
                                 <div className="text-[15px] font-bold text-nature-950 dark:text-white">
-                                    Your Working Style
+                                    {t('Your Working Style')}
                                 </div>
                             </div>
                             <p className="text-xs sm:text-sm text-nature-600 dark:text-nature-400 leading-relaxed m-0">
-                                Take the 60-second quiz on how you prefer to work. Neighbours then get tips for working with you.
+                                {t('Take the 60-second quiz on how you prefer to work. Neighbours then get tips for working with you.')}
                             </p>
                             <button
                                 type="button"
-                                aria-label="Take 60 second community working style quiz"
+                                aria-label={t('Take 60 second community working style quiz')}
                                 onClick={() => {
                                     setQuizInitialMode('quick');
                                     setShowQuizModal(true);
                                 }}
                                 className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on border-none cursor-pointer transition-colors shadow-sm mt-1"
                             >
-                                ⚡ Take 60s Quiz
+                                {t('⚡ Take 60s Quiz')}
                             </button>
                         </div>
                     );
@@ -692,18 +700,18 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                             <div className="grid grid-cols-3 gap-3 p-4">
                                 <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-xl p-3 flex flex-col items-center justify-center shadow-sm">
                                     <div className="text-amber-500 text-sm mb-1">{renderStars(stats.average)}</div>
-                                    <div className="text-xl font-black text-nature-900 dark:text-white">{stats.average.toFixed(1)}</div>
-                                    <div className="text-[10px] font-bold text-nature-400 dark:text-nature-400 uppercase mt-1">Overall</div>
+                                    <div className="text-xl font-black text-nature-900 dark:text-white">{formatNumber(stats.average, 1)}</div>
+                                    <div className="text-[10px] font-bold text-nature-400 dark:text-nature-400 uppercase mt-1">{t('Overall')}</div>
                                 </div>
                                 <div className="bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-100 dark:border-emerald-900/30 rounded-xl p-3 flex flex-col items-center justify-center shadow-sm">
                                     <div className="text-sm mb-1">📤</div>
-                                    <div className="text-xl font-black text-emerald-600 dark:text-emerald-400">{stats.asProvider?.average.toFixed(1) || '-'}</div>
-                                    <div className="text-[10px] font-bold text-emerald-600 dark:text-emerald-500 uppercase mt-1">As Provider</div>
+                                    <div className="text-xl font-black text-emerald-600 dark:text-emerald-400">{stats.asProvider ? formatNumber(stats.asProvider.average, 1) : '-'}</div>
+                                    <div className="text-[10px] font-bold text-emerald-600 dark:text-emerald-500 uppercase mt-1">{t('As Provider')}</div>
                                 </div>
                                 <div className="bg-indigo-50 dark:bg-indigo-900/10 border border-indigo-100 dark:border-indigo-900/30 rounded-xl p-3 flex flex-col items-center justify-center shadow-sm">
                                     <div className="text-sm mb-1">📥</div>
-                                    <div className="text-xl font-black text-indigo-600 dark:text-indigo-400">{stats.asReceiver?.average.toFixed(1) || '-'}</div>
-                                    <div className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase mt-1">As Payer</div>
+                                    <div className="text-xl font-black text-indigo-600 dark:text-indigo-400">{stats.asReceiver ? formatNumber(stats.asReceiver.average, 1) : '-'}</div>
+                                    <div className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase mt-1">{t('As Payer')}</div>
                                 </div>
                             </div>
                         )}
@@ -718,7 +726,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                 }`}
                                 onClick={() => setActiveTab('listings')}
                             >
-                                Listings {activePosts.length > 0 ? `(${activePosts.length})` : ''}
+                                {activePosts.length > 0 ? t('Listings ({n})', { n: activePosts.length }) : t('Listings')}
                             </button>
                             <button
                                 className={`flex-1 py-3 text-center border-b-2 font-bold text-sm bg-transparent cursor-pointer transition-all ${
@@ -728,7 +736,9 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                 }`}
                                 onClick={() => setActiveTab('reviews')}
                             >
-                                {isSelf ? 'Received' : 'Reviews'} {ratings.length > 0 ? `(${ratings.length})` : ''}
+                                {isSelf
+                                    ? (ratings.length > 0 ? t('Received ({n})', { n: ratings.length }) : t('Received'))
+                                    : (ratings.length > 0 ? t('Reviews ({n})', { n: ratings.length }) : t('Reviews'))}
                             </button>
                             {isSelf && (
                                 <button
@@ -739,7 +749,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                     }`}
                                     onClick={() => setActiveTab('given')}
                                 >
-                                    Given {given.length > 0 ? `(${given.length})` : ''}
+                                    {given.length > 0 ? t('Given ({n})', { n: given.length }) : t('Given')}
                                 </button>
                             )}
                         </div>
@@ -751,7 +761,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                     {activePosts.length === 0 ? (
                                         <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-xl p-8 text-center shadow-sm">
                         <div className="text-4xl opacity-50 mb-2">🛒</div>
-                                            <div className="font-bold text-nature-500 dark:text-nature-400">No active listings.</div>
+                                            <div className="font-bold text-nature-500 dark:text-nature-400">{t('No active listings.')}</div>
                                         </div>
                                     ) : (
                                         <div className="flex flex-col gap-3">
@@ -792,7 +802,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                                                 onNavigatePost(p.id);
                                                             }
                                                         }}
-                                                        aria-label={`View post: ${p.title}`}
+                                                        aria-label={t('View post: {title}', { title: p.title })}
                                                         className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-xl p-3 text-left cursor-pointer hover:-translate-y-0.5 transition-transform shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500"
                                                     >
                                                         <div className="flex gap-3">
@@ -822,7 +832,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                                                             });
                                                                         }
                                                                     }}
-                                                                    aria-label={`View enlarged photo: ${p.title}`}
+                                                                    aria-label={t('View enlarged photo: {title}', { title: p.title })}
                                                                     className="w-14 h-14 rounded-lg overflow-hidden border border-nature-100 dark:border-nature-800 shrink-0 cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500"
                                                                 >
                                                                     <img src={listPhotoUrl(coverImage)} alt={p.title} className="w-full h-full object-cover bg-nature-100 dark:bg-nature-800" />
@@ -839,7 +849,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                                                             ? 'bg-bp-chip-ok-tint text-bp-chip-ok-ink'
                                                                             : 'bg-bp-chip-need-tint text-bp-chip-need-ink'
                                                                     }`}>
-                                                                        {p.type?.toUpperCase()}
+                                                                        {p.type === 'offer' ? t('OFFER') : p.type === 'need' ? t('NEED') : p.type?.toUpperCase()}
                                                                     </div>
                                                                     {/* A price is Beans: none where Beans are marked (the line above says where they live). */}
                                                                     {!beansMarked && (
@@ -850,7 +860,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                                                     )}
                                                                 </div>
                                                                 <div className="font-bold text-nature-900 dark:text-white text-sm truncate">{p.title}</div>
-                                                                <div className="text-xs text-nature-400 font-medium mt-0.5">Active</div>
+                                                                <div className="text-xs text-nature-400 font-medium mt-0.5">{t('Active')}</div>
                                                             </div>
                                                         </div>
                                                     </div>
@@ -866,7 +876,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                     {ratings.length === 0 ? (
                                         <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-xl p-8 text-center shadow-sm">
                                             <div className="text-4xl opacity-50 mb-2">🌱</div>
-                                            <div className="font-bold text-nature-500 dark:text-nature-400">No reviews yet.</div>
+                                            <div className="font-bold text-nature-500 dark:text-nature-400">{t('No reviews yet.')}</div>
                                         </div>
                                     ) : (
                                         <div className="flex flex-col gap-3">
@@ -880,11 +890,11 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                                                     ? 'bg-bp-chip-ok-tint text-bp-chip-ok-ink'
                                                                     : 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-300'
                                                             }`}>
-                                                                {r.role === 'provider' ? 'Provided Service' : 'Paid for Service'}
+                                                                {r.role === 'provider' ? t('Provided Service') : t('Paid for Service')}
                                                             </div>
                                                         </div>
                                                         <div className="text-[10px] font-bold text-nature-400 uppercase">
-                                                            {new Date(r.createdAt || Date.now()).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}
+                                                            {formatDate(new Date(r.createdAt || Date.now()), 'month-year')}
                                                         </div>
                                                     </div>
                                                     {r.comment ? (
@@ -892,7 +902,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                                             "{r.comment}"
                                                         </div>
                                                     ) : (
-                                                        <div className="text-xs text-nature-400 italic">No comment provided.</div>
+                                                        <div className="text-xs text-nature-400 italic">{t('No comment provided.')}</div>
                                                     )}
                                                 </div>
                                             ))}
@@ -906,7 +916,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                     {given.length === 0 ? (
                                         <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-xl p-8 text-center shadow-sm">
                                             <div className="text-4xl opacity-50 mb-2">✍️</div>
-                                            <div className="font-bold text-nature-500 dark:text-nature-400">You haven't reviewed anyone yet.</div>
+                                            <div className="font-bold text-nature-500 dark:text-nature-400">{t("You haven't reviewed anyone yet.")}</div>
                                         </div>
                                     ) : (
                                         <div className="flex flex-col gap-3">
@@ -915,16 +925,16 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                                     <div className="flex justify-between items-start mb-2">
                                                         <div className="flex items-center gap-3 min-w-0 flex-1">
                                                             {resolveAvatarUrl(r.target_avatar) ? (
-                                                                <img src={resolveAvatarUrl(r.target_avatar)!} alt={r.target_callsign || 'avatar'} className="w-7 h-7 rounded-full object-cover border" />
+                                                                <img src={resolveAvatarUrl(r.target_avatar)!} alt={r.target_callsign || t('avatar')} className="w-7 h-7 rounded-full object-cover border" />
                                                             ) : (
                                                                 <div className="w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs bg-oat-100 dark:bg-nature-800 border">
                                                                     {r.target_callsign?.charAt(0).toUpperCase() || '?'}
                                                                 </div>
                                                             )}
-                                                            <div className="font-bold text-[14px] text-nature-900 dark:text-white truncate">{r.target_callsign || 'Anonymous'}</div>
+                                                            <div className="font-bold text-[14px] text-nature-900 dark:text-white truncate">{r.target_callsign || t('Anonymous')}</div>
                                                         </div>
                                                         <div className="text-[10px] font-bold text-nature-400 uppercase">
-                                                            {new Date(r.createdAt || Date.now()).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}
+                                                            {formatDate(new Date(r.createdAt || Date.now()), 'month-year')}
                                                         </div>
                                                     </div>
                                                     <div className="text-amber-500 text-xs mb-2">{renderStars(r.stars)}</div>
@@ -933,7 +943,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                                             "{r.comment}"
                                                         </div>
                                                     ) : (
-                                                        <div className="text-xs text-nature-400 italic">No comment provided.</div>
+                                                        <div className="text-xs text-nature-400 italic">{t('No comment provided.')}</div>
                                                     )}
 
                                                     {/* Edit review button */}
@@ -947,7 +957,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                                                 }}
                                                                 className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-nature-200 dark:border-nature-800 bg-nature-50 hover:bg-nature-100 dark:bg-nature-950 dark:hover:bg-nature-900 text-nature-600 dark:text-nature-400 font-bold text-xs cursor-pointer transition-colors"
                                                             >
-                                                                ✏️ Edit Review
+                                                                {t('✏️ Edit Review')}
                                                             </button>
                                                         </div>
                                                     )}
@@ -969,7 +979,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                 onClick={() => setShowReportModal(true)}
                                 className="flex-1 py-3 px-4 rounded-xl border border-nature-300 dark:border-nature-700 bg-white dark:bg-nature-900 text-nature-700 dark:text-nature-300 font-bold text-sm cursor-pointer hover:bg-nature-50 dark:hover:bg-nature-800 transition-colors flex items-center justify-center gap-2 shadow-sm"
                             >
-                                <span>🚩</span> Report Member
+                                <span>🚩</span> {t('Report Member')}
                             </button>
                             <button
                                 type="button"
@@ -982,11 +992,11 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                 }`}
                             >
                                 <span>{isBlocked ? '🛡️' : '🚫'}</span>
-                                <span>{isBlocking ? (isBlocked ? 'Unblocking…' : 'Blocking…') : isBlocked ? 'Unblock Member' : `Block ${profile?.callsign || 'Member'}`}</span>
+                                <span>{isBlocking ? (isBlocked ? t('Unblocking…') : t('Blocking…')) : isBlocked ? t('Unblock Member') : t('Block {name}', { name: profile?.callsign || t('Member') })}</span>
                             </button>
                         </div>
                         <p className="text-center text-xs text-nature-500 dark:text-nature-400 max-w-xs mt-1 leading-relaxed">
-                            Blocking will instantly hide their content from your feed and notify moderation.
+                            {t('Blocking will instantly hide their content from your feed and notify moderation.')}
                         </p>
                         {blocklistFullNote && (
                             <p role="status" className="text-center text-xs font-semibold text-nature-700 dark:text-nature-300 max-w-xs leading-relaxed">
@@ -1003,9 +1013,9 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                     <div className="w-full max-w-sm bg-white dark:bg-nature-900 rounded-3xl shadow-2xl border border-nature-200 dark:border-nature-800 overflow-hidden animate-in slide-in-from-bottom-4 zoom-in-95 duration-300">
                         <div className="p-6 text-center">
                             <div className="text-4xl mb-4">✍️</div>
-                            <h3 className="text-xl font-black text-nature-900 dark:text-white mb-2">Edit Your Review</h3>
+                            <h3 className="text-xl font-black text-nature-900 dark:text-white mb-2">{t('Edit Your Review')}</h3>
                             <p className="text-nature-600 dark:text-nature-400 text-sm mb-6">
-                                Update your rating for <strong>{editingReview.target_callsign || 'Partner'}</strong>
+                                <Sentence text={t('Update your rating for {name}')} parts={{ name: <strong>{editingReview.target_callsign || t('Partner')}</strong> }} />
                             </p>
 
                             <div className="flex justify-center gap-2 mb-4 drop-shadow-sm">
@@ -1013,7 +1023,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                     <button
                                         key={star}
                                         onClick={() => setReviewStars(star)}
-                                        aria-label={`Rate ${star} star${star === 1 ? '' : 's'}`}
+                                        aria-label={tn(star, 'Rate {n} star', 'Rate {n} stars')}
                                         className="text-4xl hover:scale-110 transition-transform bg-transparent border-none cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 rounded-lg"
                                     >
                                         <span className={star <= reviewStars ? "text-amber-400" : "text-nature-200 dark:text-nature-500"}>★</span>
@@ -1024,7 +1034,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                             <textarea
                                 value={reviewComment}
                                 onChange={e => setReviewComment(e.target.value)}
-                                placeholder="Write a short review (optional)..."
+                                placeholder={t('Write a short review (optional)...')}
                                 className="w-full p-3 bg-nature-50 border border-nature-200 dark:bg-nature-950 dark:border-nature-800 rounded-xl text-sm focus:outline-none focus:border-amber-300 focus:ring-1 focus:ring-amber-300 mb-6 font-medium text-nature-900 dark:text-white resize-none"
                                 rows={3}
                             />
@@ -1034,7 +1044,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                     onClick={() => setEditingReview(null)}
                                     className="flex-1 py-3 text-nature-600 dark:text-nature-300 text-sm font-bold bg-nature-100 hover:bg-nature-200 dark:bg-nature-800 dark:hover:bg-nature-700 dark:hover:text-nature-200 rounded-xl transition-colors border-none cursor-pointer"
                                 >
-                                    Cancel
+                                    {t('Cancel')}
                                 </button>
                                 <button
                                     disabled={submittingReview}
@@ -1043,7 +1053,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                         try {
                                             const txId = editingReview.transactionId;
                                             const targetPubkey = editingReview.targetPubkey;
-                                            if (!txId || !targetPubkey) throw new Error('Missing transaction or user details');
+                                            if (!txId || !targetPubkey) throw new Error(t('Missing transaction or user details'));
 
                                             await submitRating(
                                                 identity.publicKey,
@@ -1057,7 +1067,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                             const res = await getRatingsGiven(pubkey).catch(() => ({ ratings: [] }));
                                             setGiven(res.ratings || []);
                                         } catch (e: any) {
-                                            alert(e.message || 'Failed to update review');
+                                            alert(e.message || t('Failed to update review'));
                                         } finally {
                                             setSubmittingReview(false);
                                         }
@@ -1066,7 +1076,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                         submittingReview ? 'bg-bp-gold-fill opacity-75 cursor-not-allowed' : 'bg-bp-gold-fill hover:bg-bp-gold-hover hover:-translate-y-0.5'
                                     }`}
                                 >
-                                    {submittingReview ? 'Updating...' : 'Update Rating'}
+                                    {submittingReview ? t('Updating...') : t('Update Rating')}
                                 </button>
                             </div>
                         </div>
@@ -1088,7 +1098,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                     onClose={() => setShowReportModal(false)}
                     reporterPubkey={identity.publicKey}
                     targetPubkey={pubkey}
-                    targetName={profile?.callsign || 'Member'}
+                    targetName={profile?.callsign || t('Member')}
                 />
             )}
 

@@ -36,7 +36,7 @@ import { webAppHost } from '../lib/former-address';
 
 const MapPage = lazy(() => import('./MapPage').then(m => ({ default: m.MapPage })));
 
-import { helpSheetFor, t, webHelpKey } from '@beanpool/core';
+import { helpSheetFor, t, webHelpKey, word, type WordKey } from '@beanpool/core';
 import { HelpDialog } from '../components/HelpDialog';
 import { LobbyHeader, LobbyHelpButton, LobbyJoin } from '../components/LobbyHeader';
 import { MemberGuide } from '../components/MemberGuide';
@@ -44,13 +44,14 @@ import { getBundledGuide } from '../lib/guide';
 
 type LobbyTab = 'home' | 'marketplace' | 'map' | 'ledger';
 
-const TABS: { id: LobbyTab; label: string; emoji: string }[] = [
-    { id: 'home', label: 'Home', emoji: '🏠' },
-    { id: 'marketplace', label: 'Market', emoji: '🤝' },
-    { id: 'map', label: 'Map', emoji: '🗺️' },
+/** The tabs' names are the phone's tab words (word(…, 'tab')), so one translation serves both. */
+const TABS: { id: LobbyTab; label: WordKey; emoji: string }[] = [
+    { id: 'home', label: word('Home', 'tab'), emoji: '🏠' },
+    { id: 'marketplace', label: word('Market', 'tab'), emoji: '🤝' },
+    { id: 'map', label: word('Map', 'tab'), emoji: '🗺️' },
 ];
 /** The Ledger, when the node previews Beans: a visitor sees mutual exchange before any door (design §5, pick 4). */
-const LEDGER_TAB: { id: LobbyTab; label: string; emoji: string } = { id: 'ledger', label: 'Ledger', emoji: '📊' };
+const LEDGER_TAB: { id: LobbyTab; label: WordKey; emoji: string } = { id: 'ledger', label: word('Ledger', 'tab'), emoji: '📊' };
 
 interface Props {
     /** `/api/community/info`, as App read it to choose the lobby. */
@@ -144,11 +145,12 @@ export function GuestLobby({ info, onComplete, linkedPostId = null, onLinkedPost
     const joinCard = (
         <section data-testid="lobby-join-card"
             className="mb-3 px-4 py-3 rounded-2xl border border-blue-200 dark:border-blue-900 bg-blue-50/90 dark:bg-blue-950/60 text-center">
-            <h2 className="m-0 mb-1 text-lg font-extrabold text-nature-950 dark:text-white">Join BeanPool</h2>
+            <h2 className="m-0 mb-1 text-lg font-extrabold text-nature-950 dark:text-white">{t('Join BeanPool')}</h2>
             <p className="m-0 mb-3 text-sm text-nature-700 dark:text-nature-200 leading-snug">
+                {/* What joining takes is WebJoin's sentence (the join screens' sweep, W4), given here whole. */}
                 {doorOpen
-                    ? `Post what you can offer and what you need, and talk with the people here. ${joinTakes(info.features?.wordsDoor === true)}`
-                    : 'This community takes new members with an invite from one of them.'}
+                    ? t('Post what you can offer and what you need, and talk with the people here. {joinTakes}', { joinTakes: joinTakes(info.features?.wordsDoor === true) })
+                    : t('This community takes new members with an invite from one of them.')}
             </p>
             {appFirst && (
                 <a href={APP_GLOBAL_LINK} data-testid="lobby-open-app"
@@ -166,12 +168,12 @@ export function GuestLobby({ info, onComplete, linkedPostId = null, onLinkedPost
             ) : (
                 <button type="button" data-testid="lobby-join" disabled={canHoldKey === null} onClick={() => openJoin('guard')}
                     className="w-full min-h-[48px] rounded-xl border-0 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-bold text-base cursor-pointer">
-                    Join
+                    {t('Join')}
                 </button>
             )}
             <button type="button" data-testid="lobby-have-account" onClick={() => openJoin('restore')}
                 className="mt-1 min-h-[44px] px-2 bg-transparent border-0 text-sm font-semibold text-nature-600 dark:text-nature-300 underline cursor-pointer">
-                Already have BeanPool?
+                {t('Already have BeanPool?')}
             </button>
             {/* What the global community is, in members' words (DESIGN-global-mothership-fable.md §2.5, pick 1): on a global
                 community only, under its ways in, so no button moves. */}
@@ -186,26 +188,26 @@ export function GuestLobby({ info, onComplete, linkedPostId = null, onLinkedPost
     const headerJoin = (className: string) => <LobbyJoin onClick={() => openJoin('guard')} disabled={canHoldKey === null} className={className} />;
 
     // The tab's own name: at 320 px with 1.3x text "Marketplace" runs under the Join button.
-    const title = tab === 'home' ? 'Home' : tab === 'marketplace' ? 'Market' : tab === 'ledger' ? 'Ledger' : 'Map';
+    const title = tab === 'home' ? t('Home', undefined, 'tab') : tab === 'marketplace' ? t('Market', undefined, 'tab') : tab === 'ledger' ? t('Ledger', undefined, 'tab') : t('Map', undefined, 'tab');
 
     return (
         <div className="flex h-screen overflow-hidden text-text-primary" data-testid="guest-lobby">
             {/* Desktop left sidebar, as a member's: the two tabs, and Join where Settings sits. */}
             <aside className="hidden md:flex flex-col w-64 shrink-0 bg-nature-50 dark:bg-nature-950 border-r border-nature-200 dark:border-nature-800 z-50">
                 <div className="p-4 border-b border-nature-200 dark:border-nature-800 flex items-center gap-2">
-                    <img src="/bean.png" alt="BeanPool Icon" className="w-9 h-9 object-contain drop-shadow-sm" />
+                    <img src="/bean.png" alt={t('BeanPool Icon')} className="w-9 h-9 object-contain drop-shadow-sm" />
                     <span className="font-extrabold text-xl tracking-tight text-rainbow">BeanPool</span>
                 </div>
                 <nav className="flex-1 p-3 space-y-1.5 overflow-y-auto">
-                    {tabs.map((t) => (
-                        <button key={t.id} type="button" onClick={() => selectTab(t.id)} aria-current={tab === t.id ? 'page' : undefined}
+                    {tabs.map((tb) => (
+                        <button key={tb.id} type="button" onClick={() => selectTab(tb.id)} aria-current={tab === tb.id ? 'page' : undefined}
                             className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-bold text-sm transition-all duration-200 cursor-pointer ${
-                                tab === t.id
+                                tab === tb.id
                                     ? 'bg-nature-200 dark:bg-nature-800 text-nature-900 dark:text-white shadow-sm'
                                     : 'text-nature-600 dark:text-nature-400 hover:bg-nature-100 dark:hover:bg-nature-900 hover:text-nature-900 dark:hover:text-nature-200'
                             }`}>
-                            <span className="text-xl" aria-hidden="true">{t.emoji}</span>
-                            <span>{t.label}</span>
+                            <span className="text-xl" aria-hidden="true">{tb.emoji}</span>
+                            <span>{t(tb.label)}</span>
                         </button>
                     ))}
                 </nav>
@@ -268,7 +270,7 @@ export function GuestLobby({ info, onComplete, linkedPostId = null, onLinkedPost
                         <LedgerPage identity={null} isMember={false} preview onNavigate={navigate} onNearYou={() => selectTab('home')} onGuide={(slug) => navigate('guide', slug)} />
                     )}
                     {tab === 'map' && (
-                        <Suspense fallback={<div className="flex-1 flex items-center justify-center">Loading map...</div>}>
+                        <Suspense fallback={<div className="flex-1 flex items-center justify-center">{t('Loading map...')}</div>}>
                             <MapPage identity={null} isMember={false} visitor onNavigate={navigate} covered={!!join} />
                         </Suspense>
                     )}
@@ -289,10 +291,10 @@ export function GuestLobby({ info, onComplete, linkedPostId = null, onLinkedPost
                 }}>
                     <div className="absolute inset-0 bg-black/30 pointer-events-none" />
                     <div className="relative z-10 w-full flex gap-1">
-                        {tabs.map((t) => {
-                            const isActive = tab === t.id;
+                        {tabs.map((tb) => {
+                            const isActive = tab === tb.id;
                             return (
-                                <button key={t.id} type="button" onClick={() => selectTab(t.id)} aria-current={isActive ? 'page' : undefined}
+                                <button key={tb.id} type="button" onClick={() => selectTab(tb.id)} aria-current={isActive ? 'page' : undefined}
                                     style={{ flex: '1 1 0', minWidth: 0, padding: 0, background: 'transparent', border: 'none', cursor: 'pointer' }}>
                                     <div style={{
                                         display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
@@ -300,10 +302,10 @@ export function GuestLobby({ info, onComplete, linkedPostId = null, onLinkedPost
                                         border: '1px solid rgba(255,255,255,0.05)', boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
                                         color: isActive ? undefined : '#fefefe',
                                     }}>
-                                        <span className="text-dark-aura" style={{ fontSize: '1.5rem' }} aria-hidden="true">{t.emoji}</span>
+                                        <span className="text-dark-aura" style={{ fontSize: '1.5rem' }} aria-hidden="true">{tb.emoji}</span>
                                         <span className={`${isActive ? 'text-rainbow text-dark-aura font-extrabold' : 'text-dark-aura font-semibold'} truncate max-w-full text-center`}
                                             style={{ fontSize: '0.75rem', lineHeight: 1.1 }}>
-                                            {t.label}
+                                            {t(tb.label)}
                                         </span>
                                     </div>
                                 </button>

@@ -11,9 +11,12 @@
  * (lib/member-area.ts) have time limits that end in the same one line.
  *
  * Small screens: three stacked full-width controls, each at least 44px tall; holds at 320px and 130% text.
+ *
+ * Every word on it is drawn through t() in the member's language: core's word() keys, the town search's, and
+ * lib/member-area.ts's failure sentences, matched where they are shown (areaFailureWords), as the phone's AreaPicker does.
  */
 import { useEffect, useRef, useState } from 'react';
-import { AREA_STEP_WORDS, AREA_TOWN_SEARCH_WORDS, areaWhyLine, type AddressResult } from '@beanpool/core';
+import { AREA_STEP_WORDS, AREA_TOWN_SEARCH_WORDS, areaWhyLine, t, word, type AddressResult, type AddressSearchWords } from '@beanpool/core';
 import { AddressSearch } from './AddressSearch';
 import { readBrowserPosition, writeArea, type AreaSender, type MemberArea } from '../lib/member-area';
 
@@ -27,12 +30,34 @@ interface AreaStepProps {
     hideTitle?: boolean;
 }
 
+/**
+ * lib/member-area.ts's own failure sentences (a reading refused or unavailable, a place that can't be read, the community
+ * out of reach or saying no), each drawn in the member's language here, where it is shown. Anything else is the
+ * community's own sentence (or the standing refusal's, already translated), shown as it came.
+ */
+const AREA_FAILURES = {
+    noLocation: word("This browser can't share a location. Type a town instead, or skip for now."),
+    locationOff: word('Location is off for this site. Type a town instead, or skip for now.'),
+    unreadableLocation: word("Couldn't read your location. Type a town instead, or skip for now."),
+    unreadablePlace: word("That place couldn't be read. Try again or type a town."),
+    unreachable: word("Couldn't reach the community. Check your connection and try again."),
+} as const;
+const REFUSED = /^The community said no \((\d+)\)\. Try again later\.$/;
+
+/** A failed reading's or save's line (readBrowserPosition's message, writeArea's `error`), in the member's language. */
+export function areaFailureWords(error: string): string {
+    for (const k of Object.keys(AREA_FAILURES) as (keyof typeof AREA_FAILURES)[]) if (error === AREA_FAILURES[k]) return t(AREA_FAILURES[k]);
+    const refused = REFUSED.exec(error);
+    if (refused) return t('The community said no ({status}). Try again later.', { status: refused[1] });
+    return error;
+}
+
 const fullButton = {
     width: '100%', minHeight: '44px', padding: '0.75rem', borderRadius: '10px', fontSize: '1rem', fontWeight: 600,
     fontFamily: 'inherit', display: 'block', boxSizing: 'border-box' as const, marginBottom: '0.6rem',
 };
 
-export function AreaStep({ send, limits, onSaved, onSkip, skipLabel = AREA_STEP_WORDS.skip, hideTitle }: AreaStepProps) {
+export function AreaStep({ send, limits, onSaved, onSkip, skipLabel, hideTitle }: AreaStepProps) {
     const [busy, setBusy] = useState<'location' | 'town' | null>(null);
     const [showTown, setShowTown] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -57,7 +82,7 @@ export function AreaStep({ send, limits, onSaved, onSkip, skipLabel = AREA_STEP_
         if (saving.current === stop) saving.current = null;
         setBusy(null);
         if (result.ok) onSaved(result.area, placeName);
-        else setError(result.error);
+        else setError(areaFailureWords(result.error));
     };
 
     const useMyLocation = async () => {
@@ -71,7 +96,7 @@ export function AreaStep({ send, limits, onSaved, onSkip, skipLabel = AREA_STEP_
         } catch (e) {
             if (gen !== generation.current) return;
             setBusy(null);
-            setError(e instanceof Error ? e.message : "Couldn't read your location. Type a town instead, or skip for now.");
+            setError(e instanceof Error && e.message ? areaFailureWords(e.message) : t(AREA_FAILURES.unreadableLocation));
         }
     };
 
@@ -88,11 +113,21 @@ export function AreaStep({ send, limits, onSaved, onSkip, skipLabel = AREA_STEP_
         onSkip();
     };
 
+    // Made in each render, so a language change redraws the town box in the new language.
+    const townWords: AddressSearchWords = {
+        label: t(AREA_TOWN_SEARCH_WORDS.label),
+        placeholder: t(AREA_TOWN_SEARCH_WORDS.placeholder),
+        unavailable: t(AREA_TOWN_SEARCH_WORDS.unavailable),
+        noMatches: t(AREA_TOWN_SEARCH_WORDS.noMatches),
+        source: t(AREA_TOWN_SEARCH_WORDS.source),
+        pickLabel: AREA_TOWN_SEARCH_WORDS.pickLabel,
+    };
+
     return (
         <div data-testid="area-step">
-            {!hideTitle && <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '0.5rem' }}>📍 {AREA_STEP_WORDS.title}</h3>}
+            {!hideTitle && <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '0.5rem' }}>📍 <>{t(AREA_STEP_WORDS.title)}</></h3>}
             <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '0.5rem', lineHeight: 1.5 }}>{areaWhyLine(limits)}</p>
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1rem', lineHeight: 1.5 }}>{AREA_STEP_WORDS.privacy}</p>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1rem', lineHeight: 1.5 }}>{t(AREA_STEP_WORDS.privacy)}</p>
 
             <button
                 type="button"
@@ -102,7 +137,7 @@ export function AreaStep({ send, limits, onSaved, onSkip, skipLabel = AREA_STEP_
                 aria-busy={busy === 'location'}
                 style={{ ...fullButton, border: 'none', background: busy ? 'var(--bp-neutral-fill)' : 'var(--bp-info-fill)', color: 'var(--bp-info-on)', cursor: busy ? 'not-allowed' : 'pointer' }}
             >
-                {busy === 'location' ? 'Reading your location…' : `📍 ${AREA_STEP_WORDS.useLocation}`}
+                {busy === 'location' ? t('Reading your location…') : <>📍 <>{t(AREA_STEP_WORDS.useLocation)}</></>}
             </button>
             <button
                 type="button"
@@ -112,12 +147,12 @@ export function AreaStep({ send, limits, onSaved, onSkip, skipLabel = AREA_STEP_
                 aria-expanded={showTown}
                 style={{ ...fullButton, border: '1px solid var(--border-primary, #334155)', background: 'transparent', color: 'var(--text-primary)', cursor: busy ? 'not-allowed' : 'pointer' }}
             >
-                🔎 {AREA_STEP_WORDS.typeTown}
+                🔎 <>{t(AREA_STEP_WORDS.typeTown)}</>
             </button>
             {showTown && (
                 <div style={{ marginBottom: '0.6rem', textAlign: 'left' }}>
-                    <AddressSearch onPick={pickTown} words={AREA_TOWN_SEARCH_WORDS} />
-                    {busy === 'town' && <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>Saving your area…</p>}
+                    <AddressSearch onPick={pickTown} words={townWords} />
+                    {busy === 'town' && <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>{t('Saving your area…')}</p>}
                 </div>
             )}
 
@@ -129,9 +164,9 @@ export function AreaStep({ send, limits, onSaved, onSkip, skipLabel = AREA_STEP_
                 onClick={skip}
                 style={{ ...fullButton, border: 'none', background: 'none', color: 'var(--text-muted)', textDecoration: 'underline', cursor: 'pointer', fontSize: '0.95rem' }}
             >
-                {skipLabel}
+                {skipLabel ?? t(AREA_STEP_WORDS.skip)}
             </button>
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', lineHeight: 1.5, marginTop: '0.25rem' }}>{AREA_STEP_WORDS.later}</p>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', lineHeight: 1.5, marginTop: '0.25rem' }}>{t(AREA_STEP_WORDS.later)}</p>
         </div>
     );
 }

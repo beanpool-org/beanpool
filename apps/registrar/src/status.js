@@ -138,19 +138,22 @@ export async function writeStatus(env, { targets, recent, now, missedToRaise, ke
         return !!l && ((l.down && !open) || (open && !!l.rows?.some((r) => r.ok)));
     });
     // One statement, the same rule for each: a server shown, its last run of missedToRaise failed looks or more after
-    // its last answer at or before `from` (the first of them to the next answer: the incident it was already in is
-    // kept, begun as it was); the registrar, its last missedToRaise slots or more with no tick, from the tick at or
+    // its last answer at or before `from` that is not inside its open incident (else the run that began it is never
+    // looked at, and it stays open while the server answers: review r4309810870) (the first of them to the next answer:
+    // the open incident it was already in is kept, begun as it was); the registrar, its last missedToRaise slots or more with no tick, from the tick at or
     // before `from`. Refused, nothing is marked and the next tick derives it again.
     if (seed || lost || missed || changed) {
         const from = seed ? 0 : lost ? through : prev || through;
         const rows = (await env.DB.prepare(`WITH b AS (SELECT j.value AS target, COALESCE((SELECT id FROM watch_log
-                        WHERE target = j.value AND ok = 1 AND ran_at <= ? ORDER BY ran_at DESC LIMIT 1), 0) AS lo FROM json_each(?) j),
+                        WHERE target = j.value AND ok = 1 AND ran_at <= ? AND NOT EXISTS (SELECT 1 FROM watch_marks m
+                            WHERE m.key = '${INCIDENT}' || j.value AND json_extract(m.value, '$.ended') IS NULL AND m.since <= watch_log.ran_at)
+                        ORDER BY ran_at DESC LIMIT 1), 0) AS lo FROM json_each(?) j),
                 looked AS (SELECT id, target, ok, SUM(ok) OVER (PARTITION BY target ORDER BY id) AS n
                     FROM (SELECT w.id, w.target, w.ok FROM b JOIN watch_log w ON w.target = b.target AND w.id > b.lo)),
                 runs AS (SELECT target, MIN(id) AS id, COUNT(*) AS failed FROM looked WHERE ok = 0 GROUP BY target, n),
                 last AS (SELECT target, MAX(id) AS id FROM runs WHERE failed >= ? GROUP BY target),
                 found AS (SELECT l.target, w.ran_at, w.status, m.since AS was, m.value AS was_value,
-                        m.since < w.ran_at AND NOT EXISTS (SELECT 1 FROM watch_log x
+                        m.since < w.ran_at AND json_extract(m.value, '$.ended') IS NULL AND NOT EXISTS (SELECT 1 FROM watch_log x
                             WHERE x.target = l.target AND x.ok = 1 AND x.ran_at > m.since AND x.ran_at < w.ran_at) AS kept
                     FROM last l JOIN watch_log w ON w.id = l.id LEFT JOIN watch_marks m ON m.key = '${INCIDENT}' || l.target),
                 ticks AS (SELECT ran_at, LAG(ran_at) OVER (ORDER BY ran_at) AS prev FROM (SELECT DISTINCT ran_at FROM watch_log

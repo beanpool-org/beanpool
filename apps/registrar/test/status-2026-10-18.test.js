@@ -429,6 +429,42 @@ function loseLooks(r, names) {
 }
 const looksAt = (r, s) => r.w.sqlite.prepare('SELECT target FROM watch_log WHERE ran_at = ? ORDER BY target').all(s).map((x) => x.target);
 
+test('an answer written to watch_log whose tick never read it back still ends the incident on the tick after, and a quiet tick spends 2', async () => {
+    // The 2026-10-19 deciding pass's case (#2185, status.js:147): `lo`, the newest answer at or before `from`, was that
+    // answer, so the run that began the incident was never looked at; it stayed open with `up: true`, and every tick
+    // derived again for nothing (3 status queries, not 2). An answer inside an open incident is never `lo`.
+    const r = await room();
+    try {
+        let n = 0, refused = 0, armed = false;
+        const prepare = r.w.env.DB.prepare.bind(r.w.env.DB);
+        r.w.env.DB.prepare = (sql) => {
+            if (/watch_days|'status:/.test(sql)) n++;   // status.js's own
+            const stmt = prepare(sql);
+            if (!/^SELECT \* FROM watch_log WHERE target=\? ORDER BY id DESC LIMIT \?$/.test(sql)) return stmt;
+            let target;
+            return { bind(...a) { target = a[0]; stmt.bind(...a); return this; },
+                all: async () => { if (armed && target === 'test' && !refused) { refused++; refuse(); } return stmt.all(); } };
+        };
+        await r.tick();
+        const t1 = r.nowS();
+        r.servers['test.watch.test'].fail = 'timeout';
+        await r.tick(); await r.tick();
+        assert.deepEqual(r.server('test').incident, { began_at: t1 + 300, ended_at: null, why: 'timed-out' });
+        r.servers['test.watch.test'].fail = null;
+        armed = true;
+        await r.tick();   // it answers; the look is written, the read back after it refused
+        assert.equal(refused, 1, 'the read back refused once');
+        assert.deepEqual(looksAt(r, t1 + 900), NAMES.slice().sort(), 'every look of the answering tick is in watch_log');
+        await r.tick();
+        assert.equal(r.server('test').up, true);
+        assert.deepEqual(r.server('test').incident, { began_at: t1 + 300, ended_at: t1 + 900, why: 'timed-out' }, 'ended at the answer the log holds');
+        n = 0;
+        await r.tick();
+        assert.equal(n, 2, 'quiet: no derive spent for nothing');
+        assert.deepEqual(r.server('test').incident, { began_at: t1 + 300, ended_at: t1 + 900, why: 'timed-out' }, 'and it stays');
+    } finally { r.done(); }
+});
+
 test('the tick after a lost write loses every look of its own: it still names what the lost write began, never writing status.json over it', async () => {
     // The 2026-10-19 review's case (#2185, status.js:130): the tick before was known only from this tick's looks in
     // watch_log, so with none there no write was lost; status.json was written, and the incident never named.

@@ -205,6 +205,8 @@ const FILLED: ReadonlyArray<{ pattern: RegExp; words: (m: RegExpMatchArray) => s
     { pattern: /^Google could not sign you in: ([\s\S]*)$/, words: (m) => t('Google could not sign you in: {reason}', { reason: m[1] }) },
     { pattern: /^Your node does not accept (\w+) sign-in\.$/, words: (m) => t('Your node does not accept {provider} sign-in.', { provider: m[1] }) },
     { pattern: /^Provider (\w+) is not supported on this device\.$/, words: (m) => t('Provider {provider} is not supported on this device.', { provider: m[1] }) },
+    // utils/sso-signin.ts: the provider's page gave no answer in time (the provider's key, as it writes it).
+    { pattern: /^(\w+) sign-in timed out\.$/, words: (m) => t('{provider} sign-in timed out.', { provider: m[1] }) },
     // utils/db.ts redeemInvite: the node down, by its status, and a refusal with no words of the node's own (any text it sent
     // instead follows, as it came).
     {

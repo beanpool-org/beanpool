@@ -238,6 +238,9 @@ describe('the sentences with a name, a number or a time in them', () => {
             ['Google could not sign you in: {x}', 'Google could not sign you in: DEVELOPER_ERROR', ['DEVELOPER_ERROR']],
             ['Your node does not accept {x} sign-in.', 'Your node does not accept facebook sign-in.', ['facebook']],
             ['Provider {x} is not supported on this device.', 'Provider facebook is not supported on this device.', ['facebook']],
+            // utils/sso-signin.ts: the provider's page gave no answer in time (the provider's key, as the file writes it).
+            ['{x} sign-in timed out.', 'google sign-in timed out.', ['google']],
+            ['{x} sign-in timed out.', 'facebook sign-in timed out.', ['facebook']],
             ['The global community does not accept {x} sign-in.', 'The global community does not accept apple sign-in.', ['apple']],
             ["Your account couldn't be locked to this sign-in ({x}). Nothing was linked.", "Your account couldn't be locked to this sign-in (no key). Nothing was linked.", ['no key']],
             // utils/db.ts redeemInvite: the node down, and a refusal without its own words (any text it sent instead after it).

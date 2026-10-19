@@ -17,9 +17,10 @@
 // D1: a watch tick already spends most of the 50 queries Workers Free allows one invocation (38 with our five servers,
 // about 50 on a tick that raises or clears an alert), so this runs after the alerts and the daily line and spends 2 on a
 // quiet tick; 1 more on a tick where an incident begins or ends (however many), on its first tick, on the tick after a
-// lost write (with KV refusing every write, every other tick), and once a day to prune. On a tick past the budget what
-// is refused is this, and status.json is one tick older. KV: one read and one write a tick, 288 a day each (Workers
-// Free allows 100,000 reads and 1,000 writes). With no STATUS binding nothing here runs and the GET answers 404.
+// lost write or a slot with no tick (with KV refusing every write, every other tick), and once a day to prune. On a
+// tick past the budget what is refused is this, and status.json is one tick older. KV: one read and one write a tick,
+// 288 a day each (Workers Free allows 100,000 reads and 1,000 writes). With no STATUS binding nothing here runs and the
+// GET answers 404.
 
 export const STATUS_KEY = 'status.json';
 export const STATUS_WINDOW_DAYS = 90;
@@ -119,15 +120,17 @@ export async function writeStatus(env, { targets, recent, now, missedToRaise, ke
     // they are named from all of watch_log, so an outage the share counts is named too, never "no incident since" over
     // it. After, whenever one may have begun or ended: the registrar's ticks missed since the one before (the newest look
     // before this tick's, of any server), a server shown down and none open, or one open with either of its two newest
-    // looks answered. And whenever the incidents are not known written through the tick before — the last status.json
-    // (written after them) and the last time they were derived are both older: a tick's write was lost, refused past
-    // D1's budget on the very tick that raised or cleared an alert, or by KV — they are named again from watch_log from
-    // there, so what a lost write would have begun or ended is never lost.
+    // looks answered. And whenever the incidents are not known written through the slot before this tick's — the last
+    // status.json (written after them) and the last time they were derived are both in an older slot: a tick's write was
+    // lost, refused past D1's budget on the very tick that raised or cleared an alert, or by KV — they are named again
+    // from watch_log from there, so what a lost write would have begun or ended is never lost. By the clock, not by
+    // watch_log: the tick before's looks, or this tick's, may be lost too (a D1 hiccup), and a tick before known only
+    // from them would take a write lost before it as written. After a slot with no tick that one query finds nothing.
     const prev = Math.max(0, ...[...recent.values()].map((l) => (l.rows?.[0]?.ran_at === now ? l.rows[1]?.ran_at ?? 0 : 0)));
     const through = Math.max(wroteAt ?? 0, derived ?? 0);
     const seed = !since && !!first;
     if (seed) since = Math.max(first, fromS);
-    const lost = !seed && !!since && prev > through;
+    const lost = !seed && !!since && slot(now) - 1 > slot(through);
     const missed = !!prev && !!since && prev >= since && slot(now) - slot(prev) - 1 >= missedToRaise;
     const changed = shown.some((t) => {
         const l = recent.get(t.name), m = marks.get(t.name);

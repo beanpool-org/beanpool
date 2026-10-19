@@ -22,7 +22,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { useIdentity } from '../app/IdentityContext';
-import { t, tn, placeShownRoughly, PLACE_WORDS, seriesMovedFromLine } from '@beanpool/core';
+import { t, placeShownRoughly, PLACE_WORDS, seriesMovedFromLine } from '@beanpool/core';
 import { fetchEventDetail, rsvpEvent, deletePost, reportAbuse, letInToEvent } from '../utils/db';
 import { hapticTick } from '../utils/haptics';
 import { PhotoCarousel } from './PhotoCarousel';
@@ -31,7 +31,6 @@ import { NewEventModal } from './NewEventModal';
 import { EventReminder, EventShareAndCalendar } from './EventExtras';
 import { EventNextDates } from './EventNextDates';
 import { ReportReasonBox } from './ReportReasonBox';
-import { eventLineWords } from './event-lines';
 import { reportedAlertBody } from '../utils/reportReasons';
 import {
     formatEventWhenFor, eventWhen, eventRepeatCaption, withMovedFromLine, eventHostLine, eventPlaceLine, eventLinkWaitWords, isOnlineEvent, eventBadge, eventStateOf, isEventEnded, nextRsvp, applyRsvp, formatRsvpCounts,
@@ -39,7 +38,6 @@ import {
     eventLetInState, eventLetInLine, eventWaitingCount, eventWaitingLine, letEveryoneInQuestion, eventChatWaitingText, letInButtonLabel,
     type EventRsvpStatus, type RsvpCounts, type EventCopy, type EventEditValues,
 } from '../utils/events';
-
 
 interface EventDetailProps {
     post: any;
@@ -125,7 +123,7 @@ export function EventDetail({ post, openMembership = false }: EventDetailProps) 
             const res = await letInToEvent(post.id, who, on);
             if (res?.post) setView(res.post);
         } catch (err: any) {
-            Alert.alert(t('Not saved'), err?.message ? eventLineWords(err.message) : t('Could not reach the node. Try again when you have signal.'));
+            Alert.alert(t('Not saved'), err?.message || t('Could not reach the node. Try again when you have signal.'));
         } finally {
             setLetting(null);
         }
@@ -134,7 +132,7 @@ export function EventDetail({ post, openMembership = false }: EventDetailProps) 
         { text: t('Not now'), style: 'cancel' },
         { text: t('Let them in'), onPress: () => { saveLetIn('everyone', { everyone: true }, true); } },
     ]);
-    const hostName = p.authorCallsign || p.author_callsign || (p.author_pubkey || p.authorPublicKey || '').slice(0, 6) || t('Unknown', undefined, 'a host with no name');
+    const hostName = p.authorCallsign || p.author_callsign || (p.author_pubkey || p.authorPublicKey || '').slice(0, 6) || 'Unknown';
     const groupName = p.targetGroupName || p.target_group_name;
     const isGroupOnly = (p.audienceScope || p.audience_scope) === 'group';
     // Photos from the cached row, whose paths getPost has already resolved against the node.
@@ -146,7 +144,7 @@ export function EventDetail({ post, openMembership = false }: EventDetailProps) 
         const next = nextRsvp(counts.mine, tapped);
         if (pending || (closed && next !== null)) return;
         if (!identity?.publicKey) {
-            Alert.alert(t('Sign in to RSVP'), t('Set up your member identity to tell the host you are coming.'));
+            Alert.alert('Sign in to RSVP', 'Set up your member identity to tell the host you are coming.');
             return;
         }
         const before = counts;
@@ -182,8 +180,7 @@ export function EventDetail({ post, openMembership = false }: EventDetailProps) 
             }
         } catch (err: any) {
             setCounts(before);
-            // The phone's own refusals (utils/db.ts throws them as written) in the member's language; the node's words as it sent them (slice S4).
-            Alert.alert(t('RSVP not saved'), err?.message ? eventLineWords(err.message) : t('Could not reach the node. Try again when you have signal.'));
+            Alert.alert('RSVP not saved', err?.message || 'Could not reach the node. Try again when you have signal.');
         } finally {
             setPending(null);
         }
@@ -191,18 +188,18 @@ export function EventDetail({ post, openMembership = false }: EventDetailProps) 
 
     const showOnMap = () => {
         if (p.lat == null || p.lng == null) return;
-        const label = encodeURIComponent(placeName || p.title || t('Event'));
+        const label = encodeURIComponent(placeName || p.title || 'Event');
         const url = Platform.OS === 'ios'
             ? `maps:0,0?q=${label}&ll=${p.lat},${p.lng}`
             : `geo:${p.lat},${p.lng}?q=${p.lat},${p.lng}(${label})`;
-        Linking.openURL(url).catch(() => Alert.alert(t('No maps app'), t('The event is at {lat}, {lng}.', { lat: p.lat.toFixed(5), lng: p.lng.toFixed(5) })));
+        Linking.openURL(url).catch(() => Alert.alert('No maps app', `The event is at ${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}.`));
     };
 
     const cancelEvent = () => {
-        Alert.alert(t('Cancel this event?'), t('It leaves the feed and shows CANCELLED to anyone who opens it. This cannot be undone.'), [
-            { text: t('Keep event'), style: 'cancel' },
+        Alert.alert('Cancel this event?', 'It leaves the feed and shows CANCELLED to anyone who opens it. This cannot be undone.', [
+            { text: 'Keep event', style: 'cancel' },
             {
-                text: t('Cancel event'), style: 'destructive', onPress: async () => {
+                text: 'Cancel event', style: 'destructive', onPress: async () => {
                     setCancelling(true);
                     try {
                         await deletePost(post.id);
@@ -210,9 +207,9 @@ export function EventDetail({ post, openMembership = false }: EventDetailProps) 
                         // host sees it marked CANCELLED instead of losing it (events round 2, A4).
                         const after = await load();
                         if (!after) setView((v: any) => ({ ...(v ?? {}), status: 'cancelled', eventState: 'cancelled' }));
-                        Alert.alert(t('Event cancelled'), t('It now shows CANCELLED, and everyone going has been told.'));
+                        Alert.alert('Event cancelled', 'It now shows CANCELLED, and everyone going has been told.');
                     } catch (e: any) {
-                        Alert.alert(t('Not cancelled'), e?.message ? eventLineWords(e.message) : t('Could not reach the node.'));
+                        Alert.alert('Not cancelled', e?.message || 'Could not reach the node.');
                     } finally {
                         setCancelling(false);
                     }
@@ -229,9 +226,9 @@ export function EventDetail({ post, openMembership = false }: EventDetailProps) 
             const sent = await reportAbuse(identity.publicKey, p.author_pubkey || p.authorPublicKey, reason, post.id);
             setReporting(false);
             // The thanks, and why the member's words were left out when they were (case 14).
-            Alert.alert(t('Reported'), reportedAlertBody(sent?.wordsLeftOut, reason));
+            Alert.alert('Reported', reportedAlertBody(sent?.wordsLeftOut, reason));
         } catch (e: any) {
-            Alert.alert(t('Not sent'), e?.message ? eventLineWords(e.message) : t('Could not reach the node.'));
+            Alert.alert('Not sent', e?.message || 'Could not reach the node.');
             throw e; // the box keeps the choice and the words
         }
     };
@@ -247,7 +244,7 @@ export function EventDetail({ post, openMembership = false }: EventDetailProps) 
                 disabled={disabled}
                 style={[styles.rsvpBtn, selected && styles.rsvpBtnSelected, disabled && styles.rsvpBtnDisabled]}
                 accessibilityRole="button"
-                accessibilityLabel={selected ? t('{label}, selected. Tap to clear', { label }) : label}
+                accessibilityLabel={selected ? `${label}, selected. Tap to clear` : label}
                 accessibilityState={{ selected, disabled, busy: pending === status }}
             >
                 {/*
@@ -255,7 +252,7 @@ export function EventDetail({ post, openMembership = false }: EventDetailProps) 
                   * buttons size to their own labels, so swapping the label out for the spinner would shrink the
                   * button under the finger and re-flow a stacked row mid-tap.
                   */}
-                <Text style={[styles.rsvpText, selected && styles.rsvpTextSelected, pending === status && styles.rsvpTextBusy]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{selected ? t('{label} ✓', { label }) : label}</Text>
+                <Text style={[styles.rsvpText, selected && styles.rsvpTextSelected, pending === status && styles.rsvpTextBusy]} numberOfLines={1}>{selected ? `${label} ✓` : label}</Text>
                 {pending === status && (
                     <View style={styles.rsvpSpinner} pointerEvents="none">
                         <ActivityIndicator size="small" color={selected ? '#fff' : EVENT_ACCENT} />
@@ -268,12 +265,11 @@ export function EventDetail({ post, openMembership = false }: EventDetailProps) 
     return (
         <View style={[styles.container, { paddingTop: insets.top }]}>
             <View style={styles.header}>
-                <Pressable accessibilityRole="button" accessibilityLabel={t('Back')} onPress={goBack} style={styles.backButton}>
+                <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={goBack} style={styles.backButton}>
                     <Text style={styles.backText}>←</Text>
-                    <Text style={[styles.backLabel, { flexShrink: 1 }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Back')}</Text>
+                    <Text style={styles.backLabel} numberOfLines={1}>Back</Text>
                 </Pressable>
-                {/* In capitals in the words, never a textTransform: that follows the phone's rules, not the language's. */}
-                <Text style={styles.headerTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('EVENT', undefined, 'screen title')}</Text>
+                <Text style={styles.headerTitle} numberOfLines={1}>Event</Text>
                 <View style={{ width: 72 }} />
             </View>
 
@@ -292,7 +288,7 @@ export function EventDetail({ post, openMembership = false }: EventDetailProps) 
 
                 {badge && (
                     <View style={[styles.badge, badge === 'CANCELLED' ? { backgroundColor: colors.feedback.danger.bg, borderColor: colors.feedback.danger.border } : styles.badgeUpdated]}>
-                        <Text style={[styles.badgeText, { color: badge === 'CANCELLED' ? colors.feedback.danger.fg : EVENT_ACCENT }]}>{badge === 'CANCELLED' ? t('CANCELLED', undefined, 'event') : t('UPDATED', undefined, 'event')}</Text>
+                        <Text style={[styles.badgeText, { color: badge === 'CANCELLED' ? colors.feedback.danger.fg : EVENT_ACCENT }]}>{badge}</Text>
                     </View>
                 )}
                 <Text style={[styles.when, cancelled && styles.whenCancelled]}>{when}</Text>
@@ -311,15 +307,15 @@ export function EventDetail({ post, openMembership = false }: EventDetailProps) 
                         }}
                     />
                 )}
-                {ended && !cancelled && <Text style={styles.endedNote}>{t('This event has ended.')}</Text>}
+                {ended && !cancelled && <Text style={styles.endedNote}>This event has ended.</Text>}
 
                 <Text style={styles.counts} numberOfLines={1}>👥 {formatRsvpCounts(counts.going, counts.interested)}</Text>
                 {isHost ? (
-                    <Text style={styles.hostingLine} accessibilityRole="text">{t("You're hosting this event")}</Text>
+                    <Text style={styles.hostingLine} accessibilityRole="text">You're hosting this event</Text>
                 ) : (
                     <View style={styles.rsvpRow}>
-                        {rsvpButton('going', t('Going'))}
-                        {rsvpButton('interested', t('Interested'))}
+                        {rsvpButton('going', 'Going')}
+                        {rsvpButton('interested', 'Interested')}
                     </View>
                 )}
 
@@ -355,7 +351,7 @@ export function EventDetail({ post, openMembership = false }: EventDetailProps) 
 
                 {online && (
                     <View style={styles.placeRow}>
-                        <Text style={styles.place} numberOfLines={2}>💻 {eventPlaceLine(p, null)}</Text>
+                        <Text style={styles.place} numberOfLines={2}>{`💻 ${eventPlaceLine(p, null)}`}</Text>
                         {!!joinLink && !closed && (
                             <Pressable
                                 onPress={() => Linking.openURL(joinLink).catch(() => Alert.alert(t('Could not open the link'), joinLink))}
@@ -378,8 +374,8 @@ export function EventDetail({ post, openMembership = false }: EventDetailProps) 
                     <View style={styles.placeRow}>
                         <Text style={styles.place} numberOfLines={2}>📍 {placeName}</Text>
                         {p.lat != null && p.lng != null && (
-                            <Pressable onPress={showOnMap} style={styles.linkBtn} accessibilityRole="link" accessibilityLabel={t('Show {place} on a map', { place: placeName })}>
-                                <Text style={styles.link} numberOfLines={2}>{t('Show on map')}</Text>
+                            <Pressable onPress={showOnMap} style={styles.linkBtn} accessibilityRole="link" accessibilityLabel={`Show ${placeName} on a map`}>
+                                <Text style={styles.link} numberOfLines={1}>Show on map</Text>
                             </Pressable>
                         )}
                     </View>
@@ -391,7 +387,7 @@ export function EventDetail({ post, openMembership = false }: EventDetailProps) 
 
                 {note ? (
                     <View style={styles.noteBox}>
-                        <Text style={styles.noteLabel}>{t('NOTE FOR PEOPLE WHO ARE GOING')}</Text>
+                        <Text style={styles.noteLabel}>NOTE FOR PEOPLE WHO ARE GOING</Text>
                         <Text style={styles.noteText} selectable>{note}</Text>
                     </View>
                 ) : null}
@@ -399,9 +395,7 @@ export function EventDetail({ post, openMembership = false }: EventDetailProps) 
                 {!!p.description && <Text style={styles.description}>{p.description}</Text>}
 
                 <Text style={styles.hostLine} numberOfLines={2}>
-                    {isGroupOnly && groupName
-                        ? t('Hosted by {name} · 🔒 only {group} can see this', { name: hostName, group: groupName })
-                        : t('Hosted by {name}', { name: hostName })}
+                    Hosted by {hostName}{isGroupOnly && groupName ? ` · 🔒 only ${groupName} can see this` : ''}
                 </Text>
 
                 {isHost && (
@@ -411,9 +405,9 @@ export function EventDetail({ post, openMembership = false }: EventDetailProps) 
                             style={styles.hostRowBtn}
                             accessibilityRole="button"
                             accessibilityState={{ expanded: showRsvps }}
-                            accessibilityLabel={tn(rsvps!.length, "Who's going, {n} replies", "Who's going, {n} replies")}
+                            accessibilityLabel={`Who's going, ${rsvps!.length} replies`}
                         >
-                            <Text style={styles.hostRowText} numberOfLines={1}>{t("Who's going ({n})", { n: rsvps!.length })}</Text>
+                            <Text style={styles.hostRowText} numberOfLines={1}>Who's going ({rsvps!.length})</Text>
                             <Text style={styles.hostRowText}>{showRsvps ? '▲' : '▼'}</Text>
                         </Pressable>)}
                         {hostView && waiting > 0 && (
@@ -426,7 +420,7 @@ export function EventDetail({ post, openMembership = false }: EventDetailProps) 
                             </Pressable>
                         )}
                         {hostView && showRsvps && (rsvps!.length === 0
-                            ? <Text style={styles.rsvpEmpty}>{t('Nobody has replied yet.')}</Text>
+                            ? <Text style={styles.rsvpEmpty}>Nobody has replied yet.</Text>
                             : rsvps!.map((r: any) => (
                                 <View key={r.memberPubkey} style={styles.rsvpListRow}>
                                     <Text style={styles.rsvpName} numberOfLines={1}>{r.memberCallsign || r.memberPubkey.slice(0, 8)}</Text>
@@ -442,7 +436,7 @@ export function EventDetail({ post, openMembership = false }: EventDetailProps) 
                                             <Text style={[styles.letInText, r.letInAt && styles.letInTextOn]} numberOfLines={1}>{r.letInAt ? t('Let in ✓') : t('Let in')}</Text>
                                         </Pressable>
                                     ) : (
-                                        <Text style={styles.rsvpStatus} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{r.status === 'going' ? t('Going') : t('Interested')}</Text>
+                                        <Text style={styles.rsvpStatus} numberOfLines={1}>{r.status === 'going' ? 'Going' : 'Interested'}</Text>
                                     )}
                                 </View>
                             )))}
@@ -454,22 +448,22 @@ export function EventDetail({ post, openMembership = false }: EventDetailProps) 
                                     id: post.id,
                                     // The cached row's photo paths are already resolved against the node.
                                     values: eventEditValues({ ...p, photos }),
-                                    audienceLabel: isGroupOnly && groupName ? t('🔒 Only {group} can see this.', { group: groupName }) : t('This community.'),
+                                    audienceLabel: isGroupOnly && groupName ? `🔒 Only ${groupName} can see this.` : 'This community.',
                                 })}
                                 style={styles.editBtn}
                                 accessibilityRole="button"
-                                accessibilityLabel={t('Edit event')}
+                                accessibilityLabel="Edit event"
                             >
-                                <Text style={styles.editText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Edit event')}</Text>
+                                <Text style={styles.editText} numberOfLines={1}>Edit event</Text>
                             </Pressable>
                         )}
                         <Pressable
                             onPress={() => setCopyDraft(buildEventCopy(p, identity?.publicKey))}
                             style={styles.copyBtn}
                             accessibilityRole="button"
-                            accessibilityLabel={t('Copy to a new date')}
+                            accessibilityLabel="Copy to a new date"
                         >
-                            <Text style={styles.copyText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Copy to a new date')}</Text>
+                            <Text style={styles.copyText} numberOfLines={1}>Copy to a new date</Text>
                         </Pressable>
                         {!closed && (
                             <Pressable
@@ -477,10 +471,10 @@ export function EventDetail({ post, openMembership = false }: EventDetailProps) 
                                 disabled={cancelling}
                                 style={styles.cancelBtn}
                                 accessibilityRole="button"
-                                accessibilityLabel={t('Cancel event')}
+                                accessibilityLabel="Cancel event"
                                 accessibilityState={{ busy: cancelling }}
                             >
-                                {cancelling ? <ActivityIndicator size="small" color={colors.feedback.danger.fg} /> : <Text style={styles.cancelText}>{t('Cancel event')}</Text>}
+                                {cancelling ? <ActivityIndicator size="small" color={colors.feedback.danger.fg} /> : <Text style={styles.cancelText}>Cancel event</Text>}
                             </Pressable>
                         )}
                     </View>
@@ -488,8 +482,8 @@ export function EventDetail({ post, openMembership = false }: EventDetailProps) 
 
                 {!isHost && identity?.publicKey && (
                     <>
-                        <Pressable onPress={() => setReporting((r) => !r)} style={styles.reportBtn} accessibilityRole="button" accessibilityLabel={t('Report event')} accessibilityState={{ expanded: reporting }}>
-                            <Text style={styles.reportText}>{t('🚩 Report event')}</Text>
+                        <Pressable onPress={() => setReporting((r) => !r)} style={styles.reportBtn} accessibilityRole="button" accessibilityLabel="Report event" accessibilityState={{ expanded: reporting }}>
+                            <Text style={styles.reportText}>🚩 Report event</Text>
                         </Pressable>
                         {reporting && <ReportReasonBox onSubmit={report} onCancel={() => setReporting(false)} />}
                     </>
@@ -523,7 +517,7 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
         backButton: { flexDirection: 'row', width: 72, minHeight: 48, alignItems: 'center' },
         backText: { color: colors.text.body, fontSize: 22 },
         backLabel: { color: colors.text.body, fontSize: 15, fontWeight: '700', marginLeft: 4 },
-        headerTitle: { flex: 1, textAlign: 'center', fontSize: 17, fontWeight: '800', color: colors.text.body, letterSpacing: 1 },
+        headerTitle: { flex: 1, textAlign: 'center', fontSize: 17, fontWeight: '800', color: colors.text.body, letterSpacing: 1, textTransform: 'uppercase' },
         scroll: { padding: 16 },
         badge: { alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, borderWidth: 1, marginBottom: 6 },
         badgeUpdated: {
@@ -596,8 +590,7 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
         rsvpEmpty: { fontSize: 14, color: colors.text.secondary, paddingVertical: 8 },
         rsvpListRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8, borderTopWidth: 1, borderTopColor: colors.border.default },
         rsvpName: { flex: 1, fontSize: 14, color: colors.text.body },
-        // Gives way to a longer language's word (up to half the row) rather than pushing the name off; shrinks to fit.
-        rsvpStatus: { fontSize: 13, fontWeight: '700', color: EVENT_ACCENT, flexShrink: 1, maxWidth: '45%' },
+        rsvpStatus: { fontSize: 13, fontWeight: '700', color: EVENT_ACCENT, flexShrink: 0 },
         hostingLine: { fontSize: 15, fontWeight: '700', color: EVENT_ACCENT, marginBottom: 14 },
         editBtn: {
             minHeight: 48, justifyContent: 'center', alignItems: 'center', borderRadius: 12, backgroundColor: EVENT_ACCENT,

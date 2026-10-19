@@ -8,7 +8,7 @@
  * "My location" never depend on it: a failed search says so in one line and the pin picker carries on.
  */
 import { useEffect, useRef, useState } from 'react';
-import { createAddressLookup, t, type AddressLookup, type AddressLookupState, type AddressResult, type AddressSearchWords } from '@beanpool/core';
+import { createAddressLookup, type AddressLookup, type AddressLookupState, type AddressResult, type AddressSearchWords } from '@beanpool/core';
 
 /** The event form's words: it has a map to tap and a pin to drop. A match is read by its own text. */
 const EVENT_WORDS: AddressSearchWords = {
@@ -102,7 +102,7 @@ export function AddressSearch({ onPick, words = EVENT_WORDS }: AddressSearchProp
                 )}
             </div>
             <p role="status" aria-live="polite" className="m-0">
-                {state.status === 'searching' && <span className="sr-only">{t('Searching…')}</span>}
+                {state.status === 'searching' && <span className="sr-only">Searching…</span>}
                 {state.status === 'error' && (
                     <span className="block mt-1 text-xs font-semibold text-red-600 dark:text-red-400">
                         {words.unavailable}
@@ -118,7 +118,7 @@ export function AddressSearch({ onPick, words = EVENT_WORDS }: AddressSearchProp
                 <ul
                     id="event-address-results"
                     role="listbox"
-                    aria-label={t('Address matches')}
+                    aria-label="Address matches"
                     className="list-none m-0 mt-1 p-0 rounded-xl border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 divide-y divide-nature-100 dark:divide-nature-700 overflow-hidden"
                 >
                     {results.map((item, idx) => (

@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, Pressable, Modal, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { t, type HelpSheet as HelpSheetWords } from '@beanpool/core';
+import type { HelpSheet as HelpSheetWords } from '@beanpool/core';
 import type { AppColors } from '../constants/colors';
 import { editHomeStyles } from './home/EditHomeSheet';
 
@@ -42,19 +42,18 @@ export function HelpSheet({ visible, sheet, tourOpen, canTour, colors, onReadPag
                 <View style={[editHomeStyles.sheet, helpStyles.sheet, { backgroundColor: colors.surface.card, paddingBottom: 12 + insets.bottom }]} testID="help-sheet">
                     <View style={editHomeStyles.head}>
                         <Text style={[editHomeStyles.title, { color: colors.text.heading }]} accessibilityRole="header" testID="help-title">
-                            {/* The page's own title is the guide's (slice S5); the stand-in is ours. */}
-                            {sheet.title ?? t('Help')}
+                            {sheet.title ?? 'Help'}
                         </Text>
-                        <Pressable onPress={onClose} style={editHomeStyles.done} accessibilityRole="button" accessibilityLabel={t('Close help')} testID="help-close">
-                            <Text style={[editHomeStyles.doneText, { color: colors.text.link }]}>{t('Close')}</Text>
+                        <Pressable onPress={onClose} style={editHomeStyles.done} accessibilityRole="button" accessibilityLabel="Close help" testID="help-close">
+                            <Text style={[editHomeStyles.doneText, { color: colors.text.link }]}>Close</Text>
                         </Pressable>
                     </View>
                     <View style={helpStyles.body}>
                         {!!sheet.text && <Text style={[helpStyles.text, { color: colors.text.body }]} testID="help-text">{sheet.text}</Text>}
                         <View style={[helpStyles.rows, { borderTopColor: colors.border.default }]}>
-                            {(sheet.slug || sheet.section) && row(t('Read the guide page ›'), onReadPage, 'help-read-page', t('Read the guide page: {title}', { title: sheet.title ?? '' }))}
-                            {row(t('Search the guide'), onSearch, 'help-search', t('Search the guide'))}
-                            {canTour && row(tourOpen ? t('Pick up the tour') : t('Take the tour again'), onTour, 'help-tour', tourOpen ? t('Pick up the tour') : t('Take the tour again'))}
+                            {(sheet.slug || sheet.section) && row('Read the guide page ›', onReadPage, 'help-read-page', `Read the guide page: ${sheet.title ?? ''}`)}
+                            {row('Search the guide', onSearch, 'help-search', 'Search the guide')}
+                            {canTour && row(tourOpen ? 'Pick up the tour' : 'Take the tour again', onTour, 'help-tour', tourOpen ? 'Pick up the tour' : 'Take the tour again')}
                         </View>
                     </View>
                 </View>

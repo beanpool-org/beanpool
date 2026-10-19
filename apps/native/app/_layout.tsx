@@ -49,16 +49,12 @@ import ForceUpdateBlock from '../components/ForceUpdateBlock';
 import { communitySwitched } from '../utils/community-switch';
 import { fetchMembership } from '../utils/membership-probe';
 import { takeHoldsToShow, vaultHoldsAtOpen } from '../utils/vault';
-import { attestOwnRekeys, declineRekey, operatorContact, rekeyToAsk } from '../utils/key-succession';
+import { attestOwnRekeys, declineRekey, keySuccessionPromptText, operatorContact, rekeyToAsk, KEY_SUCCESSION_PROMPT_NO, KEY_SUCCESSION_PROMPT_YES } from '../utils/key-succession';
 import { isUnlockLink } from '../utils/takeover-unlock';
 import { isPairLink } from '../utils/pair-link';
 import { isGlobalLink } from '../utils/global-link';
 import { doorLinkFromSystemPath } from '../utils/open-door';
 import * as WebBrowser from 'expo-web-browser';
-import { t } from '@beanpool/core';
-import { settingsLineWords } from '../components/settings/settings-lines';
-import { welcomeLineWords } from '../components/welcome/welcome-lines';
-import { rekeyPromptWords } from '../components/shell-lines';
 
 // Complete any pending browser-based auth sessions (e.g. OAuth redirects)
 try {
@@ -164,10 +160,10 @@ function patternScreenLayout({ options, children }: { options: { presentation?: 
 /** "Not me" on the re-key prompt: nothing is signed, and the admins' contact is offered when the owner publishes one. */
 async function tellAdminsNotMe(nodeUrl: string): Promise<void> {
     const { email, phone } = await operatorContact(nodeUrl);
-    Alert.alert(t('Nothing was confirmed'), t("If you didn't ask for a new key, tell this community's admins: someone else may have moved your account."), [
-        { text: t('Close'), style: 'cancel' },
-        ...(email ? [{ text: t('Email the admins'), onPress: () => { Linking.openURL(`mailto:${email}`).catch(() => {}); } }] : []),
-        ...(phone ? [{ text: t('Call the admins'), onPress: () => { Linking.openURL(`tel:${phone.replace(/[^\d+]/g, '')}`).catch(() => {}); } }] : []),
+    Alert.alert('Nothing was confirmed', "If you didn't ask for a new key, tell this community's admins: someone else may have moved your account.", [
+        { text: 'Close', style: 'cancel' },
+        ...(email ? [{ text: 'Email the admins', onPress: () => { Linking.openURL(`mailto:${email}`).catch(() => {}); } }] : []),
+        ...(phone ? [{ text: 'Call the admins', onPress: () => { Linking.openURL(`tel:${phone.replace(/[^\d+]/g, '')}`).catch(() => {}); } }] : []),
     ]);
 }
 
@@ -208,7 +204,7 @@ function RootLayoutNav() {
     }, []);
 
     const triggerUnlock = async () => {
-        const success = await unlockWithPhoneLock(t('Unlock BeanPool'));
+        const success = await unlockWithPhoneLock('Unlock BeanPool');
         if (success) {
             setAppLocked(false);
         }
@@ -254,7 +250,7 @@ function RootLayoutNav() {
             const enabled = await appLockLocks();
             if (enabled && identity) {
                 setAppLocked(true);
-                const success = await unlockWithPhoneLock(t('Unlock BeanPool'));
+                const success = await unlockWithPhoneLock('Unlock BeanPool');
                 if (success) {
                     setAppLocked(false);
                 }
@@ -269,7 +265,7 @@ function RootLayoutNav() {
     // a slow prompt is never followed by a second one: utils/return-lock.ts. It covers the app as it leaves, too, so the
     // app switcher shows nothing of the member's.
     useEffect(() => {
-        if (!returnLock.current) returnLock.current = createReturnLock(setAppLocked, setAppCovered, () => t('Unlock BeanPool'));
+        if (!returnLock.current) returnLock.current = createReturnLock(setAppLocked, setAppCovered);
         const onChange = returnLock.current;
         const sub = AppState.addEventListener('change', (next) => {
             onChange(next, !!identity);
@@ -355,8 +351,7 @@ function RootLayoutNav() {
             });
         } catch (e) {
             if (e instanceof UnsafeNodeAddressError) {
-                // The phone's refusal of the address (utils/node-url.ts), in the member's language.
-                Alert.alert(t('Invite not opened'), settingsLineWords(e.message));
+                Alert.alert('Invite not opened', e.message);
                 return;
             }
             throw e;
@@ -417,12 +412,12 @@ function RootLayoutNav() {
                 setTimeout(() => {
                     if (!isComponentMounted.current) return;
                     Alert.alert(
-                        t('Switch Nodes?'),
-                        t('You have been invited to a community node at {address}. Would you like to switch your active connection to this node and redeem your invite code?', { address: targetOrigin }),
+                        'Switch Nodes?',
+                        `You have been invited to a community node at ${targetOrigin}. Would you like to switch your active connection to this node and redeem your invite code?`,
                         [
-                            { text: t('Cancel'), style: 'cancel' },
+                            { text: 'Cancel', style: 'cancel' },
                             {
-                                text: t('Switch & Join'),
+                                text: 'Switch & Join',
                                 onPress: () => {
                                     closeDB()
                                         .then(() => AsyncStorage.setItem('beanpool_anchor_url', targetOrigin))
@@ -451,9 +446,9 @@ function RootLayoutNav() {
                                             }
 
                                             if (redeemRes?.alreadyMember) {
-                                                Alert.alert(t("You're already in! 🫘"), t('Switched active node to {address}. You are already a registered member!', { address: targetOrigin }));
+                                                Alert.alert("You're already in! 🫘", `Switched active node to ${targetOrigin}. You are already a registered member!`);
                                             } else {
-                                                Alert.alert(t('Success'), t('Node switched and invite redeemed successfully!'));
+                                                Alert.alert('Success', 'Node switched and invite redeemed successfully!');
                                             }
                                             // Land the user's canonical picture on the newly-joined node so the
                                             // marketplace never blocks them for a "missing" profile photo they
@@ -473,20 +468,18 @@ function RootLayoutNav() {
                                             const errStr = err?.message || String(err);
                                             if (errStr.includes('already been used') || errStr.includes('already used')) {
                                                 Alert.alert(
-                                                    t('Invite Already Used'),
-                                                    t('This invite code has already been redeemed. If you are setting up on a new device, would you like to recover your account using your seed phrase?'),
+                                                    'Invite Already Used',
+                                                    'This invite code has already been redeemed. If you are setting up on a new device, would you like to recover your account using your seed phrase?',
                                                     [
-                                                        { text: t('Cancel'), style: 'cancel' },
+                                                        { text: 'Cancel', style: 'cancel' },
                                                         {
-                                                            text: t('Recover Account'),
+                                                            text: 'Recover Account',
                                                             onPress: () => router.replace({ pathname: '/welcome', params: { mode: 'recover' } })
                                                         }
                                                     ]
                                                 );
                                             } else {
-                                                // redeemInvite's own sentences in the member's language, as the invite join says
-                                                // them; the node's words as given.
-                                                Alert.alert(t('Redemption Failed'), welcomeLineWords(errStr));
+                                                Alert.alert('Redemption Failed', errStr);
                                             }
                                         });
                                 }
@@ -500,21 +493,21 @@ function RootLayoutNav() {
                     setTimeout(() => {
                         if (!isComponentMounted.current) return;
                         Alert.alert(
-                            t('Active Connection Invite'),
-                            t('You scanned an invite for your active community ({address}). How would you like to proceed?', { address: targetOrigin }),
+                            'Active Connection Invite',
+                            `You scanned an invite for your active community (${targetOrigin}). How would you like to proceed?`,
                             [
-                                { text: t('Cancel'), style: 'cancel' },
+                                { text: 'Cancel', style: 'cancel' },
                                 {
-                                    text: t('Wipe & Join Fresh'),
+                                    text: 'Wipe & Join Fresh',
                                     style: 'destructive',
                                     onPress: () => {
                                         Alert.alert(
-                                            t('Confirm Wipe'),
-                                            t('This will permanently delete your local database and transaction cache for this community. Your key will be preserved, and you will be routed back to the welcome screen to register with this invite.'),
+                                            'Confirm Wipe',
+                                            'This will permanently delete your local database and transaction cache for this community. Your key will be preserved, and you will be routed back to the welcome screen to register with this invite.',
                                             [
-                                                { text: t('Cancel'), style: 'cancel' },
+                                                { text: 'Cancel', style: 'cancel' },
                                                 {
-                                                    text: t('Wipe'),
+                                                    text: 'Wipe',
                                                     style: 'destructive',
                                                     onPress: async () => {
                                                         try {
@@ -528,7 +521,7 @@ function RootLayoutNav() {
                                                             await removeSavedNode(targetOrigin);
                                                             router.replace({ pathname: '/welcome', params: { invite: parsedCode, server: targetOrigin } });
                                                         } catch (err: any) {
-                                                            Alert.alert(t('Wipe Failed'), err.message);
+                                                            Alert.alert('Wipe Failed', err.message);
                                                         }
                                                     }
                                                 }
@@ -537,14 +530,14 @@ function RootLayoutNav() {
                                     }
                                 },
                                 {
-                                    text: t('Join Node'),
+                                    text: 'Join Node',
                                     onPress: () => {
                                         redeemInvite(parsedCode, identity?.callsign || 'Unknown', identity)
                                             .then(async (redeemRes: any) => {
                                                 if (redeemRes?.alreadyMember) {
-                                                    Alert.alert(t("You're already in! 🫘"), t('Your connection is active and registered.'));
+                                                    Alert.alert("You're already in! 🫘", 'Your connection is active and registered.');
                                                 } else {
-                                                    Alert.alert(t('Success'), t('Invite redeemed! Your connection is registered.'));
+                                                    Alert.alert('Success', 'Invite redeemed! Your connection is registered.');
                                                 }
                                                 // Publish the canonical picture to this node up front, unless the
                                                 // redeem response said the node already holds one (see above).
@@ -557,19 +550,18 @@ function RootLayoutNav() {
                                                 const errStr = err?.message || String(err);
                                                 if (errStr.includes('already been used') || errStr.includes('already used')) {
                                                     Alert.alert(
-                                                        t('Invite Already Used'),
-                                                        t('This invite code has already been redeemed. If you are setting up on a new device, would you like to recover your account using your seed phrase?'),
+                                                        'Invite Already Used',
+                                                        'This invite code has already been redeemed. If you are setting up on a new device, would you like to recover your account using your seed phrase?',
                                                         [
-                                                            { text: t('Cancel'), style: 'cancel' },
+                                                            { text: 'Cancel', style: 'cancel' },
                                                             {
-                                                                text: t('Recover Account'),
+                                                                text: 'Recover Account',
                                                                 onPress: () => router.replace({ pathname: '/welcome', params: { mode: 'recover' } })
                                                             }
                                                         ]
                                                     );
                                                 } else {
-                                                    // As above: redeemInvite's own sentences worded, the node's as given.
-                                                    Alert.alert(t('Redemption Failed'), welcomeLineWords(errStr));
+                                                    Alert.alert('Redemption Failed', errStr);
                                                 }
                                             });
                                     }
@@ -587,7 +579,7 @@ function RootLayoutNav() {
                         const isMember = !!(data && data.isMember);
                         if (isMember) {
                             console.log('[DeepLink] User is already an active member of current node.');
-                            Alert.alert(t("You're already in! 🫘"), t('You are already an active, registered member of this community.'));
+                            Alert.alert("You're already in! 🫘", 'You are already an active, registered member of this community.');
                             return;
                         }
                         showUnregisteredMemberDialog();
@@ -597,7 +589,7 @@ function RootLayoutNav() {
                         if (!isComponentMounted.current) return;
                         // Active node already saved & connected locally - show already in toast
                         console.log('[DeepLink] Active node locally connected.');
-                        Alert.alert(t("You're already in! 🫘"), t('You are already connected to this community.'));
+                        Alert.alert("You're already in! 🫘", 'You are already connected to this community.');
                     });
             }
         });
@@ -660,11 +652,11 @@ function RootLayoutNav() {
                     if (!isComponentMounted.current) return;
                     recoveryNavPrompted.current = true;
                     Alert.alert(
-                        t('Account recovery reported'),
-                        t('The node you are connected to reports a recovery in progress for your account. Open Settings to review your account protection?'),
+                        'Account recovery reported',
+                        'The node you are connected to reports a recovery in progress for your account. Open Settings to review your account protection?',
                         [
-                            { text: t('Not now'), style: 'cancel' },
-                            { text: t('Review'), onPress: () => { if (isComponentMounted.current) router.replace({ pathname: '/(tabs)/settings', params: { section: 'protection' } }); } },
+                            { text: 'Not now', style: 'cancel' },
+                            { text: 'Review', onPress: () => { if (isComponentMounted.current) router.replace({ pathname: '/(tabs)/settings', params: { section: 'protection' } }); } },
                         ],
                     );
                 });
@@ -768,11 +760,12 @@ function RootLayoutNav() {
                     // A short title: Android cuts an alert's title at two lines, and at 320 dp and 1.3x text a longer
                     // one was cut mid-word (measured on the emulator). The body says what happened.
                     Alert.alert(
-                        t('Is this you?'),
-                        t('Someone used a linked sign-in to get back into your BeanPool account on another device. If it was you, you can let it through now. If not, stop it.'),
+                        'Is this you?',
+                        'Someone used a linked sign-in to get back into your BeanPool account on another device. If it was you, '
+                        + 'you can let it through now. If not, stop it.',
                         [
-                            { text: t('Not now'), style: 'cancel' },
-                            { text: t('Review'), onPress: () => router.push('/(tabs)/settings') },
+                            { text: 'Not now', style: 'cancel' },
+                            { text: 'Review', onPress: () => router.push('/(tabs)/settings') },
                         ],
                     );
                 }));
@@ -805,10 +798,9 @@ function RootLayoutNav() {
             if (!current || !ask) return;
             cancel = whenAppShows(() => {
                 if (!current) return;
-                const words = rekeyPromptWords(ask.at);
-                Alert.alert(t('Was this you?'), words.text, [
-                    { text: words.no, style: 'cancel', onPress: () => { declineRekey(nodeUrl, identity, ask).catch(() => {}); void tellAdminsNotMe(nodeUrl); } },
-                    { text: words.yes, onPress: () => { attestOwnRekeys(nodeUrl, identity, [ask]).catch(() => {}); } },
+                Alert.alert('Was this you?', keySuccessionPromptText(ask.at), [
+                    { text: KEY_SUCCESSION_PROMPT_NO, style: 'cancel', onPress: () => { declineRekey(nodeUrl, identity, ask).catch(() => {}); void tellAdminsNotMe(nodeUrl); } },
+                    { text: KEY_SUCCESSION_PROMPT_YES, onPress: () => { attestOwnRekeys(nodeUrl, identity, [ask]).catch(() => {}); } },
                 ]);
             });
         })().catch(() => {});
@@ -929,10 +921,9 @@ export default function RootLayout() {
         // Listen for system announcements from the WebSocket connection
         const wsSub = DeviceEventEmitter.addListener('ws_activity', (data) => {
             if (data?.type === 'system_announcement') {
-                // The node's own words, as it sent them (slice S4); the phone's stand-in title in the member's language.
-                const title = data.title || t('System Announcement');
+                const title = data.title || 'System Announcement';
                 const body = data.body || '';
-                Alert.alert(title, body, [{ text: t('Acknowledge'), style: 'cancel' }]);
+                Alert.alert(title, body, [{ text: 'Acknowledge', style: 'cancel' }]);
                 // A notice the node keeps names its id: shown now, so the background sync never posts it again
                 // (utils/sync-notices.ts).
                 void markNoticeShown(data.noticeId, AsyncStorage);
@@ -945,7 +936,7 @@ export default function RootLayout() {
             .then(() => requestSync())
             .catch(err => {
                 console.error('[Init DB] Error:', err);
-                Alert.alert(t('DB Error'), String(err));
+                Alert.alert('DB Error', String(err));
             });
 
         // An account that left this phone with no connection: its push alerts stop once each of its communities has

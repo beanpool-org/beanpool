@@ -3,15 +3,14 @@ import { View, Text, StyleSheet, AppState, type AppStateStatus } from 'react-nat
 import { getLastSyncTime } from '../services/pillar-sync';
 import { colors } from '../constants/colors';
 import { withJitter } from '../utils/jitter';
-import { t, tn } from '@beanpool/core';
 
 function formatTimeAgo(timestamp: number): string {
     const seconds = Math.floor((Date.now() - timestamp) / 1000);
-    if (seconds < 60) return tn(seconds, '{n}s ago', '{n}s ago');
+    if (seconds < 60) return `${seconds}s ago`;
     const minutes = Math.floor(seconds / 60);
-    if (minutes < 60) return tn(minutes, '{n}m ago', '{n}m ago');
+    if (minutes < 60) return `${minutes}m ago`;
     const hours = Math.floor(minutes / 60);
-    return tn(hours, '{n}h ago', '{n}h ago');
+    return `${hours}h ago`;
 }
 
 export function SyncStatus() {
@@ -71,14 +70,12 @@ export function SyncStatus() {
         <View
             style={[styles.container, isOnline ? styles.onlineBorder : styles.offlineBorder]}
             accessible={true}
-            accessibilityLabel={isOnline
-                ? (lastSync ? t('Sync status: Online, last synced {ago}', { ago: formatTimeAgo(lastSync) }) : t('Sync status: Online'))
-                : (lastSync ? t('Sync status: Offline, last synced {ago}', { ago: formatTimeAgo(lastSync) }) : t('Sync status: Offline'))}
+            accessibilityLabel={`Sync status: ${isOnline ? 'Online' : 'Offline'}${lastSync ? `, last synced ${formatTimeAgo(lastSync)}` : ''}`}
         >
             <View style={[styles.dot, isOnline ? styles.onlineDot : styles.offlineDot]} />
             <View style={styles.textStack}>
                 <Text style={[styles.text, isOnline ? styles.onlineText : styles.offlineText]}>
-                    {isOnline ? t('Online', undefined, 'sync') : t('Offline', undefined, 'sync')}
+                    {isOnline ? 'Online' : 'Offline'}
                 </Text>
                 {lastSync && (
                     <Text style={styles.timeText}>

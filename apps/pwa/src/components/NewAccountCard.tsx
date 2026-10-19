@@ -8,29 +8,24 @@
  * where the member can close it), in Settings, and in the post form when a limit is reached.
  */
 import { useEffect, useState } from 'react';
-import { t, tn, word, type WordKey } from '@beanpool/core';
 import { getCommunityMe, type CommunityStanding, type NewAccountLimit } from '../lib/api';
 
 type Probation = CommunityStanding['probation'];
 
-/**
- * "in about 5 hours", from now to `iso`: the node's own phrasing in its refusals, with days for the longer waits. In the
- * member's language: a sentence takes it whole as its {when}.
- */
+/** "in about 5 hours", from now to `iso`: the node's own phrasing in its refusals, with days for the longer waits. */
 export function inAbout(iso: string, now: number = Date.now()): string {
     const mins = Math.max(1, Math.ceil((Date.parse(iso) - now) / 60_000));
-    if (mins < 60) return tn(mins, 'in about a minute', 'in about {n} minutes');
+    if (mins < 60) return mins === 1 ? 'in about a minute' : `in about ${mins} minutes`;
     const hours = Math.round(mins / 60);
-    if (hours < 36) return tn(hours, 'in about an hour', 'in about {n} hours');
+    if (hours < 36) return hours === 1 ? 'in about an hour' : `in about ${hours} hours`;
     const days = Math.round(hours / 24);
-    return tn(days, 'in about {n} day', 'in about {n} days');
+    return `in about ${days} days`;
 }
 
-/** Each limit's name, and the sentence for when it comes back once used up (`{when}`: inAbout). */
-const ROWS: { key: keyof Probation['limits']; label: WordKey; again: WordKey }[] = [
-    { key: 'posts', label: word('Posts'), again: word('You can post again {when}.') },
-    { key: 'photos', label: word('Photos on posts'), again: word('You can add more {when}.') },
-    { key: 'new_dm_recipients', label: word('New people to message'), again: word('You can message someone new again {when}.') },
+const ROWS: { key: keyof Probation['limits']; label: string; again: string }[] = [
+    { key: 'posts', label: 'Posts', again: 'You can post again' },
+    { key: 'photos', label: 'Photos on posts', again: 'You can add more' },
+    { key: 'new_dm_recipients', label: 'New people to message', again: 'You can message someone new again' },
 ];
 
 /** What is left: the node's `remaining`, or on an older node that doesn't send it, the allowance less what is used (the server's own sum). */
@@ -41,36 +36,25 @@ export function leftOf(l: NewAccountLimit): number {
 function comesBack(row: typeof ROWS[number], l: NewAccountLimit, now: number): string | null {
     if (l.used <= 0 || !l.resetsAt || !Number.isFinite(Date.parse(l.resetsAt))) return null;
     const when = inAbout(l.resetsAt, now);
-    return leftOf(l) <= 0 ? t(row.again, { when }) : t('One more comes back {when}.', { when });
-}
-
-/**
- * "3 days" or "72 hours": how long the limits last at least. The English is as it always was (both forms the same, as
- * "{n} Beans"); a language with plural forms writes its own.
- */
-function spanWords(hours: number): string {
-    return hours % 24 === 0 ? tn(hours / 24, '{n} days', '{n} days') : tn(hours, '{n} hours', '{n} hours');
+    return leftOf(l) <= 0 ? `${row.again} ${when}.` : `One more comes back ${when}.`;
 }
 
 /** The rule, in #1133's words, from the node's numbers (an older node without `endsWhen`: its fixed 72 hours). */
 export function ruleSentence(p: Probation): string {
     const hours = p.endsWhen?.hours ?? 72;
     const kept = p.endsWhen?.keptPosts ?? p.keptPostsNeeded;
-    return tn(kept,
-        'New accounts have these limits for their first {span}, and until {n} of their posts have stayed up.',
-        'New accounts have these limits for their first {span}, and until {n} of their posts have stayed up.',
-        { span: spanWords(hours) });
+    const span = hours % 24 === 0 ? `${hours / 24} days` : `${hours} hours`;
+    return `New accounts have these limits for their first ${span}, and until ${kept} of their posts have stayed up.`;
 }
 
 function progressSentence(p: Probation, now: number): string {
-    const span = spanWords(p.endsWhen?.hours ?? 72);
+    const hours = p.endsWhen?.hours ?? 72;
+    const span = hours % 24 === 0 ? `${hours / 24} days` : `${hours} hours`;
     const kept = p.endsWhen?.keptPosts ?? p.keptPostsNeeded;
     const ageEnds = p.ageEndsAt ? Date.parse(p.ageEndsAt) : NaN;
-    const age = !Number.isFinite(ageEnds) ? '' : ageEnds > now
-        ? t('Your first {span} end {when}.', { span, when: inAbout(p.ageEndsAt!, now) })
-        : t('Your first {span} are over.', { span });
-    const posts = tn(p.keptPosts, 'So far {n} of your posts has stayed up, of the {kept} needed.', 'So far {n} of your posts have stayed up, of the {kept} needed.', { kept });
-    return [age, posts].filter(Boolean).join(' ');
+    const age = !Number.isFinite(ageEnds) ? '' : ageEnds > now ? `Your first ${span} end ${inAbout(p.ageEndsAt!, now)}. ` : `Your first ${span} are over. `;
+    const posts = p.keptPosts === 1 ? '1 of your posts has' : `${p.keptPosts} of your posts have`;
+    return `${age}So far ${posts} stayed up, of the ${kept} needed.`;
 }
 
 export interface NewAccountCardProps {
@@ -104,13 +88,13 @@ export function NewAccountCard({ refreshKey, onClose }: NewAccountCardProps) {
         >
             <div className="flex items-start justify-between gap-2">
                 <h2 id="new-account-card-title" className="font-bold text-base text-nature-900 dark:text-white m-0 min-w-0 break-words">
-                    <span aria-hidden="true">🌱 </span>{t('Your account is new')}
+                    <span aria-hidden="true">🌱 </span>Your account is new
                 </h2>
                 {onClose && (
                     <button
                         type="button"
                         onClick={onClose}
-                        aria-label={t('Hide this for now')}
+                        aria-label="Hide this for now"
                         className="shrink-0 min-w-[44px] min-h-[44px] w-11 h-11 flex items-center justify-center rounded-full bg-transparent border-none text-nature-400 hover:text-nature-600 dark:hover:text-nature-200 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                     >
                         ✕
@@ -118,7 +102,7 @@ export function NewAccountCard({ refreshKey, onClose }: NewAccountCardProps) {
                 )}
             </div>
             <p className="text-sm text-nature-600 dark:text-nature-300 mt-1 mb-3 leading-relaxed break-words">
-                {t('For now, a few things are limited, each over any 24 hours:')}
+                For now, a few things are limited, each over any 24 hours:
             </p>
             <ul className="list-none p-0 m-0 space-y-2">
                 {ROWS.map(row => {
@@ -129,9 +113,9 @@ export function NewAccountCard({ refreshKey, onClose }: NewAccountCardProps) {
                     return (
                         <li key={row.key} data-testid={`new-account-limit-${row.key}`} className="min-w-0">
                             <div className="flex flex-wrap items-baseline justify-between gap-x-3">
-                                <span className="text-sm font-semibold text-nature-800 dark:text-nature-100 break-words min-w-0">{t(row.label)}</span>
+                                <span className="text-sm font-semibold text-nature-800 dark:text-nature-100 break-words min-w-0">{row.label}</span>
                                 <span className={`text-sm whitespace-nowrap ${left <= 0 ? 'font-bold text-amber-700 dark:text-amber-400' : 'text-nature-700 dark:text-nature-200'}`}>
-                                    {t('{left} of {limit} left', { left, limit: l.limit })}
+                                    {left} of {l.limit} left
                                 </span>
                             </div>
                             {back && <div className="text-xs text-nature-500 dark:text-nature-400 break-words">{back}</div>}
@@ -140,7 +124,7 @@ export function NewAccountCard({ refreshKey, onClose }: NewAccountCardProps) {
                 })}
             </ul>
             <p className="text-xs text-nature-500 dark:text-nature-400 mt-3 mb-0 leading-relaxed break-words">
-                {t('Replying to someone who wrote to you first is never limited.')}
+                Replying to someone who wrote to you first is never limited.
             </p>
             <p data-testid="new-account-rule" className="text-sm text-nature-700 dark:text-nature-200 mt-2 mb-0 leading-relaxed break-words">
                 {ruleSentence(probation)} {progressSentence(probation, now)}

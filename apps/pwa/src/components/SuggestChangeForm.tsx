@@ -58,7 +58,7 @@ export function SuggestChangeForm({ appVersion, onDone, submit = submitFeedback 
                     onClick={onDone}
                     className="w-full min-h-[48px] py-3 rounded-xl font-semibold bg-oat-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-none cursor-pointer hover:bg-oat-200 dark:hover:bg-nature-700 dark:hover:text-nature-200 transition-colors text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                 >
-                    {t('← Back to Settings')}
+                    ← Back to Settings
                 </button>
             </div>
         );
@@ -68,13 +68,13 @@ export function SuggestChangeForm({ appVersion, onDone, submit = submitFeedback 
         <form onSubmit={handleSend} className="bg-white dark:bg-nature-900 rounded-2xl p-6 shadow-soft border border-nature-200 dark:border-nature-800">
             <h3 className="text-lg font-bold text-nature-950 dark:text-white mb-2">
                 <span aria-hidden="true">💬 </span>
-                {t('Suggest a change to BeanPool')}
+                Suggest a change to BeanPool
             </h3>
             <p className="text-sm text-nature-700 dark:text-nature-300 mb-5 leading-relaxed bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-xl p-3">
                 {t(FEEDBACK_LINES.notice)}
             </p>
 
-            <div className="text-xs font-bold uppercase tracking-wider text-nature-500 dark:text-nature-400 mb-2" id="suggest-kind-label">{t('What kind?')}</div>
+            <div className="text-xs font-bold uppercase tracking-wider text-nature-500 dark:text-nature-400 mb-2" id="suggest-kind-label">What kind?</div>
             <div className="flex flex-wrap gap-2 mb-5" role="radiogroup" aria-labelledby="suggest-kind-label">
                 {FEEDBACK_KINDS.map((k) => {
                     const on = kind === k.id;
@@ -95,20 +95,20 @@ export function SuggestChangeForm({ appVersion, onDone, submit = submitFeedback 
                 })}
             </div>
 
-            <label htmlFor="suggest-text" className="block text-xs font-bold uppercase tracking-wider text-nature-500 dark:text-nature-400 mb-2">{t('Your suggestion')}</label>
+            <label htmlFor="suggest-text" className="block text-xs font-bold uppercase tracking-wider text-nature-500 dark:text-nature-400 mb-2">Your suggestion</label>
             <textarea
                 id="suggest-text"
                 value={text}
                 onChange={(e) => { setText(e.target.value); if (error) setError(null); }}
                 rows={6}
-                placeholder={t('What would make BeanPool better for your community? Any language is fine.')}
+                placeholder="What would make BeanPool better for your community? Any language is fine."
                 className="w-full p-3 rounded-xl border border-nature-300 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-900 dark:text-white text-base resize-y focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
             />
             <div className={`text-xs text-right mt-1 mb-5 ${over ? 'text-red-600 dark:text-red-300 font-bold' : 'text-nature-500 dark:text-nature-400'}`}>
                 {count} / {FEEDBACK_TEXT_MAX}
             </div>
 
-            <label htmlFor="suggest-community" className="block text-xs font-bold uppercase tracking-wider text-nature-500 dark:text-nature-400 mb-2">{t('Your community (optional)')}</label>
+            <label htmlFor="suggest-community" className="block text-xs font-bold uppercase tracking-wider text-nature-500 dark:text-nature-400 mb-2">Your community (optional)</label>
             <input
                 id="suggest-community"
                 type="text"
@@ -116,10 +116,10 @@ export function SuggestChangeForm({ appVersion, onDone, submit = submitFeedback 
                 onChange={(e) => setCommunity(e.target.value)}
                 maxLength={FEEDBACK_COMMUNITY_MAX}
                 autoComplete="off"
-                placeholder={t("Leave blank if you'd rather not say")}
+                placeholder="Leave blank if you'd rather not say"
                 className="w-full min-h-[48px] p-3 rounded-xl border border-nature-300 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-900 dark:text-white text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
             />
-            <p className="text-xs text-nature-500 dark:text-nature-400 mt-1 mb-5">{t('Helps us see how many places ask for the same thing.')}</p>
+            <p className="text-xs text-nature-500 dark:text-nature-400 mt-1 mb-5">Helps us see how many places ask for the same thing.</p>
 
             {error && (
                 <div role="alert" className="mb-4 p-3 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50 text-sm font-semibold text-red-700 dark:text-red-300">
@@ -132,14 +132,14 @@ export function SuggestChangeForm({ appVersion, onDone, submit = submitFeedback 
                 disabled={sending || over}
                 className="w-full min-h-[48px] py-3 rounded-xl font-bold bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on border-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm mb-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
             >
-                {sending ? t('Sending…') : t('Send')}
+                {sending ? 'Sending…' : 'Send'}
             </button>
             <button
                 type="button"
                 onClick={onDone}
                 className="w-full min-h-[48px] py-3 rounded-xl font-semibold bg-oat-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-none cursor-pointer hover:bg-oat-200 dark:hover:bg-nature-700 dark:hover:text-nature-200 transition-colors text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
             >
-                {t('← Back to Settings')}
+                ← Back to Settings
             </button>
         </form>
     );

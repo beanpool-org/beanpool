@@ -12,7 +12,7 @@
  * Pure: no I/O and no Node built-ins (the barrel is bundled for the phone).
  */
 import { defaultCards, homeCardType, starterCards, type HomeNodeFacts, type HomeReaderRole } from './home-frame.js';
-import { t, word, type WordKey } from './words.js';
+import { t, word } from './words.js';
 
 // ── The steps ─────────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -27,8 +27,7 @@ export interface TourStep {
      * The top-bar step stays on Home; the last step is Home.
      */
     tab: string;
-    /** A word() key: shown through t() where it is drawn. */
-    words: WordKey;
+    words: string;
 }
 
 /** The longest a step's words may be: four lines at 320 dp and the app's 1.2× cap, so the bar stays under 170 dp. */
@@ -46,23 +45,23 @@ export interface TourNodeFacts {
 
 /**
  * The words, by step. Map, Beans and Ledger reuse the Tips card's founder-approved sentences (home-tips.ts). Global's
- * own words where they differ. word() keys: each app shows them through t(), in the member's language.
+ * own words where they differ.
  */
 export const TOUR_WORDS = {
-    home: word('Home is a short list of cards: what needs you, what\'s on nearby, what to do next. You add cards at the end.'),
-    market: word('Neighbours post Offers and Needs here. Tap + ADD POST to put up your own.'),
-    marketGlobal: word('People post things free or for swap here. Tap + ADD POST to put up your own.'),
-    map: word('What\'s near you: green pins are Offers, orange are Needs, purple are events.'),
-    talk: word('Messages, Groups and People live here. A chat with one person is locked end to end.'),
-    chat: word('Your messages. A chat with one person is locked end to end.'),
-    people: word('Members, friends and invites.'),
-    commons: word('Where your community decides things together: Decisions, events and shared enterprises.'),
-    commonsGlobal: word('Where a local community decides things together. This one is an example.'),
-    ledger: word('Beans count help given and received. Everyone starts at zero, and zero is a fine place to be.'),
-    ledgerGlobal: word('In a local community, help earns Beans and getting help spends them. This is an example ledger.'),
-    topPhone: word('Up top: the bean is your community and the guide, ? explains this screen, the sliders are Settings.'),
-    topWeb: word('At the top: ? explains the screen you\'re on; Settings is where the whole guide lives.'),
-    cards: word('Add your first cards: tap one to put it on Home. Or tap Done and Home starts with the usual five.'),
+    home: 'Home is a short list of cards: what needs you, what\'s on nearby, what to do next. You add cards at the end.',
+    market: 'Neighbours post Offers and Needs here. Tap + ADD POST to put up your own.',
+    marketGlobal: 'People post things free or for swap here. Tap + ADD POST to put up your own.',
+    map: 'What\'s near you: green pins are Offers, orange are Needs, purple are events.',
+    talk: 'Messages, Groups and People live here. A chat with one person is locked end to end.',
+    chat: 'Your messages. A chat with one person is locked end to end.',
+    people: 'Members, friends and invites.',
+    commons: 'Where your community decides things together: Decisions, events and shared enterprises.',
+    commonsGlobal: 'Where a local community decides things together. This one is an example.',
+    ledger: 'Beans count help given and received. Everyone starts at zero, and zero is a fine place to be.',
+    ledgerGlobal: 'In a local community, help earns Beans and getting help spends them. This is an example ledger.',
+    topPhone: 'Up top: the bean is your community and the guide, ? explains this screen, the sliders are Settings.',
+    topWeb: 'At the top: ? explains the screen you\'re on; Settings is where the whole guide lives.',
+    cards: 'Add your first cards: tap one to put it on Home. Or tap Done and Home starts with the usual five.',
 } as const;
 
 /**
@@ -95,8 +94,8 @@ export function tourSteps(app: TourApp, node: TourNodeFacts): TourStep[] {
     return steps;
 }
 
-/** "Step 2 of 7", as the bar's caption says it, in the member's language (an app puts it in capitals the language's way). */
-export const tourStepCaption = (index: number, total: number): string => t('Step {n} of {total}', { n: index + 1, total });
+/** "Step 2 of 7", as the bar's caption says it (the apps upper-case it with the caption style). */
+export const tourStepCaption = (index: number, total: number): string => `Step ${index + 1} of ${total}`;
 
 /**
  * The step a tab the member tapped during the tour belongs to (the tour follows, never scolds), or -1 for a tab with no

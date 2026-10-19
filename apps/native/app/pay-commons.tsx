@@ -22,8 +22,6 @@ import { useTheme, useStyles } from './ThemeContext';
 import { anchorUrl } from '../utils/node-post';
 import { namesListStyleSpec } from '../utils/names-list-style';
 import { payTheCommons, fetchMyRepayment, confirmCommonsPayment, unanswered, parseBeans, debtCodeOk, oneAtATime, REPAYMENT_COPY, DEBT_UNREACHABLE, PAY_UNANSWERED_RETRY, type CommonsPayment, type Repayment } from '../utils/names-debts';
-import { REPAYMENT_LINES, linkLeftWords, paidWords, payConfirmWords, repaymentLineWords } from '../components/repayment-lines';
-import { formatNumber, t } from '@beanpool/core';
 import type { ConfirmedPayment } from '../utils/payment-request';
 
 export { ErrorBoundary };
@@ -73,8 +71,7 @@ export default function PayCommonsScreen() {
         if (!r.ok) { setError(r.message); return; }
         DeviceEventEmitter.emit('transaction_completed');
         const forDebt = !!payment.body.debtId;
-        // names-debts.ts REPAYMENT_COPY.paid, in the member's language (components/repayment-lines.ts).
-        setPaid({ words: paidWords(r.value.amount, r.value.transactionId, forDebt, r.value, !forDebt && !!myDebt), ref: forDebt ? null : r.value.transactionId });
+        setPaid({ words: REPAYMENT_COPY.paid(r.value.amount, r.value.transactionId, forDebt, r.value, !forDebt && !!myDebt), ref: forDebt ? null : r.value.transactionId });
     });
 
     const pay = () => {
@@ -85,9 +82,9 @@ export default function PayCommonsScreen() {
         const debt = code.trim();
         if (debt && !debtCodeOk(debt)) { setError(REPAYMENT_COPY.badCode); return; }
         const shared = debt && debt.toLowerCase() === linkCode ? linkLeft : null;
-        Alert.alert(t(REPAYMENT_LINES.payTitle), payConfirmWords(beans, !!debt, shared, !debt && !!myDebt), [
-            { text: t('Cancel'), style: 'cancel' },
-            { text: t('Pay'), onPress: () => send(confirmCommonsPayment(beans, debt || undefined)) },
+        Alert.alert(REPAYMENT_COPY.payTitle, REPAYMENT_COPY.payConfirm(beans, !!debt, shared, !debt && !!myDebt), [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Pay', onPress: () => send(confirmCommonsPayment(beans, debt || undefined)) },
         ]);
     };
 
@@ -95,10 +92,10 @@ export default function PayCommonsScreen() {
         <SafeAreaView style={styles.screen} edges={['top', 'left', 'right', 'bottom']}>
             <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
             <View style={styles.header}>
-                <Pressable onPress={() => router.back()} style={styles.backButton} accessibilityRole="button" accessibilityLabel={t('Back')}>
+                <Pressable onPress={() => router.back()} style={styles.backButton} accessibilityRole="button" accessibilityLabel="Back">
                     <MaterialCommunityIcons name="arrow-left" size={24} color={colors.text.heading} />
                 </Pressable>
-                <Text style={styles.headerTitle} accessibilityRole="header">{t(REPAYMENT_LINES.payTitle)}</Text>
+                <Text style={styles.headerTitle} accessibilityRole="header">{REPAYMENT_COPY.payTitle}</Text>
             </View>
             <KeyboardAwareScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" bottomOffset={24}>
                 {paid ? (
@@ -106,33 +103,33 @@ export default function PayCommonsScreen() {
                         <View style={styles.notice} accessibilityLiveRegion="polite"><Text style={styles.noticeText} selectable>{paid.words}</Text></View>
                         <View style={styles.buttonRow}>
                             {paid.ref ? (
-                                <Pressable style={styles.primaryBtn} onPress={() => { void Share.share({ message: t('My payment to the Commons: {ref}', { ref: paid.ref! }) }).catch(() => {}); }} accessibilityRole="button">
-                                    <Text style={styles.primaryBtnText}>{t('Share the reference')}</Text>
+                                <Pressable style={styles.primaryBtn} onPress={() => { void Share.share({ message: `My payment to the Commons: ${paid.ref}` }).catch(() => {}); }} accessibilityRole="button">
+                                    <Text style={styles.primaryBtnText}>Share the reference</Text>
                                 </Pressable>
                             ) : null}
                             <Pressable style={styles.secondaryBtn} onPress={() => router.back()} accessibilityRole="button">
-                                <Text style={styles.secondaryBtnText}>{t('Done')}</Text>
+                                <Text style={styles.secondaryBtnText}>Done</Text>
                             </Pressable>
                         </View>
                     </>
                 ) : (
                     <>
-                        <Text style={styles.body}>{t(REPAYMENT_LINES.payIntro)}</Text>
-                        {linkLeft !== null && code.trim().toLowerCase() === linkCode ? <Text style={styles.body}>{linkLeftWords(linkLeft)}</Text> : null}
-                        <Text style={styles.label}>{t('BEANS')}</Text>
+                        <Text style={styles.body}>{REPAYMENT_COPY.payIntro}</Text>
+                        {linkLeft !== null && code.trim().toLowerCase() === linkCode ? <Text style={styles.body}>{REPAYMENT_COPY.linkLeft(linkLeft)}</Text> : null}
+                        <Text style={styles.label}>BEANS</Text>
                         <TextInput
-                            style={styles.input} value={amount} onChangeText={edit(setAmount)} keyboardType="decimal-pad" placeholder={t('For example {amount}', { amount: formatNumber(12.5, 2) })}
-                            placeholderTextColor={colors.text.muted} accessibilityLabel={t('How many Beans')} maxLength={12} editable={!busy}
+                            style={styles.input} value={amount} onChangeText={edit(setAmount)} keyboardType="decimal-pad" placeholder="For example 12.50"
+                            placeholderTextColor={colors.text.muted} accessibilityLabel="How many Beans" maxLength={12} editable={!busy}
                         />
-                        <Text style={styles.label}>{t('PAY-BACK CODE (IF YOU HAVE ONE)')}</Text>
+                        <Text style={styles.label}>PAY-BACK CODE (IF YOU HAVE ONE)</Text>
                         <TextInput
-                            style={styles.input} value={code} onChangeText={edit((v) => { codeTyped.current = true; setCode(v); })} placeholder={t('From an admin')} autoCapitalize="none" autoCorrect={false}
-                            placeholderTextColor={colors.text.muted} accessibilityLabel={t('The pay-back code an admin gave you')} maxLength={64} editable={!busy}
+                            style={styles.input} value={code} onChangeText={edit((v) => { codeTyped.current = true; setCode(v); })} placeholder="From an admin" autoCapitalize="none" autoCorrect={false}
+                            placeholderTextColor={colors.text.muted} accessibilityLabel="The pay-back code an admin gave you" maxLength={64} editable={!busy}
                         />
-                        {error ? <View style={styles.error}><Text style={styles.errorText}>{repaymentLineWords(error)}</Text></View> : null}
+                        {error ? <View style={styles.error}><Text style={styles.errorText}>{error}</Text></View> : null}
                         <View style={styles.buttonRow}>
                             <Pressable style={[styles.primaryBtn, busy && styles.disabled]} onPress={pay} disabled={busy} accessibilityRole="button" accessibilityState={{ disabled: busy, busy }}>
-                                <Text style={styles.primaryBtnText}>{held ? t('Try again') : t(REPAYMENT_LINES.payTitle)}</Text>
+                                <Text style={styles.primaryBtnText}>{held ? 'Try again' : REPAYMENT_COPY.payTitle}</Text>
                             </Pressable>
                         </View>
                     </>

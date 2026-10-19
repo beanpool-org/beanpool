@@ -18,7 +18,6 @@ import { avatarUri } from '../utils/image-processing';
 import { anchorUrl, getCachedAnchorUrl } from '../utils/node-post';
 import { resolveBundledAvatar } from '../utils/bundled-avatars';
 import { colors, palette } from '../constants/colors';
-import { t } from '@beanpool/core';
 
 // Consistent color palette for letter-initial fallbacks
 const FALLBACK_COLORS = [
@@ -91,7 +90,7 @@ function MemberAvatarBase({
     const smallEl = imageSource ? (
         <Image
             source={imageSource}
-            accessibilityLabel={t("{name}'s avatar", { name: callsign })}
+            accessibilityLabel={`${callsign}'s avatar`}
             cachePolicy="memory-disk"
             transition={120}
             style={[
@@ -125,18 +124,18 @@ function MemberAvatarBase({
             <Pressable
                 onPress={() => setViewerOpen(true)}
                 accessibilityRole="imagebutton"
-                accessibilityLabel={t("View {name}'s photo", { name: callsign })}
+                accessibilityLabel={`View ${callsign}'s photo`}
                 hitSlop={6}
             >
                 {smallEl}
             </Pressable>
             {viewerOpen && (
                 <Modal visible transparent animationType="fade" onRequestClose={() => setViewerOpen(false)}>
-                    <Pressable style={styles.viewerBackdrop} onPress={() => setViewerOpen(false)} accessibilityRole="button" accessibilityLabel={t('Close photo')}>
+                    <Pressable style={styles.viewerBackdrop} onPress={() => setViewerOpen(false)} accessibilityRole="button" accessibilityLabel="Close photo">
                         {imageSource ? (
                             <Image
                                 source={imageSource}
-                                accessibilityLabel={t("{name}'s photo", { name: callsign })}
+                                accessibilityLabel={`${callsign}'s photo`}
                                 cachePolicy="memory-disk"
                                 contentFit="cover"
                                 transition={150}
@@ -150,7 +149,7 @@ function MemberAvatarBase({
                             </View>
                         )}
                         <Text style={styles.viewerCallsign}>{callsign}</Text>
-                        <Text style={styles.viewerHint}>{t('Tap anywhere to close')}</Text>
+                        <Text style={styles.viewerHint}>Tap anywhere to close</Text>
                     </Pressable>
                 </Modal>
             )}

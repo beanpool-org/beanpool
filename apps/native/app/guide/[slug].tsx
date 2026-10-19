@@ -8,7 +8,6 @@ import { useTheme, useStyles } from '../ThemeContext';
 import { useGuide } from '../../utils/use-guide';
 import { findGuidePage, findGuideSection, relatedPages, findGuideVideo, splitBold } from '../../utils/guide';
 import { useLearnVideos } from '../../utils/use-learn-videos';
-import { t } from '@beanpool/core';
 
 export { ErrorBoundary };
 
@@ -64,16 +63,16 @@ export default function GuideScreen() {
         <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
             <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
             <View style={styles.header}>
-                <Pressable onPress={() => router.back()} style={styles.backButton} accessibilityRole="button" accessibilityLabel={t('Back')}>
+                <Pressable onPress={() => router.back()} style={styles.backButton} accessibilityRole="button" accessibilityLabel="Back">
                     <MaterialCommunityIcons name="arrow-left" size={26} color={colors.text.inverse} />
                 </Pressable>
-                <Text style={styles.headerTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('BEANPOOL GUIDE')}</Text>
+                <Text style={styles.headerTitle} numberOfLines={1}>BEANPOOL GUIDE</Text>
                 <View style={{ width: 48 }} />
             </View>
 
             <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: Math.max(insets.bottom, 16) + 24 }]}>
                 {!page ? (
-                    <Text style={styles.missing}>{t('This guide is not available. Go back and pick another one.')}</Text>
+                    <Text style={styles.missing}>This guide is not available. Go back and pick another one.</Text>
                 ) : (
                     <>
                         {section && (
@@ -81,7 +80,7 @@ export default function GuideScreen() {
                                 style={styles.kicker}
                                 onPress={() => router.push({ pathname: '/guide/section/[id]', params: { id: section.id } })}
                                 accessibilityRole="button"
-                                accessibilityLabel={t('Part of: {section}', { section: section.title })}
+                                accessibilityLabel={`Part of: ${section.title}`}
                             >
                                 <Text style={styles.kickerText} numberOfLines={1}>{section.title}</Text>
                             </Pressable>
@@ -93,10 +92,10 @@ export default function GuideScreen() {
                                 style={styles.watch}
                                 onPress={() => { Linking.openURL(video.url).catch(() => {}); }}
                                 accessibilityRole="link"
-                                accessibilityLabel={t('Watch: {title}. Opens the video.', { title: video.title })}
+                                accessibilityLabel={`Watch: ${video.title}. Opens the video.`}
                             >
                                 <MaterialCommunityIcons name="play-circle-outline" size={24} color={colors.brand.primary} />
-                                <Text style={styles.watchText} numberOfLines={2}>{t('Watch: {title}', { title: video.title })}</Text>
+                                <Text style={styles.watchText} numberOfLines={2}>Watch: {video.title}</Text>
                             </Pressable>
                         )}
                         {page.blocks.map((b, i) => {
@@ -118,7 +117,7 @@ export default function GuideScreen() {
                         })}
                         {relatedPages(guide, page).length > 0 && (
                             <>
-                                <Text style={styles.relatedLabel} accessibilityRole="header">{t('RELATED')}</Text>
+                                <Text style={styles.relatedLabel} accessibilityRole="header">RELATED</Text>
                                 <View style={styles.group}>
                                     {relatedPages(guide, page).map((r, i) => (
                                         <Pressable

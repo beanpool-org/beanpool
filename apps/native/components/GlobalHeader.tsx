@@ -14,7 +14,6 @@ import { NeedsYouIcons } from './NeedsYouIcons';
 import Constants from 'expo-constants';
 import appConfig from '../app.json';
 import { evaluateUpdate, normaliseVersion, pickStoreVersion } from '../utils/app-version';
-import { t } from '@beanpool/core';
 
 // The floor is a property of the COMMUNITY, not of the phone: two nodes can disagree about
 // which builds they still work with. Cached per node so switching community — or being
@@ -400,10 +399,7 @@ export function GlobalHeader({ onMeasure }: { onMeasure?: (height: number) => vo
             <View style={[styles.headerContainer, { paddingTop: insets.top, height: headerHeight }]} pointerEvents="box-none">
                 <TouchableOpacity
                     accessibilityRole="button"
-                    accessibilityLabel={!hasAnchorUrl ? t('BeanPool: your community and help, not connected')
-                        : isOffline ? t('BeanPool: your community and help, offline')
-                        : isGuestOnActive ? t('BeanPool: your community and help, guest')
-                        : t('BeanPool: your community and help, connected')}
+                    accessibilityLabel={`BeanPool: your community and help, ${!hasAnchorUrl ? 'not connected' : isOffline ? 'offline' : isGuestOnActive ? 'guest' : 'connected'}`}
                     style={styles.beanBtn}
                     activeOpacity={0.7}
                     onPress={() => router.push('/beanpool')}
@@ -422,7 +418,7 @@ export function GlobalHeader({ onMeasure }: { onMeasure?: (height: number) => vo
                     <View style={styles.statePillWrap}>
                         <Pressable
                             accessibilityRole="button"
-                            accessibilityLabel={!hasAnchorUrl ? t('Connect to a community') : t('Join this community')}
+                            accessibilityLabel={!hasAnchorUrl ? 'Connect to a community' : 'Join this community'}
                             style={styles.statePill}
                             onPress={joinOrConnect}
                         >
@@ -432,7 +428,7 @@ export function GlobalHeader({ onMeasure }: { onMeasure?: (height: number) => vo
                                 <MaterialCommunityIcons name={!hasAnchorUrl ? 'link-off' : 'account-alert-outline'} size={18}
                                     color={!hasAnchorUrl ? colors.feedback.danger.fg : colors.feedback.warning.fg} />
                                 <Text numberOfLines={1} style={[styles.statePillText, { color: !hasAnchorUrl ? colors.feedback.danger.fg : colors.feedback.warning.fg }]}>
-                                    {!hasAnchorUrl ? t('Connect') : t('Join')}
+                                    {!hasAnchorUrl ? 'Connect' : 'Join'}
                                 </Text>
                             </View>
                         </Pressable>
@@ -446,7 +442,7 @@ export function GlobalHeader({ onMeasure }: { onMeasure?: (height: number) => vo
                     {/* Help for the screen you're on (DESIGN-getting-started-fable.md §4-5): the sheet is (tabs)/_layout.tsx's. */}
                     <TouchableOpacity
                         accessibilityRole="button"
-                        accessibilityLabel={t('Help for this screen')}
+                        accessibilityLabel="Help for this screen"
                         style={styles.iconBtn}
                         onPress={() => DeviceEventEmitter.emit('open_help')}
                         testID="header-help"
@@ -457,7 +453,7 @@ export function GlobalHeader({ onMeasure }: { onMeasure?: (height: number) => vo
                     {!needsJoinOrConnect && (
                         <TouchableOpacity
                             accessibilityRole="button"
-                            accessibilityLabel={t('Invite friends')}
+                            accessibilityLabel="Invite friends"
                             style={styles.iconBtn}
                             onPress={() => {
                                 DeviceEventEmitter.emit('set_people_view', { view: 'invites' });
@@ -469,7 +465,7 @@ export function GlobalHeader({ onMeasure }: { onMeasure?: (height: number) => vo
                     )}
                     <TouchableOpacity
                         accessibilityRole="button"
-                        accessibilityLabel={t('Settings')}
+                        accessibilityLabel="Settings"
                         style={styles.iconBtn}
                         onPress={() => {
                             if (pathname === '/settings') {
@@ -487,7 +483,7 @@ export function GlobalHeader({ onMeasure }: { onMeasure?: (height: number) => vo
                     </TouchableOpacity>
                     <TouchableOpacity
                         accessibilityRole="button"
-                        accessibilityLabel={t('Open profile')}
+                        accessibilityLabel="Open profile"
                         style={styles.iconBtn}
                         onPress={() => {
                             if (identity?.publicKey) {
@@ -506,8 +502,8 @@ export function GlobalHeader({ onMeasure }: { onMeasure?: (height: number) => vo
                         <Text style={{ fontSize: 18 }}>{updateRequired ? '⚠️' : '💡'}</Text>
                         <Text style={styles.softUpdateText} numberOfLines={2}>
                             {updateRequired
-                                ? t('Your app is too old for this community — update to v{version}.', { version: softUpdateVersion })
-                                : t('Update available — v{version} has the latest community features.', { version: softUpdateVersion })}
+                                ? `Your app is too old for this community — update to v${softUpdateVersion}.`
+                                : `Update available — v${softUpdateVersion} has the latest community features.`}
                         </Text>
                     </View>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -526,14 +522,14 @@ export function GlobalHeader({ onMeasure }: { onMeasure?: (height: number) => vo
                                 });
                             }}
                         >
-                            <Text style={styles.softUpdateUpgradeText}>{t('Upgrade')}</Text>
+                            <Text style={styles.softUpdateUpgradeText}>Upgrade</Text>
                         </TouchableOpacity>
                         {/* No dismiss below the node's floor: clearing it would hide the reason
                             the app is misbehaving, and the next ping would raise it again anyway. */}
                         {!updateRequired && (
                             <TouchableOpacity
                                 accessibilityRole="button"
-                                accessibilityLabel={t('Close')}
+                                accessibilityLabel="Close"
                                 style={styles.softUpdateDismissBtn}
                                 onPress={async () => {
                                     // Remember it in memory too, so the next 30-second ping does not

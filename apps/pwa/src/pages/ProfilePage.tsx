@@ -10,15 +10,7 @@ import { updateMemberProfile, getMemberProfile, type MemberProfile } from '../li
 import { updateCallsign, type BeanPoolIdentity } from '../lib/identity';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { ArchetypeQuizModal } from '../components/ArchetypeQuizModal';
-import { parseArchetype, ARCHETYPES, CONTACT_VALUE_LIMIT, t, word, type QuizResult } from '@beanpool/core';
-
-/** Who can see the contact details: the phone's Settings → Profile options and words (word() keys, shown through t()). */
-const CONTACT_VISIBILITY = [
-    { value: 'hidden', emoji: '🔒', label: word('Hidden', 'who can see your contact details'), desc: word('Only you can see it') },
-    { value: 'trade_partners', emoji: '🤝', label: word('Trade Partners'), desc: word('Visible when you enter a trade') },
-    { value: 'friends', emoji: '👥', label: word('Friends'), desc: word('People you have added as friends') },
-    { value: 'community', emoji: '🌍', label: word('Community'), desc: word('Anyone on this node') },
-] as const;
+import { parseArchetype, ARCHETYPES, CONTACT_VALUE_LIMIT, type QuizResult } from '@beanpool/core';
 
 interface Props {
     identity: BeanPoolIdentity;
@@ -65,7 +57,7 @@ export function ProfilePage({ identity, onBack, onIdentityUpdated }: Props) {
 
     async function handleSave() {
         if (!navigator.onLine) {
-            alert(t('You must be online to update your profile.'));
+            alert('You must be online to update your profile.');
             return;
         }
         setSaving(true);
@@ -90,7 +82,7 @@ export function ProfilePage({ identity, onBack, onIdentityUpdated }: Props) {
             setSaved(true);
             setTimeout(() => setSaved(false), 2000);
         } catch (err: any) {
-            alert(err.message || t('Failed to save profile'));
+            alert(err.message || 'Failed to save profile');
         } finally {
             setSaving(false);
         }
@@ -139,7 +131,7 @@ export function ProfilePage({ identity, onBack, onIdentityUpdated }: Props) {
     if (loading) {
         return (
             <div className="p-8 text-center text-nature-500 font-medium animate-pulse">
-                {t('Loading profile...')}
+                Loading profile...
             </div>
         );
     }
@@ -151,9 +143,9 @@ export function ProfilePage({ identity, onBack, onIdentityUpdated }: Props) {
                     onClick={onBack}
                     className="bg-transparent border-none text-nature-600 dark:text-nature-400 hover:text-nature-900 dark:hover:text-white text-sm cursor-pointer px-1 transition-colors font-semibold"
                 >
-                    {t('← Back')}
+                    ← Back
                 </button>
-                <h2 className="min-w-0 text-xl font-bold text-nature-950 dark:text-white m-0 tracking-tight break-words">{t('Your Profile')}</h2>
+                <h2 className="text-xl font-bold text-nature-950 dark:text-white m-0 tracking-tight">Your Profile</h2>
             </div>
 
             {/* Avatar */}
@@ -164,7 +156,7 @@ export function ProfilePage({ identity, onBack, onIdentityUpdated }: Props) {
                 >
                     {!resolveAvatarUrl(avatar) && '👤'}
                     <div className="absolute inset-0 bg-black/30 hidden group-hover:flex items-center justify-center transition-opacity">
-                        <span className="text-white text-xs font-bold bg-black/60 px-2 py-1 rounded-full backdrop-blur-sm">{t('Edit')}</span>
+                        <span className="text-white text-xs font-bold bg-black/60 px-2 py-1 rounded-full backdrop-blur-sm">Edit</span>
                     </div>
                 </div>
 
@@ -188,13 +180,13 @@ export function ProfilePage({ identity, onBack, onIdentityUpdated }: Props) {
                         onClick={() => cameraInputRef.current?.click()}
                         className="bg-white dark:bg-nature-800 border border-nature-200 dark:border-nature-700 rounded-xl px-4 py-2 text-nature-700 dark:text-nature-200 text-xs font-bold cursor-pointer hover:bg-nature-50 dark:hover:bg-nature-700 shadow-sm transition-all"
                     >
-                        {t('📸 Camera')}
+                        📸 Camera
                     </button>
                     <button
                         onClick={() => fileInputRef.current?.click()}
                         className="bg-white dark:bg-nature-800 border border-nature-200 dark:border-nature-700 rounded-xl px-4 py-2 text-nature-700 dark:text-nature-200 text-xs font-bold cursor-pointer hover:bg-nature-50 dark:hover:bg-nature-700 shadow-sm transition-all"
                     >
-                        {t('🖼️ Gallery')}
+                        🖼️ Gallery
                     </button>
                 </div>
                 {avatar && (
@@ -202,14 +194,14 @@ export function ProfilePage({ identity, onBack, onIdentityUpdated }: Props) {
                         onClick={() => setAvatar(null)}
                         className="bg-transparent mt-3 border-none text-red-500 dark:text-red-300 hover:text-red-700 text-xs font-semibold cursor-pointer transition-colors px-2 py-1 rounded-md hover:bg-red-50 dark:hover:bg-red-950/30 dark:hover:text-red-300"
                     >
-                        {t('Remove photo')}
+                        Remove photo
                     </button>
                 )}
             </div>
 
             {/* Callsign */}
             <div className="mb-6">
-                <label htmlFor="profile-callsign" className="block text-[14px] font-bold text-nature-950 dark:text-white mb-2">{t('Callsign ✏️')}</label>
+                <label htmlFor="profile-callsign" className="block text-[14px] font-bold text-nature-950 dark:text-white mb-2">Callsign ✏️</label>
                 <input
                     id="profile-callsign"
                     type="text"
@@ -219,18 +211,18 @@ export function ProfilePage({ identity, onBack, onIdentityUpdated }: Props) {
                     className="w-full py-3 px-4 rounded-xl border border-terra-400 dark:border-terra-600 bg-terra-50/40 dark:bg-terra-950/30 text-nature-900 dark:text-white text-base focus:outline-none focus:ring-2 focus:ring-terra-300 font-semibold transition-all"
                 />
                 <p className="text-nature-500 dark:text-nature-400 text-xs mt-2 font-medium">
-                    {t('Changing your callsign updates your display name everywhere')}
+                    Changing your callsign updates your display name everywhere
                 </p>
             </div>
 
             {/* Bio */}
             <div className="mb-6">
-                <label htmlFor="profile-bio" className="block text-[14px] font-bold text-nature-950 dark:text-white mb-2">{t('Bio')}</label>
+                <label htmlFor="profile-bio" className="block text-[14px] font-bold text-nature-950 dark:text-white mb-2">Bio</label>
                 <textarea
                     id="profile-bio"
                     value={bio}
                     onChange={(e) => setBio(e.target.value)}
-                    placeholder={t('A short bio about yourself...')}
+                    placeholder="A short bio about yourself..."
                     maxLength={200}
                     className="w-full py-3 px-4 rounded-xl border border-nature-200 dark:border-nature-800 bg-oat-50/50 dark:bg-nature-950/50 text-nature-900 dark:text-white text-base focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm min-h-[90px] resize-none transition-all placeholder:text-nature-400"
                 />
@@ -241,22 +233,27 @@ export function ProfilePage({ identity, onBack, onIdentityUpdated }: Props) {
 
             {/* Contact Details */}
             <div className="bg-oat-50/50 dark:bg-nature-950/40 border border-nature-200 dark:border-nature-800 rounded-2xl p-5 mb-8 shadow-sm">
-                <label htmlFor="profile-contact" className="block text-[14px] font-bold text-nature-950 dark:text-white mb-2">{t('Contact Details')}</label>
+                <label htmlFor="profile-contact" className="block text-[14px] font-bold text-nature-950 dark:text-white mb-2">Contact Details</label>
                 <input
                     id="profile-contact"
                     type="text"
                     value={contactValue}
                     onChange={(e) => setContactValue(e.target.value)}
                     maxLength={CONTACT_VALUE_LIMIT.chars}
-                    placeholder={t('Phone, email, or WhatsApp')}
+                    placeholder="Phone, email, or WhatsApp"
                     className="w-full py-3 px-4 mb-4 rounded-xl border border-nature-200 dark:border-nature-800 bg-white dark:bg-nature-900 text-nature-900 dark:text-white text-base focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm transition-all placeholder:text-nature-400"
                 />
 
                 {contactValue.trim() && (
                     <div className="animate-in fade-in slide-in-from-top-2 duration-300">
-                        <label className="block text-xs font-bold text-nature-700 dark:text-nature-300 uppercase tracking-wider mb-2.5 mt-2">{t('Who can see this?')}</label>
+                        <label className="block text-xs font-bold text-nature-700 dark:text-nature-300 uppercase tracking-wider mb-2.5 mt-2">Who can see this?</label>
                         <div className="flex flex-col gap-2">
-                            {CONTACT_VISIBILITY.map(opt => (
+                            {([
+                                { value: 'hidden', label: '🔒 Hidden', desc: 'Only you can see it' },
+                                { value: 'trade_partners', label: '🤝 Trade Partners', desc: 'Visible when you enter a trade' },
+                                { value: 'friends', label: '👥 Friends', desc: 'People you have added as friends' },
+                                { value: 'community', label: '🌍 Community', desc: 'Anyone on this node' },
+                            ] as const).map(opt => (
                                 <button
                                     key={opt.value}
                                     onClick={() => setContactVisibility(opt.value)}
@@ -266,13 +263,13 @@ export function ProfilePage({ identity, onBack, onIdentityUpdated }: Props) {
                                             : 'border-nature-200 dark:border-nature-800 bg-white dark:bg-nature-900 hover:bg-nature-50 dark:hover:bg-nature-800'
                                     }`}
                                 >
-                                    <span className="text-xl leading-none">{opt.emoji}</span>
+                                    <span className="text-xl leading-none">{opt.label.split(' ')[0]}</span>
                                     <div className="flex-1">
                                         <div className={`text-[14px] font-bold ${contactVisibility === opt.value ? 'text-terra-900 dark:text-terra-300' : 'text-nature-900 dark:text-white'}`}>
-                                            {t(opt.label)}
+                                            {opt.label.split(' ').slice(1).join(' ')}
                                         </div>
                                         <div className={`text-xs mt-0.5 ${contactVisibility === opt.value ? 'text-terra-700 dark:text-terra-400' : 'text-nature-500 dark:text-nature-400'}`}>
-                                            {t(opt.desc)}
+                                            {opt.desc}
                                         </div>
                                     </div>
                                     {contactVisibility === opt.value && (
@@ -297,64 +294,64 @@ export function ProfilePage({ identity, onBack, onIdentityUpdated }: Props) {
                             <div className="flex items-center gap-3">
                                 <span className="text-3xl select-none" aria-hidden="true">{primary.emoji}</span>
                                 <div className="flex-1 min-w-0">
-                                    <div className="text-[15px] font-bold text-nature-950 dark:text-white break-words">
-                                        {t(primary.name)}
+                                    <div className="text-[15px] font-bold text-nature-950 dark:text-white truncate">
+                                        {primary.name}
                                     </div>
-                                    <div className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 break-words">
-                                        {t(primary.tagline)}
+                                    <div className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 truncate">
+                                        {primary.tagline}
                                     </div>
                                 </div>
                             </div>
 
                             <p className="text-xs sm:text-sm text-nature-600 dark:text-nature-400 leading-relaxed m-0">
-                                {t(primary.description)}
+                                {primary.description}
                             </p>
 
                             {secondary && (
                                 <div className="text-xs font-semibold text-nature-700 dark:text-nature-300">
-                                    {t('Secondary rhythm: {emoji} {name}', { emoji: secondary.emoji, name: t(secondary.name) })}
+                                    Secondary rhythm: {secondary.emoji} {secondary.name}
                                 </div>
                             )}
 
                             <div className="space-y-1.5 pt-1">
-                                {primary.superpowers.map((_, idx) => (
+                                {primary.superpowers.map((sp, idx) => (
                                     <div key={idx} className="flex items-start gap-2 text-xs text-nature-700 dark:text-nature-300">
                                         <span className="text-emerald-600 dark:text-emerald-400 font-bold shrink-0">✓</span>
-                                        <span>{t(primary.superpowers[idx])}</span>
+                                        <span>{sp}</span>
                                     </div>
                                 ))}
                             </div>
 
                             <div className="p-3 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200/80 dark:border-emerald-900/40 text-xs text-emerald-900 dark:text-emerald-300 leading-normal">
-                                💡 <strong className="font-bold">{t('How you work best:')}</strong> <>{t(primary.collaborationStyle)}</>
+                                💡 <strong className="font-bold">How you work best:</strong> {primary.collaborationStyle}
                             </div>
 
                             <div className="flex flex-wrap sm:flex-nowrap gap-2 pt-2">
                                 {mine.mode === 'quick' && (
                                     <button
                                         type="button"
-                                        aria-label={t('Take the longer 27 question quiz for a more accurate result')}
+                                        aria-label="Take the longer 27 question quiz for a more accurate result"
                                         onClick={() => {
                                             setQuizInitialMode('deep');
                                             setShowQuizModal(true);
                                         }}
-                                        className="flex-1 min-w-0 py-2.5 px-3 rounded-xl text-xs font-bold bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on border-none cursor-pointer transition-colors shadow-sm break-words"
+                                        className="flex-1 min-w-0 py-2.5 px-3 rounded-xl text-xs font-bold bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on border-none cursor-pointer transition-colors shadow-sm truncate"
                                     >
-                                        {t('🧭 More accurate')}
+                                        🧭 More accurate
                                     </button>
                                 )}
                                 <button
                                     type="button"
-                                    aria-label={t('Retake community working style quiz')}
+                                    aria-label="Retake community working style quiz"
                                     onClick={() => {
                                         setQuizInitialMode('quick');
                                         setShowQuizModal(true);
                                     }}
-                                    className={`min-w-0 py-2.5 px-3 rounded-xl text-xs font-bold border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-900 hover:bg-nature-50 dark:hover:bg-nature-800 text-nature-800 dark:text-nature-200 cursor-pointer transition-colors shadow-sm break-words ${
+                                    className={`min-w-0 py-2.5 px-3 rounded-xl text-xs font-bold border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-900 hover:bg-nature-50 dark:hover:bg-nature-800 text-nature-800 dark:text-nature-200 cursor-pointer transition-colors shadow-sm truncate ${
                                         mine.mode === 'quick' ? 'flex-1' : 'w-full'
                                     }`}
                                 >
-                                    {t('🔄 Retake')}
+                                    🔄 Retake
                                 </button>
                             </div>
                         </div>
@@ -366,22 +363,22 @@ export function ProfilePage({ identity, onBack, onIdentityUpdated }: Props) {
                         <div className="flex items-center gap-2 mb-2">
                             <span className="text-xl" aria-hidden="true">✨</span>
                             <div className="text-[15px] font-bold text-nature-950 dark:text-white">
-                                {t('Your Working Style')}
+                                Your Working Style
                             </div>
                         </div>
                         <p className="text-xs sm:text-sm text-nature-600 dark:text-nature-400 leading-relaxed mb-4 m-0">
-                            {t('Take the 60-second quiz on how you prefer to work. Neighbours then get tips for working with you.')}
+                            Take the 60-second quiz on how you prefer to work. Neighbours then get tips for working with you.
                         </p>
                         <button
                             type="button"
-                            aria-label={t('Take 60 second community working style quiz')}
+                            aria-label="Take 60 second community working style quiz"
                             onClick={() => {
                                 setQuizInitialMode('quick');
                                 setShowQuizModal(true);
                             }}
                             className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on border-none cursor-pointer transition-colors shadow-sm"
                         >
-                            {t('⚡ Take 60s Quiz')}
+                            ⚡ Take 60s Quiz
                         </button>
                     </div>
                 );
@@ -399,7 +396,7 @@ export function ProfilePage({ identity, onBack, onIdentityUpdated }: Props) {
                             : 'bg-nature-900 dark:bg-white text-white dark:text-nature-900 hover:opacity-90'
                 }`}
             >
-                {saved ? t('✓ Profile Saved Successfully!') : saving ? t('Saving...') : t('Save Profile Changes')}
+                {saved ? '✓ Profile Saved Successfully!' : saving ? 'Saving...' : 'Save Profile Changes'}
             </button>
 
             <ArchetypeQuizModal

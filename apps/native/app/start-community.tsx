@@ -12,7 +12,6 @@ import { useIdentity } from './IdentityContext';
 import { START_COMMUNITY_COPY, communityDetailsText, canCopyDetails, runANodeLabel, runANodeUrl } from '../utils/start-community';
 import { useNodeProfile } from '../utils/use-node-profile';
 import { SetUpServerRow } from '../components/SetUpServerRow';
-import { inCapitalsOf, t } from '@beanpool/core';
 
 export { ErrorBoundary };
 
@@ -34,8 +33,7 @@ export default function StartCommunityScreen() {
         container: { flex: 1, backgroundColor: colors.surface.page },
         header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, minHeight: 56, borderBottomWidth: 1, borderBottomColor: colors.border.default, backgroundColor: theme === 'dark' ? colors.surface.card : colors.text.heading },
         backButton: { width: 48, height: 48, justifyContent: 'center', alignItems: 'center' },
-        // In capitals the language's way (inCapitalsOf), never a textTransform: that follows the phone's rules.
-        headerTitle: { flex: 1, textAlign: 'center', fontSize: 16, fontWeight: 'bold', color: colors.brand.primary, letterSpacing: 0.5 },
+        headerTitle: { flex: 1, textAlign: 'center', fontSize: 16, fontWeight: 'bold', color: colors.brand.primary, letterSpacing: 0.5, textTransform: 'uppercase' },
         scroll: { padding: 16 },
         intro: { fontSize: 15, color: colors.text.body, lineHeight: 22 },
         sectionLabel: { fontSize: 12, fontWeight: 'bold', color: colors.text.secondary, letterSpacing: 1, marginTop: 20, marginBottom: 8, marginLeft: 4 },
@@ -68,10 +66,10 @@ export default function StartCommunityScreen() {
         <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
             <StatusBar style="light" />
             <View style={styles.header}>
-                <Pressable onPress={() => router.back()} style={styles.backButton} accessibilityRole="button" accessibilityLabel={t('Back')}>
+                <Pressable onPress={() => router.back()} style={styles.backButton} accessibilityRole="button" accessibilityLabel="Back">
                     <MaterialCommunityIcons name="arrow-left" size={26} color={colors.text.inverse} />
                 </Pressable>
-                <Text style={styles.headerTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} accessibilityRole="header">{inCapitalsOf(t(START_COMMUNITY_COPY.title))}</Text>
+                <Text style={styles.headerTitle} numberOfLines={1} accessibilityRole="header">{START_COMMUNITY_COPY.title}</Text>
                 <View style={{ width: 48 }} />
             </View>
             <KeyboardAwareScrollView
@@ -79,15 +77,15 @@ export default function StartCommunityScreen() {
                 keyboardShouldPersistTaps="handled"
                 bottomOffset={16}
             >
-                <Text style={styles.intro}>{t(START_COMMUNITY_COPY.intro)}</Text>
+                <Text style={styles.intro}>{START_COMMUNITY_COPY.intro}</Text>
 
-                <Text style={styles.sectionLabel}>{t('THREE WAYS TO RUN ONE')}</Text>
+                <Text style={styles.sectionLabel}>THREE WAYS TO RUN ONE</Text>
                 {START_COMMUNITY_COPY.ways.map(w => (
                     <View key={w.title} style={styles.card}>
                         <Text style={styles.icon} importantForAccessibility="no">{w.icon}</Text>
                         <View style={styles.cardText}>
-                            <Text style={styles.cardTitle}>{t(w.title)}</Text>
-                            <Text style={styles.cardBody}>{t(w.body)}</Text>
+                            <Text style={styles.cardTitle}>{w.title}</Text>
+                            <Text style={styles.cardBody}>{w.body}</Text>
                         </View>
                     </View>
                 ))}
@@ -96,28 +94,28 @@ export default function StartCommunityScreen() {
                     <Text style={styles.linkText}>{runANodeLabel(runANode)}</Text>
                 </Pressable>
 
-                <Text style={styles.sectionLabel}>{t("YOUR COMMUNITY'S DETAILS")}</Text>
-                <Text style={styles.label}>{t('What will it be called?')}</Text>
-                <TextInput style={styles.input} value={name} onChangeText={v => { setName(v); setCopied(false); }} maxLength={80} accessibilityLabel={t('Community name')} />
-                <Text style={styles.label}>{t('Where is it? (a town or area)')}</Text>
-                <TextInput style={styles.input} value={place} onChangeText={v => { setPlace(v); setCopied(false); }} maxLength={80} accessibilityLabel={t('Place')} />
-                <Text style={styles.label}>{t('How can people reach you? (optional)')}</Text>
-                <TextInput style={styles.input} value={contact} onChangeText={v => { setContact(v); setCopied(false); }} maxLength={120} autoCapitalize="none" accessibilityLabel={t('Contact')} />
+                <Text style={styles.sectionLabel}>YOUR COMMUNITY'S DETAILS</Text>
+                <Text style={styles.label}>What will it be called?</Text>
+                <TextInput style={styles.input} value={name} onChangeText={v => { setName(v); setCopied(false); }} maxLength={80} accessibilityLabel="Community name" />
+                <Text style={styles.label}>Where is it? (a town or area)</Text>
+                <TextInput style={styles.input} value={place} onChangeText={v => { setPlace(v); setCopied(false); }} maxLength={80} accessibilityLabel="Place" />
+                <Text style={styles.label}>How can people reach you? (optional)</Text>
+                <TextInput style={styles.input} value={contact} onChangeText={v => { setContact(v); setCopied(false); }} maxLength={120} autoCapitalize="none" accessibilityLabel="Contact" />
                 <Pressable
                     style={[styles.primary, !canCopyDetails(details) && { opacity: 0.5 }]}
                     onPress={copy}
                     disabled={!canCopyDetails(details)}
                     accessibilityRole="button"
                 >
-                    <Text style={styles.primaryText}>{t(START_COMMUNITY_COPY.copyButton)}</Text>
+                    <Text style={styles.primaryText}>{START_COMMUNITY_COPY.copyButton}</Text>
                 </Pressable>
-                {copied && <Text style={styles.note} accessibilityLiveRegion="polite">{t(START_COMMUNITY_COPY.copied)}</Text>}
+                {copied && <Text style={styles.note} accessibilityLiveRegion="polite">{START_COMMUNITY_COPY.copied}</Text>}
 
-                <Text style={styles.sectionLabel}>{t("ONCE IT'S RUNNING")}</Text>
+                <Text style={styles.sectionLabel}>ONCE IT'S RUNNING</Text>
                 <View style={styles.serverCard}>
                     <SetUpServerRow />
                 </View>
-                <Text style={styles.intro}>{t(START_COMMUNITY_COPY.after)}</Text>
+                <Text style={styles.intro}>{START_COMMUNITY_COPY.after}</Text>
             </KeyboardAwareScrollView>
         </SafeAreaView>
     );

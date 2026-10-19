@@ -11,9 +11,7 @@ import { useFocusEffect, router } from 'expo-router';
 import { useIdentity } from '../app/IdentityContext';
 import { useTheme } from '../app/ThemeContext';
 import { anchorUrl } from '../utils/node-post';
-import { fetchMyRepayment, type Repayment } from '../utils/names-debts';
-import { t } from '@beanpool/core';
-import { REPAYMENT_LINES, repaymentBannerWords } from './repayment-lines';
+import { fetchMyRepayment, REPAYMENT_COPY, type Repayment } from '../utils/names-debts';
 
 export function RepaymentCard() {
     const { identity } = useIdentity();
@@ -38,14 +36,14 @@ export function RepaymentCard() {
                     accessibilityLiveRegion="polite"
                     style={{ padding: 12, borderRadius: 12, borderWidth: 1, borderColor: colors.feedback.warning.border, backgroundColor: colors.feedback.warning.bg }}
                 >
-                    <Text style={{ fontSize: 14, lineHeight: 20, color: colors.feedback.warning.fg }}>{repaymentBannerWords(repayment)}</Text>
+                    <Text style={{ fontSize: 14, lineHeight: 20, color: colors.feedback.warning.fg }}>{REPAYMENT_COPY.banner(repayment)}</Text>
                 </View>
             ) : null}
             <Pressable
-                onPress={() => router.push(repayment?.debtId ? { pathname: '/pay-commons', params: { code: repayment.debtId } } : '/pay-commons')} accessibilityRole="button" accessibilityHint={t('Pay Beans you hold to the Commons, or pay back a debt')}
+                onPress={() => router.push(repayment?.debtId ? { pathname: '/pay-commons', params: { code: repayment.debtId } } : '/pay-commons')} accessibilityRole="button" accessibilityHint="Pay Beans you hold to the Commons, or pay back a debt"
                 style={{ minHeight: 48, justifyContent: 'center', alignSelf: 'flex-start', paddingHorizontal: 4 }}
             >
-                <Text style={{ fontSize: 14, fontWeight: '600', color: colors.brand.primary }}>{t(REPAYMENT_LINES.payTitle)}</Text>
+                <Text style={{ fontSize: 14, fontWeight: '600', color: colors.brand.primary }}>{REPAYMENT_COPY.payTitle}</Text>
             </Pressable>
         </View>
     );

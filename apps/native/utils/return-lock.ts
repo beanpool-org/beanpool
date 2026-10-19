@@ -152,14 +152,10 @@ function promptsSettled(): Promise<void> {
  * time to read it as the app leaves) and an account on the phone, setCovered(true) as the app leaves, and
  * setCovered(false) once the return is decided, unless the app has left again since: the lock screen, if this return
  * put it up, stays (utils/app-lock-screen.ts: the cover never takes it down).
- *
- * unlockReason: the words of the prompt it asks, read each time it asks, so a language picked since is the one shown.
- * This file never reaches the words layer: app/_layout.tsx passes them in the member's language (words S3l).
  */
 export function createReturnLock(
     setLocked: (locked: boolean) => void,
     setCovered: (covered: boolean) => void = () => {},
-    unlockReason: () => string = () => 'Unlock BeanPool',
 ): (next: string, hasIdentity: boolean) => Promise<void> {
     let leftAt: number | null = null;
     let setBacksAtLeave = 0;
@@ -219,6 +215,6 @@ export function createReturnLock(
         setLocked(true);
         // The app left again while this was deciding: locked, and Unlock App asks. A prompt is open: it isn't asked twice.
         if (action !== 'ask' || change !== changes || isLocalAuthPromptOpen()) return;
-        if (await unlockWithPhoneLock(unlockReason())) setLocked(false);
+        if (await unlockWithPhoneLock('Unlock BeanPool')) setLocked(false);
     }
 }

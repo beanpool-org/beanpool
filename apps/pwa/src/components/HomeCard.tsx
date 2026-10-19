@@ -10,7 +10,6 @@
  * item is a full-width button at least 44 px tall.
  */
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
-import { t } from '@beanpool/core';
 
 interface MenuProps {
     title: string;
@@ -43,8 +42,8 @@ export function CardMenu({ title, label, canMoveUp, canMoveDown, onHide, onRemov
         if (!open) return;
         list.current?.querySelector<HTMLButtonElement>('button:not([disabled])')?.focus();
         const onDown = (e: MouseEvent | TouchEvent) => {
-            const target = e.target as Node | null;
-            if (target && !list.current?.contains(target) && !button.current?.contains(target)) close(false);
+            const t = e.target as Node | null;
+            if (t && !list.current?.contains(t) && !button.current?.contains(t)) close(false);
         };
         document.addEventListener('mousedown', onDown);
         document.addEventListener('touchstart', onDown);
@@ -78,21 +77,21 @@ export function CardMenu({ title, label, canMoveUp, canMoveDown, onHide, onRemov
 
     return (
         <div className="relative shrink-0">
-            <button ref={button} type="button" aria-label={t('Card options for {card}', { card: said })} aria-haspopup="true" aria-expanded={open}
+            <button ref={button} type="button" aria-label={`Card options for ${said}`} aria-haspopup="true" aria-expanded={open}
                 aria-controls={open ? menuId : undefined} data-testid="home-card-menu"
                 onClick={() => setOpen(o => !o)}
                 className="min-w-[44px] min-h-[44px] -mr-2 -mt-2 flex items-center justify-center rounded-full bg-transparent border-0 text-nature-500 dark:text-nature-300 hover:text-nature-800 dark:hover:text-white text-lg font-black cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
                 <span aria-hidden="true">…</span>
             </button>
             {open && (
-                <div ref={list} id={menuId} role="group" aria-label={t('Options for {card}', { card: said })} onKeyDown={onKeyDown}
+                <div ref={list} id={menuId} role="group" aria-label={`Options for ${said}`} onKeyDown={onKeyDown}
                     className="absolute right-0 top-full z-30 w-48 max-w-[calc(100vw-2rem)] py-1 rounded-xl shadow-xl bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-700">
                     {/* The card goes with its "…": the page gives focus to the nearest card left (pages/HomePage.tsx). */}
-                    {onSettings && <button type="button" className={item} data-testid="home-menu-settings" onClick={() => { close(false); onSettings(); }}>{t('Settings…')}</button>}
-                    {onHide && !onRemove && <button type="button" className={item} onClick={() => { close(false); onHide(); }}>{t('Hide')}</button>}
-                    <button type="button" className={item} disabled={!canMoveUp} onClick={() => { close(true); onMove('up'); }}>{t('Move up')}</button>
-                    <button type="button" className={item} disabled={!canMoveDown} onClick={() => { close(true); onMove('down'); }}>{t('Move down')}</button>
-                    {onRemove && <button type="button" className={item} data-testid="home-menu-remove" aria-label={t('Remove {card} from Home', { card: said })} onClick={() => { close(false); onRemove(); }}>{t('Remove')}</button>}
+                    {onSettings && <button type="button" className={item} data-testid="home-menu-settings" onClick={() => { close(false); onSettings(); }}>Settings…</button>}
+                    {onHide && !onRemove && <button type="button" className={item} onClick={() => { close(false); onHide(); }}>Hide</button>}
+                    <button type="button" className={item} disabled={!canMoveUp} onClick={() => { close(true); onMove('up'); }}>Move up</button>
+                    <button type="button" className={item} disabled={!canMoveDown} onClick={() => { close(true); onMove('down'); }}>Move down</button>
+                    {onRemove && <button type="button" className={item} data-testid="home-menu-remove" aria-label={`Remove ${said} from Home`} onClick={() => { close(false); onRemove(); }}>Remove</button>}
                 </div>
             )}
         </div>

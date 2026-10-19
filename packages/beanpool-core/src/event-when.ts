@@ -6,12 +6,9 @@
  *
  * In person, the place's clock leads and the reader's own follows only when the two differ. Online, the reader's own clock
  * leads, always with the words "your time".
- *
- * The words ("Lagos time", "your time", "for the host"), the days and the clocks are the device's language (words.ts t()
- * and formatDate); English reads as it always has. A node renders in English (it never sets a language).
  */
 
-import { formatDate, t } from './words.js';
+import { formatDate } from './words.js';
 
 /** A wall clock as the node stores it: "2026-10-16T20:50". */
 export const LOCAL_CLOCK_RE = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/;
@@ -100,21 +97,15 @@ export function utcOffsetName(offsetMinutes: number): string {
  * like AEDT are never used.
  */
 export function zoneLabelFor(tz: string | null | undefined, offsetMinutes: number): string {
-    return t('{place} time', { place: zonePlaceFor(tz, offsetMinutes) });
-}
-
-/**
- * The place a zone is named for, on its own: "Sydney", "Kyiv", or the offset where it names no place ("UTC+1"). What
- * zoneLabelFor says "… time" of, for a sentence that names the place itself ("in Sydney"): never cut " time" off a label,
- * which is in the member's language.
- */
-export function zonePlaceFor(tz: string | null | undefined, offsetMinutes: number): string {
     const id = typeof tz === 'string' ? tz.trim() : '';
     const slash = id.lastIndexOf('/');
     const head = slash > 0 ? id.slice(0, id.indexOf('/')) : '';
     const last = slash > 0 ? id.slice(slash + 1) : '';
-    if (!last || head === 'Etc' || NOT_PLACES.has(last) || !/^[A-Za-z_\-]+$/.test(last)) return utcOffsetName(offsetMinutes);
-    return PLACE_NAME_ALIASES[last] ?? last.replace(/_/g, ' ');
+    if (!last || head === 'Etc' || NOT_PLACES.has(last) || !/^[A-Za-z_\-]+$/.test(last)) {
+        return `${utcOffsetName(offsetMinutes)} time`;
+    }
+    const name = PLACE_NAME_ALIASES[last] ?? last.replace(/_/g, ' ');
+    return `${name} time`;
 }
 
 function dayOf(local: string): string {
@@ -125,8 +116,7 @@ function dayOf(local: string): string {
 
 function timeOf(local: string): string {
     const p = parseLocal(local)!;
-    // The words tables' clock, read as written: "20:50" in English, "20.50" in Indonesian.
-    return formatDate(new Date(Date.UTC(p.y, p.mo - 1, p.d, p.h, p.mi)), 'time', { utc: true });
+    return `${p.h}:${String(p.mi).padStart(2, '0')}`;
 }
 
 function sameDate(a: string, b: string): boolean {
@@ -182,15 +172,15 @@ export function eventWhenParts(input: EventWhenInput): EventWhenParts | null {
 
     if (input.online) {
         const own = spanParts(deviceStart, deviceEnd);
-        const hostLine = placeStart && label && placeStart !== deviceStart ? t('{time} for the host ({zone})', { time: timeOf(placeStart), zone: label }) : null;
-        return { ...own, second: t('{time} your time', { time: own.second }), note: null, hostLine };
+        const hostLine = placeStart && label && placeStart !== deviceStart ? `${timeOf(placeStart)} for the host (${label})` : null;
+        return { ...own, second: `${own.second} your time`, note: null, hostLine };
     }
     if (!placeStart || !label) return { ...spanParts(deviceStart, deviceEnd), note: null, hostLine: null };
 
     const place = spanParts(placeStart, placeEnd);
     if (placeStart === deviceStart) return { ...place, note: null, hostLine: null };
     const yours = sameDate(placeStart, deviceStart) ? timeOf(deviceStart) : `${dayOf(deviceStart)} ${timeOf(deviceStart)}`;
-    return { ...place, note: t('{zone} · {time} your time', { zone: label, time: yours }), hostLine: null };
+    return { ...place, note: `${label} · ${yours} your time`, hostLine: null };
 }
 
 /**
@@ -199,9 +189,8 @@ export function eventWhenParts(input: EventWhenInput): EventWhenParts | null {
  */
 export function eventPlaceTimeText(startLocal: string | null | undefined, tz: string | null | undefined, startAt: string | null | undefined): string | null {
     if (!startLocal || !tz || !parseLocal(startLocal)) return null;
-    const p = parseLocal(startLocal)!;
-    const day = formatDate(new Date(Date.UTC(p.y, p.mo - 1, p.d)), 'weekday', { utc: true });
-    return t('{day} {time} {zone}', { day, time: timeOf(startLocal), zone: zoneLabelFor(tz, offsetMinutesOf(startLocal, startAt)) });
+    const weekday = dayOf(startLocal).slice(0, 3);
+    return `${weekday[0]}${weekday.slice(1).toLowerCase()} ${timeOf(startLocal)} ${zoneLabelFor(tz, offsetMinutesOf(startLocal, startAt))}`;
 }
 
 /** A Date's own clock as "YYYY-MM-DDTHH:MM", from its getters (the device's zone): the `deviceStart` the apps pass. */

@@ -8,7 +8,7 @@
  */
 
 import {
-    eventWhenParts, deviceLocalClock, zoneLabelFor, zonePlaceFor, utcOffsetName, offsetMinutesOf, localClockMs, CURRENT_ZONE_IDS,
+    eventWhenParts, deviceLocalClock, zoneLabelFor, utcOffsetName, offsetMinutesOf, localClockMs, CURRENT_ZONE_IDS,
     LOCAL_CLOCK_RE, formatDate, formatNumber, t, tn, word, type EventWhenParts, type WordKey,
     repeatCaption, repeatChoiceKeyOf, repeatChoicesFor, repeatLengthProblem, repeatPatternFor, repeatUntilProblem, type RepeatChoiceKey, type RepeatPattern,
 } from '@beanpool/core';
@@ -30,9 +30,9 @@ export const EVENT_PLACE_NAME_MAX = 80;
 export const EVENT_PRIVATE_NOTE_MAX = 1000;
 export const EVENT_DESCRIPTION_MAX = 2000;
 
-/** The pin warning enterprise pins use (PWA EnterpriseLocationPicker), worded for a gathering. word() keys: t() them where shown. */
-export const EVENT_PIN_WARNING = word("Anyone who opens this node's map will see this spot.");
-export const EVENT_PIN_HINT = word("Gatherings are often at someone's house. Use Approximate to round the location to roughly 100 m, and put the exact spot or gate code in the note for people who are going.");
+/** The pin warning enterprise pins use (PWA EnterpriseLocationPicker), worded for a gathering. */
+export const EVENT_PIN_WARNING = "Anyone who opens this node's map will see this spot.";
+export const EVENT_PIN_HINT = "Gatherings are often at someone's house. Use Approximate to round the location to roughly 100 m, and put the exact spot or gate code in the note for people who are going.";
 
 /** Round to three decimals, ~100 m — the same rounding as @beanpool/core `approximateLocation`. */
 export function approximatePin(lat: number, lng: number): { lat: number; lng: number } {
@@ -119,13 +119,13 @@ export interface EventPostDraft {
 export function buildEventDraft(input: EventFormInput, now: Date = new Date()):
     { ok: true; draft: EventPostDraft } | { ok: false; error: string } {
     const title = input.title.trim();
-    if (!title) return { ok: false, error: t('Give the event a title.') };
-    if (title.length > EVENT_TITLE_MAX) return { ok: false, error: tn(EVENT_TITLE_MAX, 'Keep the title under {n} character.', 'Keep the title under {n} characters.') };
-    if (!input.start) return { ok: false, error: t('Pick when the event starts.') };
+    if (!title) return { ok: false, error: 'Give the event a title.' };
+    if (title.length > EVENT_TITLE_MAX) return { ok: false, error: `Keep the title under ${EVENT_TITLE_MAX} characters.` };
+    if (!input.start) return { ok: false, error: 'Pick when the event starts.' };
     const startLocal = deviceLocalClock(input.start);
-    if (clockInstantMs(startLocal, input.tzOffsetMinutes, input.start) <= now.getTime()) return { ok: false, error: t('The start time has already passed. Pick a time in the future.') };
+    if (clockInstantMs(startLocal, input.tzOffsetMinutes, input.start) <= now.getTime()) return { ok: false, error: 'The start time has already passed. Pick a time in the future.' };
     const end = input.end ?? defaultEventEnd(input.start);
-    if (end.getTime() <= input.start.getTime()) return { ok: false, error: t('The end time must be after the start.') };
+    if (end.getTime() <= input.start.getTime()) return { ok: false, error: 'The end time must be after the start.' };
     const online = input.online === true;
     let link: string | null = null;
     let placeName = '';
@@ -135,16 +135,16 @@ export function buildEventDraft(input: EventFormInput, now: Date = new Date()):
         link = checked.link;
     } else {
         if (input.lat == null || input.lng == null || !Number.isFinite(input.lat) || !Number.isFinite(input.lng)) {
-            return { ok: false, error: t('Put a pin on the map so people can find it.') };
+            return { ok: false, error: 'Put a pin on the map so people can find it.' };
         }
         placeName = input.placeName.trim();
-        if (!placeName) return { ok: false, error: t('Name the place, e.g. "The old bowls club".') };
-        if (placeName.length > EVENT_PLACE_NAME_MAX) return { ok: false, error: tn(EVENT_PLACE_NAME_MAX, 'Keep the place name under {n} character.', 'Keep the place name under {n} characters.') };
+        if (!placeName) return { ok: false, error: 'Name the place, e.g. "The old bowls club".' };
+        if (placeName.length > EVENT_PLACE_NAME_MAX) return { ok: false, error: `Keep the place name under ${EVENT_PLACE_NAME_MAX} characters.` };
     }
     const note = input.privateNote.trim();
-    if (note.length > EVENT_PRIVATE_NOTE_MAX) return { ok: false, error: tn(EVENT_PRIVATE_NOTE_MAX, 'Keep the note under {n} character.', 'Keep the note under {n} characters.') };
+    if (note.length > EVENT_PRIVATE_NOTE_MAX) return { ok: false, error: `Keep the note under ${EVENT_PRIVATE_NOTE_MAX} characters.` };
     const description = input.description.trim();
-    if (description.length > EVENT_DESCRIPTION_MAX) return { ok: false, error: tn(EVENT_DESCRIPTION_MAX, 'Keep the description under {n} character.', 'Keep the description under {n} characters.') };
+    if (description.length > EVENT_DESCRIPTION_MAX) return { ok: false, error: `Keep the description under ${EVENT_DESCRIPTION_MAX} characters.` };
     const series = eventRepeatFields(input.repeat ?? 'never', input.repeatUntil ?? '', startLocal.slice(0, 10), eventFormMinutes(input.start, input.end));
     if (!series.ok) return series;
 
@@ -364,7 +364,7 @@ export function formatEventWhen(startIso: string | null | undefined, endIso?: st
 /** A form row's value: "Sat 27 Sep, 9:00". */
 export function formatPickerValue(d: Date | null): string {
     if (!d) return '';
-    return t('{date}, {time}', { date: formatDate(d, 'weekday-day-month'), time: timeLabel(d) });
+    return `${formatDate(d, 'weekday-day-month')}, ${timeLabel(d)}`;
 }
 
 export function eventEndMs(post: any): number {
@@ -608,12 +608,9 @@ export function isSignableRsvp(postId: unknown, status: unknown): boolean {
         && (status === null || status === 'going' || status === 'interested');
 }
 
-/**
- * Why an RSVP wasn't sent: utils/db.ts throws it as written (it signs, so it never reaches the words layer); a word()
- * key, so the event's page shows it through t() when it is the message it caught.
- */
+/** Why an RSVP wasn't sent. Shown as is. */
 export const UNSIGNABLE_RSVP_MESSAGE =
-    word("This event's id isn't one BeanPool recognises, so your answer wasn't signed or sent.");
+    "This event's id isn't one BeanPool recognises, so your answer wasn't signed or sent.";
 
 // ===================== EVENT CHAT (docs/events-on-the-map.md §2.2, §3, slice 4) =====================
 
@@ -692,7 +689,7 @@ export function canOpenEventChat(post: any): boolean {
  * message in a chat that had none (events round 2, B3).
  */
 export function eventChatEntryLabel(_post?: any): string {
-    return t('Open event chat');
+    return 'Open event chat';
 }
 
 /**
@@ -701,8 +698,8 @@ export function eventChatEntryLabel(_post?: any): string {
  */
 export function eventChatReadOnlyReason(post: any, nowMs: number = Date.now()): string | null {
     if (!post) return null;
-    if (eventStateOf(post) === 'cancelled') return t('This event was cancelled. The chat is read-only.');
-    if (isEventEnded(post, nowMs)) return t('This event has ended. The chat is read-only.');
+    if (eventStateOf(post) === 'cancelled') return 'This event was cancelled. The chat is read-only.';
+    if (isEventEnded(post, nowMs)) return 'This event has ended. The chat is read-only.';
     return null;
 }
 
@@ -727,8 +724,8 @@ export function isOwnEvent(post: any, viewerPubkey?: string | null): boolean {
 
 /** Why the host cannot edit this event, for the screen; null while it can be. The node refuses both. */
 export function eventEditBlockedReason(post: any, nowMs: number = Date.now()): string | null {
-    if (eventStateOf(post) === 'cancelled') return t('This event was cancelled, so it can no longer be edited.');
-    if (isEventEnded(post, nowMs)) return t('This event has ended, so it can no longer be edited.');
+    if (eventStateOf(post) === 'cancelled') return 'This event was cancelled, so it can no longer be edited.';
+    if (isEventEnded(post, nowMs)) return 'This event has ended, so it can no longer be edited.';
     return null;
 }
 
@@ -818,14 +815,14 @@ export interface EventEditPatch {
 export function buildEventEditPatch(before: EventEditValues, after: EventEditValues, now: Date = new Date()):
     { ok: true; patch: EventEditPatch; notifies: boolean } | { ok: false; error: string } {
     const title = after.title.trim();
-    if (!title) return { ok: false, error: t('Give the event a title.') };
-    if (title.length > EVENT_TITLE_MAX) return { ok: false, error: tn(EVENT_TITLE_MAX, 'Keep the title under {n} character.', 'Keep the title under {n} characters.') };
-    if (!after.start) return { ok: false, error: t('Pick when the event starts.') };
+    if (!title) return { ok: false, error: 'Give the event a title.' };
+    if (title.length > EVENT_TITLE_MAX) return { ok: false, error: `Keep the title under ${EVENT_TITLE_MAX} characters.` };
+    if (!after.start) return { ok: false, error: 'Pick when the event starts.' };
     const startMoved = !before.start || after.start.getTime() !== before.start.getTime();
     const startLocal = deviceLocalClock(after.start);
-    if (startMoved && clockInstantMs(startLocal, after.tzOffsetMinutes, after.start) <= now.getTime()) return { ok: false, error: t('The start time has already passed. Pick a time in the future.') };
+    if (startMoved && clockInstantMs(startLocal, after.tzOffsetMinutes, after.start) <= now.getTime()) return { ok: false, error: 'The start time has already passed. Pick a time in the future.' };
     const end = after.end ?? defaultEventEnd(after.start);
-    if (end.getTime() <= after.start.getTime()) return { ok: false, error: t('The end time must be after the start.') };
+    if (end.getTime() <= after.start.getTime()) return { ok: false, error: 'The end time must be after the start.' };
     const online = after.online === true;
     let link = '';
     if (online) {
@@ -833,15 +830,15 @@ export function buildEventEditPatch(before: EventEditValues, after: EventEditVal
         if (!checked.ok) return checked;
         link = checked.link ?? '';
     } else if (after.lat == null || after.lng == null || !Number.isFinite(after.lat) || !Number.isFinite(after.lng)) {
-        return { ok: false, error: t('Put a pin on the map so people can find it.') };
+        return { ok: false, error: 'Put a pin on the map so people can find it.' };
     }
     const placeName = online ? '' : after.placeName.trim();
-    if (!online && !placeName) return { ok: false, error: t('Name the place, e.g. "The old bowls club".') };
-    if (placeName.length > EVENT_PLACE_NAME_MAX) return { ok: false, error: tn(EVENT_PLACE_NAME_MAX, 'Keep the place name under {n} character.', 'Keep the place name under {n} characters.') };
+    if (!online && !placeName) return { ok: false, error: 'Name the place, e.g. "The old bowls club".' };
+    if (placeName.length > EVENT_PLACE_NAME_MAX) return { ok: false, error: `Keep the place name under ${EVENT_PLACE_NAME_MAX} characters.` };
     const note = after.privateNote.trim();
-    if (note.length > EVENT_PRIVATE_NOTE_MAX) return { ok: false, error: tn(EVENT_PRIVATE_NOTE_MAX, 'Keep the note under {n} character.', 'Keep the note under {n} characters.') };
+    if (note.length > EVENT_PRIVATE_NOTE_MAX) return { ok: false, error: `Keep the note under ${EVENT_PRIVATE_NOTE_MAX} characters.` };
     const description = after.description.trim();
-    if (description.length > EVENT_DESCRIPTION_MAX) return { ok: false, error: tn(EVENT_DESCRIPTION_MAX, 'Keep the description under {n} character.', 'Keep the description under {n} characters.') };
+    if (description.length > EVENT_DESCRIPTION_MAX) return { ok: false, error: `Keep the description under ${EVENT_DESCRIPTION_MAX} characters.` };
 
     const patch: EventEditPatch = {};
     if (title !== before.title.trim()) patch.title = title;
@@ -1208,7 +1205,7 @@ function adjustedSentence(side: 'start' | 'end', a: EventClockAdjustment, place:
 export function eventTimeAdjustedText(adjusted: { start?: EventClockAdjustment | null; end?: EventClockAdjustment | null } | null | undefined, tz: string | null | undefined): string[] {
     if (!adjusted) return [];
     // The zone's place, when the form knew it; the node's answer carries no zone of its own.
-    const place = tz ? zonePlaceFor(tz, NaN) : null;
+    const place = tz ? zoneLabelFor(tz, NaN).replace(/ time$/, '') : null;
     const lines: string[] = [];
     if (adjusted.start) { const s = adjustedSentence('start', adjusted.start, place); if (s) lines.push(s); }
     if (adjusted.end) { const s = adjustedSentence('end', adjusted.end, place); if (s) lines.push(s); }

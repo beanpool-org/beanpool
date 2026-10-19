@@ -26,9 +26,6 @@ import { usePutAwayAfterLeave } from '../utils/words-put-away';
 import { AddWordsForm } from './AddWordsForm';
 import { AppLockSurface } from './AppLock';
 import { CopyClearsNote, NoScreenCapture, NoScreenLockNote, WordsOutsideScreens } from './WordsOnScreen';
-import { useWords } from './LanguageProvider';
-import { phoneLineWords } from './shell-lines';
-import { word } from '@beanpool/core';
 
 /**
  * The full-screen "Update required", mounted once at the root (app/_layout.tsx), outside the sign-in: it covers the
@@ -41,10 +38,6 @@ import { word } from '@beanpool/core';
  * (utils/update-block-escape.ts): the other communities saved on the phone, one tap each; the member's 12 words, shown
  * (or added) here behind the phone's own lock; and leaving the community, done here on the phone. None of them goes
  * through a screen this covers, or reads the community's say on who is a member (#1415's re-review, BLOCKING).
- *
- * In the member's language, and drawn again when they pick another (useWords: it sits outside the navigator that a pick
- * redraws). A member who reads no English must still find Update and every way out: utils/__tests__/shell-words-render.test.ts
- * draws each page in the pseudo-locale. The 12 words themselves are shown as they are, never through the words layer.
  *
  * Above every screen and sheet, with a screen reader kept inside it. On Android a Modal, a window of its own; its back
  * button leaves the app rather than moving the screens hidden underneath. On iOS a FullWindowOverlay (react-native-screens),
@@ -75,12 +68,9 @@ function openStore() {
     Linking.openURL(urls.app).catch(() => { Linking.openURL(urls.web).catch(() => {}); });
 }
 
-/** What the phone's lock says it is asked for: word() keys, said in the member's language when it is asked. */
-const REASONS = {
-    words: word('Confirm your security to view your recovery phrase.'),
-    leave: word('Confirm authentication to leave this community on this phone.'),
-    lastLeave: word('Confirm authentication to take this account off this phone.'),
-};
+const WORDS_REASON = 'Confirm your security to view your recovery phrase.';
+const LEAVE_REASON = 'Confirm authentication to leave this community on this phone.';
+const LAST_LEAVE_REASON = 'Confirm authentication to take this account off this phone.';
 
 /** What the block shows: its own screen, or one of the account's pages over it. */
 type Page =
@@ -88,6 +78,8 @@ type Page =
     | { kind: 'words'; words: string[] }
     | { kind: 'add-words' }
     | { kind: 'leave'; plan: BlockLeavePlan; words: string[] | null };
+
+const reasonOf = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Please try again.');
 
 /**
  * A page that draws the 12 words, or the boxes they are typed into: capture is blocked first, and only then is it drawn
@@ -110,9 +102,6 @@ function WordsWindow({ children, onClose, background }: { children: ReactNode; o
 
 export default function ForceUpdateBlock() {
     const { colors, theme } = useTheme();
-    const { t } = useWords();
-    /** Why a way out failed: the phone's own sentence in the member's language, anything else as given (shell-lines.ts). */
-    const reasonOf = (e: unknown) => (e instanceof Error && e.message ? phoneLineWords(e.message) : t('Please try again.'));
     const insets = useSafeAreaInsets();
     const { identity, setIdentity } = useIdentity();
     const { recheck } = useNodeStatus();
@@ -222,7 +211,7 @@ export default function ForceUpdateBlock() {
     }, [showing]);
 
     if (!block) return null;
-    const ios = Platform.OS === 'ios';
+    const store = Platform.OS === 'ios' ? 'the App Store' : 'Google Play';
 
     const switchTo = async (c: OtherCommunity) => {
         if (switching || busy) return;
@@ -236,7 +225,7 @@ export default function ForceUpdateBlock() {
             if (router.canDismiss()) router.dismissAll();
             router.replace('/welcome');
         } catch (e) {
-            setSwitchError(t("Couldn't switch to {name}. {reason}", { name: c.name, reason: reasonOf(e) }));
+            setSwitchError(`Couldn't switch to ${c.name}. ${reasonOf(e)}`);
         } finally {
             setSwitching(null);
         }
@@ -249,12 +238,12 @@ export default function ForceUpdateBlock() {
         setPageError(null);
         const turn = ++turnRef.current;
         try {
-            const words = await readWordsBehindLock(identity, t(REASONS.words));
+            const words = await readWordsBehindLock(identity, WORDS_REASON);
             if (!words || turn !== turnRef.current) return;
             setPage({ kind: 'words', words });
             await AsyncStorage.setItem('beanpool_identity_backed_up', 'true').catch(() => {});
         } catch (e) {
-            setPageError(t("Couldn't read your 12 words. {reason}", { reason: reasonOf(e) }));
+            setPageError(`Couldn't read your 12 words. ${reasonOf(e)}`);
         } finally {
             setBusy(false);
         }
@@ -273,7 +262,7 @@ export default function ForceUpdateBlock() {
         try {
             setPage({ kind: 'leave', plan: await planLeaveFromUpdateBlock(), words: null });
         } catch (e) {
-            setPageError(t("Couldn't open Leave this community. {reason}", { reason: reasonOf(e) }));
+            setPageError(`Couldn't open Leave this community. ${reasonOf(e)}`);
         }
     };
 
@@ -284,11 +273,11 @@ export default function ForceUpdateBlock() {
         setPageError(null);
         const turn = ++turnRef.current;
         try {
-            const words = await readWordsBehindLock(identity, t(REASONS.lastLeave));
+            const words = await readWordsBehindLock(identity, LAST_LEAVE_REASON);
             if (!words || turn !== turnRef.current) return;
             setPage({ kind: 'leave', plan, words });
         } catch (e) {
-            setPageError(t("Couldn't read your 12 words. {reason}", { reason: reasonOf(e) }));
+            setPageError(`Couldn't read your 12 words. ${reasonOf(e)}`);
         } finally {
             setBusy(false);
         }
@@ -303,7 +292,7 @@ export default function ForceUpdateBlock() {
         setBusy(true);
         setPageError(null);
         try {
-            if (identity && !checked && !(await authenticateUser(plan.next ? t(REASONS.leave) : t(REASONS.lastLeave)))) return;
+            if (identity && !checked && !(await authenticateUser(plan.next ? LEAVE_REASON : LAST_LEAVE_REASON))) return;
             const left = await leaveFromUpdateBlock(identity ?? null, plan);
             if (left.kind === 'signed-out') {
                 setIdentity(null);
@@ -315,7 +304,7 @@ export default function ForceUpdateBlock() {
             if (router.canDismiss()) router.dismissAll();
             router.replace('/welcome');
         } catch (e) {
-            setPageError(t("Couldn't leave {name}. {reason}", { name: plan.hereName, reason: reasonOf(e) }));
+            setPageError(`Couldn't leave ${plan.hereName}. ${reasonOf(e)}`);
         } finally {
             setBusy(false);
         }
@@ -328,9 +317,9 @@ export default function ForceUpdateBlock() {
             {pageError}
         </Text>
     );
-    const backButton = (label?: string) => (
+    const backButton = (label = 'Back') => (
         <Pressable onPress={toMain} disabled={busy} accessibilityRole="button" style={secondary}>
-            <Text style={[styles.secondaryText, { color: colors.text.heading }]}>{label ?? t('Back')}</Text>
+            <Text style={[styles.secondaryText, { color: colors.text.heading }]}>{label}</Text>
         </Pressable>
     );
     // Only ever drawn inside a WordsWindow; held here too, so the words can never be drawn without the block.
@@ -339,7 +328,7 @@ export default function ForceUpdateBlock() {
             <WordsOutsideScreens>
                 <NoScreenCapture>
                 {words.map((w, i) => (
-                    <View key={`${w}-${i}`} style={styles.word} accessible accessibilityLabel={t('Word {n}: {word}', { n: i + 1, word: w })}>
+                    <View key={`${w}-${i}`} style={styles.word} accessible accessibilityLabel={`Word ${i + 1}: ${w}`}>
                         <Text style={[styles.wordText, { color: colors.text.heading }]}>{i + 1}. {w}</Text>
                     </View>
                 ))}
@@ -385,17 +374,17 @@ export default function ForceUpdateBlock() {
         pageView = (
             <WordsWindow onClose={toMain} background={colors.surface.app}>
                 {pageScroll(<>
-                    <Text accessibilityRole="header" style={[styles.subtitle, { color: colors.text.heading }]}>{t('Your 12 words')}</Text>
+                    <Text accessibilityRole="header" style={[styles.subtitle, { color: colors.text.heading }]}>Your 12 words</Text>
                     <Text style={[styles.small, { color: colors.feedback.danger.fg, fontWeight: '700' }]}>
-                        {t('Never share them with anyone. Write them down on paper and keep it somewhere safe.')}
+                        Never share them with anyone. Write them down on paper and keep it somewhere safe.
                     </Text>
                     {wordGrid(page.words)}
                     <Pressable onPress={() => { void copyWords(page.words); }} accessibilityRole="button" style={secondary}>
-                        <Text style={[styles.secondaryText, { color: colors.text.heading }]}>{copied ? t('Copied') : t('Copy words')}</Text>
+                        <Text style={[styles.secondaryText, { color: colors.text.heading }]}>{copied ? 'Copied' : 'Copy words'}</Text>
                     </Pressable>
                     <CopyClearsNote style={[styles.small, { color: colors.text.secondary, marginTop: 8 }]} />
                     <NoScreenLockNote style={[styles.small, { color: colors.text.secondary, marginTop: 4 }]} />
-                    {backButton(t('Hide them'))}
+                    {backButton('Hide them')}
                 </>)}
             </WordsWindow>
         );
@@ -405,7 +394,7 @@ export default function ForceUpdateBlock() {
                 {typingPageScroll(wordsAdded ? (
                     <>
                         <Text style={[styles.body, { color: colors.feedback.success.fg }]} accessibilityLiveRegion="polite">
-                            {t('Your 12 words are on this phone again.')}
+                            Your 12 words are on this phone again.
                         </Text>
                         {backButton()}
                     </>
@@ -422,60 +411,62 @@ export default function ForceUpdateBlock() {
         const { plan } = page;
         const leaveButton = (label: string, checked: boolean) => (
             <Pressable onPress={() => { void leave(plan, checked); }} disabled={busy} accessibilityRole="button" style={secondary}>
-                <Text style={[styles.secondaryText, { color: colors.feedback.danger.fg }]}>{busy ? t('Leaving…') : label}</Text>
+                <Text style={[styles.secondaryText, { color: colors.feedback.danger.fg }]}>{busy ? 'Leaving…' : label}</Text>
             </Pressable>
         );
         const body = !identity ? (
             <>
                 <Text style={[styles.body, { color: colors.text.body }]}>
-                    {plan.next
-                        ? t("You haven't joined {here} from this phone. Leaving forgets it here, and the app opens {next}.", { here: plan.hereName, next: plan.next.name })
-                        : t("You haven't joined {here} from this phone. Leaving forgets it here, so you can use another invite.", { here: plan.hereName })}
+                    You haven't joined {plan.hereName} from this phone. Leaving forgets it here
+                    {plan.next ? `, and the app opens ${plan.next.name}.` : ', so you can use another invite.'}
                 </Text>
-                {leaveButton(t('Leave {name}', { name: plan.hereName }), false)}
+                {leaveButton(`Leave ${plan.hereName}`, false)}
             </>
         ) : plan.next ? (
             <>
                 <Text style={[styles.body, { color: colors.text.body }]}>
-                    {t('This phone forgets {here}: its copy on this phone goes, and the app opens {next}. Your account, your 12 words and your other communities stay on this phone.', { here: plan.hereName, next: plan.next.name })}
+                    This phone forgets {plan.hereName}: its copy on this phone goes, and the app opens {plan.next.name}.
+                    Your account, your 12 words and your other communities stay on this phone.
                 </Text>
                 <Text style={[styles.small, { color: colors.text.secondary }]}>
-                    {t('Nothing is deleted at {here}. You can come back with an invite or your 12 words.', { here: plan.hereName })}
+                    Nothing is deleted at {plan.hereName}. You can come back with an invite or your 12 words.
                 </Text>
-                {leaveButton(t('Leave {name}', { name: plan.hereName }), false)}
+                {leaveButton(`Leave ${plan.hereName}`, false)}
             </>
         ) : page.words ? (
             <>
-                <Text style={[styles.subtitle, { color: colors.text.heading }]}>{t('Write these 12 words down first')}</Text>
+                <Text style={[styles.subtitle, { color: colors.text.heading }]}>Write these 12 words down first</Text>
                 <Text style={[styles.small, { color: colors.text.secondary }]}>
-                    {t('They are the only way back into this account, apart from a linked sign-in on a community that holds a recovery piece for you.')}
+                    They are the only way back into this account, apart from a linked sign-in on a community that holds a
+                    recovery piece for you.
                 </Text>
                 {wordGrid(page.words)}
                 <NoScreenLockNote style={[styles.small, { color: colors.text.secondary, marginTop: 4 }]} />
-                {leaveButton(t("I've written them down: leave"), true)}
+                {leaveButton("I've written them down: leave", true)}
             </>
         ) : (
             <>
                 <Text style={[styles.body, { color: colors.text.body }]}>
-                    {t('{here} is the only community on this phone, so leaving it takes your account off this phone, as Sign Out does. Nothing is deleted at {here}.', { here: plan.hereName })}
+                    {plan.hereName} is the only community on this phone, so leaving it takes your account off this phone, as
+                    Sign Out does. Nothing is deleted at {plan.hereName}.
                 </Text>
                 {hasMnemonic(identity) ? (
                     <Pressable onPress={() => { void showWordsBeforeLeaving(plan); }} disabled={busy} accessibilityRole="button" style={secondary}>
-                        <Text style={[styles.secondaryText, { color: colors.text.heading }]}>{t('Show my 12 words first')}</Text>
+                        <Text style={[styles.secondaryText, { color: colors.text.heading }]}>Show my 12 words first</Text>
                     </Pressable>
                 ) : (
                     <>
-                        <Text style={[styles.small, { color: colors.feedback.danger.fg }]}>{phoneLineWords(noWordsBeforeWipe())}</Text>
-                        {leaveButton(t('Take my account off this phone'), false)}
+                        <Text style={[styles.small, { color: colors.feedback.danger.fg }]}>{noWordsBeforeWipe()}</Text>
+                        {leaveButton('Take my account off this phone', false)}
                     </>
                 )}
             </>
         );
         const content = pageScroll(<>
-            <Text accessibilityRole="header" style={[styles.subtitle, { color: colors.text.heading }]}>{t('Leave {name}?', { name: plan.hereName })}</Text>
+            <Text accessibilityRole="header" style={[styles.subtitle, { color: colors.text.heading }]}>Leave {plan.hereName}?</Text>
             {body}
             {errorLine}
-            {backButton(t('Cancel'))}
+            {backButton('Cancel')}
         </>);
         pageView = page.words
             ? <WordsWindow onClose={toMain} background={colors.surface.app}>{content}</WordsWindow>
@@ -487,37 +478,35 @@ export default function ForceUpdateBlock() {
             <View style={card}>
                 <Text style={styles.icon} accessibilityElementsHidden importantForAccessibility="no">⬆️</Text>
                 <Text accessibilityRole="header" style={[styles.title, { color: colors.text.heading }]}>
-                    {t('Update required')}
+                    Update required
                 </Text>
-                {/* One sentence per store: a store's name takes its own article and case in another language. */}
                 <Text style={[styles.body, { color: colors.text.body }]}>
-                    {ios
-                        ? t('Your community needs a newer BeanPool than the one on this phone ({version}). Version {latest} is waiting in the App Store.', { version: appConfig.expo.version, latest: block.version })
-                        : t('Your community needs a newer BeanPool than the one on this phone ({version}). Version {latest} is waiting in Google Play.', { version: appConfig.expo.version, latest: block.version })}
+                    Your community needs a newer BeanPool than the one on this phone ({appConfig.expo.version}).
+                    Version {block.version} is waiting in {store}.
                 </Text>
                 <Text style={[styles.body, { color: colors.text.secondary }]}>
-                    {t('Updating keeps your account and everything on this phone.')}
+                    Updating keeps your account and everything on this phone.
                 </Text>
                 <Pressable
                     onPress={openStore}
                     accessibilityRole="button"
-                    accessibilityLabel={ios ? t('Update BeanPool in the App Store') : t('Update BeanPool in Google Play')}
+                    accessibilityLabel={`Update BeanPool in ${store}`}
                     style={({ pressed }) => [styles.button, { backgroundColor: pressed ? colors.brand.fill : colors.brand.fill }]}
                 >
-                    <Text style={[styles.buttonText, { color: colors.text.inverse }]} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Update', undefined, 'the app')}</Text>
+                    <Text style={[styles.buttonText, { color: colors.text.inverse }]}>Update</Text>
                 </Pressable>
                 <Text style={[styles.hint, { color: colors.text.secondary }]}>
-                    {t("Can't update? Ask the people who run your community.")}
+                    Can't update? Ask the people who run your community.
                 </Text>
             </View>
 
             {others.length > 0 && (
                 <View style={[...card, styles.next]}>
                     <Text accessibilityRole="header" style={[styles.subtitle, { color: colors.text.heading }]}>
-                        {t('Use another community')}
+                        Use another community
                     </Text>
                     <Text style={[styles.small, { color: colors.text.secondary }]}>
-                        {t('This update is for this community only. Your other communities on this phone are still yours.')}
+                        This update is for this community only. Your other communities on this phone are still yours.
                     </Text>
                     {others.map((c) => (
                         <Pressable
@@ -525,12 +514,12 @@ export default function ForceUpdateBlock() {
                             onPress={() => { void switchTo(c); }}
                             disabled={switching !== null}
                             accessibilityRole="button"
-                            accessibilityLabel={t('Use {name}', { name: c.name })}
+                            accessibilityLabel={`Use ${c.name}`}
                             accessibilityState={{ disabled: switching !== null, busy: switching === c.url }}
                             style={[...secondary, switching !== null && switching !== c.url && styles.dimmed]}
                         >
                             <Text style={[styles.secondaryText, { color: colors.text.heading }]}>
-                                {switching === c.url ? t('Opening {name}…', { name: c.name }) : c.name}
+                                {switching === c.url ? `Opening ${c.name}…` : c.name}
                             </Text>
                         </Pressable>
                     ))}
@@ -546,7 +535,7 @@ export default function ForceUpdateBlock() {
                 <View style={[...card, styles.next]}>
                     <Pressable onPress={() => { void openLeave(); }} disabled={busy} accessibilityRole="button" style={secondary}>
                         <Text style={[styles.secondaryText, { color: colors.feedback.danger.fg }]}>
-                            {t('Leave this community')}
+                            Leave this community
                         </Text>
                     </Pressable>
                     {page.kind === 'main' && errorLine}
@@ -556,23 +545,23 @@ export default function ForceUpdateBlock() {
             {identity && (
                 <View style={[...card, styles.next]}>
                     <Text accessibilityRole="header" style={[styles.subtitle, { color: colors.text.heading }]}>
-                        {t('Your account')}
+                        Your account
                     </Text>
                     <Text style={[styles.small, { color: colors.text.secondary }]}>
-                        {t("Your account is yours, not the community's. You can still see your 12 words, or leave this community.")}
+                        Your account is yours, not the community's. You can still see your 12 words, or leave this community.
                     </Text>
                     {hasMnemonic(identity) ? (
                         <Pressable onPress={() => { void showWords(); }} disabled={busy} accessibilityRole="button" style={secondary}>
-                            <Text style={[styles.secondaryText, { color: colors.text.heading }]}>{t('See my 12 words')}</Text>
+                            <Text style={[styles.secondaryText, { color: colors.text.heading }]}>See my 12 words</Text>
                         </Pressable>
                     ) : (
                         <Pressable onPress={() => { setPageError(null); setPage({ kind: 'add-words' }); }} accessibilityRole="button" style={secondary}>
-                            <Text style={[styles.secondaryText, { color: colors.text.heading }]}>{t('Add my 12 words to this phone')}</Text>
+                            <Text style={[styles.secondaryText, { color: colors.text.heading }]}>Add my 12 words to this phone</Text>
                         </Pressable>
                     )}
                     <Pressable onPress={() => { void openLeave(); }} disabled={busy} accessibilityRole="button" style={secondary}>
                         <Text style={[styles.secondaryText, { color: colors.feedback.danger.fg }]}>
-                            {t('Leave this community')}
+                            Leave this community
                         </Text>
                     </Pressable>
                     {page.kind === 'main' && errorLine}

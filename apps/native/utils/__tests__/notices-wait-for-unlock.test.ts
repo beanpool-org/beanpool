@@ -142,17 +142,16 @@ describe('app/_layout.tsx', () => {
         expect(layout()).toMatch(/setAppLockChecked\(true\);\s*setAppLockLaunchDecided\(\);/);
     });
 
-    // The alerts' words through t() since words S3l: the same alerts, raised in the same place.
     it('"Is this you?" marks its hold shown, and raises it, inside whenAppShows', () => {
         const s = layout();
-        expect(s).toMatch(/waits\.add\(whenAppShows\(\(\) => \{\s*if \(!current \|\| takeHoldsToShow\(holds\)\.length === 0\) return;[\s\S]{0,400}?Alert\.alert\(\s*t\('Is this you\?'\)/);
+        expect(s).toMatch(/waits\.add\(whenAppShows\(\(\) => \{\s*if \(!current \|\| takeHoldsToShow\(holds\)\.length === 0\) return;[\s\S]{0,400}?Alert\.alert\(\s*'Is this you\?'/);
         expect(s.match(/takeHoldsToShow\(/g)).toHaveLength(1);
         expect(s).toMatch(/waits\.forEach\(\(cancel\) => cancel\(\)\);/);
     });
 
     it('"Account recovery reported" is marked, and raised, inside whenAppShows, and its wait goes when recovery does', () => {
         const s = layout();
-        expect(s).toMatch(/const cancel = whenAppShows\(\(\) => \{[\s\S]{0,200}?recoveryNavPrompted\.current = true;\s*Alert\.alert\(\s*t\('Account recovery reported'\)/);
+        expect(s).toMatch(/const cancel = whenAppShows\(\(\) => \{[\s\S]{0,200}?recoveryNavPrompted\.current = true;\s*Alert\.alert\(\s*'Account recovery reported'/);
         expect(s.match(/recoveryNavPrompted\.current = true;/g)).toHaveLength(1);
         expect(s).toMatch(/if \(recognition !== 'recovering'\) \{\s*recoveryNavPrompted\.current = false;\s*recoveryPromptWait\.current\?\.\(\);/);
     });

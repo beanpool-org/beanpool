@@ -585,15 +585,14 @@ export function scoreQuiz(
     };
 }
 
-/** The words are word() keys, as the types' are: an app shows each through t(), in the member's language. */
 export interface SynergyInsight {
     relationshipType: 'dynamic_complements' | 'kindred_spirits' | 'balanced_allies';
-    title: WordKey;
+    title: string;
     emoji: string;
-    headline: WordKey;
-    summary: WordKey;
-    strengths: WordKey[];
-    collaborationTip: WordKey;
+    headline: string;
+    summary: string;
+    strengths: string[];
+    collaborationTip: string;
 }
 
 /**
@@ -670,12 +669,12 @@ export function calculateSynergy(
     if (!me || !other) {
         return {
             relationshipType: 'balanced_allies',
-            title: word('Collaborative Allies'),
+            title: 'Collaborative Allies',
             emoji: '🤝',
-            headline: word('Natural community partners'),
-            summary: word('You both bring unique strengths that enrich community projects and marketplace deals.'),
-            strengths: [word('Open communication'), word('Shared community values')],
-            collaborationTip: word('Enjoy collaborating and learning from each other\'s rhythm.'),
+            headline: 'Natural community partners',
+            summary: 'You both bring unique strengths that enrich community projects and marketplace deals.',
+            strengths: ['Open communication', 'Shared community values'],
+            collaborationTip: 'Enjoy collaborating and learning from each other\'s rhythm.',
         };
     }
 
@@ -683,16 +682,16 @@ export function calculateSynergy(
     if (viewerArchetypeKey === memberArchetypeKey) {
         return {
             relationshipType: 'kindred_spirits',
-            title: word('Kindred Rhythms'),
+            title: 'Kindred Rhythms',
             emoji: '🌱',
-            headline: word('Similar ways of working'),
-            summary: word('You both prefer similar ways of working. Conversations tend to flow easily because you prioritize similar things.'),
+            headline: 'Similar ways of working',
+            summary: 'You both prefer similar ways of working. Conversations tend to flow easily because you prioritize similar things.',
             strengths: [
-                word('Instant mutual understanding of working style'),
-                word('Shared sense of what matters in the work'),
-                word('Shared appreciation for how tasks should be approached'),
+                `Instant mutual understanding of working style`,
+                `Shared sense of what matters in the work`,
+                `Shared appreciation for how tasks should be approached`,
             ],
-            collaborationTip: word('Because you think alike, you\'ll reach decisions quickly. Be sure to seek an outside perspective for blind spots!'),
+            collaborationTip: `Because you think alike, you'll reach decisions quickly. Be sure to seek an outside perspective for blind spots!`,
         };
     }
 
@@ -704,14 +703,14 @@ export function calculateSynergy(
     if (isDirectPartner) {
         return {
             relationshipType: 'dynamic_complements',
-            title: word('Complementary Synergy'),
+            title: 'Complementary Synergy',
             emoji: '⚡',
-            headline: word('Strengths that complement'),
-            summary: word('You two have high collaboration chemistry. Your strengths naturally cover each other\'s blind spots — where one brings the spark or vision, the other brings structure and execution.'),
+            headline: 'Strengths that complement',
+            summary: `You two have high collaboration chemistry. Your strengths naturally cover each other's blind spots — where one brings the spark or vision, the other brings structure and execution.`,
             strengths: [
-                word('Natural balance of ideation and follow-through'),
-                word('Highly effective pairing for community projects and deals'),
-                word('Diverse perspectives that create stronger outcomes'),
+                `Natural balance of ideation and follow-through`,
+                `Highly effective pairing for community projects and deals`,
+                `Diverse perspectives that create stronger outcomes`,
             ],
             collaborationTip: other.communicationTip,
         };
@@ -720,14 +719,14 @@ export function calculateSynergy(
     // Case 3: Balanced Allies (Good general synergy)
     return {
         relationshipType: 'balanced_allies',
-        title: word('Balanced Collaboration'),
+        title: 'Balanced Collaboration',
         emoji: '✨',
-        headline: word('Different, compatible styles'),
-        summary: word('You bring different, harmonious approaches to collaboration. Working together brings balanced depth to any project.'),
+        headline: 'Different, compatible styles',
+        summary: `You bring different, harmonious approaches to collaboration. Working together brings balanced depth to any project.`,
         strengths: [
-            word('Complementary contributions to community discussions'),
-            word('Fresh perspectives on problem-solving'),
-            word('Respectful, balanced group dynamics'),
+            `Complementary contributions to community discussions`,
+            `Fresh perspectives on problem-solving`,
+            `Respectful, balanced group dynamics`,
         ],
         collaborationTip: other.communicationTip,
     };

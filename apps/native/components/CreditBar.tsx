@@ -1,8 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { formatNumber, t, tn } from '@beanpool/core';
-import { Sentence } from './Sentence';
 
 /**
  * CreditBar — the zero-centred "sweet spot" indicator.
@@ -73,8 +71,7 @@ function toPct(v: number, floor: number): number {
     return Math.max(3, Math.min(98, pct));
 }
 
-/** A balance with its sign, in the language's numbers: "+12", "−3.5" ("+12,5" in French). */
-const fmt = (n: number) => `${n >= 0 ? '+' : ''}${Number.isInteger(n) ? formatNumber(n) : formatNumber(n, 1)}`;
+const fmt = (n: number) => `${n >= 0 ? '+' : ''}${Number.isInteger(n) ? n : n.toFixed(1)}`;
 
 export function CreditBar({ balance, floor, colors, feeFreeMax = 200, usableFloor, liveOffers = 0, knownGrant = 0 }: {
     balance: number;
@@ -94,7 +91,7 @@ export function CreditBar({ balance, floor, colors, feeFreeMax = 200, usableFloo
     // The words on the bubble. The calm bubble is heading-coloured, so its words take the card's colour: the pair reads in
     // both themes (white on charcoal in light, as before; charcoal on white in dark, where a white label was white on white).
     const tagFg = nearLimit || overFeeFree ? colors.text.inverse : colors.surface.card;
-    const tagLabel = overFeeFree ? t('{balance} B · ≈{rate}%/mo', { balance: fmt(balance), rate }) : t('{balance} B', { balance: fmt(balance) });
+    const tagLabel = overFeeFree ? `${fmt(balance)} B · ≈${rate}%/mo` : `${fmt(balance)} B`;
 
     // Offer ladder — the negative side mirrors the fee ladder above zero. usableFloor is the depth
     // your live Offers currently unlock; earned depth beyond it (usableFloor → floor) is LOCKED.
@@ -127,7 +124,7 @@ export function CreditBar({ balance, floor, colors, feeFreeMax = 200, usableFloo
         <View
             style={s.cbar}
             accessible={true}
-            accessibilityLabel={t('Credit balance {balance} Beans, credit limit {floor} Beans, fee-free ceiling {max} Beans.', { balance, floor, max: feeFreeMax })}
+            accessibilityLabel={`Credit balance ${balance} Beans, credit limit ${floor} Beans, fee-free ceiling ${feeFreeMax} Beans.`}
         >
             {/* Lane 2 — the track */}
             <View style={s.track}>
@@ -185,7 +182,7 @@ export function CreditBar({ balance, floor, colors, feeFreeMax = 200, usableFloo
             {/* Fee ladder — the circulation-fee brackets above +feeFreeMax, revealed as you climb */}
             {showFees && (
                 <View style={s.feeRow} pointerEvents="none">
-                    <Text style={[s.feeCaption, { opacity: revealT }]}>{t('fee/mo')}</Text>
+                    <Text style={[s.feeCaption, { opacity: revealT }]}>fee/mo</Text>
                     {FEE_ZONES.map((z, i) => {
                         const active = balance > z.lo && balance <= z.hi;
                         return (
@@ -202,48 +199,36 @@ export function CreditBar({ balance, floor, colors, feeFreeMax = 200, usableFloo
             <View style={s.anchors}>
                 <View>
                     <Text style={[s.aVal, { color: RED }]}>{floor}</Text>
-                    <Text style={s.aSub}>{t('your limit')}</Text>
+                    <Text style={s.aSub}>your limit</Text>
                 </View>
                 <View style={{ alignItems: 'center' }}>
                     <Text style={[s.aVal, { color: BEAN_DEEP }]}>⚖️ 0</Text>
-                    <Text style={[s.aSub, { color: BEAN_DEEP, opacity: 0.85 }]}>{t('sweet spot')}</Text>
+                    <Text style={[s.aSub, { color: BEAN_DEEP, opacity: 0.85 }]}>sweet spot</Text>
                 </View>
                 <View style={{ alignItems: 'flex-end' }}>
                     <Text style={[s.aVal, { color: WARM }]}>+{feeFreeMax}</Text>
-                    <Text style={s.aSub}>{t('fee-free')}</Text>
+                    <Text style={s.aSub}>fee-free</Text>
                 </View>
             </View>
 
             {/* Lane 4 — directional hint */}
             <View style={s.hint}>
-                <Text style={s.hintText}>{t('← carry credit')}</Text>
-                <Text style={s.hintText}>{t('hold credit →')}</Text>
+                <Text style={s.hintText}>← carry credit</Text>
+                <Text style={s.hintText}>hold credit →</Text>
             </View>
 
             {/* Offer caption — below everything so it reads as context, not a track annotation */}
             {showLadder && hasLocked && (
                 <View style={s.ladderRow} pointerEvents="none">
-                    {/* Whole sentences with the bold parts inside them (components/Sentence); each count its own plural. */}
                     <Text style={s.ladderText}>
-                        {uFloor < 0 ? (
-                            <Sentence
-                                text={nextUnlock
-                                    ? tn(liveOffers, '🎣 {offers} unlocks\u00A0−{depth} · {more}\u00A0→\u00A0−{next}', '🎣 {offers} unlock\u00A0−{depth} · {more}\u00A0→\u00A0−{next}',
-                                        { depth: Math.abs(uFloor), next: nextUnlock, more: tn(liveOffers + 1, '{n} offer', '{n} offers') })
-                                    : tn(liveOffers, '🎣 {offers} unlocks\u00A0−{depth}', '🎣 {offers} unlock\u00A0−{depth}', { depth: Math.abs(uFloor) })}
-                                parts={{ offers: <Text style={s.ladderStrong}>{tn(liveOffers, '{n} offer', '{n} offers')}</Text> }}
-                            />
+                        🎣 {uFloor < 0 ? (
+                            <>
+                                <Text style={s.ladderStrong}>{liveOffers} offer{liveOffers === 1 ? '' : 's'}</Text> {liveOffers === 1 ? 'unlocks' : 'unlock'}{"\u00A0"}−{Math.abs(uFloor)}{nextUnlock ? ` · ${liveOffers + 1} offer${liveOffers + 1 === 1 ? '' : 's'}\u00A0→\u00A0−${nextUnlock}` : ''}
+                            </>
                         ) : (
-                            <Sentence
-                                text={tn(offersForFull,
-                                    '🎣 {post} to open your credit line — {count} offer unlocks your\u00A0full\u00A0−{floor}.',
-                                    '🎣 {post} to open your credit line — {count} offers unlock your\u00A0full\u00A0−{floor}.',
-                                    { floor: Math.abs(floor) })}
-                                parts={{
-                                    post: <Text style={s.ladderStrong}>{t('Post an offer')}</Text>,
-                                    count: <Text style={s.ladderStrong}>{formatNumber(offersForFull)}</Text>,
-                                }}
-                            />
+                            <>
+                                <Text style={s.ladderStrong}>Post an offer</Text> to open your credit line — <Text style={s.ladderStrong}>{offersForFull}</Text> offer{offersForFull === 1 ? '' : 's'} {offersForFull === 1 ? 'unlocks' : 'unlock'} your{"\u00A0"}full{"\u00A0"}−{Math.abs(floor)}.
+                            </>
                         )}
                     </Text>
                 </View>

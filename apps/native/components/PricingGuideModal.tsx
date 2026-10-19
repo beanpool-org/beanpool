@@ -28,19 +28,9 @@ import {
     type PricingGuideItem,
     type PricingCategory,
     type PricingConfig,
-    type WordKey,
-    formatNumber,
-    t,
-    tn,
 } from '@beanpool/core';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
-
-/** The chips: All Items (the guide's own words), then core's categories (word() keys). */
-const CATEGORY_CHIPS: ReadonlyArray<{ id: PricingCategory | 'all'; emoji: string; label: WordKey | null }> = [
-    { id: 'all', emoji: '🌟', label: null },
-    ...PRICING_CATEGORIES,
-];
 
 interface Props {
     isOpen: boolean;
@@ -508,8 +498,7 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem }: Props)
                 }}
                 disabled={!onSelectOfferItem}
                 accessibilityRole={onSelectOfferItem ? 'button' : undefined}
-                // The items are the catalog's (core or the node's): shown as written; the Beans in the language's numbers.
-                accessibilityLabel={onSelectOfferItem ? t('Select {name} for 🫘 {price}', { name: item.name, price: formatNumber(effectivePrice) }) : undefined}
+                accessibilityLabel={onSelectOfferItem ? `Select ${item.name} for 🫘 ${effectivePrice}` : undefined}
             >
                 <View style={styles.thumbnailWrap}>
                     {item.thumbnailUrl ? (
@@ -532,7 +521,7 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem }: Props)
 
                 <View style={styles.priceCol}>
                     <View style={styles.priceBadge}>
-                        <Text style={styles.priceText}>🫘 {formatNumber(effectivePrice)}</Text>
+                        <Text style={styles.priceText}>🫘 {effectivePrice}</Text>
                         {item.unit && <Text style={styles.unitText}>/{item.unit}</Text>}
                         {item.trend === 'up' && <Text style={[styles.trendIndicator, { color: colors.brand.primary }]}>▲</Text>}
                         {item.trend === 'down' && <Text style={[styles.trendIndicator, { color: colors.feedback.danger.fg }]}>▼</Text>}
@@ -541,7 +530,7 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem }: Props)
                     <View style={styles.actionsRow}>
                         {onSelectOfferItem && (
                             <View style={styles.offerBtn} pointerEvents="none">
-                                <Text style={styles.offerBtnText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Offer →')}</Text>
+                                <Text style={styles.offerBtnText}>Offer →</Text>
                             </View>
                         )}
                         <Pressable
@@ -552,7 +541,7 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem }: Props)
                                 setReportingItem(item);
                             }}
                             accessibilityRole="button"
-                            accessibilityLabel={t('Report price estimate for {name}', { name: item.name })}
+                            accessibilityLabel={`Report price estimate for ${item.name}`}
                         >
                             <Text style={styles.reportBtnText}>🚩</Text>
                         </Pressable>
@@ -568,12 +557,12 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem }: Props)
                 {/* Header */}
                 <View style={styles.header}>
                     <View style={styles.headerTitleWrap}>
-                        <Text style={styles.headerTitle}>{t('💡 Community Pricing Guide')}</Text>
+                        <Text style={styles.headerTitle}>💡 Community Pricing Guide</Text>
                         <Text style={styles.headerSubtitle}>
-                            {tn(items.length, '{n} items & services benchmarked', '{n} items & services benchmarked')}
+                            {items.length} items & services benchmarked
                         </Text>
                     </View>
-                    <Pressable style={styles.closeBtn} onPress={onClose} accessibilityRole="button" accessibilityLabel={t('Close pricing guide')}>
+                    <Pressable style={styles.closeBtn} onPress={onClose} accessibilityRole="button" accessibilityLabel="Close pricing guide">
                         <Text style={styles.closeBtnText}>✕</Text>
                     </Pressable>
                 </View>
@@ -584,14 +573,14 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem }: Props)
                         <Text style={styles.searchIcon}>🔍</Text>
                         <TextInput
                             style={styles.searchInput}
-                            placeholder={t('Search produce, services, trades...')}
+                            placeholder="Search produce, services, trades..."
                             placeholderTextColor={colors.text.muted}
                             value={searchQuery}
                             onChangeText={setSearchQuery}
                             clearButtonMode="while-editing"
                         />
                         {searchQuery.length > 0 && Platform.OS === 'android' && (
-                            <Pressable accessibilityRole="button" accessibilityLabel={t('Clear search')} style={styles.clearSearchBtn} onPress={() => setSearchQuery('')}>
+                            <Pressable accessibilityRole="button" accessibilityLabel="Clear search" style={styles.clearSearchBtn} onPress={() => setSearchQuery('')}>
                                 <Text style={styles.clearSearchText}>✕</Text>
                             </Pressable>
                         )}
@@ -604,7 +593,7 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem }: Props)
                         horizontal
                         showsHorizontalScrollIndicator={false}
                         contentContainerStyle={styles.categoriesScroll}
-                        data={CATEGORY_CHIPS}
+                        data={[{ id: 'all', label: 'All Items', emoji: '🌟' } as any, ...PRICING_CATEGORIES]}
                         keyExtractor={(c) => c.id}
                         renderItem={({ item: cat }) => {
                             const active = selectedCategory === cat.id;
@@ -617,7 +606,7 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem }: Props)
                                     testID={`category-chip-${cat.id}`}
                                 >
                                     <Text style={[styles.categoryChipText, active && styles.categoryChipTextActive]}>
-                                        {t('{emoji} {name}', { emoji: cat.emoji, name: cat.label ? t(cat.label) : t('All Items') })}
+                                        {cat.emoji} {cat.label}
                                     </Text>
                                 </Pressable>
                             );
@@ -630,8 +619,8 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem }: Props)
                     <Text style={{ fontSize: 16 }}>💡</Text>
                     <Text style={styles.tipBannerText}>
                         {onSelectOfferItem
-                            ? t('Tap any item to auto-fill your offer listing with community price estimates.')
-                            : t('Community estimates based on local marketplace trades and seasonal averages.')}
+                            ? 'Tap any item to auto-fill your offer listing with community price estimates.'
+                            : 'Community estimates based on local marketplace trades and seasonal averages.'}
                     </Text>
                 </View>
 
@@ -649,7 +638,7 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem }: Props)
                         ListEmptyComponent={
                             <View style={styles.emptyWrap}>
                                 <Text style={{ fontSize: 36, marginBottom: 8 }}>🔍</Text>
-                                <Text style={styles.emptyText}>{t('No items match "{query}"', { query: searchQuery })}</Text>
+                                <Text style={styles.emptyText}>No items match "{searchQuery}"</Text>
                             </View>
                         }
                     />
@@ -662,14 +651,14 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem }: Props)
                             {reportSuccess ? (
                                 <View style={{ alignItems: 'center', paddingVertical: 20 }}>
                                     <Text style={{ fontSize: 40, marginBottom: 10 }}>✨</Text>
-                                    <Text style={styles.sheetTitle}>{t('Report Submitted')}</Text>
-                                    <Text style={styles.sheetSubtitle}>{t('Thank you for helping keep community prices fair.')}</Text>
+                                    <Text style={styles.sheetTitle}>Report Submitted</Text>
+                                    <Text style={styles.sheetSubtitle}>Thank you for helping keep community prices fair.</Text>
                                 </View>
                             ) : (
                                 <>
-                                    <Text style={styles.sheetTitle}>{t('🚩 Report Price: {name}', { name: reportingItem?.name ?? '' })}</Text>
+                                    <Text style={styles.sheetTitle}>🚩 Report Price: {reportingItem?.name}</Text>
                                     <Text style={styles.sheetSubtitle}>
-                                        {t('Current estimate: 🫘 {price}', { price: reportingItem ? formatNumber(reportingItem.priceBeans) : '' })}
+                                        Current estimate: 🫘 {reportingItem ? reportingItem.priceBeans : ''}
                                     </Text>
 
                                     <View style={styles.reportOptions}>
@@ -678,33 +667,33 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem }: Props)
                                             onPress={() => setReportType('too_high')}
                                             accessibilityRole="button"
                                             accessibilityState={{ selected: reportType === 'too_high' }}
-                                            accessibilityLabel={t('Too High')}
+                                            accessibilityLabel="Too High"
                                         >
-                                            <Text style={styles.reportOptionText}>{t('📈 Too High')}</Text>
+                                            <Text style={styles.reportOptionText}>📈 Too High</Text>
                                         </Pressable>
                                         <Pressable
                                             style={[styles.reportOptionBtn, reportType === 'too_low' && styles.reportOptionBtnActive]}
                                             onPress={() => setReportType('too_low')}
                                             accessibilityRole="button"
                                             accessibilityState={{ selected: reportType === 'too_low' }}
-                                            accessibilityLabel={t('Too Low')}
+                                            accessibilityLabel="Too Low"
                                         >
-                                            <Text style={styles.reportOptionText}>{t('📉 Too Low')}</Text>
+                                            <Text style={styles.reportOptionText}>📉 Too Low</Text>
                                         </Pressable>
                                         <Pressable
                                             style={[styles.reportOptionBtn, reportType === 'other' && styles.reportOptionBtnActive]}
                                             onPress={() => setReportType('other')}
                                             accessibilityRole="button"
                                             accessibilityState={{ selected: reportType === 'other' }}
-                                            accessibilityLabel={t('Other reason')}
+                                            accessibilityLabel="Other reason"
                                         >
-                                            <Text style={styles.reportOptionText}>{t('💬 Other')}</Text>
+                                            <Text style={styles.reportOptionText}>💬 Other</Text>
                                         </Pressable>
                                     </View>
 
                                     <TextInput
                                         style={styles.reportInput}
-                                        placeholder={t('Optional: Why is this estimate wrong? (e.g. what should it cost?)')}
+                                        placeholder="Optional: Why is this estimate wrong? (e.g. what should it cost?)"
                                         placeholderTextColor={colors.text.muted}
                                         value={reportComment}
                                         onChangeText={setReportComment}
@@ -718,12 +707,12 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem }: Props)
                                         disabled={reportSubmitting}
                                         accessibilityRole="button"
                                         accessibilityState={{ disabled: reportSubmitting, busy: reportSubmitting }}
-                                        accessibilityLabel={reportSubmitting ? t('Submitting feedback...') : t('Submit Feedback')}
+                                        accessibilityLabel={reportSubmitting ? 'Submitting feedback...' : 'Submit Feedback'}
                                     >
                                         {reportSubmitting ? (
                                             <ActivityIndicator color="#ffffff" />
                                         ) : (
-                                            <Text style={styles.sheetSubmitText}>{t('Submit Feedback')}</Text>
+                                            <Text style={styles.sheetSubmitText}>Submit Feedback</Text>
                                         )}
                                     </Pressable>
 
@@ -732,9 +721,9 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem }: Props)
                                         onPress={() => setReportingItem(null)}
                                         disabled={reportSubmitting}
                                         accessibilityRole="button"
-                                        accessibilityLabel={t('Cancel')}
+                                        accessibilityLabel="Cancel"
                                     >
-                                        <Text style={styles.sheetCancelText}>{t('Cancel')}</Text>
+                                        <Text style={styles.sheetCancelText}>Cancel</Text>
                                     </Pressable>
                                 </>
                             )}

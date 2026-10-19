@@ -39,7 +39,7 @@ import { ProjectsPage } from './pages/ProjectsPage';
 import { PulsePage } from './pages/PulsePage';
 import { HomePage } from './pages/HomePage';
 import { HeaderControls, HeaderTitle, SidebarControls, useDotOnlyChip } from './components/HeaderControls';
-import { helpSheetFor, t, tourStepForTab, tourSteps, webHelpKey, word, type HomeSearchSettings, type WordKey } from '@beanpool/core';
+import { helpSheetFor, tourStepForTab, tourSteps, webHelpKey, type HomeSearchSettings } from '@beanpool/core';
 import { TourBar } from './components/TourBar';
 import { HelpDialog } from './components/HelpDialog';
 import { OPEN_HELP_EVENT, askTourAgain, endTour, moveTour, useTour } from './lib/tour-store';
@@ -73,48 +73,6 @@ export function navTabWeight(label: string): number {
 // font and gets ~54px, so 3.3vw (10.6px there) keeps it whole; 0.6rem caps it on wider screens.
 export const NAV_LABEL_FONT_SIZE = 'min(0.6rem, 3.3vw)';
 
-/** The smallest a tab's name is drawn to fit its share of the row (see useFitNavLabels). */
-export const NAV_LABEL_MIN_SCALE = 0.8;
-
-/**
- * A tab's name that doesn't fit its share of the row is drawn smaller until it does, down to NAV_LABEL_MIN_SCALE, as
- * the phone's tab strip shrinks a word to fit (adjustsFontSizeToFit); a name that fits is never touched, so English
- * reads as it always did. Measured at 320 px with 1.3x text and the phone's tab words (e2e/words-w3-screens-check.mjs):
- * es "Mapa" and "Comunes", pt "Mapa", fr "Communs" and two of ml's were cut by 2 to 6 px. Fitted again whenever the
- * row or a name changes size, and on a language change. Returns the ref for the row (a callback: it mounts after loading).
- */
-function useFitNavLabels(lang: string): (nav: HTMLElement | null) => void {
-    const [nav, setNav] = useState<HTMLElement | null>(null);
-    useLayoutEffect(() => {
-        if (!nav || typeof ResizeObserver === 'undefined') return;
-        const fit = () => {
-            for (const label of nav.querySelectorAll<HTMLElement>('[data-nav-label]')) {
-                label.style.removeProperty('--nav-label-scale');
-                const need = label.scrollWidth;
-                const room = label.clientWidth;
-                if (room > 0 && need > room + 0.5) label.style.setProperty('--nav-label-scale', String(Math.max(NAV_LABEL_MIN_SCALE, room / need)));
-            }
-        };
-        fit();
-        // A frame later, not inside the observer: a label's own change of size would loop it.
-        let frame = 0;
-        const observer = new ResizeObserver(() => {
-            cancelAnimationFrame(frame);
-            frame = requestAnimationFrame(fit);
-        });
-        observer.observe(nav);
-        for (const label of nav.querySelectorAll('[data-nav-label]')) observer.observe(label);
-        let live = true;
-        document.fonts?.ready.then(() => live && fit());
-        return () => {
-            live = false;
-            observer.disconnect();
-            cancelAnimationFrame(frame);
-        };
-    }, [nav, lang]);
-    return setNav;
-}
-
 // What the header reads out of GET /api/community/health. `online` is ours, not the
 // node's: it records whether that call answered at all.
 interface NodeHealthState {
@@ -131,8 +89,7 @@ interface NodeHealthState {
 
 export function App() {
     // Every screen reads the new words the moment the language changes (lib/language.ts): App re-renders, and so does all of it.
-    const [lang] = useLanguage();
-    const fitNavLabels = useFitNavLabels(lang);
+    useLanguage();
     const [identity, setIdentity] = useState<BeanPoolIdentity | null>(null);
     const [loading, setLoading] = useState(true);
     /*
@@ -660,21 +617,19 @@ export function App() {
     }, [identity]);
 
     // Home first; the Pulse is a card on Home with its page one tap away, so Home takes its slot (design §8, §13 Q1).
-    // The tabs' names are the phone's tab words (word(…, 'tab')), so one translation serves both; "Chat" is the web's own.
-    const TABS: { id: Tab; label: WordKey; emoji: string }[] = [
-        { id: 'home', label: word('Home', 'tab'), emoji: '🏠' },
-        { id: 'marketplace', label: word('Market', 'tab'), emoji: '🤝' },
-        { id: 'map', label: word('Map', 'tab'), emoji: '🗺️' },
-        { id: 'projects', label: word('Commons', 'tab'), emoji: '🌱' },
-        { id: 'messages', label: word('Chat', 'tab'), emoji: '💬' },
-        { id: 'people', label: word('People', 'tab'), emoji: '👥' },
-        { id: 'ledger', label: word('Ledger', 'tab'), emoji: '📊' },
+    const TABS: { id: Tab; label: string; emoji: string }[] = [
+        { id: 'home', label: 'Home', emoji: '🏠' },
+        { id: 'marketplace', label: 'Market', emoji: '🤝' },
+        { id: 'map', label: 'Map', emoji: '🗺️' },
+        { id: 'projects', label: 'Commons', emoji: '🌱' },
+        { id: 'messages', label: 'Chat', emoji: '💬' },
+        { id: 'people', label: 'People', emoji: '👥' },
+        { id: 'ledger', label: 'Ledger', emoji: '📊' },
     ];
-    const activeTabEntry = TABS.find(tb => tb.id === activeTab);
 
     // The mobile header's title (none on the map, which shows the community's name), and the sync chip as its dot alone
     // where the title wouldn't fit beside the chip's words (a hook, so above the returns before the app).
-    const headerTitle = activeTab !== 'map' || showSettings ? (activeTab === 'pulse' ? t('The Pulse') : activeTabEntry ? t(activeTabEntry.label) : '') : null;
+    const headerTitle = activeTab !== 'map' || showSettings ? ((activeTab === 'pulse' ? 'The Pulse' : TABS.find(t => t.id === activeTab)?.label) ?? '') : null;
     const [headerRef, chipDotOnly] = useDotOnlyChip(headerTitle);
 
     if (loading || (!identity && visitorView.kind === 'checking')) {
@@ -687,7 +642,7 @@ export function App() {
                 color: '#888',
                 fontSize: '1.1rem',
             }}>
-                {t('Loading...')}
+                Loading...
             </div>
         );
     }
@@ -721,20 +676,20 @@ export function App() {
             <div className="flex items-center gap-2 mb-3">
                 <span className={`w-2.5 h-2.5 rounded-full ${communityHealth.online ? 'bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.6)]' : 'bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.6)]'}`} />
                 <span className="font-bold text-sm text-nature-900 dark:text-white">
-                    {communityHealth.online ? t('Online') : t('Offline')}
+                    {communityHealth.online ? 'Online' : 'Offline'}
                 </span>
             </div>
             <div className="space-y-1.5 text-xs text-nature-600 dark:text-nature-300">
                 <div className="flex justify-between">
-                    <span>{t('Node:')}</span>
-                    <span className="font-mono font-semibold">{communityHealth.nodeName || communityHealth.callsign || t('Local')}</span>
+                    <span>Node:</span>
+                    <span className="font-mono font-semibold">{communityHealth.nodeName || communityHealth.callsign || 'Local'}</span>
                 </div>
                 <div className="flex justify-between">
-                    <span>{t('Members:')}</span>
+                    <span>Members:</span>
                     <span className="font-mono font-semibold">{communityHealth.memberCount ?? communityHealth.tree?.totalMembers ?? 0}</span>
                 </div>
                 <div className="flex justify-between">
-                    <span>{t('Active Posts:')}</span>
+                    <span>Active Posts:</span>
                     <span className="font-mono font-semibold">{communityHealth.postCount ?? communityHealth.activity?.totalPosts ?? 0}</span>
                 </div>
             </div>
@@ -742,7 +697,7 @@ export function App() {
                 onClick={() => setShowCommunityStatus(false)}
                 className="mt-3 w-full py-1 text-xs font-semibold text-center text-nature-500 dark:text-nature-400 hover:text-nature-800 dark:hover:text-white transition-colors"
             >
-                {t('Close')}
+                Close
             </button>
         </div>
     );
@@ -770,13 +725,13 @@ export function App() {
                             setOpenProfilePubkey(null);
                         }}
                     >
-                        <img src="/bean.png" alt={t('BeanPool Icon')} className="w-9 h-9 object-contain drop-shadow-sm" />
+                        <img src="/bean.png" alt="BeanPool Icon" className="w-9 h-9 object-contain drop-shadow-sm" />
                         <div className="flex flex-col">
                             <span className="font-extrabold text-xl tracking-tight text-rainbow">BeanPool</span>
                             <span
                                 className="text-[10px] font-bold text-amber-700 dark:text-amber-500 tracking-wider"
-                                aria-label={t('Version {version}', { version: displayVersion })}
-                            >{t('v{version}', { version: displayVersion })}</span>
+                                aria-label={`Version ${displayVersion}`}
+                            >v{displayVersion}</span>
                         </div>
                     </div>
                 </div>
@@ -803,7 +758,7 @@ export function App() {
                             >
                                 <div className="flex items-center gap-3">
                                     <span className="text-xl">{tab.emoji}</span>
-                                    <span>{t(tab.label)}</span>
+                                    <span>{tab.label}</span>
                                 </div>
                                 {tab.id === 'messages' && totalUnread > 0 && (
                                     <span className="bg-bp-cta-fill text-bp-cta-on text-xs font-black px-2 py-0.5 rounded-full shadow-sm">
@@ -836,8 +791,8 @@ export function App() {
                                 {identity.callsign ? identity.callsign.substring(0, 2).toUpperCase() : 'ME'}
                             </div>
                             <div className="flex flex-col truncate">
-                                <span className="font-bold text-xs truncate text-nature-900 dark:text-white">{identity.callsign || t('Anonymous')}</span>
-                                <span className="text-[10px] text-nature-500 dark:text-nature-400">{t('View Profile')}</span>
+                                <span className="font-bold text-xs truncate text-nature-900 dark:text-white">{identity.callsign || 'Anonymous'}</span>
+                                <span className="text-[10px] text-nature-500 dark:text-nature-400">View Profile</span>
                             </div>
                         </button>
                     )}
@@ -856,9 +811,9 @@ export function App() {
                         <div className="flex items-center gap-2 flex-1 min-w-[200px]">
                             <span className="text-lg shrink-0" aria-hidden="true">⚠️</span>
                             <div className="leading-tight">
-                                <span className="font-bold">{t('BeanPool has been updated:')} </span>
+                                <span className="font-bold">BeanPool has been updated: </span>
                                 <span className="text-xs sm:text-sm">
-                                    {t('this page is version {page} and your community now runs {node}. Refresh to load it.', { page: __APP_VERSION__, node: serverVersionAhead })}
+                                    this page is version {__APP_VERSION__} and your community now runs {serverVersionAhead}. Refresh to load it.
                                 </span>
                             </div>
                         </div>
@@ -867,7 +822,7 @@ export function App() {
                             onClick={() => window.location.reload()}
                             className="px-3 py-1.5 bg-white text-amber-900 font-bold rounded-lg text-xs hover:bg-amber-50 active:scale-95 transition-all cursor-pointer border-none shadow-sm shrink-0"
                         >
-                            {t('Refresh')}
+                            Refresh
                         </button>
                     </div>
                 )}
@@ -909,12 +864,12 @@ export function App() {
                                 style={{ transform: 'translateX(-12px) translateY(-2px)' }}
                                 onClick={toggleCommunityStatus}
                             >
-                                <img src="/bean.png" alt={t('BeanPool Icon')} style={{ width: '40px', height: '40px', objectFit: 'contain' }} className="drop-shadow-sm" />
+                                <img src="/bean.png" alt="BeanPool Icon" style={{ width: '40px', height: '40px', objectFit: 'contain' }} className="drop-shadow-sm" />
                                 <span className="font-extrabold text-[1.6rem] tracking-tight text-rainbow drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">BeanPool</span>
                                 <span
                                     className="absolute -right-6 bottom-0.5 text-[10px] font-bold text-amber-500 tracking-wider whitespace-nowrap"
-                                    aria-label={t('Version {version}', { version: displayVersion })}
-                                >{t('v{version}', { version: displayVersion })}</span>
+                                    aria-label={`Version ${displayVersion}`}
+                                >v{displayVersion}</span>
                             </div>
                             {communityStatus}
                         </div>
@@ -994,7 +949,7 @@ export function App() {
                                 </div>
                             )}
                             {activeTab === 'map' && (
-                                <Suspense fallback={<div className="flex-1 flex items-center justify-center">{t('Loading map...')}</div>}>
+                                <Suspense fallback={<div className="flex-1 flex items-center justify-center">Loading map...</div>}>
                                     <MapPage
                                         identity={identity}
                                         openNewPost={openNewPost}
@@ -1150,7 +1105,6 @@ export function App() {
                     // desktop sidebar at every width instead of swapping at 768px.
                     className={`relative bottom-nav-bar ${isBottomNavVisible ? 'flex' : 'hidden'} md:hidden`}
                     data-testid="mobile-bottom-nav"
-                    ref={fitNavLabels}
                     style={{
                     position: 'fixed',
                     bottom: 0,
@@ -1184,7 +1138,7 @@ export function App() {
                             style={{
                                 // Width follows label length (floor 4, the emoji's width), so "Commons"
                                 // gets the room it needs instead of every tab shrinking to fit it.
-                                flexGrow: navTabWeight(t(tab.label)),
+                                flexGrow: navTabWeight(tab.label),
                                 flexShrink: 1,
                                 flexBasis: 0,
                                 minWidth: 0,
@@ -1262,8 +1216,8 @@ export function App() {
                                 {/* 0.6rem alone scales with the user's text size and cut "Market"/"Commons"
                                     to "Mar…"/"Co…" on a 320px phone at 1.3x. The vw cap keeps whole labels
                                     there; wider screens still get the full 0.6rem. */}
-                                <span data-nav-label className={`${isActive ? 'text-rainbow text-dark-aura font-extrabold' : 'text-dark-aura font-semibold'} truncate max-w-full text-center`} style={{ fontSize: `calc(${NAV_LABEL_FONT_SIZE} * var(--nav-label-scale, 1))`, lineHeight: 1.1 }}>
-                                    {t(tab.label)}
+                                <span data-nav-label className={`${isActive ? 'text-rainbow text-dark-aura font-extrabold' : 'text-dark-aura font-semibold'} truncate max-w-full text-center`} style={{ fontSize: NAV_LABEL_FONT_SIZE, lineHeight: 1.1 }}>
+                                    {tab.label}
                                 </span>
                             </div>
                         </button>

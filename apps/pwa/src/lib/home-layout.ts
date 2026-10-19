@@ -20,7 +20,7 @@
 
 import {
     HOME_CARD_GROUPS, HOME_CARD_TYPES, HOME_FRAME_LIMITS, addCard as frameAddCard, cardsToAsk as frameCardsToAsk, defaultHomeLayout,
-    homeCardType, readHomeLayout as frameReadHomeLayout, readSearchSettings, removeCard as frameRemoveCard, starterCards, t, word,
+    homeCardType, readHomeLayout as frameReadHomeLayout, readSearchSettings, removeCard as frameRemoveCard, starterCards,
     type HomeAddRefusal, type HomeCardGroup, type HomeCardInstance, type HomeLayoutV2,
 } from '@beanpool/core';
 
@@ -60,14 +60,11 @@ export type HomeRole = 'owner' | 'admin' | 'moderator' | null | undefined;
 
 // ── Names ─────────────────────────────────────────────────────────────────────────────────────────────────────────
 
-/**
- * A type's name: its caption, its row in the picker and Edit home. Fixed words, never a member's: core's word() keys, in
- * the member's language (the phone's utils/home-cards.ts cardName).
- */
+/** A type's name: its caption, its row in the picker and Edit home. Fixed words, never a member's. */
 export function cardName(type: HomeCardType, profile?: string): string {
-    const entry = homeCardType(type);
-    if (!entry) return type;
-    return profile === 'global' && entry.globalName ? t(entry.globalName) : t(entry.name);
+    const t = homeCardType(type);
+    if (!t) return type;
+    return profile === 'global' && t.globalName ? t.globalName : t.name;
 }
 
 /** The most of a saved search's words its screen-reader name carries; longer ones end in "…". */
@@ -83,7 +80,7 @@ export function cardLabelName(c: Pick<HomeCardInstance, 'type' | 'settings'>, pr
     const words = searchWords(c);
     if (!words) return cardName(c.type, profile);
     const kind = searchKindWord(c);
-    return kind ? t('"{words}" ({kind})', { words, kind }) : t('"{words}"', { words });
+    return kind ? `"${words}" (${kind})` : `"${words}"`;
 }
 
 /** A saved search's words, bounded (CARD_WORDS_MAX, then "…"); null for any other card or a search with none. */
@@ -96,7 +93,7 @@ function searchWords(c: Pick<HomeCardInstance, 'type' | 'settings'>): string | n
 /** A saved search's kind as its names say it: "Offers" or "Needs" (the sheet's chips), nothing for Both. */
 function searchKindWord(c: Pick<HomeCardInstance, 'type' | 'settings'>): string | null {
     const kind = readSearchSettings(c.settings).kind;
-    return kind === 'offer' ? t('Offers') : kind === 'need' ? t('Needs') : null;
+    return kind === 'offer' ? 'Offers' : kind === 'need' ? 'Needs' : null;
 }
 
 /**
@@ -108,7 +105,7 @@ export function cardRowName(c: Pick<HomeCardInstance, 'type' | 'settings'>, prof
     if (!words) return cardName(c.type, profile);
     const kind = searchKindWord(c);
     // The kind leads, so a long search's row cut at two lines (320dp × 1.3) still shows it (#1716 confirmation, finding 4).
-    return kind ? t('{kind} · {words}', { kind, words }) : words;
+    return kind ? `${kind} · ${words}` : words;
 }
 
 // ── Reading, and which copy wins ──────────────────────────────────────────────────────────────────────────────────
@@ -390,8 +387,8 @@ export function searchEmptyLine(q: string, km: number | null): string {
     const words = q.trim().replace(/\s+/g, ' ');
     return ['No', words || 'listings', within(km), 'right now'].filter(Boolean).join(' ');
 }
-/** Edit home's line while a node before the frame can't keep the member's cards (§2.3). A word() key: shown through t(). */
-export const NOT_ON_ACCOUNT_LINE = word("Your community's server needs an update before your cards follow you to other devices.");
+/** Edit home's line while a node before the frame can't keep the member's cards (§2.3). */
+export const NOT_ON_ACCOUNT_LINE = "Your community's server needs an update before your cards follow you to other devices.";
 
 // ── The picker (§1.2) ─────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -430,28 +427,28 @@ export function pickerGroups(
 ): { groups: PickerGroup[]; full: boolean } {
     const list = listOf(layout);
     const full = list.length >= HOME_FRAME_LIMITS.cards;
-    const groups = HOME_CARD_GROUPS.map(g => ({ id: g.id, name: t(g.name), rows: [] as PickerRow[] }));
-    for (const entry of HOME_CARD_TYPES) {
-        if (entry.fixed || !HOME_DRAWN.has(entry.id) || pinned.includes(entry.id) || !cardOnNode(entry.id, answer, role)) continue;
-        const n = list.filter(c => c.type === entry.id).length;
-        const max = entry.multiple?.max ?? 1;
-        const state: PickerRow['state'] = !entry.multiple && n > 0 ? 'on-home' : n >= max ? 'full' : 'add';
-        groups.find(g => g.id === entry.group)!.rows.push({
-            type: entry.id,
-            name: cardName(entry.id, answer.profile),
-            line: t(entry.line),
+    const groups = HOME_CARD_GROUPS.map(g => ({ id: g.id, name: g.name, rows: [] as PickerRow[] }));
+    for (const t of HOME_CARD_TYPES) {
+        if (t.fixed || !HOME_DRAWN.has(t.id) || pinned.includes(t.id) || !cardOnNode(t.id, answer, role)) continue;
+        const n = list.filter(c => c.type === t.id).length;
+        const max = t.multiple?.max ?? 1;
+        const state: PickerRow['state'] = !t.multiple && n > 0 ? 'on-home' : n >= max ? 'full' : 'add';
+        groups.find(g => g.id === t.group)!.rows.push({
+            type: t.id,
+            name: cardName(t.id, answer.profile),
+            line: t.line,
             state: full && state === 'add' ? 'full' : state,
-            count: entry.multiple && n > 0 ? t('{n} of {max} on Home', { n: Math.min(n, max), max }) : null,
-            status: status[entry.id] ?? null,
-            hasSettings: !!entry.readSettings,
+            count: t.multiple && n > 0 ? `${Math.min(n, max)} of ${max} on Home` : null,
+            status: status[t.id] ?? null,
+            hasSettings: !!t.readSettings,
         });
     }
     return { groups: groups.filter(g => g.rows.length > 0), full };
 }
 
-/** What the live line says when a card is added or removed (§1.3), in the member's language (the phone's words). */
-export const addedLine = (name: string) => t('{card} added to Home', { card: name });
-export const removedLine = (name: string) => t('{card} removed. Add a card brings it back.', { card: name });
+/** What the live line says when a card is added or removed (§1.3). */
+export const addedLine = (name: string) => `${name} added to Home`;
+export const removedLine = (name: string) => `${name} removed. Add a card brings it back.`;
 
 // ── What is asked ─────────────────────────────────────────────────────────────────────────────────────────────────
 

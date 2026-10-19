@@ -13,19 +13,19 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, TextInput, Pressable, ScrollView, ActivityIndicator, StyleSheet, Keyboard, Platform } from 'react-native';
 import Constants from 'expo-constants';
-import { createAddressLookup, t, type AddressLookup, type AddressLookupState, type AddressResult, type AddressSearchWords } from '@beanpool/core';
+import { createAddressLookup, type AddressLookup, type AddressLookupState, type AddressResult, type AddressSearchWords } from '@beanpool/core';
 import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { nominatimHeaders } from '../utils/address-search';
 
-/** The event form's words: it has a map to tap and a pin to place. Written where they are drawn, in the member's language. */
-const eventWords = (): AddressSearchWords => ({
-    label: t('Find an address'),
-    placeholder: t('Street and town, or a place'),
-    unavailable: t("Address search isn't working right now. Tap the map or use your location."),
-    noMatches: t('No matches. Try a street and town, or tap the map.'),
-    source: t('Addresses from OpenStreetMap. What you type here is sent to them.'),
-    pickLabel: (place) => t('Put the pin at {place}', { place }),
-});
+/** The event form's words: it has a map to tap and a pin to place. */
+const EVENT_WORDS: AddressSearchWords = {
+    label: 'Find an address',
+    placeholder: 'Street and town, or a place',
+    unavailable: "Address search isn't working right now. Tap the map or use your location.",
+    noMatches: 'No matches. Try a street and town, or tap the map.',
+    source: 'Addresses from OpenStreetMap. What you type here is sent to them.',
+    pickLabel: (place) => `Put the pin at ${place}`,
+};
 
 interface AddressSearchProps {
     onPick: (result: AddressResult) => void;
@@ -36,7 +36,7 @@ interface AddressSearchProps {
     words?: AddressSearchWords;
 }
 
-export function AddressSearch({ onPick, onResultsShown, accent, words = eventWords() }: AddressSearchProps) {
+export function AddressSearch({ onPick, onResultsShown, accent, words = EVENT_WORDS }: AddressSearchProps) {
     const { colors } = useTheme();
     const styles = useStyles(makeStyles);
     const [query, setQuery] = useState('');
@@ -93,7 +93,7 @@ export function AddressSearch({ onPick, onResultsShown, accent, words = eventWor
                     accessibilityLabel={words.label}
                 />
                 {state.status === 'searching' && (
-                    <ActivityIndicator style={styles.spinner} size="small" color={accent} accessibilityLabel={t('Searching')} />
+                    <ActivityIndicator style={styles.spinner} size="small" color={accent} accessibilityLabel="Searching" />
                 )}
             </View>
             {open && state.status === 'error' && (
@@ -112,7 +112,7 @@ export function AddressSearch({ onPick, onResultsShown, accent, words = eventWor
                             onPress={() => pick(item)}
                             style={({ pressed }) => [styles.row, idx > 0 && styles.rowDivider, pressed && styles.rowPressed]}
                             accessibilityRole="button"
-                            accessibilityLabel={(words.pickLabel ?? eventWords().pickLabel!)(item.displayName)}
+                            accessibilityLabel={(words.pickLabel ?? EVENT_WORDS.pickLabel!)(item.displayName)}
                         >
                             <Text style={styles.rowTitle} numberOfLines={1}>{item.shortName || item.displayName}</Text>
                             <Text style={styles.rowSub} numberOfLines={1}>{item.displayName}</Text>

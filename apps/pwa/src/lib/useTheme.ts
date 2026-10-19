@@ -24,7 +24,6 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { word, type WordKey } from '@beanpool/core';
 
 export type Theme = 'dark' | 'light';
 export type ThemePreference = 'system' | 'light' | 'dark';
@@ -41,11 +40,10 @@ const DARK_QUERY = '(prefers-color-scheme: dark)';
 // --header-bg in index.css, so the browser chrome runs on from the header.
 const THEME_COLOR: Record<Theme, string> = { light: '#fbfaf8', dark: '#1d231d' };
 
-/** Settings → Appearance's three choices. The labels are word() keys: Settings shows them through t(). */
-export const THEME_PREFERENCE_OPTIONS: { value: ThemePreference; label: WordKey }[] = [
-    { value: 'system', label: word('Same as device') },
-    { value: 'light', label: word('Light', 'appearance') },
-    { value: 'dark', label: word('Dark', 'appearance') },
+export const THEME_PREFERENCE_OPTIONS: { value: ThemePreference; label: string }[] = [
+    { value: 'system', label: 'Same as device' },
+    { value: 'light', label: 'Light' },
+    { value: 'dark', label: 'Dark' },
 ];
 
 export function resolveTheme(preference: ThemePreference, systemDark: boolean): Theme {

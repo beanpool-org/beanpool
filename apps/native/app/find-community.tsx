@@ -21,18 +21,12 @@ import {
 import { joinAnotherCommunity, joinedNudge, PROTECT_REDIRECT, HOME_REDIRECT } from '../utils/join-another-community';
 import { claimProbeOrigin, claimRouteFor } from '../utils/claim-link';
 import { readClaimStatus } from '../utils/node-claim';
-import { FIND_COMMUNITY_WORDS, NOT_HERE_TYPE_YOUR_TOWN, TYPE_YOUR_TOWN, findCommunityState, t, type AddressResult } from '@beanpool/core';
+import { FIND_COMMUNITY_WORDS, FIND_TOWN_SEARCH_WORDS, NOT_HERE_TYPE_YOUR_TOWN, TYPE_YOUR_TOWN, findCommunityState, t, type AddressResult } from '@beanpool/core';
 import { AddressSearch } from '../components/AddressSearch';
 import { SetUpServerRow } from '../components/SetUpServerRow';
-import { readTypedPlace, saveTypedPlace, forgetTypedPlace, LOCATION_NOTES, type TypedPlace } from '../utils/typed-place';
-import { joinedNudgeWords } from '../utils/joined-nudge-words';
-import { findLineWords, findTownSearchWords, nearWords } from '../components/find-community-lines';
-import { welcomeLineWords } from '../components/welcome/welcome-lines';
+import { readTypedPlace, saveTypedPlace, forgetTypedPlace, nearLine, LOCATION_NOTES, type TypedPlace } from '../utils/typed-place';
 
 export { ErrorBoundary };
-
-/** core's links to the town search: word() keys, t()'d where shown. */
-const LINES = { typeYourTown: TYPE_YOUR_TOWN, notHereTypeYourTown: NOT_HERE_TYPE_YOUR_TOWN };
 
 const LIST_LIMIT = 20;
 
@@ -60,8 +54,7 @@ export default function FindCommunityScreen() {
         container: { flex: 1, backgroundColor: colors.surface.page },
         header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, minHeight: 56, borderBottomWidth: 1, borderBottomColor: colors.border.default, backgroundColor: theme === 'dark' ? colors.surface.card : colors.text.heading },
         backButton: { width: 48, height: 48, justifyContent: 'center', alignItems: 'center' },
-        // In capitals in the words, never a textTransform (the phone's rules, not the language's).
-        headerTitle: { flex: 1, textAlign: 'center', fontSize: 16, fontWeight: 'bold', color: colors.brand.primary, letterSpacing: 0.5 },
+        headerTitle: { flex: 1, textAlign: 'center', fontSize: 16, fontWeight: 'bold', color: colors.brand.primary, letterSpacing: 0.5, textTransform: 'uppercase' },
         scroll: { padding: 16 },
         lead: { fontSize: 15, color: colors.text.body, lineHeight: 21, marginBottom: 12 },
         sectionLabel: { fontSize: 12, fontWeight: 'bold', color: colors.text.secondary, letterSpacing: 1, marginTop: 20, marginBottom: 8, marginLeft: 4 },
@@ -240,9 +233,9 @@ export default function FindCommunityScreen() {
         setWatchBusy(false);
         if (r.ok) {
             setWatches(w => [...(w ?? []).filter(x => x.id !== r.value.id), r.value]);
-            setWatchNote(t("Done. You'll be told when a community starts near here."));
+            setWatchNote("Done. You'll be told when a community starts near here.");
         } else {
-            setWatchNote(findLineWords(r.message));
+            setWatchNote(r.message);
         }
     };
 
@@ -250,7 +243,7 @@ export default function FindCommunityScreen() {
         if (!identity) return;
         const r = await unwatchPlace(identity, id);
         if (r.ok) setWatches(w => (w ?? []).filter(x => x.id !== id));
-        else setWatchNote(findLineWords(r.message));
+        else setWatchNote(r.message);
     };
 
     // ── Asking, and joining ─────────────────────────────────────────────────────────────────────────────
@@ -299,7 +292,7 @@ export default function FindCommunityScreen() {
             const returnUrl = await AsyncStorage.getItem('beanpool_anchor_url');
             const joined = await joinAnotherCommunity({ targetUrl: url, code: invite, identity, returnUrl, knownName: name });
             await forgetKnock(identity.publicKey, url);
-            const nudge = joinedNudgeWords(joinedNudge(joined.name), joined.name);
+            const nudge = joinedNudge(joined.name);
             Alert.alert(nudge.title, nudge.body, [
                 { text: nudge.later, onPress: () => router.replace({ pathname: '/profile-setup', params: { redirect: HOME_REDIRECT } }) },
                 // Only where each community keeps its own sign-in copy (a build without a key vault).
@@ -308,9 +301,7 @@ export default function FindCommunityScreen() {
                     : []),
             ], { cancelable: false });
         } catch (e: any) {
-            // The redeem's own words (the community's) as given; the phone's (redeemInvite's: the node down, no answer in
-            // time, a refusal with no words; the refusal of an address) in the member's language, as the invite join says them.
-            Alert.alert(t("Couldn't join"), e?.message ? welcomeLineWords(e.message) : t('Please try again.'));
+            Alert.alert("Couldn't join", e?.message || 'Please try again.');
         } finally {
             setJoining(null);
         }
@@ -326,7 +317,7 @@ export default function FindCommunityScreen() {
     const renderKnock = (url: string | null, name: string | null, community?: DirectoryCommunity) => {
         const state = stateFor(url);
         if (state.kind === 'no_address' || state.kind === 'waiting' || state.kind === 'member') {
-            return <Text style={styles.note}>{findLineWords(state.note)}</Text>;
+            return <Text style={styles.note}>{state.note}</Text>;
         }
         if (state.kind === 'checking') {
             return <ActivityIndicator style={{ marginTop: 10, alignSelf: 'flex-start' }} color={colors.brand.primary} />;
@@ -334,10 +325,10 @@ export default function FindCommunityScreen() {
         if (state.kind === 'unreachable') {
             return (
                 <View>
-                    <Text style={styles.refusal}>{findLineWords(state.note)}</Text>
+                    <Text style={styles.refusal}>{state.note}</Text>
                     <View style={styles.actions}>
                         <Pressable style={styles.secondary} onPress={() => url && readStatus(url)} accessibilityRole="button">
-                            <Text style={styles.secondaryText}>{t('Check again')}</Text>
+                            <Text style={styles.secondaryText}>Check again</Text>
                         </Pressable>
                     </View>
                 </View>
@@ -346,16 +337,16 @@ export default function FindCommunityScreen() {
         if (state.kind === 'invited') {
             return (
                 <View>
-                    <Text style={styles.note}>{findLineWords(state.note)}</Text>
+                    <Text style={styles.note}>{state.note}</Text>
                     <View style={styles.actions}>
                         <Pressable
                             style={[styles.primary, joining === url && { opacity: 0.6 }]}
                             onPress={() => url && join(url, name, state.invite)}
                             disabled={!!joining}
                             accessibilityRole="button"
-                            accessibilityLabel={name ? t('Join {name}', { name }) : t('Join this community')}
+                            accessibilityLabel={`Join ${name ?? 'this community'}`}
                         >
-                            <Text style={styles.primaryText}>{joining === url ? t('Joining…') : name ? t('Join {name}', { name }) : t('Join now')}</Text>
+                            <Text style={styles.primaryText}>{joining === url ? 'Joining…' : `Join ${name ?? 'now'}`}</Text>
                         </Pressable>
                     </View>
                 </View>
@@ -363,7 +354,7 @@ export default function FindCommunityScreen() {
         }
         // 'ask', or a refusal: the community's own words, and the button only where asking again could work.
         const refused = state.kind === 'refused';
-        const noteView = state.note ? <Text style={refused ? styles.refusal : styles.note}>{findLineWords(state.note)}</Text> : null;
+        const noteView = state.note ? <Text style={refused ? styles.refusal : styles.note}>{state.note}</Text> : null;
         if (!community || (refused && !state.canAsk)) return noteView;
         if (openForm !== community.key) {
             return (
@@ -375,9 +366,9 @@ export default function FindCommunityScreen() {
                             onPress={() => { setOpenForm(community.key); setFormError(null); }}
                             disabled={!identity}
                             accessibilityRole="button"
-                            accessibilityLabel={t('Ask to join {name}', { name: communityLabel(community) })}
+                            accessibilityLabel={`Ask to join ${communityLabel(community)}`}
                         >
-                            <Text style={styles.primaryText}>{t('Ask to join')}</Text>
+                            <Text style={styles.primaryText}>Ask to join</Text>
                         </Pressable>
                     </View>
                 </View>
@@ -385,27 +376,27 @@ export default function FindCommunityScreen() {
         }
         return (
             <View>
-                <Text style={styles.label}>{t('Your name')}</Text>
+                <Text style={styles.label}>Your name</Text>
                 <TextInput
                     style={styles.input}
                     value={callsign}
                     onChangeText={v => setCallsign(v.slice(0, KNOCK_CALLSIGN_CHARS))}
                     maxLength={KNOCK_CALLSIGN_CHARS}
                     autoCapitalize="words"
-                    accessibilityLabel={t('Your name')}
+                    accessibilityLabel="Your name"
                 />
-                <Text style={styles.label}>{t('A few words about yourself')}</Text>
+                <Text style={styles.label}>A few words about yourself</Text>
                 <TextInput
                     style={[styles.input, styles.multiline]}
                     value={message}
                     onChangeText={v => setMessage(Array.from(v).slice(0, KNOCK_MESSAGE_CHARS).join(''))}
                     multiline
-                    placeholder={t("Where you live, what you'd like to share or learn")}
+                    placeholder="Where you live, what you'd like to share or learn"
                     placeholderTextColor={colors.text.muted}
-                    accessibilityLabel={t('A few words about yourself')}
+                    accessibilityLabel="A few words about yourself"
                 />
                 <Text style={styles.counter}>{Array.from(message).length}/{KNOCK_MESSAGE_CHARS}</Text>
-                {!!formError && <Text style={styles.formError} accessibilityLiveRegion="polite">{findLineWords(formError)}</Text>}
+                {!!formError && <Text style={styles.formError} accessibilityLiveRegion="polite">{formError}</Text>}
                 <View style={styles.actions}>
                     <Pressable
                         style={[styles.primary, sending && { opacity: 0.6 }]}
@@ -413,10 +404,10 @@ export default function FindCommunityScreen() {
                         disabled={sending}
                         accessibilityRole="button"
                     >
-                        <Text style={styles.primaryText}>{sending ? t('Sending…') : t('Send')}</Text>
+                        <Text style={styles.primaryText}>{sending ? 'Sending…' : 'Send'}</Text>
                     </Pressable>
                     <Pressable style={styles.secondary} onPress={() => { setOpenForm(null); setFormError(null); }} accessibilityRole="button">
-                        <Text style={styles.secondaryText}>{t('Cancel')}</Text>
+                        <Text style={styles.secondaryText}>Cancel</Text>
                     </Pressable>
                 </View>
             </View>
@@ -434,10 +425,10 @@ export default function FindCommunityScreen() {
         <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
             <StatusBar style="light" />
             <View style={styles.header}>
-                <Pressable onPress={() => router.back()} style={styles.backButton} accessibilityRole="button" accessibilityLabel={t('Back')}>
+                <Pressable onPress={() => router.back()} style={styles.backButton} accessibilityRole="button" accessibilityLabel="Back">
                     <MaterialCommunityIcons name="arrow-left" size={26} color={colors.text.inverse} />
                 </Pressable>
-                <Text style={styles.headerTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} accessibilityRole="header">{t('FIND A COMMUNITY')}</Text>
+                <Text style={styles.headerTitle} numberOfLines={1} accessibilityRole="header">Find a community</Text>
                 <View style={{ width: 48 }} />
             </View>
 
@@ -447,12 +438,12 @@ export default function FindCommunityScreen() {
                 bottomOffset={16}
             >
                 <Text style={styles.lead}>
-                    {t('Communities are where neighbours trade and help each other. Ask to join one near you: any member there can let you in.')}
+                    Communities are where neighbours trade and help each other. Ask to join one near you: any member there can let you in.
                 </Text>
 
                 {asked.length > 0 && (
                     <>
-                        <Text style={styles.sectionLabel}>{t('YOUR REQUESTS TO JOIN')}</Text>
+                        <Text style={styles.sectionLabel}>YOUR REQUESTS TO JOIN</Text>
                         {askedNotListed.map(a => (
                             <View key={a.url} style={styles.card}>
                                 <Text style={styles.name} numberOfLines={2}>{a.name ?? a.url.replace(/^https:\/\//, '')}</Text>
@@ -460,17 +451,17 @@ export default function FindCommunityScreen() {
                             </View>
                         ))}
                         {asked.length > askedNotListed.length && (
-                            <Text style={styles.rowSub}>{t('The others are in the list below.')}</Text>
+                            <Text style={styles.rowSub}>The others are in the list below.</Text>
                         )}
                     </>
                 )}
 
-                <Text style={styles.sectionLabel}>{point ? t('NEAREST FIRST') : t('COMMUNITIES')}</Text>
+                <Text style={styles.sectionLabel}>{point ? 'NEAREST FIRST' : 'COMMUNITIES'}</Text>
                 {typed && !townOpen && (
                     <View style={styles.placeRow} testID="find-town-picked">
-                        <Text style={styles.placeName} numberOfLines={2}>{nearWords(typed)}</Text>
-                        <Pressable style={[styles.linkBtn, { marginTop: 0 }]} onPress={() => setTownOpen(true)} accessibilityRole="button" accessibilityLabel={t('Change the town')}>
-                            <Text style={styles.linkText}>{t('change', undefined, 'the town')}</Text>
+                        <Text style={styles.placeName} numberOfLines={2}>{nearLine(typed)}</Text>
+                        <Pressable style={[styles.linkBtn, { marginTop: 0 }]} onPress={() => setTownOpen(true)} accessibilityRole="button" accessibilityLabel="Change the town">
+                            <Text style={styles.linkText}>change</Text>
                         </Pressable>
                     </View>
                 )}
@@ -478,57 +469,57 @@ export default function FindCommunityScreen() {
                     <View style={styles.placeRow}>
                         <Pressable style={styles.pillBtn} onPress={locateMe} disabled={locating} accessibilityRole="button">
                             <MaterialCommunityIcons name="crosshairs-gps" size={20} color={colors.brand.primary} />
-                            <Text style={styles.pillText}>{locating ? t('Finding you…') : t('Use my location')}</Text>
+                            <Text style={styles.pillText}>{locating ? 'Finding you…' : 'Use my location'}</Text>
                         </Pressable>
                         {!point && !townOpen && (
                             <Pressable style={styles.linkBtn} onPress={() => setTownOpen(true)} accessibilityRole="button" testID="find-type-town">
-                                <Text style={styles.linkText}>{t(LINES.typeYourTown)}</Text>
+                                <Text style={styles.linkText}>{TYPE_YOUR_TOWN}</Text>
                             </Pressable>
                         )}
                     </View>
                 )}
                 {!!point && !typed && !townOpen && (
                     <Pressable style={[styles.linkBtn, { alignSelf: 'flex-start', marginTop: 0 }]} onPress={() => setTownOpen(true)} accessibilityRole="button" testID="find-type-town-instead">
-                        <Text style={styles.linkText}>{t(LINES.notHereTypeYourTown)}</Text>
+                        <Text style={styles.linkText}>{NOT_HERE_TYPE_YOUR_TOWN}</Text>
                     </Pressable>
                 )}
-                {!!locationNote && <Text style={[styles.rowSub, { marginTop: 6 }]} accessibilityLiveRegion="polite">{findLineWords(locationNote)}</Text>}
+                {!!locationNote && <Text style={[styles.rowSub, { marginTop: 6 }]} accessibilityLiveRegion="polite">{locationNote}</Text>}
                 {townOpen && (
                     <View style={{ marginTop: 10 }}>
-                        <AddressSearch onPick={r => void pickTown(r)} accent={colors.brand.primary} words={findTownSearchWords()} />
+                        <AddressSearch onPick={r => void pickTown(r)} accent={colors.brand.primary} words={FIND_TOWN_SEARCH_WORDS} />
                         <Pressable style={[styles.linkBtn, { alignSelf: 'flex-start', marginTop: 4 }]} onPress={() => setTownOpen(false)} accessibilityRole="button"
-                            accessibilityLabel={typed ? t('Cancel, and keep {place}', { place: nearWords(typed) }) : t('Cancel the town search')} testID="find-town-cancel">
-                            <Text style={styles.linkText}>{t('Cancel')}</Text>
+                            accessibilityLabel={typed ? `Cancel, and keep ${nearLine(typed)}` : 'Cancel the town search'} testID="find-town-cancel">
+                            <Text style={styles.linkText}>Cancel</Text>
                         </Pressable>
                     </View>
                 )}
 
-                <Text style={[styles.label, { marginTop: 16 }]}>{t("Know the community's name, or its server address?")}</Text>
+                <Text style={[styles.label, { marginTop: 16 }]}>Know the community's name, or its server address?</Text>
                 <View style={styles.searchBox}>
                     <MaterialCommunityIcons name="magnify" size={20} color={colors.text.muted} />
                     <TextInput
                         style={styles.searchInput}
                         value={query}
                         onChangeText={setQuery}
-                        placeholder={t('Community name')}
+                        placeholder="Community name"
                         placeholderTextColor={colors.text.muted}
                         returnKeyType="search"
                         autoCorrect={false}
-                        accessibilityLabel={t('Search communities by name')}
+                        accessibilityLabel="Search communities by name"
                     />
                 </View>
                 {claimable && (
                     <View style={[styles.card, { marginTop: 10 }]}>
-                        <Text style={styles.name}>{t('{name} has no owner yet', { name: claimable.name })}</Text>
+                        <Text style={styles.name}>{claimable.name} has no owner yet</Text>
                         <Text style={styles.facts} selectable>{claimable.origin}</Text>
-                        <Text style={styles.note}>{t('If you installed it, claim it with the one-time code on the server.')}</Text>
+                        <Text style={styles.note}>If you installed it, claim it with the one-time code on the server.</Text>
                         <View style={styles.actions}>
                             <Pressable
                                 style={styles.primary}
                                 onPress={() => router.push(claimRouteFor({ node: claimable.origin, nodeRefused: false, codeId: claimable.codeId, code: null }) as any)}
                                 accessibilityRole="button"
                             >
-                                <Text style={styles.primaryText}>{t('Claim {name}', { name: claimable.name })}</Text>
+                                <Text style={styles.primaryText}>Claim {claimable.name}</Text>
                             </Pressable>
                         </View>
                     </View>
@@ -539,14 +530,14 @@ export default function FindCommunityScreen() {
                         <ActivityIndicator color={colors.brand.primary} style={{ marginVertical: 24 }} />
                     ) : listError ? (
                         <View>
-                            <Text style={styles.empty}>{findLineWords(listError)}</Text>
+                            <Text style={styles.empty}>{listError}</Text>
                             <Pressable style={styles.secondary} onPress={loadList} accessibilityRole="button">
-                                <Text style={styles.secondaryText}>{t('Try again')}</Text>
+                                <Text style={styles.secondaryText}>Try again</Text>
                             </Pressable>
                         </View>
                     ) : listed.length === 0 ? (
                         <Text style={styles.empty} testID="find-empty">
-                            {!listFetchedAt ? t(FIND_COMMUNITY_WORDS.notLoaded) : query.trim() ? t('No community by that name is listed.') : t(FIND_COMMUNITY_WORDS.noneNear)}
+                            {!listFetchedAt ? t(FIND_COMMUNITY_WORDS.notLoaded) : query.trim() ? 'No community by that name is listed.' : t(FIND_COMMUNITY_WORDS.noneNear)}
                         </Text>
                     ) : [
                         farLine ? <Text key="far" style={styles.empty} testID="find-far">{farLine}</Text> : null,
@@ -565,13 +556,13 @@ export default function FindCommunityScreen() {
                     ]}
                 </View>
 
-                <Text style={styles.sectionLabel}>{t('NOTHING NEAR YOU?')}</Text>
+                <Text style={styles.sectionLabel}>NOTHING NEAR YOU?</Text>
                 <View style={styles.card}>
                     <Pressable style={styles.row} onPress={() => router.push('/start-community')} accessibilityRole="button">
                         <MaterialCommunityIcons name="home-plus-outline" size={24} color={colors.brand.primary} />
                         <View style={styles.rowText}>
-                            <Text style={styles.rowTitle}>{t('Start a community')}</Text>
-                            <Text style={styles.rowSub}>{t('What it takes, and how to begin')}</Text>
+                            <Text style={styles.rowTitle}>Start a community</Text>
+                            <Text style={styles.rowSub}>What it takes, and how to begin</Text>
                         </View>
                         <MaterialCommunityIcons name="chevron-right" size={22} color={colors.text.muted} />
                     </Pressable>
@@ -579,27 +570,26 @@ export default function FindCommunityScreen() {
                     <View style={[styles.row, styles.divider]}>
                         <MaterialCommunityIcons name="bell-ring-outline" size={24} color={colors.brand.primary} />
                         <View style={styles.rowText}>
-                            <Text style={styles.rowTitle}>{t('Tell me when one starts here')}</Text>
+                            <Text style={styles.rowTitle}>Tell me when one starts here</Text>
                             <Text style={styles.rowSub}>
-                                {point ? t('Only the area (about 10 km) is kept, never where you are exactly.') : t('Use your location or type your town first, so we know where "here" is.')}
+                                {point ? 'Only the area (about 10 km) is kept, never where you are exactly.' : 'Use your location or type your town first, so we know where "here" is.'}
                             </Text>
                         </View>
                     </View>
                     {!!point && (
                         <Pressable style={[styles.secondary, watchBusy && { opacity: 0.6 }]} onPress={watchHere} disabled={watchBusy || !identity} accessibilityRole="button">
-                            <Text style={styles.secondaryText}>{watchBusy ? t('Saving…') : t('Tell me')}</Text>
+                            <Text style={styles.secondaryText}>{watchBusy ? 'Saving…' : 'Tell me'}</Text>
                         </Pressable>
                     )}
                     {!!watchNote && <Text style={styles.note}>{watchNote}</Text>}
                     {(watches ?? []).map(w => (
                         <View key={w.id} style={[styles.row, styles.divider]}>
                             <View style={styles.rowText}>
-                                {/* The coordinates as a map writes them: a place's code, not a number to read. */}
-                                <Text style={styles.rowTitle}>{t('Watching {lat}, {lng}', { lat: w.lat.toFixed(1), lng: w.lng.toFixed(1) })}</Text>
-                                <Text style={styles.rowSub}>{t('Within {km} km', { km: w.radiusKm })}</Text>
+                                <Text style={styles.rowTitle}>Watching {w.lat.toFixed(1)}, {w.lng.toFixed(1)}</Text>
+                                <Text style={styles.rowSub}>Within {w.radiusKm} km</Text>
                             </View>
-                            <Pressable style={styles.secondary} onPress={() => stopWatching(w.id)} accessibilityRole="button" accessibilityLabel={t('Stop watching this place')}>
-                                <Text style={styles.secondaryText}>{t('Stop')}</Text>
+                            <Pressable style={styles.secondary} onPress={() => stopWatching(w.id)} accessibilityRole="button" accessibilityLabel="Stop watching this place">
+                                <Text style={styles.secondaryText}>Stop</Text>
                             </Pressable>
                         </View>
                     ))}

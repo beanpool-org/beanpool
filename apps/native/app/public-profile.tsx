@@ -25,21 +25,17 @@ import { cardNeedsFetch, fetchCardByKey } from '../utils/members-lookup';
 import { useShowcaseMode } from '../utils/use-reader-features';
 import { readsOwn } from '../utils/reads-own';
 import { LocalCommunityMark } from '../components/showcase/LocalCommunityMark';
-import { LOCAL_COMMUNITY_LINES, formatDate, formatNumber, t, tn, type TierName } from '@beanpool/core';
+import { LOCAL_COMMUNITY_LINES } from '@beanpool/core';
 import { beansOn, membersByKey } from '../utils/node-profile';
 import { meetingTips } from '../utils/market-global';
-import { TIER_WORDS } from '../utils/trust-tier';
-import { Sentence } from '../components/Sentence';
-import { signedRequestWords } from '../components/signed-request-lines';
 
 
 
-/** A day through core's formatDate ("3 Oct 2026"), in the member's language; '' for none or a date that can't be read. */
-const fmtDay = (iso?: string | null, caps = false): string => {
+const fmtMonthYear = (iso?: string | null): string => {
     if (!iso) return '';
     const d = new Date(iso);
     if (isNaN(d.getTime())) return '';
-    return formatDate(d, 'day-month-year', { caps });
+    return d.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
 };
 
 const fmtLastActive = (iso?: string | null): string => {
@@ -47,15 +43,12 @@ const fmtLastActive = (iso?: string | null): string => {
     const d = new Date(iso);
     if (isNaN(d.getTime())) return '';
     const days = Math.floor((Date.now() - d.getTime()) / (1000 * 60 * 60 * 24));
-    if (days <= 0) return t('Active today');
-    if (days === 1) return t('Active yesterday');
-    if (days < 7) return tn(days, 'Active {n}d ago', 'Active {n}d ago');
-    if (days < 30) return tn(Math.floor(days / 7), 'Active {n}w ago', 'Active {n}w ago');
-    return t('Active {date}', { date: fmtDay(iso) });
+    if (days <= 0) return 'Active today';
+    if (days === 1) return 'Active yesterday';
+    if (days < 7) return `Active ${days}d ago`;
+    if (days < 30) return `Active ${Math.floor(days / 7)}w ago`;
+    return `Active ${d.toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}`;
 };
-
-/** A tier the node names (Newcomer, Resident, Steward, Elder) in the member's language; one this build doesn't know as the node wrote it. */
-const tierWords = (name?: string | null): string => (name && Object.prototype.hasOwnProperty.call(TIER_WORDS, name) ? t(TIER_WORDS[name as TierName]) : name ?? '');
 
 export default function PublicProfileScreen() {
     const { publicKey, callsign } = useLocalSearchParams<{ publicKey?: string | string[]; callsign?: string | string[] }>();
@@ -291,13 +284,11 @@ export default function PublicProfileScreen() {
         },
         starRating: { fontSize: 13, color: colors.trust.star, marginBottom: 4, letterSpacing: -1 },
         statValueOverall: { fontSize: 18, fontWeight: '800', color: colors.text.heading, marginBottom: 2 },
-        // The stat labels, the role badges and the review dates keep their capitals in the words (and formatDate's caps), never
-        // a textTransform: that upper-cases a translation by the phone's rules, not the language's (Turkish i).
-        statLabelOverall: { fontSize: 9, fontWeight: '700', color: colors.text.muted, letterSpacing: 0.5 },
+        statLabelOverall: { fontSize: 9, fontWeight: '700', color: colors.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 },
         statValueProvider: { fontSize: 18, fontWeight: '800', color: colors.brand.primary, marginBottom: 2, marginTop: 4 },
-        statLabelProvider: { fontSize: 9, fontWeight: '700', color: colors.brand.primary, letterSpacing: 0.5 },
+        statLabelProvider: { fontSize: 9, fontWeight: '700', color: colors.brand.primary, textTransform: 'uppercase', letterSpacing: 0.5 },
         statValueReceiver: { fontSize: 18, fontWeight: '800', color: theme === 'dark' ? colors.text.heading : palette.indigo500, marginBottom: 2, marginTop: 4 },
-        statLabelReceiver: { fontSize: 9, fontWeight: '700', color: theme === 'dark' ? colors.text.secondary : palette.indigo500, letterSpacing: 0.5 },
+        statLabelReceiver: { fontSize: 9, fontWeight: '700', color: theme === 'dark' ? colors.text.secondary : palette.indigo500, textTransform: 'uppercase', letterSpacing: 0.5 },
 
         // Tabs
         tabBar: {
@@ -346,10 +337,10 @@ export default function PublicProfileScreen() {
         roleBadge: { paddingHorizontal: 7, paddingVertical: 3, borderRadius: 5 },
         roleBadgeProvider: { backgroundColor: colors.profile.roleProviderBg },
         roleBadgeReceiver: { backgroundColor: colors.profile.roleReceiverBg },
-        roleText: { fontSize: 9, fontWeight: '800', letterSpacing: 0.3 },
+        roleText: { fontSize: 9, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.3 },
         roleTextProvider: { color: colors.brand.primary },
         roleTextReceiver: { color: theme === 'dark' ? palette.indigo300 : palette.indigo600 },
-        dateText: { fontSize: 10, fontWeight: '700', color: colors.text.muted, letterSpacing: 0.3, flexShrink: 0, marginLeft: 8 },
+        dateText: { fontSize: 10, fontWeight: '700', color: colors.text.muted, textTransform: 'uppercase', letterSpacing: 0.3, flexShrink: 0, marginLeft: 8 },
         commentText: {
             fontSize: 14, color: colors.text.body, fontStyle: 'italic', lineHeight: 20,
             backgroundColor: colors.surface.subtle, padding: 12, borderRadius: 8,
@@ -641,11 +632,9 @@ export default function PublicProfileScreen() {
             await vouchMember(pubKeyStr, level);
             const fresh = await getTrustProfile(pubKeyStr).catch(() => null);
             if (fresh) setTrust(fresh);
-            // With no name of the voucher's own, the badge says "Vouched by a sponsor" (as it always has) in its own words.
-            else setTrust((cur: any) => cur ? { ...cur, elderVouch: identity?.callsign ? { callsign: identity.callsign } : { sponsor: true } } : cur);
+            else setTrust((t: any) => t ? { ...t, elderVouch: { callsign: identity?.callsign || 'a sponsor' } } : t);
         } catch (e: any) {
-            // The node's own words as it sent them (slice S4); the phone's own (utils/db.ts _signedRequest) in the member's language.
-            Alert.alert(t('Could not vouch'), e?.message ? signedRequestWords(e.message) : t('Please try again.'));
+            Alert.alert('Could not vouch', e?.message || 'Please try again.');
         } finally {
             setVouching(false);
         }
@@ -655,13 +644,13 @@ export default function PublicProfileScreen() {
     const chooseVouchLevel = () => {
         if (vouching || !pubKeyStr) return;
         Alert.alert(
-            profile?.callsign ? t('Vouch for {name}', { name: profile.callsign }) : t('Vouch for this member'),
-            t("Choose how deep a credit line to extend. This lets them trade on credit down to that floor — it reflects your confidence in them. No beans leave your wallet."),
+            `Vouch for ${profile?.callsign || 'this member'}`,
+            "Choose how deep a credit line to extend. This lets them trade on credit down to that floor — it reflects your confidence in them. No beans leave your wallet.",
             [
-                { text: t('Light · −{n}', { n: 25 }), onPress: () => handleVouch(1) },
-                { text: t('Standard · −{n}', { n: 50 }), onPress: () => handleVouch(2) },
-                { text: t('Deep · −{n}', { n: 100 }), onPress: () => handleVouch(3) },
-                { text: t('Cancel'), style: 'cancel' },
+                { text: 'Light · −25', onPress: () => handleVouch(1) },
+                { text: 'Standard · −50', onPress: () => handleVouch(2) },
+                { text: 'Deep · −100', onPress: () => handleVouch(3) },
+                { text: 'Cancel', style: 'cancel' },
             ]
         );
     };
@@ -670,30 +659,24 @@ export default function PublicProfileScreen() {
 
     const handleBlockUser = () => {
         if (!pubKeyStr || isBlocking) return;
-        // Whole sentences with the member's name or without it ("this user"), never a stand-in glued into a sentence.
-        const name = callsignStr;
+        const targetName = callsignStr || 'this user';
         Alert.alert(
-            name ? t('Block {name}?', { name }) : t('Block this user?'),
-            name
-                ? t('This will instantly hide all posts, offers, and messages from {name}, and notify moderation.', { name })
-                : t('This will instantly hide all posts, offers, and messages from this user, and notify moderation.'),
+            `Block ${targetName}?`,
+            `This will instantly hide all posts, offers, and messages from ${targetName}, and notify moderation.`,
             [
-                { text: t('Cancel'), style: 'cancel' },
+                { text: 'Cancel', style: 'cancel' },
                 {
-                    text: t('Block User'),
+                    text: 'Block User',
                     style: 'destructive',
                     onPress: async () => {
                         try {
                             setIsBlocking(true);
-                            // The reason goes to the node as written (moderators read it), not in the member's language.
                             await blockUser(pubKeyStr, identity?.publicKey, 'Abusive user reported via Trust Profile', undefined);
-                            Alert.alert(t('User Blocked'), name
-                                ? t('{name} has been blocked and removed from your feed.', { name })
-                                : t('this user has been blocked and removed from your feed.'), [
-                                { text: t('OK'), onPress: () => router.back() }
+                            Alert.alert('User Blocked', `${targetName} has been blocked and removed from your feed.`, [
+                                { text: 'OK', onPress: () => router.back() }
                             ]);
                         } catch (e) {
-                            Alert.alert(t('Error'), t('Failed to block user. Please try again.'));
+                            Alert.alert('Error', 'Failed to block user. Please try again.');
                         } finally {
                             setIsBlocking(false);
                         }
@@ -714,11 +697,11 @@ export default function PublicProfileScreen() {
                         style={styles.backButton}
                     >
                         <Text style={styles.backText}>←</Text>
-                        <Text style={styles.backTextLabel}>{t('Back')}</Text>
+                        <Text style={styles.backTextLabel}>Back</Text>
                     </Pressable>
                 </View>
                 <Text style={{ margin: 24, fontSize: 16, lineHeight: 22, textAlign: 'center', color: colors.text.secondary }}>
-                    {t('Who posted this is shown to members of this community. Join it to see their profile.')}
+                    Who posted this is shown to members of this community. Join it to see their profile.
                 </Text>
             </SafeAreaView>
         );
@@ -740,18 +723,18 @@ export default function PublicProfileScreen() {
                     style={styles.backButton}
                 >
                     <Text style={styles.backText}>←</Text>
-                    <Text style={styles.backTextLabel}>{t('Back')}</Text>
+                    <Text style={styles.backTextLabel}>Back</Text>
                 </Pressable>
-                <Text style={[styles.headerTitle, { flexShrink: 1, marginHorizontal: 8 }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{isSelf ? t('My Profile') : t('Trust Profile')}</Text>
+                <Text style={styles.headerTitle}>{isSelf ? 'My Profile' : 'Trust Profile'}</Text>
                 {isSelf ? (
                     <Pressable accessibilityRole="button" style={styles.editBtn} onPress={() => router.push({ pathname: '/(tabs)/settings', params: { section: 'profile' } })}>
                         <MaterialCommunityIcons name="pencil" size={15} color={colors.brand.primary} />
-                        <Text style={styles.editBtnText}>{t('Edit')}</Text>
+                        <Text style={styles.editBtnText}>Edit</Text>
                     </Pressable>
                 ) : (
                     <Pressable
                         accessibilityRole="button"
-                        accessibilityLabel={callsignStr ? t('Block user {name}', { name: callsignStr }) : t('Block user')}
+                        accessibilityLabel={`Block user ${callsignStr || ''}`}
                         accessibilityState={{ busy: isBlocking }}
                         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                         disabled={isBlocking}
@@ -763,7 +746,7 @@ export default function PublicProfileScreen() {
                         ) : (
                             <MaterialCommunityIcons name="shield-alert-outline" size={15} color={colors.feedback.danger.fg} />
                         )}
-                        <Text style={{ fontSize: 12, fontWeight: '700', color: colors.feedback.danger.fg }} numberOfLines={1}>{isBlocking ? t('Blocking…') : t('Block')}</Text>
+                        <Text style={{ fontSize: 12, fontWeight: '700', color: colors.feedback.danger.fg }}>{isBlocking ? 'Blocking…' : 'Block'}</Text>
                     </Pressable>
                 )}
             </View>
@@ -779,17 +762,17 @@ export default function PublicProfileScreen() {
                         <MaterialCommunityIcons name="check-decagram" size={22} color={colors.brand.primary} style={{ marginLeft: 6, marginTop: 2, flexShrink: 0 }} />
                     </View>
                     <Text style={styles.pubkeyText}>{pubKeyStr?.slice(0, 16)}...</Text>
-                    {cardUnreachable && <Text style={styles.unreachableText} numberOfLines={2}>{t('Connect to see more')}</Text>}
-                    {!!fmtDay(profile?.joined_at) && (
-                        <Text style={styles.joinedText} numberOfLines={1}>{t('📅 Joined {date}', { date: fmtDay(profile.joined_at) })}</Text>
+                    {cardUnreachable && <Text style={styles.unreachableText} numberOfLines={2}>Connect to see more</Text>}
+                    {profile?.joined_at && (
+                        <Text style={styles.joinedText} numberOfLines={1}>📅 Joined {new Date(profile.joined_at).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</Text>
                     )}
                     {/* Visual Reciprocity Health Ring / Badge (#4). The deal completion rate: Beans, gated like the trust
                         panel below. Where nobody makes a deal (the worldwide community) it read 100% for everyone. */}
                     {showsBeans && (
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.brand.tint, paddingHorizontal: 12, paddingVertical: 5, borderRadius: 20, borderWidth: 1, borderColor: colors.brand.primary, marginTop: 6 }}>
                         <MaterialCommunityIcons name="circle-outline" size={15} color={colors.brand.primary} />
-                        <Text style={{ fontSize: 13, fontWeight: '800', color: colors.brand.primary, flexShrink: 1 }}>
-                            {t('{pct}% Reciprocity Health', { pct: trust?.completionRate === null || trust?.completionRate === undefined ? 100 : Math.round(trust.completionRate * 100) })}
+                        <Text style={{ fontSize: 13, fontWeight: '800', color: colors.brand.primary }}>
+                            {trust?.completionRate === null || trust?.completionRate === undefined ? 100 : Math.round(trust.completionRate * 100)}% Reciprocity Health
                         </Text>
                     </View>
                     )}
@@ -810,7 +793,7 @@ export default function PublicProfileScreen() {
                     trustLoading ? (showsBeans && (
                         <View style={{ marginHorizontal: 16, marginTop: 16, padding: 20, borderRadius: 14, borderWidth: 1, borderColor: colors.border.default, backgroundColor: colors.surface.card, alignItems: 'center', justifyContent: 'center' }}>
                             <ActivityIndicator size="small" color={colors.brand.primary} />
-                            <Text style={{ marginTop: 8, color: colors.text.muted, fontSize: 12, fontWeight: '600' }}>{t('Calculating trust signals...')}</Text>
+                            <Text style={{ marginTop: 8, color: colors.text.muted, fontSize: 12, fontWeight: '600' }}>Calculating trust signals...</Text>
                         </View>
                     )) : trust ? (
                         <>
@@ -820,7 +803,6 @@ export default function PublicProfileScreen() {
                                 const band = RISK_BAND[trust.risk?.band] || RISK_BAND.yellow;
                                 return (
                                     <View style={[styles.safetyBanner, { backgroundColor: band.bg, borderColor: band.border }]}>
-                                        {/* The verdict, its reasons and its tips are the node's own words, shown as it sent them (slice S4). */}
                                         <View style={styles.safetyHeaderRow}>
                                             <Text style={styles.safetyEmoji} allowFontScaling={false}>{band.emoji}</Text>
                                             <Text style={[styles.safetyHeadline, { color: band.text }]}>{trust.risk?.headline}</Text>
@@ -830,8 +812,8 @@ export default function PublicProfileScreen() {
                                         ))}
                                         {(trust.risk?.tips || []).length > 0 && (
                                             <View style={styles.safetyTips}>
-                                                {trust.risk.tips.map((tip: string, i: number) => (
-                                                    <Text key={i} style={styles.safetyTip}>⚠️  {tip}</Text>
+                                                {trust.risk.tips.map((t: string, i: number) => (
+                                                    <Text key={i} style={styles.safetyTip}>⚠️  {t}</Text>
                                                 ))}
                                             </View>
                                         )}
@@ -844,20 +826,15 @@ export default function PublicProfileScreen() {
                                 <Text style={styles.trustEmoji} allowFontScaling={false}>{trust.tier?.emoji || '🌱'}</Text>
                                 <View style={{ flex: 1, minWidth: 0 }}>
                                     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
-                                        <Text style={[styles.trustTierName, { flexShrink: 1 }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{trust.tier?.name ? tierWords(trust.tier.name) : t('Member', undefined, 'trust tier')}</Text>
+                                        <Text style={styles.trustTierName} numberOfLines={1}>{trust.tier?.name || 'Member'}</Text>
                                         <View style={{ backgroundColor: colors.brand.tint, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, borderWidth: 1, borderColor: colors.brand.primary }}>
                                             <Text style={{ fontSize: 13, fontWeight: '900', color: colors.brand.primary }}>
-                                                {tn(Math.round(trust.earnedCredit || 0), '{n} Trust Points', '{n} Trust Points')}
+                                                {Math.round(trust.earnedCredit || 0)} Trust Points
                                             </Text>
                                         </View>
                                     </View>
-                                    <Text style={styles.trustSub} numberOfLines={2}>
-                                        {(() => {
-                                            const since = fmtDay(trust.joinedAt);
-                                            const active = fmtLastActive(trust.lastActiveAt);
-                                            if (since && active) return t('Member since {date} · {active}', { date: since, active });
-                                            return since ? t('Member since {date}', { date: since }) : active;
-                                        })()}
+                                    <Text style={styles.trustSub} numberOfLines={1}>
+                                        {[trust.joinedAt ? `Member since ${fmtMonthYear(trust.joinedAt)}` : '', fmtLastActive(trust.lastActiveAt)].filter(Boolean).join(' · ')}
                                     </Text>
                                     
                                     {/* Clear Nuanced Trust Explanation */}
@@ -867,41 +844,23 @@ export default function PublicProfileScreen() {
                                             const isHighRisk = trust.risk?.band === 'red' || trust.risk?.band === 'black';
                                             const completionPct = trust.completionRate !== null && trust.completionRate !== undefined ? Math.round(trust.completionRate * 100) : 100;
 
-                                            const partners = trust.stats?.uniquePartners || 0;
-                                            // Each verdict one sentence with its bold label inside it (components/Sentence); the
-                                            // partners' count is its own phrase, so each count takes its language's plural.
                                             if (tradeCount === 0) {
                                                 return (
                                                     <Text style={{ fontSize: 12, color: colors.text.secondary, lineHeight: 17, fontWeight: '500' }}>
-                                                        <Sentence
-                                                            text={t('🌱 {label} Has not completed any trades yet. Complete a marketplace trade with them to help build their community trust score.')}
-                                                            parts={{ label: <Text style={{ fontWeight: '700', color: colors.text.heading }}>{t('New Member:')}</Text> }}
-                                                        />
+                                                        🌱 <Text style={{ fontWeight: '700', color: colors.text.heading }}>New Member:</Text> Has not completed any trades yet. Complete a marketplace trade with them to help build their community trust score.
                                                     </Text>
                                                 );
                                             }
                                             if (isHighRisk || completionPct < 75) {
                                                 return (
                                                     <Text style={{ fontSize: 12, color: colors.feedback.danger.fg, lineHeight: 17, fontWeight: '600' }}>
-                                                        <Sentence
-                                                            text={tn(tradeCount,
-                                                                '⚠️ {label} Completed {n} trade with a {pct}% completion rate across {partners}.',
-                                                                '⚠️ {label} Completed {n} trades with a {pct}% completion rate across {partners}.',
-                                                                { pct: completionPct, partners: tn(partners, '{n} partner', '{n} partners') })}
-                                                            parts={{ label: <Text style={{ fontWeight: '800' }}>{t('Mixed Track Record:')}</Text> }}
-                                                        />
+                                                        ⚠️ <Text style={{ fontWeight: '800' }}>Mixed Track Record:</Text> Completed {tradeCount} trade{tradeCount === 1 ? '' : 's'} with a {completionPct}% completion rate across {trust.stats?.uniquePartners || 0} partner{trust.stats?.uniquePartners === 1 ? '' : 's'}.
                                                     </Text>
                                                 );
                                             }
                                             return (
                                                 <Text style={{ fontSize: 12, color: colors.brand.primary, lineHeight: 17, fontWeight: '600' }}>
-                                                    <Sentence
-                                                        text={tn(tradeCount,
-                                                            '🤝 {label} Earned trust through {n} completed trade across {partners}.',
-                                                            '🤝 {label} Earned trust through {n} completed trades across {partners}.',
-                                                            { partners: tn(partners, '{n} unique partner', '{n} unique partners') })}
-                                                        parts={{ label: <Text style={{ fontWeight: '800' }}>{t('Proven Partner:')}</Text> }}
-                                                    />
+                                                    🤝 <Text style={{ fontWeight: '800' }}>Proven Partner:</Text> Earned trust through {tradeCount} completed trade{tradeCount === 1 ? '' : 's'} across {trust.stats?.uniquePartners || 0} unique partner{trust.stats?.uniquePartners === 1 ? '' : 's'}.
                                                 </Text>
                                             );
                                         })()}
@@ -924,17 +883,17 @@ export default function PublicProfileScreen() {
                                             <View style={styles.synergyHeaderRow}>
                                                 <Text style={styles.synergyEmoji}>{synergy.emoji}</Text>
                                                 <View style={{ flex: 1 }}>
-                                                    <Text style={styles.synergyTitle}>{t(synergy.title)}</Text>
-                                                    <Text style={styles.synergyHeadline}>{t(synergy.headline)}</Text>
+                                                    <Text style={styles.synergyTitle}>{synergy.title}</Text>
+                                                    <Text style={styles.synergyHeadline}>{synergy.headline}</Text>
                                                 </View>
                                             </View>
-                                            <Text style={styles.synergySummary}>{t(synergy.summary)}</Text>
+                                            <Text style={styles.synergySummary}>{synergy.summary}</Text>
 
                                             <View style={styles.synergyStrengthsWrap}>
-                                                {synergy.strengths.map((_str, idx: number) => (
+                                                {synergy.strengths.map((str: string, idx: number) => (
                                                     <View key={idx} style={styles.synergyStrengthRow}>
                                                         <Text style={styles.synergyBullet}>✓</Text>
-                                                        <Text style={styles.synergyStrengthText}>{t(synergy.strengths[idx])}</Text>
+                                                        <Text style={styles.synergyStrengthText}>{str}</Text>
                                                     </View>
                                                 ))}
                                             </View>
@@ -942,7 +901,7 @@ export default function PublicProfileScreen() {
                                             {synergy.collaborationTip && (
                                                 <View style={styles.synergyTipBox}>
                                                     <Text style={styles.synergyTipText}>
-                                                        <Sentence text={t('💡 {label} {tip}', { tip: t(synergy.collaborationTip) })} parts={{ label: <Text style={{ fontWeight: '700' }}>{t('Collaboration tip:')}</Text> }} />
+                                                        💡 <Text style={{ fontWeight: '700' }}>Collaboration tip:</Text> {synergy.collaborationTip}
                                                     </Text>
                                                 </View>
                                             )}
@@ -955,20 +914,18 @@ export default function PublicProfileScreen() {
                                         <View style={styles.synergyInviteCard}>
                                             <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
                                                 <Text style={{ fontSize: 20, marginRight: 8 }}>✨</Text>
-                                                <Text style={[styles.synergyInviteTitle, { flexShrink: 1 }]}>{t('Collaboration Chemistry')}</Text>
+                                                <Text style={styles.synergyInviteTitle}>Collaboration Chemistry</Text>
                                             </View>
                                             <Text style={styles.synergyInviteDesc}>
-                                                {callsignStr
-                                                    ? t('Take the 60-second quiz to get tips for working with {name}.', { name: callsignStr })
-                                                    : t('Take the 60-second quiz to get tips for working with this member.')}
+                                                Take the 60-second quiz to get tips for working with {callsignStr || 'this member'}.
                                             </Text>
                                             <Pressable
                                                 accessibilityRole="button"
-                                                accessibilityLabel={t('Take 60 second quiz to discover collaboration synergy')}
+                                                accessibilityLabel="Take 60 second quiz to discover collaboration synergy"
                                                 style={styles.synergyTakeQuizBtn}
                                                 onPress={() => setShowQuizModal(true)}
                                             >
-                                                <Text style={styles.synergyTakeQuizBtnText}>{t('⚡ Take 60s Quiz')}</Text>
+                                                <Text style={styles.synergyTakeQuizBtnText}>⚡ Take 60s Quiz</Text>
                                             </Pressable>
                                         </View>
                                     );
@@ -979,34 +936,27 @@ export default function PublicProfileScreen() {
                                         <View style={styles.synergyInviteCard}>
                                             <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
                                                 <Text style={{ fontSize: 20, marginRight: 8 }}>✨</Text>
-                                                <Text style={[styles.synergyInviteTitle, { flexShrink: 1 }]}>{t('Collaboration Chemistry')}</Text>
+                                                <Text style={styles.synergyInviteTitle}>Collaboration Chemistry</Text>
                                             </View>
                                             <Text style={styles.synergyInviteDesc}>
-                                                {callsignStr
-                                                    ? t("{name} hasn't taken the working style quiz yet. Send a friendly nudge in chat to get tips for working together.", { name: callsignStr })
-                                                    : t("This member hasn't taken the working style quiz yet. Send a friendly nudge in chat to get tips for working together.")}
+                                                {callsignStr || 'This member'} hasn't taken the working style quiz yet. Send a friendly nudge in chat to get tips for working together.
                                             </Text>
                                             <Pressable
                                                 accessibilityRole="button"
-                                                accessibilityLabel={callsignStr ? t('Nudge {name} to take the working style quiz', { name: callsignStr }) : t('Nudge member to take the working style quiz')}
+                                                accessibilityLabel={`Nudge ${callsignStr || 'member'} to take the working style quiz`}
                                                 style={styles.synergyTakeQuizBtn}
                                                 onPress={() => {
                                                     if (pubKeyStr) {
-                                                        // The message starts in the sender's language; they can change it before it goes.
                                                         router.push({
                                                             pathname: `/chat/${pubKeyStr}`,
                                                             params: {
-                                                                prefill: callsignStr
-                                                                    ? t('Hey {name}! Take the 60-second working style quiz on your profile so we can see how we work best together! ⚡', { name: callsignStr })
-                                                                    : t('Hey there! Take the 60-second working style quiz on your profile so we can see how we work best together! ⚡'),
+                                                                prefill: `Hey ${callsignStr || 'there'}! Take the 60-second working style quiz on your profile so we can see how we work best together! ⚡`
                                                             }
                                                         });
                                                     }
                                                 }}
                                             >
-                                                <Text style={styles.synergyTakeQuizBtnText}>
-                                                    {callsignStr ? t('💬 Nudge {name} in Chat', { name: callsignStr }) : t('💬 Nudge Member in Chat')}
-                                                </Text>
+                                                <Text style={styles.synergyTakeQuizBtnText}>💬 Nudge {callsignStr || 'Member'} in Chat</Text>
                                             </Pressable>
                                         </View>
                                     );
@@ -1017,20 +967,18 @@ export default function PublicProfileScreen() {
                                         <View style={styles.synergyInviteCard}>
                                             <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
                                                 <Text style={{ fontSize: 20, marginRight: 8 }}>✨</Text>
-                                                <Text style={[styles.synergyInviteTitle, { flexShrink: 1 }]}>{t('Collaboration Chemistry')}</Text>
+                                                <Text style={styles.synergyInviteTitle}>Collaboration Chemistry</Text>
                                             </View>
                                             <Text style={styles.synergyInviteDesc}>
-                                                {callsignStr
-                                                    ? t('Take the 60-second quiz to get tips for working with {name}.', { name: callsignStr })
-                                                    : t('Take the 60-second quiz to get tips for working with this member.')}
+                                                Take the 60-second quiz to get tips for working with {callsignStr || 'this member'}.
                                             </Text>
                                             <Pressable
                                                 accessibilityRole="button"
-                                                accessibilityLabel={t('Take 60 second quiz to discover collaboration synergy')}
+                                                accessibilityLabel="Take 60 second quiz to discover collaboration synergy"
                                                 style={styles.synergyTakeQuizBtn}
                                                 onPress={() => setShowQuizModal(true)}
                                             >
-                                                <Text style={styles.synergyTakeQuizBtnText}>{t('⚡ Take 60s Quiz')}</Text>
+                                                <Text style={styles.synergyTakeQuizBtnText}>⚡ Take 60s Quiz</Text>
                                             </Pressable>
                                         </View>
                                     );
@@ -1044,17 +992,17 @@ export default function PublicProfileScreen() {
                             <View style={styles.statStrip} testID="trust-track-record">
                                 <View style={styles.statTile}>
                                     <Text style={styles.statTileNum} numberOfLines={1}>{trust.stats?.tradeCount ?? 0}</Text>
-                                    <Text style={styles.statTileLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Trades')}</Text>
+                                    <Text style={styles.statTileLabel} numberOfLines={1}>Trades</Text>
                                 </View>
                                 <View style={styles.statDivider} />
                                 <View style={styles.statTile}>
                                     <Text style={styles.statTileNum} numberOfLines={1}>{trust.stats?.uniquePartners ?? 0}</Text>
-                                    <Text style={styles.statTileLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Partners')}</Text>
+                                    <Text style={styles.statTileLabel} numberOfLines={1}>Partners</Text>
                                 </View>
                                 <View style={styles.statDivider} />
                                 <View style={styles.statTile}>
                                     <Text style={styles.statTileNum} numberOfLines={1}>{trust.completionRate === null || trust.completionRate === undefined ? '100%' : `${Math.round(trust.completionRate * 100)}%`}</Text>
-                                    <Text style={styles.statTileLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Completion')}</Text>
+                                    <Text style={styles.statTileLabel} numberOfLines={1}>Completion</Text>
                                 </View>
                             </View>
                             )}
@@ -1062,7 +1010,7 @@ export default function PublicProfileScreen() {
                             {/* Mutual connections — the line that calms nerves */}
                             {trust.mutualCount > 0 && (
                                 <View style={styles.mutualCard}>
-                                    <Text style={styles.mutualTitle}>{tn(trust.mutualCount, '👥 {n} connection in common', '👥 {n} connections in common')}</Text>
+                                    <Text style={styles.mutualTitle}>👥 {trust.mutualCount} connection{trust.mutualCount === 1 ? '' : 's'} in common</Text>
                                     {trust.mutualConnections.map((m: any) => (
                                         <Pressable
                                             key={m.publicKey}
@@ -1072,7 +1020,7 @@ export default function PublicProfileScreen() {
                                         >
                                             <MemberAvatar avatarUrl={m.avatarUrl} pubkey={m.publicKey} callsign={m.callsign || '?'} size={32} />
                                             <Text style={styles.mutualName} numberOfLines={1}>{m.callsign || `${m.publicKey?.slice(0, 8)}…`}</Text>
-                                            <Text style={[styles.mutualAsk, { flexShrink: 1, maxWidth: '50%' }]} numberOfLines={2}>{t('Ask about them ›')}</Text>
+                                            <Text style={styles.mutualAsk}>Ask about them ›</Text>
                                         </Pressable>
                                     ))}
                                 </View>
@@ -1090,8 +1038,8 @@ export default function PublicProfileScreen() {
                                         >
                                             <MemberAvatar avatarUrl={trust.vouchedInBy.avatarUrl} pubkey={trust.vouchedInBy.publicKey} callsign={trust.vouchedInBy.callsign || '?'} size={32} />
                                             <View style={{ flex: 1, minWidth: 0 }}>
-                                                <Text style={styles.vouchInviterName} numberOfLines={1}>{t('🌱 Vouched in by {name}', { name: trust.vouchedInBy.callsign ?? '' })}</Text>
-                                                <Text style={styles.vouchInviterSub} numberOfLines={2}>{t('{tier} tier · tap to reach out', { tier: tierWords(trust.vouchedInBy.tier) })}</Text>
+                                                <Text style={styles.vouchInviterName} numberOfLines={1}>🌱 Vouched in by {trust.vouchedInBy.callsign}</Text>
+                                                <Text style={styles.vouchInviterSub} numberOfLines={1}>{trust.vouchedInBy.tier} tier · tap to reach out</Text>
                                             </View>
                                             <MaterialCommunityIcons name="chevron-right" size={20} color={colors.text.secondary} />
                                         </Pressable>
@@ -1102,11 +1050,11 @@ export default function PublicProfileScreen() {
                                                 <MaterialCommunityIcons name="shield-check" size={20} color={colors.brand.primary} />
                                             </View>
                                             <View style={{ flex: 1, minWidth: 0 }}>
-                                                <Text style={styles.vouchInviterName} numberOfLines={2}>
-                                                    {trust.vouchedInBy.kind === 'founder' ? t('Founding member') : t('Invited directly by the system admin')}
+                                                <Text style={styles.vouchInviterName} numberOfLines={1}>
+                                                    {trust.vouchedInBy.kind === 'founder' ? 'Founding member' : 'Invited directly by the system admin'}
                                                 </Text>
-                                                <Text style={styles.vouchInviterSub} numberOfLines={2}>
-                                                    {trust.vouchedInBy.kind === 'founder' ? t('Here since the community began') : t('Vetted by the admin at sign-up')}
+                                                <Text style={styles.vouchInviterSub} numberOfLines={1}>
+                                                    {trust.vouchedInBy.kind === 'founder' ? 'Here since the community began' : 'Vetted by the admin at sign-up'}
                                                 </Text>
                                             </View>
                                         </View>
@@ -1118,11 +1066,7 @@ export default function PublicProfileScreen() {
                             {trust.elderVouch && (
                                 <View style={[styles.vouchCard, { flexDirection: 'row', alignItems: 'center', gap: 8, borderColor: '#f59e0b' }]}>
                                     <Text style={{ fontSize: 18 }} allowFontScaling={false}>⛰️</Text>
-                                    <Text style={[styles.vouchInviterName, { flexShrink: 1 }]} numberOfLines={2}>
-                                        {trust.elderVouch.callsign
-                                            ? t('Vouched by {name}', { name: trust.elderVouch.callsign })
-                                            : trust.elderVouch.sponsor ? t('Vouched by a sponsor') : t('Vouched by an Elder')}
-                                    </Text>
+                                    <Text style={styles.vouchInviterName} numberOfLines={1}>Vouched by {trust.elderVouch.callsign || 'an Elder'}</Text>
                                 </View>
                             )}
 
@@ -1134,7 +1078,7 @@ export default function PublicProfileScreen() {
                                     onPress={chooseVouchLevel}
                                     style={{ marginTop: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 12, borderRadius: 12, backgroundColor: colors.feedback.warning.solid, opacity: vouching ? 0.6 : 1 }}
                                     >
-                                    <Text style={{ color: colors.text.onGold, fontWeight: '800', fontSize: 15, flexShrink: 1, textAlign: 'center' }} allowFontScaling={false}>{vouching ? t('🤝 Vouching…') : t('🤝 Vouch for Member')}</Text>
+                                    <Text style={{ color: colors.text.onGold, fontWeight: '800', fontSize: 15 }} allowFontScaling={false}>🤝 {vouching ? 'Vouching…' : 'Vouch for Member'}</Text>
                                 </Pressable>
                             )}
                             </>)}
@@ -1157,7 +1101,7 @@ export default function PublicProfileScreen() {
 
                 {!showsBeans && beansPreview && (
                     <View style={{ marginHorizontal: 16 }}>
-                        <LocalCommunityMark variant="line" feature="beans" text={t(LOCAL_COMMUNITY_LINES.profile)} />
+                        <LocalCommunityMark variant="line" feature="beans" text={LOCAL_COMMUNITY_LINES.profile} />
                     </View>
                 )}
 
@@ -1167,14 +1111,14 @@ export default function PublicProfileScreen() {
                         <View style={styles.trustLeft}>
                             <Text style={styles.trustEmoji} allowFontScaling={false}>{balanceInfo.tier?.emoji || '🌱'}</Text>
                             <View style={{ flexShrink: 1 }}>
-                                <Text style={styles.trustTierName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{balanceInfo.tier?.name ? tierWords(balanceInfo.tier.name) : t('Member', undefined, 'trust tier')}</Text>
-                                <Text style={styles.trustSub} numberOfLines={1}>{tn(Math.round(balanceInfo.earnedCredit || 0), '{n} trust points', '{n} trust points')}</Text>
+                                <Text style={styles.trustTierName} numberOfLines={1}>{balanceInfo.tier?.name || 'Member'}</Text>
+                                <Text style={styles.trustSub} numberOfLines={1}>{Math.round(balanceInfo.earnedCredit || 0)} trust points</Text>
                             </View>
                         </View>
                         <View style={styles.trustRight}>
                             <View style={{ alignItems: 'flex-end' }}>
-                                <Text style={styles.trustBalance}>{balanceInfo.balance >= 0 ? '+' : ''}{formatNumber(balanceInfo.balance ?? 0, 1)}</Text>
-                                <Text style={styles.trustSub}>{t('Beans')}</Text>
+                                <Text style={styles.trustBalance}>{balanceInfo.balance >= 0 ? '+' : ''}{(balanceInfo.balance ?? 0).toFixed(1)}</Text>
+                                <Text style={styles.trustSub}>Beans</Text>
                             </View>
                             <MaterialCommunityIcons name="chevron-right" size={22} color={colors.text.secondary} />
                         </View>
@@ -1189,14 +1133,14 @@ export default function PublicProfileScreen() {
                             router.push({ pathname: '/(tabs)/people', params: { view: 'friends' } });
                         }}>
                             <Text style={styles.statTileNum} numberOfLines={1}>{friendsCount}</Text>
-                            <Text style={styles.statTileLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Friends')}</Text>
+                            <Text style={styles.statTileLabel} numberOfLines={1}>Friends</Text>
                         </Pressable>
                         {/* A count of deals: Beans, so not drawn where nobody makes one (the worldwide community). */}
                         {showsBeans && (<>
                         <View style={styles.statDivider} />
                         <View style={styles.statTile}>
                             <Text style={styles.statTileNum} numberOfLines={1}>{balanceInfo?.trustStats?.tradeCount ?? 0}</Text>
-                            <Text style={styles.statTileLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Trades')}</Text>
+                            <Text style={styles.statTileLabel} numberOfLines={1}>Trades</Text>
                         </View>
                         </>)}
                     </View>
@@ -1216,30 +1160,30 @@ export default function PublicProfileScreen() {
                                 <View style={styles.synergyHeaderRow}>
                                     <Text style={styles.synergyEmoji}>{primary.emoji}</Text>
                                     <View style={{ flex: 1 }}>
-                                        <Text style={styles.synergyTitle}>{t(primary.name)}</Text>
-                                        <Text style={styles.synergyHeadline}>{t(primary.tagline)}</Text>
+                                        <Text style={styles.synergyTitle}>{primary.name}</Text>
+                                        <Text style={styles.synergyHeadline}>{primary.tagline}</Text>
                                     </View>
                                 </View>
-                                <Text style={styles.synergySummary}>{t(primary.description)}</Text>
+                                <Text style={styles.synergySummary}>{primary.description}</Text>
 
                                 {secondary && (
                                     <Text style={styles.synergyHeadline}>
-                                        {t('Secondary rhythm: {emoji} {name}', { emoji: secondary.emoji, name: t(secondary.name) })}
+                                        Secondary rhythm: {secondary.emoji} {secondary.name}
                                     </Text>
                                 )}
 
                                 <View style={styles.synergyStrengthsWrap}>
-                                    {primary.superpowers.map((_sp, idx: number) => (
+                                    {primary.superpowers.map((sp: string, idx: number) => (
                                         <View key={idx} style={styles.synergyStrengthRow}>
                                             <Text style={styles.synergyBullet}>✓</Text>
-                                            <Text style={styles.synergyStrengthText}>{t(primary.superpowers[idx])}</Text>
+                                            <Text style={styles.synergyStrengthText}>{sp}</Text>
                                         </View>
                                     ))}
                                 </View>
 
                                 <View style={styles.synergyTipBox}>
                                     <Text style={styles.synergyTipText}>
-                                        <Sentence text={t('💡 {label} {style}', { style: t(primary.collaborationStyle) })} parts={{ label: <Text style={{ fontWeight: '700' }}>{t('How you work best:')}</Text> }} />
+                                        💡 <Text style={{ fontWeight: '700' }}>How you work best:</Text> {primary.collaborationStyle}
                                     </Text>
                                 </View>
 
@@ -1249,20 +1193,20 @@ export default function PublicProfileScreen() {
                                     {mine.mode === 'quick' && (
                                         <Pressable
                                             accessibilityRole="button"
-                                            accessibilityLabel={t('Take the longer 27 question quiz for a more accurate result')}
+                                            accessibilityLabel="Take the longer 27 question quiz for a more accurate result"
                                             style={[styles.synergyTakeQuizBtn, styles.quizBtnFlex]}
                                             onPress={() => { setQuizInitialMode('deep'); setShowQuizModal(true); }}
                                         >
-                                            <Text style={styles.synergyTakeQuizBtnText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('🧭 More accurate')}</Text>
+                                            <Text style={styles.synergyTakeQuizBtnText} numberOfLines={1}>🧭 More accurate</Text>
                                         </Pressable>
                                     )}
                                     <Pressable
                                         accessibilityRole="button"
-                                        accessibilityLabel={t('Retake community working style quiz')}
+                                        accessibilityLabel="Retake community working style quiz"
                                         style={[styles.synergyRetakeBtn, styles.quizBtnFlex]}
                                         onPress={() => { setQuizInitialMode('quick'); setShowQuizModal(true); }}
                                     >
-                                        <Text style={styles.synergyRetakeBtnText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('🔄 Retake')}</Text>
+                                        <Text style={styles.synergyRetakeBtnText} numberOfLines={1}>🔄 Retake</Text>
                                     </Pressable>
                                 </View>
                             </View>
@@ -1273,18 +1217,18 @@ export default function PublicProfileScreen() {
                         <View style={styles.synergyInviteCard}>
                             <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
                                 <Text style={{ fontSize: 20, marginRight: 8 }}>✨</Text>
-                                <Text style={[styles.synergyInviteTitle, { flexShrink: 1 }]}>{t('Your Working Style')}</Text>
+                                <Text style={styles.synergyInviteTitle}>Your Working Style</Text>
                             </View>
                             <Text style={styles.synergyInviteDesc}>
-                                {t('Take the 60-second quiz on how you prefer to work. Neighbours then get tips for working with you.')}
+                                Take the 60-second quiz on how you prefer to work. Neighbours then get tips for working with you.
                             </Text>
                             <Pressable
                                 accessibilityRole="button"
-                                accessibilityLabel={t('Take 60 second community working style quiz')}
+                                accessibilityLabel="Take 60 second community working style quiz"
                                 style={styles.synergyTakeQuizBtn}
                                 onPress={() => { setQuizInitialMode('quick'); setShowQuizModal(true); }}
                             >
-                                <Text style={styles.synergyTakeQuizBtnText}>{t('⚡ Take 60s Quiz')}</Text>
+                                <Text style={styles.synergyTakeQuizBtnText}>⚡ Take 60s Quiz</Text>
                             </Pressable>
                         </View>
                     );
@@ -1303,18 +1247,18 @@ export default function PublicProfileScreen() {
                              <View style={styles.statsGrid}>
                                  <View style={styles.statBoxOverall}>
                                      <Text style={styles.starRating} allowFontScaling={false} numberOfLines={1}>{renderStars(stats.average)}</Text>
-                                     <Text style={styles.statValueOverall} numberOfLines={1}>{formatNumber(stats.average, 1)}</Text>
-                                     <Text style={styles.statLabelOverall} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('OVERALL')}</Text>
+                                     <Text style={styles.statValueOverall} numberOfLines={1}>{stats.average.toFixed(1)}</Text>
+                                     <Text style={styles.statLabelOverall} numberOfLines={1}>OVERALL</Text>
                                  </View>
                                  <View style={styles.statBoxProvider}>
                                      <MaterialCommunityIcons name="inbox-arrow-up" size={26} color={colors.brand.primary} />
-                                     <Text style={styles.statValueProvider} numberOfLines={1}>{typeof stats.asProvider?.average === 'number' ? formatNumber(stats.asProvider.average, 1) : '-'}</Text>
-                                     <Text style={styles.statLabelProvider} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('AS PROVIDER')}</Text>
+                                     <Text style={styles.statValueProvider} numberOfLines={1}>{stats.asProvider?.average.toFixed(1) || '-'}</Text>
+                                     <Text style={styles.statLabelProvider} numberOfLines={1} adjustsFontSizeToFit>AS PROVIDER</Text>
                                  </View>
                                  <View style={styles.statBoxReceiver}>
                                      <MaterialCommunityIcons name="inbox-arrow-down" size={26} color={palette.indigo500} />
-                                     <Text style={styles.statValueReceiver} numberOfLines={1}>{typeof stats.asReceiver?.average === 'number' ? formatNumber(stats.asReceiver.average, 1) : '-'}</Text>
-                                     <Text style={styles.statLabelReceiver} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('AS RECEIVER')}</Text>
+                                     <Text style={styles.statValueReceiver} numberOfLines={1}>{stats.asReceiver?.average.toFixed(1) || '-'}</Text>
+                                     <Text style={styles.statLabelReceiver} numberOfLines={1} adjustsFontSizeToFit>AS RECEIVER</Text>
                                  </View>
                              </View>
                         ) : null}
@@ -1327,8 +1271,8 @@ export default function PublicProfileScreen() {
                                 style={[styles.tab, activeTab === 'listings' && styles.tabActive]}
                                 onPress={() => setActiveTab('listings')}
                             >
-                                <Text style={[styles.tabText, activeTab === 'listings' && styles.tabTextActive]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6} allowFontScaling={false}>
-                                    {activePosts.length > 0 ? t('Listings ({n})', { n: activePosts.length }) : t('Listings')}
+                                <Text style={[styles.tabText, activeTab === 'listings' && styles.tabTextActive]} numberOfLines={1} allowFontScaling={false}>
+                                    Listings {activePosts.length > 0 ? `(${activePosts.length})` : ''}
                                 </Text>
                             </Pressable>
                             <Pressable
@@ -1337,10 +1281,8 @@ export default function PublicProfileScreen() {
                                 style={[styles.tab, activeTab === 'reviews' && styles.tabActive]}
                                 onPress={() => setActiveTab('reviews')}
                             >
-                                <Text style={[styles.tabText, activeTab === 'reviews' && styles.tabTextActive]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6} allowFontScaling={false}>
-                                    {isSelf
-                                        ? (ratings.length > 0 ? t('Received ({n})', { n: ratings.length }) : t('Received', undefined, 'reviews'))
-                                        : (ratings.length > 0 ? t('Reviews ({n})', { n: ratings.length }) : t('Reviews'))}
+                                <Text style={[styles.tabText, activeTab === 'reviews' && styles.tabTextActive]} numberOfLines={1} allowFontScaling={false}>
+                                    {isSelf ? 'Received' : 'Reviews'} {ratings.length > 0 ? `(${ratings.length})` : ''}
                                 </Text>
                             </Pressable>
                             {isSelf && (
@@ -1350,8 +1292,8 @@ export default function PublicProfileScreen() {
                                     style={[styles.tab, activeTab === 'given' && styles.tabActive]}
                                     onPress={() => setActiveTab('given')}
                                 >
-                                    <Text style={[styles.tabText, activeTab === 'given' && styles.tabTextActive]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6} allowFontScaling={false}>
-                                        {given.length > 0 ? t('Given ({n})', { n: given.length }) : t('Given', undefined, 'reviews')}
+                                    <Text style={[styles.tabText, activeTab === 'given' && styles.tabTextActive]} numberOfLines={1} allowFontScaling={false}>
+                                        Given {given.length > 0 ? `(${given.length})` : ''}
                                     </Text>
                                 </Pressable>
                             )}
@@ -1363,7 +1305,7 @@ export default function PublicProfileScreen() {
                                 {activePosts.length === 0 ? (
                                     <View style={styles.emptyCard}>
                                         <Text style={styles.emptyIcon}>🛒</Text>
-                                        <Text style={styles.emptyText}>{t('No active listings.')}</Text>
+                                        <Text style={styles.emptyText}>No active listings.</Text>
                                     </View>
                                 ) : (
                                     activePosts.map((p, i) => {
@@ -1379,7 +1321,7 @@ export default function PublicProfileScreen() {
                                                 <View style={styles.dealCard}>
                                                     <View style={{ flexDirection: 'row', gap: 12 }}>
                                                         {coverImage && typeof coverImage === 'string' && coverImage.trim() !== '' && coverImage !== 'null' && coverImage !== 'undefined' ? (
-                                                            <Image accessibilityLabel={t('Listing photo')} source={{ uri: listPhotoUrl(coverImage) }} style={styles.dealThumb} />
+                                                            <Image accessibilityLabel="Listing photo" source={{ uri: listPhotoUrl(coverImage) }} style={styles.dealThumb} />
                                                         ) : (
                                                             <View style={[styles.dealThumb, styles.dealThumbFallback]}>
                                                                 <Text style={{ fontSize: 24, opacity: 0.4 }}>📦</Text>
@@ -1388,7 +1330,7 @@ export default function PublicProfileScreen() {
                                                         <View style={{ flex: 1, justifyContent: 'center' }}>
                                                             <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
                                                                 <View style={[styles.typeBadge, p.type === 'offer' ? styles.badgeOffer : styles.badgeNeed]}>
-                                                                    <Text style={styles.typeBadgeText}>{p.type === 'offer' ? t('OFFER') : p.type === 'need' ? t('NEED') : p.type?.toUpperCase()}</Text>
+                                                                    <Text style={styles.typeBadgeText}>{p.type?.toUpperCase()}</Text>
                                                                 </View>
                                                                 {showsBeans && (
                                                                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -1398,7 +1340,7 @@ export default function PublicProfileScreen() {
                                                                 )}
                                                             </View>
                                                             <Text style={styles.dealTitle} numberOfLines={1}>{p.title}</Text>
-                                                            <Text style={styles.dealDateText}>{t('Active', undefined, 'listing status')}</Text>
+                                                            <Text style={styles.dealDateText}>Active</Text>
                                                         </View>
                                                     </View>
                                                 </View>
@@ -1417,7 +1359,7 @@ export default function PublicProfileScreen() {
                                 ) : ratings.length === 0 ? (
                                     <View style={styles.emptyCard}>
                                         <Text style={styles.emptyIcon}>🌱</Text>
-                                        <Text style={styles.emptyText}>{t('No reviews yet.')}</Text>
+                                        <Text style={styles.emptyText}>No reviews yet.</Text>
                                     </View>
                                 ) : (
                                     ratings.map((r, i) => (
@@ -1426,19 +1368,19 @@ export default function PublicProfileScreen() {
                                                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1, minWidth: 0 }}>
                                                     <Text style={styles.starText} allowFontScaling={false} numberOfLines={1}>{renderStars(r.stars)}</Text>
                                                     <View style={[styles.roleBadge, { flexShrink: 1 }, r.role === 'provider' ? styles.roleBadgeProvider : styles.roleBadgeReceiver]}>
-                                                        <Text style={[styles.roleText, r.role === 'provider' ? styles.roleTextProvider : styles.roleTextReceiver]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
-                                                            {r.role === 'provider' ? t('PROVIDED SERVICE') : t('RECEIVED SERVICE')}
+                                                        <Text style={[styles.roleText, r.role === 'provider' ? styles.roleTextProvider : styles.roleTextReceiver]} numberOfLines={1}>
+                                                            {r.role === 'provider' ? 'Provided Service' : 'Received Service'}
                                                         </Text>
                                                     </View>
                                                 </View>
                                                 <Text style={styles.dateText}>
-                                                    {fmtDay(r.createdAt || new Date().toISOString(), true)}
+                                                    {new Date(r.createdAt || Date.now()).toLocaleDateString(undefined, { month: 'short', year: 'numeric' }).toUpperCase()}
                                                 </Text>
                                             </View>
                                             {r.comment ? (
                                                 <Text style={styles.commentText}>"{r.comment}"</Text>
                                             ) : (
-                                                <Text style={styles.noCommentText}>{t('No comment provided.')}</Text>
+                                                <Text style={styles.noCommentText}>No comment provided.</Text>
                                             )}
                                         </View>
                                     ))
@@ -1453,7 +1395,7 @@ export default function PublicProfileScreen() {
                                 ) : given.length === 0 ? (
                                     <View style={styles.emptyCard}>
                                         <Text style={styles.emptyIcon}>✍️</Text>
-                                        <Text style={styles.emptyText}>{t("You haven't reviewed anyone yet.")}</Text>
+                                        <Text style={styles.emptyText}>You haven't reviewed anyone yet.</Text>
                                     </View>
                                 ) : (
                                     given.map((r, i) => (
@@ -1464,14 +1406,14 @@ export default function PublicProfileScreen() {
                                                     <Text style={styles.givenName} numberOfLines={1}>{r.target_callsign || `${r.target_pubkey?.slice(0, 8)}…`}</Text>
                                                 </View>
                                                 <Text style={styles.dateText}>
-                                                    {fmtDay(r.created_at || new Date().toISOString(), true)}
+                                                    {new Date(r.created_at || Date.now()).toLocaleDateString(undefined, { month: 'short', year: 'numeric' }).toUpperCase()}
                                                 </Text>
                                             </View>
                                             <Text style={styles.starText} allowFontScaling={false} numberOfLines={1}>{renderStars(r.stars)}</Text>
                                             {r.comment ? (
                                                 <Text style={styles.commentText}>"{r.comment}"</Text>
                                             ) : (
-                                                <Text style={styles.noCommentText}>{t('No comment provided.')}</Text>
+                                                <Text style={styles.noCommentText}>No comment provided.</Text>
                                             )}
                                             
                                             {/* Edit review button */}
@@ -1486,11 +1428,11 @@ export default function PublicProfileScreen() {
                                                         onPress={() => setEditingReview({
                                                             txId: r.transaction_id,
                                                             targetPubkey: r.target_pubkey,
-                                                            targetCallsign: r.target_callsign || t('Partner', undefined, 'a member with no name')
+                                                            targetCallsign: r.target_callsign || 'Partner'
                                                         })}
                                                     >
                                                         <MaterialCommunityIcons name="pencil" size={12} color={colors.text.secondary} style={{ marginRight: 4 }} />
-                                                        <Text style={styles.editReviewBtnText}>{t('Edit Review')}</Text>
+                                                        <Text style={styles.editReviewBtnText}>Edit Review</Text>
                                                     </Pressable>
                                                 </View>
                                             )}
@@ -1503,7 +1445,7 @@ export default function PublicProfileScreen() {
                             <View style={{ marginHorizontal: 16, marginTop: 24, marginBottom: 32 }}>
                                 <Pressable
                                     accessibilityRole="button"
-                                    accessibilityLabel={callsignStr ? t('Block user {name}', { name: callsignStr }) : t('Block user')}
+                                    accessibilityLabel={`Block user ${callsignStr || ''}`}
                                     accessibilityState={{ busy: isBlocking }}
                                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                                     disabled={isBlocking}
@@ -1526,12 +1468,12 @@ export default function PublicProfileScreen() {
                                     ) : (
                                         <MaterialCommunityIcons name="shield-alert" size={18} color={colors.feedback.danger.fg} />
                                     )}
-                                    <Text style={{ color: colors.feedback.danger.fg, fontWeight: '800', fontSize: 14, flexShrink: 1, textAlign: 'center' }}>
-                                        {isBlocking ? t('Blocking…') : callsignStr ? t('Block {name}', { name: callsignStr }) : t('Block User')}
+                                    <Text style={{ color: colors.feedback.danger.fg, fontWeight: '800', fontSize: 14 }}>
+                                        {isBlocking ? 'Blocking…' : `Block ${callsignStr || 'User'}`}
                                     </Text>
                                 </Pressable>
                                 <Text style={{ textAlign: 'center', color: colors.text.muted, fontSize: 11, marginTop: 6 }}>
-                                    {t('Blocking will instantly hide their content from your feed and notify moderation.')}
+                                    Blocking will instantly hide their content from your feed and notify moderation.
                                 </Text>
                             </View>
                         )}

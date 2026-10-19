@@ -52,16 +52,14 @@ export const AREA_TOWN_SEARCH_WORDS = {
  * manually"): the quiet second way, beside "Use my location", on the phone's find screen and the web's Home card. A town
  * or suburb, not a street: only a rough point is kept, and Nominatim gets whatever is typed.
  */
-export const FIND_TOWN_SEARCH_WORDS = {
-    // word() keys, so the phone shows each through t() in the member's language (Find a community, words S3l); the
-    // same English where they are shown as written.
-    label: word('Your town or suburb'),
-    placeholder: word('Your town or suburb'),
-    unavailable: word("Town search isn't working right now. Use your location, or search by name."),
-    noMatches: word('No matches. Try the name of a town or suburb nearby.'),
-    source: word('Places from OpenStreetMap. What you type here is sent to them.'),
-    pickLabel: (place: string) => t('Look near {place}', { place }),
-} satisfies AddressSearchWords;
+export const FIND_TOWN_SEARCH_WORDS: AddressSearchWords = {
+    label: 'Your town or suburb',
+    placeholder: 'Your town or suburb',
+    unavailable: "Town search isn't working right now. Use your location, or search by name.",
+    noMatches: 'No matches. Try the name of a town or suburb nearby.',
+    source: 'Places from OpenStreetMap. What you type here is sent to them.',
+    pickLabel: (place) => `Look near ${place}`,
+};
 
 /** The link that opens it, beside "Use my location". */
 export const TYPE_YOUR_TOWN = word('or type your town');

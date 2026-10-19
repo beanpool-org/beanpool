@@ -5,6 +5,7 @@ import { colors as lightColors, type AppColors } from '../constants/colors';
 import { useIdentity } from '../app/IdentityContext';
 import { LinkSignInSheet } from './LinkSignInSheet';
 import {
+    ONE_WAY_BACK_TEXT,
     askOneWayBackStandingShared,
     dismissOneWayBack,
     finishOneWayBack,
@@ -25,20 +26,6 @@ import {
 } from '../utils/one-way-back';
 import { anchorUrl } from '../utils/node-post';
 import { vaultCopyKnown } from '../utils/vault';
-import { t, word } from '@beanpool/core';
-
-/**
- * utils/one-way-back.ts ONE_WAY_BACK_TEXT, as word() keys shown through t() (that file signs its reads, so it never reaches
- * the words layer). The same English: utils/__tests__/rest-words-render.test.ts holds the two equal.
- */
-export const ONE_WAY_BACK_LINES = {
-    title: word('Your account has one way back'),
-    body: word('Your account has one way back: your 12 words. Check you still have them, or add a sign-in.'),
-    addSignIn: word('Add a sign-in'),
-    checkWords: word('Show my 12 words'),
-    checked: word('I still have my 12 words'),
-    notNow: word('Not now'),
-} as const;
 
 const sameCommunity = (a: string, b: string) => a.trim().replace(/\/+$/, '').toLowerCase() === b.trim().replace(/\/+$/, '').toLowerCase();
 
@@ -192,8 +179,6 @@ export function OneWayBackCard({ place, colors = lightColors, onActionsAt, homeW
     useEffect(() => () => { if (place === 'landing') reportAt.current?.(null); }, [place]);
 
     if (!identity || !record || !up) return null;
-    const bodyLine = t(ONE_WAY_BACK_LINES.body);
-    const checkedLine = t(ONE_WAY_BACK_LINES.checked);
 
     const sheet = (
         <LinkSignInSheet
@@ -212,9 +197,9 @@ export function OneWayBackCard({ place, colors = lightColors, onActionsAt, homeW
         if (place !== 'settings') return null;
         return (
             <View style={s.quietCard}>
-                <Text style={s.body}>{t('A sign-in can be a second way back, and it lifts the limits on new 12-words accounts.')}</Text>
+                <Text style={s.body}>A sign-in can be a second way back, and it lifts the limits on new 12-words accounts.</Text>
                 <Pressable style={s.secondary} onPress={() => setLinking(true)} accessibilityRole="button">
-                    <Text style={s.secondaryText}>{t(ONE_WAY_BACK_LINES.addSignIn)}</Text>
+                    <Text style={s.secondaryText}>{ONE_WAY_BACK_TEXT.addSignIn}</Text>
                 </Pressable>
                 {sheet}
             </View>
@@ -222,10 +207,10 @@ export function OneWayBackCard({ place, colors = lightColors, onActionsAt, homeW
     }
 
     return (
-        <View style={[s.card, place === 'landing' && s.landing]} accessibilityRole="summary" accessibilityLabel={t(ONE_WAY_BACK_LINES.title)}>
+        <View style={[s.card, place === 'landing' && s.landing]} accessibilityRole="summary" accessibilityLabel={ONE_WAY_BACK_TEXT.title}>
             {/* The design's one sentence, as it is: no heading that says it twice. */}
             <View style={s.row}>
-                <Text style={s.title}>🔑 {bodyLine}</Text>
+                <Text style={s.title}>🔑 {ONE_WAY_BACK_TEXT.body}</Text>
                 {place === 'landing' && (
                     <Pressable
                         onPress={async () => {
@@ -237,7 +222,7 @@ export function OneWayBackCard({ place, colors = lightColors, onActionsAt, homeW
                         }}
                         hitSlop={12}
                         accessibilityRole="button"
-                        accessibilityLabel={t(ONE_WAY_BACK_LINES.notNow)}
+                        accessibilityLabel={ONE_WAY_BACK_TEXT.notNow}
                     >
                         <Text style={s.close}>✕</Text>
                     </Pressable>
@@ -246,7 +231,7 @@ export function OneWayBackCard({ place, colors = lightColors, onActionsAt, homeW
             {/* Not flattened away (Android), so it can be measured on screen. */}
             <View ref={actionsRef} collapsable={false} onLayout={onActionsLayout}>
             <Pressable style={s.primary} onPress={() => setLinking(true)} accessibilityRole="button">
-                <Text style={s.primaryText}>{t(ONE_WAY_BACK_LINES.addSignIn)}</Text>
+                <Text style={s.primaryText}>{ONE_WAY_BACK_TEXT.addSignIn}</Text>
             </Pressable>
             {place === 'landing' ? (
                 <Pressable
@@ -254,16 +239,16 @@ export function OneWayBackCard({ place, colors = lightColors, onActionsAt, homeW
                     onPress={() => router.push({ pathname: '/(tabs)/settings', params: { section: 'protection' } })}
                     accessibilityRole="button"
                 >
-                    <Text style={s.secondaryText}>{t(ONE_WAY_BACK_LINES.checkWords)}</Text>
+                    <Text style={s.secondaryText}>{ONE_WAY_BACK_TEXT.checkWords}</Text>
                 </Pressable>
             ) : (
                 <Pressable
                     style={s.secondary}
                     onPress={async () => { await finishOneWayBack(identity.publicKey, 'checked'); void refresh(); }}
                     accessibilityRole="button"
-                    accessibilityHint={t('Says you checked you still have your 12 words written down')}
+                    accessibilityHint="Says you checked you still have your 12 words written down"
                 >
-                    <Text style={s.secondaryText}>✓ {checkedLine}</Text>
+                    <Text style={s.secondaryText}>✓ {ONE_WAY_BACK_TEXT.checked}</Text>
                 </Pressable>
             )}
             </View>

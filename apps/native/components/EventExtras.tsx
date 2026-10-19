@@ -24,49 +24,16 @@ import { fetchMemberPreferences, fetchMyEvents, isRouteMissing, setEventReminder
 import { eventShareWhen } from '../utils/events';
 import {
     DEFAULT_REMINDER_OFFSETS, REMINDER_OFFSETS, REMINDER_PREF_KEY, buildIcs, buildShareText, eventLink,
-    googleCalendarUrl, icsFileName, normaliseReminderOffsets, parseReminderOffsets, type ShareableEvent,
+    formatReminderChoice, googleCalendarUrl, icsFileName, normaliseReminderOffsets, parseReminderOffsets,
+    reminderOffsetLabel, type ShareableEvent,
 } from '../utils/event-extras';
-import { t, tn } from '@beanpool/core';
 import { EVENT_ACCENT } from './EventCard';
-import { Sentence } from './Sentence';
-import { reminderBeforeWords } from './settings/settings-lines';
-import { eventLineWords } from './event-lines';
-
-/** One offset on its own ("1 week"), as utils/event-extras.ts reminderOffsetLabel writes it, in the member's language. */
-function offsetWords(minutes: number): string {
-    switch (minutes) {
-        case 10080: return t('1 week');
-        case 1440: return t('1 day');
-        case 120: return t('2 hours');
-        case 60: return t('1 hour');
-        case 30: return t('30 minutes');
-        default: return tn(minutes, '{n} minutes', '{n} minutes');
-    }
-}
-
-/**
- * utils/event-extras.ts formatReminderChoice in the member's language, whole sentences: "Off", "1 day before (your
- * default)", "1 week and 2 hours before", "1 week, 1 day and 30 minutes before". English reads exactly as it does.
- */
-export function reminderChoiceWords(offsets: number[] | null, fallback: number[] = DEFAULT_REMINDER_OFFSETS): string {
-    const clean = normaliseReminderOffsets(offsets ?? fallback);
-    let choice: string;
-    if (clean.length === 0) choice = t('Off', undefined, 'reminder');
-    else if (clean.length === 1) choice = reminderBeforeWords(clean[0]);
-    else {
-        const parts = clean.map(offsetWords);
-        let list = parts[0];
-        for (const item of parts.slice(1, -1)) list = t('{list}, {item}', { list, item });
-        choice = t('{list} and {last} before', { list, last: parts[parts.length - 1] });
-    }
-    return offsets === null ? t('{choice} (your default)', { choice }) : choice;
-}
 
 /** The event as the share text and the calendar entry need it, from either row shape. */
 export function shareableEvent(post: any): ShareableEvent {
     return {
         id: post.id,
-        title: post.title || t('Event'),
+        title: post.title || 'Event',
         startAt: post.eventStartAt ?? post.event_start_at ?? '',
         endAt: post.eventEndAt ?? post.event_end_at ?? null,
         placeName: post.eventPlaceName ?? post.event_place_name ?? null,
@@ -77,7 +44,7 @@ export function shareableEvent(post: any): ShareableEvent {
 
 async function anchorOrThrow(): Promise<string> {
     const url = await AsyncStorage.getItem('beanpool_anchor_url');
-    if (!url) throw new Error(t('You are currently offline.'));
+    if (!url) throw new Error('You are currently offline.');
     return url;
 }
 
@@ -92,7 +59,7 @@ export function EventShareAndCalendar({ post }: { post: any }) {
             const link = eventLink(await anchorOrThrow(), event.id);
             await Share.share({ message: buildShareText(event, when, link), title: event.title });
         } catch (e: any) {
-            Alert.alert(t('Not shared'), e?.message || t('Could not share this event.'));
+            Alert.alert('Not shared', e?.message || 'Could not share this event.');
         }
     };
 
@@ -102,24 +69,24 @@ export function EventShareAndCalendar({ post }: { post: any }) {
             if (Platform.OS === 'ios') {
                 const path = `${FileSystem.cacheDirectory}${icsFileName(event)}`;
                 await FileSystem.writeAsStringAsync(path, buildIcs(event, link), { encoding: FileSystem.EncodingType.UTF8 });
-                await Sharing.shareAsync(path, { mimeType: 'text/calendar', UTI: 'com.apple.ical.ics', dialogTitle: t('Add to calendar') });
+                await Sharing.shareAsync(path, { mimeType: 'text/calendar', UTI: 'com.apple.ical.ics', dialogTitle: 'Add to calendar' });
                 return;
             }
             const url = googleCalendarUrl(event, link);
             const opened = await Linking.openURL(url).then(() => true).catch(() => false);
-            if (!opened) Alert.alert(t('No calendar app'), t('Nothing on this phone could open a calendar entry.'));
+            if (!opened) Alert.alert('No calendar app', 'Nothing on this phone could open a calendar entry.');
         } catch (e: any) {
-            Alert.alert(t('Not added'), e?.message || t('Could not make a calendar entry.'));
+            Alert.alert('Not added', e?.message || 'Could not make a calendar entry.');
         }
     };
 
     return (
         <View style={styles.row}>
-            <Pressable onPress={share} style={styles.btn} accessibilityRole="button" accessibilityLabel={t('Share this event')}>
-                <Text style={styles.btnText} numberOfLines={1} maxFontSizeMultiplier={1.3} adjustsFontSizeToFit minimumFontScale={0.7}>{t('🔗 Share')}</Text>
+            <Pressable onPress={share} style={styles.btn} accessibilityRole="button" accessibilityLabel="Share this event">
+                <Text style={styles.btnText} numberOfLines={1} maxFontSizeMultiplier={1.3}>🔗 Share</Text>
             </Pressable>
-            <Pressable onPress={addToCalendar} style={styles.btn} accessibilityRole="button" accessibilityLabel={t('Add this event to your calendar')}>
-                <Text style={styles.btnText} numberOfLines={1} maxFontSizeMultiplier={1.3} adjustsFontSizeToFit minimumFontScale={0.7}>{t('📅 Add to calendar')}</Text>
+            <Pressable onPress={addToCalendar} style={styles.btn} accessibilityRole="button" accessibilityLabel="Add this event to your calendar">
+                <Text style={styles.btnText} numberOfLines={1} maxFontSizeMultiplier={1.3}>📅 Add to calendar</Text>
             </Pressable>
         </View>
     );
@@ -193,7 +160,7 @@ export function EventReminder({ post, myRsvp, viewerPublicKey }: ReminderProps) 
                 setSupported(false);
                 return;
             }
-            Alert.alert(t('Reminder not saved'), e?.message ? eventLineWords(e.message) : t('Could not reach the node.'));
+            Alert.alert('Reminder not saved', e?.message || 'Could not reach the node.');
         } finally {
             setSaving(false);
         }
@@ -203,22 +170,22 @@ export function EventReminder({ post, myRsvp, viewerPublicKey }: ReminderProps) 
         <View style={styles.reminderBox}>
             <View style={styles.reminderHeadRow}>
                 <Text style={styles.reminderLine} numberOfLines={3}>
-                    <Sentence text={t('⏰ Remind me: {choice}')} parts={{ choice: <Text style={styles.reminderChoice}>{reminderChoiceWords(offsets, defaults)}</Text> }} />
+                    ⏰ Remind me: <Text style={styles.reminderChoice}>{formatReminderChoice(offsets, defaults)}</Text>
                 </Text>
                 <Pressable
                     onPress={() => { if (!open) setDraft(offsets ?? defaults); setOpen(o => !o); }}
                     style={styles.smallBtn}
                     accessibilityRole="button"
-                    accessibilityLabel={open ? t('Close reminder choices') : t('Change the reminder for this event')}
+                    accessibilityLabel={open ? 'Close reminder choices' : 'Change the reminder for this event'}
                     accessibilityState={{ expanded: open }}
                 >
-                    <Text style={styles.smallBtnText} numberOfLines={1} maxFontSizeMultiplier={1.3}>{open ? t('Close') : t('Change')}</Text>
+                    <Text style={styles.smallBtnText} numberOfLines={1} maxFontSizeMultiplier={1.3}>{open ? 'Close' : 'Change'}</Text>
                 </Pressable>
             </View>
 
             {open && (
                 <View>
-                    <Text style={styles.reminderHint}>{t('Tell me before it starts. With none ticked you get no reminder for this event.')}</Text>
+                    <Text style={styles.reminderHint}>Tell me before it starts. With none ticked you get no reminder for this event.</Text>
                     {REMINDER_OFFSETS.map(minutes => {
                         const on = draft.includes(minutes);
                         return (
@@ -227,13 +194,13 @@ export function EventReminder({ post, myRsvp, viewerPublicKey }: ReminderProps) 
                                 onPress={() => setDraft(d => (on ? d.filter(m => m !== minutes) : [...d, minutes]))}
                                 style={styles.tickRow}
                                 accessibilityRole="checkbox"
-                                accessibilityLabel={reminderBeforeWords(minutes)}
+                                accessibilityLabel={`${reminderOffsetLabel(minutes)} before`}
                                 accessibilityState={{ checked: on }}
                             >
                                 <View style={[styles.tickBox, on && styles.tickBoxOn]}>
                                     {on && <Text style={styles.tickMark}>✓</Text>}
                                 </View>
-                                <Text style={styles.tickLabel} numberOfLines={2}>{reminderBeforeWords(minutes)}</Text>
+                                <Text style={styles.tickLabel} numberOfLines={2}>{reminderOffsetLabel(minutes)} before</Text>
                             </Pressable>
                         );
                     })}
@@ -242,10 +209,10 @@ export function EventReminder({ post, myRsvp, viewerPublicKey }: ReminderProps) 
                         disabled={saving}
                         style={styles.saveBtn}
                         accessibilityRole="button"
-                        accessibilityLabel={saving ? t('Saving reminder for this event...') : t('Save for this event')}
+                        accessibilityLabel={saving ? "Saving reminder for this event..." : "Save for this event"}
                         accessibilityState={{ busy: saving, disabled: saving }}
                     >
-                        {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.saveBtnText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Save for this event')}</Text>}
+                        {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.saveBtnText} numberOfLines={1}>Save for this event</Text>}
                     </Pressable>
                     {offsets !== null && (
                         <Pressable
@@ -253,9 +220,9 @@ export function EventReminder({ post, myRsvp, viewerPublicKey }: ReminderProps) 
                             disabled={saving}
                             style={styles.resetBtn}
                             accessibilityRole="button"
-                            accessibilityLabel={t('Use my default reminder for this event')}
+                            accessibilityLabel="Use my default reminder for this event"
                         >
-                            <Text style={styles.resetBtnText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Use my default')}</Text>
+                            <Text style={styles.resetBtnText} numberOfLines={1}>Use my default</Text>
                         </Pressable>
                     )}
                 </View>

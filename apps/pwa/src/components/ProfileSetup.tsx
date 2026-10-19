@@ -6,7 +6,6 @@
  * so saving the avatar never wipes them.
  */
 import { useState, useEffect, useRef } from 'react';
-import { t } from '@beanpool/core';
 import { updateMemberProfile, getMemberProfile, registerMember } from '../lib/api';
 import { updateCallsign, type BeanPoolIdentity } from '../lib/identity';
 import { adoptNodeName, nodeNameFor } from '../lib/member-name';
@@ -95,7 +94,7 @@ export function ProfileSetup({ identity, onDone, onIdentityUpdated }: Props) {
     }
 
     async function handleFinish() {
-        if (!navigator.onLine) { setError(t('You need to be online to save your profile.')); return; }
+        if (!navigator.onLine) { setError('You need to be online to save your profile.'); return; }
         if (!nameOk || !avatarOk) return;
         setSaving(true);
         setError(null);
@@ -104,7 +103,7 @@ export function ProfileSetup({ identity, onDone, onIdentityUpdated }: Props) {
             await syncCallsign(callsign.trim());
             onDone();
         } catch (err: any) {
-            setError(err?.message || t('Could not save your profile. Try again.'));
+            setError(err?.message || 'Could not save your profile. Try again.');
         } finally {
             setSaving(false);
         }
@@ -113,7 +112,7 @@ export function ProfileSetup({ identity, onDone, onIdentityUpdated }: Props) {
     if (loading) {
         return (
             <div className="min-h-full bg-white dark:bg-nature-900 p-8 text-center text-nature-500 dark:text-nature-300 font-medium animate-pulse">
-                {t('Loading profile...')}
+                Loading profile...
             </div>
         );
     }
@@ -132,23 +131,23 @@ export function ProfileSetup({ identity, onDone, onIdentityUpdated }: Props) {
                         />
                     ))}
                     <span className="ml-2 text-xs font-semibold text-nature-500 dark:text-nature-400 whitespace-nowrap">
-                        {t('Step {n} of {total}', { n: idx + 1, total: ORDER.length })}
+                        Step {idx + 1} of {ORDER.length}
                     </span>
                 </div>
 
                 {step === 'name' && (
                     <>
-                        <h2 className="text-xl font-bold text-nature-950 dark:text-white mb-1">{t('👋 Your name')}</h2>
+                        <h2 className="text-xl font-bold text-nature-950 dark:text-white mb-1">👋 Your name</h2>
                         <p className="text-sm text-nature-500 dark:text-nature-400 mb-5 leading-relaxed">
-                            {t('This is how neighbours will know you. You can change it any time.')}
+                            This is how neighbours will know you. You can change it any time.
                         </p>
                         <input
-                            aria-label={t('Your name')}
+                            aria-label="Your name"
                             type="text"
                             value={callsign}
                             onChange={(e) => setCallsign(e.target.value)}
                             maxLength={20}
-                            placeholder={t('Your name (e.g. Sally)')}
+                            placeholder="Your name (e.g. Sally)"
                             className="w-full py-3 px-4 rounded-xl border border-terra-400 dark:border-terra-600 bg-terra-50/40 dark:bg-terra-950/30 text-nature-900 dark:text-white text-base focus:outline-none focus:ring-2 focus:ring-terra-300 font-semibold transition-all"
                         />
                         {error && <p className="text-red-500 dark:text-red-300 text-sm mt-3">{error}</p>}
@@ -157,19 +156,19 @@ export function ProfileSetup({ identity, onDone, onIdentityUpdated }: Props) {
                             disabled={!nameOk}
                             className={`w-full mt-6 py-3.5 rounded-xl font-bold text-[15px] transition-all shadow-md ${nameOk ? 'bg-nature-900 dark:bg-white text-white dark:text-nature-900 hover:opacity-90 cursor-pointer' : 'bg-nature-300 dark:bg-nature-700 text-white/70 cursor-not-allowed'}`}
                         >
-                            {t('Next →')}
+                            Next →
                         </button>
                         <button onClick={onDone} className="w-full mt-3 py-2 bg-transparent border-none text-nature-400 hover:text-nature-600 dark:hover:text-nature-300 text-sm font-semibold cursor-pointer">
-                            {t('Cancel')}
+                            Cancel
                         </button>
                     </>
                 )}
 
                 {step === 'avatar' && (
                     <>
-                        <h2 className="text-xl font-bold text-nature-950 dark:text-white mb-1">{t('📸 Choose your look')}</h2>
+                        <h2 className="text-xl font-bold text-nature-950 dark:text-white mb-1">📸 Choose your look</h2>
                         <p className="text-sm text-nature-500 dark:text-nature-400 mb-5 leading-relaxed">
-                            {t('Add a photo — whatever feels like you.')}
+                            Add a photo — whatever feels like you.
                         </p>
                         <div className="text-center mb-6">
                             <div
@@ -182,10 +181,10 @@ export function ProfileSetup({ identity, onDone, onIdentityUpdated }: Props) {
                             <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" onChange={handleAvatarUpload} className="hidden" />
                             <div className="flex justify-center gap-3 mt-4">
                                 <button onClick={() => cameraInputRef.current?.click()} className="bg-white dark:bg-nature-800 border border-nature-200 dark:border-nature-700 rounded-xl px-4 py-2 text-nature-700 dark:text-nature-200 text-xs font-bold cursor-pointer hover:bg-nature-50 dark:hover:bg-nature-700 shadow-sm transition-all">
-                                    {t('📸 Camera')}
+                                    📸 Camera
                                 </button>
                                 <button onClick={() => fileInputRef.current?.click()} className="bg-white dark:bg-nature-800 border border-nature-200 dark:border-nature-700 rounded-xl px-4 py-2 text-nature-700 dark:text-nature-200 text-xs font-bold cursor-pointer hover:bg-nature-50 dark:hover:bg-nature-700 shadow-sm transition-all">
-                                    {t('🖼️ Gallery')}
+                                    🖼️ Gallery
                                 </button>
                             </div>
                         </div>
@@ -195,19 +194,19 @@ export function ProfileSetup({ identity, onDone, onIdentityUpdated }: Props) {
                             disabled={!avatarOk}
                             className={`w-full py-3.5 rounded-xl font-bold text-[15px] transition-all shadow-md ${avatarOk ? 'bg-nature-900 dark:bg-white text-white dark:text-nature-900 hover:opacity-90 cursor-pointer' : 'bg-nature-300 dark:bg-nature-700 text-white/70 cursor-not-allowed'}`}
                         >
-                            {t('Next →')}
+                            Next →
                         </button>
                         <button onClick={() => { setError(null); setStep('name'); }} className="w-full mt-3 py-2 bg-transparent border-none text-nature-400 hover:text-nature-600 dark:hover:text-nature-300 text-sm font-semibold cursor-pointer">
-                            {t('← Back')}
+                            ← Back
                         </button>
                     </>
                 )}
 
                 {step === 'guide' && (
                     <>
-                        <h2 className="text-xl font-bold text-nature-950 dark:text-white mb-1">{t('🫘 How BeanPool works')}</h2>
+                        <h2 className="text-xl font-bold text-nature-950 dark:text-white mb-1">🫘 How BeanPool works</h2>
                         <p className="text-sm text-nature-500 dark:text-nature-400 mb-5 leading-relaxed">
-                            {t('A quick look at this community economy.')}
+                            A quick look at this community economy.
                         </p>
                         <OnboardingGuide />
                         {error && <p className="text-red-500 dark:text-red-300 text-sm mt-3">{error}</p>}
@@ -216,10 +215,10 @@ export function ProfileSetup({ identity, onDone, onIdentityUpdated }: Props) {
                             disabled={saving}
                             className={`w-full mt-6 py-3.5 rounded-xl font-bold text-[15px] transition-all shadow-md ${saving ? 'bg-nature-400 text-white cursor-not-allowed' : 'bg-nature-900 dark:bg-white text-white dark:text-nature-900 hover:opacity-90 cursor-pointer'}`}
                         >
-                            {saving ? t('Saving...') : t('Done ✓')}
+                            {saving ? 'Saving...' : 'Done ✓'}
                         </button>
                         <button onClick={() => { setError(null); setStep('avatar'); }} disabled={saving} className="w-full mt-3 py-2 bg-transparent border-none text-nature-400 hover:text-nature-600 dark:hover:text-nature-300 text-sm font-semibold cursor-pointer">
-                            {t('← Back')}
+                            ← Back
                         </button>
                     </>
                 )}

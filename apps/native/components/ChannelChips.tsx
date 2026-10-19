@@ -12,7 +12,7 @@
 
 import React from 'react';
 import { View, Text, StyleSheet, Pressable, Linking } from 'react-native';
-import { isWebUrl, platformMeta, platformName, t, type PublicCreatorChannel } from '@beanpool/core';
+import { isWebUrl, platformMeta, type PublicCreatorChannel } from '@beanpool/core';
 import { useTheme, useStyles } from '../app/ThemeContext';
 
 interface Props {
@@ -42,22 +42,17 @@ export function ChannelChips({ channels }: Props) {
     };
 
     return (
-        <View style={styles.container} accessibilityRole="list" accessibilityLabel={t('External channels')}>
+        <View style={styles.container} accessibilityRole="list" accessibilityLabel="External channels">
             {channels.map((channel) => {
                 const meta = platformMeta(channel.platform);
-                // A brand as written everywhere; our own names (Website, Blog / RSS, Link) in the member's language.
-                const name = platformName(channel.platform);
                 const hasHandle = Boolean(channel.handle && channel.handle.trim());
                 const displayLabel = hasHandle
-                    ? t('{platform} · {handle}', { platform: name, handle: channel.handle! })
-                    : name;
+                    ? `${meta.label} · ${channel.handle}`
+                    : meta.label;
 
-                // Whole sentences per variant: with or without the handle, verified or not.
-                const accessLabel = hasHandle
-                    ? (channel.isVerified
-                        ? t('{platform} {handle} (verified account)', { platform: name, handle: channel.handle! })
-                        : t('{platform} {handle}', { platform: name, handle: channel.handle! }))
-                    : (channel.isVerified ? t('{platform} (verified account)', { platform: name }) : name);
+                const accessLabel = `${meta.label}${hasHandle ? ` ${channel.handle}` : ''}${
+                    channel.isVerified ? ' (verified account)' : ''
+                }`;
 
                 return (
                     <Pressable
@@ -71,7 +66,7 @@ export function ChannelChips({ channels }: Props) {
                         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                         accessibilityRole="link"
                         accessibilityLabel={accessLabel}
-                        accessibilityHint={t('Opens external channel link')}
+                        accessibilityHint="Opens external channel link"
                     >
                         <Text style={styles.icon} allowFontScaling={false}>
                             {meta.icon}
@@ -82,7 +77,7 @@ export function ChannelChips({ channels }: Props) {
                         {channel.isVerified ? (
                             <View
                                 style={styles.verifiedBadge}
-                                accessibilityLabel={t('Verified account')}
+                                accessibilityLabel="Verified account"
                             >
                                 <Text style={styles.verifiedIcon} allowFontScaling={false}>
                                     ✓

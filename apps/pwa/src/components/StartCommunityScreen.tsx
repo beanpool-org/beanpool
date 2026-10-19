@@ -8,7 +8,6 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { t } from '@beanpool/core';
 import { useDialogFocus } from './dialog-focus';
 import { startCommunityUrl, useCommunityInfo } from '../lib/features';
 import { useCoversScreen } from '../lib/screen-cover';
@@ -62,69 +61,69 @@ export function StartCommunityScreen({
         >
             <div className="mx-auto max-w-2xl px-4 pb-10 pt-4">
                 <div className="mb-4 flex items-center gap-2">
-                    <button ref={backRef} type="button" onClick={onClose} aria-label={t('Back')}
+                    <button ref={backRef} type="button" onClick={onClose} aria-label="Back"
                         className="-ml-2 shrink-0 rounded-lg px-2 py-1 text-xl text-nature-600 dark:text-nature-300 hover:bg-nature-100 dark:hover:bg-nature-800">←</button>
-                    <h1 id="start-community-title" className="min-w-0 text-2xl font-extrabold text-nature-900 dark:text-nature-50">{t(COPY.title)}</h1>
+                    <h1 id="start-community-title" className="min-w-0 text-2xl font-extrabold text-nature-900 dark:text-nature-50">{COPY.title}</h1>
                 </div>
-                <p className="mb-5 text-[15px] leading-relaxed text-nature-700 dark:text-nature-200">{t(COPY.intro)}</p>
+                <p className="mb-5 text-[15px] leading-relaxed text-nature-700 dark:text-nature-200">{COPY.intro}</p>
 
                 <ul className="mb-6 flex flex-col gap-3">
                     {COPY.ways.map((w) => (
                         <li key={w.title} className="flex gap-3 rounded-2xl border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-900 p-4">
                             <span className="shrink-0 text-2xl" aria-hidden="true">{w.icon}</span>
                             <div className="min-w-0">
-                                <h2 className="font-bold text-nature-900 dark:text-nature-50">{t(w.title)}</h2>
-                                <p className="text-sm text-nature-600 dark:text-nature-300">{t(w.body)}</p>
+                                <h2 className="font-bold text-nature-900 dark:text-nature-50">{w.title}</h2>
+                                <p className="text-sm text-nature-600 dark:text-nature-300">{w.body}</p>
                             </div>
                         </li>
                     ))}
                 </ul>
 
                 <section className="mb-6 rounded-2xl border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-900 p-4" data-testid="start-community-know">
-                    <h2 className="mb-2 font-extrabold text-nature-900 dark:text-nature-50">{t(KNOW.heading)}</h2>
+                    <h2 className="mb-2 font-extrabold text-nature-900 dark:text-nature-50">{KNOW.heading}</h2>
                     <dl className="flex flex-col gap-2">
                         {KNOW.lines.map((l) => (
                             <div key={l.label}>
-                                <dt className="text-sm font-bold text-nature-800 dark:text-nature-100">{t(l.label)}</dt>
-                                <dd className="text-sm text-nature-600 dark:text-nature-300">{t(l.body)}</dd>
+                                <dt className="text-sm font-bold text-nature-800 dark:text-nature-100">{l.label}</dt>
+                                <dd className="text-sm text-nature-600 dark:text-nature-300">{l.body}</dd>
                             </div>
                         ))}
                     </dl>
-                    <p className="mt-3 text-sm text-nature-700 dark:text-nature-200">{t(KNOW.steps)}</p>
+                    <p className="mt-3 text-sm text-nature-700 dark:text-nature-200">{KNOW.steps}</p>
                     <div className="mt-4 flex flex-col gap-2">
                         <a href={startCommunityUrl(info)} target="_blank" rel="noopener noreferrer" data-testid="start-community-run-a-node"
-                            className="w-full rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover px-4 py-3 text-center font-bold text-bp-cta-on">{t(COPY.website)}<span aria-hidden="true"> ↗</span></a>
+                            className="w-full rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover px-4 py-3 text-center font-bold text-bp-cta-on">{COPY.website} ↗</a>
                         <a href={SETUP_CHAPTER_URL} target="_blank" rel="noopener noreferrer" data-testid="start-community-setup"
-                            className="w-full rounded-xl border border-nature-300 dark:border-nature-600 px-4 py-3 text-center font-bold text-nature-800 dark:text-nature-100 hover:bg-nature-50 dark:hover:bg-nature-800">{t(KNOW.setupChapter)}<span aria-hidden="true"> ↗</span></a>
+                            className="w-full rounded-xl border border-nature-300 dark:border-nature-600 px-4 py-3 text-center font-bold text-nature-800 dark:text-nature-100 hover:bg-nature-50 dark:hover:bg-nature-800">{KNOW.setupChapter} ↗</a>
                     </div>
                 </section>
 
-                <p className="mb-4 text-sm text-nature-700 dark:text-nature-200">{t(COPY.after)}</p>
+                <p className="mb-4 text-sm text-nature-700 dark:text-nature-200">{COPY.after}</p>
 
                 <section className="mb-6 rounded-2xl border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-900 p-4">
                     <div className="flex flex-col gap-2">
-                        <label className="text-sm font-bold text-nature-800 dark:text-nature-100">{t('Community name')}
-                            <input className={`${FIELD} mt-1`} value={name} onChange={(e) => { setName(e.target.value); setCopied(null); }} placeholder={t('e.g. Riverbend')} />
+                        <label className="text-sm font-bold text-nature-800 dark:text-nature-100">Community name
+                            <input className={`${FIELD} mt-1`} value={name} onChange={(e) => { setName(e.target.value); setCopied(null); }} placeholder="e.g. Riverbend" />
                         </label>
-                        <label className="text-sm font-bold text-nature-800 dark:text-nature-100">{t('Place')}
-                            <input className={`${FIELD} mt-1`} value={place} onChange={(e) => { setPlace(e.target.value); setCopied(null); }} placeholder={t('A town or area')} />
+                        <label className="text-sm font-bold text-nature-800 dark:text-nature-100">Place
+                            <input className={`${FIELD} mt-1`} value={place} onChange={(e) => { setPlace(e.target.value); setCopied(null); }} placeholder="A town or area" />
                         </label>
-                        <label className="text-sm font-bold text-nature-800 dark:text-nature-100">{t('Contact')}
-                            <input className={`${FIELD} mt-1`} value={contact} onChange={(e) => { setContact(e.target.value); setCopied(null); }} placeholder={t('How people can reach you')} />
+                        <label className="text-sm font-bold text-nature-800 dark:text-nature-100">Contact
+                            <input className={`${FIELD} mt-1`} value={contact} onChange={(e) => { setContact(e.target.value); setCopied(null); }} placeholder="How people can reach you" />
                         </label>
                     </div>
                     <button type="button" onClick={copy} disabled={!canCopyDetails(details)} data-testid="start-community-copy"
                         className="mt-3 w-full rounded-xl border border-nature-300 dark:border-nature-600 px-4 py-3 font-bold text-nature-800 dark:text-nature-100 hover:bg-nature-50 dark:hover:bg-nature-800 disabled:cursor-not-allowed">
-                        <span aria-hidden="true">📋 </span>{t(COPY.copyButton)}
+                        📋 {COPY.copyButton}
                     </button>
-                    {copied === 'yes' && <p className="mt-2 text-sm font-semibold text-emerald-700 dark:text-emerald-400" role="status">{t(COPY.copied)}</p>}
-                    {copied === 'no' && <p className="mt-2 text-sm text-nature-700 dark:text-nature-200" role="status">{t('This browser wouldn’t copy. Write the details down, or copy them from here by hand.')}</p>}
+                    {copied === 'yes' && <p className="mt-2 text-sm font-semibold text-emerald-700 dark:text-emerald-400" role="status">{COPY.copied}</p>}
+                    {copied === 'no' && <p className="mt-2 text-sm text-nature-700 dark:text-nature-200" role="status">This browser wouldn’t copy. Write the details down, or copy them from here by hand.</p>}
                 </section>
 
                 {onNearYou && (
                     <button type="button" onClick={() => { onClose(); onNearYou(); }}
                         className="w-full rounded-xl px-4 py-3 font-bold text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-950/50">
-                        {t('Or find a community near you ›')}
+                        Or find a community near you ›
                     </button>
                 )}
             </div>

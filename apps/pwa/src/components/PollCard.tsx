@@ -250,8 +250,10 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
                             />
 
                             {/* Option Row Content */}
-                            <div className="relative z-10 flex items-center justify-between gap-3 text-xs">
-                                <div className="flex items-center gap-2 min-w-0">
+                            {/* The answer keeps at least three-fifths of the row; a percentage a longer language writes wider than
+                                the rest drops to its own line rather than cutting what the member wrote. */}
+                            <div className="relative z-10 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs">
+                                <div className="flex items-center gap-2 min-w-0 flex-1 basis-3/5">
                                     <div
                                         aria-hidden="true"
                                         className={`w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0 border text-[9px] font-black ${
@@ -267,7 +269,7 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
                                     </span>
                                 </div>
 
-                                <div className="flex items-center gap-2 flex-shrink-0 text-right">
+                                <div className="flex items-center gap-2 flex-shrink-0 ml-auto text-right">
                                     <span className="font-black text-nature-700 dark:text-nature-300">
                                         {isVotingThis ? t('Voting...') : t('{rate}%', { rate: pct })}
                                     </span>

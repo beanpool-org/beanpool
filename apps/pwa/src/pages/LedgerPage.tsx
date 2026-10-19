@@ -577,7 +577,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                             </div>
                             <div className="flex-1 min-w-0">
                                 <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: tier.color }}>{t('YOUR TRUST LEVEL')}</span>
-                                <div className="text-2xl font-black leading-tight mt-0.5" style={{ color: tier.color }}>{t(TIER_WORDS[tier.name])}</div>
+                                <div className="text-2xl font-black leading-tight mt-0.5 break-words" style={{ color: tier.color }}>{t(TIER_WORDS[tier.name])}</div>
                                 <div className="text-xs font-semibold text-nature-500 dark:text-nature-300 mt-1">{tn(ec, 'Level {level} of {levels} · {n} trust', 'Level {level} of {levels} · {n} trust', { level: tierIdx + 1, levels: TIERS.length })}</div>
                                 <div className="text-xs font-semibold mt-2 text-nature-700 dark:text-nature-300">
                                     {nextTier
@@ -623,7 +623,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                                         aria-pressed={isSel}
                                         aria-label={t('View {tier} level details', { tier: t(TIER_WORDS[lvl.name]) })}
                                         onClick={() => setSelectedLevel(i)}
-                                        className="flex flex-col items-center py-3 px-1 rounded-xl border-2 transition-all cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-1"
+                                        className="min-w-0 flex flex-col items-center py-3 px-1 rounded-xl border-2 transition-all cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-1"
                                         style={{
                                             background: isSel ? lvl.bg : 'var(--tier-card)',
                                             borderColor: isSel ? lvl.color : 'var(--tier-card-border)',
@@ -632,7 +632,8 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                                         }}
                                     >
                                         <span className="text-3xl leading-none">{lvl.emoji}</span>
-                                        <span className="text-[11px] font-black mt-2 leading-tight" style={{ color: lvl.color }}>{t(TIER_WORDS[lvl.name])}</span>
+                                        {/* A quarter of a 320 px screen: a longer language's tier name breaks inside its tile. */}
+                                        <span className="w-full text-center text-[11px] font-black mt-2 leading-tight [overflow-wrap:anywhere]" style={{ color: lvl.color }}>{t(TIER_WORDS[lvl.name])}</span>
                                         <span className="text-[9px] font-semibold text-nature-400 mt-1 leading-none">
                                             {tierIdx === i ? t("You're here") : reached ? t('Reached') : tn(lvl.min, '{n} trust', '{n} trust')}
                                         </span>

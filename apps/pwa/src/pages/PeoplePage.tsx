@@ -309,7 +309,8 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                         tabIndex={view === v ? 0 : -1}
                         onClick={() => setView(v)}
                         onKeyDown={onTabKeyDown}
-                        className={`flex-1 min-h-[48px] py-2 px-1 border-none rounded-lg text-xs font-bold cursor-pointer transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
+                        // min-w-0 and break-words: a longer language's pane name wraps in its tab, never off a 320 px screen.
+                        className={`flex-1 min-w-0 break-words leading-tight min-h-[48px] py-2 px-1 border-none rounded-lg text-xs font-bold cursor-pointer transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
                             view === v 
                                 ? 'bg-white dark:bg-nature-800 text-rainbow shadow-sm border border-nature-200/50 dark:border-nature-700/50 scale-95 drop-shadow-sm' 
                                 : 'bg-transparent text-nature-500 dark:text-nature-400 hover:text-nature-700 dark:hover:text-oat-50 hover:bg-oat-200 dark:hover:bg-nature-800'

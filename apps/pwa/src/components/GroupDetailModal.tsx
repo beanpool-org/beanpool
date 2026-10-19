@@ -416,12 +416,14 @@ export function GroupDetailModal({
                                         {pendingMembers.map((p) => {
                                             const resolvedAvatar = resolveAvatarUrl(p.avatarUrl);
                                             return (
-                                                <div key={p.memberPubkey} className="flex items-center justify-between p-2 bg-white dark:bg-nature-900 rounded-xl border border-nature-200 dark:border-nature-800">
-                                                    <div className="flex items-center gap-2 min-w-0">
+                                                // The name keeps close to half the row (at 320 px it was cut even in English); Approve and
+                                                // Decline in a longer language drop below it rather than squeezing it away.
+                                                <div key={p.memberPubkey} className="flex flex-wrap items-center justify-between gap-2 p-2 bg-white dark:bg-nature-900 rounded-xl border border-nature-200 dark:border-nature-800">
+                                                    <div className="flex items-center gap-2 min-w-0 flex-1 basis-[45%]">
                                                         {resolvedAvatar ? (
-                                                            <img src={resolvedAvatar} alt="" className="w-6 h-6 rounded-full object-cover" />
+                                                            <img src={resolvedAvatar} alt="" className="w-6 h-6 shrink-0 rounded-full object-cover" />
                                                         ) : (
-                                                            <div className="w-6 h-6 rounded-full bg-nature-200 dark:bg-nature-700 flex items-center justify-center text-[10px] font-bold">
+                                                            <div className="w-6 h-6 shrink-0 rounded-full bg-nature-200 dark:bg-nature-700 flex items-center justify-center text-[10px] font-bold">
                                                                 {(p.callsign || '?').charAt(0).toUpperCase()}
                                                             </div>
                                                         )}
@@ -429,7 +431,7 @@ export function GroupDetailModal({
                                                             {p.callsign || p.memberPubkey.slice(0, 10)}
                                                         </span>
                                                     </div>
-                                                    <div className="flex items-center gap-1">
+                                                    <div className="flex items-center gap-1 ml-auto">
                                                         <button
                                                             onClick={() => handleApprove(p.memberPubkey)}
                                                             disabled={actionLoading}

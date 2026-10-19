@@ -173,13 +173,14 @@ export function DecideSection({
                     aria-selected={activeView === 'open'}
                     aria-controls="panel-open-decisions"
                     onClick={() => onChangeView('open')}
-                    className={`flex-1 py-2.5 px-4 rounded-xl border text-sm font-bold flex items-center justify-center gap-2 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
+                    className={`flex-1 min-w-0 py-2.5 px-4 rounded-xl border text-sm font-bold flex items-center justify-center gap-2 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
                         activeView === 'open'
                             ? 'bg-emerald-50 dark:bg-emerald-500/20 border-emerald-500 text-emerald-800 dark:text-emerald-300 shadow-sm'
                             : 'bg-nature-900 border-nature-800 text-nature-400 hover:border-nature-700'
                     }`}
                 >
-                    <span><span aria-hidden="true">🗳️ </span>{t('Open Decisions')}</span>
+                    {/* A longer language wraps inside the tab rather than pushing the other tab off a 320 px screen. */}
+                    <span className="min-w-0 break-words text-center"><span aria-hidden="true">🗳️ </span>{t('Open Decisions')}</span>
                     {openDecisions.length > 0 && (
                         <span className="bg-bp-commit-fill text-bp-commit-on text-xs px-2 py-0.5 rounded-full font-extrabold">
                             {openDecisions.length}
@@ -194,13 +195,13 @@ export function DecideSection({
                     aria-selected={activeView === 'history'}
                     aria-controls="panel-history-decisions"
                     onClick={() => onChangeView('history')}
-                    className={`flex-1 py-2.5 px-4 rounded-xl border text-sm font-bold flex items-center justify-center gap-2 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
+                    className={`flex-1 min-w-0 py-2.5 px-4 rounded-xl border text-sm font-bold flex items-center justify-center gap-2 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
                         activeView === 'history'
                             ? 'bg-emerald-50 dark:bg-emerald-500/20 border-emerald-500 text-emerald-800 dark:text-emerald-300 shadow-sm'
                             : 'bg-nature-900 border-nature-800 text-nature-400 hover:border-nature-700'
                     }`}
                 >
-                    <span><span aria-hidden="true">📜 </span>{t('Decisions History')}</span>
+                    <span className="min-w-0 break-words text-center"><span aria-hidden="true">📜 </span>{t('Decisions History')}</span>
                 </button>
             </div>
 
@@ -236,7 +237,7 @@ export function DecideSection({
                                 type="button"
                                 onClick={onOpenPropose}
                                 disabled={!canPropose || hasOpenDecision}
-                                className={`w-full sm:w-auto py-2.5 px-5 rounded-xl font-bold text-sm shadow-md transition-all active:scale-95 whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
+                                className={`w-full sm:w-auto py-2.5 px-5 rounded-xl font-bold text-sm shadow-md transition-all active:scale-95 break-words sm:whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
                                     canPropose && !hasOpenDecision
                                         ? 'bg-bp-sage-fill hover:bg-bp-sage-hover text-bp-sage-on'
                                         : 'bg-nature-800 text-nature-500 cursor-not-allowed border border-nature-700/50'
@@ -468,20 +469,20 @@ export function DecideSection({
                                                         type="button"
                                                         onClick={() => handleVote(item, true)}
                                                         disabled={votingId === item.id || buttons.yes.disabled || !!blocker}
-                                                        className="flex-1 py-2.5 px-4 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-extrabold text-sm shadow transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
+                                                        className="flex-1 min-w-0 py-2.5 px-4 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-extrabold text-sm shadow transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
                                                     >
                                                         <span aria-hidden="true">👍</span>
-                                                        <span>{votingId === item.id ? t('Recording...') : buttons.yes.label}</span>
+                                                        <span className="min-w-0 break-words">{votingId === item.id ? t('Recording...') : buttons.yes.label}</span>
                                                     </button>
 
                                                     <button
                                                         type="button"
                                                         onClick={() => handleVote(item, false)}
                                                         disabled={votingId === item.id || buttons.no.disabled || !!blocker}
-                                                        className="flex-1 py-2.5 px-4 rounded-xl bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on font-extrabold text-sm shadow transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
+                                                        className="flex-1 min-w-0 py-2.5 px-4 rounded-xl bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on font-extrabold text-sm shadow transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
                                                     >
                                                         <span aria-hidden="true">👎</span>
-                                                        <span>{votingId === item.id ? t('Recording...') : buttons.no.label}</span>
+                                                        <span className="min-w-0 break-words">{votingId === item.id ? t('Recording...') : buttons.no.label}</span>
                                                     </button>
                                                 </div>
                                             )}

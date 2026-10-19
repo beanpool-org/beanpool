@@ -211,13 +211,15 @@ export function CreditBar({ balance, floor, usableFloor, liveOffers = 0, knownGr
                 ))}
             </div>
 
-            {/* Lane 1 — your position tag (sits above the track) */}
+            {/* Lane 1 — your position tag (sits above the track). Anchored at the same fraction of its own width as the bead's
+                place on the track: centred at the middle as before, and never past either end, however long the language
+                writes "B · ≈1%/mo" (a centred tag ran off a 320 px screen near the right end). The pointer stays over the bead. */}
             <div
                 style={{
                     position: 'absolute',
                     top: 0,
                     left: `${pct}%`,
-                    transform: 'translateX(-50%)',
+                    transform: `translateX(-${pct}%)`,
                     backgroundColor: tagBg,
                     color: '#fff',
                     padding: '3px 8px',
@@ -230,10 +232,10 @@ export function CreditBar({ balance, floor, usableFloor, liveOffers = 0, knownGr
                 }}
             >
                 {tagLabel}
-                {/* pointer */}
+                {/* pointer: over the bead, kept off the tag's rounded corners */}
                 <span style={{
                     position: 'absolute',
-                    left: '50%',
+                    left: `clamp(8px, ${pct}%, calc(100% - 8px))`,
                     bottom: -4,
                     transform: 'translateX(-50%)',
                     width: 0,

@@ -315,7 +315,8 @@ export const EnterpriseLocationPicker: React.FC<EnterpriseLocationPickerProps> =
                         </button>
                     )}
                 </div>
-                <div className="flex items-center gap-2">
+                {/* Wraps too: Cancel and Save in a longer language are wider than a 320dp screen side by side. */}
+                <div className="flex flex-wrap items-center justify-end gap-2">
                     <button
                         type="button"
                         onClick={onClose}

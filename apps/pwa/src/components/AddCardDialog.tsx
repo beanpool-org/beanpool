@@ -42,6 +42,8 @@ function Shell({ id, testId, title, children, onClose, dialog }: {
 
 export const PICKER_NOTE = word('Pick a card to put on Home. You can move or remove it any time.');
 export const PICKER_FULL_NOTE = word('Home is full: remove a card to add one.');
+/** The picker's two notes, shown through t() (a table, as words:check reads a key). */
+const NOTES = { pick: PICKER_NOTE, full: PICKER_FULL_NOTE } as const;
 
 interface PickerProps {
     groups: PickerGroup[];
@@ -78,7 +80,7 @@ export function AddCardDialog({ groups, full, onAdd, onClose, returnFocus, hasPo
 
     return (
         <Shell id="home-add-title" testId="home-add-dialog" title={t('Add a card')} onClose={onClose} dialog={dialog}>
-            <p data-testid="home-add-note" className="m-0 mb-3 text-sm text-nature-700 dark:text-nature-200">{t(full ? PICKER_FULL_NOTE : PICKER_NOTE)}</p>
+            <p data-testid="home-add-note" className="m-0 mb-3 text-sm text-nature-700 dark:text-nature-200">{full ? t(NOTES.full) : t(NOTES.pick)}</p>
             {groups.map((g) => (
                 <section key={g.id} aria-labelledby={`home-add-group-${g.id}`} className="mb-3">
                     <h3 id={`home-add-group-${g.id}`} className="m-0 mb-1 text-[0.7rem] font-extrabold uppercase tracking-wider text-nature-600 dark:text-nature-300">{g.name}</h3>

@@ -42,6 +42,8 @@ interface Props {
 }
 
 export const EDIT_HOME_NOTE = word("Needs you stays at the top, and your community's card at the bottom.");
+/** The dialog's fixed lines, shown through t() (a table, as words:check reads a key). */
+const LINES = { note: EDIT_HOME_NOTE, notOnAccount: NOT_ON_ACCOUNT_LINE } as const;
 
 export function EditHomeDialog({ rows, notOnAccount, onAdd, onMove, onSettings, onRemove, onReset, onClose, returnFocus }: Props) {
     const dialog = useRef<HTMLDivElement | null>(null);
@@ -75,9 +77,9 @@ export function EditHomeDialog({ rows, notOnAccount, onAdd, onMove, onSettings, 
             <div ref={dialog} role="dialog" aria-modal="true" aria-labelledby="home-edit-title" data-testid="home-edit-dialog"
                 className="w-full sm:max-w-md max-h-[90vh] overflow-y-auto bg-white dark:bg-nature-950 rounded-t-2xl sm:rounded-2xl shadow-2xl p-4 min-w-0">
                 <h2 id="home-edit-title" tabIndex={-1} className="m-0 mb-1 text-lg font-extrabold text-nature-950 dark:text-white focus:outline-none">{t('Edit home')}</h2>
-                <p className="m-0 mb-3 text-sm text-nature-700 dark:text-nature-200">{t(EDIT_HOME_NOTE)}</p>
+                <p className="m-0 mb-3 text-sm text-nature-700 dark:text-nature-200">{t(LINES.note)}</p>
                 {notOnAccount && (
-                    <p data-testid="home-edit-not-on-account" className="m-0 mb-3 text-sm text-nature-700 dark:text-nature-200">{t(NOT_ON_ACCOUNT_LINE)}</p>
+                    <p data-testid="home-edit-not-on-account" className="m-0 mb-3 text-sm text-nature-700 dark:text-nature-200">{t(LINES.notOnAccount)}</p>
                 )}
                 <button type="button" data-testid="home-edit-add" onClick={onAdd}
                     className="w-full mb-3 min-h-[44px] px-4 rounded-xl border-0 bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on text-sm font-bold cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400">

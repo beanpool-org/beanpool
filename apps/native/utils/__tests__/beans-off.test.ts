@@ -216,9 +216,11 @@ describe('the screens draw Beans only behind beansOn (source check)', () => {
     it('a group’s post form: no price field, and the price never holds the post back', () => {
         const src = read('app/group-post.tsx');
         const field = block(src, '{showsBeans ? (');
+        // Through t() since words S3h: the same field, then the same note in its place.
+        expect(src).toContain('noBeansEditNote: NO_BEANS_EDIT_NOTE');
         expect(field).toContain('PRICE (BEANS) *');
-        expect(field).toContain('{NO_BEANS_EDIT_NOTE}');
-        expect(field.indexOf('PRICE (BEANS) *')).toBeLessThan(field.indexOf('{NO_BEANS_EDIT_NOTE}'));
+        expect(field).toContain('{t(LINES.noBeansEditNote)}');
+        expect(field.indexOf('PRICE (BEANS) *')).toBeLessThan(field.indexOf('{t(LINES.noBeansEditNote)}'));
         expect(src).toContain('if (groupPostPriceInvalid(credits, nodeProfile?.features)) errs.add(\'credits\');');
         expect(src).toContain('groupPostMissingFields(nodeProfile?.features)');
         expect(src).toContain('...groupPostPrice(credits, priceType, nodeProfile?.features),');

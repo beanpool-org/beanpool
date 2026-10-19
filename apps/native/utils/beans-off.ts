@@ -11,6 +11,7 @@
  */
 
 import type { NodeFeatures } from './node-profile';
+import { t } from '@beanpool/core';
 
 function beansShown(features: NodeFeatures | null | undefined): boolean {
     return features?.beans !== false;
@@ -34,7 +35,7 @@ export function groupPostPriceInvalid(field: string, features: NodeFeatures | nu
 
 /** What the alert says when a required field is missing. */
 export function groupPostMissingFields(features: NodeFeatures | null | undefined): string {
-    return beansShown(features) ? 'Please provide a title, category, and price/credits.' : 'Please provide a title and category.';
+    return beansShown(features) ? t('Please provide a title, category, and price/credits.') : t('Please provide a title and category.');
 }
 
 /*

@@ -17,17 +17,28 @@ import { useNodeProfile } from '../utils/use-node-profile';
 import { beansOn, showcaseMode } from '../utils/node-profile';
 import { NO_BEANS_EDIT_NOTE } from '../utils/market-global';
 import { LocalCommunityMark } from '../components/showcase/LocalCommunityMark';
-import { LOCAL_COMMUNITY_LINES } from '@beanpool/core';
+import { LOCAL_COMMUNITY_LINES, t, word, type WordKey } from '@beanpool/core';
 import { groupPostPrice, groupPostPriceInvalid, groupPostMissingFields } from '../utils/beans-off';
 
 const PRICE_TYPES = ['fixed', 'hourly', 'daily', 'weekly', 'monthly'] as const;
-const PRICE_TYPE_LABEL: Record<string, string> = { fixed: 'Total', hourly: '/hr', daily: '/day', weekly: '/wk', monthly: '/mo' };
+/** The price box's unit: marked here, translated where shown (the same words as an enterprise's post form). */
+const PRICE_TYPE_LABEL: Record<string, WordKey> = {
+    fixed: word('Total', 'price unit'), hourly: word('/hr'), daily: word('/day'), weekly: word('/wk'), monthly: word('/mo'),
+};
+/** Sentences marked elsewhere, translated here where they are shown. */
+const LINES = { noBeansEditNote: NO_BEANS_EDIT_NOTE, price: LOCAL_COMMUNITY_LINES.price };
+
+/** The price unit's words, "Total" for a type this screen does not list. */
+function priceUnit(priceType: string): string {
+    return Object.prototype.hasOwnProperty.call(PRICE_TYPE_LABEL, priceType) ? t(PRICE_TYPE_LABEL[priceType]) : t(PRICE_TYPE_LABEL.fixed);
+}
 
 export default function GroupPostScreen() {
     const params = useLocalSearchParams<{ groupId?: string | string[]; groupName?: string | string[] }>();
     const groupId = Array.isArray(params.groupId) ? params.groupId[0] : params.groupId;
     const rawGroupName = Array.isArray(params.groupName) ? params.groupName[0] : params.groupName;
-    const groupName = rawGroupName || 'Group';
+    // The name its members gave it, as written; the word only when the screen was opened without one.
+    const groupName = rawGroupName || t('Group');
     const { identity } = useIdentity();
     const { theme, colors } = useTheme();
 
@@ -206,17 +217,17 @@ export default function GroupPostScreen() {
         setErrors(errs);
         if (errs.size > 0) {
             hapticWarning();
-            Alert.alert('Missing Fields', groupPostMissingFields(nodeProfile?.features));
+            Alert.alert(t('Missing Fields'), groupPostMissingFields(nodeProfile?.features));
             return;
         }
 
         if (!groupId) {
-            Alert.alert('Error', 'Missing target group identifier');
+            Alert.alert(t('Error'), t('Missing target group identifier'));
             return;
         }
 
         if (!identity?.publicKey) {
-            Alert.alert('Authentication Required', 'You must be logged in to create a group post.');
+            Alert.alert(t('Authentication Required'), t('You must be logged in to create a group post.'));
             return;
         }
 
@@ -240,13 +251,13 @@ export default function GroupPostScreen() {
             });
             hapticSuccess();
             Alert.alert(
-                'Post Created',
-                `Your post has been shared with ${groupName}.`,
-                [{ text: 'OK', onPress: () => router.back() }]
+                t('Post Created'),
+                t('Your post has been shared with {name}.', { name: groupName }),
+                [{ text: t('OK'), onPress: () => router.back() }]
             );
         } catch (err: any) {
             hapticWarning();
-            Alert.alert('Error Posting', err.message || 'Failed to create group post');
+            Alert.alert(t('Error Posting'), err.message || t('Failed to create group post'));
         } finally {
             submittingRef.current = false;
             setSubmitting(false);
@@ -258,13 +269,13 @@ export default function GroupPostScreen() {
             <View style={styles.header}>
                 <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel="Back"
+                    accessibilityLabel={t('Back')}
                     onPress={() => router.back()}
                     style={styles.backButton}
                 >
                     <MaterialCommunityIcons name="arrow-left" size={24} color={colors.text.inverse} />
                 </Pressable>
-                <Text style={styles.headerTitle}>Post to Group</Text>
+                <Text style={[styles.headerTitle, { flexShrink: 1, textAlign: 'center' }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Post to Group')}</Text>
                 <View style={{ width: 40 }} />
             </View>
 
@@ -276,10 +287,10 @@ export default function GroupPostScreen() {
                     <View style={styles.audienceBanner}>
                         <View style={styles.audienceBadgeRow}>
                             <MaterialCommunityIcons name="lock" size={20} color={colors.brand.primary} />
-                            <Text style={styles.audienceBannerTitle}>Only {groupName} can see this</Text>
+                            <Text style={[styles.audienceBannerTitle, { flexShrink: 1 }]}>{t('Only {name} can see this', { name: groupName })}</Text>
                         </View>
                         <Text style={styles.audienceBannerDesc}>
-                            This post will be visible exclusively to active members of {groupName}. It will never appear in the public marketplace feed or on the public map.
+                            {t('This post will be visible exclusively to active members of {name}. It will never appear in the public marketplace feed or on the public map.', { name: groupName })}
                         </Text>
                     </View>
 
@@ -291,8 +302,8 @@ export default function GroupPostScreen() {
                             accessibilityRole="button"
                             accessibilityState={{ selected: type === 'offer' }}
                         >
-                            <Text style={[styles.typeBtnText, type === 'offer' && styles.typeBtnTextActive]}>
-                                🟢 Offer
+                            <Text style={[styles.typeBtnText, type === 'offer' && styles.typeBtnTextActive]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+                                {t('🟢 Offer')}
                             </Text>
                         </Pressable>
                         <Pressable
@@ -301,21 +312,21 @@ export default function GroupPostScreen() {
                             accessibilityRole="button"
                             accessibilityState={{ selected: type === 'need' }}
                         >
-                            <Text style={[styles.typeBtnText, type === 'need' && styles.typeBtnTextActive]}>
-                                🟠 Need
+                            <Text style={[styles.typeBtnText, type === 'need' && styles.typeBtnTextActive]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+                                {t('🟠 Need')}
                             </Text>
                         </Pressable>
                     </View>
 
                     {/* Title */}
                     <View style={styles.field}>
-                        <Text style={styles.label}>TITLE *</Text>
+                        <Text style={styles.label}>{t('TITLE *')}</Text>
                         <TextInput
                             style={[styles.input, errors.has('title') && styles.fieldError]}
                             value={title}
-                            onChangeText={(t) => { setTitle(t); clearError('title'); }}
+                            onChangeText={(text) => { setTitle(text); clearError('title'); }}
                             // One line at 320dp + 1.3x: a longer placeholder wraps and its second line is clipped on Android.
-                            placeholder={type === 'offer' ? 'e.g. Garden tools lending' : 'e.g. Help moving soil'}
+                            placeholder={type === 'offer' ? t('e.g. Garden tools lending') : t('e.g. Help moving soil')}
                             placeholderTextColor={colors.text.muted}
                             maxLength={80}
                         />
@@ -323,15 +334,15 @@ export default function GroupPostScreen() {
 
                     {/* Category */}
                     <View style={styles.field}>
-                        <Text style={styles.label}>CATEGORY *</Text>
+                        <Text style={styles.label}>{t('CATEGORY *')}</Text>
                         <Pressable
                             style={[styles.input, styles.pickerRow, errors.has('category') && styles.fieldError]}
                             onPress={() => setShowCategoryPicker(true)}
                             accessibilityRole="button"
-                            accessibilityLabel={`Category: ${categoryLabel(category)}`}
-                            accessibilityHint="Opens category picker sheet"
+                            accessibilityLabel={t('Category: {category}', { category: categoryLabel(category) })}
+                            accessibilityHint={t('Opens category picker sheet')}
                         >
-                            <Text style={styles.pickerText}>
+                            <Text style={[styles.pickerText, { flexShrink: 1 }]}>
                                 {categoryEmoji(category)} {categoryLabel(category)}
                             </Text>
                             <MaterialCommunityIcons name="chevron-down" size={20} color={colors.text.secondary} />
@@ -341,7 +352,7 @@ export default function GroupPostScreen() {
                     {/* Price / Credits; where there are no Beans, a note instead */}
                     {showsBeans ? (
                     <View style={styles.field}>
-                        <Text style={styles.label}>PRICE (BEANS) *</Text>
+                        <Text style={styles.label}>{t('PRICE (BEANS) *')}</Text>
                         <View style={styles.priceRow}>
                             <TextInput
                                 style={[styles.input, styles.priceInput, errors.has('credits') && styles.fieldError]}
@@ -355,28 +366,28 @@ export default function GroupPostScreen() {
                                 style={styles.priceTypeBtn}
                                 onPress={cyclePriceType}
                                 accessibilityRole="button"
-                                accessibilityLabel={`Price unit: ${PRICE_TYPE_LABEL[priceType] || 'Total'}`}
-                                accessibilityHint="Cycles price unit"
+                                accessibilityLabel={t('Price unit: {unit}', { unit: priceUnit(priceType) })}
+                                accessibilityHint={t('Cycles price unit')}
                             >
-                                <Text style={styles.priceTypeText}>{PRICE_TYPE_LABEL[priceType] || 'Total'}</Text>
+                                <Text style={styles.priceTypeText}>{priceUnit(priceType)}</Text>
                             </Pressable>
                         </View>
                     </View>
                     ) : (
                     <View style={styles.field}>
-                        <Text style={{ color: colors.text.secondary, fontSize: 13, lineHeight: 18 }}>{NO_BEANS_EDIT_NOTE}</Text>
-                        {beansPreview && <LocalCommunityMark variant="line" feature="beans" text={LOCAL_COMMUNITY_LINES.price} />}
+                        <Text style={{ color: colors.text.secondary, fontSize: 13, lineHeight: 18 }}>{t(LINES.noBeansEditNote)}</Text>
+                        {beansPreview && <LocalCommunityMark variant="line" feature="beans" text={t(LINES.price)} />}
                     </View>
                     )}
 
                     {/* Description */}
                     <View style={styles.field}>
-                        <Text style={styles.label}>DESCRIPTION</Text>
+                        <Text style={styles.label}>{t('DESCRIPTION')}</Text>
                         <TextInput
                             style={[styles.input, styles.textarea]}
                             value={description}
                             onChangeText={setDescription}
-                            placeholder="Add details, instructions, or notes for group members..."
+                            placeholder={t('Add details, instructions, or notes for group members...')}
                             placeholderTextColor={colors.text.muted}
                             multiline
                             textAlignVertical="top"
@@ -393,8 +404,8 @@ export default function GroupPostScreen() {
                             {repeatable && <MaterialCommunityIcons name="check" size={16} color={colors.text.inverse} />}
                         </View>
                         <View style={{ flex: 1 }}>
-                            <Text style={styles.toggleLabel}>🔁 Recurring Post</Text>
-                            <Text style={styles.toggleHint}>Stays active after trade is completed</Text>
+                            <Text style={styles.toggleLabel}>{t('🔁 Recurring Post')}</Text>
+                            <Text style={styles.toggleHint}>{t('Stays active after trade is completed')}</Text>
                         </View>
                     </Pressable>
 
@@ -408,8 +419,8 @@ export default function GroupPostScreen() {
                             {cashAlsoNeeded && <MaterialCommunityIcons name="check" size={16} color={colors.text.inverse} />}
                         </View>
                         <View style={{ flex: 1 }}>
-                            <Text style={styles.toggleLabel}>💸 Cash Also Needed</Text>
-                            <Text style={styles.toggleHint}>At cost for fuel or materials (agreed in chat)</Text>
+                            <Text style={styles.toggleLabel}>{t('💸 Cash Also Needed')}</Text>
+                            <Text style={styles.toggleHint}>{t('At cost for fuel or materials (agreed in chat)')}</Text>
                         </View>
                     </Pressable>
                 </ScrollView>
@@ -426,7 +437,7 @@ export default function GroupPostScreen() {
                         {submitting ? (
                             <ActivityIndicator color={colors.text.inverse} />
                         ) : (
-                            <Text style={styles.submitBtnText} numberOfLines={1}>Post to {groupName}</Text>
+                            <Text style={styles.submitBtnText} numberOfLines={1}>{t('Post to {name}', { name: groupName })}</Text>
                         )}
                     </Pressable>
                 </View>

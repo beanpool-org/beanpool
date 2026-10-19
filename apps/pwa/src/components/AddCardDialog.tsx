@@ -13,7 +13,7 @@
  * control is at least 44 px.
  */
 import { useRef, useState, type ReactNode } from 'react';
-import { HOME_SEARCH_KMS, HOME_SEARCH_MAX_CHARS, readSearchSettings, readSkySettings, type HomeSearchKind, type SkySettings } from '@beanpool/core';
+import { HOME_SEARCH_KMS, HOME_SEARCH_MAX_CHARS, readSearchSettings, readSkySettings, t, word, type HomeSearchKind, type SkySettings, type WordKey } from '@beanpool/core';
 import { type PickerGroup, type PickerRow } from '../lib/home-layout';
 import { MARKETPLACE_CATEGORIES } from '../lib/marketplace';
 import { useDialogFocus } from './dialog-focus';
@@ -32,7 +32,7 @@ function Shell({ id, testId, title, children, onClose, dialog }: {
                 className="w-full sm:max-w-md max-h-[90vh] overflow-y-auto bg-white dark:bg-nature-950 rounded-t-2xl sm:rounded-2xl shadow-2xl p-4 min-w-0">
                 <div className="flex items-start gap-2 mb-1">
                     <h2 id={id} tabIndex={-1} className="m-0 flex-1 min-w-0 break-words text-lg font-extrabold text-nature-950 dark:text-white focus:outline-none">{title}</h2>
-                    <button type="button" data-testid={`${testId}-done`} onClick={onClose} className={plain}>Done</button>
+                    <button type="button" data-testid={`${testId}-done`} onClick={onClose} className={plain}>{t('Done')}</button>
                 </div>
                 {children}
             </div>
@@ -40,8 +40,10 @@ function Shell({ id, testId, title, children, onClose, dialog }: {
     );
 }
 
-export const PICKER_NOTE = 'Pick a card to put on Home. You can move or remove it any time.';
-export const PICKER_FULL_NOTE = 'Home is full: remove a card to add one.';
+export const PICKER_NOTE = word('Pick a card to put on Home. You can move or remove it any time.');
+export const PICKER_FULL_NOTE = word('Home is full: remove a card to add one.');
+/** The picker's two notes, shown through t() (a table, as words:check reads a key). */
+const NOTES = { pick: PICKER_NOTE, full: PICKER_FULL_NOTE } as const;
 
 interface PickerProps {
     groups: PickerGroup[];
@@ -77,8 +79,8 @@ export function AddCardDialog({ groups, full, onAdd, onClose, returnFocus, hasPo
     }
 
     return (
-        <Shell id="home-add-title" testId="home-add-dialog" title="Add a card" onClose={onClose} dialog={dialog}>
-            <p data-testid="home-add-note" className="m-0 mb-3 text-sm text-nature-700 dark:text-nature-200">{full ? PICKER_FULL_NOTE : PICKER_NOTE}</p>
+        <Shell id="home-add-title" testId="home-add-dialog" title={t('Add a card')} onClose={onClose} dialog={dialog}>
+            <p data-testid="home-add-note" className="m-0 mb-3 text-sm text-nature-700 dark:text-nature-200">{full ? t(NOTES.full) : t(NOTES.pick)}</p>
             {groups.map((g) => (
                 <section key={g.id} aria-labelledby={`home-add-group-${g.id}`} className="mb-3">
                     <h3 id={`home-add-group-${g.id}`} className="m-0 mb-1 text-[0.7rem] font-extrabold uppercase tracking-wider text-nature-600 dark:text-nature-300">{g.name}</h3>
@@ -93,14 +95,14 @@ export function AddCardDialog({ groups, full, onAdd, onClose, returnFocus, hasPo
                                     {r.status && <span className="block text-xs text-nature-600 dark:text-nature-300">{r.status}</span>}
                                 </span>
                                 {r.state === 'add' ? (
-                                    <button type="button" data-testid={`home-add-${r.type}`} aria-label={`Add ${r.name} to Home`} className={`shrink-0 ${primary}`}
+                                    <button type="button" data-testid={`home-add-${r.type}`} aria-label={t('Add {card} to Home', { card: r.name })} className={`shrink-0 ${primary}`}
                                         onClick={() => (r.hasSettings ? setSettingsFor(r) : add(r.type))}>
-                                        Add
+                                        {t('Add')}
                                     </button>
                                 ) : r.state === 'on-home' ? (
                                     // Words, not an aria-label: a plain span's label isn't reliably read (review of #1701, 7a).
                                     <span data-testid={`home-add-on-${r.type}`} className="shrink-0 text-xs font-semibold text-nature-600 dark:text-nature-300">
-                                        <span aria-hidden="true">On Home</span><span className="sr-only">{r.name} is already on Home</span>
+                                        <span aria-hidden="true">{t('On Home')}</span><span className="sr-only">{t('{card} is already on Home', { card: r.name })}</span>
                                     </span>
                                 ) : null}
                             </li>
@@ -129,14 +131,14 @@ interface SettingsProps {
     returnFocus?: () => HTMLElement | null | undefined;
 }
 
-/** A saved search's kinds, as its sheet offers them (CARD-FRAME §4). */
-export const SEARCH_KIND_CHIPS: ReadonlyArray<{ kind: HomeSearchKind; label: string }> = [
-    { kind: 'any', label: 'Both' }, { kind: 'offer', label: 'Offers' }, { kind: 'need', label: 'Needs' },
+/** A saved search's kinds, as its sheet offers them (CARD-FRAME §4). word() keys: shown through t(). */
+export const SEARCH_KIND_CHIPS: ReadonlyArray<{ kind: HomeSearchKind; label: WordKey }> = [
+    { kind: 'any', label: word('Both') }, { kind: 'offer', label: word('Offers') }, { kind: 'need', label: word('Needs') },
 ];
 
-/** Whose place the sun and moon card shows, as its sheet offers it (CARD-FRAME §4). */
-export const SKY_PLACE_CHIPS: ReadonlyArray<{ place: SkySettings['place']; label: string }> = [
-    { place: 'community', label: 'Your community' }, { place: 'me', label: 'Your area' },
+/** Whose place the sun and moon card shows, as its sheet offers it (CARD-FRAME §4). word() keys: shown through t(). */
+export const SKY_PLACE_CHIPS: ReadonlyArray<{ place: SkySettings['place']; label: WordKey }> = [
+    { place: 'community', label: word('Your community') }, { place: 'me', label: word('Your area') },
 ];
 
 const chip = (on: boolean) => `min-w-[44px] min-h-[44px] px-3 rounded-full border text-sm font-semibold cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
@@ -179,10 +181,10 @@ export function CardSettingsDialog({ type, name, mode, initial, hasPoint = false
         return (
             <Shell id="home-settings-title" testId="home-settings-dialog" title={name} onClose={onClose} dialog={dialog}>
                 <form onSubmit={(e) => { e.preventDefault(); onSubmit({ place }); }}>
-                    <Chips legend="Whose place" testId="home-settings-place" value={place} onPick={setPlace}
-                        options={SKY_PLACE_CHIPS.map((p) => ({ value: p.place, label: p.label }))} />
+                    <Chips legend={t('Whose place')} testId="home-settings-place" value={place} onPick={setPlace}
+                        options={SKY_PLACE_CHIPS.map((p) => ({ value: p.place, label: t(p.label) }))} />
                     <button type="submit" data-testid="home-settings-submit" className={`mt-4 w-full ${primary}`}>
-                        {mode === 'add' ? 'Add to Home' : 'Save'}
+                        {mode === 'add' ? t('Add to Home') : t('Save')}
                     </button>
                 </form>
             </Shell>
@@ -193,24 +195,28 @@ export function CardSettingsDialog({ type, name, mode, initial, hasPoint = false
     return (
         <Shell id="home-settings-title" testId="home-settings-dialog" title={name} onClose={onClose} dialog={dialog}>
             <form onSubmit={(e) => { e.preventDefault(); if (words) submit(); }}>
-                <label htmlFor="home-settings-q" className="block mb-1 text-sm font-semibold text-nature-900 dark:text-white">Words to look for</label>
+                <label htmlFor="home-settings-q" className="block mb-1 text-sm font-semibold text-nature-900 dark:text-white">{t('Words to look for')}</label>
                 <input id="home-settings-q" data-testid="home-settings-q" type="text" value={q} maxLength={HOME_SEARCH_MAX_CHARS}
                     onChange={(e) => setQ(e.target.value)} autoComplete="off"
                     className="w-full min-w-0 min-h-[44px] px-3 rounded-xl border border-nature-300 dark:border-nature-700 bg-white dark:bg-nature-900 text-base text-nature-900 dark:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500" />
-                <Chips legend="Show" testId="home-settings-kind" value={kind} onPick={setKind}
-                    options={SEARCH_KIND_CHIPS.map((k) => ({ value: k.kind, label: k.label }))} />
-                <label htmlFor="home-settings-category" className="block mt-3 mb-1 text-sm font-semibold text-nature-900 dark:text-white">Category</label>
+                <Chips legend={t('Show')} testId="home-settings-kind" value={kind} onPick={setKind}
+                    options={SEARCH_KIND_CHIPS.map((k) => ({ value: k.kind, label: t(k.label) }))} />
+                <label htmlFor="home-settings-category" className="block mt-3 mb-1 text-sm font-semibold text-nature-900 dark:text-white">{t('Category')}</label>
                 <select id="home-settings-category" data-testid="home-settings-category" value={category} onChange={(e) => setCategory(e.target.value)}
                     className="w-full min-w-0 min-h-[44px] px-3 rounded-xl border border-nature-300 dark:border-nature-700 bg-white dark:bg-nature-900 text-base text-nature-900 dark:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
-                    <option value="">Any category</option>
-                    {MARKETPLACE_CATEGORIES.map((c) => <option key={c.id} value={c.id}>{`${c.emoji} ${c.label}`}</option>)}
+                    <option value="">{t('Any category')}</option>
+                    {MARKETPLACE_CATEGORIES.map((c) => {
+                        // The category's name in the member's language, after its emoji (an icon, not words).
+                        const name = t(c.label);
+                        return <option key={c.id} value={c.id}>{`${c.emoji} ${name}`}</option>;
+                    })}
                 </select>
                 {hasPoint && (
-                    <Chips legend="Distance" testId="home-settings-km" value={km} onPick={setKm}
-                        options={[{ value: null, label: 'Any distance' }, ...HOME_SEARCH_KMS.map((k) => ({ value: k as number | null, label: `${k} km` }))]} />
+                    <Chips legend={t('Distance')} testId="home-settings-km" value={km} onPick={setKm}
+                        options={[{ value: null, label: t('Any distance') }, ...HOME_SEARCH_KMS.map((k) => ({ value: k as number | null, label: t('{distance} km', { distance: k }) }))]} />
                 )}
                 <button type="submit" data-testid="home-settings-submit" disabled={!words} className={`mt-4 w-full disabled:opacity-40 disabled:cursor-default ${primary}`}>
-                    {mode === 'add' ? 'Add to Home' : 'Save'}
+                    {mode === 'add' ? t('Add to Home') : t('Save')}
                 </button>
             </form>
         </Shell>

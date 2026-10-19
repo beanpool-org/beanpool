@@ -89,6 +89,7 @@ import {
 } from './blocklist';
 import { ringBlocklistDoorbell } from './blocklist-doorbell';
 import * as api from './api';
+import { backToEnglish, showIn, xx } from '../words-xx.test-support';
 
 const ME = 'a1'.repeat(32);
 const [K1, K2, K3, K4] = ['b2', 'c3', 'd4', 'e5'].map(p => p.repeat(32));
@@ -579,6 +580,32 @@ describe('the block list the community keeps for the account', () => {
         await loadBlocklist();
         expect(getBlocklistStatus()).toEqual({ loaded: true, error: null });
         expect(getBlockedUsers()).toEqual([K1]);
+    });
+
+    it('in another language, "couldn\u2019t reach your community" is said in it, for a read, a block, an unblock and Unblock All', async () => {
+        node.list = [K1];
+        startBlocklist(ME);
+        await vi.waitFor(() => expect(getBlockedUsers()).toEqual([K1]));
+        await showIn('xx');
+        try {
+            node.down = true;
+            const read = await loadBlocklist().catch(e => e);
+            expect(read).toBeInstanceOf(BlocklistError);
+            expect(read.message).toBe(xx('Couldn’t load your blocked members from your community. Check your connection and try again.'));
+            expect(getBlocklistStatus().error).toBe(read.message);
+            expect((await blockUser(K2, ME, 'Harassment').catch(e => e)).message)
+                .toBe(xx('Couldn’t reach your community, so they are not blocked. Check your connection and try again.'));
+            expect((await unblockUser(K1).catch(e => e)).message)
+                .toBe(xx('Couldn’t reach your community, so they are still blocked. Check your connection and try again.'));
+            expect((await clearBlocklist().catch(e => e)).message)
+                .toBe(xx('Couldn’t reach your community, so nobody was unblocked. Check your connection and try again.'));
+            // The node's own refusal stays in its words (it sends them in the member's language when it has them).
+            node.down = false;
+            node.refuse = { status: 409, error: 'You can block up to 500 people. Unblock someone to block another.', code: 'block_limit' };
+            expect((await blockUser(K2).catch(e => e)).message).toBe('You can block up to 500 people. Unblock someone to block another.');
+        } finally {
+            backToEnglish();
+        }
     });
 
     it('unblocking someone the old browser list still names takes them off it too, so the move never blocks them again', async () => {

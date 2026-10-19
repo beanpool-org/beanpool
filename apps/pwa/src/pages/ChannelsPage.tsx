@@ -17,7 +17,9 @@ import {
     CATEGORIES,
     VIDEO_PLATFORMS,
     platformMeta,
+    platformName,
     categoryMeta,
+    t,
 } from '@beanpool/core';
 import {
     type MemberCreatorChannel,
@@ -34,6 +36,13 @@ interface Props {
     onBack: () => void;
     onViewFeed: () => void;
     onSharePost: (channelId?: string) => void;
+}
+
+/** How a channel keeps the feed current, in the member's language: it updates itself, or a tap per post (as the phone's). */
+function listingWords(channel: MemberCreatorChannel): string {
+    if (channel.supportsAutolist) return channel.oauthVerifiedAt ? t('Updates itself (connected)') : t('Updates itself');
+    const listing = platformMeta(channel.platform).listing;
+    return t(LISTING_LABEL[listing === 'auto' ? 'manual' : listing]);
 }
 
 interface CrossPostPrompt {
@@ -66,7 +75,7 @@ export function ChannelsPage({ identity, onBack, onViewFeed, onSharePost }: Prop
 
     const load = useCallback(async () => {
         if (!identity) {
-            setListError('No identity on this device yet.');
+            setListError(t('No identity on this device yet.'));
             setLoading(false);
             return;
         }
@@ -75,7 +84,7 @@ export function ChannelsPage({ identity, onBack, onViewFeed, onSharePost }: Prop
             setChannels(res.channels || []);
             setListError(null);
         } catch (e: any) {
-            setListError(e?.message || 'Could not load your channels.');
+            setListError(e?.message || t('Could not load your channels.'));
         } finally {
             setLoading(false);
         }
@@ -113,7 +122,7 @@ export function ChannelsPage({ identity, onBack, onViewFeed, onSharePost }: Prop
                 });
             }
         } catch (e: any) {
-            setFormError(e?.message || 'Could not add that channel.');
+            setFormError(e?.message || t('Could not add that channel.'));
         } finally {
             setSaving(false);
         }
@@ -139,7 +148,7 @@ export function ChannelsPage({ identity, onBack, onViewFeed, onSharePost }: Prop
                     return restored;
                 }));
             }
-            setListError(e?.message || 'Could not save that change.');
+            setListError(e?.message || t('Could not save that change.'));
         }
     };
 
@@ -172,13 +181,14 @@ export function ChannelsPage({ identity, onBack, onViewFeed, onSharePost }: Prop
             await deleteMemberChannel(channel.id);
             await load();
         } catch (e: any) {
-            setListError(e?.message || 'Could not remove that channel.');
+            setListError(e?.message || t('Could not remove that channel.'));
         }
     };
 
     const videoChannels = channels.filter(c => VIDEO_PLATFORMS.includes(c.platform));
     const showCrossPostBanner = videoChannels.length > 1;
     const primary = videoChannels.find(c => c.isPrimaryVideo);
+    const chosen = platformMeta(platform);
 
     return (
         <div className="max-w-2xl mx-auto p-4 sm:p-6 pb-24 min-h-full">
@@ -188,22 +198,22 @@ export function ChannelsPage({ identity, onBack, onViewFeed, onSharePost }: Prop
                     type="button"
                     onClick={onBack}
                     className="flex items-center gap-1 text-sm font-bold text-nature-600 dark:text-nature-400 hover:text-nature-900 dark:hover:text-white bg-transparent border-none cursor-pointer p-1 transition-colors"
-                    aria-label="Go back"
+                    aria-label={t('Go back')}
                 >
-                    ‹ Back
+                    {t('‹ Back')}
                 </button>
 
                 <h2 className="text-lg sm:text-xl font-extrabold text-nature-950 dark:text-white m-0 tracking-tight text-center flex-1">
-                    Channels & Showcase
+                    {t('Channels & Showcase')}
                 </h2>
 
                 <button
                     type="button"
                     onClick={onViewFeed}
                     className="text-xs sm:text-sm font-bold text-terra-600 dark:text-terra-400 hover:text-terra-700 dark:hover:text-terra-300 bg-transparent border-none cursor-pointer p-1 transition-colors whitespace-nowrap"
-                    aria-label="View The Pulse community feed"
+                    aria-label={t('View The Pulse community feed')}
                 >
-                    View Feed ↗
+                    {t('View Feed ↗')}
                 </button>
             </div>
 
@@ -233,17 +243,17 @@ export function ChannelsPage({ identity, onBack, onViewFeed, onSharePost }: Prop
                         <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-3xl p-6 sm:p-8 text-center my-4 shadow-sm">
                             <div className="text-4xl mb-3 select-none">📡</div>
                             <h3 className="text-base sm:text-lg font-bold text-nature-900 dark:text-white mb-2">
-                                Already posting your work somewhere?
+                                {t('Already posting your work somewhere?')}
                             </h3>
                             <p className="text-xs sm:text-sm text-nature-600 dark:text-nature-400 max-w-md mx-auto leading-relaxed mb-6">
-                                Add it here so your neighbours can find it — and trade with you. You won't have to post twice.
+                                {t("Add it here so your neighbours can find it — and trade with you. You won't have to post twice.")}
                             </p>
                             <button
                                 type="button"
                                 onClick={() => { setAdding(true); setFormError(null); }}
                                 className="px-5 py-2.5 rounded-xl font-bold text-sm bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on cursor-pointer shadow-sm transition-transform active:scale-95"
                             >
-                                + Add a channel
+                                {t('+ Add a channel')}
                             </button>
                         </div>
                     )}
@@ -252,15 +262,15 @@ export function ChannelsPage({ identity, onBack, onViewFeed, onSharePost }: Prop
                     {showCrossPostBanner && (
                         <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 text-amber-800 dark:text-amber-200 p-3.5 rounded-2xl mb-4 text-xs sm:text-sm leading-relaxed" role="alert">
                             {primary
-                                ? `You post video in more than one place. The feed uses your ${platformMeta(primary.platform).label} as the main one.`
-                                : 'You post video in more than one place. Pick which one the feed should use.'}
+                                ? t('You post video in more than one place. The feed uses your {platform} as the main one.', { platform: platformName(primary.platform) })
+                                : t('You post video in more than one place. Pick which one the feed should use.')}
                         </div>
                     )}
 
                     {/* Connected Channel Cards */}
                     <div className="space-y-4 mb-6">
                         {channels.map(channel => {
-                            const meta = platformMeta(channel.platform);
+                            const name = platformName(channel.platform);
                             const isOauthPlatform = channel.platform === 'tiktok' || channel.platform === 'instagram';
 
                             return (
@@ -270,28 +280,25 @@ export function ChannelsPage({ identity, onBack, onViewFeed, onSharePost }: Prop
                                 >
                                     <div className="flex items-center justify-between gap-2 mb-1">
                                         <h3 className="font-bold text-base text-nature-950 dark:text-white m-0 truncate">
-                                            <span className="mr-1.5">{meta.icon}</span>
-                                            <span>{meta.label}</span>
+                                            <span className="mr-1.5">{platformMeta(channel.platform).icon}</span>
+                                            <span>{name}</span>
                                             {channel.handle && <span className="font-normal text-nature-500 dark:text-nature-400"> · {channel.handle}</span>}
                                         </h3>
                                         {channel.oauthVerifiedAt && (
                                             <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-bp-chip-ok-tint text-bp-chip-ok-ink border border-transparent shrink-0">
-                                                ✓ Verified
+                                                {t('✓ Verified')}
                                             </span>
                                         )}
                                     </div>
 
                                     <p className="text-xs text-nature-500 dark:text-nature-400 mb-4">
-                                        {channel.supportsAutolist
-                                            ? (channel.oauthVerifiedAt ? 'Updates itself (connected)' : 'Updates itself')
-                                            : LISTING_LABEL[meta.listing === 'auto' ? 'manual' : meta.listing]}
-                                        {channel.isPrimaryVideo ? ' · main video channel' : ''}
+                                        {channel.isPrimaryVideo ? t('{listing} · main video channel', { listing: listingWords(channel) }) : listingWords(channel)}
                                     </p>
 
                                     {/* Show on local feed toggle */}
                                     <div className="flex items-center justify-between py-2 border-t border-nature-100 dark:border-nature-800/60">
                                         <span className="text-xs sm:text-sm font-semibold text-nature-800 dark:text-nature-200">
-                                            Show on the local feed
+                                            {t('Show on the local feed')}
                                         </span>
                                         <label className="relative inline-flex items-center cursor-pointer shrink-0">
                                             <input
@@ -299,7 +306,7 @@ export function ChannelsPage({ identity, onBack, onViewFeed, onSharePost }: Prop
                                                 checked={channel.syndicateToNode}
                                                 onChange={e => handlePatch(channel.id, { syndicateToNode: e.target.checked }, { syndicateToNode: e.target.checked })}
                                                 className="sr-only peer"
-                                                aria-label={`Show ${meta.label} on the local feed`}
+                                                aria-label={t('Show {platform} on the local feed', { platform: name })}
                                             />
                                             <div className="w-11 h-6 bg-nature-200 peer-focus-visible:ring-2 peer-focus-visible:ring-terra-500 peer-focus-visible:ring-offset-2 dark:peer-focus-visible:ring-offset-nature-900 rounded-full peer dark:bg-nature-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-terra-500"></div>
                                         </label>
@@ -309,14 +316,14 @@ export function ChannelsPage({ identity, onBack, onViewFeed, onSharePost }: Prop
                                     <div className="flex items-center justify-between py-2 border-t border-nature-100 dark:border-nature-800/60">
                                         <span className="text-xs sm:text-sm font-semibold text-nature-800 dark:text-nature-200 flex items-center gap-1">
                                             <span>{categoryMeta(channel.category).icon}</span>
-                                            <span>{categoryMeta(channel.category).label}</span>
+                                            <span>{t(categoryMeta(channel.category).label)}</span>
                                         </span>
                                         <button
                                             type="button"
                                             onClick={() => setEditingId(editingId === channel.id ? null : channel.id)}
                                             className="text-xs font-semibold px-2.5 py-1 rounded-lg border border-nature-200 dark:border-nature-700 bg-nature-50 dark:bg-nature-800 text-nature-700 dark:text-nature-300 hover:bg-nature-100 dark:hover:bg-nature-700 dark:hover:text-nature-200 cursor-pointer transition-colors"
                                         >
-                                            {editingId === channel.id ? 'Done' : 'Change category'}
+                                            {editingId === channel.id ? t('Done') : t('Change category')}
                                         </button>
                                     </div>
 
@@ -324,7 +331,7 @@ export function ChannelsPage({ identity, onBack, onViewFeed, onSharePost }: Prop
                                     {editingId === channel.id && (
                                         <div className="p-3 my-2 rounded-xl bg-nature-50 dark:bg-nature-950/60 border border-nature-200 dark:border-nature-800 animate-in fade-in duration-150">
                                             <div className="text-xs font-bold text-nature-700 dark:text-nature-300 mb-2">
-                                                Select Category
+                                                {t('Select Category')}
                                             </div>
                                             <div className="grid grid-cols-2 gap-1.5">
                                                 {CATEGORIES.map(cat => {
@@ -341,7 +348,7 @@ export function ChannelsPage({ identity, onBack, onViewFeed, onSharePost }: Prop
                                                             }`}
                                                         >
                                                             <span>{cat.icon}</span>
-                                                            <span className="truncate">{cat.label}</span>
+                                                            <span className="truncate">{t(cat.label)}</span>
                                                         </button>
                                                     );
                                                 })}
@@ -352,7 +359,7 @@ export function ChannelsPage({ identity, onBack, onViewFeed, onSharePost }: Prop
                                     {/* OAuth informational notice (Task 2 parity guardrail) */}
                                     {isOauthPlatform && !channel.oauthVerifiedAt && (
                                         <div className="text-[11px] text-nature-500 dark:text-nature-400 bg-nature-50 dark:bg-nature-950/60 p-2.5 rounded-xl border border-nature-100 dark:border-nature-800 my-2 leading-relaxed">
-                                            📱 <strong>Creator account linking:</strong> Automatic feed sync via OAuth is configured on the phone app. On the web client, you can share individual posts directly with "+ Share post" below.
+                                            <span aria-hidden="true">📱</span> <strong>{t('Creator account linking:')}</strong> <span>{t('Automatic feed sync via OAuth is configured on the phone app. On the web client, you can share individual posts directly with "{button}" below.', { button: t('+ Share post') })}</span>
                                         </div>
                                     )}
 
@@ -364,7 +371,7 @@ export function ChannelsPage({ identity, onBack, onViewFeed, onSharePost }: Prop
                                                 onClick={() => onSharePost(channel.id)}
                                                 className="px-3 py-1.5 rounded-xl text-xs sm:text-sm font-bold bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on cursor-pointer shadow-sm transition-colors"
                                             >
-                                                + Share post
+                                                {t('+ Share post')}
                                             </button>
                                         )}
 
@@ -374,7 +381,7 @@ export function ChannelsPage({ identity, onBack, onViewFeed, onSharePost }: Prop
                                                 onClick={() => handleSetPrimary(channel.id)}
                                                 className="px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold border border-nature-200 dark:border-nature-700 bg-nature-50 dark:bg-nature-800 text-nature-700 dark:text-nature-200 hover:bg-nature-100 dark:hover:bg-nature-700 cursor-pointer transition-colors"
                                             >
-                                                Make main
+                                                {t('Make main')}
                                             </button>
                                         )}
 
@@ -383,7 +390,7 @@ export function ChannelsPage({ identity, onBack, onViewFeed, onSharePost }: Prop
                                             onClick={() => setChannelToRemove(channel)}
                                             className="px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold text-red-600 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-950/30 bg-transparent border-none cursor-pointer transition-colors ml-auto"
                                         >
-                                            Remove
+                                            {t('Remove')}
                                         </button>
                                     </div>
                                 </div>
@@ -395,7 +402,7 @@ export function ChannelsPage({ identity, onBack, onViewFeed, onSharePost }: Prop
                     {adding ? (
                         <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-3xl p-5 sm:p-6 shadow-sm mb-6">
                             <h3 className="text-sm sm:text-base font-bold text-nature-900 dark:text-white mb-3">
-                                Where do you post?
+                                {t('Where do you post?')}
                             </h3>
 
                             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 mb-5">
@@ -414,10 +421,10 @@ export function ChannelsPage({ identity, onBack, onViewFeed, onSharePost }: Prop
                                         >
                                             <span className="text-2xl mb-1 select-none">{p.icon}</span>
                                             <span className={`text-xs font-bold ${active ? 'text-terra-900 dark:text-terra-300' : 'text-nature-900 dark:text-white'}`}>
-                                                {p.label}
+                                                {platformName(p.id)}
                                             </span>
                                             <span className="text-[10px] text-nature-500 dark:text-nature-400 mt-0.5">
-                                                {LISTING_LABEL[p.listing]}
+                                                {t(LISTING_LABEL[p.listing])}
                                             </span>
                                         </button>
                                     );
@@ -425,13 +432,13 @@ export function ChannelsPage({ identity, onBack, onViewFeed, onSharePost }: Prop
                             </div>
 
                             <label className="block text-xs sm:text-sm font-bold text-nature-900 dark:text-white mb-2">
-                                Your link or handle
+                                {t('Your link or handle')}
                             </label>
                             <input
                                 type="url"
                                 value={value}
                                 onChange={e => setValue(e.target.value.replace(/\s/g, ''))}
-                                placeholder={platformMeta(platform).hint}
+                                placeholder={chosen.hint ? t(chosen.hint) : ''}
                                 autoCapitalize="none"
                                 autoCorrect="off"
                                 spellCheck="false"
@@ -439,7 +446,7 @@ export function ChannelsPage({ identity, onBack, onViewFeed, onSharePost }: Prop
                             />
 
                             <label className="block text-xs sm:text-sm font-bold text-nature-900 dark:text-white mb-2">
-                                What's it about?
+                                {t("What's it about?")}
                             </label>
                             <div className="flex flex-wrap gap-2 mb-5">
                                 {CATEGORIES.map(c => {
@@ -455,7 +462,7 @@ export function ChannelsPage({ identity, onBack, onViewFeed, onSharePost }: Prop
                                                     : 'bg-nature-50 dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-700 dark:text-nature-300 hover:bg-nature-100 dark:hover:bg-nature-700 dark:hover:text-nature-200'
                                             }`}
                                         >
-                                            {c.icon} {c.label}
+                                            {t('{emoji} {label}', { emoji: c.icon, label: t(c.label) })}
                                         </button>
                                     );
                                 })}
@@ -473,7 +480,7 @@ export function ChannelsPage({ identity, onBack, onViewFeed, onSharePost }: Prop
                                     onClick={() => { setAdding(false); setValue(''); setCategory(null); setFormError(null); }}
                                     className="px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-700 dark:text-nature-200 hover:bg-nature-50 dark:hover:bg-nature-700 cursor-pointer"
                                 >
-                                    Cancel
+                                    {t('Cancel')}
                                 </button>
                                 <button
                                     type="button"
@@ -481,7 +488,7 @@ export function ChannelsPage({ identity, onBack, onViewFeed, onSharePost }: Prop
                                     disabled={saving || !value.trim() || !category}
                                     className="px-5 py-2 rounded-xl text-xs sm:text-sm font-bold bg-bp-cta-fill hover:bg-bp-cta-hover disabled:opacity-50 text-bp-cta-on cursor-pointer shadow-sm"
                                 >
-                                    {saving ? 'Adding…' : 'Add channel'}
+                                    {saving ? t('Adding…') : t('Add channel')}
                                 </button>
                             </div>
                         </div>
@@ -492,7 +499,7 @@ export function ChannelsPage({ identity, onBack, onViewFeed, onSharePost }: Prop
                                 onClick={() => { setAdding(true); setFormError(null); }}
                                 className="w-full sm:w-auto px-5 py-2.5 rounded-xl font-bold text-sm bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on cursor-pointer shadow-sm transition-colors"
                             >
-                                + Add a channel
+                                {t('+ Add a channel')}
                             </button>
 
                             {channels.length > 0 && (
@@ -501,7 +508,7 @@ export function ChannelsPage({ identity, onBack, onViewFeed, onSharePost }: Prop
                                     onClick={() => onSharePost()}
                                     className="w-full sm:w-auto px-5 py-2.5 rounded-xl font-bold text-sm border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-800 dark:text-nature-200 hover:bg-nature-50 dark:hover:bg-nature-700 cursor-pointer shadow-sm transition-colors"
                                 >
-                                    Share a post to Pulse →
+                                    {t('Share a post to Pulse →')}
                                 </button>
                             )}
                         </div>
@@ -523,12 +530,12 @@ export function ChannelsPage({ identity, onBack, onViewFeed, onSharePost }: Prop
                         className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-3xl max-w-md w-full p-6 shadow-2xl"
                     >
                         <h4 id="cross-post-dialog-title" className="text-base sm:text-lg font-bold text-nature-900 dark:text-white mb-2">
-                            {crossPostPrompt.several ? 'You post video in more than one place' : 'You post video in two places'}
+                            {crossPostPrompt.several ? t('You post video in more than one place') : t('You post video in two places')}
                         </h4>
-                        <p className="text-xs sm:text-sm text-nature-600 dark:text-nature-400 mb-5 leading-relaxed">
-                            If you put the same videos on {platformMeta(crossPostPrompt.newChannel.platform).label} and {platformMeta(crossPostPrompt.rivalChannel.platform).label}, they'd show up twice on the feed.
-                            <br /><br />
-                            Which should the feed use?
+                        <p className="text-xs sm:text-sm text-nature-600 dark:text-nature-400 mb-5 leading-relaxed whitespace-pre-line">
+                            {t("If you put the same videos on {platform} and {other}, they'd show up twice on the feed.\n\nWhich should the feed use?", {
+                                platform: platformName(crossPostPrompt.newChannel.platform), other: platformName(crossPostPrompt.rivalChannel.platform),
+                            })}
                         </p>
 
                         <div className="space-y-2">
@@ -540,7 +547,9 @@ export function ChannelsPage({ identity, onBack, onViewFeed, onSharePost }: Prop
                                 }}
                                 className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on cursor-pointer"
                             >
-                                {platformMeta(crossPostPrompt.newChannel.platform).label} {crossPostPrompt.newChannel.supportsAutolist ? '(updates itself)' : ''}
+                                {crossPostPrompt.newChannel.supportsAutolist
+                                    ? t('{platform} (updates itself)', { platform: platformName(crossPostPrompt.newChannel.platform) })
+                                    : platformName(crossPostPrompt.newChannel.platform)}
                             </button>
                             <button
                                 type="button"
@@ -550,14 +559,16 @@ export function ChannelsPage({ identity, onBack, onViewFeed, onSharePost }: Prop
                                 }}
                                 className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-800 dark:text-nature-200 hover:bg-nature-50 dark:hover:bg-nature-700 cursor-pointer"
                             >
-                                {platformMeta(crossPostPrompt.rivalChannel.platform).label} {crossPostPrompt.rivalChannel.supportsAutolist ? '(updates itself)' : ''}
+                                {crossPostPrompt.rivalChannel.supportsAutolist
+                                    ? t('{platform} (updates itself)', { platform: platformName(crossPostPrompt.rivalChannel.platform) })
+                                    : platformName(crossPostPrompt.rivalChannel.platform)}
                             </button>
                             <button
                                 type="button"
                                 onClick={() => setCrossPostPrompt(null)}
                                 className="w-full py-2 text-xs text-nature-500 dark:text-nature-400 hover:text-nature-800 dark:hover:text-white bg-transparent border-none cursor-pointer"
                             >
-                                {crossPostPrompt.several ? 'Keep all — I post different things' : 'Both — I post different things'}
+                                {crossPostPrompt.several ? t('Keep all — I post different things') : t('Both — I post different things')}
                             </button>
                         </div>
                     </div>
@@ -578,10 +589,12 @@ export function ChannelsPage({ identity, onBack, onViewFeed, onSharePost }: Prop
                         className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl max-w-sm w-full p-5 shadow-2xl"
                     >
                         <h4 id="remove-channel-dialog-title" className="text-base font-bold text-nature-900 dark:text-white mb-2">
-                            Remove this channel?
+                            {t('Remove this channel?')}
                         </h4>
                         <p className="text-sm text-nature-600 dark:text-nature-400 mb-5 leading-relaxed">
-                            {platformMeta(channelToRemove.platform).label}{channelToRemove.handle ? ` · ${channelToRemove.handle}` : ''} will no longer appear on your profile.
+                            {t('{channel} will no longer appear on your profile.', {
+                                channel: channelToRemove.handle ? `${platformName(channelToRemove.platform)} · ${channelToRemove.handle}` : platformName(channelToRemove.platform),
+                            })}
                         </p>
                         <div className="flex gap-2 justify-end">
                             <button
@@ -589,14 +602,14 @@ export function ChannelsPage({ identity, onBack, onViewFeed, onSharePost }: Prop
                                 onClick={() => setChannelToRemove(null)}
                                 className="px-4 py-2 rounded-xl text-sm font-semibold border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-700 dark:text-nature-200 hover:bg-nature-50 dark:hover:bg-nature-700 cursor-pointer"
                             >
-                                Keep it
+                                {t('Keep it')}
                             </button>
                             <button
                                 type="button"
                                 onClick={confirmRemoveChannel}
                                 className="px-4 py-2 rounded-xl text-sm font-bold bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on cursor-pointer"
                             >
-                                Remove
+                                {t('Remove')}
                             </button>
                         </div>
                     </div>

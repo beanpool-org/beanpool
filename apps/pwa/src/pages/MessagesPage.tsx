@@ -44,7 +44,7 @@ import { ReportModal } from '../components/ReportModal';
 import { EventChat } from '../components/EventChat';
 import { CreateGroupModal } from '../components/CreateGroupModal';
 import { inConversationTab, groupsUnreadCount, isGroupLikeChat, type ConversationTab } from '../lib/conversation-tabs';
-import { listPhotoUrl, removedRunText, t, tn } from '@beanpool/core';
+import { formatDate, listPhotoUrl, removedRunText, t, tn, word, type WordKey } from '@beanpool/core';
 import { systemLineColours } from '../lib/systemLineColours';
 import { readsOwn } from '../lib/features';
 
@@ -66,9 +66,49 @@ interface GroupChatView {
     roster: DisplayRosterRow[];
 }
 
-/** Words for a group chat this member can read but not write in (the node's own, GROUP_CHAT_OBSERVER). */
-const GROUP_CHAT_READ_ONLY_TEXT = 'Observers can read this chat but not post in it';
-const GROUP_CHAT_CLOSED_TEXT = 'This group was closed by its members: its chat stays to read and takes no new messages.';
+/** Words for a group chat this member can read but not write in (the node's own, GROUP_CHAT_OBSERVER): shown through t(). */
+const GROUP_CHAT_WORDS = {
+    readOnly: word('Observers can read this chat but not post in it'),
+    closed: word('This group was closed by its members: its chat stays to read and takes no new messages.'),
+};
+
+/**
+ * A listing's or its deal's status on a conversation row's pill, as the phone's (utils/listing-status-words.ts): word()
+ * keys written in capitals, shown through t(); a status this build doesn't know is shown as the node wrote it.
+ */
+const POST_STATUS_WORDS: Readonly<Record<string, WordKey>> = {
+    active: word('ACTIVE', 'listing status'),
+    pending: word('HELD IN TRUST'),
+    completed: word('COMPLETED', 'deal status'),
+    cancelled: word('CANCELLED', 'deal status'),
+    requested: word('REQUESTED', 'deal status'),
+    rejected: word('REJECTED', 'deal status'),
+    paused: word('PAUSED', 'listing status'),
+};
+
+function postStatusWords(status: string): string {
+    return Object.prototype.hasOwnProperty.call(POST_STATUS_WORDS, status) ? t(POST_STATUS_WORDS[status]) : status.toUpperCase();
+}
+
+/** The one time under a bubble: core's time of day in the member's language ("9:05", as the phone's), empty for an unreadable stamp. */
+function messageTime(iso: string): string {
+    const d = new Date(iso);
+    return isNaN(d.getTime()) ? '' : formatDate(d, 'time');
+}
+
+/** When a conversation row began, from core's date tables ("14 Oct 2026"), empty for an unreadable stamp. */
+function conversationDate(iso: string): string {
+    const d = new Date(iso);
+    return isNaN(d.getTime()) ? '' : formatDate(d, 'day-month-year');
+}
+
+/**
+ * A trade line's amount for tn(): a number, written the language's way; anything else the node sent, exactly as given
+ * (`{ n }` in the values wins over the count).
+ */
+function tradeAmount(amount: unknown): { n: number; values?: { n: string } } {
+    return typeof amount === 'number' ? { n: amount } : { n: Number(amount), values: { n: String(amount) } };
+}
 
 interface Props {
     identity: BeanPoolIdentity;
@@ -90,11 +130,11 @@ function resizeImageToDataUri(file: File, maxW: number, quality: number): Promis
             const canvas = document.createElement('canvas');
             canvas.width = w; canvas.height = h;
             const cctx = canvas.getContext('2d');
-            if (!cctx) { reject(new Error('Canvas not supported')); return; }
+            if (!cctx) { reject(new Error(t('Canvas not supported'))); return; }
             cctx.drawImage(img, 0, 0, w, h);
             resolve(canvas.toDataURL('image/jpeg', quality));
         };
-        img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Could not load image')); };
+        img.onerror = () => { URL.revokeObjectURL(url); reject(new Error(t('Could not load image'))); };
         img.src = url;
     });
 }
@@ -107,7 +147,7 @@ function formatSystemMessage(msg: any, myPubkey: string, userTransactions: any[]
     } catch {}
 
     const amount = metaObj?.amount ?? '';
-    const beansStr = amount ? `${amount} Beans` : 'Beans';
+    const sum = tradeAmount(amount);
 
     const getSellerPublicKey = (postId?: string) => {
         if (!postId) return undefined;
@@ -118,7 +158,7 @@ function formatSystemMessage(msg: any, myPubkey: string, userTransactions: any[]
     };
 
     if (msg.systemType === 'ESCROW_FUNDED') {
-        return `${beansStr} held in trust.`;
+        return amount ? tn(sum.n, '{n} Beans held in trust.', '{n} Beans held in trust.', sum.values) : t('Beans held in trust.');
     }
 
     if (msg.systemType === 'ESCROW_RELEASED') {
@@ -127,14 +167,14 @@ function formatSystemMessage(msg: any, myPubkey: string, userTransactions: any[]
         
         const isSeller = sellerPubkey === myPubkey;
         if (isSeller) {
-            return `Payment of ${beansStr} released to you.`;
+            return amount ? tn(sum.n, 'Payment of {n} Beans released to you.', 'Payment of {n} Beans released to you.', sum.values) : t('Payment of Beans released to you.');
         } else {
-            return `Payment of ${beansStr} released to the provider.`;
+            return amount ? tn(sum.n, 'Payment of {n} Beans released to the provider.', 'Payment of {n} Beans released to the provider.', sum.values) : t('Payment of Beans released to the provider.');
         }
     }
 
     if (msg.systemType === 'ESCROW_CANCELLED') {
-        return `Trust hold cancelled and funds refunded.`;
+        return t('Trust hold cancelled and funds refunded.');
     }
 
     // Fallback: clean up Ʀ or R in the ciphertext
@@ -146,9 +186,11 @@ function formatSystemMessage(msg: any, myPubkey: string, userTransactions: any[]
         txt = txt.replace(/Payment of R(\d+) released to the provider\./g, (_: string, amt: string) => {
             const sellerPubkey = metaObj?.sellerPubkey || getSellerPublicKey(metaObj?.postId);
             const isSeller = sellerPubkey === myPubkey;
-            return `Payment of ${amt} Beans released to ${isSeller ? 'you' : 'the provider'}.`;
+            return isSeller
+                ? tn(Number(amt), 'Payment of {n} Beans released to you.', 'Payment of {n} Beans released to you.', { n: amt })
+                : tn(Number(amt), 'Payment of {n} Beans released to the provider.', 'Payment of {n} Beans released to the provider.', { n: amt });
         });
-        txt = txt.replace(/R(\d+) has been placed in escrow\./g, '$1 Beans held in trust.');
+        txt = txt.replace(/R(\d+) has been placed in escrow\./g, (_: string, amt: string) => tn(Number(amt), '{n} Beans held in trust.', '{n} Beans held in trust.', { n: amt }));
     }
     return txt;
 }
@@ -176,8 +218,8 @@ function ChatImageBubble({ messageId, conversationId, authorPubkey, metadata, bo
         })();
         return () => { active = false; };
     }, [messageId, conversationId, authorPubkey, metadata, bodyFormat, peerPubHex, myPrivHex]);
-    if (failed) return <span style={{ fontStyle: 'italic', opacity: 0.7 }}>🔒 Image unavailable</span>;
-    if (!uri) return <span style={{ opacity: 0.6 }}>Loading image…</span>;
+    if (failed) return <span style={{ fontStyle: 'italic', opacity: 0.7 }}>{t('🔒 Image unavailable')}</span>;
+    if (!uri) return <span style={{ opacity: 0.6 }}>{t('Loading image…')}</span>;
     return <img src={uri} alt="" style={{ maxWidth: '220px', borderRadius: '12px', display: 'block' }} />;
 }
 
@@ -453,30 +495,30 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     const [actionLoading, setActionLoading] = useState(false);
 
     async function handleReleaseCredits(txId: string, amount: number) {
-        if (!confirm(`Release ${amount} Beans to the provider? This action is final.`)) return;
+        if (!confirm(tn(amount, 'Release {n} Beans to the provider? This action is final.', 'Release {n} Beans to the provider? This action is final.'))) return;
         setActionLoading(true);
         try {
             await completeMarketplaceTransaction(txId, identity.publicKey);
-            alert('Payment released successfully!');
+            alert(t('Payment released successfully!'));
             await loadConversations();
             if (activeConv) await loadMessages(activeConv.id);
         } catch (e: any) {
-            alert(e?.message || 'Failed to release credits.');
+            alert(e?.message || t('Failed to release credits.'));
         } finally {
             setActionLoading(false);
         }
     }
 
     async function handleCancelCredits(txId: string) {
-        if (!confirm('Cancel this hold and refund the credits?')) return;
+        if (!confirm(t('Cancel this hold and refund the credits?'))) return;
         setActionLoading(true);
         try {
             await cancelMarketplaceTransaction(txId, identity.publicKey);
-            alert('Hold cancelled and credits refunded.');
+            alert(t('Hold cancelled and credits refunded.'));
             await loadConversations();
             if (activeConv) await loadMessages(activeConv.id);
         } catch (e: any) {
-            alert(e?.message || 'Failed to cancel hold.');
+            alert(e?.message || t('Failed to cancel hold.'));
         } finally {
             setActionLoading(false);
         }
@@ -758,7 +800,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             }
         } catch (err: any) {
             console.error('Failed to react:', err);
-            alert(err.message || 'Failed to react to message');
+            alert(err.message || t('Failed to react to message'));
             await loadMessages(activeConv.id);
         }
     }
@@ -823,7 +865,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             setChatRefusal(null);
             await loadConversations();
         } catch (err: any) {
-            showChatError(err, 'Failed to start conversation');
+            showChatError(err, t('Failed to start conversation'));
         }
     }
 
@@ -888,7 +930,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         }
         const plan = await groupChatSendPlan(ring, chat, chatErr);
         if (plan.kind === 'refuse') { setChatRefusal(plan.sentence); return; }
-        if (chat && chat.canPost === false) { setChatRefusal(chat.readOnly ? GROUP_CHAT_CLOSED_TEXT : GROUP_CHAT_READ_ONLY_TEXT); return; }
+        if (chat && chat.canPost === false) { setChatRefusal(chat.readOnly ? t(GROUP_CHAT_WORDS.closed) : t(GROUP_CHAT_WORDS.readOnly)); return; }
         const text = draft.trim();
         if (plan.kind === 'readable') {
             // A node from before locked chats, and a browser that never saw this group locked (§14.3): as it always was.
@@ -986,7 +1028,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             }
         } catch (err: any) {
             if (isDmNotLocked(err)) setChatRefusal(dmNotLockedLine(peerNameFor(activeConv)));
-            else showChatError(err, wasEditing ? 'Failed to edit message' : 'Failed to send message');
+            else showChatError(err, wasEditing ? t('Failed to edit message') : t('Failed to send message'));
         } finally {
             setSending(false);
         }
@@ -1000,7 +1042,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
      */
     async function handleSendImage(file: File, caption = ''): Promise<boolean> {
         if (!activeConv) return false;
-        if (activeConv.type !== 'dm') { alert('Photos can only be sent in direct messages.'); return false; }
+        if (activeConv.type !== 'dm') { alert(t('Photos can only be sent in direct messages.')); return false; }
         // A group seen locked here takes no photo whatever the node calls it; an unreadable lock store sends none to a
         // conversation this browser doesn't know as a DM (lib/group-hold.ts).
         const route = await sendRouteOf(identity.publicKey, activeConv.id);
@@ -1027,7 +1069,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             return true;
         } catch (err: any) {
             if (isDmNotLocked(err)) setChatRefusal(dmNotLockedLine(peerNameFor(activeConv)));
-            else showChatError(err, 'Failed to send image');
+            else showChatError(err, t('Failed to send image'));
             return false;
         } finally {
             setSending(false);
@@ -1058,7 +1100,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         // couldn't be locked and keeps the picture there.)
         if (activeConv.type !== 'dm') {
             clearPendingImage();
-            setImageNotice('Photos can only be sent in direct messages');
+            setImageNotice(t('Photos can only be sent in direct messages'));
             return;
         }
 
@@ -1129,7 +1171,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
 
     // What decryptMessage() puts in place of a body it could not read. A photo's
     // body is its caption, so these must never be shown as one.
-    const UNREADABLE_BODIES = ['[Encrypted — update your app to read]', '[Unable to decrypt this message]', DM_LINE_NOT_VERIFIED_TEXT];
+    const UNREADABLE_BODIES = [t('[Encrypted — update your app to read]'), t('[Unable to decrypt this message]'), DM_LINE_NOT_VERIFIED_TEXT];
 
     function decryptMessage(msg: ApiMessage): string {
         // A locked group chat's line, as drawn (groupLineShown): never a row's own words unless they opened.
@@ -1139,13 +1181,13 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             // A DM's line, as the thread check judged it: never a row's words unless they opened.
             const view = lineViews?.get(msg.id);
             if (view) {
-                if (view.mark === 'not-verified' && isEncryptedNonce(msg.nonce) && !dmCtxFor(activeConv)) return '[Encrypted — update your app to read]';
+                if (view.mark === 'not-verified' && isEncryptedNonce(msg.nonce) && !dmCtxFor(activeConv)) return t('[Encrypted — update your app to read]');
                 return dmLineShownText(view);
             }
             if (msg.nonce === '00000') return msg.ciphertext;
             if (isEncryptedNonce(msg.nonce)) {
                 const ctx = dmCtxFor(activeConv);
-                if (!ctx) return '[Encrypted — update your app to read]';
+                if (!ctx) return t('[Encrypted — update your app to read]');
                 // A line outside the loaded thread (a quoted one): opened on its own, bound the same way.
                 try {
                     return openDmLine({ ciphertext: msg.ciphertext, nonce: msg.nonce }, ctx,
@@ -1156,7 +1198,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             }
             return decodePlaintext(msg.ciphertext, msg.nonce);
         } catch {
-            return '[Unable to decrypt this message]';
+            return t('[Unable to decrypt this message]');
         }
     }
 
@@ -1167,11 +1209,11 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
      * line): the quote then says what the row is, never "You" or the other person's name over words it can't confirm.
      */
     function quoteOf(parent: ApiMessage | undefined): { author: string; text: string; note: string | null; named: boolean } {
-        if (!parent) return { author: 'Someone', text: 'Message not found', note: null, named: false };
+        if (!parent) return { author: t('Someone'), text: t('Message not found'), note: null, named: false };
         // In a locked group chat, the answered line as drawn: under its signer's name, or nobody's.
         const g = groupShown?.get(parent.id);
         if (g) {
-            const author = g.mine ? 'You' : g.nodeLine ? 'BeanPool' : (g.name ?? GROUP_LINE_UNVERIFIED_NAME);
+            const author = g.mine ? t('You') : g.nodeLine ? 'BeanPool' : (g.name ?? GROUP_LINE_UNVERIFIED_NAME);
             return { author, text: g.text ?? formatSystemMessage(parent, identity.publicKey, userTransactionsByPostId), note: null, named: false };
         }
         const view = lineViews?.get(parent.id);
@@ -1182,8 +1224,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         }
         return {
             author: membersByPublicKey.get(parent.authorPubkey)?.callsign
-                || (parent.authorPubkey === identity.publicKey ? 'You' : parent.authorPubkey.substring(0, 8)),
-            text: parent.type === 'image' ? '🔒 Photo' : decryptMessage(parent),
+                || (parent.authorPubkey === identity.publicKey ? t('You') : parent.authorPubkey.substring(0, 8)),
+            text: parent.type === 'image' ? t('🔒 Photo') : decryptMessage(parent),
             note: dmLineMarkText(view?.mark),
             named: true,
         };
@@ -1191,8 +1233,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
 
     function getConversationTitle(conv: Conversation): string {
         // An event chat is named after its event, which is why the conversation row carries `name`.
-        if (conv.type === 'event_thread') return conv.name || 'Event chat';
-        if (conv.type === 'group_thread') return conv.name || 'Group';
+        if (conv.type === 'event_thread') return conv.name || t('Event chat');
+        if (conv.type === 'group_thread') return conv.name || t('Group');
         // An enterprise's thread is named after the enterprise (engine/enterprise-thread.ts), as the phone's header is: never
         // after whichever member's key comes first, which made its header button read "Ben, enterprise page".
         if ((conv.type as string) === 'enterprise_thread') return conv.name || t('Enterprise chat');
@@ -1272,7 +1314,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             <button
                 type="button"
                 onClick={() => setChatRefusal(null)}
-                aria-label="Dismiss"
+                aria-label={t('Dismiss')}
                 style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '1rem', padding: '6px', minWidth: '28px', minHeight: '28px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
             >
                 ✕
@@ -1322,44 +1364,44 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         onClick={() => { setShowNewDm(false); setPickerQuery(''); }}
                         style={{ background: 'none', border: 'none', color: 'var(--accent)', fontSize: '1rem', cursor: 'pointer', fontFamily: 'inherit', minHeight: '44px', minWidth: '44px', padding: '0 0.25rem' }}
                     >
-                        ← Back
+                        {t('← Back')}
                     </button>
                     <h2 style={{ fontSize: '1.2rem', margin: 0 }}>
-                        New Message
+                        {t('New Message')}
                     </h2>
                 </div>
                 {chatRefusalNotice && <div style={{ marginBottom: '0.75rem' }}>{chatRefusalNotice}</div>}
 
                 <label htmlFor="new-message-search" style={{ display: 'block', fontWeight: 600, fontSize: '0.9rem', marginBottom: '0.4rem' }}>
-                    Find someone by name
+                    {t('Find someone by name')}
                 </label>
                 <input
                     id="new-message-search"
                     type="search"
                     value={pickerQuery}
                     onChange={e => setPickerQuery(e.target.value)}
-                    placeholder="Type a name…"
+                    placeholder={t('Type a name…')}
                     style={{ ...inputStyle, width: '100%', height: '44px', marginBottom: '0.4rem' }}
                 />
                 <p style={note} aria-live="polite" data-testid="new-message-search-status">
-                    {typed && typed.length < MEMBERS_SEARCH_MIN_CHARS ? `Type at least ${MEMBERS_SEARCH_MIN_CHARS} letters of a name.`
-                        : pickerSearch.state === 'searching' ? 'Searching…'
-                        : pickerSearch.state === 'failed' ? (pickerSearch.refusal ?? "Couldn't search just now. Check your connection and try again.")
-                        : pickerSearch.found && found.length === 0 ? 'Nobody here has a name starting with that.'
+                    {typed && typed.length < MEMBERS_SEARCH_MIN_CHARS ? tn(MEMBERS_SEARCH_MIN_CHARS, 'Type at least {n} letter of a name.', 'Type at least {n} letters of a name.')
+                        : pickerSearch.state === 'searching' ? t('Searching…')
+                        : pickerSearch.state === 'failed' ? (pickerSearch.refusal ?? t("Couldn't search just now. Check your connection and try again."))
+                        : pickerSearch.found && found.length === 0 ? t('Nobody here has a name starting with that.')
                         : null}
                 </p>
                 {found.length > 0 && <div data-testid="new-message-found" style={{ marginBottom: '1rem' }}>{found.map(pick)}</div>}
 
-                <h3 style={{ fontSize: '0.95rem', margin: '0 0 0.5rem' }}>People you've talked to</h3>
+                <h3 style={{ fontSize: '0.95rem', margin: '0 0 0.5rem' }}>{t("People you've talked to")}</h3>
                 {recents.length === 0
-                    ? <p style={note}>No one yet. Search for someone by name above.</p>
+                    ? <p style={note}>{t('No one yet. Search for someone by name above.')}</p>
                     : <div data-testid="new-message-recents">{recents.map(pick)}</div>}
 
                 {pickerFriends === 'failed' ? (
-                    <p style={note} data-testid="new-message-friends-failed">Couldn't load your friends just now. Search for them by name above.</p>
+                    <p style={note} data-testid="new-message-friends-failed">{t("Couldn't load your friends just now. Search for them by name above.")}</p>
                 ) : friendsToPick.length > 0 && (
                     <>
-                        <h3 style={{ fontSize: '0.95rem', margin: '1rem 0 0.5rem' }}>Friends</h3>
+                        <h3 style={{ fontSize: '0.95rem', margin: '1rem 0 0.5rem' }}>{t('Friends')}</h3>
                         <div data-testid="new-message-friends">{friendsToPick.map(pick)}</div>
                     </>
                 )}
@@ -1377,15 +1419,15 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         onClick={() => setShowNewDm(false)}
                         style={{ background: 'none', border: 'none', color: 'var(--accent)', fontSize: '1rem', cursor: 'pointer', fontFamily: 'inherit' }}
                     >
-                        ← Back
+                        {t('← Back')}
                     </button>
                     <h2 style={{ fontSize: '1.2rem', margin: 0 }}>
-                        New Message
+                        {t('New Message')}
                     </h2>
                 </div>
 
                 <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '0.75rem' }}>
-                    Choose someone to message:
+                    {t('Choose someone to message:')}
                 </p>
                 {chatRefusalNotice && <div style={{ marginBottom: '0.75rem' }}>{chatRefusalNotice}</div>}
                 {members.map(m => (
@@ -1487,7 +1529,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             fontSize: '0.9rem', color: 'var(--accent)', background: 'var(--bg-hover)',
                         }}
                     >
-                        Drop the picture to send it
+                        {t('Drop the picture to send it')}
                     </div>
                 )}
                 {/* Chat header */}
@@ -1560,7 +1602,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             type="button"
                             data-testid="group-chat-search-toggle"
                             onClick={() => setChatSearch((q) => (q === null ? '' : null))}
-                            aria-label={chatSearch === null ? 'Search this chat' : 'Close search'}
+                            aria-label={chatSearch === null ? t('Search this chat') : t('Close search')}
                             aria-expanded={chatSearch !== null}
                             style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: '1rem', minWidth: '44px', minHeight: '44px', flexShrink: 0 }}
                         >
@@ -1573,11 +1615,11 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             <button
                                 type="button"
                                 onClick={() => setReportTarget({ pubkey: peerPubkey, name: getConversationTitle(activeConv) })}
-                                title="Report user"
-                                aria-label="Report user"
+                                title={t('Report user')}
+                                aria-label={t('Report user')}
                                 className="px-2.5 py-1 rounded-lg border border-nature-300 dark:border-nature-700 bg-white/80 dark:bg-nature-800 text-nature-600 dark:text-nature-300 font-bold text-xs cursor-pointer hover:bg-nature-100 dark:hover:bg-nature-700 dark:hover:text-nature-200 transition-colors flex items-center gap-1"
                             >
-                                <span>🚩</span> <span className="hidden sm:inline">Report</span>
+                                <span>🚩</span> <span className="hidden sm:inline">{t('Report', undefined, 'button: report a member')}</span>
                             </button>
                             <button
                                 type="button"
@@ -1585,22 +1627,22 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                     // The community keeps the list (lib/blocklist): a change it didn't take is said, never shown as done.
                                     try {
                                         if (isPeerBlocked) {
-                                            if (window.confirm(`Unblock ${getConversationTitle(activeConv)}?`)) {
+                                            if (window.confirm(t('Unblock {name}?', { name: getConversationTitle(activeConv) }))) {
                                                 await unblockUser(peerPubkey);
                                                 await loadConversations();
                                             }
                                         } else {
                                             const name = getConversationTitle(activeConv);
-                                            if (window.confirm(`Block ${name}?\n\nThis will hide their messages and posts, and notify moderation.`)) {
+                                            if (window.confirm(t('Block {name}?\n\nThis will hide their messages and posts, and notify moderation.', { name }))) {
                                                 await blockUser(peerPubkey, identity.publicKey, 'Abusive user reported via Chat');
                                                 await loadConversations();
                                             }
                                         }
                                     } catch (e: any) {
-                                        alert(e?.message || 'That did not go through. Please try again.');
+                                        alert(e?.message || t('That did not go through. Please try again.'));
                                     }
                                 }}
-                                aria-label={isPeerBlocked ? 'Unblock user' : 'Block user'}
+                                aria-label={isPeerBlocked ? t('Unblock user') : t('Block user')}
                                 className={`px-2.5 py-1 rounded-lg border font-bold text-xs cursor-pointer transition-colors flex items-center gap-1 ${
                                     isPeerBlocked
                                         ? 'border-nature-300 dark:border-nature-700 bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 hover:bg-nature-200 dark:hover:bg-nature-700 dark:hover:text-nature-200'
@@ -1608,7 +1650,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                 }`}
                             >
                                 <span>{isPeerBlocked ? '🛡️' : '🚫'}</span>
-                                <span>{isPeerBlocked ? 'Unblock' : 'Block'}</span>
+                                <span>{isPeerBlocked ? t('Unblock') : t('Block', undefined, 'button: block a member')}</span>
                             </button>
                         </div>
                     )}
@@ -1622,8 +1664,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             data-testid="group-chat-search"
                             value={chatSearch}
                             onChange={(e) => setChatSearch(e.target.value)}
-                            placeholder="Search this chat"
-                            aria-label="Search this chat"
+                            placeholder={t('Search this chat')}
+                            aria-label={t('Search this chat')}
                             autoFocus
                             style={{ ...inputStyle, width: '100%', minHeight: '44px' }}
                         />
@@ -1639,8 +1681,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                             <span style={{ fontSize: '1.2rem' }}>🛍️</span>
                             <div>
-                                <div style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--bp-chip-ok-ink)' }}>View Attached Listing</div>
-                                <div style={{ fontSize: '0.75rem', color: 'var(--bp-chip-ok-ink)' }}>Marketplace Transaction Thread</div>
+                                <div style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--bp-chip-ok-ink)' }}>{t('View Attached Listing')}</div>
+                                <div style={{ fontSize: '0.75rem', color: 'var(--bp-chip-ok-ink)' }}>{t('Marketplace Transaction Thread')}</div>
                             </div>
                         </div>
                     </div>
@@ -1665,10 +1707,10 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         }}>
                             <div>
                                 <div style={{ fontWeight: 'bold', fontSize: '0.85rem', color: isBuyer ? 'var(--bp-ink-success)' : 'var(--bp-ink-warning)' }}>
-                                    🔒 Trust Hold: {pendingTx.credits} Beans
+                                    {tn(pendingTx.credits, '🔒 Trust Hold: {n} Beans', '🔒 Trust Hold: {n} Beans')}
                                 </div>
                                 <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                                    {isBuyer ? 'Release credits once you receive your items.' : 'Awaiting buyer to release credits.'}
+                                    {isBuyer ? t('Release credits once you receive your items.') : t('Awaiting buyer to release credits.')}
                                 </div>
                             </div>
                             {isBuyer ? (
@@ -1687,7 +1729,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                             cursor: 'pointer'
                                         }}
                                     >
-                                        {actionLoading ? '…' : '✅ Release Credits'}
+                                        {actionLoading ? '…' : t('✅ Release Credits')}
                                     </button>
                                     <button
                                         onClick={() => handleCancelCredits(pendingTx.id)}
@@ -1703,11 +1745,11 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                             cursor: 'pointer'
                                         }}
                                     >
-                                        Cancel
+                                        {t('Cancel')}
                                     </button>
                                 </div>
                             ) : (
-                                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#f59e0b' }}>⏳ Pending</span>
+                                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#f59e0b' }}>{t('⏳ Pending')}</span>
                             )}
                         </div>
                     );
@@ -1746,12 +1788,12 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 }}>
                     {messages.length === 0 && (
                         <p style={{ textAlign: 'center', color: 'var(--text-faint)', marginTop: '2rem' }}>
-                            No messages yet. Say hello! 👋
+                            {t('No messages yet. Say hello! 👋')}
                         </p>
                     )}
                     {chatSearch?.trim() && searchedMessages.length === 0 && (
                         <p data-testid="group-chat-search-none" style={{ textAlign: 'center', color: 'var(--text-faint)', marginTop: '1rem' }}>
-                            No messages in this chat match.
+                            {t('No messages in this chat match.')}
                         </p>
                     )}
                     {searchedMessages.map((msg, index) => {
@@ -1859,7 +1901,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                                 padding: '4px 12px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer'
                                             }}
                                         >
-                                            🏷️ View Post
+                                            <span aria-hidden="true">🏷️ </span><span>{t('View Post')}</span>
                                         </button>
                                     )}
                                     
@@ -1885,7 +1927,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                             >
                                                 {!relatedTx
                                                     ? <><span aria-hidden="true">🏷️ </span><span>{t('View Post')}</span></>
-                                                    : hasRated ? '✓ Rating Submitted' : '⭐ Rate your partner'}
+                                                    : hasRated ? t('✓ Rating Submitted') : <><span aria-hidden="true">⭐ </span><span>{t('Rate your partner')}</span></>}
                                             </button>
                                         );
                                     })()}
@@ -1987,8 +2029,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                                     cursor: 'pointer',
                                                     lineHeight: 1,
                                                 }}
-                                                aria-label={`React with ${emoji}`}
-                                                title={`React with ${emoji}`}
+                                                aria-label={t('React with {emoji}', { emoji })}
+                                                title={t('React with {emoji}', { emoji })}
                                             >
                                                 {emoji}
                                             </button>
@@ -2048,10 +2090,10 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                             </div>
                                         );
                                     })()}
-                                    <div style={{ display: 'inline', whiteSpace: 'pre-wrap' }}>
+                                    <div dir="auto" style={{ display: 'inline', whiteSpace: 'pre-wrap' }}>
                                         {msg.type === 'image' ? (() => {
                                             const ctx = dmCtxFor(activeConv);
-                                            if (!ctx) return <span style={{ fontStyle: 'italic', opacity: 0.7 }}>🔒 Image</span>;
+                                            if (!ctx) return <span style={{ fontStyle: 'italic', opacity: 0.7 }}>{t('🔒 Image')}</span>;
                                             // An image message's body is its caption, which is
                                             // usually empty. The phone already shows it; show it
                                             // here too, or a caption typed on the web would be
@@ -2106,10 +2148,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                         userSelect: 'none',
                                         verticalAlign: 'bottom',
                                     }}>
-                                        {isEdited ? 'edited · ' : ''}
-                                        {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                        {isEdited ? t('edited · {time}', { time: messageTime(msg.timestamp) }) : messageTime(msg.timestamp)}
                                         {isMe && (
-                                            <span style={{ marginLeft: '2px', color: readByPeer ? '#38bdf8' : 'rgba(255, 255, 255, 0.6)' }} aria-label={readByPeer ? 'Read by recipient' : 'Sent'}>
+                                            <span style={{ marginLeft: '2px', color: readByPeer ? '#38bdf8' : 'rgba(255, 255, 255, 0.6)' }} aria-label={readByPeer ? t('Read by recipient') : t('Sent', undefined, 'message status')}>
                                                 {readByPeer ? '✓✓' : '✓'}
                                             </span>
                                         )}
@@ -2132,9 +2173,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                                 textDecoration: 'underline',
                                                 textUnderlineOffset: '2px',
                                             }}
-                                            aria-label="Reply to message"
+                                            aria-label={t('Reply to message')}
                                         >
-                                            Reply
+                                            {t('Reply')}
                                         </button>
                                         <button
                                             type="button"
@@ -2158,10 +2199,10 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                                 textDecoration: 'underline',
                                                 textUnderlineOffset: '2px',
                                             }}
-                                            aria-label="React to message"
-                                            title="React"
+                                            aria-label={t('React to message')}
+                                            title={t('React')}
                                         >
-                                            React
+                                            {t('React')}
                                         </button>
                                         {canEdit && (
                                             <button
@@ -2183,9 +2224,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                                     textDecoration: 'underline',
                                                     textUnderlineOffset: '2px',
                                                 }}
-                                                aria-label="Edit message"
+                                                aria-label={t('Edit message')}
                                             >
-                                                Edit
+                                                {t('Edit', undefined, 'button: edit a message')}
                                             </button>
                                         )}
                                     </span>
@@ -2215,8 +2256,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                             color: 'var(--text-primary)',
                                             userSelect: 'none',
                                         }}
-                                        aria-label={`Reactions: ${uniqueEmojis.join(' ')}. Total: ${totalReactionsCount}`}
-                                        title={reactions.map((r: any) => `${r.author === identity.publicKey ? 'You' : (membersByPublicKey.get(r.author)?.callsign || r.author.slice(0, 8))}: ${r.emoji}`).join('\n')}
+                                        aria-label={t('Reactions: {emojis}. Total: {total}', { emojis: uniqueEmojis.join(' '), total: totalReactionsCount })}
+                                        title={reactions.map((r: any) => t('{name}: {emoji}', { name: r.author === identity.publicKey ? t('You') : (membersByPublicKey.get(r.author)?.callsign || r.author.slice(0, 8)), emoji: r.emoji })).join('\n')}
                                     >
                                         <span>{uniqueEmojis.join(' ')}</span>
                                         {totalReactionsCount > 1 && (
@@ -2243,7 +2284,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                     }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', borderLeft: '3px solid var(--accent)', paddingLeft: '8px', minWidth: 0, flex: 1 }}>
                             <div style={{ fontWeight: 600, fontSize: '0.8rem', color: 'var(--accent)' }}>
-                                Editing message
+                                {t('Editing message')}
                             </div>
                             <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>
                                 {decryptMessage(editingMessage)}
@@ -2252,7 +2293,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         <button
                             type="button"
                             onClick={handleCancelEdit}
-                            aria-label="Cancel edit"
+                            aria-label={t('Cancel edit')}
                             style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '1rem', padding: '6px', minWidth: '28px', minHeight: '28px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
                         >
                             ✕
@@ -2276,7 +2317,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                 return (
                                     <>
                                         <div style={{ fontWeight: 600, fontSize: '0.8rem', color: 'var(--accent)' }}>
-                                            Replying to {!q.named ? q.author : replyToMessage.authorPubkey === identity.publicKey ? 'You' : (membersByPublicKey.get(replyToMessage.authorPubkey)?.callsign || 'Someone')}
+                                            {t('Replying to {name}', { name: !q.named ? q.author : replyToMessage.authorPubkey === identity.publicKey ? t('You') : (membersByPublicKey.get(replyToMessage.authorPubkey)?.callsign || t('Someone')) })}
                                         </div>
                                         <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>
                                             {q.text}
@@ -2289,7 +2330,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         <button
                             type="button"
                             onClick={() => setReplyToMessage(null)}
-                            aria-label="Cancel reply"
+                            aria-label={t('Cancel reply')}
                             style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '1rem', padding: '6px', minWidth: '28px', minHeight: '28px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
                         >
                             ✕
@@ -2312,7 +2353,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         <button
                             type="button"
                             onClick={() => setImageNotice(null)}
-                            aria-label="Dismiss"
+                            aria-label={t('Dismiss')}
                             style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '1rem', padding: '6px', minWidth: '28px', minHeight: '28px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
                         >
                             ✕
@@ -2352,7 +2393,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             <div style={{ width: '48px', height: '48px', borderRadius: '8px', background: 'var(--bg-hover)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>🖼️</div>
                         )}
                         <div style={{ minWidth: 0, flex: 1, fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                            {draft.trim() ? 'Send this picture, with what you have typed as its caption?' : 'Send this picture?'}
+                            {draft.trim() ? t('Send this picture, with what you have typed as its caption?') : t('Send this picture?')}
                         </div>
                         <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
                             <button
@@ -2360,7 +2401,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                 onClick={clearPendingImage}
                                 style={{ minHeight: '32px', padding: '0 12px', borderRadius: '8px', border: '1px solid var(--border-primary)', background: 'transparent', color: 'var(--text-secondary)', fontFamily: 'inherit', fontSize: '0.85rem', cursor: 'pointer' }}
                             >
-                                Cancel
+                                {t('Cancel')}
                             </button>
                             <button
                                 type="button"
@@ -2368,7 +2409,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                 disabled={sending}
                                 style={{ minHeight: '32px', padding: '0 12px', borderRadius: '8px', border: 'none', background: 'var(--accent)', color: '#fff', fontFamily: 'inherit', fontSize: '0.85rem', fontWeight: 600, cursor: sending ? 'default' : 'pointer', opacity: sending ? 0.6 : 1 }}
                             >
-                                {sending ? 'Sending…' : 'Send'}
+                                {sending ? t('Sending…') : t('Send')}
                             </button>
                         </div>
                     </div>
@@ -2380,22 +2421,22 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         role="alert"
                         className="p-3.5 m-3 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 text-red-600 dark:text-red-400 text-xs sm:text-sm font-bold flex flex-wrap items-center justify-between gap-2 sm:gap-3"
                     >
-                        <span className="min-w-0 flex-1 break-words">🚫 You have blocked this user. Messaging is disabled.</span>
+                        <span className="min-w-0 flex-1 break-words"><span aria-hidden="true">🚫 </span>{t('You have blocked this user. Messaging is disabled.')}</span>
                         <button
                             type="button"
                             onClick={async () => {
-                                if (window.confirm(`Unblock ${getConversationTitle(activeConv)}?`)) {
+                                if (window.confirm(t('Unblock {name}?', { name: getConversationTitle(activeConv) }))) {
                                     try {
                                         await unblockUser(peerPubkey);
                                         await loadConversations();
                                     } catch (e: any) {
-                                        alert(e?.message || 'That did not go through. Please try again.');
+                                        alert(e?.message || t('That did not go through. Please try again.'));
                                     }
                                 }
                             }}
                             className="px-3 py-1 bg-white dark:bg-nature-900 border border-red-300 dark:border-red-700 text-red-600 dark:text-red-300 font-bold rounded-lg text-xs cursor-pointer hover:bg-red-50 dark:hover:bg-red-950/30 shrink-0"
                         >
-                            Unblock
+                            {t('Unblock')}
                         </button>
                     </div>
                 ) : (
@@ -2407,7 +2448,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         background: 'var(--bg-secondary)',
                     }}>
                         {activeConv.type === 'dm' && (
-                            <label title="Send photo" style={{
+                            <label title={t('Send photo')} style={{
                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                                 width: '40px', height: '40px', borderRadius: '50%',
                                 fontSize: '1.2rem',
@@ -2443,7 +2484,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                     handleSend();
                                 }
                             }}
-                            placeholder={editingMessage ? "Edit message..." : "Message..."}
+                            placeholder={editingMessage ? t('Edit message...') : t('Message...')}
                             disabled={sending}
                             rows={1}
                             style={{
@@ -2461,7 +2502,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             type="button"
                             onClick={handleSend}
                             disabled={sending || !draft.trim()}
-                            title={editingMessage ? "Save edit" : "Send message"}
+                            title={editingMessage ? t('Save edit') : t('Send message')}
                             style={{
                                 height: '40px',
                                 width: '40px',
@@ -2520,11 +2561,11 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         <div className="p-4 md:p-6 max-w-4xl mx-auto w-full">
             {/* Wraps: at 320px with 1.3x text, Groups' two buttons go under the title rather than squeeze it. */}
             <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
-                <h2 style={{ fontSize: '1.3rem', margin: 0 }}>💬 Messages</h2>
+                <h2 style={{ fontSize: '1.3rem', margin: 0 }}>{t('💬 Messages')}</h2>
                 <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: '0.5rem', marginLeft: 'auto' }}>
                     {activeTab !== 'groups' ? (
                         <button onClick={() => { setShowNewDm(true); loadMembers(); }} style={headerButtonStyle}>
-                            ✉️ New DM
+                            {t('✉️ New DM')}
                         </button>
                     ) : hasGroups && (
                         // As the phone's Groups: the empty view has its own two, so these show with a list.
@@ -2622,8 +2663,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             ) : conversations.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--text-faint)' }}>
                     <p style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>💬</p>
-                    <p>No conversations yet.</p>
-                    <p style={{ fontSize: '0.85rem' }}>Start by sending a DM or creating a group.</p>
+                    <p>{t('No conversations yet.')}</p>
+                    <p style={{ fontSize: '0.85rem' }}>{t('Start by sending a DM or creating a group.')}</p>
                 </div>
             ) : (
                 <div className="bg-white dark:bg-nature-900 rounded-2xl border border-nature-200 dark:border-nature-800 shadow-sm divide-y divide-nature-100 dark:divide-nature-800 overflow-hidden">
@@ -2730,20 +2771,20 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                                     background: conv.postStatus === 'active' ? '#dbeafe' : conv.postStatus === 'pending' ? '#d1fae5' : '#f3f4f6',
                                                     color: conv.postStatus === 'active' ? '#1d4ed8' : conv.postStatus === 'pending' ? '#047857' : '#4b5563',
                                                 }}>
-                                                    {conv.postStatus === 'pending' ? 'HELD IN TRUST' : conv.postStatus.toUpperCase()}
+                                                    {postStatusWords(conv.postStatus)}
                                                 </div>
                                             )}
                                         </div>
                                     )}
                                     {!conv.postTitle && (
                                         <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                            {conv.type === 'group_thread' ? tn(conv.participants.length, '{n} member', '{n} members') : new Date(conv.createdAt).toLocaleDateString()}
+                                            {conv.type === 'group_thread' ? tn(conv.participants.length, '{n} member', '{n} members') : conversationDate(conv.createdAt)}
                                         </div>
                                     )}
                                     
                                     {needsReview && (
                                         <div style={{ fontSize: '0.75rem', color: '#d97706', fontWeight: 700, marginTop: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                                            <span style={{ fontSize: '0.8rem' }}>⭐</span> Action Needed: Review Partner
+                                            <span style={{ fontSize: '0.8rem' }}>⭐</span> {t('Action Needed: Review Partner')}
                                         </div>
                                     )}
                                 </div>

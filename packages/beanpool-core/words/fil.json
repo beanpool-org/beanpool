@@ -2,7 +2,7 @@
   "_meta": {
     "language": "fil",
     "name": "Filipino",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-19",
@@ -364,5 +364,106 @@
   },
   "Too many suggestions from your connection recently. Please try again later — your text is still here.": "Masyadong maraming mungkahi mula sa iyong koneksyon kamakailan. Pakisubukan muli mamaya — narito pa rin ang iyong teksto.",
   "This poll is shown at your area (about 10 km around it) to everyone who can read it.": "Ipinapakita ang poll na ito sa iyong lugar (humigit-kumulang 10 km sa palibot nito) sa lahat ng makakabasa nito.",
-  "You haven't set your area, so members nearby won't see this poll in their list; they can still find it by searching. Set it in Settings → Your area to show it near you.": "Hindi mo pa naitatakda ang iyong lugar, kaya hindi makikita ng mga kalapit na miyembro ang poll na ito sa kanilang listahan; mahahanap pa rin nila ito sa pamamagitan ng paghahanap. Itakda ito sa Mga Setting → Iyong lugar para maipakita ito malapit sa iyo."
+  "You haven't set your area, so members nearby won't see this poll in their list; they can still find it by searching. Set it in Settings → Your area to show it near you.": "Hindi mo pa naitatakda ang iyong lugar, kaya hindi makikita ng mga kalapit na miyembro ang poll na ito sa kanilang listahan; mahahanap pa rin nila ito sa pamamagitan ng paghahanap. Itakda ito sa Mga Setting → Iyong lugar para maipakita ito malapit sa iyo.",
+  "Project · A leader, a goal, an end date": "Proyekto · Isang pinuno, isang layunin, isang takdang petsa",
+  "Enterprise · Run by its keepers": "Negosyo · Pinamamahalaan ng mga tagapangalaga nito",
+  "Lead convenor\u0004group role": "Punong tagapag-ugnay",
+  "Convenor\u0004group role": "Tagapag-ugnay",
+  "Member\u0004group role": "Miyembro",
+  "Observer\u0004group role": "Tagamasid",
+  "Make one of the observers a member first, then hand the lead to them.": "Gawing miyembro muna ang isa sa mga tagamasid, bago ipasa sa kanila ang pamumuno.",
+  "{name} receives {n} Beans. The 1.5% trade fee ({fee} Beans) goes to the Commons.|{name} receives {n} Beans. The 1.5% trade fee ({fee} Beans) goes to the Commons.": {
+    "one": "Tatanggap si {name} ng {n} munggo. Ang 1.5% na bayad sa palitan ({fee} munggo) ay mapupunta sa Komun.",
+    "other": "Tatanggap si {name} ng {n} munggo. Ang 1.5% na bayad sa palitan ({fee} munggo) ay mapupunta sa Komun."
+  },
+  "Enter an amount in Beans, like 40 or 12.50.": "Maglagay ng halaga sa munggo, tulad ng 40 o 12.50.",
+  "The amount must be more than 0 Beans.": "Dapat higit sa 0 munggo ang halaga.",
+  "The enterprise holds {n} Beans, so it can't pay more than that.|The enterprise holds {n} Beans, so it can't pay more than that.": {
+    "one": "May hawak na {n} munggo ang negosyo, kaya hindi ito makakapagbayad nang higit doon.",
+    "other": "May hawak na {n} munggo ang negosyo, kaya hindi ito makakapagbayad nang higit doon."
+  },
+  "Paying a keeper is a wage, and a wage comes only out of what the enterprise has earned above its costs (its earned surplus): {n} Beans now.|Paying a keeper is a wage, and a wage comes only out of what the enterprise has earned above its costs (its earned surplus): {n} Beans now.": {
+    "one": "Sahod ang pagbabayad sa tagapangalaga, at ang sahod ay kinukuha lamang mula sa kinita ng negosyo lampas sa mga gastusin nito (ang kinita nitong labis): {n} munggo ngayon.",
+    "other": "Sahod ang pagbabayad sa tagapangalaga, at ang sahod ay kinukuha lamang mula sa kinita ng negosyo lampas sa mga gastusin nito (ang kinita nitong labis): {n} munggo ngayon."
+  },
+  "Paying a keeper is a wage: only out of what the project has earned.": "Sahod ang pagbabayad sa tagapangalaga: mula lamang sa kinita ng proyekto.",
+  "Paying a keeper is a wage: only out of what the enterprise has earned.": "Sahod ang pagbabayad sa tagapangalaga: mula lamang sa kinita ng negosyo.",
+  "Paying a keeper is a wage: only out of what the project has earned above its costs, {n} Beans now.|Paying a keeper is a wage: only out of what the project has earned above its costs, {n} Beans now.": {
+    "one": "Sahod ang pagbabayad sa tagapangalaga: mula lamang sa kinita ng proyekto lampas sa mga gastusin nito, {n} munggo ngayon.",
+    "other": "Sahod ang pagbabayad sa tagapangalaga: mula lamang sa kinita ng proyekto lampas sa mga gastusin nito, {n} munggo ngayon."
+  },
+  "Paying a keeper is a wage: only out of what the enterprise has earned above its costs, {n} Beans now.|Paying a keeper is a wage: only out of what the enterprise has earned above its costs, {n} Beans now.": {
+    "one": "Sahod ang pagbabayad sa tagapangalaga: mula lamang sa kinita ng negosyo lampas sa mga gastusin nito, {n} munggo ngayon.",
+    "other": "Sahod ang pagbabayad sa tagapangalaga: mula lamang sa kinita ng negosyo lampas sa mga gastusin nito, {n} munggo ngayon."
+  },
+  "Pay Beans out": "Magbayad ng munggo",
+  "Remove a collaborator": "Mag-alis ng katuwang",
+  "Remove a keeper": "Mag-alis ng tagapangalaga",
+  "Make another keeper the lead": "Gawing pinuno ang isa pang tagapangalaga",
+  "You're not in this group now, but you were when these votes opened, so you can still vote on them.": "Wala ka sa grupong ito ngayon, ngunit narito ka noong binuksan ang mga botohang ito, kaya maaari ka pa ring bumoto sa mga ito.",
+  "You're not in this group now. These are the votes you were part of.": "Wala ka sa grupong ito ngayon. Ito ang mga botohan kung saan naging bahagi ka.",
+  "someone in the group": "isang tao sa grupo",
+  "someone": "isang tao",
+  "Pay {n} Beans to {name}|Pay {n} Beans to {name}": {
+    "one": "Magbayad ng {n} munggo kay {name}",
+    "other": "Magbayad ng {n} munggo kay {name}"
+  },
+  "Remove {name} as a collaborator": "Alisin si {name} bilang katuwang",
+  "Remove {name} as a keeper": "Alisin si {name} bilang tagapangalaga",
+  "Make {name} the leader": "Gawing pinuno si {name}",
+  "Make {name} the lead keeper": "Gawing punong tagapangalaga si {name}",
+  "Make {name} the lead convenor": "Gawing punong tagapag-ugnay si {name}",
+  "Make {name} a convenor": "Gawing tagapag-ugnay si {name}",
+  "Make {name} a member, no longer a convenor": "Gawing miyembro si {name}, hindi na tagapag-ugnay",
+  "Remove {name} from the group": "Alisin si {name} sa grupo",
+  "Change who can join: {policy}": "Baguhin kung sino ang maaaring sumali: {policy}",
+  "Close the group. Its chat stays to read.": "Isara ang grupo. Mananatili ang chat nito para mabasa.",
+  "A vote": "Isang botohan",
+  "{voted} of {roll} has voted. {quorum} must vote. Yes and No show when it closes.": "{voted} sa {roll} ang nakaboto na. Dapat bumoto ang {quorum}. Ipapakita ang Oo at Hindi kapag nagsara ito.",
+  "{n} of {roll} have voted. {quorum} must vote. Yes and No show when it closes.|{n} of {roll} have voted. {quorum} must vote. Yes and No show when it closes.": {
+    "one": "{n} sa {roll} ang nakaboto na. Dapat bumoto ang {quorum}. Ipapakita ang Oo at Hindi kapag nagsara ito.",
+    "other": "{n} sa {roll} ang nakaboto na. Dapat bumoto ang {quorum}. Ipapakita ang Oo at Hindi kapag nagsara ito."
+  },
+  "Yes {yes} · No {no}. {voted} of {roll} voted.": "Oo {yes} · Hindi {no}. {voted} sa {roll} ang bumoto.",
+  "Open\u0004a vote": "Bukas",
+  "Passed and carried out": "Pumasa at naisagawa",
+  "Passed": "Pumasa",
+  "Did not pass": "Hindi pumasa",
+  "Not enough people voted": "Hindi sapat ang mga taong bumoto",
+  "Not enough keepers voted": "Hindi sapat ang mga tagapangalagang bumoto",
+  "Passed, but not carried out: {reason}": "Pumasa, ngunit hindi naisagawa: {reason}",
+  "Passed, but not carried out": "Pumasa, ngunit hindi naisagawa",
+  "Passed, but there was nothing to do: {reason}": "Pumasa, ngunit walang kailangang gawin: {reason}",
+  "Passed, but there was nothing to do": "Pumasa, ngunit walang kailangang gawin",
+  "Closed\u0004a vote": "Sarado",
+  "closing now": "nagsasara na ngayon",
+  "closes in {n} day|closes in {n} days": {
+    "one": "magsasara sa loob ng {n} araw",
+    "other": "magsasara sa loob ng {n} araw"
+  },
+  "closes in {n} hour|closes in {n} hours": {
+    "one": "magsasara sa loob ng {n} oras",
+    "other": "magsasara sa loob ng {n} oras"
+  },
+  "closes within the hour": "magsasara sa loob ng isang oras",
+  "Nobody sees who voted how. In a very small group, though, the result and who has voted can show it.": "Walang nakakakita kung paano bumoto ang bawat isa. Gayunpaman, sa isang napakaliit na grupo, maaaring maihayag ito ng resulta at kung sino ang bumoto.",
+  "anyone can join": "kahit sino ay maaaring sumali",
+  "people ask, and a convenor lets them in": "humihiling ang mga tao, at pinapapasok sila ng tagapag-ugnay",
+  "by invitation only": "sa pamamagitan lamang ng imbitasyon",
+  "a new rule": "isang bagong panuntunan",
+  "Choose a new lead convenor": "Pumili ng bagong punong tagapag-ugnay",
+  "Make someone a convenor": "Gawing tagapag-ugnay ang isang tao",
+  "Make a convenor a member": "Gawing miyembro ang isang tagapag-ugnay",
+  "Remove someone": "Mag-alis ng isang tao",
+  "Change who can join": "Baguhin kung sino ang maaaring sumali",
+  "Close the group": "Isara ang grupo",
+  "Who should lead?": "Sino ang dapat mamuno?",
+  "Who should be a convenor?": "Sino ang dapat maging tagapag-ugnay?",
+  "Which convenor?": "Aling tagapag-ugnay?",
+  "Remove whom?": "Alisin kung sino?",
+  "Open: anyone can join": "Bukas: kahit sino ay maaaring sumali",
+  "Ask to join": "Humiling na sumali",
+  "Invite only": "Imbitasyon lamang",
+  "The group was closed by its members’ vote. Its chat stays to read.": "Isinara ang grupo sa pamamagitan ng boto ng mga miyembro nito. Mananatili ang chat nito para mabasa.",
+  "Votes among the group's members and convenors; observers watch. More than half must vote. 7 days, or sooner once the answer can't change.": "Mga botohan sa pagitan ng mga miyembro at convenor ng grupo; nanonood ang mga tagamasid. Mahigit kalahati ang dapat bumoto. 7 araw, o mas maaga kapag hindi na magbabago ang sagot."
 }

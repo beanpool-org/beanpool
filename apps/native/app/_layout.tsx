@@ -268,7 +268,7 @@ function RootLayoutNav() {
     // a slow prompt is never followed by a second one: utils/return-lock.ts. It covers the app as it leaves, too, so the
     // app switcher shows nothing of the member's.
     useEffect(() => {
-        if (!returnLock.current) returnLock.current = createReturnLock(setAppLocked, setAppCovered);
+        if (!returnLock.current) returnLock.current = createReturnLock(setAppLocked, setAppCovered, () => t('Unlock BeanPool'));
         const onChange = returnLock.current;
         const sub = AppState.addEventListener('change', (next) => {
             onChange(next, !!identity);

@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ja",
     "name": "Japanese",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-19",
@@ -340,5 +340,97 @@
   },
   "Too many suggestions from your connection recently. Please try again later — your text is still here.": "最近この接続からのご意見が多すぎます。後でもう一度お試しください — 入力内容は残っています。",
   "This poll is shown at your area (about 10 km around it) to everyone who can read it.": "この投票はあなたの地域（周辺約10 km）で、閲覧できるすべての人に表示されます。",
-  "You haven't set your area, so members nearby won't see this poll in their list; they can still find it by searching. Set it in Settings → Your area to show it near you.": "あなたの地域が設定されていないため、近くのメンバーのリストにはこの投票が表示されません。ただし検索で見つけることはできます。近くに表示するには、設定 → あなたの地域 で設定してください。"
+  "You haven't set your area, so members nearby won't see this poll in their list; they can still find it by searching. Set it in Settings → Your area to show it near you.": "あなたの地域が設定されていないため、近くのメンバーのリストにはこの投票が表示されません。ただし検索で見つけることはできます。近くに表示するには、設定 → あなたの地域 で設定してください。",
+  "Project · A leader, a goal, an end date": "プロジェクト · リーダー、目標、終了日",
+  "Enterprise · Run by its keepers": "事業体 · 運営者によって運営",
+  "Lead convenor\u0004group role": "代表まとめ役",
+  "Convenor\u0004group role": "まとめ役",
+  "Member\u0004group role": "メンバー",
+  "Observer\u0004group role": "オブザーバー",
+  "Make one of the observers a member first, then hand the lead to them.": "まずオブザーバーの1人をメンバーにしてから、リーダー役を引き継いでください。",
+  "{name} receives {n} Beans. The 1.5% trade fee ({fee} Beans) goes to the Commons.|{name} receives {n} Beans. The 1.5% trade fee ({fee} Beans) goes to the Commons.": {
+    "other": "{name}が{n}豆を受け取ります。1.5%の取引手数料（{fee}豆）はコモンズに送られます。"
+  },
+  "Enter an amount in Beans, like 40 or 12.50.": "40や12.50のように、豆の数量を入力してください。",
+  "The amount must be more than 0 Beans.": "数量は0豆より多くある必要があります。",
+  "The enterprise holds {n} Beans, so it can't pay more than that.|The enterprise holds {n} Beans, so it can't pay more than that.": {
+    "other": "事業体の保有は{n}豆のため、それを超える支払いはできません。"
+  },
+  "Paying a keeper is a wage, and a wage comes only out of what the enterprise has earned above its costs (its earned surplus): {n} Beans now.|Paying a keeper is a wage, and a wage comes only out of what the enterprise has earned above its costs (its earned surplus): {n} Beans now.": {
+    "other": "運営者への支払いは報酬であり、報酬は事業体が経費を超えて得た利益（余剰金）からのみ支払われます：現在は{n}豆。"
+  },
+  "Paying a keeper is a wage: only out of what the project has earned.": "運営者への支払いは報酬です：プロジェクトが獲得した利益からのみ支払われます。",
+  "Paying a keeper is a wage: only out of what the enterprise has earned.": "運営者への支払いは報酬です：事業体が獲得した利益からのみ支払われます。",
+  "Paying a keeper is a wage: only out of what the project has earned above its costs, {n} Beans now.|Paying a keeper is a wage: only out of what the project has earned above its costs, {n} Beans now.": {
+    "other": "運営者への支払いは報酬です：プロジェクトが経費を超えて得た利益からのみ支払われます。現在は{n}豆。"
+  },
+  "Paying a keeper is a wage: only out of what the enterprise has earned above its costs, {n} Beans now.|Paying a keeper is a wage: only out of what the enterprise has earned above its costs, {n} Beans now.": {
+    "other": "運営者への支払いは報酬です：事業体が経費を超えて得た利益からのみ支払われます。現在は{n}豆。"
+  },
+  "Pay Beans out": "豆を支払う",
+  "Remove a collaborator": "協力者を削除",
+  "Remove a keeper": "運営者を削除",
+  "Make another keeper the lead": "別の運営者を代表にする",
+  "You're not in this group now, but you were when these votes opened, so you can still vote on them.": "現在このグループには所属していませんが、これらの投票が開始された時点では所属していたため、投票することができます。",
+  "You're not in this group now. These are the votes you were part of.": "現在このグループには所属していません。これらはあなたが参加していた投票です。",
+  "someone in the group": "グループの誰か",
+  "someone": "誰か",
+  "Pay {n} Beans to {name}|Pay {n} Beans to {name}": {
+    "other": "{name}に{n}豆を支払う"
+  },
+  "Remove {name} as a collaborator": "{name}を協力者から外す",
+  "Remove {name} as a keeper": "{name}を運営者から外す",
+  "Make {name} the leader": "{name}をリーダーにする",
+  "Make {name} the lead keeper": "{name}を代表運営者にする",
+  "Make {name} the lead convenor": "{name}を代表まとめ役にする",
+  "Make {name} a convenor": "{name}をまとめ役にする",
+  "Make {name} a member, no longer a convenor": "{name}をメンバーにし、まとめ役から外す",
+  "Remove {name} from the group": "{name}をグループから外す",
+  "Change who can join: {policy}": "参加可能な人を変更：{policy}",
+  "Close the group. Its chat stays to read.": "グループを閉鎖します。チャットは閲覧用に残ります。",
+  "A vote": "投票",
+  "{voted} of {roll} has voted. {quorum} must vote. Yes and No show when it closes.": "{roll}人中{voted}人が投票しました。{quorum}人の投票が必要です。賛成と反対は終了時に表示されます。",
+  "{n} of {roll} have voted. {quorum} must vote. Yes and No show when it closes.|{n} of {roll} have voted. {quorum} must vote. Yes and No show when it closes.": {
+    "other": "{roll}人中{n}人が投票しました。{quorum}人の投票が必要です。賛成と反対は終了時に表示されます。"
+  },
+  "Yes {yes} · No {no}. {voted} of {roll} voted.": "賛成 {yes} · 反対 {no}。{roll}人中{voted}人が投票しました。",
+  "Open\u0004a vote": "進行中",
+  "Passed and carried out": "可決され実行されました",
+  "Passed": "可決",
+  "Did not pass": "否決",
+  "Not enough people voted": "投票人数が足りませんでした",
+  "Not enough keepers voted": "投票した運営者が足りませんでした",
+  "Passed, but not carried out: {reason}": "可決されましたが、実行されませんでした：{reason}",
+  "Passed, but not carried out": "可決されましたが、実行されませんでした",
+  "Passed, but there was nothing to do: {reason}": "可決されましたが、対応は不要でした：{reason}",
+  "Passed, but there was nothing to do": "可決されましたが、対応は不要でした",
+  "Closed\u0004a vote": "終了",
+  "closing now": "まもなく終了",
+  "closes in {n} day|closes in {n} days": {
+    "other": "{n}日後に終了"
+  },
+  "closes in {n} hour|closes in {n} hours": {
+    "other": "{n}時間後に終了"
+  },
+  "closes within the hour": "1時間以内に終了",
+  "Nobody sees who voted how. In a very small group, though, the result and who has voted can show it.": "誰がどのように投票したかは誰にも見えません。ただし、非常に少人数のグループでは、結果と投票者から推測できる場合があります。",
+  "anyone can join": "誰でも参加可能",
+  "people ask, and a convenor lets them in": "参加申請し、まとめ役が承認",
+  "by invitation only": "招待制",
+  "a new rule": "新しいルール",
+  "Choose a new lead convenor": "新しい代表まとめ役を選択",
+  "Make someone a convenor": "誰かをまとめ役にする",
+  "Make a convenor a member": "まとめ役をメンバーにする",
+  "Remove someone": "メンバーを外す",
+  "Change who can join": "参加条件を変更",
+  "Close the group": "グループを閉鎖",
+  "Who should lead?": "誰がリードすべきですか？",
+  "Who should be a convenor?": "誰をまとめ役にしますか？",
+  "Which convenor?": "どのまとめ役ですか？",
+  "Remove whom?": "誰を外しますか？",
+  "Open: anyone can join": "オープン：誰でも参加可能",
+  "Ask to join": "参加を申請",
+  "Invite only": "招待のみ",
+  "The group was closed by its members’ vote. Its chat stays to read.": "グループはメンバーの投票によって閉鎖されました。チャットは閲覧用に残ります。",
+  "Votes among the group's members and convenors; observers watch. More than half must vote. 7 days, or sooner once the answer can't change.": "グループのメンバーとまとめ役による投票（オブザーバーは閲覧のみ）。過半数の投票が必要です。期間は7日間、または結果が確定した時点で終了します。"
 }

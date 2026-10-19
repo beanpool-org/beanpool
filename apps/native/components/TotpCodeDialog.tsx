@@ -6,6 +6,7 @@ import React from 'react';
 import { View, Text, Pressable, Modal, TextInput, ActivityIndicator, Keyboard, ScrollView } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useTheme } from '../app/ThemeContext';
+import { t } from '@beanpool/core';
 
 /** A plausible code: six digits, or a backup code. */
 export const looksLikeTotpCode = (code: string) => /^\s*[0-9a-zA-Z-]{6,}\s*$/.test(code);
@@ -29,14 +30,14 @@ export function TotpCodeDialog(props: {
                 <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: 16 }} keyboardShouldPersistTaps="handled">
                     <View style={{ backgroundColor: colors.surface.card, borderRadius: 20, padding: 20, borderWidth: 1, borderColor: colors.border.default }}>
                         <Text style={{ fontSize: 18, fontWeight: 'bold', color: colors.text.heading, marginBottom: 8 }} accessibilityRole="header">
-                            2FA code for {communityName}
+                            {t('2FA code for {name}', { name: communityName })}
                         </Text>
                         <Text style={{ fontSize: 14, color: colors.text.secondary, lineHeight: 20, marginBottom: 12 }}>
-                            This community's settings are also protected by a 2FA code. Enter the 6-digit code from your authenticator app, or a backup code.
+                            {t("This community's settings are also protected by a 2FA code. Enter the 6-digit code from your authenticator app, or a backup code.")}
                         </Text>
                         {wrongCode ? (
                             <Text style={{ fontSize: 14, color: colors.feedback.danger.fg, marginBottom: 8 }} accessibilityLiveRegion="polite">
-                                That code didn't work. Codes change every 30 seconds — try the current one.
+                                {t("That code didn't work. Codes change every 30 seconds — try the current one.")}
                             </Text>
                         ) : null}
                         <TextInput
@@ -47,7 +48,7 @@ export function TotpCodeDialog(props: {
                             autoComplete="one-time-code"
                             textContentType="oneTimeCode"
                             maxLength={20}
-                            accessibilityLabel="2FA code"
+                            accessibilityLabel={t('2FA code')}
                             placeholder="123456"
                             placeholderTextColor={colors.text.muted}
                             onSubmitEditing={onSubmit}
@@ -59,7 +60,7 @@ export function TotpCodeDialog(props: {
                                 accessibilityRole="button"
                                 style={{ minHeight: 48, minWidth: 48, paddingHorizontal: 16, justifyContent: 'center' }}
                             >
-                                <Text style={{ fontSize: 15, color: colors.text.secondary, fontWeight: '600' }}>Cancel</Text>
+                                <Text style={{ fontSize: 15, color: colors.text.secondary, fontWeight: '600' }}>{t('Cancel')}</Text>
                             </Pressable>
                             <Pressable
                                 onPress={onSubmit}

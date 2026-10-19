@@ -2,7 +2,7 @@
   "_meta": {
     "language": "bn",
     "name": "Bengali",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-19",
@@ -364,5 +364,106 @@
   },
   "Too many suggestions from your connection recently. Please try again later — your text is still here.": "সম্প্রতি আপনার সংযোগ থেকে অনেক বেশি পরামর্শ এসেছে। অনুগ্রহ করে পরে আবার চেষ্টা করুন — আপনার লেখাটি এখনও এখানে রয়েছে।",
   "This poll is shown at your area (about 10 km around it) to everyone who can read it.": "এই পোলটি আপনার এলাকায় (এর চারপাশে প্রায় ১০ কিমি) এমন সকলকে দেখানো হবে যারা এটি পড়তে পারেন।",
-  "You haven't set your area, so members nearby won't see this poll in their list; they can still find it by searching. Set it in Settings → Your area to show it near you.": "আপনি আপনার এলাকা সেট করেননি, তাই আশেপাশের সদস্যরা তাদের তালিকায় এই পোলটি দেখতে পাবেন না; তারা এখনও অনুসন্ধানের মাধ্যমে এটি খুঁজে পেতে পারেন। এটি আপনার কাছাকাছি দেখাতে সেটিংস → আপনার এলাকা-তে সেট করুন।"
+  "You haven't set your area, so members nearby won't see this poll in their list; they can still find it by searching. Set it in Settings → Your area to show it near you.": "আপনি আপনার এলাকা সেট করেননি, তাই আশেপাশের সদস্যরা তাদের তালিকায় এই পোলটি দেখতে পাবেন না; তারা এখনও অনুসন্ধানের মাধ্যমে এটি খুঁজে পেতে পারেন। এটি আপনার কাছাকাছি দেখাতে সেটিংস → আপনার এলাকা-তে সেট করুন।",
+  "Project · A leader, a goal, an end date": "প্রকল্প · একজন নেতা, একটি লক্ষ্য, একটি সমাপ্তির তারিখ",
+  "Enterprise · Run by its keepers": "উদ্যোগ · এর কিপারদের দ্বারা পরিচালিত",
+  "Lead convenor\u0004group role": "প্রধান আহ্বায়ক",
+  "Convenor\u0004group role": "আহ্বায়ক",
+  "Member\u0004group role": "সদস্য",
+  "Observer\u0004group role": "পর্যবেক্ষক",
+  "Make one of the observers a member first, then hand the lead to them.": "প্রথমে পর্যবেক্ষকদের একজনকে সদস্য করুন, তারপর তাঁর হাতে নেতৃত্ব তুলে দিন।",
+  "{name} receives {n} Beans. The 1.5% trade fee ({fee} Beans) goes to the Commons.|{name} receives {n} Beans. The 1.5% trade fee ({fee} Beans) goes to the Commons.": {
+    "one": "{name} {n} শিম পাবেন। ১.৫% ট্রেড ফি ({fee} শিম) কমনসে যাবে।",
+    "other": "{name} {n} শিম পাবেন। ১.৫% ট্রেড ফি ({fee} শিম) কমনসে যাবে।"
+  },
+  "Enter an amount in Beans, like 40 or 12.50.": "শিমে একটি পরিমাণ লিখুন, যেমন 40 বা 12.50।",
+  "The amount must be more than 0 Beans.": "পরিমাণটি 0 শিমের বেশি হতে হবে।",
+  "The enterprise holds {n} Beans, so it can't pay more than that.|The enterprise holds {n} Beans, so it can't pay more than that.": {
+    "one": "উদ্যোগটিতে {n} শিম রয়েছে, তাই এটি এর চেয়ে বেশি দিতে পারবে না।",
+    "other": "উদ্যোগটিতে {n} শিম রয়েছে, তাই এটি এর চেয়ে বেশি দিতে পারবে না।"
+  },
+  "Paying a keeper is a wage, and a wage comes only out of what the enterprise has earned above its costs (its earned surplus): {n} Beans now.|Paying a keeper is a wage, and a wage comes only out of what the enterprise has earned above its costs (its earned surplus): {n} Beans now.": {
+    "one": "কিপারকে অর্থ প্রদান একটি মজুরি, এবং মজুরি কেবল উদ্যোগটি তার খরচের অতিরিক্ত যা আয় করেছে (এর অর্জিত উদ্বৃত্ত) তা থেকেই আসে: এখন {n} শিম।",
+    "other": "কিপারকে অর্থ প্রদান একটি মজুরি, এবং মজুরি কেবল উদ্যোগটি তার খরচের অতিরিক্ত যা আয় করেছে (এর অর্জিত উদ্বৃত্ত) তা থেকেই আসে: এখন {n} শিম।"
+  },
+  "Paying a keeper is a wage: only out of what the project has earned.": "কিপারকে অর্থ প্রদান একটি মজুরি: কেবল প্রকল্পটি যা আয় করেছে তা থেকে।",
+  "Paying a keeper is a wage: only out of what the enterprise has earned.": "কিপারকে অর্থ প্রদান একটি মজুরি: কেবল উদ্যোগটি যা আয় করেছে তা থেকে।",
+  "Paying a keeper is a wage: only out of what the project has earned above its costs, {n} Beans now.|Paying a keeper is a wage: only out of what the project has earned above its costs, {n} Beans now.": {
+    "one": "কিপারকে অর্থ প্রদান একটি মজুরি: কেবল প্রকল্পটি তার খরচের অতিরিক্ত যা আয় করেছে তা থেকে, এখন {n} শিম।",
+    "other": "কিপারকে অর্থ প্রদান একটি মজুরি: কেবল প্রকল্পটি তার খরচের অতিরিক্ত যা আয় করেছে তা থেকে, এখন {n} শিম।"
+  },
+  "Paying a keeper is a wage: only out of what the enterprise has earned above its costs, {n} Beans now.|Paying a keeper is a wage: only out of what the enterprise has earned above its costs, {n} Beans now.": {
+    "one": "কিপারকে অর্থ প্রদান একটি মজুরি: কেবল উদ্যোগটি তার খরচের অতিরিক্ত যা আয় করেছে তা থেকে, এখন {n} শিম।",
+    "other": "কিপারকে অর্থ প্রদান একটি মজুরি: কেবল উদ্যোগটি তার খরচের অতিরিক্ত যা আয় করেছে তা থেকে, এখন {n} শিম।"
+  },
+  "Pay Beans out": "শিম প্রদান করুন",
+  "Remove a collaborator": "একজন সহযোগীকে সরান",
+  "Remove a keeper": "একজন কিপারকে সরান",
+  "Make another keeper the lead": "অন্য একজন কিপারকে প্রধান করুন",
+  "You're not in this group now, but you were when these votes opened, so you can still vote on them.": "আপনি এখন এই গ্রুপে নেই, তবে এই ভোটগুলি যখন শুরু হয়েছিল তখন আপনি ছিলেন, তাই আপনি এখনও এগুলিতে ভোট দিতে পারেন।",
+  "You're not in this group now. These are the votes you were part of.": "আপনি এখন এই গ্রুপে নেই। এগুলি সেই ভোট যেগুলির অংশ আপনি ছিলেন।",
+  "someone in the group": "গ্রুপের কেউ একজন",
+  "someone": "কেউ একজন",
+  "Pay {n} Beans to {name}|Pay {n} Beans to {name}": {
+    "one": "{name}-কে {n} শিম প্রদান করুন",
+    "other": "{name}-কে {n} শিম প্রদান করুন"
+  },
+  "Remove {name} as a collaborator": "সহযোগী হিসেবে {name}-কে সরান",
+  "Remove {name} as a keeper": "কিপার হিসেবে {name}-কে সরান",
+  "Make {name} the leader": "{name}-কে নেতা করুন",
+  "Make {name} the lead keeper": "{name}-কে প্রধান কিপার করুন",
+  "Make {name} the lead convenor": "{name}-কে প্রধান আহ্বায়ক করুন",
+  "Make {name} a convenor": "{name}-কে একজন আহ্বায়ক করুন",
+  "Make {name} a member, no longer a convenor": "{name}-কে সদস্য করুন, আর আহ্বায়ক নয়",
+  "Remove {name} from the group": "গ্রুপ থেকে {name}-কে সরান",
+  "Change who can join: {policy}": "কারা যোগ দিতে পারবে তা পরিবর্তন করুন: {policy}",
+  "Close the group. Its chat stays to read.": "গ্রুপটি বন্ধ করুন। এর চ্যাট পড়ার জন্য থাকবে।",
+  "A vote": "একটি ভোট",
+  "{voted} of {roll} has voted. {quorum} must vote. Yes and No show when it closes.": "{roll}-এর মধ্যে {voted} জন ভোট দিয়েছেন। {quorum} জনের ভোট দেওয়া আবশ্যক। ভোট শেষ হলে হ্যাঁ এবং না দেখানো হবে।",
+  "{n} of {roll} have voted. {quorum} must vote. Yes and No show when it closes.|{n} of {roll} have voted. {quorum} must vote. Yes and No show when it closes.": {
+    "one": "{roll}-এর মধ্যে {n} জন ভোট দিয়েছেন। {quorum} জনের ভোট দেওয়া আবশ্যক। ভোট শেষ হলে হ্যাঁ এবং না দেখানো হবে।",
+    "other": "{roll}-এর মধ্যে {n} জন ভোট দিয়েছেন। {quorum} জনের ভোট দেওয়া আবশ্যক। ভোট শেষ হলে হ্যাঁ এবং না দেখানো হবে।"
+  },
+  "Yes {yes} · No {no}. {voted} of {roll} voted.": "হ্যাঁ {yes} · না {no}। {roll}-এর মধ্যে {voted} জন ভোট দিয়েছেন।",
+  "Open\u0004a vote": "উন্মুক্ত",
+  "Passed and carried out": "পাস হয়েছে এবং কার্যকর হয়েছে",
+  "Passed": "পাস হয়েছে",
+  "Did not pass": "পাস হয়নি",
+  "Not enough people voted": "পর্যাপ্ত মানুষ ভোট দেননি",
+  "Not enough keepers voted": "পর্যাপ্ত কিপার ভোট দেননি",
+  "Passed, but not carried out: {reason}": "পাস হয়েছে, তবে কার্যকর হয়নি: {reason}",
+  "Passed, but not carried out": "পাস হয়েছে, তবে কার্যকর হয়নি",
+  "Passed, but there was nothing to do: {reason}": "পাস হয়েছে, তবে করার কিছু ছিল না: {reason}",
+  "Passed, but there was nothing to do": "পাস হয়েছে, তবে করার কিছু ছিল না",
+  "Closed\u0004a vote": "বন্ধ",
+  "closing now": "এখনই শেষ হচ্ছে",
+  "closes in {n} day|closes in {n} days": {
+    "one": "{n} দিনের মধ্যে শেষ হবে",
+    "other": "{n} দিনের মধ্যে শেষ হবে"
+  },
+  "closes in {n} hour|closes in {n} hours": {
+    "one": "{n} ঘণ্টার মধ্যে শেষ হবে",
+    "other": "{n} ঘণ্টার মধ্যে শেষ হবে"
+  },
+  "closes within the hour": "এক ঘণ্টার মধ্যে শেষ হবে",
+  "Nobody sees who voted how. In a very small group, though, the result and who has voted can show it.": "কে কীভাবে ভোট দিয়েছেন তা কেউ দেখতে পায় না। তবে খুব ছোট গ্রুপে ফলাফল এবং কারা ভোট দিয়েছেন তা থেকে এটি বোঝা যেতে পারে।",
+  "anyone can join": "যে কেউ যোগ দিতে পারেন",
+  "people ask, and a convenor lets them in": "মানুষ অনুরোধ করেন, এবং আহ্বায়ক তাদের যুক্ত করেন",
+  "by invitation only": "শুধুমাত্র আমন্ত্রণে",
+  "a new rule": "একটি নতুন নিয়ম",
+  "Choose a new lead convenor": "নতুন প্রধান আহ্বায়ক বেছে নিন",
+  "Make someone a convenor": "কাউকে আহ্বায়ক করুন",
+  "Make a convenor a member": "একজন আহ্বায়ককে সদস্য করুন",
+  "Remove someone": "কাউকে সরান",
+  "Change who can join": "কারা যোগ দিতে পারবে তা পরিবর্তন করুন",
+  "Close the group": "গ্রুপটি বন্ধ করুন",
+  "Who should lead?": "কার নেতৃত্ব দেওয়া উচিত?",
+  "Who should be a convenor?": "কার আহ্বায়ক হওয়া উচিত?",
+  "Which convenor?": "কোন আহ্বায়ক?",
+  "Remove whom?": "কাকে সরাতে চান?",
+  "Open: anyone can join": "উন্মুক্ত: যে কেউ যোগ দিতে পারেন",
+  "Ask to join": "যোগদানের জন্য অনুরোধ করুন",
+  "Invite only": "শুধুমাত্র আমন্ত্রণ",
+  "The group was closed by its members’ vote. Its chat stays to read.": "গ্রুপটি এর সদস্যদের ভোটে বন্ধ করা হয়েছে। এর চ্যাট পড়ার জন্য থাকবে।",
+  "Votes among the group's members and convenors; observers watch. More than half must vote. 7 days, or sooner once the answer can't change.": "গ্রুপের সদস্য এবং আহ্বায়কদের মধ্যে ভোট; পর্যবেক্ষকরা পর্যবেক্ষণ করেন। অর্ধেকের বেশি ভোট দেওয়া আবশ্যক। ৭ দিন, অথবা ফলাফল নিশ্চিত হলে তার আগেই।"
 }

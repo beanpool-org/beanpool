@@ -2,7 +2,7 @@
   "_meta": {
     "language": "el",
     "name": "Greek",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-19",
@@ -364,5 +364,106 @@
   },
   "Too many suggestions from your connection recently. Please try again later — your text is still here.": "Πάρα πολλές προτάσεις από τη σύνδεσή σου πρόσφατα. Παρακαλώ δοκίμασε ξανά αργότερα — το κείμενό σου είναι ακόμα εδώ.",
   "This poll is shown at your area (about 10 km around it) to everyone who can read it.": "Αυτή η δημοσκόπηση εμφανίζεται στην περιοχή σου (περίπου 10 χλμ. γύρω της) σε όλους όσους μπορούν να τη διαβάσουν.",
-  "You haven't set your area, so members nearby won't see this poll in their list; they can still find it by searching. Set it in Settings → Your area to show it near you.": "Δεν έχεις ορίσει την περιοχή σου, οπότε τα μέλη κοντά σου δεν θα βλέπουν αυτή τη δημοσκόπηση στη λίστα τους· μπορούν όμως να τη βρουν μέσω αναζήτησης. Όρισέ την στις Ρυθμίσεις → Η περιοχή σου για να εμφανίζεται κοντά σου."
+  "You haven't set your area, so members nearby won't see this poll in their list; they can still find it by searching. Set it in Settings → Your area to show it near you.": "Δεν έχεις ορίσει την περιοχή σου, οπότε τα μέλη κοντά σου δεν θα βλέπουν αυτή τη δημοσκόπηση στη λίστα τους· μπορούν όμως να τη βρουν μέσω αναζήτησης. Όρισέ την στις Ρυθμίσεις → Η περιοχή σου για να εμφανίζεται κοντά σου.",
+  "Project · A leader, a goal, an end date": "Έργο · Επικεφαλής, στόχος, ημερομηνία λήξης",
+  "Enterprise · Run by its keepers": "Εγχείρημα · Διοικείται από τους υπευθύνους του",
+  "Lead convenor\u0004group role": "Επικεφαλής συντονιστής",
+  "Convenor\u0004group role": "Συντονιστής",
+  "Member\u0004group role": "Μέλος",
+  "Observer\u0004group role": "Παρατηρητής",
+  "Make one of the observers a member first, then hand the lead to them.": "Κάνε πρώτα έναν από τους παρατηρητές μέλος και μετά ανάθεσέ του την ηγεσία.",
+  "{name} receives {n} Beans. The 1.5% trade fee ({fee} Beans) goes to the Commons.|{name} receives {n} Beans. The 1.5% trade fee ({fee} Beans) goes to the Commons.": {
+    "one": "Ο/Η {name} λαμβάνει {n} φασόλι. Το τέλος συναλλαγής 1,5% ({fee} φασόλια) πηγαίνει στα Κοινά.",
+    "other": "Ο/Η {name} λαμβάνει {n} φασόλια. Το τέλος συναλλαγής 1,5% ({fee} φασόλια) πηγαίνει στα Κοινά."
+  },
+  "Enter an amount in Beans, like 40 or 12.50.": "Εισάγαγε ένα ποσό σε φασόλια, όπως 40 ή 12,50.",
+  "The amount must be more than 0 Beans.": "Το ποσό πρέπει να είναι μεγαλύτερο από 0 φασόλια.",
+  "The enterprise holds {n} Beans, so it can't pay more than that.|The enterprise holds {n} Beans, so it can't pay more than that.": {
+    "one": "Το εγχείρημα διαθέτει {n} φασόλι, επομένως δεν μπορεί να πληρώσει περισσότερα από αυτό.",
+    "other": "Το εγχείρημα διαθέτει {n} φασόλια, επομένως δεν μπορεί να πληρώσει περισσότερα από αυτά."
+  },
+  "Paying a keeper is a wage, and a wage comes only out of what the enterprise has earned above its costs (its earned surplus): {n} Beans now.|Paying a keeper is a wage, and a wage comes only out of what the enterprise has earned above its costs (its earned surplus): {n} Beans now.": {
+    "one": "Η πληρωμή υπευθύνου είναι αμοιβή και η αμοιβή προέρχεται μόνο από όσα έχει κερδίσει το εγχείρημα πέραν του κόστους του (το δεδουλευμένο πλεόνασμα): {n} φασόλι τώρα.",
+    "other": "Η πληρωμή υπευθύνου είναι αμοιβή και η αμοιβή προέρχεται μόνο από όσα έχει κερδίσει το εγχείρημα πέραν του κόστους του (το δεδουλευμένο πλεόνασμα): {n} φασόλια τώρα."
+  },
+  "Paying a keeper is a wage: only out of what the project has earned.": "Η πληρωμή υπευθύνου είναι αμοιβή: μόνο από όσα έχει κερδίσει το έργο.",
+  "Paying a keeper is a wage: only out of what the enterprise has earned.": "Η πληρωμή υπευθύνου είναι αμοιβή: μόνο από όσα έχει κερδίσει το εγχείρημα.",
+  "Paying a keeper is a wage: only out of what the project has earned above its costs, {n} Beans now.|Paying a keeper is a wage: only out of what the project has earned above its costs, {n} Beans now.": {
+    "one": "Η πληρωμή υπευθύνου είναι αμοιβή: μόνο από όσα έχει κερδίσει το έργο πέραν του κόστους του, {n} φασόλι τώρα.",
+    "other": "Η πληρωμή υπευθύνου είναι αμοιβή: μόνο από όσα έχει κερδίσει το έργο πέραν του κόστους του, {n} φασόλια τώρα."
+  },
+  "Paying a keeper is a wage: only out of what the enterprise has earned above its costs, {n} Beans now.|Paying a keeper is a wage: only out of what the enterprise has earned above its costs, {n} Beans now.": {
+    "one": "Η πληρωμή υπευθύνου είναι αμοιβή: μόνο από όσα έχει κερδίσει το εγχείρημα πέραν του κόστους του, {n} φασόλι τώρα.",
+    "other": "Η πληρωμή υπευθύνου είναι αμοιβή: μόνο από όσα έχει κερδίσει το εγχείρημα πέραν του κόστους του, {n} φασόλια τώρα."
+  },
+  "Pay Beans out": "Πληρωμή φασολιών",
+  "Remove a collaborator": "Αφαίρεση συνεργάτη",
+  "Remove a keeper": "Αφαίρεση υπευθύνου",
+  "Make another keeper the lead": "Ορισμός άλλου υπευθύνου ως επικεφαλής",
+  "You're not in this group now, but you were when these votes opened, so you can still vote on them.": "Δεν ανήκεις σε αυτή την ομάδα τώρα, αλλά ήσουν μέλος όταν άνοιξαν αυτές οι ψηφοφορίες, οπότε μπορείς ακόμα να ψηφίσεις σε αυτές.",
+  "You're not in this group now. These are the votes you were part of.": "Δεν ανήκεις σε αυτή την ομάδα τώρα. Αυτές είναι οι ψηφοφορίες στις οποίες συμμετείχες.",
+  "someone in the group": "κάποιος στην ομάδα",
+  "someone": "κάποιος",
+  "Pay {n} Beans to {name}|Pay {n} Beans to {name}": {
+    "one": "Πληρωμή {n} φασολιού στον/στην {name}",
+    "other": "Πληρωμή {n} φασολιών στον/στην {name}"
+  },
+  "Remove {name} as a collaborator": "Αφαίρεση {name} ως συνεργάτη",
+  "Remove {name} as a keeper": "Αφαίρεση {name} ως υπευθύνου",
+  "Make {name} the leader": "Ορισμός {name} ως επικεφαλής",
+  "Make {name} the lead keeper": "Ορισμός {name} ως επικεφαλής υπευθύνου",
+  "Make {name} the lead convenor": "Ορισμός {name} ως επικεφαλής συντονιστή",
+  "Make {name} a convenor": "Ορισμός {name} ως συντονιστή",
+  "Make {name} a member, no longer a convenor": "Ορισμός {name} ως μέλους, όχι πλέον συντονιστή",
+  "Remove {name} from the group": "Αφαίρεση {name} από την ομάδα",
+  "Change who can join: {policy}": "Αλλαγή δικαιώματος συμμετοχής: {policy}",
+  "Close the group. Its chat stays to read.": "Κλείσιμο της ομάδας. Η συνομιλία της παραμένει διαθέσιμη για ανάγνωση.",
+  "A vote": "Μία ψηφοφορία",
+  "{voted} of {roll} has voted. {quorum} must vote. Yes and No show when it closes.": "{voted} από {roll} έχει ψηφίσει. Πρέπει να ψηφίσουν {quorum}. Το Ναι και το Όχι εμφανίζονται κατά το κλείσιμο.",
+  "{n} of {roll} have voted. {quorum} must vote. Yes and No show when it closes.|{n} of {roll} have voted. {quorum} must vote. Yes and No show when it closes.": {
+    "one": "{n} από {roll} έχει ψηφίσει. Πρέπει να ψηφίσουν {quorum}. Το Ναι και το Όχι εμφανίζονται κατά το κλείσιμο.",
+    "other": "{n} από {roll} έχουν ψηφίσει. Πρέπει να ψηφίσουν {quorum}. Το Ναι και το Όχι εμφανίζονται κατά το κλείσιμο."
+  },
+  "Yes {yes} · No {no}. {voted} of {roll} voted.": "Ναι {yes} · Όχι {no}. Ψήφισαν {voted} από {roll}.",
+  "Open\u0004a vote": "Ανοιχτή",
+  "Passed and carried out": "Εγκρίθηκε και εκτελέστηκε",
+  "Passed": "Εγκρίθηκε",
+  "Did not pass": "Δεν εγκρίθηκε",
+  "Not enough people voted": "Δεν ψήφισαν αρκετά άτομα",
+  "Not enough keepers voted": "Δεν ψήφισαν αρκετοί υπεύθυνοι",
+  "Passed, but not carried out: {reason}": "Εγκρίθηκε, αλλά δεν εκτελέστηκε: {reason}",
+  "Passed, but not carried out": "Εγκρίθηκε, αλλά δεν εκτελέστηκε",
+  "Passed, but there was nothing to do: {reason}": "Εγκρίθηκε, αλλά δεν υπήρχε ενέργεια προς εκτέλεση: {reason}",
+  "Passed, but there was nothing to do": "Εγκρίθηκε, αλλά δεν υπήρχε ενέργεια προς εκτέλεση",
+  "Closed\u0004a vote": "Έκλεισε",
+  "closing now": "κλείνει τώρα",
+  "closes in {n} day|closes in {n} days": {
+    "one": "κλείνει σε {n} ημέρα",
+    "other": "κλείνει σε {n} ημέρες"
+  },
+  "closes in {n} hour|closes in {n} hours": {
+    "one": "κλείνει σε {n} ώρα",
+    "other": "κλείνει σε {n} ώρες"
+  },
+  "closes within the hour": "κλείνει μέσα σε μία ώρα",
+  "Nobody sees who voted how. In a very small group, though, the result and who has voted can show it.": "Κανείς δεν βλέπει ποιος ψήφισε τι. Σε μια πολύ μικρή ομάδα, ωστόσο, το αποτέλεσμα και το ποιος ψήφισε μπορεί να το αποκαλύψει.",
+  "anyone can join": "οποιοσδήποτε μπορεί να συμμετέχει",
+  "people ask, and a convenor lets them in": "ζητούν συμμετοχή και ένας συντονιστής τους αποδέχεται",
+  "by invitation only": "μόνο με πρόσκληση",
+  "a new rule": "ένας νέος κανόνας",
+  "Choose a new lead convenor": "Επιλογή νέου επικεφαλής συντονιστή",
+  "Make someone a convenor": "Ορισμός κάποιου ως συντονιστή",
+  "Make a convenor a member": "Ορισμός συντονιστή ως μέλους",
+  "Remove someone": "Αφαίρεση κάποιου",
+  "Change who can join": "Αλλαγή δικαιώματος συμμετοχής",
+  "Close the group": "Κλείσιμο της ομάδας",
+  "Who should lead?": "Ποιος πρέπει να ηγηθεί;",
+  "Who should be a convenor?": "Ποιος πρέπει να είναι συντονιστής;",
+  "Which convenor?": "Ποιος συντονιστής;",
+  "Remove whom?": "Ποιον να αφαιρέσουμε;",
+  "Open: anyone can join": "Ανοιχτή: οποιοσδήποτε μπορεί να συμμετέχει",
+  "Ask to join": "Αίτημα συμμετοχής",
+  "Invite only": "Μόνο με πρόσκληση",
+  "The group was closed by its members’ vote. Its chat stays to read.": "Η ομάδα έκλεισε κατόπιν ψηφοφορίας των μελών της. Η συνομιλία της παραμένει διαθέσιμη για ανάγνωση.",
+  "Votes among the group's members and convenors; observers watch. More than half must vote. 7 days, or sooner once the answer can't change.": "Ψηφοφορία μεταξύ των μελών και των συντονιστών της ομάδας· οι παρατηρητές παρακολουθούν. Πρέπει να ψηφίσει πάνω από το μισό. 7 ημέρες, ή νωρίτερα μόλις το αποτέλεσμα δεν μπορεί να αλλάξει."
 }

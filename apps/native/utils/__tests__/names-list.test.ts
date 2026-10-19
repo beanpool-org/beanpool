@@ -669,7 +669,9 @@ describe('C. Drops and removal', () => {
         expect(listKeyOf({ plan: { kind: 'wait', keyId: two, n: 2, holders: [], newKeyNeeded: false, canMakeNew: false, drops: [] }, pin: b2.pin })).toBeNull();
         // The screen shows it on this phone's key card, where two admins checking each other see both.
         const screen = fs.readFileSync(path.join(__dirname, '../../app/names-list.tsx'), 'utf8');
-        expect(screen).toMatch(/COPY\.listKey\(/);
+        // NAMES_COPY.listKey's sentence, said with the same key number and code in the member's language (words S3k).
+        expect(screen).toContain("t('This phone adds names under list key {n}, code {code}.', { n: listKey.n, code: listKey.code })");
+        expect(NAMES_COPY.listKey(3, '1234 5678 9012 3456 7890')).toBe('This phone adds names under list key 3, code 1234 5678 9012 3456 7890.');
         expect(screen).toMatch(/COPY\.compareListKey/);
     });
 

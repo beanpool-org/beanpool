@@ -2,7 +2,7 @@
   "_meta": {
     "language": "fr",
     "name": "French",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-19",
@@ -364,5 +364,106 @@
   },
   "Too many suggestions from your connection recently. Please try again later — your text is still here.": "Trop de suggestions provenant de votre connexion récemment. Veuillez réessayer plus tard — votre texte est toujours là.",
   "This poll is shown at your area (about 10 km around it) to everyone who can read it.": "Ce sondage est visible dans votre zone (environ 10 km autour) par toutes les personnes qui peuvent le lire.",
-  "You haven't set your area, so members nearby won't see this poll in their list; they can still find it by searching. Set it in Settings → Your area to show it near you.": "Vous n'avez pas défini votre zone, les membres à proximité ne verront donc pas ce sondage dans leur liste ; ils peuvent toujours le trouver via la recherche. Définissez-la dans Paramètres → Votre zone pour l'afficher près de chez vous."
+  "You haven't set your area, so members nearby won't see this poll in their list; they can still find it by searching. Set it in Settings → Your area to show it near you.": "Vous n'avez pas défini votre zone, les membres à proximité ne verront donc pas ce sondage dans leur liste ; ils peuvent toujours le trouver via la recherche. Définissez-la dans Paramètres → Votre zone pour l'afficher près de chez vous.",
+  "Project · A leader, a goal, an end date": "Projet · Un responsable, un objectif, une date de fin",
+  "Enterprise · Run by its keepers": "Entreprise · Gérée par ses gestionnaires",
+  "Lead convenor\u0004group role": "Coordinateur principal",
+  "Convenor\u0004group role": "Coordinateur",
+  "Member\u0004group role": "Membre",
+  "Observer\u0004group role": "Observateur",
+  "Make one of the observers a member first, then hand the lead to them.": "Faites d'abord d'un des observateurs un membre, puis confiez-lui la coordination.",
+  "{name} receives {n} Beans. The 1.5% trade fee ({fee} Beans) goes to the Commons.|{name} receives {n} Beans. The 1.5% trade fee ({fee} Beans) goes to the Commons.": {
+    "one": "{name} reçoit {n} haricot. Les frais d'échange de 1.5% ({fee} haricots) vont aux Communs.",
+    "other": "{name} reçoit {n} haricots. Les frais d'échange de 1.5% ({fee} haricots) vont aux Communs."
+  },
+  "Enter an amount in Beans, like 40 or 12.50.": "Saisissez un montant en haricots, comme 40 ou 12.50.",
+  "The amount must be more than 0 Beans.": "Le montant doit être supérieur à 0 haricot.",
+  "The enterprise holds {n} Beans, so it can't pay more than that.|The enterprise holds {n} Beans, so it can't pay more than that.": {
+    "one": "L'entreprise détient {n} haricot, elle ne peut donc pas payer davantage.",
+    "other": "L'entreprise détient {n} haricots, elle ne peut donc pas payer davantage."
+  },
+  "Paying a keeper is a wage, and a wage comes only out of what the enterprise has earned above its costs (its earned surplus): {n} Beans now.|Paying a keeper is a wage, and a wage comes only out of what the enterprise has earned above its costs (its earned surplus): {n} Beans now.": {
+    "one": "Rémunérer un gestionnaire est un salaire, et un salaire ne provient que de ce que l'entreprise a gagné au-delà de ses coûts (son excédent réalisé) : {n} haricot actuellement.",
+    "other": "Rémunérer un gestionnaire est un salaire, et un salaire ne provient que de ce que l'entreprise a gagné au-delà de ses coûts (son excédent réalisé) : {n} haricots actuellement."
+  },
+  "Paying a keeper is a wage: only out of what the project has earned.": "Rémunérer un gestionnaire est un salaire : uniquement sur ce que le projet a gagné.",
+  "Paying a keeper is a wage: only out of what the enterprise has earned.": "Rémunérer un gestionnaire est un salaire : uniquement sur ce que l'entreprise a gagné.",
+  "Paying a keeper is a wage: only out of what the project has earned above its costs, {n} Beans now.|Paying a keeper is a wage: only out of what the project has earned above its costs, {n} Beans now.": {
+    "one": "Rémunérer un gestionnaire est un salaire : uniquement sur ce que le projet a gagné au-delà de ses coûts, {n} haricot actuellement.",
+    "other": "Rémunérer un gestionnaire est un salaire : uniquement sur ce que le projet a gagné au-delà de ses coûts, {n} haricots actuellement."
+  },
+  "Paying a keeper is a wage: only out of what the enterprise has earned above its costs, {n} Beans now.|Paying a keeper is a wage: only out of what the enterprise has earned above its costs, {n} Beans now.": {
+    "one": "Rémunérer un gestionnaire est un salaire : uniquement sur ce que l'entreprise a gagné au-delà de ses coûts, {n} haricot actuellement.",
+    "other": "Rémunérer un gestionnaire est un salaire : uniquement sur ce que l'entreprise a gagné au-delà de ses coûts, {n} haricots actuellement."
+  },
+  "Pay Beans out": "Verser des haricots",
+  "Remove a collaborator": "Retirer un collaborateur",
+  "Remove a keeper": "Retirer un gestionnaire",
+  "Make another keeper the lead": "Désigner un autre gestionnaire comme principal",
+  "You're not in this group now, but you were when these votes opened, so you can still vote on them.": "Vous ne faites plus partie de ce groupe actuellement, mais vous en faisiez partie à l'ouverture de ces votes, vous pouvez donc encore y voter.",
+  "You're not in this group now. These are the votes you were part of.": "Vous ne faites plus partie de ce groupe actuellement. Voici les votes auxquels vous avez participé.",
+  "someone in the group": "quelqu'un du groupe",
+  "someone": "quelqu'un",
+  "Pay {n} Beans to {name}|Pay {n} Beans to {name}": {
+    "one": "Verser {n} haricot à {name}",
+    "other": "Verser {n} haricots à {name}"
+  },
+  "Remove {name} as a collaborator": "Retirer {name} en tant que collaborateur",
+  "Remove {name} as a keeper": "Retirer {name} en tant que gestionnaire",
+  "Make {name} the leader": "Désigner {name} comme responsable",
+  "Make {name} the lead keeper": "Désigner {name} comme gestionnaire principal",
+  "Make {name} the lead convenor": "Désigner {name} comme coordinateur principal",
+  "Make {name} a convenor": "Nommer {name} coordinateur",
+  "Make {name} a member, no longer a convenor": "Faire de {name} un membre, plus un coordinateur",
+  "Remove {name} from the group": "Retirer {name} du groupe",
+  "Change who can join: {policy}": "Modifier qui peut rejoindre : {policy}",
+  "Close the group. Its chat stays to read.": "Fermer le groupe. Ses échanges restent consultables.",
+  "A vote": "Un vote",
+  "{voted} of {roll} has voted. {quorum} must vote. Yes and No show when it closes.": "{voted} sur {roll} a voté. {quorum} doivent voter. Les résultats s'affichent à la clôture.",
+  "{n} of {roll} have voted. {quorum} must vote. Yes and No show when it closes.|{n} of {roll} have voted. {quorum} must vote. Yes and No show when it closes.": {
+    "one": "{n} sur {roll} a voté. {quorum} doivent voter. Les résultats s'affichent à la clôture.",
+    "other": "{n} sur {roll} ont voté. {quorum} doivent voter. Les résultats s'affichent à la clôture."
+  },
+  "Yes {yes} · No {no}. {voted} of {roll} voted.": "Oui {yes} · Non {no}. {voted} sur {roll} ont voté.",
+  "Open\u0004a vote": "Ouvert",
+  "Passed and carried out": "Adopté et exécuté",
+  "Passed": "Adopté",
+  "Did not pass": "Non adopté",
+  "Not enough people voted": "Pas assez de participants ont voté",
+  "Not enough keepers voted": "Pas assez de gestionnaires ont voté",
+  "Passed, but not carried out: {reason}": "Adopté, mais non exécuté : {reason}",
+  "Passed, but not carried out": "Adopté, mais non exécuté",
+  "Passed, but there was nothing to do: {reason}": "Adopté, mais il n'y avait rien à faire : {reason}",
+  "Passed, but there was nothing to do": "Adopté, mais il n'y avait rien à faire",
+  "Closed\u0004a vote": "Clôturé",
+  "closing now": "clôture en cours",
+  "closes in {n} day|closes in {n} days": {
+    "one": "se clôture dans {n} jour",
+    "other": "se clôture dans {n} jours"
+  },
+  "closes in {n} hour|closes in {n} hours": {
+    "one": "se clôture dans {n} heure",
+    "other": "se clôture dans {n} heures"
+  },
+  "closes within the hour": "se clôture dans l'heure",
+  "Nobody sees who voted how. In a very small group, though, the result and who has voted can show it.": "Personne ne voit qui a voté quoi. Dans un très petit groupe, toutefois, le résultat et les votants peuvent le laisser deviner.",
+  "anyone can join": "tout le monde peut rejoindre",
+  "people ask, and a convenor lets them in": "sur demande, un coordinateur valide l'entrée",
+  "by invitation only": "sur invitation uniquement",
+  "a new rule": "une nouvelle règle",
+  "Choose a new lead convenor": "Choisir un nouveau coordinateur principal",
+  "Make someone a convenor": "Nommer quelqu'un coordinateur",
+  "Make a convenor a member": "Rétrograder un coordinateur en membre",
+  "Remove someone": "Retirer quelqu'un",
+  "Change who can join": "Modifier qui peut rejoindre",
+  "Close the group": "Fermer le groupe",
+  "Who should lead?": "Qui doit diriger ?",
+  "Who should be a convenor?": "Qui doit être coordinateur ?",
+  "Which convenor?": "Quel coordinateur ?",
+  "Remove whom?": "Retirer qui ?",
+  "Open: anyone can join": "Ouvert : tout le monde peut rejoindre",
+  "Ask to join": "Demander à rejoindre",
+  "Invite only": "Sur invitation uniquement",
+  "The group was closed by its members’ vote. Its chat stays to read.": "Le groupe a été fermé par vote de ses membres. Ses échanges restent consultables.",
+  "Votes among the group's members and convenors; observers watch. More than half must vote. 7 days, or sooner once the answer can't change.": "Vote parmi les membres et coordinateurs du groupe ; les observateurs regardent. Plus de la moitié doivent voter. 7 jours, ou plus tôt dès que l'issue est certaine."
 }

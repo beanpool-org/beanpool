@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ta",
     "name": "Tamil",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-19",
@@ -364,5 +364,106 @@
   },
   "Too many suggestions from your connection recently. Please try again later — your text is still here.": "சமீபத்தில் உங்கள் இணைப்பிலிருந்து அதிக பரிந்துரைகள் வந்துள்ளன. பின்னர் மீண்டும் முயற்சிக்கவும் — உங்கள் உரை இன்னும் இங்கேயே உள்ளது.",
   "This poll is shown at your area (about 10 km around it) to everyone who can read it.": "இந்த வாக்கெடுப்பு அதைப் படிக்கக்கூடிய அனைவருக்கும் உங்கள் பகுதியில் (அதைச் சுற்றி சுமார் 10 கி.மீ வரை) காட்டப்படும்.",
-  "You haven't set your area, so members nearby won't see this poll in their list; they can still find it by searching. Set it in Settings → Your area to show it near you.": "உங்கள் பகுதியை நீங்கள் அமைக்கவில்லை, எனவே அருகிலுள்ள உறுப்பினர்கள் தங்கள் பட்டியலில் இந்த வாக்கெடுப்பைக் காண மாட்டார்கள்; அவர்கள் தேடுவதன் மூலம் அதை இன்னும் கண்டறியலாம். உங்களுக்கு அருகில் அதைக் காட்ட அமைப்புகள் → உங்கள் பகுதி என்பதில் அமைக்கவும்."
+  "You haven't set your area, so members nearby won't see this poll in their list; they can still find it by searching. Set it in Settings → Your area to show it near you.": "உங்கள் பகுதியை நீங்கள் அமைக்கவில்லை, எனவே அருகிலுள்ள உறுப்பினர்கள் தங்கள் பட்டியலில் இந்த வாக்கெடுப்பைக் காண மாட்டார்கள்; அவர்கள் தேடுவதன் மூலம் அதை இன்னும் கண்டறியலாம். உங்களுக்கு அருகில் அதைக் காட்ட அமைப்புகள் → உங்கள் பகுதி என்பதில் அமைக்கவும்.",
+  "Project · A leader, a goal, an end date": "திட்டம் · ஒரு தலைவர், ஓர் இலக்கு, ஒரு முடிவுத் தேதி",
+  "Enterprise · Run by its keepers": "கூட்டு முயற்சி · அதன் பொறுப்பாளர்களால் நடத்தப்படுகிறது",
+  "Lead convenor\u0004group role": "முதன்மை ஒருங்கிணைப்பாளர்",
+  "Convenor\u0004group role": "ஒருங்கிணைப்பாளர்",
+  "Member\u0004group role": "உறுப்பினர்",
+  "Observer\u0004group role": "பார்வையாளர்",
+  "Make one of the observers a member first, then hand the lead to them.": "முதலில் பார்வையாளர்களில் ஒருவரை உறுப்பினராக்குங்கள், பின்னர் அவரிடம் முதன்மைப் பொறுப்பை ஒப்படையுங்கள்.",
+  "{name} receives {n} Beans. The 1.5% trade fee ({fee} Beans) goes to the Commons.|{name} receives {n} Beans. The 1.5% trade fee ({fee} Beans) goes to the Commons.": {
+    "one": "{name} {n} பயறு பெறுவார். 1.5% வர்த்தகக் கட்டணம் ({fee} பயறு) பொதுவுக்குச் செல்லும்.",
+    "other": "{name} {n} பயறுகள் பெறுவார். 1.5% வர்த்தகக் கட்டணம் ({fee} பயறுகள்) பொதுவுக்குச் செல்லும்."
+  },
+  "Enter an amount in Beans, like 40 or 12.50.": "பயறுகளில் ஒரு தொகையை உள்ளிடுங்கள், எ.கா. 40 அல்லது 12.50.",
+  "The amount must be more than 0 Beans.": "தொகை 0 பயறை விட அதிகமாக இருக்க வேண்டும்.",
+  "The enterprise holds {n} Beans, so it can't pay more than that.|The enterprise holds {n} Beans, so it can't pay more than that.": {
+    "one": "கூட்டு முயற்சியிடம் {n} பயறு மட்டுமே உள்ளது, எனவே அதற்கு மேல் செலுத்த முடியாது.",
+    "other": "கூட்டு முயற்சியிடம் {n} பயறுகள் மட்டுமே உள்ளன, எனவே அதற்கு மேல் செலுத்த முடியாது."
+  },
+  "Paying a keeper is a wage, and a wage comes only out of what the enterprise has earned above its costs (its earned surplus): {n} Beans now.|Paying a keeper is a wage, and a wage comes only out of what the enterprise has earned above its costs (its earned surplus): {n} Beans now.": {
+    "one": "பொறுப்பாளருக்கு ஊதியம் வழங்குவது கூலியாகும்; கூலி என்பது கூட்டு முயற்சி அதன் செலவுகளுக்கு மேல் ஈட்டியதிலிருந்து மட்டுமே வரும் (அதன் ஈட்டிய உபரி): இப்போது {n} பயறு.",
+    "other": "பொறுப்பாளருக்கு ஊதியம் வழங்குவது கூலியாகும்; கூலி என்பது கூட்டு முயற்சி அதன் செலவுகளுக்கு மேல் ஈட்டியதிலிருந்து மட்டுமே வரும் (அதன் ஈட்டிய உபரி): இப்போது {n} பயறுகள்."
+  },
+  "Paying a keeper is a wage: only out of what the project has earned.": "பொறுப்பாளருக்குக் கொடுப்பது ஊதியம்: திட்டம் ஈட்டியதிலிருந்து மட்டுமே வழங்க முடியும்.",
+  "Paying a keeper is a wage: only out of what the enterprise has earned.": "பொறுப்பாளருக்குக் கொடுப்பது ஊதியம்: கூட்டு முயற்சி ஈட்டியதிலிருந்து மட்டுமே வழங்க முடியும்.",
+  "Paying a keeper is a wage: only out of what the project has earned above its costs, {n} Beans now.|Paying a keeper is a wage: only out of what the project has earned above its costs, {n} Beans now.": {
+    "one": "பொறுப்பாளருக்குக் கொடுப்பது ஊதியம்: திட்டம் அதன் செலவுகளுக்கு மேல் ஈட்டியதிலிருந்து மட்டுமே, இப்போது {n} பயறு.",
+    "other": "பொறுப்பாளருக்குக் கொடுப்பது ஊதியம்: திட்டம் அதன் செலவுகளுக்கு மேல் ஈட்டியதிலிருந்து மட்டுமே, இப்போது {n} பயறுகள்."
+  },
+  "Paying a keeper is a wage: only out of what the enterprise has earned above its costs, {n} Beans now.|Paying a keeper is a wage: only out of what the enterprise has earned above its costs, {n} Beans now.": {
+    "one": "பொறுப்பாளருக்குக் கொடுப்பது ஊதியம்: கூட்டு முயற்சி அதன் செலவுகளுக்கு மேல் ஈட்டியதிலிருந்து மட்டுமே, இப்போது {n} பயறு.",
+    "other": "பொறுப்பாளருக்குக் கொடுப்பது ஊதியம்: கூட்டு முயற்சி அதன் செலவுகளுக்கு மேல் ஈட்டியதிலிருந்து மட்டுமே, இப்போது {n} பயறுகள்."
+  },
+  "Pay Beans out": "பயறுகளை வெளியே செலுத்து",
+  "Remove a collaborator": "பங்களிப்பாளரை நீக்கு",
+  "Remove a keeper": "பொறுப்பாளரை நீக்கு",
+  "Make another keeper the lead": "மற்றொரு பொறுப்பாளரை முதன்மைப் பொறுப்பாளராக்கு",
+  "You're not in this group now, but you were when these votes opened, so you can still vote on them.": "நீங்கள் இப்போது இந்தக் குழுவில் இல்லை, ஆனால் இந்த வாக்கெடுப்புகள் தொடங்கியபோது நீங்கள் இருந்தீர்கள், எனவே நீங்கள் இன்னும் இவற்றில் வாக்களிக்கலாம்.",
+  "You're not in this group now. These are the votes you were part of.": "நீங்கள் இப்போது இந்தக் குழுவில் இல்லை. நீங்கள் பங்கெடுத்த வாக்கெடுப்புகள் இவை.",
+  "someone in the group": "குழுவில் உள்ள ஒருவர்",
+  "someone": "யாரோ ஒருவர்",
+  "Pay {n} Beans to {name}|Pay {n} Beans to {name}": {
+    "one": "{name}-க்கு {n} பயறு செலுத்து",
+    "other": "{name}-க்கு {n} பயறுகள் செலுத்து"
+  },
+  "Remove {name} as a collaborator": "{name}-ஐப் பங்களிப்பாளர் பொறுப்பிலிருந்து நீக்கு",
+  "Remove {name} as a keeper": "{name}-ஐப் பொறுப்பாளர் பொறுப்பிலிருந்து நீக்கு",
+  "Make {name} the leader": "{name}-ஐத் தலைவராக்கு",
+  "Make {name} the lead keeper": "{name}-ஐ முதன்மைப் பொறுப்பாளராக்கு",
+  "Make {name} the lead convenor": "{name}-ஐ முதன்மை ஒருங்கிணைப்பாளராக்கு",
+  "Make {name} a convenor": "{name}-ஐ ஓர் ஒருங்கிணைப்பாளராக்கு",
+  "Make {name} a member, no longer a convenor": "{name}-ஐ உறுப்பினராக்கு, இனி ஒருங்கிணைப்பாளர் இல்லை",
+  "Remove {name} from the group": "{name}-ஐக் குழுவிலிருந்து நீக்கு",
+  "Change who can join: {policy}": "யார் இணையலாம் என்பதை மாற்று: {policy}",
+  "Close the group. Its chat stays to read.": "குழுவை மூடு. அதன் அரட்டை வாசிப்பதற்காக இருக்கும்.",
+  "A vote": "ஒரு வாக்கெடுப்பு",
+  "{voted} of {roll} has voted. {quorum} must vote. Yes and No show when it closes.": "{roll}-இல் {voted} பேர் வாக்களித்துள்ளனர். {quorum} பேர் வாக்களிக்க வேண்டும். வாக்கெடுப்பு முடிந்ததும் ஆம் மற்றும் இல்லை காட்டப்படும்.",
+  "{n} of {roll} have voted. {quorum} must vote. Yes and No show when it closes.|{n} of {roll} have voted. {quorum} must vote. Yes and No show when it closes.": {
+    "one": "{roll}-இல் {n} நபர் வாக்களித்துள்ளார். {quorum} பேர் வாக்களிக்க வேண்டும். வாக்கெடுப்பு முடிந்ததும் ஆம் மற்றும் இல்லை காட்டப்படும்.",
+    "other": "{roll}-இல் {n} பேர் வாக்களித்துள்ளனர். {quorum} பேர் வாக்களிக்க வேண்டும். வாக்கெடுப்பு முடிந்ததும் ஆம் மற்றும் இல்லை காட்டப்படும்."
+  },
+  "Yes {yes} · No {no}. {voted} of {roll} voted.": "ஆம் {yes} · இல்லை {no}. {roll}-இல் {voted} பேர் வாக்களித்தனர்.",
+  "Open\u0004a vote": "திறந்துள்ளது",
+  "Passed and carried out": "வெற்றி பெற்று செயல்படுத்தப்பட்டது",
+  "Passed": "வெற்றி பெற்றது",
+  "Did not pass": "வெற்றி பெறவில்லை",
+  "Not enough people voted": "போதிய நபர்கள் வாக்களிக்கவில்லை",
+  "Not enough keepers voted": "போதிய பொறுப்பாளர்கள் வாக்களிக்கவில்லை",
+  "Passed, but not carried out: {reason}": "வெற்றி பெற்றது, ஆனால் செயல்படுத்தப்படவில்லை: {reason}",
+  "Passed, but not carried out": "வெற்றி பெற்றது, ஆனால் செயல்படுத்தப்படவில்லை",
+  "Passed, but there was nothing to do: {reason}": "வெற்றி பெற்றது, ஆனால் செய்ய எதுவும் இல்லை: {reason}",
+  "Passed, but there was nothing to do": "வெற்றி பெற்றது, ஆனால் செய்ய எதுவும் இல்லை",
+  "Closed\u0004a vote": "முடிந்தது",
+  "closing now": "இப்போது முடிகிறது",
+  "closes in {n} day|closes in {n} days": {
+    "one": "{n} நாளில் முடிகிறது",
+    "other": "{n} நாட்களில் முடிகிறது"
+  },
+  "closes in {n} hour|closes in {n} hours": {
+    "one": "{n} மணி நேரத்தில் முடிகிறது",
+    "other": "{n} மணி நேரங்களில் முடிகிறது"
+  },
+  "closes within the hour": "ஒரு மணி நேரத்திற்குள் முடிகிறது",
+  "Nobody sees who voted how. In a very small group, though, the result and who has voted can show it.": "யார் எப்படி வாக்களித்தார்கள் என்பதை யாரும் பார்க்க முடியாது. இருப்பினும், மிகச் சிறிய குழுவில், முடிவும் யார் வாக்களித்தார்கள் என்பதும் அதை வெளிப்படுத்தக்கூடும்.",
+  "anyone can join": "யார் வேண்டுமானாலும் இணையலாம்",
+  "people ask, and a convenor lets them in": "மக்கள் கோருவார்கள், ஒருங்கிணைப்பாளர் அவர்களை அனுமதிப்பார்",
+  "by invitation only": "அழைப்பின் மூலம் மட்டுமே",
+  "a new rule": "ஒரு புதிய விதி",
+  "Choose a new lead convenor": "ஒரு புதிய முதன்மை ஒருங்கிணைப்பாளரைத் தேர்ந்தெடுங்கள்",
+  "Make someone a convenor": "ஒருவரை ஒருங்கிணைப்பாளராக்குங்கள்",
+  "Make a convenor a member": "ஒருங்கிணைப்பாளரை உறுப்பினராக்குங்கள்",
+  "Remove someone": "ஒருவரை நீக்குங்கள்",
+  "Change who can join": "யார் இணையலாம் என்பதை மாற்றுங்கள்",
+  "Close the group": "குழுவை மூடுங்கள்",
+  "Who should lead?": "யார் தலைமை ஏற்க வேண்டும்?",
+  "Who should be a convenor?": "யார் ஒருங்கிணைப்பாளராக இருக்க வேண்டும்?",
+  "Which convenor?": "எந்த ஒருங்கிணைப்பாளர்?",
+  "Remove whom?": "யாரை நீக்க வேண்டும்?",
+  "Open: anyone can join": "திறந்தது: யார் வேண்டுமானாலும் இணையலாம்",
+  "Ask to join": "இணையக் கோருங்கள்",
+  "Invite only": "அழைப்பு மூலம் மட்டுமே",
+  "The group was closed by its members’ vote. Its chat stays to read.": "உறுப்பினர்களின் வாக்கெடுப்பால் இக்குழு மூடப்பட்டது. அதன் அரட்டை வாசிப்பதற்காக இருக்கும்.",
+  "Votes among the group's members and convenors; observers watch. More than half must vote. 7 days, or sooner once the answer can't change.": "குழுவின் உறுப்பினர்கள் மற்றும் ஒருங்கிணைப்பாளர்களிடையே வாக்கெடுப்பு; பார்வையாளர்கள் கவனிப்பார்கள். பாதியளவுக்கும் அதிகமானோர் வாக்களிக்க வேண்டும். 7 நாட்கள், அல்லது முடிவை மாற்ற முடியாது என்ற நிலை வந்தவுடன் முடிவுக்கு வரும்."
 }

@@ -2,7 +2,7 @@
   "_meta": {
     "language": "vi",
     "name": "Vietnamese",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-19",
@@ -340,5 +340,97 @@
   },
   "Too many suggestions from your connection recently. Please try again later — your text is still here.": "Có quá nhiều gợi ý từ kết nối của bạn gần đây. Vui lòng thử lại sau — nội dung của bạn vẫn còn ở đây.",
   "This poll is shown at your area (about 10 km around it) to everyone who can read it.": "Cuộc bình chọn này được hiển thị tại khu vực của bạn (khoảng 10 km xung quanh) cho tất cả những ai có thể đọc.",
-  "You haven't set your area, so members nearby won't see this poll in their list; they can still find it by searching. Set it in Settings → Your area to show it near you.": "Bạn chưa đặt khu vực của mình, nên các thành viên ở gần sẽ không thấy cuộc bình chọn này trong danh sách của họ; họ vẫn có thể tìm thấy bằng cách tìm kiếm. Hãy đặt trong Cài đặt → Khu vực của bạn để hiển thị gần bạn."
+  "You haven't set your area, so members nearby won't see this poll in their list; they can still find it by searching. Set it in Settings → Your area to show it near you.": "Bạn chưa đặt khu vực của mình, nên các thành viên ở gần sẽ không thấy cuộc bình chọn này trong danh sách của họ; họ vẫn có thể tìm thấy bằng cách tìm kiếm. Hãy đặt trong Cài đặt → Khu vực của bạn để hiển thị gần bạn.",
+  "Project · A leader, a goal, an end date": "Dự án · Một trưởng nhóm, một mục tiêu, một ngày kết thúc",
+  "Enterprise · Run by its keepers": "Doanh nghiệp · Do các người quản lý điều hành",
+  "Lead convenor\u0004group role": "Trưởng ban điều hành",
+  "Convenor\u0004group role": "Điều hành viên",
+  "Member\u0004group role": "Thành viên",
+  "Observer\u0004group role": "Quan sát viên",
+  "Make one of the observers a member first, then hand the lead to them.": "Hãy chuyển một trong các quan sát viên thành thành viên trước, rồi mới giao quyền điều hành cho họ.",
+  "{name} receives {n} Beans. The 1.5% trade fee ({fee} Beans) goes to the Commons.|{name} receives {n} Beans. The 1.5% trade fee ({fee} Beans) goes to the Commons.": {
+    "other": "{name} nhận được {n} đậu. Phí giao dịch 1.5% ({fee} đậu) chuyển vào Commons."
+  },
+  "Enter an amount in Beans, like 40 or 12.50.": "Nhập số đậu, chẳng hạn 40 hoặc 12.50.",
+  "The amount must be more than 0 Beans.": "Số lượng phải lớn hơn 0 đậu.",
+  "The enterprise holds {n} Beans, so it can't pay more than that.|The enterprise holds {n} Beans, so it can't pay more than that.": {
+    "other": "Doanh nghiệp hiện có {n} đậu, nên không thể chi trả nhiều hơn số đó."
+  },
+  "Paying a keeper is a wage, and a wage comes only out of what the enterprise has earned above its costs (its earned surplus): {n} Beans now.|Paying a keeper is a wage, and a wage comes only out of what the enterprise has earned above its costs (its earned surplus): {n} Beans now.": {
+    "other": "Chi trả cho người quản lý là trả lương, và lương chỉ được trích từ phần doanh nghiệp kiếm được vượt chi phí (thặng dư kiếm được): hiện là {n} đậu."
+  },
+  "Paying a keeper is a wage: only out of what the project has earned.": "Chi trả cho người quản lý là trả lương: chỉ trích từ phần dự án đã kiếm được.",
+  "Paying a keeper is a wage: only out of what the enterprise has earned.": "Chi trả cho người quản lý là trả lương: chỉ trích từ phần doanh nghiệp đã kiếm được.",
+  "Paying a keeper is a wage: only out of what the project has earned above its costs, {n} Beans now.|Paying a keeper is a wage: only out of what the project has earned above its costs, {n} Beans now.": {
+    "other": "Chi trả cho người quản lý là trả lương: chỉ trích từ phần dự án đã kiếm được vượt chi phí, hiện là {n} đậu."
+  },
+  "Paying a keeper is a wage: only out of what the enterprise has earned above its costs, {n} Beans now.|Paying a keeper is a wage: only out of what the enterprise has earned above its costs, {n} Beans now.": {
+    "other": "Chi trả cho người quản lý là trả lương: chỉ trích từ phần doanh nghiệp đã kiếm được vượt chi phí, hiện là {n} đậu."
+  },
+  "Pay Beans out": "Chi trả đậu",
+  "Remove a collaborator": "Xóa cộng tác viên",
+  "Remove a keeper": "Xóa người quản lý",
+  "Make another keeper the lead": "Chuyển vai trò quản lý chính cho một người quản lý khác",
+  "You're not in this group now, but you were when these votes opened, so you can still vote on them.": "Hiện bạn không ở trong nhóm này, nhưng bạn từng ở trong nhóm khi các cuộc biểu quyết này mở ra, nên bạn vẫn có thể bỏ phiếu.",
+  "You're not in this group now. These are the votes you were part of.": "Hiện bạn không ở trong nhóm này. Đây là các cuộc biểu quyết mà bạn từng tham gia.",
+  "someone in the group": "ai đó trong nhóm",
+  "someone": "ai đó",
+  "Pay {n} Beans to {name}|Pay {n} Beans to {name}": {
+    "other": "Chi trả {n} đậu cho {name}"
+  },
+  "Remove {name} as a collaborator": "Xóa {name} khỏi vai trò cộng tác viên",
+  "Remove {name} as a keeper": "Xóa {name} khỏi vai trò người quản lý",
+  "Make {name} the leader": "Chọn {name} làm trưởng nhóm",
+  "Make {name} the lead keeper": "Chọn {name} làm người quản lý chính",
+  "Make {name} the lead convenor": "Chọn {name} làm trưởng ban điều hành",
+  "Make {name} a convenor": "Chọn {name} làm điều hành viên",
+  "Make {name} a member, no longer a convenor": "Chuyển {name} thành thành viên, không còn là điều hành viên",
+  "Remove {name} from the group": "Xóa {name} khỏi nhóm",
+  "Change who can join: {policy}": "Thay đổi ai có thể tham gia: {policy}",
+  "Close the group. Its chat stays to read.": "Đóng nhóm. Tin nhắn trò chuyện vẫn được giữ lại để đọc.",
+  "A vote": "Biểu quyết",
+  "{voted} of {roll} has voted. {quorum} must vote. Yes and No show when it closes.": "{voted} trên {roll} người đã bỏ phiếu. Cần {quorum} người bỏ phiếu. Đồng ý và Không hiển thị khi đóng lại.",
+  "{n} of {roll} have voted. {quorum} must vote. Yes and No show when it closes.|{n} of {roll} have voted. {quorum} must vote. Yes and No show when it closes.": {
+    "other": "{n} trên {roll} người đã bỏ phiếu. Cần {quorum} người bỏ phiếu. Đồng ý và Không hiển thị khi đóng lại."
+  },
+  "Yes {yes} · No {no}. {voted} of {roll} voted.": "Đồng ý {yes} · Không {no}. {voted} trên {roll} người đã bỏ phiếu.",
+  "Open\u0004a vote": "Đang mở",
+  "Passed and carried out": "Đã thông qua và thực hiện",
+  "Passed": "Đã thông qua",
+  "Did not pass": "Không thông qua",
+  "Not enough people voted": "Không đủ người bỏ phiếu",
+  "Not enough keepers voted": "Không đủ người quản lý bỏ phiếu",
+  "Passed, but not carried out: {reason}": "Đã thông qua, nhưng chưa thực hiện: {reason}",
+  "Passed, but not carried out": "Đã thông qua, nhưng chưa thực hiện",
+  "Passed, but there was nothing to do: {reason}": "Đã thông qua, nhưng không có việc cần xử lý: {reason}",
+  "Passed, but there was nothing to do": "Đã thông qua, nhưng không có việc cần xử lý",
+  "Closed\u0004a vote": "Đã đóng",
+  "closing now": "đang đóng",
+  "closes in {n} day|closes in {n} days": {
+    "other": "đóng sau {n} ngày"
+  },
+  "closes in {n} hour|closes in {n} hours": {
+    "other": "đóng sau {n} giờ"
+  },
+  "closes within the hour": "đóng trong vòng một giờ",
+  "Nobody sees who voted how. In a very small group, though, the result and who has voted can show it.": "Không ai thấy ai bỏ phiếu ra sao. Tuy nhiên trong nhóm rất nhỏ, kết quả và những người đã bỏ phiếu có thể để lộ điều đó.",
+  "anyone can join": "ai cũng có thể tham gia",
+  "people ask, and a convenor lets them in": "mọi người yêu cầu tham gia và điều hành viên sẽ duyệt vào",
+  "by invitation only": "chỉ theo lời mời",
+  "a new rule": "quy tắc mới",
+  "Choose a new lead convenor": "Chọn trưởng ban điều hành mới",
+  "Make someone a convenor": "Chọn ai đó làm điều hành viên",
+  "Make a convenor a member": "Chuyển điều hành viên thành thành viên",
+  "Remove someone": "Xóa ai đó",
+  "Change who can join": "Thay đổi ai có thể tham gia",
+  "Close the group": "Đóng nhóm",
+  "Who should lead?": "Ai nên dẫn dắt?",
+  "Who should be a convenor?": "Ai nên làm điều hành viên?",
+  "Which convenor?": "Điều hành viên nào?",
+  "Remove whom?": "Xóa ai?",
+  "Open: anyone can join": "Mở: ai cũng có thể tham gia",
+  "Ask to join": "Yêu cầu tham gia",
+  "Invite only": "Chỉ theo lời mời",
+  "The group was closed by its members’ vote. Its chat stays to read.": "Nhóm đã đóng theo biểu quyết của các thành viên. Tin nhắn trò chuyện vẫn được giữ lại để đọc.",
+  "Votes among the group's members and convenors; observers watch. More than half must vote. 7 days, or sooner once the answer can't change.": "Biểu quyết giữa các thành viên và điều hành viên của nhóm; quan sát viên theo dõi. Hơn một nửa số người phải bỏ phiếu. 7 ngày, hoặc sớm hơn khi kết quả không thể thay đổi."
 }

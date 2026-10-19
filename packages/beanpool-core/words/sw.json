@@ -2,7 +2,7 @@
   "_meta": {
     "language": "sw",
     "name": "Swahili",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-19",
@@ -364,5 +364,106 @@
   },
   "Too many suggestions from your connection recently. Please try again later — your text is still here.": "Mapendekezo mengi mno kutoka kwenye muunganisho wako hivi karibuni. Tafadhali jaribu tena baadaye — maandishi yako bado yapo hapa.",
   "This poll is shown at your area (about 10 km around it) to everyone who can read it.": "Kura hii ya maoni huonyeshwa katika eneo lako (takriban 10 km kulizunguka) kwa kila mtu anayeweza kuisoma.",
-  "You haven't set your area, so members nearby won't see this poll in their list; they can still find it by searching. Set it in Settings → Your area to show it near you.": "Hujaweka eneo lako, kwa hivyo wanachama wa karibu hawataona kura hii ya maoni kwenye orodha yao; bado wanaweza kuipata kwa kutafuta. Liweke katika Mipangilio → Eneo lako ili kuionyesha karibu nawe."
+  "You haven't set your area, so members nearby won't see this poll in their list; they can still find it by searching. Set it in Settings → Your area to show it near you.": "Hujaweka eneo lako, kwa hivyo wanachama wa karibu hawataona kura hii ya maoni kwenye orodha yao; bado wanaweza kuipata kwa kutafuta. Liweke katika Mipangilio → Eneo lako ili kuionyesha karibu nawe.",
+  "Project · A leader, a goal, an end date": "Mradi · Kiongozi, lengo, tarehe ya mwisho",
+  "Enterprise · Run by its keepers": "Biashara · Huendeshwa na wasimamizi wake",
+  "Lead convenor\u0004group role": "Mratibu mkuu",
+  "Convenor\u0004group role": "Mratibu",
+  "Member\u0004group role": "Mwanachama",
+  "Observer\u0004group role": "Mtazamaji",
+  "Make one of the observers a member first, then hand the lead to them.": "Mteue mmoja wa watazamaji kuwa mwanachama kwanza, kisha umpe uongozi.",
+  "{name} receives {n} Beans. The 1.5% trade fee ({fee} Beans) goes to the Commons.|{name} receives {n} Beans. The 1.5% trade fee ({fee} Beans) goes to the Commons.": {
+    "one": "{name} anapokea maharagwe {n}. Ada ya biashara ya 1.5% (maharagwe {fee}) huenda kwenye Mali za Pamoja.",
+    "other": "{name} anapokea maharagwe {n}. Ada ya biashara ya 1.5% (maharagwe {fee}) huenda kwenye Mali za Pamoja."
+  },
+  "Enter an amount in Beans, like 40 or 12.50.": "Weka kiasi katika Maharagwe, kama 40 au 12.50.",
+  "The amount must be more than 0 Beans.": "Kiasi lazima kiwe zaidi ya Maharagwe 0.",
+  "The enterprise holds {n} Beans, so it can't pay more than that.|The enterprise holds {n} Beans, so it can't pay more than that.": {
+    "one": "Biashara inashikilia maharagwe {n}, kwa hivyo haiwezi kulipa zaidi ya hayo.",
+    "other": "Biashara inashikilia maharagwe {n}, kwa hivyo haiwezi kulipa zaidi ya hayo."
+  },
+  "Paying a keeper is a wage, and a wage comes only out of what the enterprise has earned above its costs (its earned surplus): {n} Beans now.|Paying a keeper is a wage, and a wage comes only out of what the enterprise has earned above its costs (its earned surplus): {n} Beans now.": {
+    "one": "Kumlipa msimamizi ni mshahara, na mshahara hutoka tu katika kile ambacho biashara imepata zaidi ya gharama zake (ziada iliyopatikana): maharagwe {n} sasa.",
+    "other": "Kumlipa msimamizi ni mshahara, na mshahara hutoka tu katika kile ambacho biashara imepata zaidi ya gharama zake (ziada iliyopatikana): maharagwe {n} sasa."
+  },
+  "Paying a keeper is a wage: only out of what the project has earned.": "Kumlipa msimamizi ni mshahara: hutoka tu katika kile ambacho mradi umepata.",
+  "Paying a keeper is a wage: only out of what the enterprise has earned.": "Kumlipa msimamizi ni mshahara: hutoka tu katika kile ambacho biashara imepata.",
+  "Paying a keeper is a wage: only out of what the project has earned above its costs, {n} Beans now.|Paying a keeper is a wage: only out of what the project has earned above its costs, {n} Beans now.": {
+    "one": "Kumlipa msimamizi ni mshahara: hutoka tu katika kile ambacho mradi umepata zaidi ya gharama zake, maharagwe {n} sasa.",
+    "other": "Kumlipa msimamizi ni mshahara: hutoka tu katika kile ambacho mradi umepata zaidi ya gharama zake, maharagwe {n} sasa."
+  },
+  "Paying a keeper is a wage: only out of what the enterprise has earned above its costs, {n} Beans now.|Paying a keeper is a wage: only out of what the enterprise has earned above its costs, {n} Beans now.": {
+    "one": "Kumlipa msimamizi ni mshahara: hutoka tu katika kile ambacho biashara imepata zaidi ya gharama zake, maharagwe {n} sasa.",
+    "other": "Kumlipa msimamizi ni mshahara: hutoka tu katika kile ambacho biashara imepata zaidi ya gharama zake, maharagwe {n} sasa."
+  },
+  "Pay Beans out": "Lipa Maharagwe nje",
+  "Remove a collaborator": "Ondoa mshiriki",
+  "Remove a keeper": "Ondoa msimamizi",
+  "Make another keeper the lead": "Mteue msimamizi mwingine kuwa kiongozi mkuu",
+  "You're not in this group now, but you were when these votes opened, so you can still vote on them.": "Hauko katika kikundi hiki sasa, lakini ulikuwepo kura hizi zilipofunguliwa, kwa hivyo bado unaweza kuzipigia kura.",
+  "You're not in this group now. These are the votes you were part of.": "Hauko katika kikundi hiki sasa. Hizi ndizo kura ulizoshiriki.",
+  "someone in the group": "mtu katika kikundi",
+  "someone": "mtu fulani",
+  "Pay {n} Beans to {name}|Pay {n} Beans to {name}": {
+    "one": "Lipa maharagwe {n} kwa {name}",
+    "other": "Lipa maharagwe {n} kwa {name}"
+  },
+  "Remove {name} as a collaborator": "Ondoa {name} kama mshiriki",
+  "Remove {name} as a keeper": "Ondoa {name} kama msimamizi",
+  "Make {name} the leader": "Mteue {name} kuwa kiongozi",
+  "Make {name} the lead keeper": "Mteue {name} kuwa msimamizi mkuu",
+  "Make {name} the lead convenor": "Mteue {name} kuwa mratibu mkuu",
+  "Make {name} a convenor": "Mteue {name} kuwa mratibu",
+  "Make {name} a member, no longer a convenor": "Mteue {name} kuwa mwanachama, si mratibu tena",
+  "Remove {name} from the group": "Ondoa {name} kwenye kikundi",
+  "Change who can join: {policy}": "Badilisha anayeweza kujiunga: {policy}",
+  "Close the group. Its chat stays to read.": "Funga kikundi. Gumzo lake linabaki kusomwa.",
+  "A vote": "Kura",
+  "{voted} of {roll} has voted. {quorum} must vote. Yes and No show when it closes.": "{voted} kati ya {roll} amepiga kura. {quorum} lazima wapige kura. Ndiyo na Hapana zitaonyeshwa ikifungwa.",
+  "{n} of {roll} have voted. {quorum} must vote. Yes and No show when it closes.|{n} of {roll} have voted. {quorum} must vote. Yes and No show when it closes.": {
+    "one": "{n} kati ya {roll} amepiga kura. {quorum} lazima wapige kura. Ndiyo na Hapana zitaonyeshwa ikifungwa.",
+    "other": "{n} kati ya {roll} wamepiga kura. {quorum} lazima wapige kura. Ndiyo na Hapana zitaonyeshwa ikifungwa."
+  },
+  "Yes {yes} · No {no}. {voted} of {roll} voted.": "Ndiyo {yes} · Hapana {no}. {voted} kati ya {roll} walipiga kura.",
+  "Open\u0004a vote": "Wazi",
+  "Passed and carried out": "Imepitishwa na kutekelezwa",
+  "Passed": "Imepitishwa",
+  "Did not pass": "Haikupitishwa",
+  "Not enough people voted": "Watu wa kutosha hawakupiga kura",
+  "Not enough keepers voted": "Wasimamizi wa kutosha hawakupiga kura",
+  "Passed, but not carried out: {reason}": "Imepitishwa, lakini haijatekelezwa: {reason}",
+  "Passed, but not carried out": "Imepitishwa, lakini haijatekelezwa",
+  "Passed, but there was nothing to do: {reason}": "Imepitishwa, lakini hakukuwa na cha kufanya: {reason}",
+  "Passed, but there was nothing to do": "Imepitishwa, lakini hakukuwa na cha kufanya",
+  "Closed\u0004a vote": "Imefungwa",
+  "closing now": "inafungwa sasa",
+  "closes in {n} day|closes in {n} days": {
+    "one": "inafungwa baada ya siku {n}",
+    "other": "inafungwa baada ya siku {n}"
+  },
+  "closes in {n} hour|closes in {n} hours": {
+    "one": "inafungwa baada ya saa {n}",
+    "other": "inafungwa baada ya saa {n}"
+  },
+  "closes within the hour": "inafungwa ndani ya saa moja",
+  "Nobody sees who voted how. In a very small group, though, the result and who has voted can show it.": "Hakuna anayeona nani alipiga kura vipi. Hata hivyo, katika kikundi kidogo sana, matokeo na nani aliyepiga kura vinaweza kuonyesha hilo.",
+  "anyone can join": "mtu yeyote anaweza kujiunga",
+  "people ask, and a convenor lets them in": "watu huomba, na mratibu huwaruhusu kuingia",
+  "by invitation only": "kwa mwaliko tu",
+  "a new rule": "sheria mpya",
+  "Choose a new lead convenor": "Chagua mratibu mkuu mpya",
+  "Make someone a convenor": "Mteue mtu kuwa mratibu",
+  "Make a convenor a member": "Mteue mratibu kuwa mwanachama",
+  "Remove someone": "Ondoa mtu",
+  "Change who can join": "Badilisha anayeweza kujiunga",
+  "Close the group": "Funga kikundi",
+  "Who should lead?": "Nani anapaswa kuongoza?",
+  "Who should be a convenor?": "Nani anapaswa kuwa mratibu?",
+  "Which convenor?": "Mratibu yupi?",
+  "Remove whom?": "Kumwondoa nani?",
+  "Open: anyone can join": "Wazi: mtu yeyote anaweza kujiunga",
+  "Ask to join": "Omba kujiunga",
+  "Invite only": "Mwaliko tu",
+  "The group was closed by its members’ vote. Its chat stays to read.": "Kikundi kilifungwa kwa kura ya wanachama wake. Gumzo lake linabaki kusomwa.",
+  "Votes among the group's members and convenors; observers watch. More than half must vote. 7 days, or sooner once the answer can't change.": "Kura kati ya wanachama na waratibu wa kikundi; watazamaji huangalia. Zaidi ya nusu lazima wapige kura. Siku 7, au mapema zaidi mara jibu linapokuwa haliwezi kubadilika."
 }

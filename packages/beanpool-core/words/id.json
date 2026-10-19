@@ -2,7 +2,7 @@
   "_meta": {
     "language": "id",
     "name": "Indonesian",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-19",
@@ -340,5 +340,97 @@
   },
   "Too many suggestions from your connection recently. Please try again later — your text is still here.": "Terlalu banyak saran dari koneksimu baru-baru ini. Silakan coba lagi nanti — teksmu masih ada di sini.",
   "This poll is shown at your area (about 10 km around it) to everyone who can read it.": "Jajak pendapat ini ditampilkan di wilayahmu (sekitar 10 km di sekitarnya) kepada semua orang yang dapat membacanya.",
-  "You haven't set your area, so members nearby won't see this poll in their list; they can still find it by searching. Set it in Settings → Your area to show it near you.": "Kamu belum mengatur wilayahmu, jadi anggota di sekitarmu tidak akan melihat jajak pendapat ini di daftar mereka; mereka masih bisa menemukannya lewat pencarian. Atur di Pengaturan → Wilayahmu untuk menampilkannya di dekatmu."
+  "You haven't set your area, so members nearby won't see this poll in their list; they can still find it by searching. Set it in Settings → Your area to show it near you.": "Kamu belum mengatur wilayahmu, jadi anggota di sekitarmu tidak akan melihat jajak pendapat ini di daftar mereka; mereka masih bisa menemukannya lewat pencarian. Atur di Pengaturan → Wilayahmu untuk menampilkannya di dekatmu.",
+  "Project · A leader, a goal, an end date": "Proyek · Seorang pemimpin, sebuah target, tanggal akhir",
+  "Enterprise · Run by its keepers": "Usaha · Dikelola oleh para pengurusnya",
+  "Lead convenor\u0004group role": "Koordinator utama",
+  "Convenor\u0004group role": "Koordinator",
+  "Member\u0004group role": "Anggota",
+  "Observer\u0004group role": "Pengamat",
+  "Make one of the observers a member first, then hand the lead to them.": "Jadikan salah satu pengamat sebagai anggota terlebih dahulu, lalu serahkan kepemimpinan kepadanya.",
+  "{name} receives {n} Beans. The 1.5% trade fee ({fee} Beans) goes to the Commons.|{name} receives {n} Beans. The 1.5% trade fee ({fee} Beans) goes to the Commons.": {
+    "other": "{name} menerima {n} kacang. Biaya transaksi 1,5% ({fee} kacang) masuk ke sarana bersama."
+  },
+  "Enter an amount in Beans, like 40 or 12.50.": "Masukkan jumlah dalam kacang, seperti 40 atau 12.50.",
+  "The amount must be more than 0 Beans.": "Jumlah harus lebih dari 0 kacang.",
+  "The enterprise holds {n} Beans, so it can't pay more than that.|The enterprise holds {n} Beans, so it can't pay more than that.": {
+    "other": "Usaha memiliki {n} kacang, jadi tidak dapat membayar lebih dari itu."
+  },
+  "Paying a keeper is a wage, and a wage comes only out of what the enterprise has earned above its costs (its earned surplus): {n} Beans now.|Paying a keeper is a wage, and a wage comes only out of what the enterprise has earned above its costs (its earned surplus): {n} Beans now.": {
+    "other": "Membayar pengurus adalah upah, dan upah hanya berasal dari pendapatan usaha di atas biaya (surplus yang diperoleh): {n} kacang saat ini."
+  },
+  "Paying a keeper is a wage: only out of what the project has earned.": "Membayar pengurus adalah upah: hanya dari apa yang diperoleh proyek.",
+  "Paying a keeper is a wage: only out of what the enterprise has earned.": "Membayar pengurus adalah upah: hanya dari apa yang diperoleh usaha.",
+  "Paying a keeper is a wage: only out of what the project has earned above its costs, {n} Beans now.|Paying a keeper is a wage: only out of what the project has earned above its costs, {n} Beans now.": {
+    "other": "Membayar pengurus adalah upah: hanya dari apa yang diperoleh proyek di atas biayanya, {n} kacang saat ini."
+  },
+  "Paying a keeper is a wage: only out of what the enterprise has earned above its costs, {n} Beans now.|Paying a keeper is a wage: only out of what the enterprise has earned above its costs, {n} Beans now.": {
+    "other": "Membayar pengurus adalah upah: hanya dari apa yang diperoleh usaha di atas biayanya, {n} kacang saat ini."
+  },
+  "Pay Beans out": "Bayarkan kacang",
+  "Remove a collaborator": "Hapus kolaborator",
+  "Remove a keeper": "Hapus pengurus",
+  "Make another keeper the lead": "Jadikan pengurus lain sebagai ketua",
+  "You're not in this group now, but you were when these votes opened, so you can still vote on them.": "Kamu tidak berada di grup ini sekarang, tetapi kamu ada saat pemungutan suara dibuka, jadi kamu masih dapat memilih.",
+  "You're not in this group now. These are the votes you were part of.": "Kamu tidak berada di grup ini sekarang. Ini adalah pemungutan suara di mana kamu pernah menjadi bagian di dalamnya.",
+  "someone in the group": "seseorang di dalam grup",
+  "someone": "seseorang",
+  "Pay {n} Beans to {name}|Pay {n} Beans to {name}": {
+    "other": "Bayar {n} kacang ke {name}"
+  },
+  "Remove {name} as a collaborator": "Hapus {name} sebagai kolaborator",
+  "Remove {name} as a keeper": "Hapus {name} sebagai pengurus",
+  "Make {name} the leader": "Jadikan {name} sebagai pemimpin",
+  "Make {name} the lead keeper": "Jadikan {name} sebagai pengurus utama",
+  "Make {name} the lead convenor": "Jadikan {name} sebagai koordinator utama",
+  "Make {name} a convenor": "Jadikan {name} sebagai koordinator",
+  "Make {name} a member, no longer a convenor": "Jadikan {name} anggota, bukan lagi koordinator",
+  "Remove {name} from the group": "Hapus {name} dari grup",
+  "Change who can join: {policy}": "Ubah siapa yang dapat bergabung: {policy}",
+  "Close the group. Its chat stays to read.": "Tutup grup. Obrolannya tetap ada untuk dibaca.",
+  "A vote": "Pemungutan suara",
+  "{voted} of {roll} has voted. {quorum} must vote. Yes and No show when it closes.": "{voted} dari {roll} telah memilih. {quorum} harus memilih. Ya dan Tidak ditampilkan saat ditutup.",
+  "{n} of {roll} have voted. {quorum} must vote. Yes and No show when it closes.|{n} of {roll} have voted. {quorum} must vote. Yes and No show when it closes.": {
+    "other": "{n} dari {roll} telah memilih. {quorum} harus memilih. Ya dan Tidak ditampilkan saat ditutup."
+  },
+  "Yes {yes} · No {no}. {voted} of {roll} voted.": "Ya {yes} · Tidak {no}. {voted} dari {roll} memilih.",
+  "Open\u0004a vote": "Terbuka",
+  "Passed and carried out": "Disetujui dan dijalankan",
+  "Passed": "Disetujui",
+  "Did not pass": "Tidak disetujui",
+  "Not enough people voted": "Tidak cukup orang yang memilih",
+  "Not enough keepers voted": "Tidak cukup pengurus yang memilih",
+  "Passed, but not carried out: {reason}": "Disetujui, tetapi tidak dijalankan: {reason}",
+  "Passed, but not carried out": "Disetujui, tetapi tidak dijalankan",
+  "Passed, but there was nothing to do: {reason}": "Disetujui, tetapi tidak ada yang perlu dilakukan: {reason}",
+  "Passed, but there was nothing to do": "Disetujui, tetapi tidak ada yang perlu dilakukan",
+  "Closed\u0004a vote": "Ditutup",
+  "closing now": "segera ditutup",
+  "closes in {n} day|closes in {n} days": {
+    "other": "ditutup dalam {n} hari"
+  },
+  "closes in {n} hour|closes in {n} hours": {
+    "other": "ditutup dalam {n} jam"
+  },
+  "closes within the hour": "ditutup dalam satu jam",
+  "Nobody sees who voted how. In a very small group, though, the result and who has voted can show it.": "Tidak ada yang melihat siapa memilih apa. Namun, dalam grup yang sangat kecil, hasil dan siapa yang telah memilih dapat memperlihatkannya.",
+  "anyone can join": "siapa pun dapat bergabung",
+  "people ask, and a convenor lets them in": "orang meminta, dan koordinator mengizinkan mereka masuk",
+  "by invitation only": "hanya melalui undangan",
+  "a new rule": "aturan baru",
+  "Choose a new lead convenor": "Pilih koordinator utama baru",
+  "Make someone a convenor": "Jadikan seseorang koordinator",
+  "Make a convenor a member": "Jadikan koordinator sebagai anggota",
+  "Remove someone": "Hapus seseorang",
+  "Change who can join": "Ubah siapa yang dapat bergabung",
+  "Close the group": "Tutup grup",
+  "Who should lead?": "Siapa yang harus memimpin?",
+  "Who should be a convenor?": "Siapa yang harus menjadi koordinator?",
+  "Which convenor?": "Koordinator yang mana?",
+  "Remove whom?": "Hapus siapa?",
+  "Open: anyone can join": "Terbuka: siapa pun dapat bergabung",
+  "Ask to join": "Minta untuk bergabung",
+  "Invite only": "Hanya undangan",
+  "The group was closed by its members’ vote. Its chat stays to read.": "Grup ditutup berdasarkan pemungutan suara anggotanya. Obrolannya tetap ada untuk dibaca.",
+  "Votes among the group's members and convenors; observers watch. More than half must vote. 7 days, or sooner once the answer can't change.": "Pemungutan suara di antara anggota dan koordinator grup; pengamat menyaksikan. Lebih dari setengahnya harus memilih. 7 hari, atau lebih cepat setelah hasilnya tidak dapat berubah lagi."
 }

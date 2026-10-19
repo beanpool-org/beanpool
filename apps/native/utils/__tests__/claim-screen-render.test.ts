@@ -158,7 +158,8 @@ describe('the empty claim code box reads as empty', () => {
     it('shows a pattern, not a code: nothing in it is a hex digit, so it can never read as filled in', async () => {
         nav.params = { node: ORIGIN };
         const host = await render();
-        expect(q(host, '[data-role="header"]')?.textContent).toBe('Claim a community');
+        // Written in capitals by the language's rule (core upperCase), where a textTransform drew them before (words S3k).
+        expect(q(host, '[data-role="header"]')?.textContent).toBe('CLAIM A COMMUNITY');
         expect(host.textContent).toContain('Claim Beans Town');
 
         const field = codeField(host)!;

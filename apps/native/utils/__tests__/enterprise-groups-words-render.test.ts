@@ -648,9 +648,9 @@ describe('posting to a group in the pseudo-locale (words S3h)', () => {
 // ── 320 dp with text at 1.3×: longer languages never push words past an edge (checked with the pseudo-locale) ─────────
 const FLOOR = 320;
 const SCALE = 1.3;
-const glyphEm = (c: string) => (/\p{M}/u.test(c) || /[️​‌‍]/.test(c) ? 0 : /\p{Extended_Pictographic}/u.test(c) ? 1.25 : 0.62);
+const glyphEm = (c: string) => (/\p{M}/u.test(c) || /[\uFE0F\u200B\u200C\u200D]/.test(c) ? 0 : /\p{Extended_Pictographic}/u.test(c) ? 1.25 : 0.62);
 const widthOf = (text: string, px: number) => Array.from(text).reduce((w, c) => w + glyphEm(c) * px, 0);
-const longestWord = (text: string) => text.split(/[\s​]+/).reduce((a, b) => (widthOf(b, 1) > widthOf(a, 1) ? b : a), '');
+const longestWord = (text: string) => text.split(/[\s\u200B]+/).reduce((a, b) => (widthOf(b, 1) > widthOf(a, 1) ? b : a), '');
 const spanWith = (text: string) => Array.from(host.querySelectorAll('span')).find((s) => s.textContent === text) ?? null;
 
 describe('the enterprise page and groups at 320 dp with 1.3× text, in the pseudo-locale', () => {

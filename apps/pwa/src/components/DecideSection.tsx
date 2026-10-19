@@ -465,12 +465,14 @@ export function DecideSection({
                                                     <LocalCommunityAction feature="decisions" label={t('👎 Vote NO')} className="flex-1" {...ways} />
                                                 </div>
                                             ) : (
-                                                <div className="flex gap-3">
+                                                <div className="flex flex-wrap gap-3">
+                                                    {/* Not min-w-0: a button keeps its longest word whole (max-w-full lets a word wider than the card
+                                                        still break), and flex-wrap puts No under Yes when both cannot fit side by side. */}
                                                     <button
                                                         type="button"
                                                         onClick={() => handleVote(item, true)}
                                                         disabled={votingId === item.id || buttons.yes.disabled || !!blocker}
-                                                        className="flex-1 min-w-0 py-2.5 px-4 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-extrabold text-sm shadow transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
+                                                        className="flex-1 max-w-full py-2.5 px-4 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-extrabold text-sm shadow transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
                                                     >
                                                         <span aria-hidden="true">👍</span>
                                                         <span className="min-w-0 break-words">{votingId === item.id ? t('Recording...') : buttons.yes.label}</span>
@@ -480,7 +482,7 @@ export function DecideSection({
                                                         type="button"
                                                         onClick={() => handleVote(item, false)}
                                                         disabled={votingId === item.id || buttons.no.disabled || !!blocker}
-                                                        className="flex-1 min-w-0 py-2.5 px-4 rounded-xl bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on font-extrabold text-sm shadow transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
+                                                        className="flex-1 max-w-full py-2.5 px-4 rounded-xl bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on font-extrabold text-sm shadow transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
                                                     >
                                                         <span aria-hidden="true">👎</span>
                                                         <span className="min-w-0 break-words">{votingId === item.id ? t('Recording...') : buttons.no.label}</span>

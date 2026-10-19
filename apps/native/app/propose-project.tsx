@@ -15,6 +15,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CurrencyDisplay } from '../components/CurrencyDisplay';
 import { palette } from '../constants/colors';
 import { useTheme, useStyles } from './ThemeContext';
+import { formatDate, inCapitalsOf, t } from '@beanpool/core';
+import { Sentence } from '../components/Sentence';
 
 export default function ProposeProjectModal() {
     const { theme, colors } = useTheme();
@@ -22,7 +24,8 @@ export default function ProposeProjectModal() {
         container: { flex: 1, backgroundColor: colors.surface.page },
         header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.border.default, backgroundColor: theme === 'dark' ? colors.surface.card : colors.text.heading },
         backButton: { width: 40, height: 40, justifyContent: 'center', alignItems: 'flex-start' },
-        headerTitle: { fontSize: 16, fontWeight: 'bold', color: colors.brand.primary, letterSpacing: 0.5, textTransform: 'uppercase' },
+        // In capitals by inCapitalsOf (the language's way), never a textTransform (the phone's).
+        headerTitle: { fontSize: 16, fontWeight: 'bold', color: colors.brand.primary, letterSpacing: 0.5 },
         infoBox: { flexDirection: 'row', backgroundColor: theme === 'dark' ? colors.brand.tint : palette.emerald50, padding: 16, borderRadius: 12, marginBottom: 20, borderWidth: 1, borderColor: theme === 'dark' ? colors.brand.primary : palette.emerald200 },
         infoText: { flex: 1, fontSize: 13, color: theme === 'dark' ? colors.text.body : palette.emerald800, lineHeight: 19 },
         scroll: { padding: 20 },
@@ -82,7 +85,7 @@ export default function ProposeProjectModal() {
         }
         setValidationErrors(errors);
         if (errors.size > 0) {
-            setValidationToast('⚠️ Please complete all required fields');
+            setValidationToast(t('⚠️ Please complete all required fields'));
             setTimeout(() => setValidationToast(''), 3000);
             return;
         }
@@ -106,14 +109,15 @@ export default function ProposeProjectModal() {
                 avatar: photos.length > 0 ? photos[0] : undefined,
             });
             Alert.alert(
-                "Initiative Started 🌱",
-                lifecycle === 'bounded' 
-                    ? "Your project has been created and is now open for community backing."
-                    : "Your community enterprise has been established in the Commons.",
-                [{ text: "OK", onPress: () => router.back() }]
+                t('Initiative Started 🌱'),
+                lifecycle === 'bounded'
+                    ? t('Your project has been created and is now open for community backing.')
+                    : t('Your community enterprise has been established in the Commons.'),
+                [{ text: t('OK'), onPress: () => router.back() }]
             );
         } catch (e: any) {
-            Alert.alert("Creation Failed", e.message || "Could not start enterprise.");
+            // The node's own words as it sent them (slice S4).
+            Alert.alert(t('Creation Failed'), e.message || t('Could not start enterprise.'));
         } finally {
             setSubmitting(false);
             submittingRef.current = false;
@@ -124,10 +128,10 @@ export default function ProposeProjectModal() {
         <SafeAreaView style={styles.container}>
             <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
             <View style={styles.header}>
-                <Pressable onPress={() => router.back()} style={styles.backButton} accessibilityRole="button" accessibilityLabel="Close">
+                <Pressable onPress={() => router.back()} style={styles.backButton} accessibilityRole="button" accessibilityLabel={t('Close')}>
                     <MaterialCommunityIcons name="close" size={28} color={colors.text.inverse} />
                 </Pressable>
-                <Text style={styles.headerTitle}>Start an Enterprise / Project</Text>
+                <Text style={styles.headerTitle}>{inCapitalsOf(t('Start an Enterprise / Project'))}</Text>
                 <View style={{ width: 40 }} />
             </View>
 
@@ -143,46 +147,46 @@ export default function ProposeProjectModal() {
                     <View style={styles.infoBox}>
                         <MaterialCommunityIcons name="information" size={20} color={colors.brand.primary} style={{ marginRight: 8 }} />
                         <Text style={styles.infoText}>
-                            An enterprise keeps going and trades; its keepers run it together. A project has a leader, a goal in Beans and usually an end date.
+                            {t('An enterprise keeps going and trades; its keepers run it together. A project has a leader, a goal in Beans and usually an end date.')}
                         </Text>
                     </View>
 
                     {/* Initiative Type Selector */}
                     <View style={styles.field}>
-                        <Text style={styles.label}>INITIATIVE TYPE</Text>
+                        <Text style={styles.label}>{t('INITIATIVE TYPE')}</Text>
                         <View style={styles.typeSelectorRow}>
                             <Pressable
                                 accessibilityRole="button"
-                                accessibilityLabel="Project: a leader, a goal, an end date"
+                                accessibilityLabel={t('Project: a leader, a goal, an end date')}
                                 accessibilityState={{ selected: lifecycle === 'bounded' }}
                                 style={[styles.typeBtn, lifecycle === 'bounded' && styles.typeBtnActive]}
                                 onPress={() => setLifecycle('bounded')}
                             >
-                                <Text style={styles.typeBtnTitle}>🌱 Project</Text>
-                                <Text style={styles.typeBtnDesc}>A leader, a goal, an end date</Text>
+                                <Text style={styles.typeBtnTitle}>{t('🌱 Project')}</Text>
+                                <Text style={styles.typeBtnDesc}>{t('A leader, a goal, an end date')}</Text>
                             </Pressable>
                             <Pressable
                                 accessibilityRole="button"
-                                accessibilityLabel="Enterprise: keepers, it keeps going"
+                                accessibilityLabel={t('Enterprise: keepers, it keeps going')}
                                 accessibilityState={{ selected: lifecycle === 'ongoing' }}
                                 style={[styles.typeBtn, lifecycle === 'ongoing' && styles.typeBtnActive]}
                                 onPress={() => setLifecycle('ongoing')}
                             >
-                                <Text style={styles.typeBtnTitle}>🏛️ Enterprise</Text>
-                                <Text style={styles.typeBtnDesc}>Keepers; it keeps going</Text>
+                                <Text style={styles.typeBtnTitle}>{t('🏛️ Enterprise')}</Text>
+                                <Text style={styles.typeBtnDesc}>{t('Keepers; it keeps going')}</Text>
                             </Pressable>
                         </View>
                     </View>
 
                     {/* Name / Title */}
                     <View style={styles.field}>
-                        <Text style={styles.label}>NAME / TITLE *</Text>
+                        <Text style={styles.label}>{t('NAME / TITLE *')}</Text>
                         <TextInput
-                            accessibilityLabel="Enterprise name or project title"
+                            accessibilityLabel={t('Enterprise name or project title')}
                             style={[styles.input, fieldBorder('title')]}
                             // Short enough for one line at 320dp + 1.3x: Android wraps a long placeholder inside a
                             // one-line input and clips the second line.
-                            placeholder="e.g. Community Tool Shed"
+                            placeholder={t('e.g. Community Tool Shed')}
                             placeholderTextColor={colors.text.muted}
                             value={title}
                             onChangeText={(v) => { setTitle(v); if (validationErrors.has('title')) { const n = new Set(validationErrors); n.delete('title'); setValidationErrors(n); } }}
@@ -192,27 +196,29 @@ export default function ProposeProjectModal() {
 
                     {/* Purpose Statement (required per docs/the-commons.md §2.1) */}
                     <View style={styles.field}>
-                        <Text style={styles.label}>PURPOSE STATEMENT *</Text>
+                        <Text style={styles.label}>{t('PURPOSE STATEMENT *')}</Text>
                         <TextInput
-                            accessibilityLabel="Purpose statement"
+                            accessibilityLabel={t('Purpose statement')}
                             style={[styles.input, styles.textarea, fieldBorder('description')]}
-                            placeholder="State clearly what this enterprise exists to do (e.g. 'We build and maintain a communal shade house by November')."
+                            placeholder={t("State clearly what this enterprise exists to do (e.g. 'We build and maintain a communal shade house by November').")}
                             placeholderTextColor={colors.text.muted}
                             value={description}
                             onChangeText={(v) => { setDescription(v); if (validationErrors.has('description')) { const n = new Set(validationErrors); n.delete('description'); setValidationErrors(n); } }}
                             multiline
                             textAlignVertical="top"
                         />
-                        <Text style={styles.hint}>The purpose statement is what the community judges the initiative against.</Text>
+                        <Text style={styles.hint}>{t('The purpose statement is what the community judges the initiative against.')}</Text>
                     </View>
 
                     {/* Bounded Project Fields: Goal & Deadline */}
                     {lifecycle === 'bounded' && (
                         <>
                             <View style={styles.field}>
-                                <Text style={styles.label}>FUNDING GOAL (<CurrencyDisplay hideAmount={true} />) *</Text>
+                                <Text style={styles.label}>
+                                    <Sentence text={t('FUNDING GOAL ({currency}) *')} parts={{ currency: <CurrencyDisplay hideAmount={true} /> }} />
+                                </Text>
                                 <TextInput
-                                    accessibilityLabel="Funding goal amount"
+                                    accessibilityLabel={t('Funding goal amount')}
                                     style={[styles.input, styles.priceInput, fieldBorder('goalAmount')]}
                                     placeholder="0"
                                     placeholderTextColor={colors.text.muted}
@@ -221,19 +227,20 @@ export default function ProposeProjectModal() {
                                     onChangeText={(v) => { setGoalAmount(v); if (validationErrors.has('goalAmount')) { const n = new Set(validationErrors); n.delete('goalAmount'); setValidationErrors(n); } }}
                                     maxLength={6}
                                 />
-                                <Text style={styles.hint}>Pledges are held safely in the enterprise account.</Text>
+                                <Text style={styles.hint}>{t('Pledges are held safely in the enterprise account.')}</Text>
                             </View>
 
                             <View style={styles.field}>
-                                <Text style={styles.label}>FUNDING DEADLINE (OPTIONAL)</Text>
+                                <Text style={styles.label}>{t('FUNDING DEADLINE (OPTIONAL)')}</Text>
                                 <Pressable
                                     style={[styles.input, { justifyContent: 'center' }]}
                                     onPress={() => setShowPicker(true)}
                                     accessibilityRole="button"
-                                    accessibilityLabel={deadlineDate ? `Funding deadline: ${deadlineDate.toISOString().split('T')[0]}` : "Select funding deadline date"}
+                                    accessibilityLabel={deadlineDate ? t('Funding deadline: {date}', { date: formatDate(deadlineDate, 'day-month-year') }) : t('Select funding deadline date')}
                                 >
                                     <Text style={{ color: deadlineDate ? colors.text.heading : colors.text.muted, fontSize: 15 }}>
-                                        {deadlineDate ? deadlineDate.toISOString().split('T')[0] : "Select Deadline Date (Optional)"}
+                                        {/* The day picked, through core's formatDate ("30 Nov 2026"; was its UTC ISO date). */}
+                                        {deadlineDate ? formatDate(deadlineDate, 'day-month-year') : t('Select Deadline Date (Optional)')}
                                     </Text>
                                 </Pressable>
                                 {showPicker && (
@@ -256,9 +263,9 @@ export default function ProposeProjectModal() {
                                         onPress={() => setDeadlineDate(null)}
                                         style={{ marginTop: 4 }}
                                         accessibilityRole="button"
-                                        accessibilityLabel="Clear deadline"
+                                        accessibilityLabel={t('Clear deadline')}
                                     >
-                                        <Text style={{ fontSize: 12, color: colors.feedback.danger.fg }}>Clear deadline</Text>
+                                        <Text style={{ fontSize: 12, color: colors.feedback.danger.fg }}>{t('Clear deadline')}</Text>
                                     </Pressable>
                                 )}
                             </View>
@@ -267,17 +274,17 @@ export default function ProposeProjectModal() {
 
                     {/* Photos / Avatar */}
                     <View style={styles.field}>
-                        <Text style={styles.label}>COVER PHOTO / AVATAR (OPTIONAL)</Text>
+                        <Text style={styles.label}>{t('COVER PHOTO / AVATAR (OPTIONAL)')}</Text>
                         <View style={{ flexDirection: 'row', gap: 10, marginTop: 4, padding: 4 }}>
                             {photos.map((uri, idx) => (
                                 uri && typeof uri === 'string' && uri.trim() !== '' && uri !== 'null' && uri !== 'undefined' ? (
                                     <View key={idx} style={{ position: 'relative' }}>
-                                        <Image source={{ uri }} style={{ width: 80, height: 80, borderRadius: 12, backgroundColor: colors.surface.subtle }} accessibilityLabel="Initiative photo" />
+                                        <Image source={{ uri }} style={{ width: 80, height: 80, borderRadius: 12, backgroundColor: colors.surface.subtle }} accessibilityLabel={t('Initiative photo')} />
                                         <Pressable
                                             onPress={() => setPhotos(prev => prev.filter((_, i) => i !== idx))}
                                             style={{ position: 'absolute', top: -5, right: -5, backgroundColor: colors.feedback.danger.solid, borderRadius: 12, width: 24, height: 24, alignItems: 'center', justifyContent: 'center' }}
                                             accessibilityRole="button"
-                                            accessibilityLabel="Remove photo"
+                                            accessibilityLabel={t('Remove photo')}
                                         >
                                             <MaterialCommunityIcons name="close" size={16} color={colors.text.inverse} />
                                         </Pressable>
@@ -307,7 +314,7 @@ export default function ProposeProjectModal() {
                                     }}
                                     style={{ width: 80, height: 80, borderRadius: 12, borderWidth: 2, borderColor: colors.border.default, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface.app }}
                                     accessibilityRole="button"
-                                    accessibilityLabel="Add photo"
+                                    accessibilityLabel={t('Add photo')}
                                 >
                                     <MaterialCommunityIcons name="image-plus" size={28} color={colors.text.muted} />
                                 </Pressable>
@@ -332,14 +339,14 @@ export default function ProposeProjectModal() {
                             onPress={handleSubmit}
                             disabled={submitting}
                             accessibilityRole="button"
-                            accessibilityLabel={submitting ? "Starting initiative..." : "Start initiative"}
-                            accessibilityHint="Creates enterprise or project and opens it for community backing"
+                            accessibilityLabel={submitting ? t('Starting initiative...') : t('Start initiative')}
+                            accessibilityHint={t('Creates enterprise or project and opens it for community backing')}
                             accessibilityState={{ disabled: submitting, busy: submitting }}
                         >
                             {submitting ? (
                                 <ActivityIndicator color={colors.text.inverse} />
                             ) : (
-                                <Text style={styles.submitBtnText}>START INITIATIVE 🌱</Text>
+                                <Text style={styles.submitBtnText}>{t('START INITIATIVE 🌱')}</Text>
                             )}
                         </Pressable>
                     </View>

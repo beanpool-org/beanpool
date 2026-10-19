@@ -145,6 +145,15 @@ export function chatAuthorWords(name: string | null | undefined): string | null 
     return name;
 }
 
+/**
+ * A Talk row's preview (utils/db.ts getConversations): in the member's language only when BeanPool wrote it
+ * (`lastMessageFromApp`: a stand-in, a deleted line, a trade's or the node's system line). A member's words and the
+ * admins' message are shown exactly as written, even one that matches a sentence in this table ("Keep them locked").
+ */
+export function chatPreviewWords(row: { lastMessage?: string | null; lastMessageFromApp?: boolean }): string | null | undefined {
+    return row.lastMessageFromApp ? chatLineWords(row.lastMessage) : row.lastMessage;
+}
+
 /** A line a lower layer wrote, in the member's language; anything it doesn't know, exactly as given. */
 export function chatLineWords(text: string): string;
 export function chatLineWords(text: string | null | undefined): string | null | undefined;

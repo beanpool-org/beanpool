@@ -355,6 +355,20 @@ describe('the review sheet after a deal, in the pseudo-locale', () => {
     });
 });
 
+describe("the listing's type and category line in capitals, the language's way", () => {
+    it('Greek: the category drops its accents in capitals (never toUpperCase on a translated word)', async () => {
+        const { readFileSync } = await import('node:fs');
+        const { resolve } = await import('node:path');
+        const el = JSON.parse(readFileSync(resolve(__dirname, '../../words/el.json'), 'utf8')) as Record<string, string>;
+        const transport = el['Transport'];
+        expect(transport.toUpperCase()).not.toBe(transport.toLocaleUpperCase('el'));
+        await open(OFFER, 'el');
+        expect(host.textContent).toContain('Bike repairs at home');
+        expect(host.textContent).toContain(`· ${transport.toLocaleUpperCase('el')}`);
+        expect(host.textContent).not.toContain(transport.toUpperCase());
+    });
+});
+
 describe('the page at 320 dp with 1.3× text: the fixed-width words shrink to fit rather than being cut', () => {
     it('Back grows to 120 dp and then shrinks; Deny and Approve & Commit stay one line, shrinking', async () => {
         await open(NEED, 'xx', { all: (sql) => (sql.includes("status='requested'") ? REQUESTS : []) });

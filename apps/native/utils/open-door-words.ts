@@ -6,14 +6,52 @@
  * The phone's own sentences about a refusal name the global community (utils/global-join.ts DOOR_MESSAGES, shared with the
  * first screen's door); at another community's door each is said again with its name. What a node says itself in its
  * answer (open-join.ts: "this community", "here") is shown as it came, at any door.
+ *
+ * The global community's door says its sentences in the member's language too. The phone's own fixed sentences that
+ * global-join.ts, global-join-existing.ts and door-work.ts write (they sign the join and hold the key, so they stay off
+ * the words layer: core recovery-path-files' rule) are translated here, by their exact English (PHONE_DOOR_LINES;
+ * utils/__tests__/join-door-words-render.test.ts holds the table to them both ways: each entry is one of their
+ * sentences, and each fixed sentence they write is an entry or is named there with why not). A node's own sentence, and
+ * one with a time or a sign-in's name in it, is shown as it came.
  */
-import { t } from '@beanpool/core';
+import { t, word, type WordKey } from '@beanpool/core';
 import {
     DOOR_MESSAGES, doorMessage, nameCheckMessage, type DoorAnswer, type NameCheck,
 } from './global-join';
 import { accountDoorMessage } from './global-join-existing';
 import { GLOBAL_DOOR_MESSAGES, type GlobalDoorRefusal } from './node-profile';
 import { communityName } from './community-name';
+
+/** The phone's fixed door sentences by their exact English: see the note above. */
+const PHONE_DOOR_LINES: Readonly<Record<string, WordKey>> = {
+    "This account's place in the global community was closed, so it can't join again.": word("This account's place in the global community was closed, so it can't join again."),
+    "The BeanPool identity this sign-in joined with was removed from the global community, so it can't join again. You can still join a community with an invite.": word("The BeanPool identity this sign-in joined with was removed from the global community, so it can't join again. You can still join a community with an invite."),
+    "This phone's key was replaced by a new one, so it can't join. Use the device or the 12 words that hold the new key.": word("This phone's key was replaced by a new one, so it can't join. Use the device or the 12 words that hold the new key."),
+    'Too many new accounts have joined from this network. Please try again later.': word('Too many new accounts have joined from this network. Please try again later.'),
+    'This community needs a sign-in to join: Google, Apple or Facebook. You can sign in below.': word('This community needs a sign-in to join: Google, Apple or Facebook. You can sign in below.'),
+    'Your sign-in could not be used. Please sign in again.': word('Your sign-in could not be used. Please sign in again.'),
+    "The global community couldn't accept this because your phone's date and time look wrong. Check them in your phone's settings (set them to automatic), then try again.": word("The global community couldn't accept this because your phone's date and time look wrong. Check them in your phone's settings (set them to automatic), then try again."),
+    'Your join could not be completed, and nothing was saved. Please try again in a minute.': word('Your join could not be completed, and nothing was saved. Please try again in a minute.'),
+    'Checking your sign-in another way…': word('Checking your sign-in another way…'),
+    // global-join.ts WORK_MESSAGES: the door work didn't count twice in a row.
+    "Setting up your account didn't finish. Please try again.": word("Setting up your account didn't finish. Please try again."),
+    "Setting up your account didn't work out. Please try again.": word("Setting up your account didn't work out. Please try again."),
+    "That took a while, so setting up your account had to start again, and it didn't finish. Please try again.": word("That took a while, so setting up your account had to start again, and it didn't finish. Please try again."),
+    'This sign-in already joined the global community with a different BeanPool account. To join as the account on this phone, use a different sign-in.': word('This sign-in already joined the global community with a different BeanPool account. To join as the account on this phone, use a different sign-in.'),
+    'This phone has no BeanPool account now, so nothing was sent. Go back and start again from the first screen.': word('This phone has no BeanPool account now, so nothing was sent. Go back and start again from the first screen.'),
+    "This phone can't finish setting up a 12-words account right now. Try again, or sign in.": word("This phone can't finish setting up a 12-words account right now. Try again, or sign in."),
+    "You're in the global community": word("You're in the global community"),
+    'Your key and your 12 words are the same as before, and nothing changed in your other communities: your posts, chats and trades stay in each one.': word('Your key and your 12 words are the same as before, and nothing changed in your other communities: your posts, chats and trades stay in each one.'),
+    [GLOBAL_DOOR_MESSAGES.unreachable]: GLOBAL_DOOR_MESSAGES.unreachable,
+    [GLOBAL_DOOR_MESSAGES.door_closed]: GLOBAL_DOOR_MESSAGES.door_closed,
+    // global-join.ts PRIVATE_PREVIEW_MESSAGE, the same English as the server's own sentence.
+    [GLOBAL_DOOR_MESSAGES.private_preview]: GLOBAL_DOOR_MESSAGES.private_preview,
+};
+
+/** One of the phone's fixed door sentences in the member's language; anything else (a node's own) exactly as given. */
+export function phoneDoorLineWords(english: string): string {
+    return Object.prototype.hasOwnProperty.call(PHONE_DOOR_LINES, english) ? t(PHONE_DOOR_LINES[english]) : english;
+}
 
 /** The community a door is for, as the screen names it. */
 export interface DoorPlace {
@@ -57,14 +95,15 @@ export function doorScreenWords(place: DoorPlace) {
  */
 export function doorKeeperWords(place: DoorPlace, copiesAt: 'vault' | 'community'): { choose: string; signIn: string } {
     if (place.global) {
-        const keeper = copiesAt === 'vault'
-            ? 'BeanPool keeps a locked copy of your account for it, and BeanPool can open that copy.'
-            : 'the global community keeps a locked copy of your account for it, and the people who run it can open that copy.';
-        return {
-            choose: `${keeper.charAt(0).toUpperCase()}${keeper.slice(1)} BeanPool never sees your password and never posts anything for you.`,
-            signIn: 'To keep out fake accounts, sign in once with an account you already have. That sign-in also becomes '
-                + `a way back into your account if you lose this phone: ${keeper} BeanPool never sees your password and never posts anything for you.`,
-        };
+        return copiesAt === 'vault'
+            ? {
+                choose: t('BeanPool keeps a locked copy of your account for it, and BeanPool can open that copy. BeanPool never sees your password and never posts anything for you.'),
+                signIn: t('To keep out fake accounts, sign in once with an account you already have. That sign-in also becomes a way back into your account if you lose this phone: BeanPool keeps a locked copy of your account for it, and BeanPool can open that copy. BeanPool never sees your password and never posts anything for you.'),
+            }
+            : {
+                choose: t('The global community keeps a locked copy of your account for it, and the people who run it can open that copy. BeanPool never sees your password and never posts anything for you.'),
+                signIn: t('To keep out fake accounts, sign in once with an account you already have. That sign-in also becomes a way back into your account if you lose this phone: the global community keeps a locked copy of your account for it, and the people who run it can open that copy. BeanPool never sees your password and never posts anything for you.'),
+            };
     }
     const name = place.name;
     return copiesAt === 'vault'
@@ -80,7 +119,7 @@ export function doorKeeperWords(place: DoorPlace, copiesAt: 'vault' | 'community
 
 /** Why the door can't be used now, from its check (node-profile.ts checkGlobalDoor). */
 export function doorRefusalWords(reason: GlobalDoorRefusal, place: DoorPlace): string {
-    if (place.global) return GLOBAL_DOOR_MESSAGES[reason];
+    if (place.global) return t(GLOBAL_DOOR_MESSAGES[reason]);
     const name = place.name;
     switch (reason) {
         case 'unreachable': return t("Can't reach {name} right now. Check your connection and try again.", { name });
@@ -92,7 +131,7 @@ export function doorRefusalWords(reason: GlobalDoorRefusal, place: DoorPlace): s
 
 /** What the screen says for an answer that isn't `joined` (global-join-existing.ts accountDoorMessage, by name). */
 export function doorAnswerWords(answer: Exclude<DoorAnswer, { kind: 'joined' }>, place: DoorPlace): string {
-    if (place.global) return accountDoorMessage(answer);
+    if (place.global) return phoneDoorLineWords(accountDoorMessage(answer));
     const name = place.name;
     switch (answer.kind) {
         case 'already_joined':
@@ -111,13 +150,28 @@ export function doorAnswerWords(answer: Exclude<DoorAnswer, { kind: 'joined' }>,
                 ? t("The BeanPool identity this sign-in joined with was removed from {name}, so it can't join again. You can still join a community with an invite.", { name })
                 : answer.message;
         default:
-            return doorMessage(answer);
+            return phoneDoorLineWords(doorMessage(answer));
     }
 }
 
 /** What the name step says when its check doesn't lead to the join (global-join.ts nameCheckMessage, by name). */
 export function doorNameCheckWords(name: string, check: NameCheck, place: DoorPlace): string {
-    if (place.global) return nameCheckMessage(name, check);
+    if (place.global) {
+        // nameCheckMessage's sentences (global-join.ts), in the member's language; the tests hold the two to the same English.
+        switch (check.kind) {
+            case 'timed_out':
+                return t("The global community didn't answer in time, so your name wasn't checked and nothing was sent. Check your connection, then tap Join to try again, or go back.");
+            case 'taken':
+                if (check.suggestionsTimedOut) {
+                    return t('"{name}" is already taken in the global community, and suggestions didn\'t load in time. Choose another name, then tap Join.', { name });
+                }
+                return check.suggestions.length > 0
+                    ? t('"{name}" is already taken in the global community. Pick one of the suggestions below, or choose another name.', { name })
+                    : t('"{name}" is already taken in the global community. Choose another name.', { name });
+            default:
+                return nameCheckMessage(name, check);
+        }
+    }
     const community = place.name;
     switch (check.kind) {
         case 'timed_out':
@@ -136,7 +190,7 @@ export function doorNameCheckWords(name: string, check: NameCheck, place: DoorPl
 
 /** "You're in": the title over global-join-existing.ts joinedGlobalNotice's body, by name. */
 export function joinedTitle(place: DoorPlace, globalTitle: string): string {
-    return place.global ? globalTitle : t("You're in {name}", { name: place.name });
+    return place.global ? phoneDoorLineWords(globalTitle) : t("You're in {name}", { name: place.name });
 }
 
 function hostOf(url: string): string {

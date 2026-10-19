@@ -231,7 +231,7 @@ export function EventDetail({ post, openMembership = false }: EventDetailProps) 
             // The thanks, and why the member's words were left out when they were (case 14).
             Alert.alert(t('Reported'), reportedAlertBody(sent?.wordsLeftOut, reason));
         } catch (e: any) {
-            Alert.alert(t('Not sent'), e?.message || t('Could not reach the node.'));
+            Alert.alert(t('Not sent'), e?.message ? eventLineWords(e.message) : t('Could not reach the node.'));
             throw e; // the box keeps the choice and the words
         }
     };

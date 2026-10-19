@@ -1,11 +1,12 @@
 /**
  * The phone's own sentences an event's page shows from utils/db.ts, in the member's language (words S3l).
  *
- * utils/db.ts signs the RSVP, the cancel, the let-in and the reminder with the member's key, so it never reaches the words
- * layer: what rsvpEvent, deletePost, letInToEvent (_signedRequest) and setEventReminder throw as written is worded again
- * here as word() keys and looked up by the exact sentence where components/EventDetail.tsx and EventExtras.tsx show it. db.ts is not touched. A node's own words (a
- * refusal's reason) are shown exactly as given (slice S4). utils/__tests__/events-words-render.test.ts holds each to the
- * throw in db.ts it stands for.
+ * utils/db.ts signs the RSVP, the cancel, the let-in, the report and the reminder with the member's key, so it never
+ * reaches the words layer: what rsvpEvent, deletePost, letInToEvent and reportAbuse (_signedRequest) and setEventReminder
+ * throw as written is worded again here as word() keys and looked up by the exact sentence where
+ * components/EventDetail.tsx and EventExtras.tsx show it. db.ts is not touched. A node's own words (a refusal's reason)
+ * are shown exactly as given (slice S4). utils/__tests__/events-words-render.test.ts holds each to the throw in db.ts it
+ * stands for.
  */
 import { t, word, type WordKey } from '@beanpool/core';
 import { UNSIGNABLE_RSVP_MESSAGE } from '../utils/events';
@@ -22,7 +23,7 @@ const FIXED: Readonly<Record<string, WordKey>> = {
     'Action requires internet connection.': word('Action requires internet connection.'),
     'Not logged in. Identity required.': word('Not logged in. Identity required.'),
     'Failed to remove post on Node': word('Failed to remove post on Node'),
-    // _signedRequest (letInToEvent): no community set, no key, and a send that failed without a reason.
+    // _signedRequest (letInToEvent, reportAbuse): no community set, no key, and a send that failed without a reason.
     'You are off-grid. Please connect to a BeanPool Node to perform this action.': word('You are off-grid. Please connect to a BeanPool Node to perform this action.'),
     'No identity found. You must be logged in.': word('No identity found. You must be logged in.'),
     'Network request failed. You must be connected to a node.': word('Network request failed. You must be connected to a node.'),

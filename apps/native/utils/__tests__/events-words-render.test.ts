@@ -68,7 +68,7 @@ const who = vi.hoisted(() => ({ value: { identity: { publicKey: '9'.repeat(64), 
 vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => who.value }));
 const node = vi.hoisted(() => ({
     view: null as any, rsvpError: null as null | Error, deleteError: null as null | Error, deleted: [] as string[], groups: [] as unknown[],
-    reminders: [] as unknown[], reminderError: null as null | Error,
+    reminders: [] as unknown[], reminderError: null as null | Error, reportError: null as null | Error,
 }));
 vi.mock('../db', async () => {
     const { UNSIGNABLE_RSVP_MESSAGE } = await import('../events');
@@ -80,7 +80,7 @@ vi.mock('../db', async () => {
             return { success: true, post: node.view };
         },
         deletePost: async (id: string) => { if (node.deleteError) throw node.deleteError; node.deleted.push(id); node.view = { ...node.view, status: 'cancelled', eventState: 'cancelled' }; },
-        reportAbuse: async () => ({ ok: true }),
+        reportAbuse: async () => { if (node.reportError) throw node.reportError; return { ok: true }; },
         letInToEvent: async () => ({ success: true, post: node.view }),
         fetchMemberPreferences: async () => ({}),
         fetchMyEvents: async () => node.reminders,
@@ -148,6 +148,7 @@ beforeEach(() => {
     node.groups = [];
     node.reminders = [];
     node.reminderError = null;
+    node.reportError = null;
 });
 afterEach(() => { act(() => root.unmount()); host.remove(); setLanguage('en'); });
 
@@ -178,6 +179,7 @@ const pressAlert = async (english: string) => {
     await settle();
 };
 const said = () => alerts.said;
+const byText = (shown: string) => [...host.querySelectorAll('button')].find((b) => b.textContent === shown) ?? null;
 
 describe('an event\'s page in the pseudo-locale: every word came through t() (words S3l)', () => {
     it('a member: the header, the date, the counts, Going and Interested, the place, the host line, Share, Add to calendar, Report', async () => {
@@ -253,6 +255,28 @@ describe('an event\'s page in the pseudo-locale: every word came through t() (wo
         await click(byLabel(xx('Report event')), 'Report');
         expect(host.textContent).toContain(xx('WHY ARE YOU REPORTING IT?'));
         expect(bypassing(host, MEMBERS, said())).toEqual([]);
+    });
+
+    it("a report the phone couldn't send: _signedRequest's sentences in the member's language, the node's words as given", async () => {
+        node.view = { ...base, myRsvp: null };
+        const cases: Array<[Error, string]> = [
+            [new Error('You are off-grid. Please connect to a BeanPool Node to perform this action.'), xx('You are off-grid. Please connect to a BeanPool Node to perform this action.')],
+            [new Error('No identity found. You must be logged in.'), xx('No identity found. You must be logged in.')],
+            [new Error('Server returned 502'), xx('Server returned {status}').replace('{status}', '502')],
+            [new Error('This event was already reported by you.'), 'This event was already reported by you.'],
+        ];
+        for (const [error, body] of cases) {
+            node.reportError = error;
+            alerts.said.length = 0;
+            await renderIn('xx', createElement(EventDetail, { post: base }));
+            await click(byLabel(xx('Report event')), 'Report');
+            await click(byText(xx('Spam or scam')), 'Spam or scam');
+            await click(byText(xx('Submit report')), 'Submit report');
+            expect(said(), error.message).toEqual([xx('Not sent'), body]);
+            expect(bypassing(host, MEMBERS, said().slice(0, -1))).toEqual([]);
+            act(() => root.unmount());
+            root = createRoot(host);
+        }
     });
 
     it("the phone's own refusals in the member's language: an RSVP with no community set, a cancel that never reached the node", async () => {

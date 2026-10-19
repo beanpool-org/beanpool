@@ -577,7 +577,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                             </div>
                             <div className="flex-1 min-w-0">
                                 <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: tier.color }}>{t('YOUR TRUST LEVEL')}</span>
-                                <div className="text-2xl font-black leading-tight mt-0.5 break-words" style={{ color: tier.color }}>{t(TIER_WORDS[tier.name])}</div>
+                                <div className="text-xl sm:text-2xl font-black leading-tight mt-0.5 break-words" style={{ color: tier.color }}>{t(TIER_WORDS[tier.name])}</div>
                                 <div className="text-xs font-semibold text-nature-500 dark:text-nature-300 mt-1">{tn(ec, 'Level {level} of {levels} · {n} trust', 'Level {level} of {levels} · {n} trust', { level: tierIdx + 1, levels: TIERS.length })}</div>
                                 <div className="text-xs font-semibold mt-2 text-nature-700 dark:text-nature-300">
                                     {nextTier
@@ -612,7 +612,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                         to grow into. Never a lock, never faded or greyed as if it were out of bounds. */}
                     <div>
                         <span className="text-[10px] font-bold text-nature-400 uppercase tracking-widest block mb-3">{t('ALL LEVELS')}</span>
-                        <div className="grid grid-cols-4 gap-2" data-testid="levels-shelf">
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2" data-testid="levels-shelf">
                             {TIERS.map((lvl, i) => {
                                 const reached = tierIdx >= i;
                                 const isSel = selLevel === i;

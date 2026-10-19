@@ -110,13 +110,15 @@ const out = vi.hoisted(() => ({
     plan: null as any,
     switchError: null as null | Error,
     wordsError: null as null | Error,
+    planError: null as null | Error,
+    leaveError: null as null | Error,
     reasons: [] as string[],
 }));
 vi.mock('../update-block-escape', () => ({
     otherCommunitiesOnPhone: async () => out.others,
-    planLeaveFromUpdateBlock: async () => out.plan,
+    planLeaveFromUpdateBlock: async () => { if (out.planError) throw out.planError; return out.plan; },
     switchFromUpdateBlock: async () => { if (out.switchError) throw out.switchError; },
-    leaveFromUpdateBlock: async () => ({ kind: 'left' }),
+    leaveFromUpdateBlock: async () => { if (out.leaveError) throw out.leaveError; return { kind: 'left' }; },
 }));
 vi.mock('../words-behind-lock', () => ({
     readWordsBehindLock: vi.fn(async (_id: unknown, reason: string) => { out.reasons.push(reason); if (out.wordsError) throw out.wordsError; return WORDS; }),
@@ -180,6 +182,8 @@ beforeEach(() => {
     out.plan = { hereName: 'Mullum Commons', next: { url: 'https://lismore.example', name: 'Lismore Commons' } };
     out.switchError = null;
     out.wordsError = null;
+    out.planError = null;
+    out.leaveError = null;
     out.reasons.length = 0;
     learn.video = null;
     globalThis.fetch = vi.fn(async () => { throw new TypeError('offline'); }) as typeof fetch;
@@ -282,6 +286,25 @@ describe('"Update required" in the pseudo-locale: every page, every word through
         await renderIn('xx', createElement(ForceUpdateBlock));
         await click(buttonReading(xx('Leave this community')), 'Leave this community');
         expect(host.textContent).toContain(xx("You haven't joined {here} from this phone. Leaving forgets it here, so you can use another invite.").replace('{here}', 'Mullum Commons'));
+        expect(bypassing(host, WRITTEN, alerts.said)).toEqual([]);
+    });
+
+    it("the ways out's own reasons in the member's language: the phone on no community, the phone moved since the plan", async () => {
+        // What update-block-escape.ts throws, from the real functions.
+        const real = await vi.importActual<typeof import('../update-block-escape')>('../update-block-escape');
+        out.planError = await real.planLeaveFromUpdateBlock({ getItem: async () => null }).then(() => null, (e: Error) => e);
+        out.leaveError = await real.leaveFromUpdateBlock(null, { here: 'https://mullum.example', hereName: 'Mullum Commons', next: null },
+            { storage: { getItem: async () => 'https://lismore.example' } } as any).then(() => null, (e: Error) => e);
+        expect(out.planError?.message).toBe('This phone is not set to a community.');
+        expect(out.leaveError?.message).toBe('This phone changed community. Open Leave this community again.');
+        await renderIn('xx', createElement(ForceUpdateBlock));
+        await click(buttonReading(xx('Leave this community')), 'Leave this community');
+        expect(host.textContent).toContain(xx("Couldn't open Leave this community. {reason}").replace('{reason}', xx(out.planError!.message)));
+        expect(bypassing(host, WRITTEN, alerts.said)).toEqual([]);
+        out.planError = null;
+        await click(buttonReading(xx('Leave this community')), 'Leave this community');
+        await click(buttonReading(xx('Leave {name}').replace('{name}', 'Mullum Commons')), 'Leave Mullum Commons');
+        expect(host.textContent).toContain(xx("Couldn't leave {name}. {reason}").replace('{name}', 'Mullum Commons').replace('{reason}', xx(out.leaveError!.message)));
         expect(bypassing(host, WRITTEN, alerts.said)).toEqual([]);
     });
 

@@ -5,7 +5,8 @@
  * Code that handles keys, signatures, the 12 words or a backup never reaches the words layer (core
  * recovery-path-files.test.ts): lib/web-join.ts (signs the door's requests), lib/identity.ts (keeps the key and its
  * words), lib/door-work.ts and lib/words-work.ts (the door's work, signed with the joining key), lib/web-restore.ts (opens
- * a sign-in's copy of the account), lib/link-signin.ts (seals the account to a sign-in). The screens translate those
+ * a sign-in's copy of the account), lib/link-signin.ts (seals the account to a sign-in), lib/web-rekey.ts (signs a re-key
+ * ask). The screens translate those
  * files' sentences here: by the exact English (the key IS the English), or by the English with a sign-in's name, a member's
  * name, a status or a time in it, built again word for word. Nothing here imports those files at runtime:
  * key-lines.test.ts holds every sentence to the constant or builder it stands for, so a sentence changed there fails a
@@ -48,6 +49,11 @@ const FIXED: Readonly<Record<string, WordKey>> = {
     'Adding a sign-in was cancelled. Nothing changed.': word('Adding a sign-in was cancelled. Nothing changed.'),
     // Before tryAgainIn's sentence (linkRefusalMessage's 429): see WITH_WAIT.
     'Too many tries just now.': word('Too many tries just now.'),
+    // lib/web-rekey.ts WEB_REKEY_TEXT: a re-key code's answers (the phone's rekey-redeem.ts says two of them the same).
+    'Your admin said this device isn’t yours, so nothing changed. Ask them to try again with you there.': word('Your admin said this device isn’t yours, so nothing changed. Ask them to try again with you there.'),
+    'That code isn’t valid any more. Ask the admin for a new one.': word('That code isn’t valid any more. Ask the admin for a new one.'),
+    'That code is for another community. Open the link your admin gave you, or ask them for a new code.': word('That code is for another community. Open the link your admin gave you, or ask them for a new code.'),
+    'Couldn’t reach your community. Check your connection: you can try again, and the code still works until it expires.': word('Couldn’t reach your community. Check your connection: you can try again, and the code still works until it expires.'),
     // lib/web-restore.ts: a restore with a sign-in.
     'That restore timed out on the community. Start again.': word('That restore timed out on the community. Start again.'),
     'Too many tries from this network. Please try again later.': word('Too many tries from this network. Please try again later.'),

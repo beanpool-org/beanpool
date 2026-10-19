@@ -5,6 +5,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { t } from '@beanpool/core';
 import {
     completePendingJoin, loadIdentity, loadPendingJoin, markPendingJoinSent, releaseSentPendingJoin, IdentityHeldError,
     PendingJoinHeldError, type BeanPoolIdentity,
@@ -14,6 +15,7 @@ import {
     abandonWebRekey, askWebRekey, endsWebRekey, finishWebRekey, isRekeyCode, pollWebRekey, webRekeyKey, WEB_REKEY_POLL_MS,
     WEB_REKEY_TEXT, type WebRekeyAnswer, type WebRekeyDeps, type WebRekeyKey,
 } from '../lib/web-rekey';
+import { saidWords, type Said } from './WebJoin';
 
 // Each default reads its import only when called: other screens' tests mock ../lib/identity and ../lib/api without
 // these exports, and a read at module load would fail every file that renders WelcomePage.
@@ -44,7 +46,8 @@ const secondary: React.CSSProperties = { background: 'none', border: 'none', col
 export function WebRekey({ initialCode, onBound, onBack, deps = defaultDeps }: Props) {
     const [code, setCode] = useState(initialCode ?? '');
     const [phase, setPhase] = useState<Phase>('form');
-    const [error, setError] = useState<string | null>(null);
+    // What went wrong, said in the language of the moment (Said; held as a function, so set with setError(() => …)).
+    const [error, setError] = useState<Said | null>(null);
     const [match, setMatch] = useState<string | null>(null);
     const [member, setMember] = useState<BeanPoolIdentity | null>(null);
     const [wroteThemDown, setWroteThemDown] = useState(false);
@@ -72,7 +75,7 @@ export function WebRekey({ initialCode, onBound, onBack, deps = defaultDeps }: P
                 setPhase(k.madeHere ? 'words' : 'linkAgain');
             } catch (e) {
                 finishing.current = false;
-                setError(e instanceof IdentityHeldError ? 'This browser holds another BeanPool account, so this one wasn’t saved here.' : WEB_REKEY_TEXT.unreachable);
+                setError(() => (e instanceof IdentityHeldError ? () => t('This browser holds another BeanPool account, so this one wasn’t saved here.') : WEB_REKEY_TEXT.unreachable));
                 setPhase('form');
             }
             return;
@@ -100,14 +103,14 @@ export function WebRekey({ initialCode, onBound, onBack, deps = defaultDeps }: P
 
     const ask = async () => {
         setError(null);
-        if (!isRekeyCode(code)) { setError('That isn’t a whole re-key code. It starts RK- and has eight letters and numbers.'); return; }
+        if (!isRekeyCode(code)) { setError(() => () => t('That isn’t a whole re-key code. It starts RK- and has eight letters and numbers.')); return; }
         setPhase('asking');
         try {
             key.current = await webRekeyKey(deps);
         } catch (e) {
-            setError(e instanceof PendingJoinHeldError
-                ? 'A join you started in this browser is still waiting. Finish it first, then come back to your code.'
-                : 'This browser couldn’t keep the key safely, so nothing was sent.');
+            setError(() => (e instanceof PendingJoinHeldError
+                ? () => t('A join you started in this browser is still waiting. Finish it first, then come back to your code.')
+                : () => t('This browser couldn’t keep the key safely, so nothing was sent.')));
             setPhase('form');
             return;
         }
@@ -118,23 +121,23 @@ export function WebRekey({ initialCode, onBound, onBack, deps = defaultDeps }: P
     if (phase === 'waiting' && match) {
         return (
             <div data-testid="web-rekey-waiting">
-                <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>Show this number to your admin</h3>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>{t('Show this number to your admin')}</h3>
                 <p style={{ fontSize: '3rem', fontWeight: 900, letterSpacing: '0.4rem', fontFamily: 'monospace', margin: '0.75rem 0' }} data-testid="web-rekey-number">{match}</p>
                 {/* The community this number came from, so the admin can check it is theirs (#1783 review N9). */}
-                <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', margin: '0 0 0.5rem', overflowWrap: 'anywhere' }} data-testid="web-rekey-number-host">from {typeof window !== 'undefined' ? window.location.host : ''}</p>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', margin: '0 0 0.5rem', overflowWrap: 'anywhere' }} data-testid="web-rekey-number-host">{t('from {host}', { host: typeof window !== 'undefined' ? window.location.host : '' })}</p>
                 <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', lineHeight: 1.5 }}>
-                    They type it on their screen. Check the address above is your community's. Your old phone stops working for good.
+                    {t("They type it on their screen. Check the address above is your community's. Your old phone stops working for good.")}
                 </p>
-                <p role="status" style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Waiting for your admin…</p>
-                {error && <p role="alert" style={{ color: '#dc2626', fontSize: '0.85rem' }}>{error}</p>}
+                <p role="status" style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>{t('Waiting for your admin…')}</p>
+                {error && <p role="alert" style={{ color: '#dc2626', fontSize: '0.85rem' }}>{saidWords(error)}</p>}
             </div>
         );
     }
     if (phase === 'words' && member) {
         return (
             <div data-testid="web-rekey-words">
-                <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>You’re in</h3>
-                <p style={{ fontSize: '0.9rem', lineHeight: 1.5 }}>These are the 12 words of your NEW key. Your old words no longer work. Write them down and keep them safe.</p>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>{t('You’re in')}</h3>
+                <p style={{ fontSize: '0.9rem', lineHeight: 1.5 }}>{t('These are the 12 words of your NEW key. Your old words no longer work. Write them down and keep them safe.')}</p>
                 {/* English in every language: the browser's page translation may not rewrite them (#1947 confirmation N-B). */}
                 <ol data-testid="web-rekey-word-list" translate="no" className="notranslate" style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', listStyle: 'none', padding: 0 }}>
                     {(member.mnemonic ?? []).map((w, i) => (
@@ -142,41 +145,41 @@ export function WebRekey({ initialCode, onBound, onBack, deps = defaultDeps }: P
                     ))}
                 </ol>
                 <label style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginTop: '0.75rem', fontSize: '0.9rem' }}>
-                    <input type="checkbox" checked={wroteThemDown} onChange={(e) => setWroteThemDown(e.target.checked)} /> I’ve written my 12 words down
+                    <input type="checkbox" checked={wroteThemDown} onChange={(e) => setWroteThemDown(e.target.checked)} /> {t('I’ve written my 12 words down')}
                 </label>
-                <button type="button" style={primary} onClick={() => setPhase('linkAgain')}>Continue</button>
+                <button type="button" style={primary} onClick={() => setPhase('linkAgain')}>{t('Continue')}</button>
             </div>
         );
     }
     if (phase === 'linkAgain' && member && !linkSignInAgain) {
         return (
             <div data-testid="web-rekey-done">
-                <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>You’re in</h3>
-                <p style={{ fontSize: '0.9rem', lineHeight: 1.5 }}>This device now holds your account: your Beans, your name and your history.</p>
-                <button type="button" style={primary} onClick={() => onBound(member)}>Continue</button>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>{t('You’re in')}</h3>
+                <p style={{ fontSize: '0.9rem', lineHeight: 1.5 }}>{t('This device now holds your account: your Beans, your name and your history.')}</p>
+                <button type="button" style={primary} onClick={() => onBound(member)}>{t('Continue')}</button>
             </div>
         );
     }
     if (phase === 'linkAgain' && member) {
         return (
             <div data-testid="web-rekey-link-again">
-                <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>Link your sign-in again</h3>
-                <p style={{ fontSize: '0.9rem', lineHeight: 1.5 }}>A sign-in you had linked protected your old key, so it was removed. Link it again in Settings, so you can get back in if you lose this device.</p>
-                <button type="button" style={primary} onClick={() => onBound(member)}>Continue</button>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>{t('Link your sign-in again')}</h3>
+                <p style={{ fontSize: '0.9rem', lineHeight: 1.5 }}>{t('A sign-in you had linked protected your old key, so it was removed. Link it again in Settings, so you can get back in if you lose this device.')}</p>
+                <button type="button" style={primary} onClick={() => onBound(member)}>{t('Continue')}</button>
             </div>
         );
     }
     return (
         <div data-testid="web-rekey-form">
-            <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: '0.35rem' }}>🪪 An admin gave me a re-key code</h3>
+            <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: '0.35rem' }}>{t('🪪 An admin gave me a re-key code')}</h3>
             <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', lineHeight: 1.5 }}>
-                Lost your phone and your 12 words? An admin of this community checked it’s you and made a code. This device takes over your account: your Beans, your name and your history.
+                {t('Lost your phone and your 12 words? An admin of this community checked it’s you and made a code. This device takes over your account: your Beans, your name and your history.')}
             </p>
-            <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, marginTop: '0.75rem', marginBottom: '0.25rem' }} htmlFor="web-rekey-code">The code</label>
+            <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, marginTop: '0.75rem', marginBottom: '0.25rem' }} htmlFor="web-rekey-code">{t('The code')}</label>
             <input id="web-rekey-code" style={box} value={code} onChange={(e) => setCode(e.target.value)} placeholder="RK-XXXX-XXXX" autoCapitalize="characters" autoComplete="off" spellCheck={false} />
-            {error && <p role="alert" style={{ color: '#dc2626', fontSize: '0.85rem', marginTop: '0.5rem', lineHeight: 1.5 }}>{error}</p>}
-            <button type="button" style={primary} onClick={ask} disabled={phase === 'asking'}>{phase === 'asking' ? 'One moment…' : 'Continue'}</button>
-            <button type="button" style={secondary} onClick={onBack}>← Back</button>
+            {error && <p role="alert" style={{ color: '#dc2626', fontSize: '0.85rem', marginTop: '0.5rem', lineHeight: 1.5 }}>{saidWords(error)}</p>}
+            <button type="button" style={primary} onClick={ask} disabled={phase === 'asking'}>{phase === 'asking' ? t('One moment…') : t('Continue')}</button>
+            <button type="button" style={secondary} onClick={onBack}>{t('← Back')}</button>
         </div>
     );
 }

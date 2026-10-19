@@ -20,9 +20,10 @@ import { NO_STORAGE_SENTENCE, STORE_WOULD_NOT_OPEN_SENTENCE, type JoinProvider }
 import { aboutTime, busySentence, signInBusySentence, WORK_CANT_RUN } from '../lib/door-work';
 import { releaseRefusalMessage, sessionRefusalMessage } from '../lib/web-restore';
 import { leaveForLink, linkRefusalMessage, linkResultMessage } from '../lib/link-signin';
+import { WEB_REKEY_TEXT } from '../lib/web-rekey';
 
 /** The lib files key-lines.ts reads (its header names them). */
-const LIB_FILES = ['web-join.ts', 'identity.ts', 'door-work.ts', 'words-work.ts', 'web-restore.ts', 'link-signin.ts'];
+const LIB_FILES = ['web-join.ts', 'identity.ts', 'door-work.ts', 'words-work.ts', 'web-restore.ts', 'link-signin.ts', 'web-rekey.ts'];
 const PROVIDERS: JoinProvider[] = ['google', 'apple', 'facebook'];
 const NAMES = ['Google', 'Apple', 'Facebook', 'Alice', 'Maria José', 'Bob. Use your 12 words'];
 
@@ -85,7 +86,7 @@ function libSentences(): string[] {
         out.push(signInBusySentence(s));
     }
     for (const m of [60, 300, 5400, 7200, 3 * 3600]) out.push(tryAgainIn(m));
-    out.push(NO_STORAGE_SENTENCE, STORE_WOULD_NOT_OPEN_SENTENCE, WORK_CANT_RUN, WRONG_CLOCK, PRIVATE_PREVIEW_MESSAGE);
+    out.push(NO_STORAGE_SENTENCE, STORE_WOULD_NOT_OPEN_SENTENCE, WORK_CANT_RUN, WRONG_CLOCK, PRIVATE_PREVIEW_MESSAGE, ...Object.values(WEB_REKEY_TEXT));
     return [...new Set(out)];
 }
 

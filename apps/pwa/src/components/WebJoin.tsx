@@ -840,7 +840,9 @@ export function WebJoin({
         } catch (e) {
             // Said either way, with Try again beside it: never "Getting the sign-ins ready…" for good.
             if (!(e instanceof DoorUnreachableError)) console.error('[WebJoin] could not ask for a sign-in:', e);
-            if (mounted.current) setNonceProblem(e instanceof DoorUnreachableError ? () => t(JOIN_WORDS.unreachable) : () => t(JOIN_WORDS.wentWrong));
+            // Held as a function (React would run one passed bare as an updater), so it is said in the language of the moment.
+            const why: Said = e instanceof DoorUnreachableError ? () => t(JOIN_WORDS.unreachable) : () => t(JOIN_WORDS.wentWrong);
+            if (mounted.current) setNonceProblem(() => why);
         }
         return null;
     }, [finish]);

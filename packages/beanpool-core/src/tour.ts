@@ -27,7 +27,7 @@ export interface TourStep {
      * The top-bar step stays on Home; the last step is Home.
      */
     tab: string;
-    /** A `word()` key (TOUR_WORDS): an app shows it through t(), in the language of that moment. */
+    /** A word() key: shown through t() where it is drawn. */
     words: WordKey;
 }
 
@@ -46,7 +46,7 @@ export interface TourNodeFacts {
 
 /**
  * The words, by step. Map, Beans and Ledger reuse the Tips card's founder-approved sentences (home-tips.ts). Global's
- * own words where they differ. `word()` keys: shown through t() where the bar draws them (identity in English).
+ * own words where they differ. word() keys: each app shows them through t(), in the member's language.
  */
 export const TOUR_WORDS = {
     home: word('Home is a short list of cards: what needs you, what\'s on nearby, what to do next. You add cards at the end.'),
@@ -95,8 +95,8 @@ export function tourSteps(app: TourApp, node: TourNodeFacts): TourStep[] {
     return steps;
 }
 
-/** "Step 2 of 7", as the bar's caption says it (the apps upper-case it with the caption style). */
-export const tourStepCaption = (index: number, total: number): string => `Step ${index + 1} of ${total}`;
+/** "Step 2 of 7", as the bar's caption says it, in the member's language (an app puts it in capitals the language's way). */
+export const tourStepCaption = (index: number, total: number): string => t('Step {n} of {total}', { n: index + 1, total });
 
 /**
  * The step a tab the member tapped during the tour belongs to (the tour follows, never scolds), or -1 for a tab with no

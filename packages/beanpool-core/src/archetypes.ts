@@ -675,7 +675,7 @@ export function calculateSynergy(
             headline: word('Natural community partners'),
             summary: word('You both bring unique strengths that enrich community projects and marketplace deals.'),
             strengths: [word('Open communication'), word('Shared community values')],
-            collaborationTip: word("Enjoy collaborating and learning from each other's rhythm."),
+            collaborationTip: word('Enjoy collaborating and learning from each other\'s rhythm.'),
         };
     }
 
@@ -692,7 +692,7 @@ export function calculateSynergy(
                 word('Shared sense of what matters in the work'),
                 word('Shared appreciation for how tasks should be approached'),
             ],
-            collaborationTip: word("Because you think alike, you'll reach decisions quickly. Be sure to seek an outside perspective for blind spots!"),
+            collaborationTip: word('Because you think alike, you\'ll reach decisions quickly. Be sure to seek an outside perspective for blind spots!'),
         };
     }
 
@@ -707,7 +707,7 @@ export function calculateSynergy(
             title: word('Complementary Synergy'),
             emoji: '⚡',
             headline: word('Strengths that complement'),
-            summary: word("You two have high collaboration chemistry. Your strengths naturally cover each other's blind spots — where one brings the spark or vision, the other brings structure and execution."),
+            summary: word('You two have high collaboration chemistry. Your strengths naturally cover each other\'s blind spots — where one brings the spark or vision, the other brings structure and execution.'),
             strengths: [
                 word('Natural balance of ideation and follow-through'),
                 word('Highly effective pairing for community projects and deals'),

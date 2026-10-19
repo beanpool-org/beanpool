@@ -80,6 +80,16 @@ describe('the Pulse lower layers\' English, in the member\'s language where it i
         expect(inXx(() => pulseLineWords(UNSAFE_NODE_ADDRESS_MESSAGE))).toBe(pseudoLocalise(UNSAFE_NODE_ADDRESS_MESSAGE));
     });
 
+    it('that refusal wrapped by relayConnect on Connect: the lead-in and the refusal both translated, the phone\'s own error as it came', () => {
+        const wrapped = `Could not reach your community node: ${UNSAFE_NODE_ADDRESS_MESSAGE}`;
+        expect(pulseLineWords(wrapped)).toBe(wrapped);
+        const xx = inXx(() => pulseLineWords(wrapped));
+        expect(xx).toContain(pseudoLocalise(UNSAFE_NODE_ADDRESS_MESSAGE));
+        expect(xx).not.toContain(UNSAFE_NODE_ADDRESS_MESSAGE);
+        expect(outsideBrackets(xx)).toBe('');
+        expect(inXx(() => pulseLineWords('Could not reach your community node: Network request failed'))).toContain('Network request failed');
+    });
+
     it('the sentences built from a template: each template is in its source; English as built; translated around the values', () => {
         for (const { file, template, sample, values } of TEMPLATES) {
             expect(source(file), `${file} still writes ${template}`).toContain(template);

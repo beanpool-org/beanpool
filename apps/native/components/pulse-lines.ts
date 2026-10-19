@@ -67,8 +67,9 @@ const FILLED: ReadonlyArray<{ pattern: RegExp; words: (m: RegExpMatchArray) => s
         words: (m) => t('{platform} did not say which account you signed in to. Try again.', { platform: m[1] }),
     },
     { pattern: new RegExp(`^Could not connect ${PLATFORM}\\.$`), words: (m) => t('Could not connect {platform}.', { platform: m[1] }) },
-    // utils/pulse-oauth.ts relayConnect: the phone's own network error, as the phone gave it.
-    { pattern: /^Could not reach your community node: (.*)$/s, words: (m) => t('Could not reach your community node: {reason}', { reason: m[1] }) },
+    // utils/pulse-oauth.ts relayConnect: the phone's own network error, as the phone gave it; a sentence of this file's
+    // (node-url.ts's refusal, which signedPost throws there before sending) in the member's language.
+    { pattern: /^Could not reach your community node: (.*)$/s, words: (m) => t('Could not reach your community node: {reason}', { reason: pulseLineWords(m[1]) }) },
     // utils/pulse-oauth.ts: TikTok's own error code, as TikTok gave it.
     { pattern: /^TikTok returned error: (.*)$/s, words: (m) => t('TikTok returned error: {error}', { error: m[1] }) },
     // utils/pulse.ts: the node's status when it gave no words of its own.

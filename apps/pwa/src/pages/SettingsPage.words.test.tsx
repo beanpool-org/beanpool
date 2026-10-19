@@ -22,6 +22,7 @@ import { WEB_COPY_CLEARS_LINE } from '../lib/words-clipboard';
 import { KIT_WEB_LABEL } from '../lib/recovery-kit';
 import * as api from '../lib/api';
 import { readMyArea, useNearbyLimits } from '../lib/member-area';
+import { loadBlocklist, resetBlocklistForTests } from '../lib/blocklist';
 import { backToEnglish, bracketed, showIn, xx } from '../words-xx.test-support';
 import { AS_WRITTEN, LANGUAGE_LIST, LanguageRoot, bypassing, guideStrings } from '../words-w3.test-support';
 import ruWords from '../../words/ru.json';
@@ -71,6 +72,7 @@ beforeEach(() => {
     vi.spyOn(window, 'alert').mockImplementation((m?: unknown) => { said.push(String(m)); });
     vi.spyOn(window, 'confirm').mockImplementation((m?: string) => { said.push(String(m)); return false; });
     vi.mocked(useNearbyLimits).mockReturnValue(null);
+    vi.mocked(loadBlocklist).mockImplementation(async () => ['blocked-pk-0000000000000000']);
     vi.mocked(readMyArea).mockResolvedValue(null);
     vi.mocked(api.getMemberProfile).mockImplementation(async (pk: string) => (pk === 'blocked-pk-0000000000000000'
         ? { publicKey: pk, callsign: 'Blocked Bea', avatar: null, bio: '', contact: null } as any
@@ -199,6 +201,22 @@ describe('Settings in the pseudo-locale: every word on it came through t() (word
         fireEvent.keyDown(again, { key: 'Enter' });
         expect(await within(area).findByText(xx(AREA_TOWN_SEARCH_WORDS.unavailable))).toBeInTheDocument();
         expect(unwrapped()).toEqual([]);
+    });
+
+    it('Blocked Members when the community can\'t be reached: the list read\'s own sentence, in the member\'s language', async () => {
+        // The real read, against a node that can't be reached (blocked members come from the community, never the browser).
+        const actual = await vi.importActual<typeof import('../lib/blocklist')>('../lib/blocklist');
+        vi.mocked(loadBlocklist).mockImplementation(actual.loadBlocklist);
+        vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Failed to fetch'); }));
+        await showIn('xx');
+        try {
+            renderSettings();
+            await tap('Manage Blocked Members');
+            expect(await screen.findByText(xx('Couldn’t load your blocked members from your community. Check your connection and try again.'))).toBeInTheDocument();
+            expect(unwrapped()).toEqual([]);
+        } finally {
+            resetBlocklistForTests();
+        }
     });
 
     it('Account Deletion & Sign Out: the choices, the device sign-out and the purge, words only', async () => {

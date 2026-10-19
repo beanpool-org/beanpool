@@ -42,7 +42,7 @@
  * browser; a queue an older build left in localStorage (bp_pending_abuse_reports) is taken into memory and deleted. Once
  * the account is known, only its own reports are sent.
  */
-import { tn } from '@beanpool/core';
+import { t, tn, word } from '@beanpool/core';
 import { reportAbuse, getBlockList, addToBlockList, removeFromBlockList, clearBlockList, type BlockList } from './api';
 import { BLOCKLIST_DOORBELL_EVENT } from './blocklist-doorbell';
 
@@ -71,20 +71,24 @@ export class BlocklistError extends Error {
     }
 }
 
+/** word() keys: each is drawn through t() when the error is made, so in the language the member reads then. */
 const UNREACHABLE = {
-    read: 'Couldn’t load your blocked members from your community. Check your connection and try again.',
-    block: 'Couldn’t reach your community, so they are not blocked. Check your connection and try again.',
-    unblock: 'Couldn’t reach your community, so they are still blocked. Check your connection and try again.',
-    clear: 'Couldn’t reach your community, so nobody was unblocked. Check your connection and try again.',
+    read: word('Couldn’t load your blocked members from your community. Check your connection and try again.'),
+    block: word('Couldn’t reach your community, so they are not blocked. Check your connection and try again.'),
+    unblock: word('Couldn’t reach your community, so they are still blocked. Check your connection and try again.'),
+    clear: word('Couldn’t reach your community, so nobody was unblocked. Check your connection and try again.'),
 } as const;
 
-/** What the member is told: the node's own words when it answered and refused, else that it couldn't be reached. */
+/**
+ * What the member is told: the node's own words when it answered and refused (already in the member's language when the
+ * node has them), else that it couldn't be reached, in the member's language.
+ */
 function toBlocklistError(e: unknown, action: keyof typeof UNREACHABLE): BlocklistError {
     const status = (e as { status?: number } | null)?.status;
     const code = (e as { code?: string } | null)?.code;
     const said = e instanceof Error ? e.message : '';
     if (typeof status === 'number' && status >= 400 && status < 500 && said) return new BlocklistError(said, status, code);
-    return new BlocklistError(UNREACHABLE[action], status, code);
+    return new BlocklistError(t(UNREACHABLE[action]), status, code);
 }
 
 // ── the list, in this page's memory ─────────────────────────────────────────────────────────────

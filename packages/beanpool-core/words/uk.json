@@ -2,7 +2,7 @@
   "_meta": {
     "language": "uk",
     "name": "Ukrainian",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-19",
@@ -738,5 +738,16 @@
   "I thrive in spontaneous, novel settings": "Я розквітаю в несподіваних і нових обставинах",
   "I am patient with different paces and value keeping the community atmosphere harmonious.": "Я з терпінням ставлюся до різного темпу й ціную збереження гармонії в спільноті.",
   "I push for faster progress when needed": "За потреби я наполягаю на швидшому русі вперед",
-  "I push for higher standards when needed": "За потреби я вимагаю вищих стандартів якості"
+  "I push for higher standards when needed": "За потреби я вимагаю вищих стандартів якості",
+  "Type an amount.": "Введіть суму.",
+  "The amount can’t be below 0.": "Сума не може бути меншою за 0.",
+  "Type the amount without thousands separators, like {example}.": "Введіть суму без роздільників тисяч, наприклад {example}.",
+  "Type one decimal mark at most, like {example}.": "Введіть щонайбільше один десятковий знак, наприклад {example}.",
+  "Type at most {n} decimal, like {example}.|Type at most {n} decimals, like {example}.": {
+    "one": "Введіть щонайбільше {n} десятковий знак, наприклад {example}.",
+    "few": "Введіть щонайбільше {n} десяткові знаки, наприклад {example}.",
+    "many": "Введіть щонайбільше {n} десяткових знаків, наприклад {example}.",
+    "other": "Введіть щонайбільше {n} десяткового знака, наприклад {example}."
+  },
+  "Type the amount as a number, like {example}.": "Введіть суму числом, наприклад {example}."
 }

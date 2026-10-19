@@ -7,11 +7,12 @@
  * Every id keeps the fixture's `sample-` prefix, which the server refuses on any write (apps/server/src/sample-id-guard.ts).
  */
 import {
-    SAMPLE_COMMUNITY, TIER_LEVELS, sampleEnterpriseCards, sampleEnterpriseDetail, sampleEnterpriseLedger as coreSampleEnterpriseLedger, sampleRowNote, t,
+    SAMPLE_COMMUNITY, TIER_LEVELS, sampleEnterpriseCards, sampleEnterpriseDetail, sampleEnterpriseLedger as coreSampleEnterpriseLedger, sampleRowNote, t, tn,
 } from '@beanpool/core';
 import type { DecisionWithTally, EnterpriseLedgerResponse, MyPoolVoting, TreasurySummary } from '../../utils/db';
 
-const when = (daysAgo: number) => (daysAgo === 1 ? 'yesterday' : `${daysAgo} days ago`);
+/** When an example row was, in the member's language ("yesterday", "3 days ago"). */
+const when = (daysAgo: number) => (daysAgo === 1 ? t('yesterday') : tn(daysAgo, '{n} day ago', '{n} days ago'));
 
 /**
  * The Ledger's balance answer for "an example member": 85 Beans, a floor of −200, level 2 of 4 with 200 trust, spend-freeze
@@ -43,13 +44,13 @@ export function sampleBalance() {
 
 /** The Ledger's transaction rows, newest first: "a neighbour", what it was for (a hold: "Held in trust · …"), and when. */
 export function sampleTransactions() {
-    return SAMPLE_COMMUNITY.transactions.map(t => ({
-        id: t.id,
-        type: t.amount < 0 ? 'debit' : 'credit',
-        amount: Math.abs(t.amount),
-        peer: t.who,
-        memo: sampleRowNote(t),
-        timestamp: when(t.daysAgo),
+    return SAMPLE_COMMUNITY.transactions.map(row => ({
+        id: row.id,
+        type: row.amount < 0 ? 'debit' : 'credit',
+        amount: Math.abs(row.amount),
+        peer: t(row.who),
+        memo: sampleRowNote(row),
+        timestamp: when(row.daysAgo),
     }));
 }
 

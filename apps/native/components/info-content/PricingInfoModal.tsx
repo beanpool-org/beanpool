@@ -2,6 +2,8 @@ import React from 'react';
 import { View, Text, Image, StyleSheet, Pressable } from 'react-native';
 import { InfoModal, InfoModalTab } from '../InfoModal';
 import { useStyles, useTheme } from '../../app/ThemeContext';
+import { t } from '@beanpool/core';
+import { richWords } from './rich-words';
 
 interface Props {
     isOpen: boolean;
@@ -95,15 +97,15 @@ export function PricingInfoModal({ isOpen, onClose, initialTab, onOpenFullCatalo
     const tabs: InfoModalTab[] = [
         {
             id: 'guide',
-            label: '💡 Pricing Guide',
+            label: t('💡 Pricing Guide'),
             content: (
                 <View style={styles.tabContent}>
                     <Text style={styles.descriptionText}>
-                        BeanPool uses a mutual credit system. Since credits represent real value and time, we recommend following this general pricing guide for your offers and needs.
+                        {t('BeanPool uses a mutual credit system. Since credits represent real value and time, we recommend following this general pricing guide for your offers and needs.')}
                     </Text>
 
                     <View style={styles.processContainer}>
-                        <Text style={styles.processLabel}>SUGGESTED PRICING BRACKETS</Text>
+                        <Text style={styles.processLabel}>{t('SUGGESTED PRICING BRACKETS')}</Text>
 
                         <View style={styles.priceRow}>
                             <View style={styles.priceCol}>
@@ -111,7 +113,7 @@ export function PricingInfoModal({ isOpen, onClose, initialTab, onOpenFullCatalo
                                 <Image source={require('../../assets/images/bean.png')} style={styles.beanIcon} />
                             </View>
                             <View style={styles.descCol}>
-                                <Text style={styles.descText}>Gifts, freebies, and community contributions.</Text>
+                                <Text style={styles.descText}>{t('Gifts, freebies, and community contributions.')}</Text>
                             </View>
                         </View>
 
@@ -121,7 +123,7 @@ export function PricingInfoModal({ isOpen, onClose, initialTab, onOpenFullCatalo
                                 <Image source={require('../../assets/images/bean.png')} style={styles.beanIcon} />
                             </View>
                             <View style={styles.descCol}>
-                                <Text style={styles.descText}>Small favours, home produce, quick tasks, or simple tools.</Text>
+                                <Text style={styles.descText}>{t('Small favours, home produce, quick tasks, or simple tools.')}</Text>
                             </View>
                         </View>
 
@@ -131,7 +133,7 @@ export function PricingInfoModal({ isOpen, onClose, initialTab, onOpenFullCatalo
                                 <Image source={require('../../assets/images/bean.png')} style={styles.beanIcon} />
                             </View>
                             <View style={styles.descCol}>
-                                <Text style={styles.descText}>Skilled labour (per hour), substantial goods, or tech repairs.</Text>
+                                <Text style={styles.descText}>{t('Skilled labour (per hour), substantial goods, or tech repairs.')}</Text>
                             </View>
                         </View>
 
@@ -141,7 +143,7 @@ export function PricingInfoModal({ isOpen, onClose, initialTab, onOpenFullCatalo
                                 <Image source={require('../../assets/images/bean.png')} style={styles.beanIcon} />
                             </View>
                             <View style={styles.descCol}>
-                                <Text style={styles.descText}>Professional services, large items, or event catering.</Text>
+                                <Text style={styles.descText}>{t('Professional services, large items, or event catering.')}</Text>
                             </View>
                         </View>
 
@@ -151,7 +153,7 @@ export function PricingInfoModal({ isOpen, onClose, initialTab, onOpenFullCatalo
                                 <Image source={require('../../assets/images/bean.png')} style={styles.beanIcon} />
                             </View>
                             <View style={styles.descCol}>
-                                <Text style={styles.descText}>Major projects, housing rentals, vehicles, or commercial contracts.</Text>
+                                <Text style={styles.descText}>{t('Major projects, housing rentals, vehicles, or commercial contracts.')}</Text>
                             </View>
                         </View>
                     </View>
@@ -173,18 +175,18 @@ export function PricingInfoModal({ isOpen, onClose, initialTab, onOpenFullCatalo
                             if (onOpenFullCatalog) onOpenFullCatalog();
                         }}
                         accessibilityRole="button"
-                        accessibilityLabel="Browse 500+ community price estimates"
+                        accessibilityLabel={t('Browse 500+ community price estimates')}
                     >
                         <Text style={{ fontSize: 16 }}>🔍</Text>
-                        <Text style={{ color: '#ffffff', fontWeight: '700', fontSize: 14 }}>
-                            Browse 500+ Community Estimates →
+                        <Text style={{ color: '#ffffff', fontWeight: '700', fontSize: 14, flexShrink: 1, textAlign: 'center' }}>
+                            {t('Browse 500+ Community Estimates →')}
                         </Text>
                     </Pressable>
 
                     <View style={styles.infoBox}>
                         <Text style={styles.infoBoxIcon}>🤝</Text>
                         <Text style={styles.infoBoxText}>
-                            These are just guidelines. You are free to negotiate prices with other members based on your own needs and the value of your time!
+                            {t('These are just guidelines. You are free to negotiate prices with other members based on your own needs and the value of your time!')}
                         </Text>
                     </View>
                 </View>
@@ -192,36 +194,36 @@ export function PricingInfoModal({ isOpen, onClose, initialTab, onOpenFullCatalo
         },
         {
             id: 'tax',
-            label: '🔒 Transaction Fee',
+            label: t('🔒 Transaction Fee'),
             content: (
                 <View style={styles.tabContent}>
                     <Text style={styles.descriptionText}>
-                        To protect the integrity of the community ledger, BeanPool applies a flat <Text style={styles.boldWhiteText}>1.5% Transaction Fee</Text> on completed marketplace trades. Direct member-to-member transfers are free.
+                        {richWords(t('To protect the integrity of the community ledger, BeanPool applies a flat **1.5% Transaction Fee** on completed marketplace trades. Direct member-to-member transfers are free.'), styles.boldWhiteText)}
                         {"\n\n"}
-                        <Text style={{ fontWeight: 'bold', color: colors.brand.primary }}>🌱 100% Community-Owned:</Text> This fee is never taken for private profit. All collected credits remain fully inside the Commons Pool to support local project grants and guarantee system solvency.
+                        {richWords(t('**🌱 100% Community-Owned:** This fee is never taken for private profit. All collected credits remain fully inside the Commons Pool to support local project grants and guarantee system solvency.'), { fontWeight: 'bold', color: colors.brand.primary })}
                     </Text>
 
                     <View style={styles.processContainer}>
-                        <Text style={styles.processLabel}>WHY DO WE COLLECT FEES?</Text>
-                        
+                        <Text style={styles.processLabel}>{t('WHY DO WE COLLECT FEES?')}</Text>
+
                         <View style={{ marginBottom: 12 }}>
-                            <Text style={{ color: colors.text.heading, fontWeight: 'bold', fontSize: 14, marginBottom: 4 }}>Solvency & Balance</Text>
+                            <Text style={{ color: colors.text.heading, fontWeight: 'bold', fontSize: 14, marginBottom: 4 }}>{t('Solvency & Balance')}</Text>
                             <Text style={{ color: colors.text.body, fontSize: 13, lineHeight: 18 }}>
-                                As a zero-sum mutual credit network, deleting inactive accounts requires balancing the ledger. These fees fund the Commons Pool to cover write-offs of unpaid debts.
+                                {t('As a zero-sum mutual credit network, deleting inactive accounts requires balancing the ledger. These fees fund the Commons Pool to cover write-offs of unpaid debts.')}
                             </Text>
                         </View>
 
                         <View style={{ marginBottom: 12 }}>
-                            <Text style={{ color: colors.text.heading, fontWeight: 'bold', fontSize: 14, marginBottom: 4 }}>Circulation Fee Gap</Text>
+                            <Text style={{ color: colors.text.heading, fontWeight: 'bold', fontSize: 14, marginBottom: 4 }}>{t('Circulation Fee Gap')}</Text>
                             <Text style={{ color: colors.text.body, fontSize: 13, lineHeight: 18 }}>
-                                In active economies, members spend earned credits quickly (staying in the fee-free green zone under 200B). Holding fees alone are insufficient to cover defaults.
+                                {t('In active economies, members spend earned credits quickly (staying in the fee-free green zone under 200B). Holding fees alone are insufficient to cover defaults.')}
                             </Text>
                         </View>
 
                         <View>
-                            <Text style={{ color: colors.text.heading, fontWeight: 'bold', fontSize: 14, marginBottom: 4 }}>Community Projects</Text>
+                            <Text style={{ color: colors.text.heading, fontWeight: 'bold', fontSize: 14, marginBottom: 4 }}>{t('Community Projects')}</Text>
                             <Text style={{ color: colors.text.body, fontSize: 13, lineHeight: 18 }}>
-                                Any surplus in the Commons Pool beyond maintaining solvency is recycled back into community enterprises and projects through community Decisions.
+                                {t('Any surplus in the Commons Pool beyond maintaining solvency is recycled back into community enterprises and projects through community Decisions.')}
                             </Text>
                         </View>
                     </View>
@@ -229,7 +231,7 @@ export function PricingInfoModal({ isOpen, onClose, initialTab, onOpenFullCatalo
                     <View style={styles.infoBox}>
                         <Text style={styles.infoBoxIcon}>🛡️</Text>
                         <Text style={styles.infoBoxText}>
-                            The <Text style={styles.boldWhiteText}>1.5% fee</Text> is only applied when credits are successfully released to the recipient. Trust wallet deposits and cancellations (refunds) are completely fee-exempt.
+                            {richWords(t('The **1.5% fee** is only applied when credits are successfully released to the recipient. Trust wallet deposits and cancellations (refunds) are completely fee-exempt.'), styles.boldWhiteText)}
                         </Text>
                     </View>
                 </View>
@@ -241,7 +243,7 @@ export function PricingInfoModal({ isOpen, onClose, initialTab, onOpenFullCatalo
         <InfoModal
             isOpen={isOpen}
             onClose={onClose}
-            title="Pricing & Fees"
+            title={t('Pricing & Fees')}
             icon={<Text style={{ fontSize: 24 }}>💡</Text>}
             tabs={tabs}
             defaultTab={initialTab}

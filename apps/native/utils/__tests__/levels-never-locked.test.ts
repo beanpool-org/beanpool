@@ -36,7 +36,7 @@ describe('the levels list on the phone', () => {
     });
 
     it('calls a level not reached yet the next level or one up ahead', () => {
-        expect(levelsCode).toContain("selLevel === tierIdx + 1 ? 'Next level' : 'Up ahead'");
+        expect(levelsCode).toContain("selLevel === tierIdx + 1 ? t('Next level') : t('Up ahead')");
     });
 
     it('fades nothing, and greys no level name, state or perk for not being reached', () => {

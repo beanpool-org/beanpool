@@ -27,7 +27,7 @@ import { MARKETPLACE_CATEGORIES } from '../lib/marketplace';
 import { pledgeClosedLine } from '../lib/enterprise-pledge';
 import {
     formatDate, formatNumber, groupKindLine, isSampleId, isWholeCents, keeperWords, t, tn, word, amountRefusalWords, ANY_DECIMALS,
-    isAmbiguousAmount, parseAmount, type WordKey,
+    isAmbiguousAmount, parseAmount, upperCase, type WordKey,
 } from '@beanpool/core';
 import { ReportModal } from '../components/ReportModal';
 import { EnterpriseDecisions } from '../components/EnterpriseDecisions';
@@ -2510,7 +2510,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                     />
                                                 ) : (
                                                     <div className="w-8 h-8 rounded-full bg-nature-200 dark:bg-nature-700 flex items-center justify-center font-bold text-nature-700 dark:text-nature-200 shrink-0">
-                                                        {authorName.charAt(0).toUpperCase()}
+                                                        {upperCase(authorName.charAt(0))}
                                                     </div>
                                                 )}
                                                 <div className="min-w-0 flex-1">

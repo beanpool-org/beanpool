@@ -3,6 +3,10 @@
  *
  * NOTE: Friend / keeper recovery has been removed. This panel now hosts SSO enrolment only
  * (Sign-In Recovery Providers: Apple, Google, Facebook).
+ *
+ * Shown on welcome's Safety Backup and in Settings, in the member's language: its own sentences are word() keys or t(),
+ * no-words-copy.ts's (on the 12 words' key path, so in English there) through components/welcome/welcome-lines.ts.
+ * Each sentence is its own Text inside the line, so one translation never runs into the next.
  */
 import React from 'react';
 import { StyleSheet, Text, View, Platform, TouchableOpacity } from 'react-native';
@@ -12,7 +16,8 @@ import { GoogleButton, AppleButton, FacebookButton } from './SsoButton';
 import { SSO_PROVIDER_NAMES as PROVIDER_NAMES, type SsoProvider } from '../utils/sso-providers';
 import { NO_WORDS_WAY_BACK, SSO_WORDS_NOTE } from '../utils/no-words-copy';
 import { hasVault } from '../utils/vault-config';
-import { t, tn } from '@beanpool/core';
+import { t, tn, word } from '@beanpool/core';
+import { welcomeLineWords } from './welcome/welcome-lines';
 
 /**
  * Under a connected sign-in, in a build without a key vault (utils/vault.ts `signInCopiesAt`): who can open the copy
@@ -23,8 +28,8 @@ import { t, tn } from '@beanpool/core';
  * your 12 words" would talk a member out of their only way back.
  */
 export const SIGN_IN_COPY_OPENERS =
-    "The people who run your community's server can open the copy of your account kept for your sign-in, because their server checks your sign-in. A stolen copy of the server's database can't, once the server has been updated for it.";
-export const SIGN_IN_COPY_WORDS_ONLY = 'If you would rather nobody but you could get in, use only your 12 words.';
+    word("The people who run your community's server can open the copy of your account kept for your sign-in, because their server checks your sign-in. A stolen copy of the server's database can't, once the server has been updated for it.");
+export const SIGN_IN_COPY_WORDS_ONLY = word('If you would rather nobody but you could get in, use only your 12 words.');
 
 /**
  * The same, in a build with BeanPool's key vault (key vault design D6, Marty 2026-09-28: the honest words; D1: one
@@ -34,7 +39,7 @@ export const SIGN_IN_COPY_WORDS_ONLY = 'If you would rather nobody but you could
  * holding the sign-in account could get in, unless a phone of the member's stops the day's wait (the covered footnote). The guide says the same at length once the vault is live: the parked pages in issue #1349.
  */
 export const VAULT_COPY_OPENERS =
-    "BeanPool's key vault, a small server in Iceland, keeps the copy of your account that your sign-in opens. BeanPool can open these copies: for now one person, BeanPool's founder, looks after the vault, and it is moving to three people in different countries, two of whom must act together. The company that hosts it can read its memory while it runs. A court could order a copy opened, and anyone who takes over your sign-in account could get in.";
+    word("BeanPool's key vault, a small server in Iceland, keeps the copy of your account that your sign-in opens. BeanPool can open these copies: for now one person, BeanPool's founder, looks after the vault, and it is moving to three people in different countries, two of whom must act together. The company that hosts it can read its memory while it runs. A court could order a copy opened, and anyone who takes over your sign-in account could get in.");
 
 /**
  * Above the sign-in buttons, in a build without a key vault: the community's server keeps the whole copy (single blob), so
@@ -43,11 +48,20 @@ export const VAULT_COPY_OPENERS =
  * themselves (SIGN_IN_COPY_OPENERS; review FABLE-sec-sso finding 1, honest wording 2026-10-01).
  */
 export const COMMUNITY_SSO_GROUP_NOTE =
-    "Connect more than one, in case you lose one. Any one of them brings your account back on a new phone, through your community's server, which keeps the copy.";
+    word("Connect more than one, in case you lose one. Any one of them brings your account back on a new phone, through your community's server, which keeps the copy.");
 
 /** Above the sign-in buttons, in a build with a key vault: what a linked sign-in does now that the vault keeps the copy. */
 export const SSO_GROUP_NOTE =
-    'Connect more than one, in case you lose one. Any one of them brings your account back on a new phone, in every community.';
+    word('Connect more than one, in case you lose one. Any one of them brings your account back on a new phone, in every community.');
+
+/** The sentences above, for t() where they are shown. */
+const PANEL_WORDS = {
+    signInCopyOpeners: SIGN_IN_COPY_OPENERS,
+    signInCopyWordsOnly: SIGN_IN_COPY_WORDS_ONLY,
+    vaultCopyOpeners: VAULT_COPY_OPENERS,
+    communityGroupNote: COMMUNITY_SSO_GROUP_NOTE,
+    groupNote: SSO_GROUP_NOTE,
+} as const;
 
 
 export function formatCommunityName(raw?: string | null): string | null {
@@ -102,21 +116,30 @@ export function KeeperProtectionPanel({
     // community, so there the heading names none; without a vault each community keeps its own, so it names this one.
     const atVault = hasVault();
     const community = atVault ? null : formatCommunityName(communityName);
-    const coveredHeading = community ? `🛡️ You're covered on ${community}` : "🛡️ You're covered";
-    const copyOpeners = atVault ? VAULT_COPY_OPENERS : SIGN_IN_COPY_OPENERS;
+    const coveredHeading = community ? t("🛡️ You're covered on {community}", { community }) : t("🛡️ You're covered");
+    const copyOpeners = atVault ? t(PANEL_WORDS.vaultCopyOpeners) : t(PANEL_WORDS.signInCopyOpeners);
 
     const renderSsoProviders = () => {
         if (Platform.OS === 'web' || !onProtectSso) return null;
 
         return (
             <View style={styles.ssoGroup}>
-                <Text style={styles.ssoGroupTitle}>Sign-In Recovery Providers (1-of-N)</Text>
+                <Text style={styles.ssoGroupTitle}>{t('Sign-In Recovery Providers (1-of-N)')}</Text>
                 <Text style={styles.ssoGroupSubtitle}>
-                    {atVault
-                        ? (hasWords ? `${SSO_GROUP_NOTE} ${SSO_WORDS_NOTE} Keep the words written down as well.` : SSO_GROUP_NOTE)
-                        : hasWords
-                            ? `${COMMUNITY_SSO_GROUP_NOTE} ${SSO_WORDS_NOTE} It only works while your community's server is running, so keep the words written down.`
-                            : `${COMMUNITY_SSO_GROUP_NOTE} It only works while your community's server is running.`}
+                    <Text>{atVault ? t(PANEL_WORDS.groupNote) : t(PANEL_WORDS.communityGroupNote)}</Text>
+                    {hasWords && <>{' '}<Text>{welcomeLineWords(SSO_WORDS_NOTE)}</Text></>}
+                    {(hasWords || !atVault) && (
+                        <>
+                            {' '}
+                            <Text>
+                                {atVault
+                                    ? t('Keep the words written down as well.')
+                                    : hasWords
+                                        ? t("It only works while your community's server is running, so keep the words written down.")
+                                        : t("It only works while your community's server is running.")}
+                            </Text>
+                        </>
+                    )}
                 </Text>
 
                 {allProviders.map((prov) => {
@@ -134,14 +157,14 @@ export function KeeperProtectionPanel({
                                 <View
                                     style={styles.providerInfo}
                                     accessible={true}
-                                    accessibilityLabel={`${PROVIDER_NAMES[prov]} connected as a recovery provider`}
+                                    accessibilityLabel={t('{provider} connected as a recovery provider', { provider: PROVIDER_NAMES[prov] })}
                                 >
                                     <Text
                                         style={styles.tick}
                                         accessibilityElementsHidden={true}
                                         importantForAccessibility="no"
                                     >✅</Text>
-                                    <Text style={styles.providerName}>{PROVIDER_NAMES[prov]} Connected</Text>
+                                    <Text style={styles.providerName}>{t('{provider} Connected', { provider: PROVIDER_NAMES[prov] })}</Text>
                                 </View>
                                 {/* Connecting again replaces this sign-in's copy (at the vault, or without one at the
                                     community) with a fresh one, which carries the 12 words: the way to add them to a
@@ -152,9 +175,9 @@ export function KeeperProtectionPanel({
                                             style={styles.reconnectBtn}
                                             onPress={() => onProtectSso(prov)}
                                             accessibilityRole="button"
-                                            accessibilityLabel={`Connect ${PROVIDER_NAMES[prov]} again, to include your 12 words`}
+                                            accessibilityLabel={t('Connect {provider} again, to include your 12 words', { provider: PROVIDER_NAMES[prov] })}
                                         >
-                                            <Text style={styles.reconnectText}>Connect again</Text>
+                                            <Text style={styles.reconnectText}>{t('Connect again')}</Text>
                                         </TouchableOpacity>
                                     )}
                                     {onDisconnectSso && (
@@ -162,9 +185,9 @@ export function KeeperProtectionPanel({
                                             style={styles.disconnectBtn}
                                             onPress={() => onDisconnectSso(prov)}
                                             accessibilityRole="button"
-                                            accessibilityLabel={`Disconnect ${PROVIDER_NAMES[prov]}`}
+                                            accessibilityLabel={t('Disconnect {provider}', { provider: PROVIDER_NAMES[prov] })}
                                         >
-                                            <Text style={styles.disconnectText}>Disconnect</Text>
+                                            <Text style={styles.disconnectText}>{t('Disconnect')}</Text>
                                         </TouchableOpacity>
                                     )}
                                 </View>
@@ -176,7 +199,7 @@ export function KeeperProtectionPanel({
                         return (
                             <AppleButton
                                 key="apple"
-                                title="Protect with Apple"
+                                title={t('Protect with Apple')}
                                 onPress={() => onProtectSso('apple')}
                                 style={{ marginTop: 8 }}
                             />
@@ -186,7 +209,7 @@ export function KeeperProtectionPanel({
                         return (
                             <GoogleButton
                                 key="google"
-                                title="Protect with Google"
+                                title={t('Protect with Google')}
                                 onPress={() => onProtectSso('google')}
                                 style={{ marginTop: 8 }}
                             />
@@ -195,7 +218,7 @@ export function KeeperProtectionPanel({
                     return (
                         <FacebookButton
                             key="facebook"
-                            title="Protect with Facebook"
+                            title={t('Protect with Facebook')}
                             onPress={() => onProtectSso('facebook')}
                             style={{ marginTop: 8 }}
                         />
@@ -205,10 +228,11 @@ export function KeeperProtectionPanel({
                     row on Android, and its copy is on the server all the same. */}
                 {enrolledSso.length > 0 && (
                     <Text style={styles.copyOpeners}>
-                        {hasWords ? `${copyOpeners} ${SIGN_IN_COPY_WORDS_ONLY}` : copyOpeners}
+                        <Text>{copyOpeners}</Text>
+                        {hasWords && <>{' '}<Text>{t(PANEL_WORDS.signInCopyWordsOnly)}</Text></>}
                     </Text>
                 )}
-                <Text style={styles.actionNote}>This is not a login — your account stays your own key.</Text>
+                <Text style={styles.actionNote}>{t('This is not a login — your account stays your own key.')}</Text>
             </View>
         );
     };
@@ -218,7 +242,7 @@ export function KeeperProtectionPanel({
             <View style={[styles.panel, styles.covered]}>
                 <Text style={styles.heading} accessibilityRole="header">{coveredHeading}</Text>
                 {protection.holding.map((label, i) => (
-                    <View key={`${label}-${i}`} style={styles.row} accessible accessibilityLabel={`${label}: holding a piece`}>
+                    <View key={`${label}-${i}`} style={styles.row} accessible accessibilityLabel={t('{label}: holding a piece', { label })}>
                         <Text style={styles.tick}>✅</Text>
                         <Text style={styles.rowLabel}>{label}</Text>
                     </View>
@@ -234,8 +258,10 @@ export function KeeperProtectionPanel({
                                 "Protected by {n} sign-in accounts, in every community. Any one of them brings your account back on a new phone: it takes a day, or less if another phone of yours says it's you, and your other phones are told so they can stop it.")
                             : t("Protected by your sign-in account, in every community. It brings your account back on a new phone: it takes a day, or less if another phone of yours says it's you, and your other phones are told so they can stop it."))
                         : enrolledSso.length > 1
-                            ? `Protected by ${enrolledSso.length} sign-in accounts. Any one of them brings your account back, through your community's server, which keeps the copy.`
-                            : "Protected by your sign-in account. It brings your account back, through your community's server, which keeps the copy."}
+                            ? tn(enrolledSso.length,
+                                "Protected by {n} sign-in account. Any one of them brings your account back, through your community's server, which keeps the copy.",
+                                "Protected by {n} sign-in accounts. Any one of them brings your account back, through your community's server, which keeps the copy.")
+                            : t("Protected by your sign-in account. It brings your account back, through your community's server, which keeps the copy.")}
                 </Text>
 
                 {renderSsoProviders()}
@@ -248,15 +274,15 @@ export function KeeperProtectionPanel({
         <View style={[styles.panel, styles.wordsOnly]}>
             {hasWords ? (
                 <>
-                    <Text style={styles.heading} accessibilityRole="header">🔑 Your 12 words are your primary recovery</Text>
+                    <Text style={styles.heading} accessibilityRole="header">{t('🔑 Your 12 words are your primary recovery')}</Text>
                     <Text style={styles.body}>
-                        Your 12 words are your primary key to your account. Write them down safely. Without them or a connected sign-in provider, restoring your account requires operator-assisted re-enrolment by your node administrator.
+                        {t('Your 12 words are your primary key to your account. Write them down safely. Without them or a connected sign-in provider, restoring your account requires operator-assisted re-enrolment by your node administrator.')}
                     </Text>
                 </>
             ) : (
                 <>
-                    <Text style={styles.heading} accessibilityRole="header">🔑 Connect a sign-in</Text>
-                    <Text style={styles.body}>{NO_WORDS_WAY_BACK}</Text>
+                    <Text style={styles.heading} accessibilityRole="header">{t('🔑 Connect a sign-in')}</Text>
+                    <Text style={styles.body}>{welcomeLineWords(NO_WORDS_WAY_BACK)}</Text>
                 </>
             )}
 

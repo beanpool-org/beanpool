@@ -302,7 +302,8 @@ describe('components/SsoEnrolSheet.tsx: Protect with / Connect again / Try again
         const s = sheet();
         expect(s).toContain("import { authenticateUser } from '../utils/LocalAuth';");
         expect(s).toMatch(/askPhoneLock = true,/);
-        expect(s).toContain(`phoneLock: askPhoneLock ? () => authenticateUser('${REASON}') : null,`);
+        // The prompt in the member's language (words S3j): the same sentence, through t().
+        expect(s).toContain(`phoneLock: askPhoneLock ? () => authenticateUser(t('${REASON}')) : null,`);
     });
 
     it('a check that did not pass closes the sheet, as a cancelled sign-in does', () => {

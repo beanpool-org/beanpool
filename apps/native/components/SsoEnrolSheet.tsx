@@ -8,7 +8,7 @@ import { t } from '@beanpool/core';
 import { SsoSignInError, returnToApp } from '../utils/sso-signin';
 import { SSO_PROVIDER_NAMES, type SsoProvider } from '../utils/sso-providers';
 import type { KeeperEnrolmentResult } from '../utils/keeper-enrolment';
-import { signInReplacedNote } from '../utils/no-words-copy';
+import { signInReplacedWords, welcomeLineWords } from './welcome/welcome-lines';
 import { connectAndDeposit } from '../utils/sso-sheet-connect';
 import { authenticateUser } from '../utils/LocalAuth';
 import { signInOnOpen } from '../utils/sso-sheet-opening';
@@ -70,7 +70,7 @@ export function SsoEnrolSheet({
 
     const handleConnect = async () => {
         if (!identity) {
-            setErrorMessage(`You must be signed in to connect ${PROVIDER_NAME}.`);
+            setErrorMessage(t('You must be signed in to connect {provider}.', { provider: PROVIDER_NAME }));
             setStep('error');
             return;
         }
@@ -84,7 +84,7 @@ export function SsoEnrolSheet({
             // community this phone is set to, as before the vault (utils/sso-sheet-connect.ts).
             const url = atVault ? null : await anchorUrl();
             if (!atVault && !url) {
-                setErrorMessage('No node configured yet.');
+                setErrorMessage(t('No node configured yet.'));
                 setStep('error');
                 return;
             }
@@ -92,7 +92,7 @@ export function SsoEnrolSheet({
                 provider,
                 url,
                 identity,
-                phoneLock: askPhoneLock ? () => authenticateUser('Confirm authentication to link a sign-in to your account.') : null,
+                phoneLock: askPhoneLock ? () => authenticateUser(t('Confirm authentication to link a sign-in to your account.')) : null,
                 // The provider is done: Cancel comes down, and the deposit goes ahead.
                 onSignedIn: async () => {
                     setStep('saving');
@@ -103,7 +103,9 @@ export function SsoEnrolSheet({
             });
 
             if (result.error) {
-                setErrorMessage(result.error);
+                // The lower layers' sentences in the member's language (components/welcome/welcome-lines.ts); a node's
+                // or the key vault's own words as they came.
+                setErrorMessage(welcomeLineWords(result.error));
                 setStep('error');
             } else {
                 setEnrolResult(result);
@@ -124,16 +126,16 @@ export function SsoEnrolSheet({
                     return;
                 }
                 if (e.reason === 'unsupported') {
-                    setErrorMessage(`This device can't sign in with ${PROVIDER_NAME}. (${e.message})`);
+                    setErrorMessage(t("This device can't sign in with {provider}. ({reason})", { provider: PROVIDER_NAME, reason: welcomeLineWords(e.message) }));
                 } else if (e.reason === 'no-token' || e.reason === 'provider') {
-                    setErrorMessage(`${PROVIDER_NAME} sign-in failed: ${e.message}`);
+                    setErrorMessage(t('{provider} sign-in failed: {reason}', { provider: PROVIDER_NAME, reason: welcomeLineWords(e.message) }));
                 } else if (e.reason === 'nonce') {
-                    setErrorMessage(`Sign-in setup failed: ${e.message}`);
+                    setErrorMessage(t('Sign-in setup failed: {reason}', { reason: welcomeLineWords(e.message) }));
                 } else {
-                    setErrorMessage(e.message);
+                    setErrorMessage(welcomeLineWords(e.message));
                 }
             } else {
-                setErrorMessage((e as Error).message || 'An unknown error occurred.');
+                setErrorMessage((e as Error).message ? welcomeLineWords((e as Error).message) : t('An unknown error occurred.'));
             }
             setStep('error');
         }
@@ -177,14 +179,14 @@ export function SsoEnrolSheet({
                     {step === 'processing' && (
                         <View style={styles.centerContent} accessibilityLiveRegion="polite">
                             <ActivityIndicator size="large" color={colors.brand.primary} />
-                            <Text style={styles.processingText}>Connecting with {PROVIDER_NAME}...</Text>
+                            <Text style={styles.processingText}>{t('Connecting with {provider}...', { provider: PROVIDER_NAME })}</Text>
                             <TouchableOpacity
                                 style={[styles.secondaryButton, { marginTop: 24, alignSelf: 'stretch' }]}
                                 onPress={closeAndStop}
                                 accessibilityRole="button"
-                                accessibilityLabel="Cancel connection"
+                                accessibilityLabel={t('Cancel connection')}
                             >
-                                <Text style={styles.secondaryButtonText}>Cancel</Text>
+                                <Text style={styles.secondaryButtonText}>{t('Cancel')}</Text>
                             </TouchableOpacity>
                         </View>
                     )}
@@ -195,7 +197,7 @@ export function SsoEnrolSheet({
                     {step === 'saving' && (
                         <View style={styles.centerContent} accessibilityLiveRegion="polite">
                             <ActivityIndicator size="large" color={colors.brand.primary} />
-                            <Text style={styles.processingText}>Linking your {PROVIDER_NAME} sign-in...</Text>
+                            <Text style={styles.processingText}>{t('Linking your {provider} sign-in...', { provider: PROVIDER_NAME })}</Text>
                         </View>
                     )}
 
@@ -204,43 +206,43 @@ export function SsoEnrolSheet({
                             <View style={styles.successIconWrapper}>
                                 <Text style={styles.successIcon}>✅</Text>
                             </View>
-                            <Text style={styles.title} accessibilityRole="header">You're covered</Text>
+                            <Text style={styles.title} accessibilityRole="header">{t("You're covered")}</Text>
                             <Text style={styles.body}>
                                 {atVault
                                     // Another phone, never a computer: only the phone app can answer a restore (the web app has no vault client).
                                     ? t("Your {name} sign-in is now linked, in every community. If you lose this phone, sign in with {name} to get back in: it takes a day, or less if another phone of yours says it's you.", { name: PROVIDER_NAME })
-                                    : `Your ${PROVIDER_NAME} sign-in is now linked. If you lose this phone, sign in with ${PROVIDER_NAME} to get back in.`}
+                                    : t('Your {name} sign-in is now linked. If you lose this phone, sign in with {name} to get back in.', { name: PROVIDER_NAME })}
                             </Text>
                             {enrolResult?.replaced && (
-                                <Text style={styles.body}>{signInReplacedNote(PROVIDER_NAME)}</Text>
+                                <Text style={styles.body}>{signInReplacedWords(PROVIDER_NAME)}</Text>
                             )}
                             <TouchableOpacity
                                 style={styles.primaryButton}
                                 onPress={handleDone}
                                 accessibilityRole="button"
                             >
-                                <Text style={styles.primaryButtonText}>Done</Text>
+                                <Text style={styles.primaryButtonText}>{t('Done')}</Text>
                             </TouchableOpacity>
                         </View>
                     )}
 
                     {step === 'error' && (
                         <View style={styles.content} accessibilityLiveRegion="assertive">
-                            <Text style={styles.title} accessibilityRole="header">{atVault ? 'Not linked' : 'Something went wrong'}</Text>
+                            <Text style={styles.title} accessibilityRole="header">{atVault ? t('Not linked') : t('Something went wrong')}</Text>
                             <Text style={styles.body} accessibilityRole="alert">{errorMessage}</Text>
                             <TouchableOpacity
                                 style={styles.primaryButton}
                                 onPress={handleConnect}
                                 accessibilityRole="button"
                             >
-                                <Text style={styles.primaryButtonText}>Try again</Text>
+                                <Text style={styles.primaryButtonText}>{t('Try again')}</Text>
                             </TouchableOpacity>
                             <TouchableOpacity
                                 style={styles.secondaryButton}
                                 onPress={onClose}
                                 accessibilityRole="button"
                             >
-                                <Text style={styles.secondaryButtonText}>Cancel</Text>
+                                <Text style={styles.secondaryButtonText}>{t('Cancel')}</Text>
                             </TouchableOpacity>
                         </View>
                     )}

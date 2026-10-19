@@ -20,7 +20,8 @@ import {
     type DecisionEffect,
     createDecision,
 } from '../utils/db';
-import { keeperWords } from '@beanpool/core';
+import { inCapitalsOf, keeperWords, t, tn, word, type WordKey } from '@beanpool/core';
+import { Sentence } from './Sentence';
 
 interface Props {
     isOpen: boolean;
@@ -32,29 +33,53 @@ interface Props {
     treasuries?: Array<{ publicKey: string; name: string; balance?: number; lifecycle?: string | null }>;
 }
 
-const TOUCH_OPTIONS: Array<{ id: DecisionTouch; label: string; icon: string }> = [
-    { id: 'member', label: 'Member', icon: 'account-cog' },
-    { id: 'pool', label: 'Commons Pool', icon: 'bank' },
+/** What a Decision can touch and do: word() keys, shown through t(). */
+const TOUCH_OPTIONS: Array<{ id: DecisionTouch; label: WordKey; icon: string }> = [
+    { id: 'member', label: word('Member', 'what a Decision touches'), icon: 'account-cog' },
+    { id: 'pool', label: word('Commons Pool'), icon: 'bank' },
 ];
 
-const EFFECTS_BY_TOUCH: Record<DecisionTouch, Array<{ id: DecisionEffect; label: string; desc: string }>> = {
+const EFFECTS_BY_TOUCH: Record<DecisionTouch, Array<{ id: DecisionEffect; label: WordKey; desc: WordKey }>> = {
     member: [
-        { id: 'remove_member', label: 'Remove Member', desc: 'Expulsion from this node (66% supermajority, 25% quorum, 7-day grace window)' },
-        { id: 'suspend_member', label: 'Suspend Member', desc: 'Temporary freeze of trading and messaging' },
-        { id: 'unsuspend_member', label: 'Unsuspend Member', desc: 'Restore member to active standing (simple majority)' },
-        { id: 'reinstate_member', label: 'Reinstate Member', desc: 'Cancel pending removal and restore account (simple majority)' },
-        { id: 'freeze_credit', label: 'Freeze Credit', desc: 'Lock credit floor to zero' },
-        { id: 'unfreeze_credit', label: 'Unfreeze Credit', desc: 'Restore credit floor (simple majority)' },
-        { id: 'grant_voucher', label: 'Grant Voucher', desc: 'Authorise member to vouch for newcomers' },
-        { id: 'revoke_voucher', label: 'Revoke Voucher', desc: 'Remove vouching privileges' },
-        { id: 'remove_lead_keeper', label: 'Remove a lead keeper or project leader', desc: "Replace an enterprise's lead keeper or a project's leader" },
+        { id: 'remove_member', label: word('Remove Member'), desc: word('Expulsion from this node (66% supermajority, 25% quorum, 7-day grace window)') },
+        { id: 'suspend_member', label: word('Suspend Member'), desc: word('Temporary freeze of trading and messaging') },
+        { id: 'unsuspend_member', label: word('Unsuspend Member'), desc: word('Restore member to active standing (simple majority)') },
+        { id: 'reinstate_member', label: word('Reinstate Member'), desc: word('Cancel pending removal and restore account (simple majority)') },
+        { id: 'freeze_credit', label: word('Freeze Credit'), desc: word('Lock credit floor to zero') },
+        { id: 'unfreeze_credit', label: word('Unfreeze Credit'), desc: word('Restore credit floor (simple majority)') },
+        { id: 'grant_voucher', label: word('Grant Voucher'), desc: word('Authorise member to vouch for newcomers') },
+        { id: 'revoke_voucher', label: word('Revoke Voucher'), desc: word('Remove vouching privileges') },
+        { id: 'remove_lead_keeper', label: word('Remove a lead keeper or project leader'), desc: word("Replace an enterprise's lead keeper or a project's leader") },
     ],
     pool: [
-        { id: 'grant_enterprise', label: 'Give Beans to a project or enterprise', desc: "Pay Beans from the Commons pool straight into a project's or enterprise's account" },
-        { id: 'grant_hardship', label: 'Hardship Grant', desc: 'Direct emergency support grant from Commons pool to a member' },
-        { id: 'write_off_deficit', label: "Pay off a project's or enterprise's debt", desc: "The Commons pool takes on the debt of a project or enterprise that can't pay it" },
+        { id: 'grant_enterprise', label: word('Give Beans to a project or enterprise'), desc: word("Pay Beans from the Commons pool straight into a project's or enterprise's account") },
+        { id: 'grant_hardship', label: word('Hardship Grant'), desc: word('Direct emergency support grant from Commons pool to a member') },
+        { id: 'write_off_deficit', label: word("Pay off a project's or enterprise's debt"), desc: word("The Commons pool takes on the debt of a project or enterprise that can't pay it") },
     ],
 };
+
+/**
+ * The removal of a lead: a project's leader, an enterprise's lead keeper, or (none picked yet) both words. Whole
+ * sentences for each, never the word glued in.
+ */
+function leadWords(lead: 'leader' | 'lead keeper' | 'either') {
+    if (lead === 'leader') {
+        return {
+            missing: t('Missing leader'), enter: t("Please enter the leader's callsign or public key."),
+            label: t('The leader to remove: callsign or public key'), placeholder: t("Enter the leader's callsign or pubkey..."),
+        };
+    }
+    if (lead === 'lead keeper') {
+        return {
+            missing: t('Missing lead keeper'), enter: t("Please enter the lead keeper's callsign or public key."),
+            label: t('The lead keeper to remove: callsign or public key'), placeholder: t("Enter the lead keeper's callsign or pubkey..."),
+        };
+    }
+    return {
+        missing: t('Missing lead keeper or leader'), enter: t("Please enter the lead keeper or leader's callsign or public key."),
+        label: t('The lead keeper or leader to remove: callsign or public key'), placeholder: t("Enter the lead keeper or leader's callsign or pubkey..."),
+    };
+}
 
 export function ProposeDecisionModal({
     isOpen,
@@ -100,16 +125,21 @@ export function ProposeDecisionModal({
         return membersMap.get(subject) || membersMap.get(subject.toLowerCase()) || null;
     }, [membersMap, subject]);
 
-    const targetName = selectedMember?.callsign || subject || 'Member';
+    const targetName = selectedMember?.callsign || subject || t('Member');
     // The one removed is a project's leader or an enterprise's lead keeper (§3.1); until one is picked, both words.
-    const pickedGroup = treasuries.find(t => t.publicKey === enterprisePubkey.trim());
-    const leadWord = pickedGroup ? keeperWords(pickedGroup.lifecycle).lead : 'lead keeper or leader';
+    const pickedGroup = treasuries.find(tr => tr.publicKey === enterprisePubkey.trim());
+    const lead = leadWords(pickedGroup ? (keeperWords(pickedGroup.lifecycle).lead === 'leader' ? 'leader' : 'lead keeper') : 'either');
     const poolAmount = Math.round(commonsBalance || 0);
 
     // §3.8, with balances private (Marty, 2026-09-28): the proposer does not see the member's balance. The community
-    // records it, and any debt, when the vote opens, and shows them to everyone who can vote in it.
-    const debtWriteOffLine = `Balances are private: you can't see ${targetName}'s. When this vote opens, the community records their balance and any debt, `
-        + `and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds ${poolAmount} beans now.`;
+    // records it, and any debt, when the vote opens, and shows them to everyone who can vote in it. English writes
+    // "beans" for one and many, as it always has.
+    const debtWriteOffLine = tn(
+        poolAmount,
+        "Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.",
+        "Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.",
+        { name: targetName },
+    );
 
     const styles = useStyles(({ colors }) => StyleSheet.create({
         overlay: {
@@ -151,7 +181,7 @@ export function ProposeDecisionModal({
         sectionLabel: {
             fontSize: 12,
             fontWeight: '700',
-            textTransform: 'uppercase',
+            // In capitals by inCapitalsOf (the language's way), never a textTransform (the phone's).
             color: colors.text.secondary,
             letterSpacing: 0.5,
             marginBottom: 8,
@@ -240,7 +270,6 @@ export function ProposeDecisionModal({
             fontSize: 12,
             fontWeight: '800',
             color: palette.red700,
-            textTransform: 'uppercase',
             letterSpacing: 0.5,
             marginBottom: 4,
         },
@@ -291,18 +320,18 @@ export function ProposeDecisionModal({
 
     const handleSubmit = async () => {
         if (!title.trim()) {
-            Alert.alert('Missing Title', 'Please enter a clear, concise title for this decision.');
+            Alert.alert(t('Missing Title'), t('Please enter a clear, concise title for this decision.'));
             return;
         }
         if (!description.trim()) {
-            Alert.alert('Missing Description', 'Please explain the rationale and details.');
+            Alert.alert(t('Missing Description'), t('Please explain the rationale and details.'));
             return;
         }
 
         const targetPubkey = selectedMember?.publicKey || (subject.trim().length === 64 ? subject.trim() : null);
 
         if (touches === 'member' && !targetPubkey) {
-            Alert.alert('Member Not Found', 'Please enter or select a valid member callsign or 64-character public key.');
+            Alert.alert(t('Member Not Found'), t('Please enter or select a valid member callsign or 64-character public key.'));
             return;
         }
 
@@ -310,23 +339,23 @@ export function ProposeDecisionModal({
         if (effect === 'grant_enterprise' || effect === 'grant_hardship') {
             const amount = Number(grantAmount);
             if (!amount || amount <= 0) {
-                Alert.alert('Invalid Amount', 'Please specify a valid grant amount in Beans.');
+                Alert.alert(t('Invalid Amount'), t('Please specify a valid grant amount in Beans.'));
                 return;
             }
             params = { amount };
         } else if (effect === 'remove_lead_keeper') {
             if (!enterprisePubkey.trim()) {
-                Alert.alert('Missing project or enterprise', 'Please pick the project or enterprise, or enter its public key.');
+                Alert.alert(t('Missing project or enterprise'), t('Please pick the project or enterprise, or enter its public key.'));
                 return;
             }
             if (!targetPubkey) {
-                Alert.alert(`Missing ${leadWord}`, `Please enter the ${leadWord}'s callsign or public key.`);
+                Alert.alert(lead.missing, lead.enter);
                 return;
             }
             params = { enterprisePubkey: enterprisePubkey.trim(), leadPubkey: targetPubkey };
         } else if (effect === 'write_off_deficit') {
             if (!enterprisePubkey.trim()) {
-                Alert.alert('Missing project or enterprise', 'Please pick the project or enterprise, or enter its public key.');
+                Alert.alert(t('Missing project or enterprise'), t('Please pick the project or enterprise, or enter its public key.'));
                 return;
             }
         } else if (effect === 'remove_member') {
@@ -351,7 +380,7 @@ export function ProposeDecisionModal({
             });
 
             if (res.success) {
-                Alert.alert('Decision Proposed', 'Your community decision has been posted and 7-day voting is now open.');
+                Alert.alert(t('Decision Proposed'), t('Your community decision has been posted and 7-day voting is now open.'));
                 setTitle('');
                 setDescription('');
                 setSubject('');
@@ -360,10 +389,11 @@ export function ProposeDecisionModal({
                 onCreated();
                 onClose();
             } else {
-                Alert.alert('Error', (res as any).error || 'Failed to propose decision');
+                // The node's own words as it sent them (slice S4).
+                Alert.alert(t('Error'), (res as any).error || t('Failed to propose decision'));
             }
         } catch (err: any) {
-            Alert.alert('Error', err.message || 'Failed to propose decision');
+            Alert.alert(t('Error'), err.message || t('Failed to propose decision'));
         } finally {
             setSubmitting(false);
         }
@@ -377,15 +407,15 @@ export function ProposeDecisionModal({
             >
                 <View style={styles.sheet}>
                     <View style={styles.header}>
-                        <Text style={styles.headerTitle}>Propose a Community Decision</Text>
-                        <Pressable accessibilityRole="button" accessibilityLabel="Close modal" onPress={onClose} style={styles.closeBtn}>
+                        <Text style={styles.headerTitle}>{t('Propose a Community Decision')}</Text>
+                        <Pressable accessibilityRole="button" accessibilityLabel={t('Close modal')} onPress={onClose} style={styles.closeBtn}>
                             <MaterialCommunityIcons name="close" size={22} color={colors.text.secondary} />
                         </Pressable>
                     </View>
 
                     <ScrollView style={styles.body} contentContainerStyle={{ paddingBottom: 24 }}>
                         {/* What it touches */}
-                        <Text style={styles.sectionLabel}>What does this decision touch? (§3.6)</Text>
+                        <Text style={styles.sectionLabel}>{inCapitalsOf(t('What does this decision touch? (§3.6)'))}</Text>
                         <View style={styles.segmentRow}>
                             {TOUCH_OPTIONS.map(opt => (
                                 <Pressable
@@ -400,26 +430,26 @@ export function ProposeDecisionModal({
                                         color={touches === opt.id ? colors.brand.primary : colors.text.secondary}
                                     />
                                     <Text style={[styles.segmentText, touches === opt.id && styles.segmentTextActive]}>
-                                        {opt.label}
+                                        {t(opt.label)}
                                     </Text>
                                 </Pressable>
                             ))}
                         </View>
 
                         {/* Title & Description */}
-                        <Text style={styles.sectionLabel}>Title</Text>
+                        <Text style={styles.sectionLabel}>{inCapitalsOf(t('Title'))}</Text>
                         <TextInput
                             style={styles.input}
-                            placeholder="e.g. Grant 200 beans to the Tool Library"
+                            placeholder={t('e.g. Grant 200 beans to the Tool Library')}
                             placeholderTextColor={colors.text.muted}
                             value={title}
                             onChangeText={setTitle}
                         />
 
-                        <Text style={styles.sectionLabel}>Description & Case</Text>
+                        <Text style={styles.sectionLabel}>{inCapitalsOf(t('Description & Case'))}</Text>
                         <TextInput
                             style={[styles.input, styles.textArea]}
-                            placeholder="Explain why this decision is needed, what will be done, and who is responsible."
+                            placeholder={t('Explain why this decision is needed, what will be done, and who is responsible.')}
                             placeholderTextColor={colors.text.muted}
                             value={description}
                             onChangeText={setDescription}
@@ -428,8 +458,8 @@ export function ProposeDecisionModal({
                         />
 
                         {/* Effect Selector */}
-                        <Text style={styles.sectionLabel}>Select Specific Effect</Text>
-                        <View accessibilityRole="radiogroup" accessibilityLabel="Governance effect">
+                        <Text style={styles.sectionLabel}>{inCapitalsOf(t('Select Specific Effect'))}</Text>
+                        <View accessibilityRole="radiogroup" accessibilityLabel={t('Governance effect')}>
                             {EFFECTS_BY_TOUCH[touches].map(eff => (
                                 <Pressable
                                     key={eff.id}
@@ -439,9 +469,9 @@ export function ProposeDecisionModal({
                                     onPress={() => setEffect(eff.id)}
                                 >
                                     <Text style={[styles.effectLabel, effect === eff.id && styles.effectLabelActive]}>
-                                        {eff.label}
+                                        {t(eff.label)}
                                     </Text>
-                                    <Text style={styles.effectDesc}>{eff.desc}</Text>
+                                    <Text style={styles.effectDesc}>{t(eff.desc)}</Text>
                                 </Pressable>
                             ))}
                         </View>
@@ -449,22 +479,22 @@ export function ProposeDecisionModal({
                         {/* Enterprise Input for remove_lead_keeper and write_off_deficit */}
                         {(effect === 'remove_lead_keeper' || effect === 'write_off_deficit') && (
                             <>
-                                <Text style={styles.sectionLabel}>Project or enterprise</Text>
+                                <Text style={styles.sectionLabel}>{inCapitalsOf(t('Project or enterprise'))}</Text>
                                 {treasuries && treasuries.length > 0 && (
                                     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
-                                        {treasuries.map(t => (
+                                        {treasuries.map(tr => (
                                             <Pressable
-                                                key={t.publicKey}
+                                                key={tr.publicKey}
                                                 accessibilityRole="button"
                                                 style={[
                                                     styles.segmentBtn,
-                                                    enterprisePubkey === t.publicKey && styles.segmentBtnActive,
+                                                    enterprisePubkey === tr.publicKey && styles.segmentBtnActive,
                                                     { paddingHorizontal: 10, paddingVertical: 6 }
                                                 ]}
-                                                onPress={() => setEnterprisePubkey(t.publicKey)}
+                                                onPress={() => setEnterprisePubkey(tr.publicKey)}
                                             >
-                                                <Text style={[styles.segmentText, enterprisePubkey === t.publicKey && styles.segmentTextActive, { fontSize: 12 }]}>
-                                                    {t.name}
+                                                <Text style={[styles.segmentText, enterprisePubkey === tr.publicKey && styles.segmentTextActive, { fontSize: 12 }]}>
+                                                    {tr.name}
                                                 </Text>
                                             </Pressable>
                                         ))}
@@ -472,7 +502,7 @@ export function ProposeDecisionModal({
                                 )}
                                 <TextInput
                                     style={styles.input}
-                                    placeholder="Or enter its public key..."
+                                    placeholder={t('Or enter its public key...')}
                                     placeholderTextColor={colors.text.muted}
                                     value={enterprisePubkey}
                                     onChangeText={setEnterprisePubkey}
@@ -484,11 +514,11 @@ export function ProposeDecisionModal({
                         {touches === 'member' && (
                             <>
                                 <Text style={styles.sectionLabel}>
-                                    {effect === 'remove_lead_keeper' ? `The ${leadWord} to remove: callsign or public key` : 'Target Member Public Key or Callsign'}
+                                    {inCapitalsOf(effect === 'remove_lead_keeper' ? lead.label : t('Target Member Public Key or Callsign'))}
                                 </Text>
                                 <TextInput
                                     style={styles.input}
-                                    placeholder={effect === 'remove_lead_keeper' ? `Enter the ${leadWord}'s callsign or pubkey...` : 'Enter member callsign or pubkey...'}
+                                    placeholder={effect === 'remove_lead_keeper' ? lead.placeholder : t('Enter member callsign or pubkey...')}
                                     placeholderTextColor={colors.text.muted}
                                     value={subject}
                                     onChangeText={setSubject}
@@ -498,18 +528,18 @@ export function ProposeDecisionModal({
 
                         {effect === 'grant_enterprise' && (
                             <>
-                                <Text style={styles.sectionLabel}>Project or enterprise public key</Text>
+                                <Text style={styles.sectionLabel}>{inCapitalsOf(t('Project or enterprise public key'))}</Text>
                                 <TextInput
                                     style={styles.input}
-                                    placeholder="Enter its public key..."
+                                    placeholder={t('Enter its public key...')}
                                     placeholderTextColor={colors.text.muted}
                                     value={subject}
                                     onChangeText={setSubject}
                                 />
-                                <Text style={styles.sectionLabel}>Grant Amount (Beans)</Text>
+                                <Text style={styles.sectionLabel}>{inCapitalsOf(t('Grant Amount (Beans)'))}</Text>
                                 <TextInput
                                     style={styles.input}
-                                    placeholder="e.g. 250"
+                                    placeholder={t('e.g. 250')}
                                     placeholderTextColor={colors.text.muted}
                                     value={grantAmount}
                                     onChangeText={setGrantAmount}
@@ -520,18 +550,18 @@ export function ProposeDecisionModal({
 
                         {effect === 'grant_hardship' && (
                             <>
-                                <Text style={styles.sectionLabel}>Recipient Member Public Key</Text>
+                                <Text style={styles.sectionLabel}>{inCapitalsOf(t('Recipient Member Public Key'))}</Text>
                                 <TextInput
                                     style={styles.input}
-                                    placeholder="Enter recipient pubkey..."
+                                    placeholder={t('Enter recipient pubkey...')}
                                     placeholderTextColor={colors.text.muted}
                                     value={subject}
                                     onChangeText={setSubject}
                                 />
-                                <Text style={styles.sectionLabel}>Hardship Amount (Beans)</Text>
+                                <Text style={styles.sectionLabel}>{inCapitalsOf(t('Hardship Amount (Beans)'))}</Text>
                                 <TextInput
                                     style={styles.input}
-                                    placeholder="e.g. 100"
+                                    placeholder={t('e.g. 100')}
                                     placeholderTextColor={colors.text.muted}
                                     value={grantAmount}
                                     onChangeText={setGrantAmount}
@@ -543,7 +573,7 @@ export function ProposeDecisionModal({
                         {/* Removal Ballot Special §3.8 Warning Box */}
                         {effect === 'remove_member' && (
                             <View style={styles.removalWarningBox} testID="removal-debt-write-off-box">
-                                <Text style={styles.removalWarningTitle}>Mandatory Debt Disclosure (§3.8)</Text>
+                                <Text style={styles.removalWarningTitle}>{inCapitalsOf(t('Mandatory Debt Disclosure (§3.8)'))}</Text>
                                 <Text style={styles.debtLineText} testID="removal-debt-write-off-line">
                                     {debtWriteOffLine}
                                 </Text>
@@ -554,15 +584,18 @@ export function ProposeDecisionModal({
                         <View style={styles.noBondNotice}>
                             <MaterialCommunityIcons name="shield-check" size={20} color={colors.brand.primary} />
                             <Text style={styles.noBondText}>
-                                <Text style={{ fontWeight: '700' }}>No bond required.</Text> Open to members with a completed trade or earned standing, and to node admins. Open for 7 days. Closes and executes automatically.
+                                <Sentence
+                                    text={t('{bond} Open to members with a completed trade or earned standing, and to node admins. Open for 7 days. Closes and executes automatically.')}
+                                    parts={{ bond: <Text style={{ fontWeight: '700' }}>{t('No bond required.')}</Text> }}
+                                />
                             </Text>
                         </View>
 
                         {/* Submit Button */}
                         <Pressable
                             accessibilityRole="button"
-                            accessibilityLabel={submitting ? "Proposing decision" : "Submit Community Decision"}
-                            accessibilityHint="Posts your community decision for a 7-day vote"
+                            accessibilityLabel={submitting ? t('Proposing decision') : t('Submit Community Decision')}
+                            accessibilityHint={t('Posts your community decision for a 7-day vote')}
                             accessibilityState={{ disabled: submitting, busy: submitting }}
                             style={styles.submitBtn}
                             onPress={handleSubmit}
@@ -571,7 +604,7 @@ export function ProposeDecisionModal({
                             {submitting ? (
                                 <ActivityIndicator color={colors.text.inverse} />
                             ) : (
-                                <Text style={styles.submitBtnText}>Submit Community Decision</Text>
+                                <Text style={styles.submitBtnText}>{t('Submit Community Decision')}</Text>
                             )}
                         </Pressable>
                     </ScrollView>

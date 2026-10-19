@@ -1000,7 +1000,7 @@ export default function LedgerScreen() {
                     <Text style={styles.txnTime}>{rowWhen(item)}</Text>
                 </View>
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <Text style={[styles.txnAmount, isCredit ? styles.pos : styles.neg]}>{isCredit ? '+' : '-'}{item.amount}</Text>
+                    <Text style={[styles.txnAmount, isCredit ? styles.pos : styles.neg]}>{isCredit ? '+' : '-'}{formatNumber(Number(item.amount))}</Text>
                     <Image source={require('../../assets/images/bean.png')} accessibilityElementsHidden={true} importantForAccessibility="no-hide-descendants" style={{ width: 16, height: 16, marginLeft: 2, resizeMode: 'contain', flexShrink: 0 }} />
                 </View>
             </View>

@@ -2,7 +2,7 @@
   "_meta": {
     "language": "tr",
     "name": "Turkish",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-19",
@@ -364,5 +364,106 @@
   },
   "Too many suggestions from your connection recently. Please try again later — your text is still here.": "Son zamanlarda bağlantından çok fazla öneri geldi. Lütfen daha sonra tekrar dene — metnin hâlâ burada.",
   "This poll is shown at your area (about 10 km around it) to everyone who can read it.": "Bu anket, okuyabilen herkese bölgende (çevresinde yaklaşık 10 km) gösterilir.",
-  "You haven't set your area, so members nearby won't see this poll in their list; they can still find it by searching. Set it in Settings → Your area to show it near you.": "Bölgeni ayarlamadın, bu yüzden yakındaki üyeler bu anketi listelerinde göremeyecek; yine de arayarak bulabilirler. Yakınında göstermek için Ayarlar → Bölgen bölümünden ayarla."
+  "You haven't set your area, so members nearby won't see this poll in their list; they can still find it by searching. Set it in Settings → Your area to show it near you.": "Bölgeni ayarlamadın, bu yüzden yakındaki üyeler bu anketi listelerinde göremeyecek; yine de arayarak bulabilirler. Yakınında göstermek için Ayarlar → Bölgen bölümünden ayarla.",
+  "Project · A leader, a goal, an end date": "Proje · Bir lider, bir hedef, bir bitiş tarihi",
+  "Enterprise · Run by its keepers": "Girişim · Sorumluları tarafından yönetilir",
+  "Lead convenor\u0004group role": "Baş koordinatör",
+  "Convenor\u0004group role": "Koordinatör",
+  "Member\u0004group role": "Üye",
+  "Observer\u0004group role": "Gözlemci",
+  "Make one of the observers a member first, then hand the lead to them.": "Önce gözlemcilerden birini üye yap, ardından liderliği ona devret.",
+  "{name} receives {n} Beans. The 1.5% trade fee ({fee} Beans) goes to the Commons.|{name} receives {n} Beans. The 1.5% trade fee ({fee} Beans) goes to the Commons.": {
+    "one": "{name} {n} fasulye alır. %1.5 işlem ücreti ({fee} fasulye) Ortak'a gider.",
+    "other": "{name} {n} fasulye alır. %1.5 işlem ücreti ({fee} fasulye) Ortak'a gider."
+  },
+  "Enter an amount in Beans, like 40 or 12.50.": "40 veya 12.50 gibi fasulye cinsinden bir miktar gir.",
+  "The amount must be more than 0 Beans.": "Miktar 0 fasulyeden fazla olmalıdır.",
+  "The enterprise holds {n} Beans, so it can't pay more than that.|The enterprise holds {n} Beans, so it can't pay more than that.": {
+    "one": "Girişimde {n} fasulye var, bu yüzden bundan fazlasını ödeyemez.",
+    "other": "Girişimde {n} fasulye var, bu yüzden bundan fazlasını ödeyemez."
+  },
+  "Paying a keeper is a wage, and a wage comes only out of what the enterprise has earned above its costs (its earned surplus): {n} Beans now.|Paying a keeper is a wage, and a wage comes only out of what the enterprise has earned above its costs (its earned surplus): {n} Beans now.": {
+    "one": "Bir sorumluya ödeme yapmak ücrettir ve ücret yalnızca girişimin masraflarının üzerinde kazandığı miktardan (kazanılan fazlalık) ödenir: şu anda {n} fasulye.",
+    "other": "Bir sorumluya ödeme yapmak ücrettir ve ücret yalnızca girişimin masraflarının üzerinde kazandığı miktardan (kazanılan fazlalık) ödenir: şu anda {n} fasulye."
+  },
+  "Paying a keeper is a wage: only out of what the project has earned.": "Bir sorumluya ödeme yapmak ücrettir: yalnızca projenin kazandığı miktardan ödenir.",
+  "Paying a keeper is a wage: only out of what the enterprise has earned.": "Bir sorumluya ödeme yapmak ücrettir: yalnızca girişimin kazandığı miktardan ödenir.",
+  "Paying a keeper is a wage: only out of what the project has earned above its costs, {n} Beans now.|Paying a keeper is a wage: only out of what the project has earned above its costs, {n} Beans now.": {
+    "one": "Bir sorumluya ödeme yapmak ücrettir: yalnızca projenin masraflarının üzerinde kazandığı miktardan ödenir, şu anda {n} fasulye.",
+    "other": "Bir sorumluya ödeme yapmak ücrettir: yalnızca projenin masraflarının üzerinde kazandığı miktardan ödenir, şu anda {n} fasulye."
+  },
+  "Paying a keeper is a wage: only out of what the enterprise has earned above its costs, {n} Beans now.|Paying a keeper is a wage: only out of what the enterprise has earned above its costs, {n} Beans now.": {
+    "one": "Bir sorumluya ödeme yapmak ücrettir: yalnızca girişimin masraflarının üzerinde kazandığı miktardan ödenir, şu anda {n} fasulye.",
+    "other": "Bir sorumluya ödeme yapmak ücrettir: yalnızca girişimin masraflarının üzerinde kazandığı miktardan ödenir, şu anda {n} fasulye."
+  },
+  "Pay Beans out": "Fasulye ödemesi yap",
+  "Remove a collaborator": "Bir iş birlikçiyi çıkar",
+  "Remove a keeper": "Bir sorumluyu çıkar",
+  "Make another keeper the lead": "Başka bir sorumluyu baş sorumlu yap",
+  "You're not in this group now, but you were when these votes opened, so you can still vote on them.": "Şu anda bu grupta değilsin, ancak bu oylamalar açıldığında gruptaydın; bu yüzden hâlâ oy kullanabilirsin.",
+  "You're not in this group now. These are the votes you were part of.": "Şu anda bu grupta değilsin. Bunlar parçası olduğun oylamalardır.",
+  "someone in the group": "gruptan biri",
+  "someone": "biri",
+  "Pay {n} Beans to {name}|Pay {n} Beans to {name}": {
+    "one": "{name} adlı üyeye {n} fasulye öde",
+    "other": "{name} adlı üyeye {n} fasulye öde"
+  },
+  "Remove {name} as a collaborator": "{name} adlı kişiyi iş birlikçilikten çıkar",
+  "Remove {name} as a keeper": "{name} adlı kişiyi sorumluluktan çıkar",
+  "Make {name} the leader": "{name} adlı kişiyi lider yap",
+  "Make {name} the lead keeper": "{name} adlı kişiyi baş sorumlu yap",
+  "Make {name} the lead convenor": "{name} adlı kişiyi baş koordinatör yap",
+  "Make {name} a convenor": "{name} adlı kişiyi koordinatör yap",
+  "Make {name} a member, no longer a convenor": "{name} adlı kişiyi artık koordinatör değil, üye yap",
+  "Remove {name} from the group": "{name} adlı kişiyi gruptan çıkar",
+  "Change who can join: {policy}": "Kimin katılabileceğini değiştir: {policy}",
+  "Close the group. Its chat stays to read.": "Grubu kapat. Sohbeti okunabilir kalır.",
+  "A vote": "Bir oylama",
+  "{voted} of {roll} has voted. {quorum} must vote. Yes and No show when it closes.": "{roll} kişiden {voted} kişi oy kullandı. {quorum} kişi oy kullanmalıdır. Evet ve Hayır kapandığında gösterilir.",
+  "{n} of {roll} have voted. {quorum} must vote. Yes and No show when it closes.|{n} of {roll} have voted. {quorum} must vote. Yes and No show when it closes.": {
+    "one": "{roll} kişiden {n} kişi oy kullandı. {quorum} kişi oy kullanmalıdır. Evet ve Hayır kapandığında gösterilir.",
+    "other": "{roll} kişiden {n} kişi oy kullandı. {quorum} kişi oy kullanmalıdır. Evet ve Hayır kapandığında gösterilir."
+  },
+  "Yes {yes} · No {no}. {voted} of {roll} voted.": "Evet {yes} · Hayır {no}. {roll} kişiden {voted} kişi oy kullandı.",
+  "Open\u0004a vote": "Açık",
+  "Passed and carried out": "Kabul edildi ve uygulandı",
+  "Passed": "Kabul edildi",
+  "Did not pass": "Kabul edilmedi",
+  "Not enough people voted": "Yeterli kişi oy kullanmadı",
+  "Not enough keepers voted": "Yeterli sorumlu oy kullanmadı",
+  "Passed, but not carried out: {reason}": "Kabul edildi, ancak uygulanmadı: {reason}",
+  "Passed, but not carried out": "Kabul edildi, ancak uygulanmadı",
+  "Passed, but there was nothing to do: {reason}": "Kabul edildi, ancak yapılacak bir şey yoktu: {reason}",
+  "Passed, but there was nothing to do": "Kabul edildi, ancak yapılacak bir şey yoktu",
+  "Closed\u0004a vote": "Kapandı",
+  "closing now": "şimdi kapanıyor",
+  "closes in {n} day|closes in {n} days": {
+    "one": "{n} gün içinde kapanıyor",
+    "other": "{n} gün içinde kapanıyor"
+  },
+  "closes in {n} hour|closes in {n} hours": {
+    "one": "{n} saat içinde kapanıyor",
+    "other": "{n} saat içinde kapanıyor"
+  },
+  "closes within the hour": "bir saat içinde kapanıyor",
+  "Nobody sees who voted how. In a very small group, though, the result and who has voted can show it.": "Kimin nasıl oy kullandığını kimse görmez. Yine de çok küçük bir grupta sonuç ve kimlerin oy kullandığı bunu belli edebilir.",
+  "anyone can join": "herkes katılabilir",
+  "people ask, and a convenor lets them in": "insanlar katılmak ister ve bir koordinatör onaylar",
+  "by invitation only": "yalnızca davetle",
+  "a new rule": "yeni bir kural",
+  "Choose a new lead convenor": "Yeni bir baş koordinatör seç",
+  "Make someone a convenor": "Birini koordinatör yap",
+  "Make a convenor a member": "Bir koordinatörü üye yap",
+  "Remove someone": "Birini çıkar",
+  "Change who can join": "Kimin katılabileceğini değiştir",
+  "Close the group": "Grubu kapat",
+  "Who should lead?": "Kim lider olmalı?",
+  "Who should be a convenor?": "Kim koordinatör olmalı?",
+  "Which convenor?": "Hangi koordinatör?",
+  "Remove whom?": "Kimi çıkarmalı?",
+  "Open: anyone can join": "Açık: herkes katılabilir",
+  "Ask to join": "Katılmak için sor",
+  "Invite only": "Yalnızca davetle",
+  "The group was closed by its members’ vote. Its chat stays to read.": "Grup, üyelerinin oyuyla kapatıldı. Sohbeti okunabilir kalır.",
+  "Votes among the group's members and convenors; observers watch. More than half must vote. 7 days, or sooner once the answer can't change.": "Grup üyeleri ve koordinatörleri arasındaki oylamalar; gözlemciler izler. Yarısından fazlası oy kullanmalıdır. 7 gün sürer veya yanıtın değişemeyeceği kesinleştiğinde daha erken biter."
 }

@@ -1,4 +1,754 @@
 {
-  "sections": {},
-  "pages": {}
+  "sections": {
+    "about": {
+      "title": {
+        "text": "Kuhusu BeanPool",
+        "sourceHash": "2d9dd281fa519636"
+      },
+      "summary": {
+        "text": "Jinsi BeanPool inavyofanya kazi, sheria na jinsi maamuzi hufanywa, maswali ya kawaida, na mambo mapya.",
+        "sourceHash": "003302493f5fd51a"
+      }
+    },
+    "getting-started": {
+      "title": {
+        "text": "Kuanza",
+        "sourceHash": "831d0f72d242b7d1"
+      },
+      "summary": {
+        "text": "Nyumbani, kujiunga, kupata jumuiya iliyo karibu nawe, Maharagwe na jumuiya ya kimataifa, mipaka yake, maneno yako 12, wasifu wako, upau wa juu, mwongozo huu, kupata usaidizi, kutumia zaidi ya jumuiya moja, na programu ya wavuti.",
+        "sourceHash": "63d6211469096565"
+      }
+    },
+    "market": {
+      "title": {
+        "text": "Soko",
+        "sourceHash": "5238d9bd03d543e6"
+      },
+      "summary": {
+        "text": "Kutafuta na kuchapisha Ofa na Mahitaji, na jinsi makubaliano yanavyofanya kazi mwanzo hadi mwisho.",
+        "sourceHash": "6008ab9bf397a83a"
+      }
+    },
+    "map": {
+      "title": {
+        "text": "Ramani",
+        "sourceHash": "be176b0015c424b7"
+      },
+      "summary": {
+        "text": "Pini ni nini, yako inapokwenda, na kupata vitu vilivyo karibu nawe.",
+        "sourceHash": "b4e17982e037f558"
+      }
+    },
+    "talk": {
+      "title": {
+        "text": "Gumzo",
+        "sourceHash": "449f5a775762cdc5"
+      },
+      "summary": {
+        "text": "Ujumbe, vikundi na soga zao, watu na marafiki, soga za matukio, kunyamazisha, kutaja, na ufunguo uliobadilika.",
+        "sourceHash": "e680a96492c72e47"
+      }
+    },
+    "pulse": {
+      "title": {
+        "text": "Mwenendo",
+        "sourceHash": "f7a403c6cdf31e72"
+      },
+      "summary": {
+        "text": "Kile majirani wanashiriki, video za Jifunze, na kuongeza chaneli zako.",
+        "sourceHash": "9ab06ad52ef86462"
+      }
+    },
+    "commons": {
+      "title": {
+        "text": "Mali za Pamoja",
+        "sourceHash": "6aa9f1a43424d37b"
+      },
+      "summary": {
+        "text": "Maamuzi na kupiga kura, maharagwe ya pamoja, vikundi, miradi na wasimamizi. Kura za maoni na matukio pia yapo; unayapata katika Soko.",
+        "sourceHash": "bd9454f4374e35ae"
+      }
+    },
+    "ledger": {
+      "title": {
+        "text": "Leja",
+        "sourceHash": "ee69eb4afc76aae0"
+      },
+      "summary": {
+        "text": "Salio lako, kikomo cha mkopo, zawadi, beji za uaminifu, kikomo kwa kila mshirika, na ada ya mzunguko.",
+        "sourceHash": "99d7457bf048947c"
+      }
+    },
+    "settings": {
+      "title": {
+        "text": "Mipangilio na usalama",
+        "sourceHash": "8ee717d56a807cd5"
+      },
+      "summary": {
+        "text": "Faragha na kile wasimamizi na wasaidizi wao wa AI wanaweza kuona, eneo lako, kuzuia na kuripoti, arifa, mwanga na giza, Hali ya Likizo, kuondoka, kurejesha akaunti, na kuangalia maneno yako 12 kama mmiliki.",
+        "sourceHash": "767b3834909fa76c"
+      }
+    }
+  },
+  "pages": {
+    "how-it-works": {
+      "title": {
+        "text": "Kazi ya BeanPool",
+        "sourceHash": "8ee2145ba2a47e77"
+      },
+      "summary": {
+        "text": "Maharagwe, biashara, ofa na mahitaji, na mikopo, kwa maneno rahisi.",
+        "sourceHash": "921252df227ae544"
+      }
+    },
+    "rules": {
+      "title": {
+        "text": "Sheria na jinsi maamuzi hufanywa",
+        "sourceHash": "482819c153332e58"
+      },
+      "summary": {
+        "text": "Kupiga kura, mahudhurio, kura ya siri, nani anaweza kupiga kura, kusimamishwa, kuondoa mwanachama, wasimamizi, na wawezeshaji na wawezeshaji wakuu.",
+        "sourceHash": "b111b31338cdd2a3"
+      }
+    },
+    "faq": {
+      "title": {
+        "text": "Maswali",
+        "sourceHash": "9a72221a27476f3e"
+      },
+      "summary": {
+        "text": "Majibu mafupi kwa maswali ambayo wanachama huuliza mara nyingi.",
+        "sourceHash": "8feb7069cb08f93d"
+      }
+    },
+    "whats-new": {
+      "title": {
+        "text": "Mambo mapya",
+        "sourceHash": "135e912e89054ffa"
+      },
+      "summary": {
+        "text": "Kilichobadilika katika programu, kwa maneno rahisi.",
+        "sourceHash": "e1f96938296c5950"
+      }
+    },
+    "home": {
+      "title": {
+        "text": "Nyumbani",
+        "sourceHash": "3a78695388b38b5c"
+      },
+      "summary": {
+        "text": "Nyumbani ni nini, kadi inazoonyesha kwenye simu na wavuti, jinsi ya kuongeza, kuhamisha au kuziondoa, kuchagua unachopenda, na faragha unapotoka.",
+        "sourceHash": "a1c1ff42cd312dd2"
+      },
+      "help": {
+        "text": "Hapa ni Nyumbani: kadi kuhusu yanayokuhitaji na yaliyo karibu. Ongeza kadi chini, au gusa … ili kuhamisha au kuondoa.",
+        "sourceHash": "3842000d41b06fa3"
+      }
+    },
+    "joining": {
+      "title": {
+        "text": "Kujiunga na BeanPool",
+        "sourceHash": "4a4fa8d50d056023"
+      },
+      "summary": {
+        "text": "Njia mbili za kuingia: jumuiya, kwa mwaliko wa mwanachama, au jumuiya ya kimataifa ikiwa wazi, kwa maneno 12 ya siri au kuingia mara moja. Kuomba kujiunga na kuwaalika wengine.",
+        "sourceHash": "bfa09f20fea858c6"
+      },
+      "help": {
+        "text": "Jiunge na jumuiya kwa mwaliko wa mwanachama, au jumuiya ya kimataifa kwa maneno 12 ya siri au kuingia mara moja.",
+        "sourceHash": "288300534966c3d2"
+      }
+    },
+    "finding-a-community": {
+      "title": {
+        "text": "Kupata jumuiya iliyo karibu nawe",
+        "sourceHash": "dbb0b4170f999d18"
+      },
+      "summary": {
+        "text": "Kutoka jumuiya ya kimataifa, pata jumuiya iliyo karibu nawe na uombe kujiunga, pata taarifa mpya inapoanza, au anza yako mwenyewe.",
+        "sourceHash": "d7fada0c8e749ecf"
+      }
+    },
+    "beans-and-the-global-community": {
+      "title": {
+        "text": "Maharagwe na jumuiya ya kimataifa",
+        "sourceHash": "e44e1649e26e9122"
+      },
+      "summary": {
+        "text": "Lengo la jumuiya ya kimataifa, jumuiya moja kati ya nyingi, na unachokiona hapo: alama ya 🏘️ Jamii ya eneo, jumuiya ya mfano ya Example Valley, kwa nini Maharagwe husubiri hapo, na jinsi ya kuanza au kupata jumuiya ya ndani.",
+        "sourceHash": "f91dcd042d53fdfb"
+      }
+    },
+    "global-community-limits": {
+      "title": {
+        "text": "Mipaka ya jumuiya ya kimataifa",
+        "sourceHash": "79186984a4ee4919"
+      },
+      "summary": {
+        "text": "Jumuiya ya kimataifa ni bure, yenye mipaka michache ya kupunguza gharama. Tangazo huhifadhiwa siku 90 baada ya kubadilishwa mara ya mwisho. Tangazo lina hadi picha 5, simu huweka matangazo 500 ya karibu, na unaweza kufuatilia maeneo 3.",
+        "sourceHash": "feba3e6c852b6d3b"
+      }
+    },
+    "your-12-words": {
+      "title": {
+        "text": "Maneno yako 12",
+        "sourceHash": "dd2264b1e132960b"
+      },
+      "summary": {
+        "text": "Maneno 12 ndio ufunguo wa akaunti yako. Umuhimu wake, mahali pa kuyapata, jinsi ya kuyaweka salama, na kuongeza njia ya kuingia kwa usalama.",
+        "sourceHash": "7033308ae096c586"
+      }
+    },
+    "your-profile": {
+      "title": {
+        "text": "Wasifu wako",
+        "sourceHash": "528d89ad72cba22e"
+      },
+      "summary": {
+        "text": "Jina lako, picha, maelezo machache kukuhusu, na nani anayeweza kuona mawasiliano yako.",
+        "sourceHash": "f405b4421669fcdb"
+      }
+    },
+    "the-top-bar": {
+      "title": {
+        "text": "Upau wa juu",
+        "sourceHash": "67f6e62947dde848"
+      },
+      "summary": {
+        "text": "Haragwe, aikoni ndogo zinazoonyesha jambo linapokuhitaji, na vitufe vilivyo juu kulia.",
+        "sourceHash": "19dc6a309244ae90"
+      }
+    },
+    "the-bean": {
+      "title": {
+        "text": "Mwongozo huu",
+        "sourceHash": "1d8917503dda7b5f"
+      },
+      "summary": {
+        "text": "Mahali pa kupata mwongozo huu, jinsi ya kuutafuta, na jinsi unavyobaki kuwa wa kisasa.",
+        "sourceHash": "7e694a121aa2314d"
+      }
+    },
+    "getting-help": {
+      "title": {
+        "text": "Kupata usaidizi",
+        "sourceHash": "418313b75b185ab8"
+      },
+      "summary": {
+        "text": "Mahali pa kuangalia unapokwama, na nani wa kumwuliza.",
+        "sourceHash": "8d12d16dc2217232"
+      }
+    },
+    "communities": {
+      "title": {
+        "text": "Zaidi ya jumuiya moja",
+        "sourceHash": "b753dd3e548b2230"
+      },
+      "summary": {
+        "text": "Kuwa wa jumuiya kadhaa kwa akaunti moja, kubadili kati yao, kufuata jumuiya yako kwenye anwani mpya, na kuona kile jumuiya ya kimataifa inakuonyesha.",
+        "sourceHash": "71e99c6bbffadcbe"
+      }
+    },
+    "web-app": {
+      "title": {
+        "text": "Kutumia BeanPool kwenye kivinjari",
+        "sourceHash": "1daaa01a91ba4b17"
+      },
+      "summary": {
+        "text": "Programu ya wavuti hufanya mengi sawa na ya simu. Kujiunga na jumuiya ya kimataifa kwenye kivinjari, kurejesha akaunti, kuiweka kwenye simu, na tofauti za majina ya vitufe.",
+        "sourceHash": "8afd3ad2f9117fd5"
+      }
+    },
+    "browsing-the-market": {
+      "title": {
+        "text": "Kuvinjari sokoni",
+        "sourceHash": "ab1b6bf5f734c023"
+      },
+      "summary": {
+        "text": "Pata Ofa na Mahitaji kwa utafutaji, vichujio na umbali.",
+        "sourceHash": "e73e882abbebfa8d"
+      },
+      "help": {
+        "text": "Ofa na Mahitaji kutoka kwa watu walio karibu. Tafuta, chagua kategoria au umbali, au gusa WEKA TANGAZO kuweka lako.",
+        "sourceHash": "0bc8b01c4d9effb6"
+      }
+    },
+    "posting": {
+      "title": {
+        "text": "Kuweka Ofa au Hitaji",
+        "sourceHash": "e218de31c1bbad00"
+      },
+      "summary": {
+        "text": "Weka kitu unachoweza kufanya au kutoa, au kitu unachotafuta.",
+        "sourceHash": "9ffa9b1e66834bc0"
+      }
+    },
+    "my-deals": {
+      "title": {
+        "text": "Biashara Zangu",
+        "sourceHash": "bfad6bb30e1876c5"
+      },
+      "summary": {
+        "text": "Mahali pamoja kwa kila makubaliano uliyomo, kila tangazo uliloweka, na makubaliano ya awali.",
+        "sourceHash": "8772e2ee242712d3"
+      },
+      "help": {
+        "text": "Kila makubaliano uliyomo na matangazo yako. Makubaliano yanayokusubiri yako juu.",
+        "sourceHash": "3ec4be8c87368ed9"
+      }
+    },
+    "a-deal-step-by-step": {
+      "title": {
+        "text": "Makubaliano hatua kwa hatua",
+        "sourceHash": "d2b29952cde1ab00"
+      },
+      "summary": {
+        "text": "Kuanzia kuomba hadi kulipwa, kwa Ofa na kwa Hitaji, na kuacha maoni.",
+        "sourceHash": "88d4362d08a13bc5"
+      }
+    },
+    "when-a-deal-goes-wrong": {
+      "title": {
+        "text": "Makubaliano yakiharibika",
+        "sourceHash": "190bfad1746f9e84"
+      },
+      "summary": {
+        "text": "Kughairi makubaliano, na kinachotokea msipoweza kukubaliana.",
+        "sourceHash": "a68c0d7af60988b4"
+      }
+    },
+    "map-pins": {
+      "title": {
+        "text": "Kile ramani inaonyesha",
+        "sourceHash": "dbd1bae516674246"
+      },
+      "summary": {
+        "text": "Pini kwenye Ramani, maana ya rangi zake, na vitufe vinavyozizunguka.",
+        "sourceHash": "79dec90cc1871495"
+      },
+      "help": {
+        "text": "Yaliyo karibu nawe: pini za kijani ni Ofa, chungwa ni Mahitaji, zambarau ni matukio. Gusa pini kuona.",
+        "sourceHash": "0dae9edef568b7cd"
+      }
+    },
+    "pin-locations": {
+      "title": {
+        "text": "Pini yako inapokwenda",
+        "sourceHash": "271264e11ffa7eaf"
+      },
+      "summary": {
+        "text": "Nani anayeona mahali matangazo na matukio yako yalipo, na jinsi ya kuweka nyumba yako faragha.",
+        "sourceHash": "a6ef3083e3ca4bfc"
+      }
+    },
+    "near-you": {
+      "title": {
+        "text": "Kupata vitu vilivyo karibu",
+        "sourceHash": "21bac241e8aef2ca"
+      },
+      "summary": {
+        "text": "Onyesha tu matangazo yaliyo ndani ya umbali kutoka kwako, au kutoka mahali popote unapochagua.",
+        "sourceHash": "5158de7099e0e89b"
+      }
+    },
+    "messages": {
+      "title": {
+        "text": "Ujumbe",
+        "sourceHash": "04d7b48339271ea6"
+      },
+      "summary": {
+        "text": "Anzisha soga, tuma picha, jibu, toa hisia, hariri, futa, nyamazisha, na mambo ya faragha.",
+        "sourceHash": "d97a6ef5d498fdde"
+      },
+      "help": {
+        "text": "Soga zako. Mazungumzo ya mtu mmoja yamelindwa mwanzo hadi mwisho. Gusa soga kuifungua, au anza kutoka tangazo au marafiki.",
+        "sourceHash": "bb7067d935067660"
+      }
+    },
+    "groups": {
+      "title": {
+        "text": "Vikundi",
+        "sourceHash": "39bbb719fa2b9d22"
+      },
+      "summary": {
+        "text": "Vikundi vyako na soga zao, kuzungumza ndani yake, kuanzisha kikundi, kualika watu, kujiunga kwa mwaliko, na kura za kikundi.",
+        "sourceHash": "4fa880d88c4b646f"
+      },
+      "help": {
+        "text": "Vikundi vyako na soga zao. Anzisha kikundi, alika watu, au fungua ili kuzungumza na kupiga kura pamoja.",
+        "sourceHash": "ae3496f349eba2b3"
+      }
+    },
+    "people": {
+      "title": {
+        "text": "Watu na marafiki",
+        "sourceHash": "99d59d29a0f3c756"
+      },
+      "summary": {
+        "text": "Tafuta wanachama wa jumuiya yako, ongeza marafiki, na mdhamini mtu.",
+        "sourceHash": "4be4971d826d83fe"
+      },
+      "help": {
+        "text": "Wanachama wa jumuiya yako na marafiki. Gusa mtu kuona wasifu wake, au gusa 💬 karibu na rafiki kumtumia ujumbe.",
+        "sourceHash": "d90b46866bc2bb6f"
+      }
+    },
+    "event-chat": {
+      "title": {
+        "text": "Soga ya tukio",
+        "sourceHash": "9c298662a4d6fc3e"
+      },
+      "summary": {
+        "text": "Zungumza na mwenyeji na kila mtu anayeenda kwenye tukio.",
+        "sourceHash": "ae8ca7988e16e019"
+      }
+    },
+    "mute": {
+      "title": {
+        "text": "Kunyamazisha soga",
+        "sourceHash": "8a491f4109c925c7"
+      },
+      "summary": {
+        "text": "Nyamazisha soga — ya mtu binafsi, kikundi au mradi — kwa saa 8, wiki moja, au moja kwa moja.",
+        "sourceHash": "ce143abea39ce423"
+      }
+    },
+    "mentions": {
+      "title": {
+        "text": "Kutaja (@jina)",
+        "sourceHash": "2e133ecc601b188f"
+      },
+      "summary": {
+        "text": "Mtaarifu mtu kwenye soga ya kikundi kwa kuandika @ na jina lake.",
+        "sourceHash": "265d8fd594c5af23"
+      }
+    },
+    "key-changed": {
+      "title": {
+        "text": "Soga ikisema ufunguo wa jina umebadilika",
+        "sourceHash": "79c7dc48aa148094"
+      },
+      "summary": {
+        "text": "Kwa nini soga inasimama kutuma, jinsi ya kuangalia nambari ya ufunguo na mhusika, na wakati wa kuendelea.",
+        "sourceHash": "c7a3e58ca019f963"
+      }
+    },
+    "the-pulse": {
+      "title": {
+        "text": "Mwenendo",
+        "sourceHash": "a974f2e05f105a24"
+      },
+      "summary": {
+        "text": "Kile ambacho majirani wako hutengeneza na kushiriki kwingine, katika mlisho mmoja.",
+        "sourceHash": "999659aebbfe69d2"
+      },
+      "help": {
+        "text": "Viungo ambavyo majirani wametengeneza au kushiriki, katika mlisho mmoja. Gusa kimoja kufungua.",
+        "sourceHash": "1d19387da6116082"
+      }
+    },
+    "learn": {
+      "title": {
+        "text": "Sehemu ya Jifunze",
+        "sourceHash": "498e66e5947ca0c3"
+      },
+      "summary": {
+        "text": "Video fupi kuhusu BeanPool, na kurasa za mwongozo zinazoambatana nazo.",
+        "sourceHash": "4d2fdf4c850fe47f"
+      }
+    },
+    "your-channels": {
+      "title": {
+        "text": "Kushiriki chaneli zako",
+        "sourceHash": "e47ac70a91b21162"
+      },
+      "summary": {
+        "text": "Weka chaneli zako za YouTube, blogu, Instagram na nyinginezo kwenye Mwenendo.",
+        "sourceHash": "bc9819c938b91f04"
+      }
+    },
+    "decisions": {
+      "title": {
+        "text": "Kupiga kura ya Uamuzi",
+        "sourceHash": "67b17269f83d1030"
+      },
+      "summary": {
+        "text": "Pata Maamuzi yaliyo wazi, piga kura, badili kura yako, na uone matokeo.",
+        "sourceHash": "fc4b9c95d8478a91"
+      }
+    },
+    "proposing-a-decision": {
+      "title": {
+        "text": "Kupendekeza Uamuzi",
+        "sourceHash": "3a20703895de04dc"
+      },
+      "summary": {
+        "text": "Iombe jumuiya kuamua jambo lenye masharti ya kisheria au wajibu.",
+        "sourceHash": "69756653393ec8b4"
+      }
+    },
+    "polls": {
+      "title": {
+        "text": "Kura za maoni",
+        "sourceHash": "996729458535904a"
+      },
+      "summary": {
+        "text": "Uliza jumuiya swali la haraka. Kura za maoni huonyesha mtazamo; hazibadili chochote zenyewe.",
+        "sourceHash": "d7fadda691d8879b"
+      },
+      "help": {
+        "text": "Kura ya maoni huuliza jumuiya swali la haraka. Inaonyesha mawazo ya watu; haibadili chochote yenyewe.",
+        "sourceHash": "99dfd4781ce0785d"
+      }
+    },
+    "events": {
+      "title": {
+        "text": "Matukio",
+        "sourceHash": "8d14f6e72de8f18a"
+      },
+      "summary": {
+        "text": "Unda tukio, mahali au mtandaoni, la mara moja au linalojirudia; sema unakwenda, kumbushwa, shiriki, na liendeshe kama mwenyeji.",
+        "sourceHash": "29e8adc52f9b6df9"
+      }
+    },
+    "enterprises": {
+      "title": {
+        "text": "Miradi na biashara za pamoja",
+        "sourceHash": "e1ccbac49d2ba550"
+      },
+      "summary": {
+        "text": "Miradi ya pamoja yenye maharagwe yake yenyewe: pata moja, liunge mkono, au anza lako.",
+        "sourceHash": "8302886bb796749e"
+      }
+    },
+    "keepers": {
+      "title": {
+        "text": "Wasimamizi",
+        "sourceHash": "ffc8948f6b16666e"
+      },
+      "summary": {
+        "text": "Watu wanaoendesha mradi na kuusimamia. Jinsi ya kujiunga, kupinga, na kujiuzulu.",
+        "sourceHash": "cbe734a215f75289"
+      }
+    },
+    "commons-fund": {
+      "title": {
+        "text": "Mali za Pamoja",
+        "sourceHash": "b1b09e953a4dd7c0"
+      },
+      "summary": {
+        "text": "Maharagwe ya pamoja ya jumuiya yako: yanatoka wapi, na jinsi yanavyotumika.",
+        "sourceHash": "aaf9158560e5d6aa"
+      }
+    },
+    "your-balance": {
+      "title": {
+        "text": "Salio lako na historia",
+        "sourceHash": "fb3a96eb2bfcd2a8"
+      },
+      "summary": {
+        "text": "Maharagwe mangapi unayo, yaliyozuiliwa, na kila biashara na zawadi.",
+        "sourceHash": "61df521108b36035"
+      },
+      "help": {
+        "text": "Maharagwe yako: uliyo nayo, yaliyozuiliwa katika makubaliano, na kila biashara na zawadi. Kila mtu huanzia sifuri.",
+        "sourceHash": "a40a5f9fef426c85"
+      }
+    },
+    "credit-line": {
+      "title": {
+        "text": "Kikomo chako cha mkopo",
+        "sourceHash": "dd11b44ecc1037c9"
+      },
+      "summary": {
+        "text": "Jinsi unavyoweza kwenda chini ya sifuri, na jinsi inavyoongezeka.",
+        "sourceHash": "18b609abc63667e7"
+      }
+    },
+    "gifts": {
+      "title": {
+        "text": "Kutuma zawadi",
+        "sourceHash": "5440f4f6ef954605"
+      },
+      "summary": {
+        "text": "Tuma maharagwe kwa mtu, bila kufanya biashara.",
+        "sourceHash": "7eaddf0c6cd54a04"
+      }
+    },
+    "trust-badges": {
+      "title": {
+        "text": "Beji za uaminifu",
+        "sourceHash": "a1d8765277383923"
+      },
+      "summary": {
+        "text": "Mgeni, Mkazi, Msimamizi na Mzee. Maana yake, na kwa nini hazifungui kitu chochote.",
+        "sourceHash": "90926482e87ba9fa"
+      }
+    },
+    "trading-partner-limit": {
+      "title": {
+        "text": "Kikomo cha 500 kwa mshirika",
+        "sourceHash": "c40110de7df3670c"
+      },
+      "summary": {
+        "text": "Kwa nini kufanya biashara na watu wengi hujenga uaminifu zaidi kuliko kufanya biashara nyingi na mtu mmoja.",
+        "sourceHash": "ce231d025501d5bc"
+      }
+    },
+    "circulation-fee": {
+      "title": {
+        "text": "Ada ya mzunguko",
+        "sourceHash": "e237d280aa62b186"
+      },
+      "summary": {
+        "text": "Ada ndogo ya kila mwezi kwa salio kubwa, ili maharagwe yaendelee kuzunguka. 200 ya kwanza ni bure.",
+        "sourceHash": "c9efbe6aa5cb9873"
+      }
+    },
+    "privacy": {
+      "title": {
+        "text": "Faragha yako",
+        "sourceHash": "d2a7115d0455956b"
+      },
+      "summary": {
+        "text": "Kile wengine wanachoweza kuona kukuhusu, na mipangilio inayodhibiti.",
+        "sourceHash": "e4a23a87e82cf7a6"
+      },
+      "help": {
+        "text": "Kile wanachama wengine wanachoweza kuona kukuhusu, na swichi zinazoidhibiti.",
+        "sourceHash": "0a1a1831174d443b"
+      }
+    },
+    "your-area": {
+      "title": {
+        "text": "Eneo lako",
+        "sourceHash": "b0adfdbb4ce55184"
+      },
+      "summary": {
+        "text": "Eneo la makadirio ambalo jumuiya ya kimataifa hutumia kuonyesha matangazo ya karibu, na jinsi ya kubadilisha au kuliondoa.",
+        "sourceHash": "de4a8af84def7d30"
+      },
+      "help": {
+        "text": "Eneo la makadirio kuonyesha matangazo yaliyo karibu. Libadilishe au uliondoe hapa; si anwani yako halisi kamwe.",
+        "sourceHash": "f3099801c4d773a5"
+      }
+    },
+    "what-the-admins-can-see": {
+      "title": {
+        "text": "Wanachoweza kuona wasimamizi",
+        "sourceHash": "261de35d8123a845"
+      },
+      "summary": {
+        "text": "Katika jumuiya ambayo wasimamizi wana orodha ya majina: inachoshikilia kukuhusu, nani anaweza kusoma, seva inachoweka, na maana ya kuthibitishwa.",
+        "sourceHash": "5960a4392bb32b4b"
+      }
+    },
+    "admins-ai-assistants": {
+      "title": {
+        "text": "Msimamizi anapotumia msaidizi wa AI",
+        "sourceHash": "9180d368e5d11c1e"
+      },
+      "summary": {
+        "text": "Kile ambacho msaidizi wa AI wa mmiliki au msimamizi anaweza kusoma kukuhusu, asichokiona, na anayekipokea.",
+        "sourceHash": "d693c47b7b2cbfef"
+      }
+    },
+    "blocking": {
+      "title": {
+        "text": "Kuzuia mtu",
+        "sourceHash": "f2ddac8bd6e31ad5"
+      },
+      "summary": {
+        "text": "Ficha matangazo na ujumbe wa mtu usikuonekanie, na ubadilishe baadaye.",
+        "sourceHash": "9e63d5d87e52a1b9"
+      },
+      "help": {
+        "text": "Watu uliowazuia. Matangazo na ujumbe wao vimefichwa kwako; ondoa kizuizi cha mtu hapa.",
+        "sourceHash": "baecf7f0bec3735c"
+      }
+    },
+    "reporting": {
+      "title": {
+        "text": "Kuripoti tatizo",
+        "sourceHash": "59274c49ac87bb2f"
+      },
+      "summary": {
+        "text": "Waambie wasimamizi wa jumuiya yako kuhusu tangazo, tukio, chapisho la Mwenendo, au mradi.",
+        "sourceHash": "4b773ef8eef237fa"
+      }
+    },
+    "notifications": {
+      "title": {
+        "text": "Arifa",
+        "sourceHash": "788011833a5a0f22"
+      },
+      "summary": {
+        "text": "Chagua arifa zinazofika kwenye simu yako, na wakati matukio yanakukumbusha.",
+        "sourceHash": "70c8aa586befc843"
+      },
+      "help": {
+        "text": "Chagua arifa zinazokufikia, na wakati matukio yanakukumbusha.",
+        "sourceHash": "7f7ecf01321aba59"
+      }
+    },
+    "appearance": {
+      "title": {
+        "text": "Mwanga na giza",
+        "sourceHash": "596443341c105af1"
+      },
+      "summary": {
+        "text": "Programu ya simu huanza ikiwa na mwanga na wavuti ikiwa na giza. Badilisha, au fuata kifaa chako.",
+        "sourceHash": "31cf0aeff28a2052"
+      },
+      "help": {
+        "text": "Weka programu iwe na mwanga au giza, au fuata simu yako.",
+        "sourceHash": "1ef643d6832c782a"
+      }
+    },
+    "holiday-mode": {
+      "title": {
+        "text": "Hali ya Likizo",
+        "sourceHash": "03098a2ccb21c3c2"
+      },
+      "summary": {
+        "text": "Hali ya Likizo huficha Ofa zako na kusitisha maombi mapya ukiwa mbali.",
+        "sourceHash": "53d1ceef93b0a7a1"
+      }
+    },
+    "leaving-or-deleting": {
+      "title": {
+        "text": "Kuondoka au kufuta akaunti yako",
+        "sourceHash": "6128699c3d7f036a"
+      },
+      "summary": {
+        "text": "Ondoka kwenye simu hii, au ufute akaunti yako kabisa, na kitakachotokea kwa maharagwe yako.",
+        "sourceHash": "d28cb71428dd6615"
+      }
+    },
+    "recovery": {
+      "title": {
+        "text": "Kurejesha akaunti yako",
+        "sourceHash": "7a6a763f943871ce"
+      },
+      "summary": {
+        "text": "Rejesha akaunti yako kwenye simu mpya, na uilinde kwa akaunti ya kuingia.",
+        "sourceHash": "5235d9f9073b2e63"
+      },
+      "help": {
+        "text": "Jinsi ya kurejesha akaunti yako kwenye simu mpya: maneno yako 12, au akaunti uliyounganisha.",
+        "sourceHash": "05fba497e5466e59"
+      }
+    },
+    "check-your-12-words": {
+      "title": {
+        "text": "Maneno yako 12 na funguo za seva (wamiliki)",
+        "sourceHash": "0a24c7fe8ed3b0a4"
+      },
+      "summary": {
+        "text": "Kwa wamiliki wa jumuiya. Kuangalia maneno yako 12, kuchukua au kurejesha seva kwa simu yako, na ukaguzi ambao simu yako hufanya yenyewe.",
+        "sourceHash": "c3a1b3cdc4e7d8df"
+      }
+    }
+  }
 }

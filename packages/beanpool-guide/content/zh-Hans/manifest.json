@@ -1,4 +1,754 @@
 {
-  "sections": {},
-  "pages": {}
+  "sections": {
+    "about": {
+      "title": {
+        "text": "关于 BeanPool",
+        "sourceHash": "2d9dd281fa519636"
+      },
+      "summary": {
+        "text": "BeanPool 的运作方式、规则与决策机制、常见问题以及最新动态。",
+        "sourceHash": "003302493f5fd51a"
+      }
+    },
+    "getting-started": {
+      "title": {
+        "text": "新手入门",
+        "sourceHash": "831d0f72d242b7d1"
+      },
+      "summary": {
+        "text": "首页、加入方式、寻找附近的社区、豆子与全球社区及其限制、你的 12 个助记词、个人资料、顶部栏、本指南、获取帮助、使用多个社区以及网页版应用。",
+        "sourceHash": "63d6211469096565"
+      }
+    },
+    "market": {
+      "title": {
+        "text": "市集",
+        "sourceHash": "5238d9bd03d543e6"
+      },
+      "summary": {
+        "text": "寻找和发布“提供”与“需求”，以及一笔交易从开始到完成的全流程。",
+        "sourceHash": "6008ab9bf397a83a"
+      }
+    },
+    "map": {
+      "title": {
+        "text": "地图",
+        "sourceHash": "be176b0015c424b7"
+      },
+      "summary": {
+        "text": "图钉的含义、你的图钉位置，以及寻找附近的物品与服务。",
+        "sourceHash": "b4e17982e037f558"
+      }
+    },
+    "talk": {
+      "title": {
+        "text": "对话",
+        "sourceHash": "449f5a775762cdc5"
+      },
+      "summary": {
+        "text": "消息、群组及其聊天、人脉与好友、活动聊天、静音、提及以及密钥变更。",
+        "sourceHash": "e680a96492c72e47"
+      }
+    },
+    "pulse": {
+      "title": {
+        "text": "动态",
+        "sourceHash": "f7a403c6cdf31e72"
+      },
+      "summary": {
+        "text": "邻居分享的内容、“学习”视频以及添加你自己的频道。",
+        "sourceHash": "9ab06ad52ef86462"
+      }
+    },
+    "commons": {
+      "title": {
+        "text": "公共资金池",
+        "sourceHash": "6aa9f1a43424d37b"
+      },
+      "summary": {
+        "text": "决策与投票、共享豆子、群组、企业与管理者。投票与活动也在其中；你也可以在市集中找到它们。",
+        "sourceHash": "bd9454f4374e35ae"
+      }
+    },
+    "ledger": {
+      "title": {
+        "text": "账本",
+        "sourceHash": "ee69eb4afc76aae0"
+      },
+      "summary": {
+        "text": "你的余额、信用额度、赠送、信任徽章、每位交易伙伴的限额以及流通费。",
+        "sourceHash": "99d7457bf048947c"
+      }
+    },
+    "settings": {
+      "title": {
+        "text": "设置与安全",
+        "sourceHash": "8ee717d56a807cd5"
+      },
+      "summary": {
+        "text": "隐私与管理员及其 AI 助手可见内容、所在区域、屏蔽与举报、提醒、浅色与深色模式、外出时的休假模式、离开、找回账户以及所有者检查 12 个助记词。",
+        "sourceHash": "767b3834909fa76c"
+      }
+    }
+  },
+  "pages": {
+    "how-it-works": {
+      "title": {
+        "text": "BeanPool 运作方式",
+        "sourceHash": "8ee2145ba2a47e77"
+      },
+      "summary": {
+        "text": "用通俗的话解释豆子、交易、提供与需求以及信用。",
+        "sourceHash": "921252df227ae544"
+      }
+    },
+    "rules": {
+      "title": {
+        "text": "规则与决策机制",
+        "sourceHash": "482819c153332e58"
+      },
+      "summary": {
+        "text": "投票、投票率、匿名投票、投票资格、暂停资格、移除成员、管理者以及召集人和主召集人。",
+        "sourceHash": "b111b31338cdd2a3"
+      }
+    },
+    "faq": {
+      "title": {
+        "text": "常见问题",
+        "sourceHash": "9a72221a27476f3e"
+      },
+      "summary": {
+        "text": "成员最常提出问题的简要解答。",
+        "sourceHash": "8feb7069cb08f93d"
+      }
+    },
+    "whats-new": {
+      "title": {
+        "text": "最新动态",
+        "sourceHash": "135e912e89054ffa"
+      },
+      "summary": {
+        "text": "用通俗易懂的话介绍应用的最新变化。",
+        "sourceHash": "e1f96938296c5950"
+      }
+    },
+    "home": {
+      "title": {
+        "text": "首页",
+        "sourceHash": "3a78695388b38b5c"
+      },
+      "summary": {
+        "text": "首页是什么、在手机与网页版上显示的卡片、如何添加、移动或移除卡片、选择兴趣偏好以及退出登录时的隐私保护。",
+        "sourceHash": "a1c1ff42cd312dd2"
+      },
+      "help": {
+        "text": "这是你的首页：展示需要你关注的事项及附近动态的卡片。在底部添加卡片，或点击卡片上的 … 进行移动或移除。",
+        "sourceHash": "3842000d41b06fa3"
+      }
+    },
+    "joining": {
+      "title": {
+        "text": "加入 BeanPool",
+        "sourceHash": "4a4fa8d50d056023"
+      },
+      "summary": {
+        "text": "两种加入方式：凭成员邀请加入本地社区，或在开放时凭 12 个助记词或一次登录加入全球社区。申请加入社区以及如何邀请他人。",
+        "sourceHash": "bfa09f20fea858c6"
+      },
+      "help": {
+        "text": "凭成员邀请加入本地社区，或在开放时凭 12 个助记词或一次登录加入全球社区。",
+        "sourceHash": "288300534966c3d2"
+      }
+    },
+    "finding-a-community": {
+      "title": {
+        "text": "寻找附近的社区",
+        "sourceHash": "dbb0b4170f999d18"
+      },
+      "summary": {
+        "text": "从全球社区出发，寻找附近的社区并申请加入，在附近有新社区成立时获得通知，或者自己发起一个社区。",
+        "sourceHash": "d7fada0c8e749ecf"
+      }
+    },
+    "beans-and-the-global-community": {
+      "title": {
+        "text": "豆子与全球社区",
+        "sourceHash": "e44e1649e26e9122"
+      },
+      "summary": {
+        "text": "全球社区的用途、众多社区中的一员，以及你在那里看到的内容：🏘️ 本地社区标记、示例社区 Example Valley、为什么豆子在那里等待，以及如何发起或寻找本地社区。",
+        "sourceHash": "f91dcd042d53fdfb"
+      }
+    },
+    "global-community-limits": {
+      "title": {
+        "text": "全球社区的限制",
+        "sourceHash": "79186984a4ee4919"
+      },
+      "summary": {
+        "text": "全球社区免费开放，并通过少量限制来维持低成本。内容在最后修改 90 天后归档。每条信息最多 5 张照片，手机保留最近的 500 条信息，你可以关注 3 个地点。",
+        "sourceHash": "feba3e6c852b6d3b"
+      }
+    },
+    "your-12-words": {
+      "title": {
+        "text": "你的 12 个助记词",
+        "sourceHash": "dd2264b1e132960b"
+      },
+      "summary": {
+        "text": "这 12 个助记词是你账户的密钥。它们为何重要、在哪里找到、如何安全保存，以及添加登录方式作为备用找回途径。",
+        "sourceHash": "7033308ae096c586"
+      }
+    },
+    "your-profile": {
+      "title": {
+        "text": "个人资料",
+        "sourceHash": "528d89ad72cba22e"
+      },
+      "summary": {
+        "text": "你的昵称、头像、个人简述以及谁可以查看你的联系方式。",
+        "sourceHash": "f405b4421669fcdb"
+      }
+    },
+    "the-top-bar": {
+      "title": {
+        "text": "顶部栏",
+        "sourceHash": "67f6e62947dde848"
+      },
+      "summary": {
+        "text": "豆子图标、有待处理事项时显示的小图标，以及右上角的按钮。",
+        "sourceHash": "19dc6a309244ae90"
+      }
+    },
+    "the-bean": {
+      "title": {
+        "text": "本指南",
+        "sourceHash": "1d8917503dda7b5f"
+      },
+      "summary": {
+        "text": "在哪里找到本指南、如何搜索内容以及指南如何保持最新。",
+        "sourceHash": "7e694a121aa2314d"
+      }
+    },
+    "getting-help": {
+      "title": {
+        "text": "获取帮助",
+        "sourceHash": "418313b75b185ab8"
+      },
+      "summary": {
+        "text": "遇到问题时在哪里查找答案，以及向谁求助。",
+        "sourceHash": "8d12d16dc2217232"
+      }
+    },
+    "communities": {
+      "title": {
+        "text": "加入多个社区",
+        "sourceHash": "b753dd3e548b2230"
+      },
+      "summary": {
+        "text": "用一个账户加入多个社区、在它们之间切换、跟随你的社区迁移到新地址，以及查看全球社区向你展示的内容。",
+        "sourceHash": "71e99c6bbffadcbe"
+      }
+    },
+    "web-app": {
+      "title": {
+        "text": "在网页浏览器中使用 BeanPool",
+        "sourceHash": "1daaa01a91ba4b17"
+      },
+      "summary": {
+        "text": "网页版拥有手机版的大部分功能。在浏览器中加入全球社区、通过登录找回账户、在手机上同步相同账户，以及网页版按钮名称的不同之处。",
+        "sourceHash": "8afd3ad2f9117fd5"
+      }
+    },
+    "browsing-the-market": {
+      "title": {
+        "text": "浏览市集",
+        "sourceHash": "ab1b6bf5f734c023"
+      },
+      "summary": {
+        "text": "通过搜索、分类筛选和距离范围查找提供与需求。",
+        "sourceHash": "e73e882abbebfa8d"
+      },
+      "help": {
+        "text": "来自附近邻居的提供与需求。按类别或距离搜索筛选，或点击“发布内容”发布你自己的帖子。",
+        "sourceHash": "0bc8b01c4d9effb6"
+      }
+    },
+    "posting": {
+      "title": {
+        "text": "发布提供或需求",
+        "sourceHash": "e218de31c1bbad00"
+      },
+      "summary": {
+        "text": "发布你能做或能给予的事情，或者你正在寻找的东西。",
+        "sourceHash": "9ffa9b1e66834bc0"
+      }
+    },
+    "my-deals": {
+      "title": {
+        "text": "我的交易",
+        "sourceHash": "bfad6bb30e1876c5"
+      },
+      "summary": {
+        "text": "集中管理你参与的每一笔交易、发布的每一条信息以及过去的交易历史。",
+        "sourceHash": "8772e2ee242712d3"
+      },
+      "help": {
+        "text": "你参与的每笔交易和发布的每条帖子。等待你回应的交易排在最上方。",
+        "sourceHash": "3ec4be8c87368ed9"
+      }
+    },
+    "a-deal-step-by-step": {
+      "title": {
+        "text": "交易步骤详解",
+        "sourceHash": "d2b29952cde1ab00"
+      },
+      "summary": {
+        "text": "从发起询问到完成付款，针对提供与需求的流程，以及留下评价。",
+        "sourceHash": "88d4362d08a13bc5"
+      }
+    },
+    "when-a-deal-goes-wrong": {
+      "title": {
+        "text": "交易出现问题时",
+        "sourceHash": "190bfad1746f9e84"
+      },
+      "summary": {
+        "text": "取消交易，以及双方无法达成一致时该如何处理。",
+        "sourceHash": "a68c0d7af60988b4"
+      }
+    },
+    "map-pins": {
+      "title": {
+        "text": "地图图钉说明",
+        "sourceHash": "dbd1bae516674246"
+      },
+      "summary": {
+        "text": "地图上的图钉、颜色代表的含义以及图钉周边的操作按钮。",
+        "sourceHash": "79dec90cc1871495"
+      },
+      "help": {
+        "text": "你附近的动态：绿色图钉代表提供，橙色代表需求，紫色代表活动。点击图钉查看详情。",
+        "sourceHash": "0dae9edef568b7cd"
+      }
+    },
+    "pin-locations": {
+      "title": {
+        "text": "你的图钉位置",
+        "sourceHash": "271264e11ffa7eaf"
+      },
+      "summary": {
+        "text": "谁能看到你的帖子和活动所在位置，以及如何保护家庭住址隐私。",
+        "sourceHash": "a6ef3083e3ca4bfc"
+      }
+    },
+    "near-you": {
+      "title": {
+        "text": "查找附近的内容",
+        "sourceHash": "21bac241e8aef2ca"
+      },
+      "summary": {
+        "text": "仅显示距离你或你选择的任意地点一定范围内的帖子。",
+        "sourceHash": "5158de7099e0e89b"
+      }
+    },
+    "messages": {
+      "title": {
+        "text": "消息",
+        "sourceHash": "04d7b48339271ea6"
+      },
+      "summary": {
+        "text": "发起对话、发送照片、回复、表情回应、编辑、删除、静音以及隐私说明。",
+        "sourceHash": "d97a6ef5d498fdde"
+      },
+      "help": {
+        "text": "你的聊天列表。一对一聊天受端到端加密保护。点击聊天以打开，或从帖子与好友列表中发起。",
+        "sourceHash": "bb7067d935067660"
+      }
+    },
+    "groups": {
+      "title": {
+        "text": "群组",
+        "sourceHash": "39bbb719fa2b9d22"
+      },
+      "summary": {
+        "text": "你的群组及群聊、在其中交流、创建群组、邀请成员、凭邀请加入以及群组内部投票。",
+        "sourceHash": "4fa880d88c4b646f"
+      },
+      "help": {
+        "text": "你的群组与群聊。创建群组、邀请他人，或打开群组一起交流与投票。",
+        "sourceHash": "ae3496f349eba2b3"
+      }
+    },
+    "people": {
+      "title": {
+        "text": "成员与好友",
+        "sourceHash": "99d59d29a0f3c756"
+      },
+      "summary": {
+        "text": "查找社区成员、添加好友以及为他人背书担保。",
+        "sourceHash": "4be4971d826d83fe"
+      },
+      "help": {
+        "text": "社区成员与你的好友。点击某人查看其个人资料，或点击好友旁的 💬 发送消息。",
+        "sourceHash": "d90b46866bc2bb6f"
+      }
+    },
+    "event-chat": {
+      "title": {
+        "text": "活动聊天",
+        "sourceHash": "9c298662a4d6fc3e"
+      },
+      "summary": {
+        "text": "与活动组织者及所有参与者交流。",
+        "sourceHash": "ae8ca7988e16e019"
+      }
+    },
+    "mute": {
+      "title": {
+        "text": "静音对话",
+        "sourceHash": "8a491f4109c925c7"
+      },
+      "summary": {
+        "text": "将个人、群组或企业的对话静音 8 小时、一周或永久静音。",
+        "sourceHash": "ce143abea39ce423"
+      }
+    },
+    "mentions": {
+      "title": {
+        "text": "提及 (@成员)",
+        "sourceHash": "2e133ecc601b188f"
+      },
+      "summary": {
+        "text": "在群聊中输入 @ 加上成员姓名即可向其发送提醒。",
+        "sourceHash": "265d8fd594c5af23"
+      }
+    },
+    "key-changed": {
+      "title": {
+        "text": "若对话提示对方密钥已变更",
+        "sourceHash": "79c7dc48aa148094"
+      },
+      "summary": {
+        "text": "对话停止发送的原因、如何与对方核对安全密钥代码，以及何时可以继续交流。",
+        "sourceHash": "c7a3e58ca019f963"
+      }
+    },
+    "the-pulse": {
+      "title": {
+        "text": "社区动态",
+        "sourceHash": "a974f2e05f105a24"
+      },
+      "summary": {
+        "text": "邻居在外部平台创作和分享的内容，汇总于一条动态流中。",
+        "sourceHash": "999659aebbfe69d2"
+      },
+      "help": {
+        "text": "邻居在其他平台制作或分享的链接汇总。点击即可打开。",
+        "sourceHash": "1d19387da6116082"
+      }
+    },
+    "learn": {
+      "title": {
+        "text": "“学习”板块",
+        "sourceHash": "498e66e5947ca0c3"
+      },
+      "summary": {
+        "text": "关于 BeanPool 的短视频以及对应的指南页面。",
+        "sourceHash": "4d2fdf4c850fe47f"
+      }
+    },
+    "your-channels": {
+      "title": {
+        "text": "分享你的频道",
+        "sourceHash": "e47ac70a91b21162"
+      },
+      "summary": {
+        "text": "将你的 YouTube、博客、Instagram 等频道展示在动态中。",
+        "sourceHash": "bc9819c938b91f04"
+      }
+    },
+    "decisions": {
+      "title": {
+        "text": "参与决策投票",
+        "sourceHash": "67b17269f83d1030"
+      },
+      "summary": {
+        "text": "查找进行中的决策、投票、更改你的投票并查看投票结果。",
+        "sourceHash": "fc4b9c95d8478a91"
+      }
+    },
+    "proposing-a-decision": {
+      "title": {
+        "text": "发起决策提案",
+        "sourceHash": "3a20703895de04dc"
+      },
+      "summary": {
+        "text": "提请社区共同做出具有约束力的决定。",
+        "sourceHash": "69756653393ec8b4"
+      }
+    },
+    "polls": {
+      "title": {
+        "text": "投票",
+        "sourceHash": "996729458535904a"
+      },
+      "summary": {
+        "text": "向社区提出简短问题。民意投票仅反映大家的看法，其本身不产生任何变更。",
+        "sourceHash": "d7fadda691d8879b"
+      },
+      "help": {
+        "text": "民意投票向社区快速征询意见。它展示大家的想法，但本身不产生任何变更。",
+        "sourceHash": "99dfd4781ce0785d"
+      }
+    },
+    "events": {
+      "title": {
+        "text": "活动",
+        "sourceHash": "8d14f6e72de8f18a"
+      },
+      "summary": {
+        "text": "在线下或线上发起一次性或周期性活动；报名参加、接收提醒、分享活动并作为主办方进行管理。",
+        "sourceHash": "29e8adc52f9b6df9"
+      }
+    },
+    "enterprises": {
+      "title": {
+        "text": "项目与企业",
+        "sourceHash": "e1ccbac49d2ba550"
+      },
+      "summary": {
+        "text": "拥有独立豆子账目的共同事业：寻找、支持或自己发起一个项目或企业。",
+        "sourceHash": "8302886bb796749e"
+      }
+    },
+    "keepers": {
+      "title": {
+        "text": "管理者",
+        "sourceHash": "ffc8948f6b16666e"
+      },
+      "summary": {
+        "text": "共同经营并担当企业责任的人。如何加入、提出异议以及退出。",
+        "sourceHash": "cbe734a215f75289"
+      }
+    },
+    "commons-fund": {
+      "title": {
+        "text": "公共资金",
+        "sourceHash": "b1b09e953a4dd7c0"
+      },
+      "summary": {
+        "text": "你所在社区的共享豆子：它们从何而来，以及如何支出使用。",
+        "sourceHash": "aaf9158560e5d6aa"
+      }
+    },
+    "your-balance": {
+      "title": {
+        "text": "余额与账目历史",
+        "sourceHash": "fb3a96eb2bfcd2a8"
+      },
+      "summary": {
+        "text": "你拥有的豆子数量、交易中暂扣的豆子，以及每一笔交易与赠送记录。",
+        "sourceHash": "61df521108b36035"
+      },
+      "help": {
+        "text": "你的豆子：当前拥有的、交易暂扣的，以及所有交易和赠送记录。每个人都从零开始。",
+        "sourceHash": "a40a5f9fef426c85"
+      }
+    },
+    "credit-line": {
+      "title": {
+        "text": "信用额度",
+        "sourceHash": "dd11b44ecc1037c9"
+      },
+      "summary": {
+        "text": "你的余额最多可以透支多少，以及额度如何增长。",
+        "sourceHash": "18b609abc63667e7"
+      }
+    },
+    "gifts": {
+      "title": {
+        "text": "赠送豆子",
+        "sourceHash": "5440f4f6ef954605"
+      },
+      "summary": {
+        "text": "无需任何交易即可向他人赠送豆子。",
+        "sourceHash": "7eaddf0c6cd54a04"
+      }
+    },
+    "trust-badges": {
+      "title": {
+        "text": "信任徽章",
+        "sourceHash": "a1d8765277383923"
+      },
+      "summary": {
+        "text": "新人、居民、管家和长者。它们的含义以及为什么它们不解锁任何权限。",
+        "sourceHash": "90926482e87ba9fa"
+      }
+    },
+    "trading-partner-limit": {
+      "title": {
+        "text": "500 豆伙伴限额",
+        "sourceHash": "c40110de7df3670c"
+      },
+      "summary": {
+        "text": "为什么与多人进行交易比与单一对象大量交易更能建立社区信任。",
+        "sourceHash": "ce231d025501d5bc"
+      }
+    },
+    "circulation-fee": {
+      "title": {
+        "text": "流通费",
+        "sourceHash": "e237d280aa62b186"
+      },
+      "summary": {
+        "text": "对高额余额每月收取的小额费用，以促使豆子保持流通。前 200 豆免收费用。",
+        "sourceHash": "c9efbe6aa5cb9873"
+      }
+    },
+    "privacy": {
+      "title": {
+        "text": "个人隐私",
+        "sourceHash": "d2a7115d0455956b"
+      },
+      "summary": {
+        "text": "他人能看到的关于你的信息，以及控制这些信息的设置项。",
+        "sourceHash": "e4a23a87e82cf7a6"
+      },
+      "help": {
+        "text": "其他成员能看到的关于你的信息，以及控制这些信息的开关。",
+        "sourceHash": "0a1a1831174d443b"
+      }
+    },
+    "your-area": {
+      "title": {
+        "text": "所在区域",
+        "sourceHash": "b0adfdbb4ce55184"
+      },
+      "summary": {
+        "text": "全球社区向你展示附近帖子所使用的大致位置，以及如何更改或清除该位置。",
+        "sourceHash": "de4a8af84def7d30"
+      },
+      "help": {
+        "text": "用于向你展示附近帖子的大致位置。可在此更改或清除；这绝不是你的精确住址。",
+        "sourceHash": "f3099801c4d773a5"
+      }
+    },
+    "what-the-admins-can-see": {
+      "title": {
+        "text": "管理员可见内容",
+        "sourceHash": "261de35d8123a845"
+      },
+      "summary": {
+        "text": "在管理员保留实名名单的社区中：名单记录的内容、谁可以查看、服务器保留哪些数据以及确认身份的含义。",
+        "sourceHash": "5960a4392bb32b4b"
+      }
+    },
+    "admins-ai-assistants": {
+      "title": {
+        "text": "当管理员使用 AI 助手时",
+        "sourceHash": "9180d368e5d11c1e"
+      },
+      "summary": {
+        "text": "所有者或管理员的 AI 助手可以读取关于你的哪些信息、绝不会看到什么，以及数据传输给谁。",
+        "sourceHash": "d693c47b7b2cbfef"
+      }
+    },
+    "blocking": {
+      "title": {
+        "text": "屏蔽成员",
+        "sourceHash": "f2ddac8bd6e31ad5"
+      },
+      "summary": {
+        "text": "向自己隐藏某人的帖子和消息，并可在日后取消屏蔽。",
+        "sourceHash": "9e63d5d87e52a1b9"
+      },
+      "help": {
+        "text": "你屏蔽的人员名单。他们的帖子和消息会对你隐藏；可在此取消屏蔽。",
+        "sourceHash": "baecf7f0bec3735c"
+      }
+    },
+    "reporting": {
+      "title": {
+        "text": "举报问题",
+        "sourceHash": "59274c49ac87bb2f"
+      },
+      "summary": {
+        "text": "向社区协调员反映帖子、活动、动态内容、项目或企业方面的问题。",
+        "sourceHash": "4b773ef8eef237fa"
+      }
+    },
+    "notifications": {
+      "title": {
+        "text": "通知设置",
+        "sourceHash": "788011833a5a0f22"
+      },
+      "summary": {
+        "text": "选择哪些提醒会推送到你的手机，以及活动何时向你发出提醒。",
+        "sourceHash": "70c8aa586befc843"
+      },
+      "help": {
+        "text": "选择哪些提醒会推送到你的设备，以及活动何时向你发出提醒。",
+        "sourceHash": "7f7ecf01321aba59"
+      }
+    },
+    "appearance": {
+      "title": {
+        "text": "外观模式",
+        "sourceHash": "596443341c105af1"
+      },
+      "summary": {
+        "text": "手机端默认为浅色模式，网页端默认为深色模式。你可以手动调整或跟随系统设置。",
+        "sourceHash": "31cf0aeff28a2052"
+      },
+      "help": {
+        "text": "将应用设置为浅色或深色模式，或跟随你的手机系统。",
+        "sourceHash": "1ef643d6832c782a"
+      }
+    },
+    "holiday-mode": {
+      "title": {
+        "text": "休假模式",
+        "sourceHash": "03098a2ccb21c3c2"
+      },
+      "summary": {
+        "text": "在外出时，休假模式会隐藏你的“提供”并暂停接收新的请求。",
+        "sourceHash": "53d1ceef93b0a7a1"
+      }
+    },
+    "leaving-or-deleting": {
+      "title": {
+        "text": "离开或注销账户",
+        "sourceHash": "6128699c3d7f036a"
+      },
+      "summary": {
+        "text": "从此手机退出登录，或永久注销账户，以及你的豆子将会如何处理。",
+        "sourceHash": "d28cb71428dd6615"
+      }
+    },
+    "recovery": {
+      "title": {
+        "text": "找回你的账户",
+        "sourceHash": "7a6a763f943871ce"
+      },
+      "summary": {
+        "text": "在新手机上恢复账户，并通过关联登录方式为账户提供额外保护。",
+        "sourceHash": "5235d9f9073b2e63"
+      },
+      "help": {
+        "text": "如何在新的手机上找回你的账户：使用你的 12 个助记词，或你已关联的登录账户。",
+        "sourceHash": "05fba497e5466e59"
+      }
+    },
+    "check-your-12-words": {
+      "title": {
+        "text": "助记词与服务器密钥（所有者）",
+        "sourceHash": "0a24c7fe8ed3b0a4"
+      },
+      "summary": {
+        "text": "适用于社区所有者。核对 12 个助记词、用手机接管或恢复服务器，以及手机自身的自动检查。",
+        "sourceHash": "c3a1b3cdc4e7d8df"
+      }
+    }
+  }
 }

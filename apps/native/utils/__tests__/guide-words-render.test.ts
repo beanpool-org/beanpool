@@ -75,8 +75,7 @@ vi.mock('../../app/ThemeContext', async () => {
         useStyles: (make: (t: { theme: string; colors: unknown }) => unknown) => make({ theme: 'light', colors: lightColors }),
     };
 });
-// The titles files ship empty until the drafting round: Portuguese reads the file each test sets; Turkish reads the
-// shipped file unless a test sets one.
+// Portuguese reads the file each test sets; Turkish reads the shipped (drafted) file unless a test sets one.
 const titles = vi.hoisted(() => ({ pt: null as unknown, tr: null as unknown }));
 vi.mock('../guide-titles', async (importOriginal) => {
     const real = await importOriginal<typeof import('../guide-titles')>();
@@ -365,7 +364,8 @@ describe('the guide in Turkish: the section line in the capitals of its own word
     const section = manualSections(GUIDE).find((s) => s.title.includes('i'))!;
     const [page] = sectionPages(GUIDE, section);
 
-    it('with the shipped (empty) titles file, an English section title reads in English capitals, never with a dotted İ', async () => {
+    it('with an empty titles file (a section not yet translated), the English section title reads in English capitals, never with a dotted İ', async () => {
+        titles.tr = { sections: {}, pages: {} } satisfies GuideTitles;
         expect(inCapitalsOf(section.title, 'tr')).not.toBe(inCapitalsOf(section.title, 'en'));
         params.value = { slug: page.slug };
         await renderIn('tr', GuideScreen);

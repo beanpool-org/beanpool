@@ -8,7 +8,7 @@
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
-    "lint": "eslint app components constants services utils --no-error-on-unmatched-pattern",
+    "lint": "eslint app components constants services utils tools --no-error-on-unmatched-pattern",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },

@@ -294,6 +294,13 @@ run_check "typecheck"     pnpm turbo run typecheck $TURBO_AUX_ARGS
 # that CI had never once executed. Cheap, and it is the only check here that fails for something NOT being tested.
 run_check "suite_registration" bash scripts/check-suite-registration.sh
 
+# The tool template (scratch/tools/DESIGN-tool-template-fable.md section 2.3, docs/tools-template.md): every folder under
+# the three tools roots is a tool registered in all three packages and within its budget in scripts/tools/budgets.json
+# (minified JS per app, bundled data, sentences of its own), each problem refused in one sentence. Then the check on
+# throwaway trees, the scaffold new-tool.mjs writes type-checked and linted in memory, and the import fence. No build
+# needed; seconds.
+run_check "tool_budgets" bash -c 'node scripts/tools/check-tool-budgets.mjs && node --test scripts/tools/check-tool-budgets.test.mjs scripts/tools/scaffold.test.mjs scripts/tools/fence.test.mjs'
+
 # deploy.sh wipes each node's project directory on every run and moves data/ and .env aside first.
 # When that move nested instead of replacing, the live ledger was buried at data/data/ and the node
 # booted on a stale backup's community.key — silently, because both moves were `|| true`. Pure

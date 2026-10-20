@@ -5,7 +5,7 @@ import {
 } from '../home-frame.js';
 import { toolHomeCardTypes } from '../tools/index.js';
 
-const AT ='2026-10-08T10:00:00.000Z';
+const AT = '2026-10-08T10:00:00.000Z';
 const NOW = Date.parse(AT);
 const layout = (cards: HomeLayoutV2['cards'], dismissed: Record<string, string> = {}): HomeLayoutV2 => ({ v: 2, cards, dismissed, updatedAt: AT });
 const one = (type: string) => ({ id: type, type });

@@ -226,9 +226,10 @@ export function registerIn(p, text, id) {
 }
 
 /**
- * The names the tool `id`'s core half (from the scaffold) would export that core's tools index under `root` already
- * exports or binds: its own names, the template's (manifest, host, check, reconcile, read from this repository when
- * `root` has none) and every registered tool's. Two such names are a compile error in a file new-tool writes.
+ * The names the tool `id`'s core half (from the scaffold) would export that core already exports or binds: core's barrel
+ * (src/index.ts, whose `export *` of the tools index meets every other module's names), and the tools index's own names,
+ * the template's (manifest, host, check, reconcile, read from this repository when `root` has none) and every registered
+ * tool's. Two such names are a compile error (TS2308 in the barrel, or in a file new-tool writes).
  */
 export function toolNameClashes(id, root = ROOT) {
     const core = PARTS.find((p) => p.part === 'core');
@@ -238,7 +239,8 @@ export function toolNameClashes(id, root = ROOT) {
         return null;
     };
     const index = path.join(root, core.index);
-    const taken = new Set([...exportedNames(index, fromDisk), ...topLevelNames(parse(index, fromDisk(index) ?? ''))]);
+    const barrel = path.join(root, path.dirname(core.dir), 'index.ts');
+    const taken = new Set([...exportedNames(barrel, fromDisk), ...exportedNames(index, fromDisk), ...topLevelNames(parse(index, fromDisk(index) ?? ''))]);
     const mine = exportedNames(path.join(root, core.dir, id, 'index.ts'), (f) => overlay.get(f) ?? null);
     return [...mine].filter((name) => taken.has(name)).sort();
 }

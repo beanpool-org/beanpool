@@ -3,7 +3,7 @@
 //
 //   node --test scripts/tools/check-tool-budgets.test.mjs
 
-import { test } from 'node:test';
+import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -14,8 +14,11 @@ import { newTool } from './new-tool.mjs';
 import { PARTS, ROOT, readRegistry, registerIn, toolNames } from './registry.mjs';
 
 /** A tree with this repository's three (empty) registries and budgets, and nothing else. */
+const trees = [];
+after(() => { for (const t of trees) fs.rmSync(t, { recursive: true, force: true }); });
 function tree() {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'beanpool-tools-'));
+    trees.push(root);
     for (const rel of [...PARTS.map((p) => p.index), BUDGETS]) {
         fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
         fs.copyFileSync(path.join(ROOT, rel), path.join(root, rel));
@@ -96,10 +99,13 @@ test('an id JavaScript keeps for itself makes registries that parse; an id namin
     assert.deepEqual((await checkTools({ root })).problems, []);
 
     const before = PARTS.map((p) => fs.readFileSync(path.join(root, p.index), 'utf8'));
-    await assert.rejects(newTool('tools', { root }), /^Error: The tool tools would export TOOLS from core, which core's tools already have: pick another id\.$/);
+    await assert.rejects(newTool('tools', { root }), /^Error: The tool tools would export TOOLS from core, which core already has: pick another id\.$/);
     await assert.rejects(newTool('tool', { root }), /^Error: The tool tool would export TOOL_PERMISSIONS, ToolDoc, ToolPermission, ToolScreenProps from core,/);
     assert.deepEqual(PARTS.map((p) => fs.readFileSync(path.join(root, p.index), 'utf8')), before);
     for (const p of PARTS) for (const id of ['tools', 'tool']) assert.ok(!fs.existsSync(path.join(root, p.dir, id)), `${p.dir}/${id}`);
+    // A name another core module exports clashes in core's barrel (TS2308): PricingGuideItem, CATEGORIES.
+    await assert.rejects(newTool('pricing-guide', { root }), /would export [^:]*\bPricingGuideItem\b[^:]* from core, which core already has/);
+    await assert.rejects(newTool('categories', { root }), /would export [^:]*\bCATEGORIES\b[^:]* from core, which core already has/);
     // Two tools' names clash too: a seed tool's SEED_MAX_ITEMS is a seed-max-items tool's manifest.
     await newTool('seed', { root });
     await assert.rejects(newTool('seed-max-items', { root }), /would export SEED_MAX_ITEMS from core/);

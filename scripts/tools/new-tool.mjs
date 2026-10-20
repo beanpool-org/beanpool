@@ -22,7 +22,7 @@ export async function newTool(id, { root = ROOT } = {}) {
     }
     const clashes = toolNameClashes(id, root);
     if (clashes.length) {
-        throw new Error(`The tool ${id} would export ${clashes.join(', ')} from core, which core's tools already have: pick another id.`);
+        throw new Error(`The tool ${id} would export ${clashes.join(', ')} from core, which core already has: pick another id.`);
     }
     // Every registry first, so a file that isn't the template's stops it before anything is written.
     const indexes = PARTS.map((p) => {

@@ -16,16 +16,23 @@
  * on the way back and shows the result here (`result`).
  */
 import { useEffect, useRef, useState } from 'react';
+import { t, word } from '@beanpool/core';
 import { getCommunityMe } from '../lib/api';
 import { hasMnemonic, type BeanPoolIdentity } from '../lib/identity';
 import { NONCE_FRESH_MS, offeredProviders, providerLabel, type JoinNonce } from '../lib/web-join';
 import { leaveForLink, linkResultMessage, requestLinkNonce, type LinkResult } from '../lib/link-signin';
+import { keyLineWords } from './key-lines';
+import { saidWords, type Said } from './WebJoin';
 
-export const ONE_WAY_BACK = 'Your account has one way back: your 12 words. Check you still have them, or add a sign-in.';
+/** The card's words, marked here and translated where they are shown. */
+export const ONE_WAY_BACK_WORDS = {
+    line: word('Your account has one way back: your 12 words. Check you still have them, or add a sign-in.'),
+    /** Why a sign-in, for an account that has only its 12 words: what it is, and who can open the copy it keeps. */
+    why: word("A sign-in with Google, Apple or Facebook is a second way back if you lose this device. We keep only a scrambled reference to it, never your email or name from there. It also locks a copy of your account; the people who run this community's server can open that copy."),
+} as const;
 
-/** Why a sign-in, for an account that has only its 12 words: what it is, and who can open the copy it keeps. */
-export const ADD_SIGN_IN_WHY =
-    "A sign-in with Google, Apple or Facebook is a second way back if you lose this device. We keep only a scrambled reference to it, never your email or name from there. It also locks a copy of your account; the people who run this community's server can open that copy.";
+export const ONE_WAY_BACK = ONE_WAY_BACK_WORDS.line;
+export const ADD_SIGN_IN_WHY = ONE_WAY_BACK_WORDS.why;
 
 interface Standing {
     words: boolean;
@@ -130,7 +137,7 @@ export function putAway(s: Schedule, standing: Standing, now: number = Date.now(
 
 interface AddSignInProps {
     identity: BeanPoolIdentity;
-    /** The button's words. */
+    /** The button's words (in the member's language); "Add a sign-in" when none are given. */
     label?: string;
     /** Leaves the page for the provider. Swappable in tests. */
     navigate?: (url: string) => void;
@@ -148,13 +155,14 @@ interface AddSignInProps {
  * "Add a sign-in": asks the node which sign-ins it offers (a nonce bound to adding one for this member), then the
  * member picks one and the page leaves for it. Every refusal is a sentence beside the button.
  */
-export function AddSignIn({ identity, label = 'Add a sign-in', navigate, origin, onLeaving, autoStart = false }: AddSignInProps) {
+export function AddSignIn({ identity, label, navigate, origin, onLeaving, autoStart = false }: AddSignInProps) {
     const [nonce, setNonce] = useState<JoinNonce | null>(null);
     // When the nonce came: one held past NONCE_FRESH_MS is asked for again before the trip (time spent reading the
     // tour, say, must not come back from the provider as a failed sign-in), as WebJoin does.
     const nonceAt = useRef(0);
     const [busy, setBusy] = useState(false);
-    const [message, setMessage] = useState<string | null>(null);
+    // Why not, said in the language of the moment: a lib file's English, or this card's own (set with setMessage(() => …)).
+    const [message, setMessage] = useState<Said | null>(null);
     const mounted = useRef(true);
     useEffect(() => {
         mounted.current = true;
@@ -197,7 +205,7 @@ export function AddSignIn({ identity, label = 'Add a sign-in', navigate, origin,
             stay = onLeaving ? (await onLeaving()) === false : false;
         } catch (e) {
             console.error('[AddSignIn] could not get ready to leave:', e);
-            setMessage('Something went wrong on this page, so the sign-in didn\'t start. Try again.');
+            setMessage(() => () => t("Something went wrong on this page, so the sign-in didn't start. Try again."));
             stay = true;
         }
         let n: JoinNonce | null = nonce;
@@ -224,13 +232,13 @@ export function AddSignIn({ identity, label = 'Add a sign-in', navigate, origin,
             {!nonce ? (
                 <button type="button" data-testid="add-sign-in-start" disabled={busy} onClick={() => void open()}
                     className="w-full min-h-[44px] px-4 py-2.5 rounded-xl text-sm font-bold bg-transparent text-nature-900 dark:text-white border border-nature-300 dark:border-nature-700 cursor-pointer break-words focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
-                    {busy ? 'One moment…' : label}
+                    {busy ? t('One moment…') : label ?? t('Add a sign-in')}
                 </button>
             ) : offered.length === 0 ? (
-                <p role="alert" className="text-sm text-nature-700 dark:text-nature-200 m-0 break-words">This community has no sign-in a browser can use yet.</p>
+                <p role="alert" className="text-sm text-nature-700 dark:text-nature-200 m-0 break-words">{t('This community has no sign-in a browser can use yet.')}</p>
             ) : (
                 <div className="space-y-2">
-                    <p className="text-xs font-semibold text-nature-600 dark:text-nature-300 m-0">Add a sign-in with</p>
+                    <p className="text-xs font-semibold text-nature-600 dark:text-nature-300 m-0">{t('Add a sign-in with')}</p>
                     {offered.map((provider) => (
                         <button key={provider} type="button" data-testid={`add-sign-in-${provider}`} disabled={busy} onClick={() => void choose(provider)}
                             className="w-full min-h-[44px] px-4 py-2.5 rounded-xl text-sm font-bold bg-transparent text-nature-900 dark:text-white border border-nature-300 dark:border-nature-700 cursor-pointer break-words focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
@@ -240,9 +248,9 @@ export function AddSignIn({ identity, label = 'Add a sign-in', navigate, origin,
                 </div>
             )}
             {message && (
-                <p role="alert" data-testid="add-sign-in-problem" className="text-sm text-red-800 dark:text-red-300 mt-2 mb-0 break-words">{message}</p>
+                <p role="alert" data-testid="add-sign-in-problem" className="text-sm text-red-800 dark:text-red-300 mt-2 mb-0 break-words">{saidWords(message)}</p>
             )}
-            <p className="text-xs text-nature-600 dark:text-nature-300 mt-2 mb-0 leading-relaxed break-words">{ADD_SIGN_IN_WHY}</p>
+            <p className="text-xs text-nature-600 dark:text-nature-300 mt-2 mb-0 leading-relaxed break-words">{t(ONE_WAY_BACK_WORDS.why)}</p>
         </div>
     );
 }
@@ -285,7 +293,7 @@ export function OneWayBackCard({ identity, placement, onSeeWords, result, naviga
                     className={`w-full p-3 rounded-xl text-sm m-0 break-words ${result.kind === 'failed'
                         ? 'bg-red-50 dark:bg-red-950/40 border border-red-300 dark:border-red-700 text-red-800 dark:text-red-300'
                         : 'bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 text-nature-800 dark:text-nature-100'}`}>
-                    {linkResultMessage(result)}
+                    {keyLineWords(linkResultMessage(result))}
                 </p>
             )}
             {shown && (
@@ -293,23 +301,23 @@ export function OneWayBackCard({ identity, placement, onSeeWords, result, naviga
                     className="bg-white dark:bg-nature-900 rounded-2xl shadow-sm border border-amber-300 dark:border-amber-700 p-4 mb-3 min-w-0">
                     <div className="flex items-start justify-between gap-2">
                         <h2 id={`one-way-back-title-${placement}`} className="font-bold text-base text-nature-900 dark:text-white m-0 min-w-0 break-words">
-                            <span aria-hidden="true">🔑 </span>One way back
+                            <span aria-hidden="true">🔑 </span>{t('One way back')}
                         </h2>
                         {placement === 'landing' && (
-                            <button type="button" aria-label="Hide this for now"
+                            <button type="button" aria-label={t('Hide this for now')}
                                 onClick={() => { if (standing) update(putAway(schedule, standing)); }}
                                 className="shrink-0 min-w-[44px] min-h-[44px] w-11 h-11 flex items-center justify-center rounded-full bg-transparent border-none text-nature-400 hover:text-nature-600 dark:hover:text-nature-200 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
                                 ✕
                             </button>
                         )}
                     </div>
-                    <p data-testid="one-way-back-text" className="text-sm text-nature-700 dark:text-nature-200 mt-1 mb-3 leading-relaxed break-words">{ONE_WAY_BACK}</p>
+                    <p data-testid="one-way-back-text" className="text-sm text-nature-700 dark:text-nature-200 mt-1 mb-3 leading-relaxed break-words">{t(ONE_WAY_BACK_WORDS.line)}</p>
                     <div className="space-y-2">
                         {onSeeWords && hasMnemonic(identity) && (
                             <button type="button" data-testid="one-way-back-words"
                                 onClick={() => { if (placement === 'landing') update({ ...schedule, checked: true }); onSeeWords(); }}
                                 className="w-full min-h-[44px] px-4 py-2.5 rounded-xl text-sm font-bold bg-bp-gold-fill hover:bg-bp-gold-hover text-bp-gold-on border-none cursor-pointer break-words focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500">
-                                See my 12 words
+                                {t('See my 12 words')}
                             </button>
                         )}
                         <AddSignIn identity={identity} navigate={navigate} origin={origin} />

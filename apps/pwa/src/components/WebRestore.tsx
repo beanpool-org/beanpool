@@ -11,6 +11,7 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { t, word } from '@beanpool/core';
 import {
     clearPendingRestore,
     loadIdentityStrict,
@@ -47,7 +48,7 @@ import {
     type RestoreNonce,
     type RestoreProof,
 } from '../lib/web-restore';
-import { heading, lede, NoticeLine, primaryButton, quietButton, secondaryButton, UNREACHABLE, type Notice } from './WebJoin';
+import { heading, lede, NoticeLine, primaryButton, quietButton, saidWords, secondaryButton, JOIN_WORDS, type Notice, type Said } from './WebJoin';
 
 interface Props {
     /**
@@ -86,7 +87,7 @@ type Screen =
     /** The copy opened to another account than the name's. Nothing saved. */
     | { name: 'wrong_account' }
     /** No copy to open, or one the web can't open. */
-    | { name: 'no_copy'; message: string }
+    | { name: 'no_copy'; message: Said }
     | { name: 'already_here'; identity: BeanPoolIdentity }
     /**
      * The account is open in this page and nothing is saved: the node could not be asked about it (`unreachable`), or
@@ -103,7 +104,8 @@ interface Session {
 
 /** A nonce lives ten minutes on the node; one older than this is fetched again before it goes to a provider. */
 const NONCE_FRESH_MS = 5 * 60 * 1000;
-const WENT_WRONG = 'Something went wrong on this page. Start again.';
+/** Said in more than one place: marked here, translated where it is shown. */
+const RESTORE_WORDS = { wentWrong: word('Something went wrong on this page. Start again.') } as const;
 
 export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay, provider: hinted = null, authReturn, navigate, origin }: Props) {
     const [screen, setScreen] = useState<Screen>({ name: 'loading' });
@@ -183,14 +185,14 @@ export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay,
             if (got.answer.status === 404) {
                 // The node no longer has this session (it lives a while, then goes): from the name again.
                 setSession(null);
-                setNotice({ tone: 'error', text: 'That restore timed out on the community. Start again.' });
+                setNotice({ tone: 'error', text: () => t('That restore timed out on the community. Start again.') });
                 setScreen({ name: 'name' });
                 return null;
             }
             setNotice({ tone: 'error', text: sessionRefusalMessage(got.answer, s.account.callsign) });
         } catch (e) {
             if (!(e instanceof DoorUnreachableError)) console.error('[WebRestore] could not ask for a sign-in:', e);
-            if (mounted.current) setNotice({ tone: 'error', text: e instanceof DoorUnreachableError ? UNREACHABLE : WENT_WRONG });
+            if (mounted.current) setNotice({ tone: 'error', text: e instanceof DoorUnreachableError ? () => t(JOIN_WORDS.unreachable) : () => t(RESTORE_WORDS.wentWrong) });
         } finally {
             if (mounted.current) setFetchingNonce(false);
         }
@@ -215,7 +217,7 @@ export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay,
         } catch (e) {
             if (!(e instanceof DoorUnreachableError)) throw e;
             // Asked again with a fresh sign-in: the node lets the copy go to this session again, whichever answer was lost.
-            return backToSignIns(s, { tone: 'error', text: UNREACHABLE });
+            return backToSignIns(s, { tone: 'error', text: () => t(JOIN_WORDS.unreachable) });
         }
         if (released.status !== 200) {
             return backToSignIns(s, { tone: 'error', text: releaseRefusalMessage(released, proof.provider, s.account.callsign) });
@@ -225,25 +227,25 @@ export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay,
             fetched = await fetchSignInCopy(s.eph, s.collectionId);
         } catch (e) {
             if (!(e instanceof DoorUnreachableError)) throw e;
-            return backToSignIns(s, { tone: 'error', text: UNREACHABLE });
+            return backToSignIns(s, { tone: 'error', text: () => t(JOIN_WORDS.unreachable) });
         }
         if ('answer' in fetched) {
             if (fetched.answer.status === 400) {
                 // The session ended between the release and the fetch (its owner stopped it, moved the copy, or it ran
                 // out): the node hands nothing over from a dead session. From the name again.
                 setSession(null);
-                setNotice({ tone: 'error', text: 'That restore was stopped on the community, or has ended. Start again.' });
+                setNotice({ tone: 'error', text: () => t('That restore was stopped on the community, or has ended. Start again.') });
                 setScreen({ name: 'name' });
                 return;
             }
             return backToSignIns(s, { tone: 'error', text: releaseRefusalMessage(fetched.answer, proof.provider, s.account.callsign) });
         }
         if ('unopened' in fetched) {
-            setScreen({ name: 'no_copy', message: `The community's copy of ${s.account.callsign} didn't open in this browser, so nothing was changed. Start again, or use your 12 words.` });
+            setScreen({ name: 'no_copy', message: () => t("The community's copy of {name} didn't open in this browser, so nothing was changed. Start again, or use your 12 words.", { name: s.account.callsign }) });
             return;
         }
         if (!fetched.copy) {
-            setScreen({ name: 'no_copy', message: `The community has no ${label} copy of ${s.account.callsign} to open.` });
+            setScreen({ name: 'no_copy', message: () => t('The community has no {provider} copy of {name} to open.', { provider: label, name: s.account.callsign }) });
             return;
         }
         const result = await openRestoredAccount(fetched.copy, proof.provider, proof.sub, s.account);
@@ -255,10 +257,10 @@ export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay,
                 setScreen({ name: 'wrong_account' });
                 return;
             case 'old_format':
-                setScreen({ name: 'no_copy', message: `${s.account.callsign}'s ${label} copy is an older kind the web app can't open. Use your 12 words, or the phone app.` });
+                setScreen({ name: 'no_copy', message: () => t("{name}'s {provider} copy is an older kind the web app can't open. Use your 12 words, or the phone app.", { name: s.account.callsign, provider: label }) });
                 return;
             case 'unreadable':
-                setScreen({ name: 'no_copy', message: `${s.account.callsign}'s ${label} copy didn't open with this ${label} account. Use your 12 words, or the phone app.` });
+                setScreen({ name: 'no_copy', message: () => t("{name}'s {provider} copy didn't open with this {provider} account. Use your 12 words, or the phone app.", { name: s.account.callsign, provider: label }) });
                 return;
         }
     }, [backToSignIns, hand]);
@@ -268,7 +270,7 @@ export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay,
         if (!mounted.current) return;
         setBusy(false);
         setSession(null);
-        setNotice({ tone: 'error', text: WENT_WRONG });
+        setNotice({ tone: 'error', text: () => t(RESTORE_WORDS.wentWrong) });
         setScreen({ name: 'name' });
     }, []);
 
@@ -303,7 +305,7 @@ export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay,
                 return finishSignIn(s, { provider: outcome.provider, idToken: outcome.idToken, nonce: outcome.nonce, sub: outcome.sub });
             }
             // Back to the sign-ins on the same session, with a fresh nonce: that one went to the provider.
-            const text = outcome.kind === 'cancelled' ? 'Sign-in was cancelled.'
+            const text: Said = outcome.kind === 'cancelled' ? () => t('Sign-in was cancelled.')
                 : outcome.kind === 'provider_error' ? outcome.message
                 : refusalMessage(outcome.reason, r.provider);
             return backToSignIns(s, { tone: outcome.kind === 'cancelled' ? 'info' : 'error', text });
@@ -352,7 +354,7 @@ export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay,
                 opened = await openRestoreSession(eph, account.callsign, account.publicKey);
             } catch (e) {
                 if (!(e instanceof DoorUnreachableError)) throw e;
-                setNotice({ tone: 'error', text: UNREACHABLE });
+                setNotice({ tone: 'error', text: () => t(JOIN_WORDS.unreachable) });
                 setScreen({ name: 'name' });
                 return;
             }
@@ -387,7 +389,7 @@ export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay,
             // fetchNonce has said why.
             if (!n) return;
             const clientId = n.clientIds[provider];
-            if (!clientId) return toProviders({ tone: 'error', text: `${providerLabel(provider)} sign-in isn't available here.` });
+            if (!clientId) return toProviders({ tone: 'error', text: () => t("{provider} sign-in isn't available here.", { provider: providerLabel(provider) }) });
             const now = Date.now();
             await savePendingRestore({
                 kind: 'restore',
@@ -403,7 +405,7 @@ export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay,
             go(providerAuthUrl(provider, { clientId, origin: here, nonce: n.nonce }));
         } catch (e) {
             console.error('[WebRestore] could not start the sign-in:', e);
-            toProviders({ tone: 'error', text: WENT_WRONG });
+            toProviders({ tone: 'error', text: () => t(RESTORE_WORDS.wentWrong) });
         } finally {
             if (mounted.current) setBusy(false);
         }
@@ -438,8 +440,8 @@ export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay,
 
     const otherWays = (
         <>
-            <button type="button" style={secondaryButton} onClick={() => onOtherWay('words')}>Use my 12 words</button>
-            <button type="button" style={secondaryButton} onClick={() => onOtherWay('phone')}>Link with my phone</button>
+            <button type="button" style={secondaryButton} onClick={() => onOtherWay('words')}>{t('Use my 12 words')}</button>
+            <button type="button" style={secondaryButton} onClick={() => onOtherWay('phone')}>{t('Link with my phone')}</button>
         </>
     );
     const offered = nonceHeld ? restoreProviders(nonceHeld.value) : [];
@@ -449,17 +451,17 @@ export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay,
     let body: React.ReactNode;
     switch (screen.name) {
         case 'loading':
-            body = <p role="status" style={lede}>One moment…</p>;
+            body = <p role="status" style={lede}>{t('One moment…')}</p>;
             break;
 
         case 'name': {
             const typed = name.trim();
             body = (
                 <>
-                    <h3 style={heading}>Get your account back</h3>
-                    <p style={lede}>With the sign-in you joined with. First, type your whole name here.</p>
+                    <h3 style={heading}>{t('Get your account back')}</h3>
+                    <p style={lede}>{t('With the sign-in you joined with. First, type your whole name here.')}</p>
                     <label htmlFor="restore-callsign" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>
-                        Your name here
+                        {t('Your name here')}
                     </label>
                     <input
                         id="restore-callsign"
@@ -468,7 +470,7 @@ export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay,
                         value={name}
                         maxLength={32}
                         autoComplete="nickname"
-                        placeholder="e.g. Alice"
+                        placeholder={t('e.g. Alice')}
                         disabled={busy}
                         onChange={(e) => { setName(e.target.value); setNotice(null); }}
                         style={{
@@ -480,24 +482,23 @@ export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay,
                     />
                     <NoticeLine notice={notice} />
                     {typed.length >= 2 && candidates === 'looking' && (
-                        <p role="status" style={lede}>Looking…</p>
+                        <p role="status" style={lede}>{t('Looking…')}</p>
                     )}
                     {typed.length >= 2 && candidates === null && (
-                        <p role="alert" style={{ ...lede, color: 'var(--text-primary)' }}>{UNREACHABLE}</p>
+                        <p role="alert" style={{ ...lede, color: 'var(--text-primary)' }}>{t(JOIN_WORDS.unreachable)}</p>
                     )}
                     {typed.length >= 2 && Array.isArray(candidates) && candidates.length === 0 && (
                         // Said so it is true on both kinds of node: most list names that start with what was typed, but one that
                         // shows visitors the listings and not the people (the global one) finds the whole name only
                         // (server routes/community.ts), so a name part-typed there finds nothing yet (review 4109516319).
                         <p role="status" data-testid="restore-none" style={{ ...lede, color: 'var(--text-primary)' }}>
-                            No account called {typed} here can come back with a sign-in. Check you've typed your whole name.
-                            Your 12 words or the phone app can still bring yours here.
+                            {t("No account called {name} here can come back with a sign-in. Check you've typed your whole name. Your 12 words or the phone app can still bring yours here.", { name: typed })}
                         </p>
                     )}
                     {typed.length >= 2 && Array.isArray(candidates) && candidates.length > 0 && (
                         <>
                             <p style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
-                                Which one is you?
+                                {t('Which one is you?')}
                             </p>
                             {candidates.map((c) => (
                                 <button key={c.publicKey} type="button" data-testid="restore-candidate" style={secondaryButton} disabled={busy}
@@ -508,28 +509,28 @@ export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay,
                         </>
                     )}
                     {typed.length >= 2 && Array.isArray(candidates) && candidates.length === 0 && otherWays}
-                    <button type="button" style={quietButton} disabled={busy} onClick={onBack}>← Back</button>
+                    <button type="button" style={quietButton} disabled={busy} onClick={onBack}>{t('← Back')}</button>
                 </>
             );
             break;
         }
 
         case 'starting':
-            body = <p role="status" data-testid="restore-starting" style={lede}>One moment…</p>;
+            body = <p role="status" data-testid="restore-starting" style={lede}>{t('One moment…')}</p>;
             break;
 
         case 'providers':
             body = (
                 <>
-                    <h3 style={heading}>Sign in as {callsign}</h3>
-                    <p style={lede}>Choose the sign-in you joined with. It brings your account back to this browser.</p>
+                    <h3 style={heading}>{t('Sign in as {name}', { name: callsign })}</h3>
+                    <p style={lede}>{t('Choose the sign-in you joined with. It brings your account back to this browser.')}</p>
                     <NoticeLine notice={notice} />
                     {!nonceHeld && fetchingNonce ? (
-                        <p role="status" style={lede}>Getting the sign-ins ready…</p>
+                        <p role="status" style={lede}>{t('Getting the sign-ins ready…')}</p>
                     ) : !nonceHeld ? (
-                        <button type="button" style={secondaryButton} disabled={busy} onClick={retryNonce}>Try again</button>
+                        <button type="button" style={secondaryButton} disabled={busy} onClick={retryNonce}>{t('Try again')}</button>
                     ) : ordered.length === 0 ? (
-                        <p role="alert" style={lede}>This community has no sign-in a browser can use yet.</p>
+                        <p role="alert" style={lede}>{t('This community has no sign-in a browser can use yet.')}</p>
                     ) : (
                         ordered.map((p, i) => (
                             <button key={p} type="button" data-testid={`restore-provider-${p}`} style={i === 0 && p === hinted ? primaryButton : secondaryButton}
@@ -539,9 +540,9 @@ export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay,
                         ))
                     )}
                     <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem', lineHeight: 1.5, marginTop: '0.5rem' }}>
-                        {callsign} is told on their devices that the account is being brought back, in case it isn't them.
+                        {t("{name} is told on their devices that the account is being brought back, in case it isn't them.", { name: callsign })}
                     </p>
-                    <button type="button" style={quietButton} disabled={busy} onClick={() => void backToName()}>← Not {callsign}</button>
+                    <button type="button" style={quietButton} disabled={busy} onClick={() => void backToName()}>{t('← Not {name}', { name: callsign })}</button>
                 </>
             );
             break;
@@ -550,7 +551,7 @@ export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay,
         case 'saving':
             body = (
                 <p role="status" data-testid="restore-restoring" style={{ ...lede, color: 'var(--text-primary)', fontWeight: 600 }}>
-                    Getting {callsign || 'your account'} back…
+                    {callsign ? t('Getting {name} back…', { name: callsign }) : t('Getting your account back…')}
                 </p>
             );
             break;
@@ -558,12 +559,11 @@ export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay,
         case 'wrong_account':
             body = (
                 <>
-                    <h3 style={heading}>That isn't {callsign}</h3>
+                    <h3 style={heading}>{t("That isn't {name}", { name: callsign })}</h3>
                     <p role="alert" data-testid="restore-wrong-account" style={{ ...lede, color: 'var(--text-primary)' }}>
-                        The account that came back isn't {callsign}, so nothing was saved in this browser. Try again, or
-                        use your 12 words.
+                        {t("The account that came back isn't {name}, so nothing was saved in this browser. Try again, or use your 12 words.", { name: callsign })}
                     </p>
-                    <button type="button" style={primaryButton} onClick={() => void backToName()}>Start again</button>
+                    <button type="button" style={primaryButton} onClick={() => void backToName()}>{t('Start again')}</button>
                     {otherWays}
                 </>
             );
@@ -572,9 +572,9 @@ export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay,
         case 'no_copy':
             body = (
                 <>
-                    <p role="alert" data-testid="restore-no-copy" style={{ ...lede, color: 'var(--text-primary)' }}>{screen.message}</p>
+                    <p role="alert" data-testid="restore-no-copy" style={{ ...lede, color: 'var(--text-primary)' }}>{saidWords(screen.message)}</p>
                     {otherWays}
-                    <button type="button" style={quietButton} onClick={() => void backToName()}>← Start again</button>
+                    <button type="button" style={quietButton} onClick={() => void backToName()}>{t('← Start again')}</button>
                 </>
             );
             break;
@@ -582,12 +582,14 @@ export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay,
         case 'already_here':
             body = (
                 <>
-                    <h3 style={heading}>Already here</h3>
+                    <h3 style={heading}>{t('Already here')}</h3>
                     <p role="status" data-testid="restore-already-here" style={{ ...lede, color: 'var(--text-primary)' }}>
-                        {screen.identity.callsign.trim() || 'That account'} is already in this browser. Nothing needed bringing back.
+                        {screen.identity.callsign.trim()
+                            ? t('{name} is already in this browser. Nothing needed bringing back.', { name: screen.identity.callsign.trim() })
+                            : t('That account is already in this browser. Nothing needed bringing back.')}
                     </p>
                     <button type="button" style={primaryButton} onClick={() => onExisting(screen.identity)}>
-                        {screen.identity.callsign.trim() ? `Open ${screen.identity.callsign.trim()}` : 'Open it'}
+                        {screen.identity.callsign.trim() ? t('Open {name}', { name: screen.identity.callsign.trim() }) : t('Open it')}
                     </button>
                 </>
             );
@@ -598,14 +600,13 @@ export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay,
                 <>
                     <p role="alert" data-testid="restore-save-failed" style={{ ...lede, color: 'var(--text-primary)' }}>
                         {screen.unreachable
-                            ? `${callsign} is back on this page, but the community can't be reached to finish. Check your connection, then try again.`
-                            : `${callsign} is back on this page, but this browser couldn't save it. Try again, or try another browser.`}
-                        {' '}Nothing has been saved yet.
+                            ? t("{name} is back on this page, but the community can't be reached to finish. Check your connection, then try again. Nothing has been saved yet.", { name: callsign })
+                            : t("{name} is back on this page, but this browser couldn't save it. Try again, or try another browser. Nothing has been saved yet.", { name: callsign })}
                     </p>
-                    <button type="button" style={primaryButton} onClick={() => void retrySave()}>Try again</button>
+                    <button type="button" style={primaryButton} onClick={() => void retrySave()}>{t('Try again')}</button>
                     {/* A browser that can never save it (no storage, say) is not a dead end: the other ways, or the name. */}
                     {otherWays}
-                    <button type="button" style={quietButton} onClick={() => void backToName()}>← Start again</button>
+                    <button type="button" style={quietButton} onClick={() => void backToName()}>{t('← Start again')}</button>
                 </>
             );
             break;

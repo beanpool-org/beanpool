@@ -25,7 +25,7 @@ import { useCommunityInfo } from '../lib/features';
 import { globalCommunityLink, isAppsGlobal, phoneLaterLines } from '../lib/global-entry';
 import { webAppAddress, webAppHost } from '../lib/former-address';
 import { RecoveryKitButton } from '../components/RecoveryKitButton';
-import { NO_WORDS_HERE, SignInRecoveryLine, waysBackWithoutWords } from '../components/SignInRecoveryLine';
+import { noWordsHere, SignInRecoveryLine, waysBackWithoutWords } from '../components/SignInRecoveryLine';
 import { resolveAvatarUrl } from '../lib/avatar';
 import {
     DEFAULT_REMINDER_OFFSETS, REMINDER_OFFSETS, REMINDER_PREF_KEY, normaliseReminderOffsets, parseReminderOffsets,
@@ -42,6 +42,8 @@ import { OwnerWordsCheck } from '../components/OwnerWordsCheck';
 import { OwnerUnlockCard } from '../components/OwnerUnlockCard';
 import { NewAccountCard } from '../components/NewAccountCard';
 import { OneWayBackCard } from '../components/OneWayBack';
+import { keyLineWords } from '../components/key-lines';
+import { saidWords, type Said } from '../components/WebJoin';
 import type { LinkResult } from '../lib/link-signin';
 import { ModerationPauseCard } from '../components/ModerationPauseCard';
 import { KnownConsentCard } from '../components/KnownConsentCard';
@@ -606,7 +608,8 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
     };
     const [showPrivateKey, setShowPrivateKey] = useState(false);
     const [deletionMode, setDeletionMode] = useState<'none' | 'options' | 'confirm_local' | 'confirm_purge' | 'purged'>('none');
-    const [purgeError, setPurgeError] = useState<string | null>(null);
+    // A lib/delete-here sentence as it came, or this screen's own (Said: held as a function, set with () => …).
+    const [purgeError, setPurgeError] = useState<Said | null>(null);
     const [purgeCallsignInput, setPurgeCallsignInput] = useState('');
     const [isPurging, setIsPurging] = useState(false);
     // What Permanently Delete Account does in this browser (lib/delete-here): asked as the member opens it, so the
@@ -1231,7 +1234,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                         <p data-testid="sign-out-device-way-back" className="text-xs text-nature-600 dark:text-nature-400 leading-relaxed m-0">
                                             {hasWords
                                                 ? t('Signs out and clears local browser storage. Your account and listings remain safely stored on the community node and can be restored anytime with your 12-word recovery phrase.')
-                                                : t('Signs out and clears local browser storage. Your account and listings remain safely stored on the community node. {noWords} {waysBack}', { noWords: NO_WORDS_HERE, waysBack: waysBackWithoutWords(signInRecovery) })}
+                                                : t('Signs out and clears local browser storage. Your account and listings remain safely stored on the community node. {noWords} {waysBack}', { noWords: noWordsHere(), waysBack: waysBackWithoutWords(signInRecovery) })}
                                         </p>
                                         <button
                                             onClick={() => setDeletionMode('confirm_local')}
@@ -1247,7 +1250,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                             <span>🗑️</span> {t('Permanently Delete Account & Node Data')}
                                         </div>
                                         <p data-testid="delete-card-line" className="text-xs text-red-800 dark:text-red-400 leading-relaxed m-0">
-                                            {WEB_DELETE_CARD_LINE} <strong>{t('Cannot be undone, even with your 12-word phrase.')}</strong>
+                                            {keyLineWords(WEB_DELETE_CARD_LINE)} <strong>{t('Cannot be undone, even with your 12-word phrase.')}</strong>
                                         </p>
                                         <button
                                             onClick={openPurge}
@@ -1267,7 +1270,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                     <p data-testid="sign-out-device-confirm" className="text-xs text-nature-600 dark:text-nature-400 leading-relaxed m-0">
                                         {hasWords
                                             ? t('Are you sure you want to remove your account from this device? Ensure you have written down your 12-word recovery phrase if you plan to sign in again later.')
-                                            : t('Are you sure you want to remove your account from this device? {noWords} {waysBack}', { noWords: NO_WORDS_HERE, waysBack: waysBackWithoutWords(signInRecovery) })}
+                                            : t('Are you sure you want to remove your account from this device? {noWords} {waysBack}', { noWords: noWordsHere(), waysBack: waysBackWithoutWords(signInRecovery) })}
                                     </p>
                                     <div className="flex gap-3 pt-2">
                                         <button
@@ -1331,19 +1334,19 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                         {/* What stays in this browser: the key for the page's own community, or nothing. */}
                                         <p data-testid="delete-key-plan" aria-live="polite" className="text-xs text-nature-700 dark:text-nature-300 leading-relaxed m-0">
                                             {!deletePlan
-                                                ? WEB_DELETE_CHECKING_LINE
+                                                ? keyLineWords(WEB_DELETE_CHECKING_LINE)
                                                 : deletePlan.kind === 'this-one'
-                                                    ? `🔑 ${webKeepsKeyLine(deletePlan, hasWords)}`
-                                                    : webLastCommunityLine(hasWords)}
+                                                    ? `🔑 ${keyLineWords(webKeepsKeyLine(deletePlan, hasWords))}`
+                                                    : keyLineWords(webLastCommunityLine(hasWords))}
                                         </p>
                                         {deletePlan?.kind === 'last' && (
                                             <p data-testid="delete-vault-copy" className="text-xs text-nature-700 dark:text-nature-300 leading-relaxed m-0">
-                                                {WEB_VAULT_COPY_LINE}
+                                                {keyLineWords(WEB_VAULT_COPY_LINE)}
                                             </p>
                                         )}
                                         {purgeError && (
                                             <div id="purge-error-alert" role="alert" className="p-3 rounded-xl bg-red-100 dark:bg-red-950/60 border border-red-300 dark:border-red-800 text-red-800 dark:text-red-300 text-xs font-semibold">
-                                                {purgeError}
+                                                {saidWords(purgeError)}
                                             </div>
                                         )}
                                         <div className="flex gap-3 pt-2">
@@ -1357,7 +1360,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                             <button
                                                 onClick={async () => {
                                                     if (!isPurgeConfirmed) {
-                                                        setPurgeError(t('Please type "{name}" or "{word}" exactly to confirm.', { name: identity?.callsign || '', word: 'DELETE' }));
+                                                        setPurgeError(() => () => t('Please type "{name}" or "{word}" exactly to confirm.', { name: identity?.callsign || '', word: 'DELETE' }));
                                                         return;
                                                     }
                                                     // The screen said what stays; exactly that happens.
@@ -1465,7 +1468,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                     {seedCopied ? t('✅ Copied to Clipboard!') : t('📋 Copy All Words')}
                                 </button>
                                 <p data-testid="seed-copy-clears" className="text-[11px] text-nature-500 dark:text-nature-400 leading-relaxed mb-4">
-                                    {WEB_COPY_CLEARS_LINE}{' '}
+                                    {keyLineWords(WEB_COPY_CLEARS_LINE)}{' '}
                                     <span>{t("A keyboard's clipboard history or a clipboard shared with your other devices may keep a copy BeanPool can't clear.")}</span>
                                 </p>
                             </>

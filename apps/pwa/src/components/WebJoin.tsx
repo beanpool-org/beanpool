@@ -19,7 +19,9 @@
  */
 
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
-import { t } from '@beanpool/core';
+import { t, tn, word } from '@beanpool/core';
+import { keyLineWords, twoSentences } from './key-lines';
+import { Sentence } from './Sentence';
 import {
     clearUnsentPendingJoin,
     completePendingJoin,
@@ -192,25 +194,42 @@ type Screen =
     /** Something could not be saved or finished: the notice says what, and Reload is the way on. */
     | { name: 'failed' };
 
-export type Notice = { tone: 'error' | 'info'; text: string } | null;
+/**
+ * What a notice or a screen says: a sentence of this screen's own, said through t() as it is drawn (so a change of
+ * language redraws it), or a lib file's English as it came, translated by its words in key-lines.ts where it can be
+ * (the community's own words are shown as they came).
+ */
+export type Said = string | (() => string);
+export type Notice = { tone: 'error' | 'info'; text: Said } | null;
 
-export const UNREACHABLE = "Can't reach the community right now. Try again in a minute.";
-const WENT_WRONG = 'Something went wrong on this page. Reload it to try again.';
-const WENT_WRONG_KEPT = "Something went wrong on this page before we could finish. Your join is kept on this device: reload the page and it will check whether you're in.";
+/** A notice's or a screen's words, in the member's language. */
+export function saidWords(said: Said): string {
+    return typeof said === 'function' ? said() : keyLineWords(said);
+}
+
+/** Sentences said in more than one place: marked here, translated where they are shown. */
+export const JOIN_WORDS = {
+    unreachable: word("Can't reach the community right now. Try again in a minute."),
+    wentWrong: word('Something went wrong on this page. Reload it to try again.'),
+    wentWrongKept: word("Something went wrong on this page before we could finish. Your join is kept on this device: reload the page and it will check whether you're in."),
+    tooOld: word('This browser is too old to hold a BeanPool account. Try an up-to-date Chrome, Firefox, Safari or Edge.'),
+    /** After the node's sign-up refusal: the limit is counted per network, so a class or a meetup joining together meets it. */
+    sharedNetwork: word('Everyone joining from the same network counts together: at a campus, an office or a meetup it may be other people joining, not you.'),
+} as const;
+
+export const UNREACHABLE = JOIN_WORDS.unreachable;
 /** The one sentence for a browser that can't hold a key: its storage is missing or blocked, or it is too old. */
 export function keyProblemSentence(problem: 'storage' | 'reload' | 'old' | null): string {
-    return problem === 'storage' ? NO_STORAGE_SENTENCE : problem === 'reload' ? STORE_WOULD_NOT_OPEN_SENTENCE : TOO_OLD;
+    return problem === 'storage' ? keyLineWords(NO_STORAGE_SENTENCE) : problem === 'reload' ? keyLineWords(STORE_WOULD_NOT_OPEN_SENTENCE) : t(JOIN_WORDS.tooOld);
 }
 /**
  * What joining takes, said on the door's first screen (here, and the global lobby's Join card): both doors where the
  * node takes 12 words alone (two-doors design §2.6), one sign-in where it does not.
  */
 export function joinTakes(wordsDoor: boolean): string {
-    return wordsDoor ? 'It takes a name, and 12 secret words or a sign-in. No invite needed.' : 'It takes a name and one sign-in. No invite needed.';
+    return wordsDoor ? t('It takes a name, and 12 secret words or a sign-in. No invite needed.') : t('It takes a name and one sign-in. No invite needed.');
 }
-export const TOO_OLD = 'This browser is too old to hold a BeanPool account. Try an up-to-date Chrome, Firefox, Safari or Edge.';
-/** After the node's sign-up refusal: the limit is counted per network, so a class or a meetup joining together meets it. */
-const SHARED_NETWORK = "Everyone joining from the same network counts together: at a campus, an office or a meetup it may be other people joining, not you.";
+export const TOO_OLD = JOIN_WORDS.tooOld;
 
 /** A key restored just now, as a pending join of its own. */
 function restoredPending(r: BeanPoolIdentity): PendingJoin {
@@ -269,11 +288,11 @@ export function NoticeLine({ notice }: { notice: Notice }) {
     return notice.tone === 'error' ? (
         <div role="alert" data-testid="join-notice"
             className="bg-red-50 dark:bg-red-950/40 border border-red-300 dark:border-red-700 text-red-800 dark:text-red-300 p-2.5 rounded-xl text-xs mb-4 text-center leading-relaxed font-medium">
-            {notice.text}
+            {saidWords(notice.text)}
         </div>
     ) : (
         <p role="status" data-testid="join-notice" style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1rem', lineHeight: 1.5 }}>
-            {notice.text}
+            {saidWords(notice.text)}
         </p>
     );
 }
@@ -281,8 +300,8 @@ export function NoticeLine({ notice }: { notice: Notice }) {
 /** The door work's progress: 8 steps, one a part (design §3.3), as a bar and as words. */
 export function WorkBar({ done, of = DOOR_WORK_PARTS }: { done: number; of?: number }) {
     return (
-        <div role="progressbar" aria-label="Setting up your account" aria-valuemin={0} aria-valuemax={of} aria-valuenow={done}
-            aria-valuetext={`${done} of ${of}`} data-testid="join-work-bar"
+        <div role="progressbar" aria-label={t('Setting up your account')} aria-valuemin={0} aria-valuemax={of} aria-valuenow={done}
+            aria-valuetext={t('{done} of {total}', { done, total: of })} data-testid="join-work-bar"
             style={{ display: 'flex', gap: '0.25rem', marginBottom: '0.25rem' }}>
             {Array.from({ length: of }, (_, i) => (
                 <span key={i} style={{
@@ -303,14 +322,14 @@ export function WordsWorkLine({ work }: { work: WordsWorkState }) {
     if (work.status === 'solving' && work.level >= BUSY_LEVEL) {
         return (
             <p role="status" data-testid="join-busy" style={{ color: 'var(--text-primary)', fontSize: '0.8rem', lineHeight: 1.5, marginTop: '0.5rem', marginBottom: 0 }}>
-                {busySentence(secondsLeft(work.level, work.progress))}
+                {keyLineWords(busySentence(secondsLeft(work.level, work.progress)))}
             </p>
         );
     }
     if (work.status === 'busy' || work.status === 'closed' || work.status === 'failed') {
         return (
             <p role="alert" data-testid="join-words-problem" style={{ color: 'var(--text-primary)', fontSize: '0.8rem', lineHeight: 1.5, marginTop: '0.5rem', marginBottom: 0 }}>
-                {work.message}
+                {keyLineWords(work.message)}
             </p>
         );
     }
@@ -331,10 +350,11 @@ export function WebJoin({
     const [busy, setBusy] = useState(false);
     const [canHoldKey, setCanHoldKey] = useState<boolean | null>(null);
     // Why it can't, in the words for it: no place to keep an account (an in-app browser, a blocked profile) or too old.
-    const [keyProblemText, setKeyProblemText] = useState(TOO_OLD);
+    const [keyProblem, setKeyProblem] = useState<Parameters<typeof keyProblemSentence>[0]>('old');
+    const keyProblemText = keyProblemSentence(keyProblem);
     const [nonceHeld, setNonceHeld] = useState<{ value: JoinNonce; at: number } | null>(null);
     const nonce = nonceHeld?.value ?? null;
-    const [nonceProblem, setNonceProblem] = useState<string | null>(null);
+    const [nonceProblem, setNonceProblem] = useState<Said | null>(null);
     // The last join sent, kept in memory only: a 503 is retried with the same sign-in (the node did not spend it).
     // `proof` null: a 12-words join, which carries no sign-in.
     const lastJoin = useRef<{ pending: PendingJoin; proof: SignInProof | null } | null>(null);
@@ -398,11 +418,11 @@ export function WebJoin({
         setBusy(false);
         if (!joinWent.current && !settleOnlyRef.current) {
             // Nothing has gone: the lobby, which starts again from the top, says so.
-            setNotice({ tone: 'error', text: WENT_WRONG });
+            setNotice({ tone: 'error', text: () => t(JOIN_WORDS.wentWrong) });
             setScreen({ name: 'lobby' });
             return;
         }
-        setNotice({ tone: 'error', text: joinWent.current ? WENT_WRONG_KEPT : WENT_WRONG });
+        setNotice({ tone: 'error', text: joinWent.current ? () => t(JOIN_WORDS.wentWrongKept) : () => t(JOIN_WORDS.wentWrong) });
         setScreen({ name: 'failed' });
     }, []);
 
@@ -451,7 +471,7 @@ export function WebJoin({
             if (e instanceof IdentityHeldError) return showTaken(e.held, { ...p, identity }, true);
             // A reload finds it, asks the node, and is told "a member".
             console.error('[WebJoin] joined, but the identity could not be saved:', e);
-            setNotice({ tone: 'error', text: "You're in, but this browser couldn't save your account. Reload the page to finish." });
+            setNotice({ tone: 'error', text: () => t("You're in, but this browser couldn't save your account. Reload the page to finish.") });
             setScreen({ name: 'failed' });
             return;
         }
@@ -522,7 +542,8 @@ export function WebJoin({
                 // The node's operator has turned the 12-words door off: the sign-in is the way in.
                 setWordsShut(true);
                 const next = await keep({ ...p, nonce: null });
-                return toProviders(next, { tone: 'error', text: `${outcome.message} Choose a sign-in below.` });
+                const said = outcome.message;
+                return toProviders(next, { tone: 'error', text: () => t('{reason} Choose a sign-in below.', { reason: keyLineWords(said) }) });
             }
             case 'expired': {
                 if (!proof) break;
@@ -538,7 +559,8 @@ export function WebJoin({
             case 'rate_limited': {
                 // Kept for an hour, so trying again later uses this key rather than making a second one.
                 const next = await keep({ ...p, nonce: null, expiresAt: Date.now() + PENDING_JOIN_RATE_LIMITED_TTL_MS });
-                return toProviders(next, { tone: 'error', text: `${outcome.message} ${SHARED_NETWORK}` });
+                const said = outcome.message;
+                return toProviders(next, { tone: 'error', text: () => twoSentences(keyLineWords(said), t(JOIN_WORDS.sharedNetwork)) });
             }
             case 'unavailable':
                 setPending(p);
@@ -558,7 +580,7 @@ export function WebJoin({
         }
         // A sign-in's answer to a 12-words join (never sent so): said as it is, back at the two ways in.
         const next = await keep({ ...p, nonce: null });
-        return toProviders(next, { tone: 'error', text: 'message' in outcome ? outcome.message : WENT_WRONG });
+        return toProviders(next, { tone: 'error', text: 'message' in outcome ? outcome.message : () => t(JOIN_WORDS.wentWrong) });
     }, [keep, toProviders]);
 
     /**
@@ -670,10 +692,10 @@ export function WebJoin({
                     text: e instanceof IdentityStoreUnavailableError
                         ? e.message
                         : e instanceof PendingJoinHeldError
-                        ? 'An earlier join from this browser is still being checked. Reload the page to finish it.'
+                        ? () => t('An earlier join from this browser is still being checked. Reload the page to finish it.')
                         : e instanceof InviteSentHeldError
-                            ? 'An invite sent from this browser is still being checked, so nothing was sent. Reload the page to finish it.'
-                            : "This browser couldn't save your account, so nothing was sent. Try again, or try another browser.",
+                            ? () => t('An invite sent from this browser is still being checked, so nothing was sent. Reload the page to finish it.')
+                            : () => t("This browser couldn't save your account, so nothing was sent. Try again, or try another browser."),
                 });
             }
             joinWent.current = true;
@@ -769,8 +791,9 @@ export function WebJoin({
                 }
                 return resume(p, {
                     tone: 'info',
-                    text: `${check.kind === 'may_still_land' ? "Your join hasn't reached the community yet." : "Your join didn't reach the community."} ${
-                        p.door === 'words' ? 'Join again to finish.' : 'Sign in again to finish.'}`,
+                    text: () => (check.kind === 'may_still_land'
+                        ? (p.door === 'words' ? t("Your join hasn't reached the community yet. Join again to finish.") : t("Your join hasn't reached the community yet. Sign in again to finish."))
+                        : (p.door === 'words' ? t("Your join didn't reach the community. Join again to finish.") : t("Your join didn't reach the community. Sign in again to finish."))),
                 });
             case 'unknown':
                 setScreen({ name: 'checking', checking: false });
@@ -817,7 +840,9 @@ export function WebJoin({
         } catch (e) {
             // Said either way, with Try again beside it: never "Getting the sign-ins ready…" for good.
             if (!(e instanceof DoorUnreachableError)) console.error('[WebJoin] could not ask for a sign-in:', e);
-            if (mounted.current) setNonceProblem(e instanceof DoorUnreachableError ? UNREACHABLE : WENT_WRONG);
+            // Held as a function (React would run one passed bare as an updater), so it is said in the language of the moment.
+            const why: Said = e instanceof DoorUnreachableError ? () => t(JOIN_WORDS.unreachable) : () => t(JOIN_WORDS.wentWrong);
+            if (mounted.current) setNonceProblem(() => why);
         }
         return null;
     }, [finish]);
@@ -839,7 +864,7 @@ export function WebJoin({
                 return;
             }
             const clientId = n.clientIds[provider];
-            if (!clientId) return toProviders(p, { tone: 'error', text: `${providerLabel(provider)} sign-in isn't available here.` });
+            if (!clientId) return toProviders(p, { tone: 'error', text: () => t("{provider} sign-in isn't available here.", { provider: providerLabel(provider) }) });
             const now = Date.now();
             const next: PendingJoin = {
                 ...p,
@@ -855,7 +880,7 @@ export function WebJoin({
             // A join with another key went out from this browser (another tab, say): that one is settled first.
             if (e instanceof PendingJoinHeldError) return settleSent(e.held);
             console.error('[WebJoin] could not start the sign-in:', e);
-            toProviders(p, { tone: 'error', text: WENT_WRONG });
+            toProviders(p, { tone: 'error', text: () => t(JOIN_WORDS.wentWrong) });
         } finally {
             if (mounted.current) setBusy(false);
         }
@@ -915,8 +940,8 @@ export function WebJoin({
                     text: e instanceof IdentityStoreUnavailableError
                         ? e.message
                         : e instanceof InviteSentHeldError
-                        ? 'An invite sent from this browser is still being checked, so nothing was sent. Reload the page to finish it.'
-                        : "This browser couldn't save your account, so nothing was sent. Try again, or try another browser.",
+                        ? () => t('An invite sent from this browser is still being checked, so nothing was sent. Reload the page to finish it.')
+                        : () => t("This browser couldn't save your account, so nothing was sent. Try again, or try another browser."),
                 });
             }
             joinWent.current = true;
@@ -1008,7 +1033,7 @@ export function WebJoin({
         let cancelled = false;
         browserKeyProblem().then((problem) => {
             if (cancelled) return;
-            setKeyProblemText(keyProblemSentence(problem));
+            setKeyProblem(problem);
             setCanHoldKey(problem === null);
         });
         (async () => {
@@ -1038,7 +1063,7 @@ export function WebJoin({
                     return submit(p, proof);
                 }
                 // A foreign or unfinished return leaves the pending join as it was: it may still be this page's own.
-                const text = outcome.kind === 'cancelled' ? 'Sign-in was cancelled.'
+                const text: Said = outcome.kind === 'cancelled' ? () => t('Sign-in was cancelled.')
                     : outcome.kind === 'provider_error' ? outcome.message
                     : refusalMessage(outcome.reason, p.provider ?? ret.provider);
                 setName(p.identity.callsign);
@@ -1087,7 +1112,7 @@ export function WebJoin({
     async function chooseName() {
         const trimmed = name.trim().slice(0, MAX_JOIN_CALLSIGN).trim();
         if (trimmed.length < 2) {
-            setNotice({ tone: 'error', text: 'Please choose a name of at least 2 letters.' });
+            setNotice({ tone: 'error', text: () => t('Please choose a name of at least 2 letters.') });
             return;
         }
         setBusy(true);
@@ -1114,7 +1139,7 @@ export function WebJoin({
                 return settleSent(e.held);
             }
             console.error('[WebJoin] could not make a key:', e);
-            setNotice({ tone: 'error', text: 'This browser could not make your key. Try again, or try another browser.' });
+            setNotice({ tone: 'error', text: () => t('This browser could not make your key. Try again, or try another browser.') });
         } finally {
             setBusy(false);
         }
@@ -1181,7 +1206,7 @@ export function WebJoin({
             setScreen({ name: 'guard' });
         } catch (e) {
             console.error('[WebJoin] could not go back:', e);
-            setNotice({ tone: 'error', text: 'Something went wrong on this page. Reload it to try again.' });
+            setNotice({ tone: 'error', text: () => t('Something went wrong on this page. Reload it to try again.') });
         } finally {
             if (mounted.current) setBusy(false);
         }
@@ -1208,7 +1233,7 @@ export function WebJoin({
         } catch (e) {
             if (e instanceof PendingJoinHeldError) return settleSent(e.held);
             console.error('[WebJoin] could not let the earlier join go:', e);
-            setNotice({ tone: 'error', text: 'Something went wrong on this page. Reload it to try again.' });
+            setNotice({ tone: 'error', text: () => t('Something went wrong on this page. Reload it to try again.') });
         } finally {
             if (mounted.current) setBusy(false);
         }
@@ -1245,22 +1270,19 @@ export function WebJoin({
 
     const offered = nonce ? offeredProviders(nonce) : [];
     const callsign = pending?.identity.callsign ?? '';
-    // A key with no name yet (a re-key ask left in the slot, WebRekey) is checked without one (#1783 review N8).
-    const joinedAs = callsign ? ` as ${callsign}` : '';
 
     let body: React.ReactNode;
     switch (screen.name) {
         case 'loading':
-            body = <p role="status" style={lede}>One moment…</p>;
+            body = <p role="status" style={lede}>{t('One moment…')}</p>;
             break;
 
         case 'lobby':
             body = (
                 <>
-                    <h3 style={heading}>Join BeanPool</h3>
+                    <h3 style={heading}>{t('Join BeanPool')}</h3>
                     <p style={lede}>
-                        Post what you can offer and what you need, and talk with the people here.
-                        {' '}{joinTakes(wordsOpen)}
+                        {t('Post what you can offer and what you need, and talk with the people here. {joinTakes}', { joinTakes: joinTakes(wordsOpen) })}
                     </p>
                     <NoticeLine notice={notice} />
                     {canHoldKey === false ? (
@@ -1268,15 +1290,15 @@ export function WebJoin({
                     ) : (
                         <button type="button" data-testid="join-start" style={primaryButton} disabled={canHoldKey === null}
                             onClick={() => { setNotice(null); setScreen({ name: 'guard' }); }}>
-                            Join
+                            {t('Join')}
                         </button>
                     )}
                     <button type="button" style={quietButton} onClick={() => { setNotice(null); setScreen({ name: 'restore' }); }}>
-                        Already have BeanPool?
+                        {t('Already have BeanPool?')}
                     </button>
                     {onLobby && (
                         <div>
-                            <button type="button" style={quietButton} onClick={onLobby}>← Back to the listings</button>
+                            <button type="button" style={quietButton} onClick={onLobby}>{t('← Back to the listings')}</button>
                         </div>
                     )}
                 </>
@@ -1287,25 +1309,25 @@ export function WebJoin({
             // Asked once, before a key is made: two keys made separately can never be merged into one account.
             body = (
                 <>
-                    <h3 style={heading}>Have you used BeanPool before?</h3>
+                    <h3 style={heading}>{t('Have you used BeanPool before?')}</h3>
                     {/* Opened straight from the global lobby's Join, this screen is the first to need a key, so a
                         browser that can't hold one hears it here, as the lobby's Join says it. */}
                     {canHoldKey === false ? (
                         <p role="alert" data-testid="guard-too-old" style={{ ...lede, color: 'var(--text-primary)' }}>{keyProblemText}</p>
                     ) : (
                         <>
-                            <p style={lede}>One person, one account. If you already have one, bring it here instead of making another.</p>
+                            <p style={lede}>{t('One person, one account. If you already have one, bring it here instead of making another.')}</p>
                             <button type="button" data-testid="join-new" style={primaryButton} onClick={() => { setNotice(null); setScreen({ name: 'name' }); }}>
-                                I'm new to BeanPool
+                                {t("I'm new to BeanPool")}
                             </button>
                             <button type="button" style={secondaryButton} onClick={() => onRestore('phone')}>
-                                I use BeanPool on my phone
+                                {t('I use BeanPool on my phone')}
                             </button>
                             <button type="button" style={secondaryButton} onClick={() => onRestore('words')}>
-                                I have my 12 words
+                                {t('I have my 12 words')}
                             </button>
                             <button type="button" data-testid="join-guard-signin" style={secondaryButton} onClick={() => onRestore('signin')}>
-                                I joined with a sign-in before
+                                {t('I joined with a sign-in before')}
                             </button>
                             {/* The account someone already has, wherever it is, comes here; a new one never merges with it
                                 (DESIGN-global-entry-fable.md §D). */}
@@ -1314,7 +1336,7 @@ export function WebJoin({
                             </p>
                         </>
                     )}
-                    <button type="button" style={quietButton} onClick={() => backFrom('guard')}>← Back</button>
+                    <button type="button" style={quietButton} onClick={() => backFrom('guard')}>{t('← Back')}</button>
                 </>
             );
             break;
@@ -1322,27 +1344,27 @@ export function WebJoin({
         case 'restore':
             body = (
                 <>
-                    <h3 style={heading}>Bring your account here</h3>
+                    <h3 style={heading}>{t('Bring your account here')}</h3>
                     {/* Every way back ends with this browser holding the key, so a browser that can't hold one hears
                         that here, as the lobby's Join does, instead of "can't reach the community" (review 4109643191). */}
                     {canHoldKey === false ? (
                         <p role="alert" data-testid="restore-too-old" style={{ ...lede, color: 'var(--text-primary)' }}>{keyProblemText}</p>
                     ) : (
                         <>
-                            <p style={lede}>Use the sign-in you joined with, the phone app, or your 12 words.</p>
+                            <p style={lede}>{t('Use the sign-in you joined with, the phone app, or your 12 words.')}</p>
                             <button type="button" data-testid="join-restore-signin" style={primaryButton} disabled={canHoldKey === null}
                                 onClick={() => onRestore('signin')}>
-                                Use my sign-in
+                                {t('Use my sign-in')}
                             </button>
                             <button type="button" style={secondaryButton} disabled={canHoldKey === null} onClick={() => onRestore('phone')}>
-                                Link with my phone
+                                {t('Link with my phone')}
                             </button>
                             <button type="button" style={secondaryButton} disabled={canHoldKey === null} onClick={() => onRestore('words')}>
-                                Use my 12 words
+                                {t('Use my 12 words')}
                             </button>
                         </>
                     )}
-                    <button type="button" style={quietButton} onClick={() => backFrom('restore')}>← Back</button>
+                    <button type="button" style={quietButton} onClick={() => backFrom('restore')}>{t('← Back')}</button>
                 </>
             );
             break;
@@ -1351,10 +1373,10 @@ export function WebJoin({
             const trimmed = name.trim();
             body = (
                 <>
-                    <h3 style={heading}>What should we call you?</h3>
-                    <p style={lede}>The name people here will see. At least 2 letters.</p>
+                    <h3 style={heading}>{t('What should we call you?')}</h3>
+                    <p style={lede}>{t('The name people here will see. At least 2 letters.')}</p>
                     <label htmlFor="join-callsign" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>
-                        Your name
+                        {t('Your name')}
                     </label>
                     <input
                         id="join-callsign"
@@ -1363,7 +1385,7 @@ export function WebJoin({
                         value={name}
                         maxLength={MAX_JOIN_CALLSIGN}
                         autoComplete="nickname"
-                        placeholder="e.g. Alice"
+                        placeholder={t('e.g. Alice')}
                         disabled={busy}
                         onChange={(e) => { setName(e.target.value); setNotice(null); }}
                         onKeyDown={(e) => { if (e.key === 'Enter') void chooseName(); }}
@@ -1375,15 +1397,15 @@ export function WebJoin({
                         }}
                     />
                     <p role="status" style={{ fontSize: '0.8rem', minHeight: '1.2em', marginBottom: '0.75rem', textAlign: 'left', color: 'var(--text-muted)' }}>
-                        {trimmed.length >= 2 && nameCheck === 'available' && '✓ Available'}
-                        {trimmed.length >= 2 && nameCheck === 'taken' && `Someone here is already called ${trimmed}. You can keep it (we'll add a number) or choose another.`}
+                        {trimmed.length >= 2 && nameCheck === 'available' && t('✓ Available')}
+                        {trimmed.length >= 2 && nameCheck === 'taken' && t("Someone here is already called {name}. You can keep it (we'll add a number) or choose another.", { name: trimmed })}
                     </p>
                     <NoticeLine notice={notice} />
                     <button type="button" data-testid="join-name-next" style={primaryButton} disabled={busy} onClick={() => void chooseName()}>
-                        {busy ? 'One moment…' : 'Next →'}
+                        {busy ? t('One moment…') : t('Next →')}
                     </button>
                     <button type="button" style={quietButton} disabled={busy} onClick={() => void startOver()}>
-                        ← Back
+                        {t('← Back')}
                     </button>
                 </>
             );
@@ -1395,35 +1417,35 @@ export function WebJoin({
                 // Two ways in, side by side (two-doors design §2.6): 12 words first, the sign-ins below. Neither is the
                 // lesser one: each is a full-width choice with one plain line about what it means for getting back in.
                 <>
-                    <h3 style={heading}>How would you like to join?</h3>
+                    <h3 style={heading}>{t('How would you like to join?')}</h3>
                     <p style={{ fontSize: '0.85rem', marginBottom: '1rem' }}>
-                        Joining as <strong data-testid="join-as">{callsign}</strong>
+                        <Sentence text={t('Joining as {name}')} parts={{ name: <strong data-testid="join-as" dir="auto">{callsign}</strong> }} />
                     </p>
                     <NoticeLine notice={notice} />
                     <section data-testid="door-words" aria-labelledby="door-words-title" style={{ marginBottom: '1.25rem' }}>
                         <h4 id="door-words-title" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>
-                            With 12 secret words
+                            {t('With 12 secret words')}
                         </h4>
                         <button type="button" data-testid="join-words" style={{ ...primaryButton, marginBottom: '0.5rem' }}
                             disabled={busy || !pending || work.status === 'closed'} onClick={() => pending && void joinByWords(pending)}>
-                            Create an account with 12 secret words
+                            {t('Create an account with 12 secret words')}
                         </button>
                         <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', lineHeight: 1.5, margin: 0 }}>
-                            No Google, Apple or Facebook needed. Your 12 words are the only way back in.
+                            {t('No Google, Apple or Facebook needed. Your 12 words are the only way back in.')}
                         </p>
                         <WordsWorkLine work={work} />
                     </section>
                     <section data-testid="door-sign-in" aria-labelledby="door-sign-in-title">
-                        <h4 id="door-sign-in-title" style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '0.5rem' }}>Or sign in</h4>
+                        <h4 id="door-sign-in-title" style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '0.5rem' }}>{t('Or sign in')}</h4>
                         {nonceProblem ? (
                             <>
-                                <p role="alert" data-testid="join-nonce-problem" style={{ ...lede, color: 'var(--text-primary)' }}>{nonceProblem}</p>
-                                <button type="button" style={secondaryButton} onClick={() => pending && void fetchNonce(pending)}>Try again</button>
+                                <p role="alert" data-testid="join-nonce-problem" style={{ ...lede, color: 'var(--text-primary)' }}>{saidWords(nonceProblem)}</p>
+                                <button type="button" style={secondaryButton} onClick={() => pending && void fetchNonce(pending)}>{t('Try again')}</button>
                             </>
                         ) : !nonce ? (
-                            <p role="status" style={lede}>Getting the sign-ins ready…</p>
+                            <p role="status" style={lede}>{t('Getting the sign-ins ready…')}</p>
                         ) : offered.length === 0 ? (
-                            <p role="alert" style={lede}>This community has no sign-in a browser can use yet.</p>
+                            <p role="alert" style={lede}>{t('This community has no sign-in a browser can use yet.')}</p>
                         ) : (
                             offered.map((provider) => (
                                 <button key={provider} type="button" data-testid={`join-provider-${provider}`} style={secondaryButton}
@@ -1433,38 +1455,36 @@ export function WebJoin({
                             ))
                         )}
                         <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', lineHeight: 1.5, margin: 0 }}>
-                            Also a way back if you lose this device.
+                            {t('Also a way back if you lose this device.')}
                         </p>
                         <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem', lineHeight: 1.5, marginTop: '0.5rem' }}>
-                            We keep only a scrambled reference to your sign-in, never your email or name from there. It also
-                            locks a copy of your account, so the sign-in can bring it back. The people who run this
-                            community's server can open that copy.
+                            {t("We keep only a scrambled reference to your sign-in, never your email or name from there. It also locks a copy of your account, so the sign-in can bring it back. The people who run this community's server can open that copy.")}
                         </p>
                     </section>
                     <button type="button" style={quietButton} onClick={() => { setNotice(null); setScreen({ name: 'name' }); }}>
-                        ← Change name
+                        {t('← Change name')}
                     </button>
                 </>
             ) : (
                 <>
-                    <h3 style={heading}>Prove you're a person</h3>
-                    <p style={lede}>One sign-in, once. After this your 12 words are your account everywhere.</p>
+                    <h3 style={heading}>{t("Prove you're a person")}</h3>
+                    <p style={lede}>{t('One sign-in, once. After this your 12 words are your account everywhere.')}</p>
                     <p style={{ fontSize: '0.85rem', marginBottom: '1rem' }}>
-                        Joining as <strong data-testid="join-as">{callsign}</strong>
+                        <Sentence text={t('Joining as {name}')} parts={{ name: <strong data-testid="join-as" dir="auto">{callsign}</strong> }} />
                     </p>
                     <NoticeLine notice={notice} />
                     {nonceProblem ? (
                         <>
-                            <p role="alert" data-testid="join-nonce-problem" style={{ ...lede, color: 'var(--text-primary)' }}>{nonceProblem}</p>
-                            <button type="button" style={secondaryButton} onClick={() => pending && void fetchNonce(pending)}>Try again</button>
+                            <p role="alert" data-testid="join-nonce-problem" style={{ ...lede, color: 'var(--text-primary)' }}>{saidWords(nonceProblem)}</p>
+                            <button type="button" style={secondaryButton} onClick={() => pending && void fetchNonce(pending)}>{t('Try again')}</button>
                         </>
                     ) : !nonce ? (
-                        <p role="status" style={lede}>Getting the sign-ins ready…</p>
+                        <p role="status" style={lede}>{t('Getting the sign-ins ready…')}</p>
                     ) : offered.length === 0 ? (
-                        <p role="alert" style={lede}>This community has no sign-in a browser can use yet.</p>
+                        <p role="alert" style={lede}>{t('This community has no sign-in a browser can use yet.')}</p>
                     ) : (
                         <>
-                            <p style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Sign in with</p>
+                            <p style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>{t('Sign in with')}</p>
                             {offered.map((provider) => (
                                 <button key={provider} type="button" data-testid={`join-provider-${provider}`} style={secondaryButton}
                                     disabled={busy || !pending} onClick={() => pending && void signIn(pending, provider)}>
@@ -1474,12 +1494,10 @@ export function WebJoin({
                         </>
                     )}
                     <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem', lineHeight: 1.5, marginTop: '0.5rem' }}>
-                        Why a sign-in? It stops one person making many accounts. We keep only a scrambled reference to it,
-                        never your email or name from there. It also locks a copy of your account, so this sign-in can
-                        bring it back. The people who run this community's server can open that copy.
+                        {t("Why a sign-in? It stops one person making many accounts. We keep only a scrambled reference to it, never your email or name from there. It also locks a copy of your account, so this sign-in can bring it back. The people who run this community's server can open that copy.")}
                     </p>
                     <button type="button" style={quietButton} onClick={() => { setNotice(null); setScreen({ name: 'name' }); }}>
-                        ← Change name
+                        {t('← Change name')}
                     </button>
                 </>
             );
@@ -1494,25 +1512,25 @@ export function WebJoin({
             body = screen.setting ? (
                 <div data-testid="join-setting-up">
                     <p role="status" style={{ ...lede, color: 'var(--text-primary)', fontWeight: 600, marginBottom: '0.75rem' }}>
-                        Setting up your account…
+                        {t('Setting up your account…')}
                     </p>
                     <WorkBar done={setting?.progress?.done ?? 0} />
                     {setting && setting.level >= BUSY_LEVEL && (
                         <p data-testid="join-busy" style={{ ...lede, marginTop: '0.75rem' }}>
                             {forWords
-                                ? busySentence(secondsLeft(setting.level, setting.progress))
-                                : signInBusySentence(secondsLeft(setting.level, setting.progress))}
+                                ? keyLineWords(busySentence(secondsLeft(setting.level, setting.progress)))
+                                : keyLineWords(signInBusySentence(secondsLeft(setting.level, setting.progress)))}
                         </p>
                     )}
                     {forWords && (
                         <button type="button" data-testid="join-setting-back" style={quietButton} onClick={chooseAnotherWay}>
-                            ← Choose another way
+                            {t('← Choose another way')}
                         </button>
                     )}
                 </div>
             ) : (
                 <p role="status" data-testid="join-joining" style={{ ...lede, color: 'var(--text-primary)', fontWeight: 600 }}>
-                    {screen.securing ? 'Securing your account…' : <>Joining as {callsign}…</>}
+                    {screen.securing ? t('Securing your account…') : t('Joining as {name}…', { name: callsign })}
                 </p>
             );
             break;
@@ -1520,33 +1538,37 @@ export function WebJoin({
 
         case 'unknown':
             body = screen.checking ? (
-                <p role="status" data-testid="join-unknown" style={lede}>We can't tell if that worked. Checking…</p>
+                <p role="status" data-testid="join-unknown" style={lede}>{t("We can't tell if that worked. Checking…")}</p>
             ) : (
                 <>
                     <p role="alert" data-testid="join-unknown" style={{ ...lede, color: 'var(--text-primary)' }}>
-                        We can't tell if that worked, and you're not in yet. Check your connection, then try again.
+                        {t("We can't tell if that worked, and you're not in yet. Check your connection, then try again.")}
                     </p>
-                    <button type="button" style={primaryButton} onClick={() => afterJoin(retryLastJoin)}>Try again</button>
+                    <button type="button" style={primaryButton} onClick={() => afterJoin(retryLastJoin)}>{t('Try again')}</button>
                     {/* The same key, kept: if the join did land, the next nonce request answers "already a member". */}
-                    <button type="button" style={quietButton} onClick={() => pending && toProviders(pending, null)}>← Choose another way</button>
+                    <button type="button" style={quietButton} onClick={() => pending && toProviders(pending, null)}>{t('← Choose another way')}</button>
                 </>
             );
             break;
 
         case 'checking':
+            // A key with no name yet (a re-key ask left in the slot, WebRekey) is checked without one (#1783 review N8).
             body = screen.checking ? (
-                <p role="status" data-testid="join-checking" style={lede}>Checking whether you've joined{joinedAs}…</p>
+                <p role="status" data-testid="join-checking" style={lede}>
+                    {callsign ? t("Checking whether you've joined as {name}…", { name: callsign }) : t("Checking whether you've joined…")}
+                </p>
             ) : (
                 <>
                     <p role="alert" data-testid="join-checking" style={{ ...lede, color: 'var(--text-primary)' }}>
-                        We can't tell yet whether you joined{joinedAs}. Your account is kept on this device. Check your
-                        connection, then try again.
+                        {callsign
+                            ? t("We can't tell yet whether you joined as {name}. Your account is kept on this device. Check your connection, then try again.", { name: callsign })
+                            : t("We can't tell yet whether you joined. Your account is kept on this device. Check your connection, then try again.")}
                     </p>
-                    <button type="button" style={primaryButton} onClick={() => afterJoin(checkAgain)}>Try again</button>
+                    <button type="button" style={primaryButton} onClick={() => afterJoin(checkAgain)}>{t('Try again')}</button>
                     {/* Kept either way: from the lobby, joining again carries on with this same key. Settling only, there is
                         no lobby: the door isn't open, and nothing else here may run until the node has answered. */}
                     {!settleOnly && (
-                        <button type="button" style={quietButton} onClick={() => { setNotice(null); setScreen({ name: 'lobby' }); }}>← Back</button>
+                        <button type="button" style={quietButton} onClick={() => { setNotice(null); setScreen({ name: 'lobby' }); }}>{t('← Back')}</button>
                     )}
                 </>
             );
@@ -1555,34 +1577,35 @@ export function WebJoin({
         case 'held': {
             const minutes = Math.max(1, Math.ceil((screen.until - Date.now()) / 60_000));
             const brought = restored?.callsign.trim() || null;
-            const wait = `Wait about ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}, then check again`;
+            const wait = settleOnly
+                ? tn(minutes, 'Wait about {n} minute, then check again.', 'Wait about {n} minutes, then check again.')
+                : tn(minutes, 'Wait about {n} minute, then check again, or go back and finish joining as {name}.', 'Wait about {n} minutes, then check again, or go back and finish joining as {name}.', { name: callsign });
             body = (
                 <>
-                    <h3 style={heading}>{screen.canLand ? 'Your earlier join may still go through' : "Your earlier join didn't go through"}</h3>
+                    <h3 style={heading}>{screen.canLand ? t('Your earlier join may still go through') : t("Your earlier join didn't go through")}</h3>
                     {screen.canLand ? (
                         <p role="alert" data-testid="join-held" style={{ ...lede, color: 'var(--text-primary)' }}>
-                            This browser started joining as {callsign}, and that join may still go through, so its account is
-                            kept here for now. {settleOnly ? `${wait}.` : `${wait}, or go back and finish joining as ${callsign}.`}
+                            {twoSentences(t('This browser started joining as {name}, and that join may still go through, so its account is kept here for now.', { name: callsign }), wait)}
                         </p>
                     ) : (
                         <p role="alert" data-testid="join-held" style={{ ...lede, color: 'var(--text-primary)' }}>
-                            The community says {callsign} isn't a member, and that earlier join can no longer go through. To
-                            join as {brought ?? 'the account you brought here'}, this browser has to let go of it first. Or
-                            finish joining as {callsign} instead.
+                            {brought
+                                ? t("The community says {name} isn't a member, and that earlier join can no longer go through. To join as {brought}, this browser has to let go of it first. Or finish joining as {name} instead.", { name: callsign, brought })
+                                : t("The community says {name} isn't a member, and that earlier join can no longer go through. To join as the account you brought here, this browser has to let go of it first. Or finish joining as {name} instead.", { name: callsign })}
                         </p>
                     )}
                     {screen.canLand ? (
-                        <button type="button" style={primaryButton} onClick={() => afterJoin(checkAgain)}>Check again</button>
+                        <button type="button" style={primaryButton} onClick={() => afterJoin(checkAgain)}>{t('Check again')}</button>
                     ) : (
                         <button type="button" style={primaryButton} onClick={() => setScreen({ name: 'abandon', until: screen.until })}>
-                            {brought ? `Use ${brought} instead` : 'Use the account I brought here'}
+                            {brought ? t('Use {name} instead', { name: brought }) : t('Use the account I brought here')}
                         </button>
                     )}
                     {/* Settling only, the door isn't open: there is no joining again from here, and no lobby to go back to. */}
                     {!settleOnly && (
                         <>
-                            <button type="button" style={secondaryButton} onClick={() => pending && resume(pending)}>Finish joining as {callsign}</button>
-                            <button type="button" style={quietButton} onClick={() => { setNotice(null); setScreen({ name: 'lobby' }); }}>← Back</button>
+                            <button type="button" style={secondaryButton} onClick={() => pending && resume(pending)}>{t('Finish joining as {name}', { name: callsign })}</button>
+                            <button type="button" style={quietButton} onClick={() => { setNotice(null); setScreen({ name: 'lobby' }); }}>{t('← Back')}</button>
                         </>
                     )}
                 </>
@@ -1593,19 +1616,18 @@ export function WebJoin({
         case 'abandon':
             body = (
                 <>
-                    <h3 style={heading}>Let go of {callsign}?</h3>
+                    <h3 style={heading}>{t('Let go of {name}?', { name: callsign })}</h3>
                     <p role="alert" data-testid="join-abandon" style={{ ...lede, color: 'var(--text-primary)' }}>
-                        This deletes {callsign}'s key and its 12 words from this browser for good. The community says it
-                        never took that join, so no account there is lost, but this can't be undone.
+                        {t("This deletes {name}'s key and its 12 words from this browser for good. The community says it never took that join, so no account there is lost, but this can't be undone.", { name: callsign })}
                     </p>
                     <NoticeLine notice={notice} />
                     <button type="button" data-testid="join-abandon-confirm" disabled={busy} onClick={() => void abandonHeld()}
                         style={{ ...primaryButton, background: '#b91c1c' }}>
-                        Let go of {callsign}
+                        {t('Let go of {name}', { name: callsign })}
                     </button>
                     <button type="button" style={quietButton} disabled={busy}
                         onClick={() => setScreen({ name: 'held', canLand: false, until: screen.until })}>
-                        ← Keep it
+                        {t('← Keep it')}
                     </button>
                 </>
             );
@@ -1614,9 +1636,9 @@ export function WebJoin({
         case 'unavailable':
             body = (
                 <>
-                    <p role="alert" data-testid="join-unavailable" style={{ ...lede, color: 'var(--text-primary)' }}>{screen.message}</p>
-                    <button type="button" style={primaryButton} onClick={() => afterJoin(retryLastJoin)}>Try again</button>
-                    <button type="button" style={quietButton} onClick={() => pending && toProviders({ ...pending }, null)}>← Choose another way</button>
+                    <p role="alert" data-testid="join-unavailable" style={{ ...lede, color: 'var(--text-primary)' }}>{keyLineWords(screen.message)}</p>
+                    <button type="button" style={primaryButton} onClick={() => afterJoin(retryLastJoin)}>{t('Try again')}</button>
+                    <button type="button" style={quietButton} onClick={() => pending && toProviders({ ...pending }, null)}>{t('← Choose another way')}</button>
                 </>
             );
             break;
@@ -1624,18 +1646,18 @@ export function WebJoin({
         case 'already_joined':
             body = (
                 <>
-                    <h3 style={heading}>You're already here</h3>
-                    <p role="alert" data-testid="join-already-joined" style={{ ...lede, color: 'var(--text-primary)' }}>{screen.message}</p>
+                    <h3 style={heading}>{t("You're already here")}</h3>
+                    <p role="alert" data-testid="join-already-joined" style={{ ...lede, color: 'var(--text-primary)' }}>{keyLineWords(screen.message)}</p>
                     <button type="button" data-testid="join-restore-signin" style={primaryButton} onClick={() => onRestore('signin', screen.provider)}>
-                        Restore with {providerLabel(screen.provider)}
+                        {t('Restore with {provider}', { provider: providerLabel(screen.provider) })}
                     </button>
                     <button type="button" data-testid="join-restore-words" style={secondaryButton} onClick={() => onRestore('words')}>
-                        Restore with my 12 words
+                        {t('Restore with my 12 words')}
                     </button>
                     <button type="button" data-testid="join-restore-phone" style={secondaryButton} onClick={() => onRestore('phone')}>
-                        Link with my phone
+                        {t('Link with my phone')}
                     </button>
-                    <button type="button" style={quietButton} onClick={() => setScreen({ name: 'lobby' })}>← Back</button>
+                    <button type="button" style={quietButton} onClick={() => setScreen({ name: 'lobby' })}>{t('← Back')}</button>
                 </>
             );
             break;
@@ -1645,23 +1667,31 @@ export function WebJoin({
             // This page's key: kept here when a join went with it, and then its 12 words are one tap away.
             const mine = pending?.identity.callsign.trim() || null;
             const words = screen.joined !== 'none' ? pending?.identity.mnemonic ?? null : null;
-            const it = mine ?? 'that account';
+            // What became of this page's join, what is kept, and how to use it here instead: three sentences, each whole.
+            const took = screen.joined === 'member'
+                ? (mine ? t('The community took {name} too, so you have two accounts there now.', { name: mine }) : t('The community took that account too, so you have two accounts there now.'))
+                : (mine ? t('The join from this page, as {name}, may have gone through too.', { name: mine }) : t('The join from this page may have gone through too.'));
+            const kept = mine ? t("{name}'s key is kept on this device. Write down its 12 words to keep it.", { name: mine }) : t('Its key is kept on this device. Write down its 12 words to keep it.');
+            const useHere = mine
+                ? (heldName
+                    ? t('To use {name} here instead, sign out of {held} in Settings, then restore {name} with those words.', { name: mine, held: heldName })
+                    : t('To use {name} here instead, sign out of the other account in Settings, then restore {name} with those words.', { name: mine }))
+                : (heldName
+                    ? t('To use that account here instead, sign out of {held} in Settings, then restore that account with those words.', { held: heldName })
+                    : t('To use that account here instead, sign out of the other account in Settings, then restore that account with those words.'));
             body = (
                 <>
-                    <h3 style={heading}>This browser already has an account</h3>
+                    <h3 style={heading}>{t('This browser already has an account')}</h3>
                     <p role="alert" data-testid="join-taken" style={{ ...lede, color: 'var(--text-primary)' }}>
-                        {heldName ?? 'An account'} was saved in this browser from another tab or window while this page was
-                        open. A browser holds one account, so it stays as it is.
+                        {heldName
+                            ? t('{name} was saved in this browser from another tab or window while this page was open. A browser holds one account, so it stays as it is.', { name: heldName })
+                            : t('An account was saved in this browser from another tab or window while this page was open. A browser holds one account, so it stays as it is.')}
                     </p>
                     {screen.joined === 'none' ? (
-                        <p style={lede}>Nothing was sent from this page, so no second account was made.</p>
+                        <p style={lede}>{t('Nothing was sent from this page, so no second account was made.')}</p>
                     ) : (
                         <p style={{ ...lede, color: 'var(--text-primary)' }}>
-                            {screen.joined === 'member'
-                                ? `The community took ${it} too, so you have two accounts there now.`
-                                : `The join from this page${mine ? `, as ${mine},` : ''} may have gone through too.`}
-                            {` ${mine ?? 'Its'}${mine ? "'s" : ''} key is kept on this device. Write down its 12 words to keep it.`}
-                            {` To use ${it} here instead, sign out of ${heldName ?? 'the other account'} in Settings, then restore ${it} with those words.`}
+                            {twoSentences(took, twoSentences(kept, useHere))}
                         </p>
                     )}
                     {words && (
@@ -1670,14 +1700,16 @@ export function WebJoin({
                                 does too, and the words can be put away again on a shared screen. */}
                             <button type="button" style={secondaryButton} aria-expanded={showWords}
                                 aria-controls={showWords ? wordsId : undefined} onClick={() => setShowWords((shown) => !shown)}>
-                                {`${showWords ? 'Hide' : 'Show'} ${mine ? `${mine}'s` : 'its'} 12 words`}
+                                {showWords
+                                    ? (mine ? t("Hide {name}'s 12 words", { name: mine }) : t('Hide its 12 words'))
+                                    : (mine ? t("Show {name}'s 12 words", { name: mine }) : t('Show its 12 words'))}
                             </button>
                             {showWords && (
                                 // As the Safety Backup step lays them out: as many columns as whole words fit (one on a
                                 // 320px phone at 1.3x text), and a word someone copies onto paper is never broken across lines.
                                 // The words are English in every language: the browser's page translation may not rewrite
                                 // them (translate="no" + notranslate; #1947 confirmation N-B).
-                                <ol id={wordsId} data-testid="join-taken-words" translate="no" className="notranslate" aria-label={`${mine ? `${mine}'s` : 'Its'} 12 words`} style={{
+                                <ol id={wordsId} data-testid="join-taken-words" translate="no" className="notranslate" aria-label={mine ? t("{name}'s 12 words", { name: mine }) : t('Its 12 words')} style={{
                                     listStyle: 'none', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 6.5em), 1fr))',
                                     gap: '0.4rem', padding: 0, margin: '0 0 0.75rem', overflowWrap: 'normal',
                                 }}>
@@ -1695,7 +1727,7 @@ export function WebJoin({
                         </>
                     )}
                     <button type="button" style={primaryButton} onClick={() => (onExisting ? onExisting(screen.held) : reloadPage())}>
-                        {heldName ? `Open ${heldName}` : 'Open it'}
+                        {heldName ? t('Open {name}', { name: heldName }) : t('Open it')}
                     </button>
                 </>
             );
@@ -1706,9 +1738,9 @@ export function WebJoin({
             body = (
                 <>
                     {/* A heading like every other screen's (review 4108355867); the notice under it says what happened. */}
-                    <h3 style={heading}>Not finished yet</h3>
-                    <NoticeLine notice={notice ?? { tone: 'error', text: WENT_WRONG }} />
-                    <button type="button" style={primaryButton} onClick={() => reloadPage()}>Reload page</button>
+                    <h3 style={heading}>{t('Not finished yet')}</h3>
+                    <NoticeLine notice={notice ?? { tone: 'error', text: () => t(JOIN_WORDS.wentWrong) }} />
+                    <button type="button" style={primaryButton} onClick={() => reloadPage()}>{t('Reload page')}</button>
                 </>
             );
             break;

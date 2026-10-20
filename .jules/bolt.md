@@ -272,3 +272,7 @@ every render. Wrap it in `useMemo` keyed on `members`, or it is a net loss rathe
 ## 2026-10-16 - O(1) Keeper Lookups in EnterpriseDecisions Component
 **Learning:** In `apps/pwa/src/components/EnterpriseDecisions.tsx`, `nameOf` executed `keepers.find(k => k.publicKey === pk)` on every decision card and author name resolution during component rendering.
 **Action:** Pre-computed `keepersMap` indexed by `publicKey` using `React.useMemo`, turning keeper callsign resolution into constant-time $O(1)$ Map retrievals.
+
+## 2026-10-20 - Eliminate N+1 Conversation Type Queries in getListedUnreadCounts
+**Learning:** In `apps/server/src/state-engine.ts`, `getListedUnreadCounts` invoked `getUnreadCounts(pubkey)` and then executed `db.prepare('SELECT type FROM conversations WHERE id = ?')` inside a `for` loop over every conversation with unread messages, causing $N$ SQLite queries on every conversation list read, `/api/home/answer` fetch, and push badge calculation.
+**Action:** Exported `getUnreadCountsEntries` from `@beanpool/engine` (`packages/beanpool-engine/src/messaging.ts`) which returns `c.type` alongside `conversation_id` and `unread_count` using the existing SQL `JOIN conversations c`. Updated `getListedUnreadCounts` to use `getUnreadCountsEntriesEngine` directly, eliminating $N$ per-conversation database queries.

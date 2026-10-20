@@ -283,9 +283,15 @@ export const COUNTS_AS_UNREAD_SQL = `NOT (m.type = 'system' AND (
     OR COALESCE(CASE WHEN json_valid(m.metadata) THEN json_extract(m.metadata, '$.actorPubkey') END, '') = ?
 ))`;
 
-export function getUnreadCounts(db: Db, pubkey: string): Record<string, number> {
-    const rows = db.prepare(`
-        SELECT cp.conversation_id, 
+export interface UnreadCountEntry {
+    conversation_id: string;
+    type: string;
+    unread_count: number;
+}
+
+export function getUnreadCountsEntries(db: Db, pubkey: string): UnreadCountEntry[] {
+    return db.prepare(`
+        SELECT cp.conversation_id, c.type,
                (SELECT COUNT(*) FROM messages m 
                 WHERE m.conversation_id = cp.conversation_id 
                   AND m.author_pubkey != ? 
@@ -295,8 +301,11 @@ export function getUnreadCounts(db: Db, pubkey: string): Record<string, number> 
         FROM conversation_participants cp
         JOIN conversations c ON cp.conversation_id = c.id
         WHERE cp.public_key = ? AND c.type != 'enterprise_thread'
-    `).all(pubkey, pubkey, pubkey) as any[];
+    `).all(pubkey, pubkey, pubkey) as UnreadCountEntry[];
+}
 
+export function getUnreadCounts(db: Db, pubkey: string): Record<string, number> {
+    const rows = getUnreadCountsEntries(db, pubkey);
     const counts: Record<string, number> = {};
     for (const r of rows) if (r.unread_count > 0) counts[r.conversation_id] = r.unread_count;
     return counts;

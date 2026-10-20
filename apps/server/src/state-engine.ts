@@ -295,6 +295,7 @@ import {
     getConversationMessages as getConversationMessagesEngine,
     getConversation as getConversationEngine,
     getUnreadCounts as getUnreadCountsEngine,
+    getUnreadCountsEntries as getUnreadCountsEntriesEngine,
     getStateHash as getStateHashEngine,
     exportSyncState as exportSyncStateEngine,
     type PostPhoto,
@@ -6764,11 +6765,12 @@ export function getUnreadCounts(pubkey: string): Record<string, number> {
  * carries both read this, so the number on the app icon is always one the member can open and clear.
  */
 export function getListedUnreadCounts(pubkey: string): Record<string, number> {
-    const counts = getUnreadCounts(pubkey);
-    const typeOf = db.prepare('SELECT type FROM conversations WHERE id = ?');
-    for (const id of Object.keys(counts)) {
-        const conv = typeOf.get(id) as { type: string } | undefined;
-        if (conv && chatHiddenFrom({ id, type: conv.type }, pubkey)) delete counts[id];
+    const entries = getUnreadCountsEntriesEngine(db, pubkey);
+    const counts: Record<string, number> = {};
+    for (const entry of entries) {
+        if (entry.unread_count > 0 && !chatHiddenFrom({ id: entry.conversation_id, type: entry.type }, pubkey)) {
+            counts[entry.conversation_id] = entry.unread_count;
+        }
     }
     return counts;
 }

@@ -44,7 +44,7 @@ const said = r => `exit ${r.status}\n${r.stdout}\n${r.stderr}`;
 /** A throwaway repository holding what the guide build reads and writes, committed on main and pushed to a bare origin. */
 /**
  * A published copy of the guide package in a scratch git repository. `withoutPages` names languages whose translated pages
- * (content/<lang>/<section>/) are left out of the copy, so a test can add a language's first page as it would be on day one
+ * (content/<lang>/<section>/) and published copy (generated/guide.<lang>.json) are left out of the copy, so a test can add a language's first page as it would be on day one
  * whatever pages main holds by then (its titles file, content/<lang>/manifest.json, stays).
  */
 function makeRepo({ withoutPages = [] } = {}) {
@@ -61,6 +61,8 @@ function makeRepo({ withoutPages = [] } = {}) {
     for (const lang of withoutPages) {
         const dir = path.join(work, PKG, 'content', lang);
         for (const e of fs.readdirSync(dir, { withFileTypes: true })) if (e.isDirectory()) fs.rmSync(path.join(dir, e.name), { recursive: true });
+        // and its published copy, once main has published that language (the website's <lang>/ folder is not copied)
+        fs.rmSync(path.join(work, PKG, 'generated', `guide.${lang}.json`), { force: true });
     }
     const images = path.join(repoRoot, PKG, 'operators', 'images');
     fs.mkdirSync(path.join(work, 'apps/manager/public/images'), { recursive: true });

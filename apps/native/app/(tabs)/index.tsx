@@ -57,6 +57,9 @@ import { anchorUrl, signedGet, signedPost } from '../../utils/node-post';
 import { cachedNodeRole } from '../../utils/node-admin';
 import { getMarketplaceTransactions, getUnreadByConversation } from '../../utils/db';
 import { composeTargetFor } from '../../utils/compose-options';
+import { toolHomeCardType } from '@beanpool/core';
+import { toolOfHomeCard } from '../../tools/index';
+import { ToolHomeBody } from '../../tools/frame';
 import type { NeedsYouEntry } from '../../utils/needs-you';
 
 /**
@@ -153,7 +156,7 @@ export default function HomeScreen() {
     const manage = useManageNode();
 
     // The map's "My deals" (app/(tabs)/map.tsx, left as it is) links to `/` with the deals: passed on to the Market.
-    const params = useLocalSearchParams<{ tab?: string; dealsTab?: string; saveSearch?: string }>();
+    const params = useLocalSearchParams<{ tab?: string; dealsTab?: string; saveSearch?: string; addTool?: string }>();
     useEffect(() => {
         const forward = marketForward(params);
         if (!forward) return;
@@ -666,6 +669,20 @@ export default function HomeScreen() {
         scrollRef.current?.scrollTo({ y: 0, animated: false });
         afterModal(() => setSettingsFor({ type: 'search', mode: 'add', settings: asked }));
     }, [params.saveSearch, status, noteSaveSearch]);
+    // A tool's "Add to Home" (tools/frame.tsx ToolDoors: its card is offered once from inside the tool, never added by
+    // itself) comes as the `addTool` param: once Home knows the member's list, the card is added through the picker's own
+    // Add, unless it is there already. Read once, then the param is cleared.
+    const addedFromTool = useRef<string | null>(null);
+    useEffect(() => {
+        const sent = params.addTool;
+        if (!sent) { addedFromTool.current = null; return; }
+        if (status === 'loading' || addedFromTool.current === sent) return;
+        addedFromTool.current = sent;
+        router.setParams({ addTool: '' });
+        const type = toolHomeCardType(sent);
+        if (!toolOfHomeCard(type) || (layoutRef.current?.cards ?? []).some(c => c.type === type)) return;
+        addNow(type);
+    }, [params.addTool, status, addNow]);
     const openSettings = useCallback((c: HomeCardInstance) => {
         afterModal(() => setSettingsFor({ type: c.type, mode: 'save', id: c.id, settings: c.settings }));
     }, []);
@@ -941,7 +958,11 @@ export default function HomeScreen() {
                     onEdit={tailor ? () => setEditOpen(true) : undefined}
                 />,
             );
-            default: return null;
+            default: {
+                // A tool's card (tools/index.ts): its manifest's lines, worked out here from the tool's document on this phone.
+                const tool = toolOfHomeCard(type);
+                return tool && identity ? frame(<ToolHomeBody tool={tool} owner={identity.publicKey} colors={colors} now={now} />) : null;
+            }
         }
     };
 

@@ -40,6 +40,8 @@ test('a phone tool: React, core, its own folder, the host and the primitives; no
         "import { TOOL_APPS } from '../index';",
         "import other from '../other/screens';",
         "import { Row } from './../../utils/db';",
+        "import { phoneHost } from '../builder';",
+        "import { hostFor } from '../builder';",
         "import { KeyboardProvider } from 'react-native-keyboard-controller';",
         "export * from '../../services/api';",
         "const db = require('../../utils/db');",
@@ -72,6 +74,7 @@ test('a web tool: the same doors', async () => {
     await opens(top, "import { ToolRow } from '../ui';");
     for (const code of [
         "import { api } from '../../lib/api';",
+        "import { webHostFor } from '../builder';",
         "import { useNavigate } from 'react-router-dom';",
         "import { HomePage } from '../../pages/HomePage';",
         "const chunk = import('../../pages/MapPage');",
@@ -114,4 +117,10 @@ test("a tool's tests are outside the fence; the template's own files beside the 
     await opens('apps/native/tools/demo/__tests__/screens.test.ts', "import { vi } from 'vitest';");
     await opens('apps/native/tools/host.ts', "import { getDb } from '../utils/db';");
     await opens('apps/pwa/src/tools/ui.tsx', "import { clsx } from 'clsx';");
+});
+
+test('a probe tool cannot import the host builder (finding 1)', async () => {
+    await shut('apps/native/tools/demo/screens.tsx', "import { phoneHost } from '../builder';");
+    await shut('apps/native/tools/demo/screens.tsx', "import { hostFor } from '../builder';");
+    await shut('apps/pwa/src/tools/demo/screens.tsx', "import { webHostFor } from '../builder';");
 });

@@ -448,7 +448,7 @@ async function main(): Promise<void> {
         { name: "read its recovery keepers' status", method: 'POST', path: () => '/api/recovery/shares/status', body: () => ({}) },
         { name: 'list recoveries against its account', method: 'POST', path: () => '/api/recovery/collect/mine', body: () => ({}) },
         { name: 're-register under a new name', method: 'POST', path: () => '/api/community/register', body: a => ({ publicKey: a.pk, callsign: `${a.name} Renamed` }),
-            memberOk: r => ok(r) && !!r.body?.member, refused: r => r.status === 200 && r.body?.member === null },
+            memberOk: r => ok(r) && !!r.body?.member, refused: r => r.status === 400 && !r.body?.member },
     ];
     for (const c of cases) {
         // The member first, so the body is one that reaches the rule; then the key with no row, then the visitor.

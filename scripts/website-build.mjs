@@ -189,14 +189,14 @@ export function buildFooterLanguagesRow(page, currentLang) {
         let href;
         if (currentLang === 'en') {
             if (isLegal && lang !== 'en') {
-                // No legal translations shipped in this slice
-                href = page;
+                // On a legal page, each language link goes to that language's HOME page (/es/)
+                href = `/${lang}/`;
             } else {
                 href = lang === 'en' ? page : `${lang}/${page}`;
             }
         } else {
             if (isLegal && lang !== 'en') {
-                href = `../${page}`;
+                href = `/${lang}/`;
             } else if (lang === 'en') {
                 href = `../${page}`;
             } else if (lang === currentLang) {

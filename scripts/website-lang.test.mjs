@@ -158,6 +158,12 @@ test('legal pages banner mechanism works, and no legal translations are shipped 
     assert.ok(privacyHreflang.includes('hreflang="en"'), 'legal page includes en hreflang');
     assert.ok(privacyHreflang.includes('hreflang="x-default"'), 'legal page includes x-default hreflang');
     assert.ok(!privacyHreflang.includes('hreflang="es"'), 'legal page omits unbuilt translations');
+
+    // 4. Verify footer languages row on legal pages points each language to its home page (/es/)
+    const legalFooter = buildFooterLanguagesRow('privacy.html', 'en');
+    assert.ok(legalFooter.includes('href="/es/"'), 'footer row links Spanish to /es/');
+    assert.ok(legalFooter.includes('href="/ar/"'), 'footer row links Arabic to /ar/');
+    assert.ok(!legalFooter.includes('href="privacy.html" hreflang="es"'), 'footer row does not link Spanish to English privacy.html');
 });
 
 test('outdated translation displays "This page is newer in English." banner linking to English', () => {

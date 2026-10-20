@@ -441,8 +441,12 @@ export function loadLanguagePages(contentDir, lang, englishGuide, { version = nu
         }
         if (slugs.length > 0) {
             const secTitles = titles?.sections?.[enSec.id];
-            const title = secTitles?.title?.text ?? enSec.title;
-            const summary = secTitles?.summary?.text ?? enSec.summary;
+            const title = (secTitles?.title?.text && secTitles.title.sourceHash === guideSourceHash(enSec.title))
+                ? secTitles.title.text
+                : enSec.title;
+            const summary = (secTitles?.summary?.text && secTitles.summary.sourceHash === guideSourceHash(enSec.summary))
+                ? secTitles.summary.text
+                : enSec.summary;
             sections.push({ id: enSec.id, title, summary, slugs });
         }
     }

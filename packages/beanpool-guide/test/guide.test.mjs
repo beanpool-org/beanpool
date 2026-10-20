@@ -675,3 +675,52 @@ test('loadLanguagePages preserves canonical section and slug order defined by en
         fs.rmSync(dir, { recursive: true, force: true });
     }
 });
+
+test('loadLanguagePages falls back to English section title and summary when manifest translations are stale', () => {
+    const englishGuide = loadGuide(CONTENT_DIR);
+    const sec = englishGuide.sections[0];
+    const slug = sec.slugs[0];
+
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'guide-lang-titles-'));
+    try {
+        const esDir = path.join(dir, 'es');
+        fs.mkdirSync(path.join(esDir, sec.id), { recursive: true });
+
+        // manifest with a fresh title translation and a stale summary translation
+        const manifest = {
+            sections: {
+                [sec.id]: {
+                    title: { text: 'Título Traducido', sourceHash: guideSourceHash(sec.title) },
+                    summary: { text: 'Resumen Obsoleto', sourceHash: '0000000000000000' },
+                },
+            },
+            pages: {},
+        };
+        fs.writeFileSync(path.join(esDir, 'manifest.json'), JSON.stringify(manifest));
+
+        const relatedSlug = slug === 'rules' ? 'home' : 'rules';
+        const pageContent = [
+            '---',
+            `slug: ${slug}`,
+            'title: Página',
+            'summary: Resumen.',
+            `related: ${relatedSlug}`,
+            `source-hash: ${guideSourceHash('test')}`,
+            '---',
+            '',
+            'Cuerpo en español.',
+        ].join('\n');
+        fs.writeFileSync(path.join(esDir, sec.id, `${slug}.md`), pageContent);
+
+        const loaded = loadLanguagePages(dir, 'es', englishGuide, { version: 1 });
+        assert.ok(loaded);
+        const loadedSec = loaded.sections.find(s => s.id === sec.id);
+        assert.ok(loadedSec);
+        // Valid sourceHash adopts translation:
+        assert.equal(loadedSec.title, 'Título Traducido');
+        // Stale sourceHash falls back to English:
+        assert.equal(loadedSec.summary, sec.summary);
+    } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+});

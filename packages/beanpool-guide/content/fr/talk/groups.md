@@ -15,7 +15,7 @@ Les personnes qui veillent sur un groupe de discussion sont ses **coordinateurs*
 
 ## Vos groupes
 
-Touchez **Échanges**, puis **Groupes**. Tous les groupes dont vous faites partie y sont listés, le message le plus récent en premier, avec les projets que vous menez ou auxquels vous collaborez (🎯), les entreprises que vous gérez (🥖) et les événements que vous organisez ou auxquels vous participez (📅). La discussion d'une entreprise est son fil public : chaque membre de votre communauté peut le lire. Voir « Messages ». Chaque groupe affiche son dernier message et le nombre de messages non lus. Dans une discussion chiffrée, la ligne indique qui a écrit en dernier et **🔒 Message**, et non le contenu textuel.
+Touchez **Échanges**, puis **Groupes**. Tous les groupes dont vous faites partie y sont listés, le message le plus récent en premier, avec les projets que vous menez ou auxquels vous collaborez (🎯), les entreprises que vous gérez (🥖) et les événements que vous organisez ou auxquels vous participez (📅). La discussion d'une entreprise est son fil public : chaque membre de votre communauté peut le lire. Voir «Messages». Chaque groupe affiche son dernier message et le nombre de messages non lus. Dans une discussion chiffrée, la ligne indique qui a écrit en dernier et **🔒 Message**, et non le contenu textuel.
 
 - Le chiffre sur **Groupes** en haut cumule vos messages non lus, à l'exception des discussions mises en sourdine.
 - Touchez un groupe pour ouvrir sa discussion. Cela le marque comme lu.
@@ -61,7 +61,7 @@ La discussion d'un groupe est chiffrée de bout en bout : seuls les membres du g
 - Un message dont l'auteur ne peut pas être vérifié comme membre du groupe s'affiche comme **Non vérifié**, sans auteur identifiable, avec **Ce message n'a pas pu être vérifié.** Un message dont la clé n'est pas encore parvenue à votre téléphone indique **En attente de la clé de ce message.**
 - Si le serveur de votre communauté est plus ancien et ne gère pas encore le chiffrement des discussions de groupe, la discussion indique que le serveur peut la lire, et qu'elle sera verrouillée dès sa mise à jour. Lors de la mise à jour, les messages antérieurs lisibles par le serveur sont retirés, et une ligne dans la discussion vous en informe. Chaque message antérieur indique alors **Un message antérieur a été supprimé lors du verrouillage de cette discussion**, et plusieurs à la suite sont regroupés en une seule ligne, par exemple **11 messages antérieurs ont été supprimés lors du verrouillage de cette discussion**.
 
-Dans l'application web, vos discussions de groupe se trouvent dans **Discussion**, repérées par l'icône 👥. Vous pouvez y lire et y écrire, avec le chiffrement de bout en bout comme sur le téléphone : répondre, réagir, modifier pendant 15 minutes et chercher dans la discussion. La mise en sourdine, **Supprimer** et **Retirer** ne sont disponibles que sur le téléphone. Dans l'application web, cliquez sur le nom du groupe en haut de sa discussion pour ouvrir la fiche du groupe ; un coordinateur peut y inviter des personnes. La discussion d'une entreprise n'est pas chiffrée : voir « Messages ».
+Dans l'application web, vos discussions de groupe se trouvent dans **Discussion**, repérées par l'icône 👥. Vous pouvez y lire et y écrire, avec le chiffrement de bout en bout comme sur le téléphone : répondre, réagir, modifier pendant 15 minutes et chercher dans la discussion. La mise en sourdine, **Supprimer** et **Retirer** ne sont disponibles que sur le téléphone. Dans l'application web, cliquez sur le nom du groupe en haut de sa discussion pour ouvrir la fiche du groupe ; un coordinateur peut y inviter des personnes. La discussion d'une entreprise n'est pas chiffrée : voir «Messages».
 
 ## Échanger dans la discussion d'un groupe
 
@@ -77,7 +77,7 @@ Deux messages consécutifs ou plus supprimés par leurs auteurs apparaissent sur
 
 Sous votre propre message : une horloge pendant l'envoi, une coche dès que le serveur du groupe l'a reçu, ou **! non distribué** s'il n'a pas pu partir — touchez-le pour **Renvoyer** ou **Ignorer**. Il n'y a pas de double coche bleue dans un groupe : un groupe n'a pas un lecteur unique.
 
-Les photos ne peuvent pas être envoyées dans la discussion d'un groupe, et un accord ne peut pas y être engagé. Les deux relèvent d'un échange individuel entre deux personnes. Voir « Messages ».
+Les photos ne peuvent pas être envoyées dans la discussion d'un groupe, et un accord ne peut pas y être engagé. Les deux relèvent d'un échange individuel entre deux personnes. Voir «Messages».
 
 Un **observateur** peut lire la discussion mais ne peut pas y écrire, ni réagir, ni répondre.
 

@@ -26,7 +26,7 @@ Chaque site fonctionne un peu différemment. L'écran précise le fonctionnement
 ## Comptes vérifiés
 
 - Lorsque vous touchez **Connect TikTok** ou **Connect Instagram**, le serveur de votre communauté demande à Instagram ou à TikTok à quel compte vous vous êtes connecté. Le canal n'est marqué comme vérifié que si ce compte correspond à celui du canal.
-- Connecté à un autre compte ? L'écran vous l'indique. Connectez-vous au bon compte et touchez à nouveau le même bouton **Connect**.
+- Connecté à un autre compte ? L'écran vous l'indique. Connectez-vous au bon compte et touchez à nouveau le même bouton **Se connecter**.
 - Ajoutez le canal sous la forme de votre **@identifiant** afin qu'il puisse être vérifié. Un lien court ne peut pas l'être.
 - Les canaux Facebook ne sont jamais marqués comme vérifiés.
 - Si un canal indique **Reconnectez-vous pour restaurer votre badge vérifié**, touchez **Reconnect TikTok** ou **Reconnect Instagram**.

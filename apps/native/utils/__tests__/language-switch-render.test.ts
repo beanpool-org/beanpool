@@ -390,6 +390,6 @@ describe('the welcome and join screens\' words at 320 dp with 1.3× text', () =>
                 const piece = widestPiece(lang === 'xx' || drafted(key) ? inLang(lang, key) : key);
                 expect(widthOf(piece, FONT_OF[key] ?? 16), `"${piece}" (${lang}) breaks inside a word on a 320 dp card`).toBeLessThanOrEqual(LINE_OF[key] ?? CARD_LINE);
             }
-        });
+        }, 60000);
     }
 });

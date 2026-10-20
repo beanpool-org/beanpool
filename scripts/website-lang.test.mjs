@@ -132,6 +132,24 @@ test('no English-only link where a translated page exists', () => {
     }
 });
 
+test('translated pages link to guide page in their language when it exists, else English, and --check flags violations', () => {
+    const esGettingStarted = fs.readFileSync(path.join(WEBSITE_DIR, 'es', 'getting-started.html'), 'utf8');
+    assert.ok(esGettingStarted.includes('href="../guide/es/joining.html"'), 'es/getting-started.html links to guide/es/joining.html');
+    assert.ok(esGettingStarted.includes('href="../guide/index.html"'), 'es/getting-started.html falls back to guide/index.html when guide/es/index.html is absent');
+
+    // Simulate an English guide link where the localized guide page exists
+    const origEsFile = path.join(WEBSITE_DIR, 'es', 'getting-started.html');
+    const originalContent = fs.readFileSync(origEsFile, 'utf8');
+    try {
+        fs.writeFileSync(origEsFile, originalContent.replace('href="../guide/es/joining.html"', 'href="../guide/joining.html"'), 'utf8');
+        const errors = checkWebsite();
+        assert.ok(errors.some(e => e.includes('links to English guide page "joining.html" although guide/es/joining.html exists')),
+            'checkWebsite fails when translated page links to English guide page that exists in language');
+    } finally {
+        fs.writeFileSync(origEsFile, originalContent, 'utf8');
+    }
+});
+
 test('legal pages banner mechanism works, and no legal translations are shipped in slice S6', () => {
     // 1. Verify no legal translations exist in content/ or apps/website/<lang>/
     for (const lang of GUIDE_LANGS) {

@@ -296,7 +296,14 @@ export function renderTranslatedPage(lang, page, sourceContent, englishHtml) {
     out = out.replace(/\bhref="fonts\//g, 'href="../fonts/');
     out = out.replace(/\bsrc="main\.js(\?v=[^"]*)?"/g, 'src="../main.js$1"');
     out = out.replace(/\bsrc="assets\//g, 'src="../assets/');
-    out = out.replace(/\bhref="guide\//g, 'href="../guide/');
+    out = out.replace(/\bhref="(?:(?:\.\.\/)+)?guide\/([^"#?]+)(#[^"]*)?"/g, (match, slug, anchor) => {
+        const langGuideFile = path.join(WEBSITE_DIR, 'guide', lang, slug);
+        const hashPart = anchor || '';
+        if (fs.existsSync(langGuideFile)) {
+            return `href="../guide/${lang}/${slug}${hashPart}"`;
+        }
+        return `href="../guide/${slug}${hashPart}"`;
+    });
 
     // 4. Rewrite internal page links:
     // For translated pages, links like href="getting-started.html" stay href="getting-started.html".
@@ -529,6 +536,15 @@ export function checkWebsite() {
                 // Looking for links like href="../trPage" or href="/trPage" where trPage exists in this lang
                 if (new RegExp(`href=["'](?:\\.\\./|/)${trPage}["']`, 'i').test(actualHtml)) {
                     errors.push(`apps/website/${lang}/${page} has English-only link to ${trPage} which exists translated`);
+                }
+            }
+
+            // Verify translated pages link to the guide page in their language when guide/<lang>/<slug> exists
+            const guideLinks = actualHtml.matchAll(/href=["'](?:\.\.\/)+guide\/([^"'\s#?]+)[^"']*["']/gi);
+            for (const gMatch of guideLinks) {
+                const slug = gMatch[1];
+                if (!slug.startsWith(`${lang}/`) && fs.existsSync(path.join(WEBSITE_DIR, 'guide', lang, slug))) {
+                    errors.push(`apps/website/${lang}/${page} links to English guide page "${slug}" although guide/${lang}/${slug} exists`);
                 }
             }
         }

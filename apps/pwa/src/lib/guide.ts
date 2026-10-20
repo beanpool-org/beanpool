@@ -82,9 +82,9 @@ async function startLangRefresh(lang: string) {
         current = await loadCachedLanguageGuide(guideStorage, lang);
         publishLang(lang, current);
     }
+    lastLangCheckAt.set(lang, now);
     const remote = await refreshLanguageGuideFromWebsite(current, guideStorage, (url, init) => fetch(url, init), lang);
     if (remote) {
-        lastLangCheckAt.set(lang, now);
         publishLang(lang, remote);
     }
 }

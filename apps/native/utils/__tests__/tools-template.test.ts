@@ -50,7 +50,7 @@ vi.mock('react-native', () => {
     };
     return {
         Platform: { OS: 'android', select: (o: Record<string, unknown>) => o.android ?? o.default },
-        View: el('div'), Text: el('span'), Pressable: el('button'), ScrollView: el('div'), TextInput: el('input'), Switch: el('button'),
+        View: el('div'), Text: el('span'), Pressable: el('button'), ScrollView: el('div'), TextInput: el('input'), Switch: el('button'), ActivityIndicator: el('div'),
         Modal: ({ visible, children }: { visible: boolean; children?: unknown }) => (visible ? createElement('div', { 'data-modal': 'true' }, children as any) : null),
         StyleSheet: { create: (s: unknown) => s, hairlineWidth: 1, absoluteFill: {}, absoluteFillObject: {}, flatten: (s: unknown) => flat(s) },
         Alert: { alert: (title: string, body?: string, buttons?: Array<{ text?: string; onPress?: () => void }>) => { alerts.said.push(title); if (body) alerts.said.push(body); alerts.buttons = buttons ?? []; } },
@@ -60,13 +60,24 @@ vi.mock('react-native', () => {
         Dimensions: { get: () => ({ width: SCREEN, height: 569, scale: 1.5, fontScale: FONT_SCALE }) },
     };
 });
-const nav = vi.hoisted(() => ({ params: {} as Record<string, string>, pushed: [] as unknown[], navigated: [] as unknown[] }));
+// Each drawn route keeps the params it opened with (as a stack screen does); setParams changes the last one drawn.
+const nav = vi.hoisted(() => ({
+    params: {} as Record<string, string>, pushed: [] as unknown[], navigated: [] as unknown[], replaced: [] as unknown[], backs: 0, canGoBack: true,
+    setTop: null as null | ((next: Record<string, string | undefined>) => void),
+}));
 vi.mock('expo-router', async () => {
-    const { useEffect: effect } = await import('react');
+    const { useEffect: effect, useState: state } = await import('react');
     return {
-        router: { push: (r: unknown) => { nav.pushed.push(r); }, navigate: (r: unknown) => { nav.navigated.push(r); }, back() {}, setParams() {} },
+        router: {
+            push: (r: unknown) => { nav.pushed.push(r); }, navigate: (r: unknown) => { nav.navigated.push(r); }, replace: (r: unknown) => { nav.replaced.push(r); },
+            back: () => { nav.backs++; }, canGoBack: () => nav.canGoBack, setParams: (p: Record<string, string | undefined>) => { nav.setTop?.(p); },
+        },
         useFocusEffect: (cb: () => void | (() => void)) => effect(() => cb(), [cb]),
-        useLocalSearchParams: () => nav.params,
+        useLocalSearchParams: () => {
+            const [p, set] = state<Record<string, string | undefined>>(() => ({ ...nav.params }));
+            nav.setTop = (next) => set((was) => ({ ...was, ...next }));
+            return p;
+        },
     };
 });
 const store = vi.hoisted(() => ({ map: new Map<string, string>() }));
@@ -98,12 +109,13 @@ vi.mock('../canonical-profile', () => ({ getCanonicalAvatar: async () => null })
 
 // The one store, for real: tool_docs in SQLite (node:sqlite behind expo-sqlite's calls) and photos in a real folder.
 const disk = vi.hoisted(() => ({ dir: '', db: null as any }));
+const posts = vi.hoisted(() => ({ rows: new Map<string, Record<string, unknown>>(), paused: [] as string[], resumed: [] as string[] }));
 vi.mock('../db', () => ({
     getDb: async () => disk.db,
     getMemberProfile: async () => ({ avatar_url: null }),
-    getPost: async () => null,
-    pausePost: async () => {},
-    resumePost: async () => {},
+    getPost: async (id: string) => posts.rows.get(id) ?? null,
+    pausePost: async (id: string) => { posts.paused.push(id); },
+    resumePost: async (id: string) => { posts.resumed.push(id); },
 }));
 vi.mock('expo-file-system/legacy', async () => {
     const nfs = await import('node:fs');
@@ -141,7 +153,7 @@ import { TOOL_DOCS_TABLE, TOOL_SETTINGS_PREFIX } from '../../tools/schema';
 import { readToolDoc, wipeToolDataOnThisPhone, writeToolDoc, writeToolSettings, ToolDocTooBigError } from '../../tools/store';
 import { keepToolPhoto, toolPhotoUri } from '../../tools/photos';
 import { hostFor, phoneHost, ungrantedPermissions, type PhoneHostContext } from '../../tools/host';
-import { composerDraft, OFFER_DRAFT_KEY } from '../../tools/doors';
+import { composerDraft, openNeedComposer, OFFER_DRAFT_KEY } from '../../tools/doors';
 import { remindersToSchedule, scheduleToolReminders, toolReminderRoute, cancelToolReminders, TOOL_REMINDER_CHANNEL } from '../../tools/reminders';
 import { ToolButton, ToolButtons, ToolChips, ToolEmpty, ToolField, ToolNote, ToolRow, ToolScreen, ToolSection } from '../../tools/ui';
 import { HOME_DRAWN } from '../home-cards';
@@ -271,7 +283,13 @@ beforeEach(() => {
     nav.params = {};
     nav.pushed.length = 0;
     nav.navigated.length = 0;
+    nav.replaced.length = 0;
+    nav.backs = 0;
+    nav.canGoBack = true;
     alerts.said.length = 0;
+    posts.rows.clear();
+    posts.paused.length = 0;
+    posts.resumed.length = 0;
     node.profile = { profile: 'local', features: { beans: true } };
 });
 afterEach(() => { act(() => root.unmount()); host.remove(); setLanguage('en'); });
@@ -507,6 +525,70 @@ describe("a tool, a screen or a permission this build doesn't have", () => {
     });
 });
 
+describe('the route around a tool', () => {
+    beforeEach(() => { reg.extra = [{ manifest: KIT, app: kitApp }]; });
+
+    it('← Back is the stack\'s, and Home when the tool is the first screen there is (a link or a reminder started the app)', async () => {
+        await writeToolDoc(ME.publicKey, KIT, KIT_FIXTURES.docs.small, NOW);
+        await drawTool('fixture-kit', {}, 'en');
+        await click(byTestId('tool-back'), 'Back');
+        expect([nav.backs, nav.replaced]).toEqual([1, []]);
+        nav.canGoBack = false;
+        await click(byTestId('tool-back'), 'Back');
+        expect([nav.backs, nav.replaced]).toEqual([1, ['/(tabs)']]);
+    });
+
+    it('"Remove my data from this phone" on a later screen goes back to the first, where the doors are', async () => {
+        await writeToolDoc(ME.publicKey, KIT, KIT_FIXTURES.docs.small, NOW);
+        await drawTool('fixture-kit', { screen: 'item', key: 't0' }, 'en');
+        expect(host.textContent).toContain('One thing');
+        expect(byTestId('tool-doors')).toBeNull();
+        await click(byTestId('tool-menu'), 'the "…"');
+        await click(byTestId('tool-menu-remove'), 'Remove my data');
+        await act(async () => { alerts.buttons.find((b) => b.text === 'Remove')!.onPress!(); });
+        await settle();
+        expect((await readToolDoc(ME.publicKey, KIT)).stored).toBe(false);
+        expect(host.textContent).not.toContain('One thing');
+        expect(byTestId('tool-doors')).not.toBeNull();
+    });
+
+    it('two open screens of one tool share its document and its settings: neither writes back what the other changed', async () => {
+        // A record's screen pushed over the list: each writes, and Settings changes on the pushed one.
+        const add = (name: string) => ({ host: h }: KitProps) => createElement(ToolButton, {
+            text: 'Add', testID: `add-${name}`, onPress: () => { const d = h.doc.get(); void h.doc.set({ ...d, items: [...d.items, { id: name, name, at: NOW + DAY }] }); },
+        } as any);
+        const Main = (p: KitProps) => createElement(ToolScreen, null as any, createElement(add('Rake'), p), ...p.host.doc.get().items.map((i) => createElement(ToolRow, { key: i.id, title: i.name } as any)));
+        reg.extra = [{ manifest: { ...KIT, id: 'two-screens' }, app: { id: 'two-screens', screens: () => ({ main: Main, item: add('Saw') }) } }];
+        const tool = { ...KIT, id: 'two-screens' };
+        await writeToolDoc(ME.publicKey, tool, KIT_FIXTURES.docs.small, NOW);
+        await drawTool('two-screens', {}, 'en');
+        const over = document.createElement('div');
+        document.body.appendChild(over);
+        const overRoot = createRoot(over);
+        try {
+            nav.params = { id: 'two-screens', screen: 'item', key: 't0' };
+            await act(async () => { overRoot.render(createElement(ToolRoute) as any); });
+            await settle();
+            const inOver = (id: string) => over.querySelector(`[data-testid="${id}"]`);
+            await click(inOver('add-Saw'), 'Add on the pushed screen');
+            expect(host.textContent).toContain('Saw');
+            await click(inOver('tool-menu'), 'the "…"');
+            await click(inOver('tool-menu-settings'), 'Settings');
+            await click(inOver('tool-settings-reminder-back'), 'the reminder\'s switch');
+            // Back on the list: its write keeps the pushed screen's, and its Settings the pushed screen's switch.
+            await click(byTestId('add-Rake'), 'Add on the list');
+            expect((await readToolDoc(ME.publicKey, tool)).doc.items.map((i) => i.name)).toEqual(['Ladder', 'Tent', 'Saw', 'Rake']);
+            await click(byTestId('tool-menu'), 'the "…"');
+            await click(byTestId('tool-menu-settings'), 'Settings');
+            await click(byTestId('tool-settings-reminder-weekly'), 'the other reminder\'s switch');
+            expect(JSON.parse(store.map.get(`${TOOL_SETTINGS_PREFIX}${ME.publicKey}:two-screens`) ?? '{}').reminders).toEqual({ back: false, weekly: true });
+        } finally {
+            act(() => overRoot.unmount());
+            over.remove();
+        }
+    });
+});
+
 describe('the host given to a tool has only what its manifest declared', () => {
     const ctx = (manifest: ToolManifest<any>): PhoneHostContext<any> => ({
         manifest, owner: { kind: 'member', publicKey: ME.publicKey, name: ME.callsign }, node: { url: null, profile: 'local', features: null },
@@ -544,6 +626,20 @@ describe('the host given to a tool has only what its manifest declared', () => {
 
     it("what this build can't grant yet is named, so its route refuses the tool", () => {
         expect(ungrantedPermissions({ permissions: ['photos', 'place', 'deals', 'event-door', 'pricing-guide', 'reminders'] }, phoneHost(ctx(KIT)))).toEqual(['place', 'deals', 'event-door', 'pricing-guide']);
+    });
+
+    it("`posts` reaches only the member's own Offers: anyone else's post, or a Need, is 'gone' and can't be paused", async () => {
+        posts.rows.set('mine', { id: 'mine', author_pubkey: ME.publicKey, type: 'offer', status: 'active' });
+        posts.rows.set('theirs', { id: 'theirs', author_pubkey: 'someone-else', type: 'offer', status: 'paused' });
+        posts.rows.set('my-need', { id: 'my-need', author_pubkey: ME.publicKey, type: 'need', status: 'active' });
+        const p = phoneHost(ctx(KIT)).posts!;
+        expect(await Promise.all(['mine', 'theirs', 'my-need', 'not-here'].map((id) => p.status(id)))).toEqual(['active', 'gone', 'gone', 'gone']);
+        await expect(p.pause('theirs')).rejects.toThrow();
+        await expect(p.resume('my-need')).rejects.toThrow();
+        expect([posts.paused, posts.resumed]).toEqual([[], []]);
+        await p.pause('mine');
+        await p.resume('mine');
+        expect([posts.paused, posts.resumed]).toEqual([['mine'], ['mine']]);
     });
 });
 
@@ -656,5 +752,30 @@ describe("the doors write the map composer's own draft (app/(tabs)/map.tsx, read
         expect(d).toMatchObject({ postType: 'offer', postTitle: 'Ladder', postCredits: '3', postPriceType: 'daily', postLat: null, postLng: null, anchorUrl: 'https://mullum.example' });
         expect(d).not.toHaveProperty('lendable');
         expect(composerDraft('offer', { title: 'x' }, null, [], { kind: 'free', beans: 9 }, NOW)).toMatchObject({ postCredits: '0', postPriceType: 'fixed' });
+    });
+
+    it('needDoor asks before it replaces an unfinished post on the map, and Cancel keeps it', async () => {
+        setLanguage('en');
+        const unfinished = JSON.stringify({ anchorUrl: 'https://mullum.example', postType: 'offer', postTitle: 'My half-written post' });
+        store.map.set(OFFER_DRAFT_KEY, unfinished);
+        const answer = async (button: string) => {
+            alerts.said.length = 0;
+            const opened = openNeedComposer(ME.publicKey, 'fixture-kit', { title: 'A ladder for a day' });
+            await settle(3);
+            expect(alerts.said).toEqual(['Replace your unfinished post?', 'You have an unfinished post on the map. Going on replaces it.']);
+            alerts.buttons.find((b) => b.text === button)!.onPress!();
+            await opened;
+        };
+        await answer('Cancel');
+        expect([store.map.get(OFFER_DRAFT_KEY), nav.pushed]).toEqual([unfinished, []]);
+        await answer('Go on');
+        expect(JSON.parse(store.map.get(OFFER_DRAFT_KEY)!)).toMatchObject({ postType: 'need', postTitle: 'A ladder for a day' });
+        expect(nav.pushed).toEqual(['/(tabs)/map?newPost=need']);
+        // Nothing unfinished: straight to the composer, nothing asked.
+        alerts.said.length = 0;
+        store.map.delete(OFFER_DRAFT_KEY);
+        await openNeedComposer(ME.publicKey, 'fixture-kit', { title: 'A tent' });
+        expect(alerts.said).toEqual([]);
+        expect(nav.pushed).toHaveLength(2);
     });
 });

@@ -7,12 +7,13 @@
  * composer with `?newPost=<type>`; the composer offers to continue the draft, and nothing is posted until the member taps
  * Post there. The map files are not edited.
  */
+import { Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as Crypto from 'expo-crypto';
-import type { ToolNeedDraft, ToolOfferDraft, ToolPhoto } from '@beanpool/core';
+import { t, type ToolNeedDraft, type ToolOfferDraft, type ToolPhoto } from '@beanpool/core';
 import { keepToolPhoto, toolPhotoDataUri } from './photos';
 
 /** The Offer composer's draft key (app/(tabs)/map.tsx `OFFER_DRAFT_KEY`, read there and never changed here). */
@@ -87,7 +88,21 @@ export function openOfferComposer(owner: string, tool: string, draft: ToolOfferD
     return writeDraftAndOpen('offer', owner, tool, draft, fee);
 }
 
-/** `needDoor`: the Need composer, prefilled. Nothing is posted until the member taps Post. */
-export function openNeedComposer(owner: string, tool: string, draft: ToolNeedDraft): Promise<void> {
+/** Asked before a door replaces the member's unfinished post on the map (the composer keeps one draft): true to go on. */
+function replaceUnfinishedPost(): Promise<boolean> {
+    return new Promise((resolve) => {
+        Alert.alert(t('Replace your unfinished post?'), t('You have an unfinished post on the map. Going on replaces it.'), [
+            { text: t('Cancel'), style: 'cancel', onPress: () => resolve(false) },
+            { text: t('Go on'), style: 'destructive', onPress: () => resolve(true) },
+        ], { cancelable: true, onDismiss: () => resolve(false) });
+    });
+}
+
+/**
+ * `needDoor`: the Need composer, prefilled. Nothing is posted until the member taps Post. It has no sheet, so an
+ * unfinished post on the map that it would replace is asked about first, as the List sheet says it for an Offer.
+ */
+export async function openNeedComposer(owner: string, tool: string, draft: ToolNeedDraft): Promise<void> {
+    if (await unfinishedPostHere() && !await replaceUnfinishedPost()) return;
     return writeDraftAndOpen('need', owner, tool, draft, null);
 }

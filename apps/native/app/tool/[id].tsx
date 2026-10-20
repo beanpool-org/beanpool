@@ -7,9 +7,13 @@
  *
  * A tool, a screen or a permission this build doesn't have shows "This tool isn't in this version of the app" with
  * Update, never a crash; a screen that throws is caught and the frame stays. Nothing here names a tool.
+ *
+ * Each `navigate` pushes another of these routes, so a tool can have several screens open at once (a record over its
+ * list): they share its document and its settings ({@link openScreens}), and none of them writes back what another
+ * changed. The host is keyed by the screen, so "Remove my data" on a later screen goes back to the first in place.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, View } from 'react-native';
+import { ActivityIndicator, Alert, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { t, type AnyToolScreenProps, type ToolManifest, type ToolOfferDraft } from '@beanpool/core';
@@ -27,6 +31,19 @@ import { readToolDoc, readToolSettings, reminderOn, removeToolDataHere, writeToo
 import { scheduleToolReminders } from '../../tools/reminders';
 import { ToolDoors, ToolFrame, ToolNotInThisVersion, ToolScreenBoundary, ToolSettingsSheet, isEmptyDoc, safeLine } from '../../tools/frame';
 import { ToolListSheet } from '../../tools/list-sheet';
+
+/** What every open screen of one tool, for one owner, shares. */
+interface SharedState { doc: unknown; stored: boolean; settings: ToolSettings }
+type Hear = (next: Partial<SharedState>) => void;
+/**
+ * The open screens of each tool, by owner and tool: a write on one is every other's at once (§1.6: one writer, last write
+ * wins). Without it the screen under a pushed one would keep the document it read, show it on the way back, and its next
+ * write would put back what the pushed one had changed, or schedule a reminder its Settings had turned off.
+ */
+const openScreens = new Map<string, Set<Hear>>();
+function tellOpenScreens(key: string, from: Hear, next: Partial<SharedState>) {
+    for (const hear of openScreens.get(key) ?? []) if (hear !== from) hear(next);
+}
 
 /** The route's params as the tool sees them: every one but the route's own `id` and `screen`. */
 function toolParams(all: Record<string, string | string[] | undefined>): Record<string, string> {
@@ -75,6 +92,22 @@ function ToolHostScreen({ manifest, screenName, Screen, params }: {
     const [notificationsAllowed, setNotificationsAllowed] = useState<boolean | null>(null);
     const docRef = useRef<unknown>(undefined);
     const settingsRef = useRef<ToolSettings>({});
+    const shareKey = `${owner}\n${manifest.id}`;
+    // What another open screen of this tool wrote (only state setters and refs: the same for every drawing).
+    const hear = useRef<Hear>((next) => {
+        if ('doc' in next) { docRef.current = next.doc; setDoc(next.doc); }
+        if (next.stored !== undefined) setStored(next.stored);
+        if (next.settings) { settingsRef.current = next.settings; setSettings(next.settings); }
+    }).current;
+    useEffect(() => {
+        let open = openScreens.get(shareKey);
+        if (!open) openScreens.set(shareKey, open = new Set());
+        open.add(hear);
+        return () => {
+            open.delete(hear);
+            if (open.size === 0) openScreens.delete(shareKey);
+        };
+    }, [shareKey, hear]);
 
     const reschedule = useCallback((d: unknown, s: ToolSettings) => {
         const list = manifest.reminders?.list ?? [];
@@ -106,9 +139,10 @@ function ToolHostScreen({ manifest, screenName, Screen, params }: {
     const saveSettings = useCallback(async (next: ToolSettings) => {
         settingsRef.current = next;
         setSettings(next);
+        tellOpenScreens(shareKey, hear, { settings: next });
         await writeToolSettings(owner, manifest.id, next).catch(() => {});
         reschedule(docRef.current, next);
-    }, [owner, manifest.id, reschedule]);
+    }, [owner, manifest.id, reschedule, shareKey, hear]);
 
     const openListSheet = useCallback((draft: ToolOfferDraft) => {
         void (async () => {
@@ -134,6 +168,7 @@ function ToolHostScreen({ manifest, screenName, Screen, params }: {
                 docRef.current = next;
                 setDoc(next);
                 setStored(true);
+                tellOpenScreens(shareKey, hear, { doc: next, stored: true });
                 reschedule(next, settingsRef.current);
             },
         },
@@ -142,7 +177,7 @@ function ToolHostScreen({ manifest, screenName, Screen, params }: {
         },
         now: () => Date.now(),
         openListSheet,
-    }), [manifest, owner, identity?.callsign, url, nodeProfile, reschedule, openListSheet]);
+    }), [manifest, owner, identity?.callsign, url, nodeProfile, reschedule, openListSheet, shareKey, hear]);
 
     const ungranted = useMemo(() => ungrantedPermissions(manifest, phoneHost(ctx)), [manifest, ctx]);
     const host = useMemo(() => hostFor(manifest, ctx), [manifest, ctx]);
@@ -160,11 +195,16 @@ function ToolHostScreen({ manifest, screenName, Screen, params }: {
                         setStored(false);
                         setSettings({});
                         setSettingsOpen(false);
+                        tellOpenScreens(shareKey, hear, { doc: empty, stored: false, settings: {} });
+                        // On a later screen (a record), back to the first, where the doors are: what it showed has gone.
+                        if (screenName !== manifest.screens[0]) {
+                            router.setParams({ screen: manifest.screens[0], ...Object.fromEntries(Object.keys(params).map((k) => [k, undefined])) });
+                        }
                     }).catch((e) => console.warn('[Tools] Could not remove the tool\'s data', e instanceof Error ? e.message : e));
                 },
             },
         ]);
-    }, [owner, manifest]);
+    }, [owner, manifest, shareKey, hear, screenName, params]);
 
     const about = useCallback(() => {
         Alert.alert(t(manifest.name), t(manifest.line));
@@ -192,7 +232,13 @@ function ToolHostScreen({ manifest, screenName, Screen, params }: {
     }, [settingsOpen]);
 
     if (ungranted.length > 0) return <ToolNotInThisVersion colors={colors} />;
-    if (!owner || doc === undefined || !settings) return <View style={{ flex: 1, backgroundColor: colors.surface.page }} testID="tool-loading" />;
+    if (!owner || doc === undefined || !settings) {
+        return (
+            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface.page }} testID="tool-loading">
+                <ActivityIndicator size="large" color={colors.brand.primary} accessibilityLabel={t('Loading...')} />
+            </View>
+        );
+    }
 
     const row = safeLine(() => manifest.row(doc, Date.now()));
     const empty = !stored || isEmptyDoc(manifest, doc);

@@ -44,6 +44,8 @@ vi.mock('../community-cache', () => ({ removeCommunityCaches: vi.fn(async () => 
 vi.mock('expo-sqlite', () => ({ defaultDatabaseDirectory: '/data/user/0/org.beanpool.app/files/SQLite' }));
 vi.mock('expo-file-system/legacy', () => ({ deleteAsync: vi.fn(async () => {}), readDirectoryAsync: vi.fn(async () => []) }));
 vi.mock('../../services/pillar-sync', () => ({ resetSyncFingerprints: vi.fn() }));
+// Every tool's data on the phone (tools/store.ts, tested end to end in tools-template.test.ts): here, only who takes it.
+vi.mock('../../tools/store', () => ({ wipeToolDataOnThisPhone: vi.fn(async () => {}) }));
 // The names list's copies (names-list.ts, tested end to end through its FakeNode in names-list.test.ts): here, only that
 // Sign Out asks for them before the wipe.
 const namesSave = vi.hoisted(() => ({ calls: [] as { anchors: readonly string[]; pinThere: boolean; keyThere: boolean }[] }));
@@ -68,6 +70,7 @@ import {
 import { removeCommunityCaches } from '../community-cache';
 import { clearDB, closeDB, seedDmPinsHere, seedDmPinsBeforeLeaving } from '../db';
 import { resetSyncFingerprints } from '../../services/pillar-sync';
+import { wipeToolDataOnThisPhone } from '../../tools/store';
 import { draftIdentity, importIdentity, loadIdentity, type BeanPoolIdentity } from '../identity';
 import { boundSignatureValid } from './server-signature-check';
 import { PUSH_REGISTERED_AT_STORE_KEY, PUSH_TOKEN_STORE_KEY, SAVED_NODES_STORE_KEY } from '../storage-keys';
@@ -312,6 +315,33 @@ describe('Sign Out keeps the account\'s DM memory of each community file before 
         await releaseAccountFromPhone(kim);   // Replace (restore-account.ts) takes this door
         expect(seedDmPinsHere).not.toHaveBeenCalled();
         expect(seedDmPinsBeforeLeaving).not.toHaveBeenCalled();
+    });
+});
+
+describe('every tool\'s data goes with the account (tools/store.ts)', () => {
+    it('Replace takes it too, which never reaches wipeIdentity: before the communities, and a failure never stops the leave', async () => {
+        await kimsPhone();
+        nodes();
+        await releaseAccountFromPhone(kim);   // Replace (restore-account.ts saveRestoredAccount)
+        expect(wipeToolDataOnThisPhone).toHaveBeenCalledTimes(1);
+        expect(callOrder(wipeToolDataOnThisPhone)).toBeLessThan(callOrder(removeCommunityCaches));
+        vi.mocked(wipeToolDataOnThisPhone).mockRejectedValueOnce(new Error('the tools folder is busy'));
+        const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+        await kimsPhone();
+        await expect(releaseAccountFromPhone(kim)).resolves.toBeUndefined();
+        expect(logged).toHaveBeenCalledWith(expect.stringContaining('tools'), expect.any(Error));
+        expect(removeCommunityCaches).toHaveBeenCalledTimes(2);
+    });
+
+    it('Sign Out and "Delete this account from this phone" take it as well', async () => {
+        await kimsPhone();
+        nodes();
+        await signOutOfThisPhone(kim);
+        expect(wipeToolDataOnThisPhone).toHaveBeenCalled();
+        vi.mocked(wipeToolDataOnThisPhone).mockClear();
+        await kimsPhone();
+        await deleteAccountFromThisPhone(kim);
+        expect(wipeToolDataOnThisPhone).toHaveBeenCalled();
     });
 });
 

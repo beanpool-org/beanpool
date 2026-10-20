@@ -69,7 +69,7 @@ export function ToolListSheet({ draft, beans, needsProfilePhoto, unfinishedPost,
                             <Text style={[editHomeStyles.doneText, { color: colors.text.link }]}>{t('Cancel')}</Text>
                         </Pressable>
                     </View>
-                    <ScrollView style={editHomeStyles.list} keyboardShouldPersistTaps="handled">
+                    <ScrollView contentContainerStyle={editHomeStyles.list} keyboardShouldPersistTaps="handled">
                         {/* What the member wrote, as written. */}
                         <Text style={[s.rowLine, s.rowStrong]} numberOfLines={2} testID="tool-list-title">{draft?.title ?? ''}</Text>
                         {beans ? (

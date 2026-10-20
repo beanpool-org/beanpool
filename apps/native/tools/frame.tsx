@@ -2,7 +2,7 @@
  * What every tool gets for free, drawn by the host around the tool's screen (scratch/tools/DESIGN-tool-template-fable.md
  * §1.5, slice T0.2), so a tool never writes them:
  *
- * - The frame ({@link ToolFrame}): a header with ← Back (the stack's), the tool's emoji and name, its row's state line
+ * - The frame ({@link ToolFrame}): a header with ← Back ({@link toolBack}), the tool's emoji and name, its row's state line
  *   under them, and a "…" menu (Settings · About this tool · Remove my data from this phone); the backup line at the foot.
  * - The empty state with two doors ({@link ToolDoors}): "I already do this" (straight to the tool's own screen, where its
  *   Add is) and "I'm starting out" (its three examples and its guide page). The tool's Home card, when it has one, is
@@ -66,6 +66,15 @@ export function backupLine(settings: ToolSettings): string {
     return t('Kept on this phone only. Nothing in it leaves this phone.');
 }
 
+/**
+ * ← Back: the stack's, or Home when the tool is the first screen there is (a link or a reminder's tap that started the
+ * app), where the stack's would do nothing.
+ */
+export function toolBack() {
+    if (router.canGoBack()) router.back();
+    else router.replace('/(tabs)');
+}
+
 // ── The frame ────────────────────────────────────────────────────────────────────────────────────────────────────
 
 export function ToolFrame({ manifest, state, settings, colors, onSettings, onAbout, onRemove, children }: {
@@ -86,7 +95,7 @@ export function ToolFrame({ manifest, state, settings, colors, onSettings, onAbo
     return (
         <View style={[frame.page, { backgroundColor: colors.surface.page, paddingTop: insets.top }]} testID="tool-frame">
             <View style={[frame.header, { backgroundColor: colors.surface.card, borderBottomColor: colors.border.default }]}>
-                <Pressable onPress={() => router.back()} style={frame.headerButton} accessibilityRole="button" accessibilityLabel={t('Back')} testID="tool-back">
+                <Pressable onPress={toolBack} style={frame.headerButton} accessibilityRole="button" accessibilityLabel={t('Back')} testID="tool-back">
                     <MaterialCommunityIcons name="arrow-left" size={24} color={colors.text.heading} />
                 </Pressable>
                 <Text style={frame.icon} accessibilityElementsHidden importantForAccessibility="no">{manifest.icon}</Text>
@@ -133,7 +142,8 @@ function MenuRow({ text, icon, colors, danger, onPress, testID }: {
 /**
  * The empty state (round 2 §3.1). Before a door is taken: both doors. After "I'm starting out", while the document is
  * still empty: the three examples and the guide page, above the tool's own screen. The Home card's offer sits under the
- * doors once, for a tool that has a card, until the member answers it.
+ * doors once, for a tool that has a card, until the member answers it. It scrolls: at 320 dp with large text the doors and
+ * the offer can be taller than the screen, and above the tool's own screen it takes at most half of the frame.
  */
 export function ToolDoors({ manifest, settings, colors, onDoor, onHomeAnswer }: {
     manifest: ToolManifest;
@@ -146,7 +156,7 @@ export function ToolDoors({ manifest, settings, colors, onDoor, onHomeAnswer }: 
     const s = homeStyles(colors);
     const offerHome = !!manifest.homeCard && !settings.homeOffered;
     return (
-        <View testID="tool-doors">
+        <ScrollView style={settings.door ? frame.doorsAbove : frame.doors} keyboardShouldPersistTaps="handled" testID="tool-doors">
             {!settings.door ? (
                 <View style={s.card}>
                     <HomeRow text={t('I already do this')} sub={t('Go straight in and add what you keep.')} a11y={t('I already do this: go straight in and add what you keep.')} strong colors={colors}
@@ -182,7 +192,7 @@ export function ToolDoors({ manifest, settings, colors, onDoor, onHomeAnswer }: 
                     </View>
                 </View>
             ) : null}
-        </View>
+        </ScrollView>
     );
 }
 
@@ -213,7 +223,7 @@ export function ToolSettingsSheet({ visible, manifest, settings, notificationsAl
                             <Text style={[editHomeStyles.doneText, { color: colors.text.link }]}>{t('Done')}</Text>
                         </Pressable>
                     </View>
-                    <ScrollView style={editHomeStyles.list}>
+                    <ScrollView contentContainerStyle={editHomeStyles.list}>
                         <Text style={[editHomeStyles.note, { color: colors.text.secondary }]}>{backupLine(settings)}</Text>
                         <SwitchRow text={t("Keep a private copy on your community's server")} value={nodeCopy} colors={colors}
                             onChange={(on) => onChange({ ...settings, nodeCopy: on })} testID="tool-settings-node-copy" />
@@ -323,7 +333,7 @@ export function ToolNotInThisVersion({ colors }: { colors: AppColors }) {
                     <Pressable onPress={() => router.navigate('/(tabs)/settings')} style={s.button} accessibilityRole="button" accessibilityLabel={t('Settings')} testID="tool-open-settings">
                         <Text style={s.buttonText}>{t('Settings')}</Text>
                     </Pressable>
-                    <Pressable onPress={() => router.back()} style={s.button} accessibilityRole="button" accessibilityLabel={t('Back')} testID="tool-not-in-version-back">
+                    <Pressable onPress={toolBack} style={s.button} accessibilityRole="button" accessibilityLabel={t('Back')} testID="tool-not-in-version-back">
                         <Text style={s.buttonText}>{t('Back')}</Text>
                     </Pressable>
                 </View>
@@ -361,6 +371,8 @@ const frame = StyleSheet.create({
     title: { fontSize: 18, fontWeight: '800' },
     state: { fontSize: 13, marginTop: 1 },
     body: { flex: 1 },
+    doors: { flex: 1 },
+    doorsAbove: { flexGrow: 0, flexShrink: 1, maxHeight: '50%' },
     backup: { fontSize: 12, lineHeight: 17, paddingHorizontal: 16, paddingTop: 8, textAlign: 'center' },
     dismiss: { flex: 1 },
     menuRow: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: HOME_TARGET_DP + 8, paddingHorizontal: 16 },

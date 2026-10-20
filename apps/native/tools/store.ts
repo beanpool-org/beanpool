@@ -7,7 +7,8 @@
  *
  * Nothing here leaves the phone. The private copy on the node (member_tool_state) is slice T0.4; until it lands the
  * backup line says the document is on this phone only. An account leaving the phone takes all of it
- * ({@link wipeToolDataOnThisPhone}, from utils/identity.ts wipeIdentity): no row, no file, no reminder, no setting.
+ * ({@link wipeToolDataOnThisPhone}, from utils/account-leaves-phone.ts releaseAccountFromPhone and utils/identity.ts
+ * wipeIdentity): no row, no file, no reminder, no setting.
  *
  * The photo files are tools/photos.ts's, loaded here only when a tool's data goes: Home and the Commons tab read this
  * module for a tool's card and row, and never load the file system for it.
@@ -113,7 +114,8 @@ export async function removeToolDataHere(owner: string, tool: string): Promise<v
 }
 
 /**
- * The account leaves this phone (Sign Out, Replace, the purge: utils/identity.ts wipeIdentity): every tool's every
+ * The account leaves this phone (Sign Out, Replace, the purge: utils/account-leaves-phone.ts releaseAccountFromPhone;
+ * the node-mismatch delete: utils/identity.ts wipeIdentity, which Sign Out reaches too): every tool's every
  * reminder is cancelled, every row of the open community file goes, and the whole tools folder with every photo in it.
  * The other community files go whole with the account's cached copies (utils/community-cache.ts `everyCopy`), and
  * clearDB({ identityLeaves }) drops the table in the open one. Each step is tried even when one before it fails, so a

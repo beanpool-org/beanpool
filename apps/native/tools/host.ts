@@ -72,12 +72,25 @@ export function phoneHost<D>(ctx: PhoneHostContext<D>): ToolHostBase<D> & Partia
         offerDoor: (draft) => ctx.openListSheet(draft),
         needDoor: (draft) => { void openNeedComposer(owner, tool, draft); },
         posts: {
-            pause: async (id) => { await pausePost(id); },
-            resume: async (id) => { await resumePost(id); },
-            status: async (id) => postStatus(await getPost(id).catch(() => null)),
+            pause: async (id) => { await mustBeOwnOffer(owner, id); await pausePost(id); },
+            resume: async (id) => { await mustBeOwnOffer(owner, id); await resumePost(id); },
+            status: async (id) => postStatus(await ownOffer(owner, id)),
         },
         nodeCopy: { on: NODE_COPY_BUILT },
     };
+}
+
+/**
+ * The member's own Offer as the phone holds it, else null: `posts` reaches no other post, so a tool can't learn whether
+ * someone else's is there or what state it is in (its status says 'gone').
+ */
+async function ownOffer(owner: string, id: string): Promise<{ status?: unknown } | null> {
+    const post = await getPost(id).catch(() => null);
+    return post && post.author_pubkey === owner && post.type === 'offer' ? post : null;
+}
+
+async function mustBeOwnOffer(owner: string, id: string): Promise<void> {
+    if (!await ownOffer(owner, id)) throw new Error('Not one of your Offers on this phone.');
 }
 
 /** A post the phone holds as the host says it: live, in a deal, paused, or gone. */

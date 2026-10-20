@@ -457,9 +457,11 @@ function initLanguageBanner() {
     banner.className = 'read-in-banner';
     banner.id = 'read-in-banner';
 
+    const t = WORDS[matched] || WORDS.en;
     const link = document.createElement('a');
     link.href = p ? `/${matched}/${p}` : `/${matched}/`;
-    link.textContent = word('readIn', langName);
+    link.lang = matched;
+    link.textContent = typeof t.readIn === 'function' ? t.readIn(langName) : `Read this in ${langName} →`;
     link.addEventListener('click', () => {
         const secure = (typeof window !== 'undefined' && window.location.protocol === 'https:') ? ';Secure' : '';
         document.cookie = `beanpool_lang=${matched};path=/;max-age=31536000;SameSite=Lax${secure}`;

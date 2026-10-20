@@ -211,6 +211,8 @@ test('main.js on English page presents "Read this in <language>" banner when nav
     assert.equal(dom1.window.document.documentElement.style.getPropertyValue('--banner-height'), '61px', 'sets --banner-height custom property');
     const link = banner1.querySelector('a');
     assert.equal(link.getAttribute('href'), '/es/rules', 'banner link points to extensionless /es/rules');
+    assert.equal(link.getAttribute('lang'), 'es', 'banner link sets lang to target language');
+    assert.equal(link.textContent, 'Leer esto en Español →', 'banner link uses target language readIn string');
 
     // Test 1b: Homepage links to extensionless /es/
     const domHome = new JSDOM(`<!DOCTYPE html><html lang="en"><body><div id="navbar"></div></body></html>`, {

@@ -1,7 +1,7 @@
 ---
 slug: rules
 title: Regole e decisioni
-summary: Votazioni, quorum, voto segreto, chi può votare, sospensione, rimozione di un membro, custodi, coordinatori e coordinatori principali.
+summary: Votazioni, partecipazione, voto segreto, chi può votare, sospensione, rimozione di un membro, custodi, coordinatori e coordinatori principali.
 related: decisions, proposing-a-decision, polls, keepers, groups, people
 source-hash: be2e7321aab53ca8
 ---

@@ -491,6 +491,10 @@ async function main(argv) {
         console.log(`words:check — ok: ${callCount} t()/tn() calls, ${catalogCount} catalogs`);
         return 0;
     }
+    if (cmd === 'draft') {
+        const { draftCli } = await import('./draft.mjs');
+        return draftCli(argv.slice(1));
+    }
     if (cmd === 'lint') {
         const now = lintCounts(extracted);
         const file = path.join(ROOT, BASELINE);
@@ -550,7 +554,7 @@ async function main(argv) {
         }
         return 0;
     }
-    console.error('usage: node scripts/words/words.mjs check | lint [--update [--raise "<reason>"]] | extract | count [--json]');
+    console.error('usage: node scripts/words/words.mjs check | draft [--report|--briefs <dir>] | lint [--update [--raise "<reason>"]] | extract | count [--json]');
     return 2;
 }
 

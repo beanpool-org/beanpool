@@ -12,6 +12,7 @@ import {
     BASELINE, ROOT, baselineAt, baselineBase, catalogLangs, checkRepo, compareToBaseline, countStrings, extractFromSource, extractRepo, lintCounts, unexplainedRises,
     updatedBaseline,
 } from './words.mjs';
+import './draft.test.mjs';
 
 const pkgOf = (file, text, extra = {}) => {
     const { calls, found, problems } = extractFromSource(file, text);

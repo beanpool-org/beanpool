@@ -50,7 +50,7 @@ export function EnterpriseCard({ treasury: t, onOpen, sample = false }: { treasu
                     onOpen?.(t.publicKey);
                 }
             }}
-            className="bg-nature-900 border border-nature-800 hover:border-emerald-500/50 focus:outline-none focus:ring-2 focus:ring-emerald-500 rounded-2xl p-5 transition-all cursor-pointer shadow-sm hover:shadow-md flex flex-col justify-between group"
+            className="bg-nature-900 border border-nature-800 hover:border-emerald-500/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-2xl p-5 transition-all cursor-pointer shadow-sm hover:shadow-md flex flex-col justify-between group"
         >
             <div className="space-y-3">
                 {/* Example Valley's: the pill on its own row, the card's full width (beside the name it ran past the card at 320 px). */}
@@ -66,7 +66,7 @@ export function EnterpriseCard({ treasury: t, onOpen, sample = false }: { treasu
                                 className="w-full h-full object-cover"
                             />
                         ) : (
-                            <span>🌱</span>
+                            <span aria-hidden="true">🌱</span>
                         )}
                     </div>
                     <div className="flex-1 min-w-0">
@@ -134,7 +134,7 @@ export function EnterpriseCard({ treasury: t, onOpen, sample = false }: { treasu
                 {/* Financial Ceiling indicator if surplus exists */}
                 {t.earnedSurplus != null && t.earnedSurplus > 0 && (
                     <div className="flex items-center gap-1 text-[11px] text-emerald-400">
-                        <span>📈</span>
+                        <span aria-hidden="true">📈</span>
                         <span>Earned Surplus: {t.earnedSurplus} 🫘</span>
                     </div>
                 )}
@@ -167,7 +167,7 @@ export function EnterpriseCard({ treasury: t, onOpen, sample = false }: { treasu
                             </span>
                             {daysRemaining && (
                                 <span className={`text-[11px] font-bold ${daysRemaining === 'Expired' ? 'text-red-400' : 'text-nature-400'}`}>
-                                    ⏳ {daysRemaining}
+                                    <span aria-hidden="true">⏳ </span>{daysRemaining}
                                 </span>
                             )}
                         </div>
@@ -184,7 +184,7 @@ export function EnterpriseCard({ treasury: t, onOpen, sample = false }: { treasu
                                 aria-hidden="true"
                                 className="w-full mt-2 py-2 px-3 rounded-xl bg-bp-commit-fill text-bp-commit-on font-bold text-xs shadow-sm flex items-center justify-center gap-1.5 pointer-events-none"
                             >
-                                <span>🌱</span> Pledge Beans
+                                <span aria-hidden="true">🌱</span> Pledge Beans
                             </div>
                         )}
                     </div>

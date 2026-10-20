@@ -44,7 +44,6 @@ async function startLangRefresh(lang: string) {
     const now = Date.now();
     const lastCheck = lastLangCheckAt.get(lang) ?? 0;
     if (now - lastCheck < RECHECK_MS) return;
-    lastLangCheckAt.set(lang, now);
 
     let current = sessionLangGuides.get(lang);
     if (current === undefined) {
@@ -52,7 +51,10 @@ async function startLangRefresh(lang: string) {
         publishLang(lang, current);
     }
     const remote = await refreshLanguageGuideFromWebsite(current, AsyncStorage, fetch, lang);
-    if (remote) publishLang(lang, remote);
+    if (remote) {
+        lastLangCheckAt.set(lang, now);
+        publishLang(lang, remote);
+    }
 }
 
 /**
@@ -63,7 +65,9 @@ async function startLangRefresh(lang: string) {
 export function useGuide(): LoadedGuide {
     const [loaded, setLoaded] = useState<LoadedGuide>(() => sessionGuide ?? { guide: getBundledGuide(), source: 'bundled' });
     const { lang } = useWords();
-    const [langGuide, setLangGuide] = useState<Guide | null>(() => sessionLangGuides.get(lang) ?? null);
+    const [, setLangGuideTick] = useState(0);
+
+    const langGuide = lang === 'en' ? null : (sessionLangGuides.get(lang) ?? null);
 
     useEffect(() => {
         listeners.add(setLoaded);
@@ -73,24 +77,12 @@ export function useGuide(): LoadedGuide {
     }, []);
 
     useEffect(() => {
-        const onLangUpdate = (updatedLang: string, g: Guide | null) => {
-            if (updatedLang === lang) setLangGuide(g);
+        const onLangUpdate = (updatedLang: string) => {
+            if (updatedLang === lang) setLangGuideTick(t => t + 1);
         };
         langListeners.add(onLangUpdate);
         if (lang !== 'en') {
-            const cached = sessionLangGuides.get(lang);
-            if (cached !== undefined) {
-                setLangGuide(cached);
-            } else {
-                loadCachedLanguageGuide(AsyncStorage, lang)
-                    .then(g => {
-                        publishLang(lang, g);
-                    })
-                    .catch(() => {});
-            }
             startLangRefresh(lang).catch(() => {});
-        } else {
-            setLangGuide(null);
         }
         return () => { langListeners.delete(onLangUpdate); };
     }, [lang]);

@@ -25,9 +25,9 @@ import { composerNeedsProfilePhoto } from '../../utils/market-global';
 import { getCanonicalAvatar } from '../../utils/canonical-profile';
 import { getMemberProfile } from '../../utils/db';
 import { phoneTool } from '../../tools/index';
-import { hostFor, phoneHost, ungrantedPermissions, type PhoneHostContext } from '../../tools/host';
+import { hostFor, phoneHost, ungrantedPermissions, type PhoneHostContext } from '../../tools/builder';
 import { openOfferComposer, unfinishedPostHere, type ToolListFee } from '../../tools/doors';
-import { readToolDoc, readToolSettings, reminderOn, removeToolDataHere, writeToolDoc, writeToolSettings, type ToolSettings } from '../../tools/store';
+import { readToolDoc, readToolSettings, reminderOn, removeToolDataHere, writeToolDoc, writeToolSettings, communityKey, type ToolSettings } from '../../tools/store';
 import { scheduleToolReminders } from '../../tools/reminders';
 import { ToolDoors, ToolFrame, ToolNotInThisVersion, ToolScreenBoundary, ToolSettingsSheet, isEmptyDoc, safeLine } from '../../tools/frame';
 import { ToolListSheet } from '../../tools/list-sheet';
@@ -109,10 +109,14 @@ function ToolHostScreen({ manifest, screenName, Screen, params }: {
         };
     }, [shareKey, hear]);
 
-    const reschedule = useCallback((d: unknown, s: ToolSettings) => {
+    const reschedule = useCallback((d: unknown, s: ToolSettings, u?: string | null) => {
         const list = manifest.reminders?.list ?? [];
-        void scheduleToolReminders(manifest, d, (rid) => { const r = list.find((x) => x.id === rid); return !!r && reminderOn(s, r); });
-    }, [manifest]);
+        const c = communityKey(u !== undefined ? u : url);
+        void scheduleToolReminders(
+            manifest, d, (rid) => { const r = list.find((x) => x.id === rid); return !!r && reminderOn(s, r); },
+            Date.now(), undefined, undefined, c,
+        );
+    }, [manifest, url]);
 
     useEffect(() => {
         if (!owner) return;
@@ -131,7 +135,7 @@ function ToolHostScreen({ manifest, screenName, Screen, params }: {
             setSettings(s);
             setUrl(u);
             // Whenever the tool opens: what due() says now, after a restart, a change of language or of the clock.
-            reschedule(read.doc, s);
+            reschedule(read.doc, s, u);
         })();
         return () => { gone = true; };
     }, [owner, manifest, reschedule]);
@@ -187,7 +191,7 @@ function ToolHostScreen({ manifest, screenName, Screen, params }: {
             { text: t('Cancel'), style: 'cancel' },
             {
                 text: t('Remove'), style: 'destructive', onPress: () => {
-                    void removeToolDataHere(owner, manifest.id).then(() => {
+                    void removeToolDataHere(owner, manifest.id, url).then(() => {
                         const empty = manifest.doc.empty();
                         docRef.current = empty;
                         settingsRef.current = {};

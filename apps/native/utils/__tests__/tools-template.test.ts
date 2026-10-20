@@ -150,12 +150,18 @@ import {
 } from '@beanpool/core';
 import { TOOL_APPS, phoneTools, type PhoneTool } from '../../tools/index';
 import { TOOL_DOCS_TABLE, TOOL_SETTINGS_PREFIX } from '../../tools/schema';
-import { readToolDoc, wipeToolDataOnThisPhone, writeToolDoc, writeToolSettings, ToolDocTooBigError } from '../../tools/store';
+import {
+    readToolDoc, wipeToolDataOnThisPhone, writeToolDoc, writeToolSettings, ToolDocTooBigError,
+    removeToolDataHere, removeCommunityToolData,
+} from '../../tools/store';
+import { communityKey } from '../../tools/community';
 import { keepToolPhoto, toolPhotoUri } from '../../tools/photos';
-import { hostFor, phoneHost, ungrantedPermissions, type PhoneHostContext } from '../../tools/host';
+import { hostFor, phoneHost, ungrantedPermissions, type PhoneHostContext } from '../../tools/builder';
 import { composerDraft, openNeedComposer, OFFER_DRAFT_KEY } from '../../tools/doors';
 import { remindersToSchedule, scheduleToolReminders, toolReminderRoute, cancelToolReminders, TOOL_REMINDER_CHANNEL } from '../../tools/reminders';
 import { ToolButton, ToolButtons, ToolChips, ToolEmpty, ToolField, ToolNote, ToolRow, ToolScreen, ToolSection } from '../../tools/ui';
+import { ToolHomeBody, afterModal } from '../../tools/frame';
+import { lightColors } from '../../constants/colors';
 import { HOME_DRAWN } from '../home-cards';
 import ToolRoute from '../../app/tool/[id]';
 import ToolsScreen from '../../app/tools';
@@ -671,8 +677,8 @@ describe('the one store', () => {
         await writeToolDoc('enterprise-key', { ...KIT, id: 'other-tool' }, KIT_FIXTURES.docs.full, NOW);
         const picked = path.join(disk.dir, 'picked.jpg');
         fs.writeFileSync(picked, 'jpeg bytes');
-        const photo = await keepToolPhoto(ME.publicKey, 'fixture-kit', { uri: `file://${picked}`, width: 800, height: 600 }, 'p1');
-        const photoFile = toolPhotoUri(ME.publicKey, 'fixture-kit', photo.ref).replace(/^file:\/\//, '');
+        const photo = await keepToolPhoto('local', ME.publicKey, 'fixture-kit', { uri: `file://${picked}`, width: 800, height: 600 }, 'p1');
+        const photoFile = toolPhotoUri('local', ME.publicKey, 'fixture-kit', photo.ref).replace(/^file:\/\//, '');
         expect(fs.existsSync(photoFile)).toBe(true);
         await writeToolSettings(ME.publicKey, 'fixture-kit', { door: 'doing' });
         store.map.set('beanpool_anchor_url', 'https://mullum.example');
@@ -697,6 +703,89 @@ describe('the one store', () => {
         expect(clear).toMatch(/opts\.identityLeaves \? '[^']*DROP TABLE IF EXISTS tool_docs;/);
         expect(clear.replace(/opts\.identityLeaves \? '[^']*'/, '')).not.toMatch(/tool_docs/);
         expect(db).toContain('${TOOL_DOCS_TABLE}');
+    });
+
+    it("Remove my data in community A removes only that community's document, photos and reminders", async () => {
+        const n = fakeNotifications();
+        const urlA = 'https://community-a.example';
+        const urlB = 'https://community-b.example';
+        const commA = communityKey(urlA);
+        const commB = communityKey(urlB);
+
+        // Community A
+        await writeToolDoc(ME.publicKey, KIT, KIT_FIXTURES.docs.small, NOW);
+        const pickedA = path.join(disk.dir, 'picked-a.jpg');
+        fs.writeFileSync(pickedA, 'jpeg a');
+        const photoA = await keepToolPhoto(commA, ME.publicKey, 'fixture-kit', { uri: `file://${pickedA}`, width: 800, height: 600 }, 'pA');
+        const fileA = toolPhotoUri(commA, ME.publicKey, 'fixture-kit', photoA.ref).replace(/^file:\/\//, '');
+        expect(fs.existsSync(fileA)).toBe(true);
+
+        // Community B
+        const pickedB = path.join(disk.dir, 'picked-b.jpg');
+        fs.writeFileSync(pickedB, 'jpeg b');
+        const photoB = await keepToolPhoto(commB, ME.publicKey, 'fixture-kit', { uri: `file://${pickedB}`, width: 800, height: 600 }, 'pB');
+        const fileB = toolPhotoUri(commB, ME.publicKey, 'fixture-kit', photoB.ref).replace(/^file:\/\//, '');
+        expect(fs.existsSync(fileB)).toBe(true);
+
+        n.scheduled.push(
+            { identifier: `bp-tool:${commA}:fixture-kit:back:100` },
+            { identifier: `bp-tool:${commB}:fixture-kit:back:200` },
+        );
+
+        await removeToolDataHere(ME.publicKey, 'fixture-kit', urlA, n);
+
+        expect(fs.existsSync(fileA)).toBe(false);
+        expect(n.scheduled.some((s) => s.identifier.includes(commA))).toBe(false);
+        expect(fs.existsSync(fileB)).toBe(true);
+        expect(n.scheduled.some((s) => s.identifier === `bp-tool:${commB}:fixture-kit:back:200`)).toBe(true);
+    });
+
+    it("leaving a community removes that community's photos and reminders", async () => {
+        const n = fakeNotifications();
+        const urlLeave = 'https://community-leave.example';
+        const urlStay = 'https://community-stay.example';
+        const commLeave = communityKey(urlLeave);
+        const commStay = communityKey(urlStay);
+
+        const pickedA = path.join(disk.dir, 'leave-a.jpg');
+        fs.writeFileSync(pickedA, 'bytes a');
+        await keepToolPhoto(commLeave, ME.publicKey, 'fixture-kit', { uri: `file://${pickedA}`, width: 800, height: 600 }, 'pL');
+        const fileA = toolPhotoUri(commLeave, ME.publicKey, 'fixture-kit', 'pL').replace(/^file:\/\//, '');
+        expect(fs.existsSync(fileA)).toBe(true);
+
+        const pickedB = path.join(disk.dir, 'stay-b.jpg');
+        fs.writeFileSync(pickedB, 'bytes b');
+        await keepToolPhoto(commStay, ME.publicKey, 'fixture-kit', { uri: `file://${pickedB}`, width: 800, height: 600 }, 'pS');
+        const fileB = toolPhotoUri(commStay, ME.publicKey, 'fixture-kit', 'pS').replace(/^file:\/\//, '');
+        expect(fs.existsSync(fileB)).toBe(true);
+
+        n.scheduled.push(
+            { identifier: `bp-tool:${commLeave}:fixture-kit:back:100` },
+            { identifier: `bp-tool:${commStay}:fixture-kit:back:200` },
+        );
+
+        await removeCommunityToolData(urlLeave, n);
+
+        expect(fs.existsSync(fileA)).toBe(false);
+        expect(fs.existsSync(fileB)).toBe(true);
+        expect(n.scheduled.map((s) => s.identifier)).toEqual([`bp-tool:${commStay}:fixture-kit:back:200`]);
+    });
+
+    it("phone Home card subscribes to tool store writes and updates without a remount", async () => {
+        await writeToolDoc(ME.publicKey, KIT, { v: 1, items: [] }, NOW);
+
+        await act(async () => {
+            root.render(createElement(ToolHomeBody, { tool: { manifest: KIT, app: kitApp as any }, owner: ME.publicKey, colors: lightColors, now: NOW }) as any);
+        });
+        await settle(5);
+        expect(byTestId('tool-home-fixture-kit-open')).not.toBeNull();
+
+        await act(async () => {
+            await writeToolDoc(ME.publicKey, KIT, KIT_FIXTURES.docs.small, NOW);
+        });
+        await settle(5);
+
+        expect(host.textContent).toContain('Tent');
     });
 });
 
@@ -732,10 +821,10 @@ describe("reminders: due() becomes the phone's own date-trigger notifications", 
         n.scheduled.push({ identifier: 'bp-tool:fixture-kit:back:1' }, { identifier: 'bp-tool:other:back:1' }, { identifier: 'a-community-notice' });
         const due = await scheduleToolReminders(KIT, doc, on, NOW, n, 'android');
         expect(due).toHaveLength(1);
-        expect(n.scheduled.map((s) => s.identifier)).toEqual(['bp-tool:other:back:1', 'a-community-notice', `bp-tool:fixture-kit:back:${NOW + DAY}`]);
+        expect(n.scheduled.map((s) => s.identifier)).toEqual(['bp-tool:other:back:1', 'a-community-notice', `bp-tool:local:fixture-kit:back:${NOW + DAY}`]);
         const mine = n.scheduled[2];
         expect(mine.trigger).toEqual({ type: 'date', date: new Date(NOW + DAY), channelId: TOOL_REMINDER_CHANNEL });
-        expect(mine.content).toEqual({ title: 'Fixture kit', body: 'Ladder is due back today', data: { bpLocal: 1, bpTool: 'fixture-kit', screen: 'item' } });
+        expect(mine.content).toEqual({ title: 'Fixture kit', body: 'Ladder is due back today', data: { bpLocal: 1, bpCommunity: 'local', bpTool: 'fixture-kit', screen: 'item' } });
         expect(n.setNotificationChannelAsync).toHaveBeenCalledWith(TOOL_REMINDER_CHANNEL, expect.objectContaining({ importance: 3 }));
         await cancelToolReminders(undefined, n);
         expect(n.scheduled.map((s) => s.identifier)).toEqual(['a-community-notice']);
@@ -751,6 +840,50 @@ describe("reminders: due() becomes the phone's own date-trigger notifications", 
         // Not the phone's own (no bpLocal: 1), even with `remote` inferred false: a push naming a tool opens nothing here.
         expect(toolReminderRoute({ remote: false, data: { bpTool: 'fixture-kit', screen: 'item' } })).toBeNull();
         expect(toolReminderRoute({ remote: false, data: { bpLocal: '1', bpTool: 'fixture-kit' } })).toBeNull();
+    });
+
+    it("opening a tool in community B never cancels community A's reminders", async () => {
+        const n = fakeNotifications();
+        n.scheduled.push(
+            { identifier: `bp-tool:community_a:fixture-kit:back:${NOW + DAY}` },
+            { identifier: `bp-tool:community_b:fixture-kit:back:${NOW + 10}` },
+        );
+
+        await scheduleToolReminders(KIT, doc, on, NOW, n, 'android', 'community_b');
+
+        expect(n.scheduled.some((s) => s.identifier === `bp-tool:community_a:fixture-kit:back:${NOW + DAY}`)).toBe(true);
+    });
+
+    it("serializes reschedules so an older write cannot survive two quick writes", async () => {
+        const n = fakeNotifications();
+        const doc1: KitDoc = { v: 1, items: [{ id: '1', name: 'Ladder', at: NOW + 1000 }] };
+        const doc2: KitDoc = { v: 1, items: [{ id: '2', name: 'Tent', at: NOW + 2000 }] };
+
+        const p1 = scheduleToolReminders(KIT, doc1, on, NOW, n, 'android', 'comm');
+        const p2 = scheduleToolReminders(KIT, doc2, on, NOW, n, 'android', 'comm');
+
+        await Promise.all([p1, p2]);
+
+        expect(n.scheduled.map((s) => s.identifier)).toEqual([`bp-tool:comm:fixture-kit:back:${NOW + 2000}`]);
+    });
+
+    it("the frame's menu delays presenting Settings or Alerts on iOS until its Modal closes", () => {
+        vi.useFakeTimers();
+        try {
+            let called = false;
+            afterModal(() => { called = true; }, 'ios');
+            expect(called).toBe(false);
+            vi.advanceTimersByTime(349);
+            expect(called).toBe(false);
+            vi.advanceTimersByTime(1);
+            expect(called).toBe(true);
+
+            let androidCalled = false;
+            afterModal(() => { androidCalled = true; }, 'android');
+            expect(androidCalled).toBe(true);
+        } finally {
+            vi.useRealTimers();
+        }
     });
 });
 

@@ -23,7 +23,7 @@ import { ToolsPage, type ToolsPageProps } from '../../pages/ToolsPage';
 import { TOOL_APPS } from '../index';
 import { ToolHomeCard } from '../home-card';
 import { writeToolRecord, readToolRecord, resetToolStoreForTest } from '../store';
-import type { ComposerDraft } from '../host';
+import type { ComposerDraft } from '../builder';
 import { memoryIndexedDB } from '../../lib/memory-indexeddb';
 import { resetAccountEpochForTest } from '../../lib/account-epoch';
 import { backToEnglish, bracketed, bypassing, showIn, xx } from '../../words-xx.test-support';
@@ -331,6 +331,24 @@ describe("a tool's card on Home (Home's default branch)", () => {
         render(card(0));
         expect(await screen.findByTestId('home-tool-line-0')).toHaveTextContent('Latest: Tent');
         expect(screen.queryByTestId('home-tool-line-1')).toBeNull();
+    });
+
+    it('shows updated lines after a store write without a remount', async () => {
+        const onNavigate = vi.fn();
+        render(
+            <ToolHomeCard id="c1" title="New tool" type="tool-scaffold" publicKey={OWNER} now={0} onNavigate={onNavigate}
+                tools={[scaffold.manifest]} apps={{ scaffold: scaffold.loader }} />
+        );
+        expect(await screen.findByTestId('home-tool-open')).toBeInTheDocument();
+
+        // Write a document while the card remains mounted
+        await act(async () => {
+            await keep('scaffold', scaffold.fixtures.docs.small);
+        });
+
+        // The card updates its lines without being remounted
+        expect(await screen.findByTestId('home-tool-line-0')).toHaveTextContent('Latest: Tent');
+        expect(screen.queryByTestId('home-tool-open')).toBeNull();
     });
 
     it('a card type this build has no tool for draws nothing (kept, not drawn)', () => {

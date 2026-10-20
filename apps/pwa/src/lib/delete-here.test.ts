@@ -156,6 +156,23 @@ describe('leaving the community the web app was pointed at', () => {
         expect(localStorage.getItem('beanpool-theme-mode')).toBe('dark');
         expect(localStorage.getItem(`beanpool_seed_viewed_${KEY}`)).toBe('true');
     });
+
+    it('clears that community\'s tool documents from IndexedDB', async () => {
+        const { memoryIndexedDB, MemoryIDBKeyRange } = await import('./memory-indexeddb');
+        const mem = memoryIndexedDB();
+        vi.stubGlobal('indexedDB', mem);
+        vi.stubGlobal('IDBKeyRange', MemoryIDBKeyRange);
+        const { resetToolStoreForTest, writeToolRecord, readToolRecord } = await import('../tools/store');
+        resetToolStoreForTest();
+
+        localStorage.setItem('bp_node_url', CASTLEMAINE);
+        await writeToolRecord('ana', 'notes', { body: '{"v":1}', updatedAt: '2026-10-21T00:00:00Z', syncedAt: null });
+
+        await leaveThisCommunity();
+
+        localStorage.setItem('bp_node_url', CASTLEMAINE);
+        expect(await readToolRecord('ana', 'notes')).toBeNull();
+    });
 });
 
 describe('what the web app says', () => {

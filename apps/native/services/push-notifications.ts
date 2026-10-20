@@ -189,7 +189,9 @@ async function followNotificationTap(response: NotificationResponse): Promise<vo
     followedTaps.add(id);
     try {
         // A tool's own reminder (tools/reminders.ts), which only this app posts: it opens the tool.
-        const toolRoute = toolReminderRoute(incoming(response.notification));
+        const activeAnchor = await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null);
+        const { communityKey } = await import('../tools/community');
+        const toolRoute = toolReminderRoute(incoming(response.notification), communityKey(activeAnchor));
         if (toolRoute) {
             router.push(toolRoute as never);
             return;

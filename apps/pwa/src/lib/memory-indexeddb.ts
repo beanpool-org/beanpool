@@ -23,6 +23,18 @@ function request<T>(): FakeRequest<T> {
     return { result: undefined, error: null, onsuccess: null, onerror: null };
 }
 
+export class MemoryIDBKeyRange {
+    constructor(public lower: any, public upper: any, public lowerOpen = false, public upperOpen = false) {}
+    static bound(lower: any, upper: any, lowerOpen = false, upperOpen = false) {
+        return new MemoryIDBKeyRange(lower, upper, lowerOpen, upperOpen);
+    }
+    includes(key: any): boolean {
+        const lowerOk = this.lowerOpen ? key > this.lower : key >= this.lower;
+        const upperOk = this.upperOpen ? key < this.upper : key <= this.upper;
+        return lowerOk && upperOk;
+    }
+}
+
 export interface MemoryIndexedDB {
     open(name: string, version?: number): FakeRequest;
     deleteDatabase(name: string): FakeRequest & { onblocked: ((ev: unknown) => void) | null };
@@ -82,9 +94,23 @@ export function memoryIndexedDB(): MemoryIndexedDB {
                                 store.set(key, copy);
                                 return request();
                             },
-                            delete(key: IDBValidKey) {
-                                remember(key);
-                                store.delete(key);
+                            delete(key: unknown) {
+                                if (key && typeof key === 'object' && ('lower' in key || 'upper' in key)) {
+                                    const range = key as { lower?: unknown; upper?: unknown; includes?: (k: unknown) => boolean };
+                                    for (const k of [...store.keys()]) {
+                                        const matches = range.includes ? range.includes(k) : (
+                                            (range.lower === undefined || (k as string) >= (range.lower as string)) &&
+                                            (range.upper === undefined || (k as string) <= (range.upper as string))
+                                        );
+                                        if (matches) {
+                                            remember(k);
+                                            store.delete(k);
+                                        }
+                                    }
+                                    return request();
+                                }
+                                remember(key as IDBValidKey);
+                                store.delete(key as IDBValidKey);
                                 return request();
                             },
                             clear() {

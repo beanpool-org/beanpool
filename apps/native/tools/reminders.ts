@@ -5,9 +5,8 @@
  * calls nothing (the `reminders` permission grants no host function); the host schedules after every write of the
  * document and whenever the tool opens, and cancels every one as the account leaves the phone (tools/store.ts).
  *
- * Android keeps a date-triggered notification across an app restart and a reboot (expo-notifications reschedules its
- * alarms at boot); the API 26 emulator check of T0.2 is the director's (the PR says what to check). Each notification
- * names the tool in its data, so a tap opens the tool ({@link toolReminderRoute}): only the app posts a local one.
+ * Reminders are keyed per community, owner and tool (PR #2267 findings 2 + 3). Reschedules are serialized per tool
+ * (PR #2267 finding 5) so an older write can never land after a newer one.
  */
 import { Platform } from 'react-native';
 import { t, TOOL_LIMITS, type ToolDue, type ToolManifest } from '@beanpool/core';
@@ -15,7 +14,7 @@ import { phoneTool } from './index';
 
 /** Android's channel for every tool's reminders: its own, so a member can quieten them without the community's alerts. */
 export const TOOL_REMINDER_CHANNEL = 'tools';
-/** Every tool reminder's identifier starts so: `bp-tool:<tool>:<reminder>:<at>`. */
+/** Every tool reminder's identifier starts so: `bp-tool:<community>:<tool>:<reminder>:<at>`. */
 export const TOOL_REMINDER_PREFIX = 'bp-tool:';
 
 /** The part of expo-notifications this needs, so a test hands in its own. */
@@ -36,7 +35,6 @@ let loaded: ToolNotifications | null | undefined;
 function deviceNotifications(): ToolNotifications | null {
     if (loaded !== undefined) return loaded;
     try {
-        // Loaded on first use, as services/push-notifications.ts does: Expo Go has no local notifications of ours.
         const { default: Constants, ExecutionEnvironment } = require('expo-constants');
         loaded = Constants.executionEnvironment === ExecutionEnvironment.StoreClient ? null : require('expo-notifications');
     } catch {
@@ -45,13 +43,22 @@ function deviceNotifications(): ToolNotifications | null {
     return loaded ?? null;
 }
 
-export const toolReminderId = (tool: string, reminder: string, at: number) => `${TOOL_REMINDER_PREFIX}${tool}:${reminder}:${at}`;
+export function toolReminderId(tool: string, reminder: string, at: number): string;
+export function toolReminderId(community: string, tool: string, reminder: string, at: number): string;
+export function toolReminderId(a: string, b: string, c: string | number, d?: number): string {
+    if (typeof d === 'number') {
+        return `${TOOL_REMINDER_PREFIX}${a}:${b}:${c}:${d}`;
+    }
+    return `${TOOL_REMINDER_PREFIX}${a}:${b}:${c}`;
+}
 
 /**
  * What to schedule for one tool now: due() on its document, only the reminders the member has on, only in the future,
  * one per identifier, soonest first, at most TOOL_LIMITS.due. A due() that throws schedules nothing (never a crash).
  */
-export function remindersToSchedule<D>(manifest: ToolManifest<D>, doc: D, isOn: (reminderId: string) => boolean, now: number): ToolDue[] {
+export function remindersToSchedule<D>(
+    manifest: ToolManifest<D>, doc: D, isOn: (reminderId: string) => boolean, now: number, community: string = 'local',
+): ToolDue[] {
     if (!manifest.reminders || !manifest.permissions.includes('reminders')) return [];
     const known = new Set(manifest.reminders.list.map((r) => r.id));
     let due: ToolDue[];
@@ -65,7 +72,7 @@ export function remindersToSchedule<D>(manifest: ToolManifest<D>, doc: D, isOn: 
         .filter((d) => d && known.has(d.reminder) && isOn(d.reminder) && Number.isFinite(d.at) && d.at > now)
         .sort((a, b) => a.at - b.at)
         .filter((d) => {
-            const id = toolReminderId(manifest.id, d.reminder, d.at);
+            const id = toolReminderId(community, manifest.id, d.reminder, d.at);
             if (seen.has(id)) return false;
             seen.add(id);
             return true;
@@ -73,69 +80,110 @@ export function remindersToSchedule<D>(manifest: ToolManifest<D>, doc: D, isOn: 
         .slice(0, TOOL_LIMITS.due);
 }
 
-/** Cancel the tool's scheduled reminders, or every tool's with no id. Never throws. */
-export async function cancelToolReminders(tool?: string, n: ToolNotifications | null = deviceNotifications()): Promise<void> {
+export type CancelToolRemindersTarget =
+    | { community?: string; tool?: string }
+    | string;
+
+/** Cancel scheduled reminders for a tool, a whole community, or all tools. Never throws. */
+export async function cancelToolReminders(
+    target?: CancelToolRemindersTarget,
+    n: ToolNotifications | null = deviceNotifications(),
+): Promise<void> {
     if (!n) return;
-    const prefix = tool ? `${TOOL_REMINDER_PREFIX}${tool}:` : TOOL_REMINDER_PREFIX;
+    let match: (id: string) => boolean = (id) => id.startsWith(TOOL_REMINDER_PREFIX);
+    if (typeof target === 'string') {
+        match = (id) => id.startsWith(`${TOOL_REMINDER_PREFIX}${target}:`) || id.includes(`:${target}:`);
+    } else if (target) {
+        if (target.community && target.tool) {
+            const prefix = `${TOOL_REMINDER_PREFIX}${target.community}:${target.tool}:`;
+            match = (id) => id.startsWith(prefix) || id.startsWith(`${TOOL_REMINDER_PREFIX}${target.tool}:`);
+        } else if (target.community) {
+            const prefix = `${TOOL_REMINDER_PREFIX}${target.community}:`;
+            match = (id) => id.startsWith(prefix);
+        } else if (target.tool) {
+            match = (id) => id.includes(`:${target.tool}:`);
+        }
+    }
     try {
         for (const s of await n.getAllScheduledNotificationsAsync()) {
-            if (s.identifier.startsWith(prefix)) await n.cancelScheduledNotificationAsync(s.identifier);
+            if (match(s.identifier)) await n.cancelScheduledNotificationAsync(s.identifier);
         }
     } catch (e) {
         console.warn('[Tools] Could not cancel the reminders', e instanceof Error ? e.message : e);
     }
 }
 
+/** Chained reschedule operations per community & tool: serializes writes so older runs cannot survive. */
+const rescheduleChains = new Map<string, Promise<ToolDue[]>>();
+
 /**
  * The tool's reminders made what due() says now: every one scheduled before is cancelled, then each due one scheduled
  * on its date in the tool's channel, titled with the tool's name and saying the manifest's sentence in the member's
  * language. Returns what was scheduled. Never throws.
+ *
+ * Reschedules are serialized per tool and community so quick successive writes execute in order.
  */
 export async function scheduleToolReminders<D>(
     manifest: ToolManifest<D>, doc: D, isOn: (reminderId: string) => boolean, now: number = Date.now(),
-    n: ToolNotifications | null = deviceNotifications(), os: string = Platform.OS,
+    n: ToolNotifications | null = deviceNotifications(), os: string = Platform.OS, community: string = 'local',
 ): Promise<ToolDue[]> {
     if (!n) return [];
-    await cancelToolReminders(manifest.id, n);
-    const due = remindersToSchedule(manifest, doc, isOn, now);
-    if (due.length === 0) return [];
-    try {
-        if (os === 'android' && n.setNotificationChannelAsync) {
-            await n.setNotificationChannelAsync(TOOL_REMINDER_CHANNEL, {
-                name: t('Tool reminders'),
-                importance: n.AndroidImportance?.DEFAULT ?? 3,
-                description: t('Reminders your tools set on this phone. Nothing about them leaves it.'),
-            });
+    const chainKey = `${community}:${manifest.id}`;
+    const previous = rescheduleChains.get(chainKey) ?? Promise.resolve([]);
+    const run = (async () => {
+        try {
+            await previous;
+        } catch {
+            // Previous failure should not stop this run
         }
-        for (const d of due) {
-            await n.scheduleNotificationAsync({
-                identifier: toolReminderId(manifest.id, d.reminder, d.at),
-                content: {
-                    title: t(manifest.name),
-                    body: t(d.key, d.values),
-                    data: { bpLocal: 1, bpTool: manifest.id, ...(d.screen ? { screen: d.screen } : {}) },
-                },
-                trigger: { type: 'date', date: new Date(d.at), ...(os === 'android' ? { channelId: TOOL_REMINDER_CHANNEL } : {}) },
-            });
+        await cancelToolReminders({ community, tool: manifest.id }, n);
+        const due = remindersToSchedule(manifest, doc, isOn, now, community);
+        if (due.length === 0) return [];
+        try {
+            if (os === 'android' && n.setNotificationChannelAsync) {
+                await n.setNotificationChannelAsync(TOOL_REMINDER_CHANNEL, {
+                    name: t('Tool reminders'),
+                    importance: n.AndroidImportance?.DEFAULT ?? 3,
+                    description: t('Reminders your tools set on this phone. Nothing about them leaves it.'),
+                });
+            }
+            for (const d of due) {
+                await n.scheduleNotificationAsync({
+                    identifier: toolReminderId(community, manifest.id, d.reminder, d.at),
+                    content: {
+                        title: t(manifest.name),
+                        body: t(d.key, d.values),
+                        data: { bpLocal: 1, bpCommunity: community, bpTool: manifest.id, ...(d.screen ? { screen: d.screen } : {}) },
+                    },
+                    trigger: { type: 'date', date: new Date(d.at), ...(os === 'android' ? { channelId: TOOL_REMINDER_CHANNEL } : {}) },
+                });
+            }
+            return due;
+        } catch (e) {
+            console.warn('[Tools] Could not schedule the reminders', e instanceof Error ? e.message : e);
+            return [];
         }
-        return due;
-    } catch (e) {
-        console.warn('[Tools] Could not schedule the reminders', e instanceof Error ? e.message : e);
-        return [];
-    }
+    })();
+    rescheduleChains.set(chainKey, run);
+    return run;
+}
+
+export function resetRemindersForTest(): void {
+    rescheduleChains.clear();
 }
 
 /**
  * Where a tap on a tool's reminder opens: the tool, at the screen due() named when this build has it, else its first.
- * Null for anything else: a push from outside (only the app posts a local notification), a tool this build doesn't have.
- * Only what {@link scheduleToolReminders} posted is one: `remote` is inferred from the trigger, which a platform may leave
- * unset on a push, so the `bpLocal: 1` it writes must be there too, or an unsigned push naming a tool is never routed
- * here past the signed-tap check (PR #2267 review 4326931551).
+ * Null for anything else: a push from outside (only the app posts a local notification), a tool this build doesn't have,
+ * or a reminder belonging to a community other than the currently active one.
  */
-export function toolReminderRoute(n: { remote: boolean; data: unknown }): string | null {
+export function toolReminderRoute(n: { remote: boolean; data: unknown }, activeCommunity?: string | null): string | null {
     if (n.remote || !n.data || typeof n.data !== 'object') return null;
-    const { bpLocal, bpTool, screen } = n.data as { bpLocal?: unknown; bpTool?: unknown; screen?: unknown };
+    const { bpLocal, bpCommunity, bpTool, screen } = n.data as { bpLocal?: unknown; bpCommunity?: unknown; bpTool?: unknown; screen?: unknown };
     if (bpLocal !== 1 || typeof bpTool !== 'string') return null;
+    if (activeCommunity !== undefined && typeof bpCommunity === 'string' && bpCommunity !== activeCommunity) {
+        return null;
+    }
     const tool = phoneTool(bpTool);
     if (!tool) return null;
     const known = typeof screen === 'string' && tool.manifest.screens.includes(screen) && screen !== tool.manifest.screens[0];

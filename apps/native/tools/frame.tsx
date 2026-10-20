@@ -15,7 +15,7 @@
  *
  * Colours from the central tokens only; every sentence through t(); 48 dp targets; one column at 320 dp.
  */
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, Pressable, Modal, ScrollView, Switch, StyleSheet, Linking, Platform } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -25,7 +25,7 @@ import type { AppColors } from '../constants/colors';
 import { HOME_TARGET_DP, HomeLink, HomeRow, homeStyles } from '../components/home/HomeParts';
 import { editHomeStyles } from '../components/home/EditHomeSheet';
 import { STORE_URLS } from '../utils/force-update';
-import { NODE_COPY_BUILT, reminderOn, readToolDoc, type ToolSettings } from './store';
+import { NODE_COPY_BUILT, reminderOn, readToolDoc, subscribeToolStore, type ToolSettings } from './store';
 import type { PhoneTool } from './index';
 
 /** The row's state line, the Home card's lines: a manifest's function on the document, never a throw. */
@@ -77,6 +77,9 @@ export function toolBack() {
 
 // ── The frame ────────────────────────────────────────────────────────────────────────────────────────────────────
 
+/** A sheet opened as another closes: iOS can't present one modal while the last is still going (Android can). */
+export const afterModal = (fn: () => void, os: string = Platform.OS) => (os === 'ios' ? void setTimeout(fn, 350) : fn());
+
 export function ToolFrame({ manifest, state, settings, colors, onSettings, onAbout, onRemove, children }: {
     manifest: ToolManifest;
     /** The row's state line now, or null. */
@@ -91,7 +94,7 @@ export function ToolFrame({ manifest, state, settings, colors, onSettings, onAbo
     const insets = useSafeAreaInsets();
     const [menu, setMenu] = useState(false);
     const name = t(manifest.name);
-    const pick = (f: () => void) => () => { setMenu(false); f(); };
+    const pick = (f: () => void) => () => { setMenu(false); afterModal(f); };
     return (
         <View style={[frame.page, { backgroundColor: colors.surface.page, paddingTop: insets.top }]} testID="tool-frame">
             <View style={[frame.header, { backgroundColor: colors.surface.card, borderBottomColor: colors.border.default }]}>
@@ -288,8 +291,14 @@ export function openTool(id: string, screen?: string) {
 export function ToolHomeBody({ tool, owner, colors, now }: { tool: PhoneTool; owner: string; colors: AppColors; now: number }) {
     const { manifest } = tool;
     // The document is read as Home comes into view (back from the tool, too), not at every drawing; its lines are worked
-    // out at each drawing, for the time now.
+    // out at each drawing, for the time now. It also subscribes to tool store writes so changes show without a remount.
     const [doc, setDoc] = useState<{ value: unknown } | null>(null);
+    const reload = useCallback(() => {
+        readToolDoc(owner, manifest)
+            .then(({ doc: value }) => { setDoc({ value }); })
+            .catch(() => { setDoc({ value: manifest.doc.empty() }); });
+    }, [owner, manifest]);
+
     useFocusEffect(useCallback(() => {
         let gone = false;
         readToolDoc(owner, manifest)
@@ -297,6 +306,14 @@ export function ToolHomeBody({ tool, owner, colors, now }: { tool: PhoneTool; ow
             .catch(() => { if (!gone) setDoc({ value: manifest.doc.empty() }); });
         return () => { gone = true; };
     }, [owner, manifest]));
+
+    useEffect(() => {
+        return subscribeToolStore((o, t) => {
+            if ((o === owner || o === '*') && (t === manifest.id || t === '*')) {
+                reload();
+            }
+        });
+    }, [owner, manifest.id, reload]);
     const lines = doc ? homeLines(manifest, doc.value, now) : [];
     const name = t(manifest.name);
     return (
@@ -305,7 +322,7 @@ export function ToolHomeBody({ tool, owner, colors, now }: { tool: PhoneTool; ow
                 <HomeRow key={i} text={t(line.key, line.values)} a11y={t(line.key, line.values)} colors={colors} lines={2}
                     onPress={() => openTool(manifest.id, line.screen && manifest.screens.includes(line.screen) ? line.screen : undefined)} />
             ))}
-            <HomeLink id={`tool-home-${manifest.id}-open`} text={t('Open {tool}', { tool: name })} a11y={t('Open {tool}', { tool: name })} colors={colors} onPress={() => openTool(manifest.id)} />
+            <HomeLink id={`tool-home-${manifest.id}-open`} testID={`tool-home-${manifest.id}-open`} text={t('Open {tool}', { tool: name })} a11y={t('Open {tool}', { tool: name })} colors={colors} onPress={() => openTool(manifest.id)} />
         </View>
     );
 }

@@ -32,6 +32,21 @@ export function toolRecordKey(owner: string, tool: string): string {
     return `${node}|${owner}|${tool}`;
 }
 
+type ToolStoreListener = (owner: string, tool: string) => void;
+const listeners = new Set<ToolStoreListener>();
+
+/** Subscribe to document writes, removals and clears in this browser's tool store. */
+export function subscribeToolStore(listener: ToolStoreListener): () => void {
+    listeners.add(listener);
+    return () => { listeners.delete(listener); };
+}
+
+function notifyToolStore(owner: string, tool: string): void {
+    for (const listener of [...listeners]) {
+        try { listener(owner, tool); } catch (e) { console.warn('[Tools] Store listener failed', e); }
+    }
+}
+
 let dbPromise: Promise<IDBDatabase | null> | null = null;
 
 function openDb(): Promise<IDBDatabase | null> {
@@ -116,7 +131,10 @@ export async function writeToolRecord(owner: string, tool: string, record: ToolR
     const key = toolRecordKey(owner, tool);
     const kept = await run(db, (s) => s.put(record, key));
     if (!kept) return false;
-    if (accountEpochHolds()) return true;
+    if (accountEpochHolds()) {
+        notifyToolStore(owner, tool);
+        return true;
+    }
     await run(db, (s) => s.delete(key));
     return false;
 }
@@ -125,7 +143,28 @@ export async function writeToolRecord(owner: string, tool: string, record: ToolR
 export async function removeToolRecord(owner: string, tool: string): Promise<boolean> {
     const db = await openDb();
     if (!db) return true;
-    return run(db, (s) => s.delete(toolRecordKey(owner, tool)));
+    const ok = await run(db, (s) => s.delete(toolRecordKey(owner, tool)));
+    if (ok) notifyToolStore(owner, tool);
+    return ok;
+}
+
+/**
+ * Remove every tool document kept in this browser for `nodeUrl` (a community left or deleted while keeping the key).
+ * Deletes all records whose key starts with `${nodeUrl}|`.
+ */
+export async function clearToolRecordsFor(nodeUrl: string): Promise<boolean> {
+    const db = await openDb();
+    if (!db) return true;
+    const prefix = `${nodeUrl}|`;
+    const KeyRange = typeof IDBKeyRange !== 'undefined'
+        ? IDBKeyRange
+        : (globalThis as unknown as { IDBKeyRange?: { bound: (...a: unknown[]) => unknown } }).IDBKeyRange;
+    const range = KeyRange
+        ? KeyRange.bound(prefix, prefix + '\ufffd', false, false)
+        : { lower: prefix, upper: prefix + '\ufffd' };
+    const ok = await run(db, (s) => (s as unknown as { delete(r: unknown): IDBRequest }).delete(range));
+    notifyToolStore('*', '*');
+    return ok;
 }
 
 /** How long a sign-out waits for the database to be deleted: what was in it is already emptied by then. */
@@ -145,6 +184,7 @@ export async function clearToolStore(): Promise<void> {
     if (db) {
         await run(db, (s) => s.clear());
         try { db.close(); } catch { /* already closed */ }
+        notifyToolStore('*', '*');
     }
     await new Promise<void>((resolve) => {
         try {

@@ -431,6 +431,7 @@ export const SUITES = [
     'test-member-blocks-standby',
     'test-blocks-on-messaging',
     'test-messaging-idor',
+    'test-probation',
     'test-withheld-lines',
     'test-blocks-on-beans',
     'test-polls',

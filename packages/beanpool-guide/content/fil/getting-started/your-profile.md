@@ -8,7 +8,7 @@ source-hash: 7adea0e9b76c043c
 
 ## Palitan ang iyong pangalan, larawan o bio
 
-- Buksan ang **Mga Setting** gamit ang sliders button sa itaas ng screen.
+- Buksan ang **Setting** gamit ang sliders button sa itaas ng screen.
 - Sa iyong card sa itaas, i-tap ang **I-edit**, o i-tap ang iyong larawan.
 - Baguhin ang nais mo:
 - Ang **Callsign** ay ang pangalang makikita ng mga tao.
@@ -18,7 +18,7 @@ source-hash: 7adea0e9b76c043c
 
 Sa web app, i-tap ang **I-edit ang Profile**, palitan ang larawan gamit ang **Kamera** o **Galerya**, at i-tap ang **I-save ang mga Pagbabago sa Profile**.
 
-Maaari mo ring i-tap ang **Muling Patakbuhin ang Setup** sa Mga Setting. Gagabayan ka nitong muli sa iyong pangalan at larawan, humigit-kumulang kung nasaan ka (sa pandaigdigang komunidad, sa app sa telepono), at ang maikling tour kung paano gumagana ang BeanPool. Sa isang web browser, itakda ang iyong lugar sa **Mga Setting**, sa ilalim ng **Iyong lugar**.
+Maaari mo ring i-tap ang **Muling Patakbuhin ang Setup** sa Mga Setting. Gagabayan ka nitong muli sa iyong pangalan at larawan, humigit-kumulang kung nasaan ka (sa pandaigdigang komunidad, sa app sa telepono), at ang maikling tour kung paano gumagana ang BeanPool. Sa isang web browser, itakda ang iyong lugar sa **Setting**, sa ilalim ng **Iyong lugar**.
 
 ## Bago ka mag-post
 

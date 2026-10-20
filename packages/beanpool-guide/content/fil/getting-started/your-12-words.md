@@ -30,12 +30,12 @@ Ang iyong account ay hindi isang password na itinatabi ng ibang tao. Ito ay isan
 Ang recovery kit ay isang napi-print na pahina: ang iyong 12 salita nang sunod-sunod, ang pangalan at address ng iyong komunidad, ang petsa kung kailan mo ito ginawa, at ang mga hakbang upang makabalik sa telepono at sa web browser. Hindi nito sinasabi kung kaninong account ito. Opsyonal ito: maaari kang magpatuloy nang wala ito.
 
 - **Sa telepono**: sa tabi ng iyong 12 salita (sa Backup kapag sumali ka, at sa Mga Setting), i-tap ang **I-print ang iyong recovery kit** upang i-print ito, o **I-save bilang PDF** upang gumawa ng PDF at piliin kung saan ito pupunta. Bago mag-save, nagbabala ang app: "Ilayo ang file na ito sa mga cloud backup at chat. Kahit sino na may hawak nito ay maaaring mag-sign in bilang ikaw." Binubura ng telepono ang sarili nitong kopya ng PDF pagkatapos.
-- **Sa web app**: sa tabi ng iyong 12 salita (kapag sumali ka, at sa Mga Setting sa ilalim ng **Tingnan ang Parirala sa Pagbawi**), i-click ang **I-print o i-save ang iyong recovery kit**. Nagbabala ang app: "Ilayo ang pahina o file na ito sa mga cloud backup at chat. Kahit sino na may hawak nito ay maaaring mag-sign in bilang ikaw." I-click ang **Magpatuloy** para sa print dialog ng iyong browser. Upang magtago ng PDF sa halip na papel, piliin ang **Save as PDF** doon.
+- **Sa web app**: sa tabi ng iyong 12 salita (kapag sumali ka, at sa Mga Setting sa ilalim ng **Tingnan ang Parirala sa Pagbawi**), i-click ang **I-print o i-save ang iyong recovery kit**. Nagbabala ang app: "Ilayo ang pahina o file na ito sa mga cloud backup at chat. Kahit sino na may hawak nito ay maaaring mag-sign in bilang ikaw." I-click ang **Magpatuloy** para sa print dialog ng iyong browser. Upang magtago ng PDF sa halip na papel, piliin ang **I-save bilang PDF** doon.
 - Panatilihin ang pahina tulad ng pag-iingat mo sa mga salita: kahit sino na may hawak nito ay maaaring mag-sign in bilang ikaw.
 
 ## Kung saan makikita muli ang mga ito
 
-Buksan ang **Mga Setting** gamit ang sliders button sa itaas ng screen. Pagkatapos ay alinman sa:
+Buksan ang **Setting** gamit ang sliders button sa itaas ng screen. Pagkatapos ay alinman sa:
 
 - Sa ilalim ng **Account & Identity**, i-tap ang **Tingnan ang Parirala sa Pagbawi**. Itipa ang **CONFIRM**, i-tap ang **Ipakita ang Parirala sa Pagbawi**, at ipasa ang pagsusuri sa lock screen ng iyong telepono.
 - O i-tap ang **Proteksyon ng Account**, pagkatapos ay **Ipakita ang Aking 12 Salita sa Pagbawi**, at ipasa ang pagsusuri sa lock screen ng iyong telepono. I-tap ang **Itago** kapag tapos ka na.
@@ -50,7 +50,7 @@ Ang teleponong naibalik gamit ang isang sign-in account ay nakakakuha lamang ng 
 
 Kung walang kopya ng iyong 12 salita ang teleponong ito, at mayroon kang nakasulat, maaari mong idagdag ang mga ito:
 
-- Buksan ang **Mga Setting**. Sa ilalim ng **Account & Identity**, i-tap ang **Tingnan ang Parirala sa Pagbawi**. (O, sa **Proteksyon ng Account**, i-tap ang **Ipakita ang Aking 12 Salita sa Pagbawi**.) Sa isang teleponong walang kopya, alinman sa dalawa ay nagbubukas ng **Idagdag ang iyong 12 salita sa teleponong ito**.
+- Buksan ang **Setting**. Sa ilalim ng **Account & Identity**, i-tap ang **Tingnan ang Parirala sa Pagbawi**. (O, sa **Proteksyon ng Account**, i-tap ang **Ipakita ang Aking 12 Salita sa Pagbawi**.) Sa isang teleponong walang kopya, alinman sa dalawa ay nagbubukas ng **Idagdag ang iyong 12 salita sa teleponong ito**.
 - Itipa ang 12 salita nang sunod-sunod, o i-tap ang **I-paste**. Hindi mahalaga ang malalaking titik at sobrang mga espasyo. Ang isang salita na wala sa listahan ng mga salita sa pagbawi ay mamarkahan habang nagtitipa ka. (Tandaan na ang mga salita ay mga salitang Ingles.)
 - I-tap ang **Idagdag ang mga salitang ito**.
 
@@ -62,11 +62,11 @@ Maaari kang sumali sa pandaigdigang komunidad gamit ang 12 lihim na salita laman
 
 Sinasabi ito ng app sa **Backup**. Pagkatapos mong sumali, sinasabi itong muli ng isang card sa **Home**, sa telepono at sa web app: **May isang paraan pabalik ang iyong account: ang iyong 12 salita. Tiyaking hawak mo pa ang mga ito, o magdagdag ng sign-in.** Hindi ka nito kailanman pinipigilan sa paggawa ng anuman. Sa telepono:
 
-- Itinatabi ng **✕** ang card. Bumabalik ito nang isang beses pagkatapos ng iyong unang post at isang beses pagkatapos ng isang linggo, pagkatapos ay nananatili na lamang sa **Mga Setting**, sa ilalim ng **Proteksyon ng Account**.
+- Itinatabi ng **✕** ang card. Bumabalik ito nang isang beses pagkatapos ng iyong unang post at isang beses pagkatapos ng isang linggo, pagkatapos ay nananatili na lamang sa **Setting**, sa ilalim ng **Proteksyon ng Account**.
 - Binubuksan ng **Ipakita ang aking 12 salita** ang **Proteksyon ng Account**, kung saan makikita mo muli ang mga ito.
 - Sa **Proteksyon ng Account**, itinatabi nang tuluyan ng **Hawak ko pa ang aking 12 salita** ang card. Nananatili roon ang **Magdagdag ng sign-in**.
 
-Sa web app ang card ay may pamagat na **Isang paraan pabalik**, na may **Tingnan ang aking 12 salita** at **Magdagdag ng sign-in**. Itinatabi ito ng **✕**: bumabalik ito nang isang beses pagkatapos na manatiling nakapaskil ang isa sa iyong mga post, at isang beses kapag natapos ang iyong unang linggo. Ang pag-tap sa **Tingnan ang aking 12 salita** sa card ng **Home** ay nagpapakita sa mga ito, at hindi na babalik doon ang card. Nananatili ito sa itaas ng **Mga Setting** hanggang sa magdagdag ka ng sign-in.
+Sa web app ang card ay may pamagat na **Isang paraan pabalik**, na may **Tingnan ang aking 12 salita** at **Magdagdag ng sign-in**. Itinatabi ito ng **✕**: bumabalik ito nang isang beses pagkatapos na manatiling nakapaskil ang isa sa iyong mga post, at isang beses kapag natapos ang iyong unang linggo. Ang pag-tap sa **Tingnan ang aking 12 salita** sa card ng **Home** ay nagpapakita sa mga ito, at hindi na babalik doon ang card. Nananatili ito sa itaas ng **Setting** hanggang sa magdagdag ka ng sign-in.
 
 Ang isang account na ginawa gamit ang 12 salita ay nagsisimula ring mas mabagal kaysa sa ginawa gamit ang sign-in, para sa unang linggo nito. Tingnan ang "Pag-ulat ng problema" para sa mga limitasyon nito, at kung bakit.
 
@@ -74,9 +74,9 @@ Ang isang account na ginawa gamit ang 12 salita ay nagsisimula ring mas mabagal 
 
 Maaari kang magdagdag ng sign-in sa ibang pagkakataon, mula sa anumang telepono o browser kung saan nakapasok ka sa iyong account, hindi lamang sa kung saan ka sumali. Sa isang telepono kung saan ibinalik mo ang iyong account gamit ang iyong 12 salita, buksan ang pandaigdigang komunidad sa app: sinasabi ng komunidad na ang iyong account ay mayroon lamang ng 12 salita nito, at lumalabas ang card at ang **Magdagdag ng sign-in** (maaari itong magtagal nang kaunti). Hindi ka maaaring magdagdag habang suspendido ang iyong account, o kung isinara ng komunidad ang iyong account (sinasabi ito ng app, at walang magbabago). Ito ay nagiging pangalawang paraan pabalik, at agad nitong inaalis ang mga limitasyon ng 12 salita.
 
-Kung nagtatabi na ang key vault ng BeanPool ng kopya ng iyong account, ang kopyang iyon ay isa ring paraan pabalik. Pagkatapos ay hindi na ipinapakita ng app ang card ng isang paraan pabalik. Iniaalok pa rin nang tahimik ang **Magdagdag ng sign-in**, sa **Proteksyon ng Account** sa **Mga Setting**, dahil inaalis nito ang mga limitasyon ng 12 salita.
+Kung nagtatabi na ang key vault ng BeanPool ng kopya ng iyong account, ang kopyang iyon ay isa ring paraan pabalik. Pagkatapos ay hindi na ipinapakita ng app ang card ng isang paraan pabalik. Iniaalok pa rin nang tahimik ang **Magdagdag ng sign-in**, sa **Proteksyon ng Account** sa **Setting**, dahil inaalis nito ang mga limitasyon ng 12 salita.
 
-- I-tap ang **Magdagdag ng sign-in**: sa card, o sa **Mga Setting** sa ilalim ng **Proteksyon ng Account**. Sa **Backup** sinasabi ng button ang **Magdagdag ng sign-in bilang pangalawang daan pabalik**.
+- I-tap ang **Magdagdag ng sign-in**: sa card, o sa **Setting** sa ilalim ng **Proteksyon ng Account**. Sa **Backup** sinasabi ng button ang **Magdagdag ng sign-in bilang pangalawang daan pabalik**.
 - I-tap ang **Magpatuloy gamit ang Google**, **Magpatuloy gamit ang Facebook** o, sa iPhone, **Magpatuloy gamit ang Apple**, at mag-sign in nang isang beses. Maaaring humingi muna ang app ng lock ng iyong telepono.
 - Sinasabi ng **Sign-in added** na gumana ito. Mayroon na ngayon ang iyong account ng karaniwang mga limitasyon ng bagong account, at ibinabalik ito ng sign-in na iyon kung mawala mo ang iyong telepono, gaya ng isang taong sumali gamit ito. Tingnan ang "Pagbawi sa iyong account" para malaman kung sino ang makakapagbukas ng kopyang itinabi para dito.
 

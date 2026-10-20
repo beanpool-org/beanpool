@@ -125,7 +125,7 @@ export async function writeToolDoc<D>(owner: string, manifest: ToolManifest<D>, 
 export async function removeToolDataHere(owner: string, tool: string, url?: string | null, notifications?: ToolNotifications | null): Promise<void> {
     const db = await getDb();
     await db.runAsync('DELETE FROM tool_docs WHERE owner = ? AND tool = ?', [owner, tool]);
-    const anchorUrl = url !== undefined ? url : await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null);
+    const anchorUrl = url ?? await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null);
     const community = communityKey(anchorUrl);
     await (await import('./photos')).removeToolFolder(community, owner, tool);
     await cancelToolReminders({ community, tool }, notifications);

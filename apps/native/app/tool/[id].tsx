@@ -208,7 +208,7 @@ function ToolHostScreen({ manifest, screenName, Screen, params }: {
                 },
             },
         ]);
-    }, [owner, manifest, shareKey, hear, screenName, params]);
+    }, [owner, manifest, shareKey, hear, screenName, params, url]);
 
     const about = useCallback(() => {
         Alert.alert(t(manifest.name), t(manifest.line));

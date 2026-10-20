@@ -44,26 +44,26 @@ Kamu menjumpainya dalam beberapa bentuk:
 
 - label kecil di layar atau kartu;
 - sebuah kotak di bagian atas layar contoh;
-- sebuah tombol yang mempertahankan posisinya, seperti **Request · Beans held safely 🏘️** pada sebuah iklan;
-- satu baris di mana komunitas lokal berbeda, seperti "🏘️ In a local community this is a price in Beans ›".
+- sebuah tombol yang mempertahankan posisinya, seperti **Permintaan · Kacang tersimpan aman 🏘️** pada sebuah iklan;
+- satu baris di mana komunitas lokal berbeda, seperti "🏘️ Di komunitas lokal ini adalah harga dalam kacang ›".
 
-Ketuk salah satunya untuk membuka **Why this lives in a local community**. Bagian ini menjelaskan alasannya dalam satu atau dua kalimat, lalu menawarkan **Mulai komunitas** dan, jika memungkinkan, **Komunitas di sekitar Anda** dan **Cara kerja**.
+Ketuk salah satunya untuk membuka **Mengapa ini ada di komunitas lokal**. Bagian ini menjelaskan alasannya dalam satu atau dua kalimat, lalu menawarkan **Mulai komunitas** dan, jika memungkinkan, **Komunitas di sekitar Anda** dan **Cara kerja**.
 
 ## Example Valley
 
-Layar dengan penanda tersebut menampilkan **Example Valley**: sebuah komunitas fiktif, sehingga kamu dapat melihat layar komunitas lokal dengan konten di dalamnya.
+Layar dengan penanda tersebut menampilkan **Lembah Contoh**: sebuah komunitas fiktif, sehingga kamu dapat melihat layar komunitas lokal dengan konten di dalamnya.
 
 - **Buku kas:** contoh anggota dengan 85 Kacang, batas untuk berbelanja hingga −200, lencana kepercayaan, dan beberapa transaksi terkini, seperti roti, satu jam berkebun, dan beberapa bibit tanaman.
-- **Sarana Bersama:** Example Valley Bakery, sebuah usaha yang dikelola anggotanya, dan satu Keputusan: tempat pengomposan, dibiayai dari Kacang bersama milik Sarana Bersama.
+- **Bersama:** Example Valley Bakery, sebuah usaha yang dikelola anggotanya, dan satu Keputusan: tempat pengomposan, dibiayai dari Kacang bersama milik Sarana Bersama.
 - **Kesepakatan Saya,** di Pasar: tiga contoh kesepakatan: satu menunggu tindakanmu, satu dengan Kacang yang disimpan dengan aman, dan satu selesai.
 
-Tidak seorang pun di Example Valley yang memiliki nama asli. Kamu melihat "seorang tetangga", "Sarana Bersama", atau "Example Valley Bakery". Tidak ada yang nyata, dan tidak ada yang milikmu.
+Tidak seorang pun di Example Valley yang memiliki nama asli. Kamu melihat "seorang tetangga", "Sarana Bersama", atau "Toko Roti Lembah Contoh". Tidak ada yang nyata, dan tidak ada yang milikmu.
 
 Tombol **ⓘ** dan halaman panduan di layar-layar ini adalah yang asli: keduanya menjelaskan cara kerjanya di komunitas lokal.
 
-Tombol yang seharusnya mengirim Kacang, membuat kesepakatan, memberikan suara, berkomitmen, atau mengundang akan membuka **Why this lives in a local community** sebagai gantinya. Tombol ini tidak mengirim apa pun dan tidak mengubah apa pun.
+Tombol yang seharusnya mengirim Kacang, membuat kesepakatan, memberikan suara, berkomitmen, atau mengundang akan membuka **Mengapa ini ada di komunitas lokal** sebagai gantinya. Tombol ini tidak mengirim apa pun dan tidak mengubah apa pun.
 
-Kotak di bagian atas layar contoh memiliki tanda **✕**. Ketuk tanda itu dan kotak akan menyusut menjadi satu baris, "🏘️ An example · Why? ›". Ponsel atau browsermu mengingat hal itu, untuk komunitas ini. Di ponsel, ketuk baris tersebut untuk membuka kotak kembali. Di web app, ketuk baris tersebut untuk melihat alasannya, atau **▾** untuk membuka kotak kembali.
+Kotak di bagian atas layar contoh memiliki tanda **✕**. Ketuk tanda itu dan kotak akan menyusut menjadi satu baris, "🏘️ Contoh · Mengapa? ›". Ponsel atau browsermu mengingat hal itu, untuk komunitas ini. Di ponsel, ketuk baris tersebut untuk membuka kotak kembali. Di web app, ketuk baris tersebut untuk melihat alasannya, atau **▾** untuk membuka kotak kembali.
 
 Di browser web kamu dapat melihat contoh Buku kas sebelum bergabung: itu adalah tab di samping Beranda, Pasar, dan Peta.
 
@@ -85,13 +85,13 @@ Jika suatu hari komunitas global dapat memeriksa identitas pengguna, beberapa fi
 
 Komunitas lokal berjalan di server kecilnya sendiri, yang dirawat oleh seseorang dari warga setempat. Orang itu bisa jadi kamu.
 
-- **Biayanya:** komputer cadangan yang terus menyala di rumah, atau server sewa kecil seharga beberapa dolar sebulan. Perangkat lunaknya gratis.
+- **Berapa biayanya:** komputer cadangan yang terus menyala di rumah, atau server sewa kecil seharga beberapa dolar sebulan. Perangkat lunaknya gratis.
 - **Siapa yang menjalankannya:** kamu sendiri, di mesin milikmu sendiri atau yang kamu sewa. Server ini tidak memerlukan beanpool.org: ia dapat memiliki alamat web miliknya sendiri.
 - **Tanggung jawabmu:** laporan dari anggotamu masuk kepadamu. Data komunitas adalah milikmu untuk dicadangkan, dengan kode pemulihan. Pastikan memiliki dua pemilik, dan jaga agar server tetap menyala dan selalu diperbarui.
-- **Yang tidak pernah kamu lihat:** obrolan antarpribadi anggotamu. Pesan-pesan tersebut terkunci sehingga server tidak dapat membacanya.
+- **Apa yang tidak pernah kamu lihat:** obrolan antarpribadi anggotamu. Pesan-pesan tersebut terkunci sehingga server tidak dapat membacanya.
 - **Berapa lama penyiapannya:** sekitar setengah jam, bagi seseorang yang bisa mengikuti petunjuk.
 
-Untuk memulai, ketuk **Mulai komunitas** di lembar **Why this lives in a local community** mana pun, atau, di ponsel, pada kartu **Find your community** di Beranda. Ini menampilkan tiga cara untuk menjalankannya: komputer cadangan di rumah, server sewa kecil, atau meminta bantuan di komunitas global. **Salin detail komunitas saya** menyalin nama komunitasmu, lokasi, dan cara orang dapat menghubungimu, untuk ditempelkan ke pengaturan server barumu.
+Untuk memulai, ketuk **Mulai komunitas** di lembar **Mengapa ini ada di komunitas lokal** mana pun, atau, di ponsel, pada kartu **Temukan komunitas Anda** di Beranda. Ini menampilkan tiga cara untuk menjalankannya: komputer cadangan di rumah, server sewa kecil, atau meminta bantuan di komunitas global. **Salin detail komunitas saya** menyalin nama komunitasmu, lokasi, dan cara orang dapat menghubungimu, untuk ditempelkan ke pengaturan server barumu.
 
 Langkah-langkahnya ada di "First-time setup", dalam panduan untuk pengelola komunitas, di beanpool.org. Saat servermu aktif, kamu mengklaimnya dengan ponselmu: arahkan kamera ponsel ke kode QR yang ditampilkan servermu, atau di BeanPool ketuk **Siapkan server komunitas baru** (di **Temukan komunitas** atau **Mulai komunitas**), lalu **Pindai kode**. Pengaturan kemudian membantumu memberi nama komunitasmu, menambahkan pemilik kedua, dan membuat undangan pertamamu. Atur juga lokasi komunitasmu di Pengaturan, agar orang-orang di dekatmu dapat menemukannya.
 
@@ -100,10 +100,10 @@ Langkah-langkahnya ada di "First-time setup", dalam panduan untuk pengelola komu
 Di ponsel:
 
 - **Komunitas di sekitar Anda** mencantumkan komunitas terdekat darimu yang memilih untuk ditampilkan.
-- Ketuk **Minta bergabung**: seorang anggota di sana dapat mengizinkanmu masuk. Jika komunitas hanya mengizinkan adminnya mengundang, pemilik atau admin yang akan melakukannya.
+- Ketuk **Minta untuk bergabung**: seorang anggota di sana dapat mengizinkanmu masuk. Jika komunitas hanya mengizinkan adminnya mengundang, pemilik atau admin yang akan melakukannya.
 - Belum ada yang dekat denganmu? **Beri tahu saya jika ada yang dimulai di sini** memberi tahumu jika ada komunitas yang baru dimulai.
 
-Di web app, kartu **Find your community** di Beranda menautkan setiap komunitas di dekatmu ke halamannya masing-masing.
+Di web app, kartu **Temukan komunitas Anda** di Beranda menautkan setiap komunitas di dekatmu ke halamannya masing-masing.
 
 Akunmu ikut bersamamu, dengan 12 kata yang sama, dan kamu tetap menjadi anggota komunitas global. Lihat "Finding a community near you".
 

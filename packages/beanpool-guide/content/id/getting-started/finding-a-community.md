@@ -16,12 +16,12 @@ Belum ada komunitas di dekatmu? Kamu bisa memulainya: lihat "Belum ada yang deka
 
 ## Komunitas di sekitar Anda
 
-Di komunitas global, kartu **Find your community** di **Beranda** menampilkan komunitas-komunitas yang paling dekat denganmu. Selama 30 hari pertamamu, kartu ini tetap berada di dekat bagian atas Beranda dan tidak dapat dihapus atau dipindahkan; setelah itu kamu dapat menghapusnya seperti kartu lainnya. Di web app, setiap komunitas pada kartu merupakan tautan ke halamannya sendiri. Jika tidak mengetahui lokasimu, ketuk **Bagikan areaku**, atau **or type your town** dan pilih kotamu. Langkah-langkah di bawah ini adalah untuk aplikasi ponsel.
+Di komunitas global, kartu **Temukan komunitas Anda** di **Beranda** menampilkan komunitas-komunitas yang paling dekat denganmu. Selama 30 hari pertamamu, kartu ini tetap berada di dekat bagian atas Beranda dan tidak dapat dihapus atau dipindahkan; setelah itu kamu dapat menghapusnya seperti kartu lainnya. Di web app, setiap komunitas pada kartu merupakan tautan ke halamannya sendiri. Jika tidak mengetahui lokasimu, ketuk **Bagikan areaku**, atau **atau ketik kota Anda** dan pilih kotamu. Langkah-langkah di bawah ini adalah untuk aplikasi ponsel.
 
 Belum berada di komunitas global? Ketuk ikon kacang di kiri atas dan, di bawah **KOMUNITASMU**, ketuk **Komunitas global**, lalu bergabunglah dengannya menggunakan akun yang kamu miliki: lihat "More than one community". Jika belum memiliki akun, ketuk **Jelajahi BeanPool di seluruh dunia** pada layar pertama aplikasi: lihat "Joining BeanPool".
 
 - Ketuk **Komunitas di sekitar Anda** untuk melihat seluruh daftarnya.
-- Komunitas dicantumkan dengan yang terdekat terlebih dahulu ketika aplikasi mengetahui lokasimu. Jika tidak, ketuk **Gunakan lokasiku**, atau cari berdasarkan nama. Lebih suka tidak membagikan lokasimu? Ketuk **or type your town**, mulailah mengetik, dan pilih kotamu dari daftar: hanya perkiraan titik yang disimpan, dan **change** memilih yang lain.
+- Komunitas dicantumkan dengan yang terdekat terlebih dahulu ketika aplikasi mengetahui lokasimu. Jika tidak, ketuk **Pakai lokasiku**, atau cari berdasarkan nama. Lebih suka tidak membagikan lokasimu? Ketuk **atau ketik kota Anda**, mulailah mengetik, dan pilih kotamu dari daftar: hanya perkiraan titik yang disimpan, dan **ubah** memilih yang lain.
 - Komunitas dengan jarak yang kurang lebih sama darimu akan diacak, sehingga tidak ada satu komunitas pun yang selalu berada di paling atas.
 - Masing-masing menampilkan seberapa jauh jaraknya dan berapa banyak anggotanya, jika komunitas telah mengatakannya.
 
@@ -29,11 +29,11 @@ Komunitas yang belum mempublikasikan alamatnya tetap dicantumkan, tetapi belum d
 
 ## Meminta bergabung
 
-- Ketuk **Minta bergabung** pada suatu komunitas.
+- Ketuk **Minta untuk bergabung** pada suatu komunitas.
 - Periksa namamu, dan tulis beberapa kata tentang dirimu, hingga 280 karakter: tempat tinggalmu, apa yang ingin kamu bagikan atau pelajari.
 - Ketuk **Kirim**.
 
-Permintaanmu langsung dikirimkan ke komunitas tersebut, bukan melalui komunitas global, dengan namamu, kata-katamu, dan fotomu. Hanya anggotanya yang melihatnya. Jika komunitas hanya mengizinkan adminnya yang mengundang, hanya pemilik dan adminnya yang melihatnya. Seorang anggota di sana dapat mengizinkanmu masuk: mereka mengetuk **Invite**, dan sebuah undangan dibuat yang hanya dapat digunakan oleh akunmu.
+Permintaanmu langsung dikirimkan ke komunitas tersebut, bukan melalui komunitas global, dengan namamu, kata-katamu, dan fotomu. Hanya anggotanya yang melihatnya. Jika komunitas hanya mengizinkan adminnya yang mengundang, hanya pemilik dan adminnya yang melihatnya. Seorang anggota di sana dapat mengizinkanmu masuk: mereka mengetuk **Undang**, dan sebuah undangan dibuat yang hanya dapat digunakan oleh akunmu.
 
 Saat kamu menunggu, kartu komunitas bertuliskan **You asked to join. No answer yet**. Komunitas biasanya menjawab dalam beberapa hari. Kamu dapat memiliki satu permintaan terbuka dengan setiap komunitas, dan setiap komunitas hanya menerima beberapa permintaan per hari dari satu koneksi internet.
 
@@ -59,9 +59,9 @@ Kamu tetap menjadi anggota komunitas global, dan dapat berpindah di antara kedua
 
 ## Jika kamu adalah anggota komunitas lokal
 
-Orang dapat meminta bergabung dengan komunitasmu dari komunitas global. Ketuk **Obrolan**, lalu **Orang**, lalu **Invites**: permintaan dicantumkan di bawah **Wants to join**, beserta nama mereka, kata-kata mereka, dan dari mana mereka berasal. Permintaan dijawab di aplikasi ponsel: web app tidak mencantumkannya.
+Orang dapat meminta bergabung dengan komunitasmu dari komunitas global. Ketuk **Obrolan**, lalu **Warga**, lalu **Invites**: permintaan dicantumkan di bawah **Wants to join**, beserta nama mereka, kata-kata mereka, dan dari mana mereka berasal. Permintaan dijawab di aplikasi ponsel: web app tidak mencantumkannya.
 
-- **Invite:** membuat undangan yang hanya dapat digunakan oleh akun mereka. Aplikasi mereka menemukannya dengan sendirinya, dan mereka bergabung dengan satu ketukan.
+- **Undang:** membuat undangan yang hanya dapat digunakan oleh akun mereka. Aplikasi mereka menemukannya dengan sendirinya, dan mereka bergabung dengan satu ketukan.
 - **Nanti saja:** mereka tidak diberi tahu. Mereka tetap melihat pesan "belum ada jawaban", dan tidak dapat meminta lagi selama 30 hari.
 
 Setiap anggota dapat menjawab, apa pun lencana kepercayaan mereka, kecuali komunitas memilih bahwa hanya adminnya yang mengundang (**Known**, di bawah **Who may invite** di Pengaturan server komunitas). Jika demikian, hanya pemilik dan adminnya yang melihat permintaan tersebut dan menjawabnya. Admin komunitas dapat mematikan fitur permintaan bergabung.

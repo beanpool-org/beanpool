@@ -45,11 +45,15 @@ function openDb(): Promise<IDBDatabase | null> {
             };
             req.onsuccess = () => {
                 const db = req.result;
-                // Another tab signing out asks to delete the database: this tab lets go of it.
-                db.onversionchange = () => {
+                const letGo = () => {
                     try { db.close(); } catch { /* already closed */ }
                     if (dbPromise === opened) dbPromise = null;
                 };
+                // Another tab signing out asks to delete the database: this tab lets go of it.
+                db.onversionchange = letGo;
+                // The browser dropped the connection (its storage process gone, iOS after a long background): let go of
+                // it too, so the next read or write opens it again instead of failing until a reload.
+                db.onclose = letGo;
                 resolve(db);
             };
             req.onerror = () => resolve(null);

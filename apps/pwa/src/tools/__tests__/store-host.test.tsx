@@ -29,6 +29,47 @@ beforeEach(() => {
 });
 afterEach(() => { vi.unstubAllGlobals(); resetAccountEpochForTest(); });
 
+/**
+ * `inner`, with connections the browser can drop, as when its storage process goes or iOS has had the page in the
+ * background a long time: from then on every transaction on that connection throws InvalidStateError, and `close` fires
+ * on it. A connection opened afterwards works.
+ */
+function droppable(inner: MemoryIndexedDB) {
+    const live: Array<() => void> = [];
+    const open = (name: string, version?: number) => {
+        const req = inner.open(name, version) as ReturnType<MemoryIndexedDB['open']> & { onupgradeneeded: ((ev: unknown) => void) | null };
+        let lost = false;
+        let db: { onclose: ((ev: unknown) => void) | null; [k: string]: unknown } | null = null;
+        const outer = {
+            onsuccess: null as ((ev: unknown) => void) | null,
+            onerror: null as ((ev: unknown) => void) | null,
+            onupgradeneeded: null as ((ev: unknown) => void) | null,
+            error: null as unknown,
+            get result() { return db; },
+        };
+        const wrap = () => {
+            const real = req.result as { createObjectStore(n: string): unknown; close(): void; transaction(...a: unknown[]): unknown };
+            const conn = {
+                onclose: null as ((ev: unknown) => void) | null,
+                onversionchange: null as ((ev: unknown) => void) | null,
+                createObjectStore: (n: string) => real.createObjectStore(n),
+                close: () => real.close(),
+                transaction: (...a: unknown[]) => {
+                    if (lost) throw new DOMException('Connection to Indexed Database server lost.', 'InvalidStateError');
+                    return real.transaction(...a);
+                },
+            };
+            db = conn;
+            live.push(() => { lost = true; conn.onclose?.({}); });
+        };
+        req.onupgradeneeded = (ev) => { if (!db) wrap(); outer.onupgradeneeded?.(ev); };
+        req.onsuccess = (ev) => { if (!db) wrap(); outer.onsuccess?.(ev); };
+        req.onerror = (ev) => outer.onerror?.(ev);
+        return outer;
+    };
+    return { idb: { ...inner, open }, dropAll: () => live.splice(0).forEach((drop) => drop()) };
+}
+
 interface Doc { v: number; items: string[] }
 const tool: ToolManifest<Doc> = {
     id: 'notes', name: word('New tool'), line: word('One line on what this tool keeps for you.'), icon: '🧩', shelf: 'stock',
@@ -99,6 +140,19 @@ describe('the one store (IndexedDB)', () => {
         localStorage.removeItem('bp_node_url');
         expect(await readToolRecord('ana', 'notes')).toBeNull();
         expect(await readToolRecord('ben', 'garden')).toBeNull();
+    });
+
+    // Review of #2274: a connection the browser closed was held on to, so every read came back empty and every write
+    // failed until a reload.
+    it('a connection the browser drops is let go of: the next read and write open the database again', async () => {
+        const { idb, dropAll } = droppable(mem);
+        vi.stubGlobal('indexedDB', idb);
+        resetToolStoreForTest();
+        expect(await writeToolRecord('ana', 'notes', rec('"kept"'))).toBe(true);
+        dropAll();
+        expect((await readToolRecord('ana', 'notes'))?.body).toBe('"kept"');
+        expect(await writeToolRecord('ana', 'notes', rec('"again"'))).toBe(true);
+        expect((await readToolRecord('ana', 'notes'))?.body).toBe('"again"');
     });
 
     it('a sign-out while the database is open in this page empties it too', async () => {

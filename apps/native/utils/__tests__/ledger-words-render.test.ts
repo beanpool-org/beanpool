@@ -659,7 +659,10 @@ describe('Send Beans reads the amount in the member\'s language (#2202)', () => 
         expect(receives).toBeNull();
         expect(sent).toEqual([]);
         expect(text()).toContain(formatNumber(1000.5, undefined, 'fr'));
-        expect(text()).toContain('Type the amount without thousands separators, like 1000,5.');
+        // The sentence is core's (parseAmount's refusal), so its French is in core's catalog: the draft once it has one, else the English.
+        const coreFr = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../../../packages/beanpool-core/words/fr.json'), 'utf8')) as Record<string, string>;
+        const why = 'Type the amount without thousands separators, like {example}.';
+        expect(text()).toContain((coreFr[why] || why).replace('{example}', formatNumber(1000.5, undefined, 'fr')));
     });
 
     it('en "1.234" still gets the cents guard\'s own words, and "abc" its own', async () => {

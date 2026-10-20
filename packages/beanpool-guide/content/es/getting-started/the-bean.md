@@ -13,7 +13,7 @@ En el teléfono, toca el frijol en la parte superior izquierda de la pantalla. O
 - Abre **Ajustes** con el botón de controles deslizantes en la parte superior de la pantalla.
 - Bajo **BeanPool**, toca **Ayuda y funcionamiento**.
 
-En la app web está en el mismo lugar: **Ajustes**, luego **Ayuda y funcionamiento** bajo **BeanPool**.
+En la app web está en el mismo lugar: **Configuración**, luego **Ayuda y funcionamiento** bajo **BeanPool**.
 
 ## Qué contiene
 

@@ -9,7 +9,9 @@
 //                                            English as "text" and today's sourceHash: translate each "text" and merge
 //                                            the entries into content/<lang>/manifest.json.
 //
-// Run from anywhere: pnpm --filter @beanpool/guide titles [--draft <lang>]
+// Run from anywhere: pnpm --filter @beanpool/guide titles. The draft is JSON for a file or an agent, so run it with node
+// (node packages/beanpool-guide/scripts/titles.mjs --draft <lang> > draft.json): pnpm --filter prints its own banner
+// before it, even with -s.
 
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';

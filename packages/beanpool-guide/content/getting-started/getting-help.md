@@ -14,12 +14,12 @@ related: the-bean, reporting, faq, blocking, the-top-bar
 
 ## Ask a person
 
-- **About a trade:** message the other person first. Most problems are misunderstandings. On the post, tap **Message** and their name.
+- **About a trade:** message the other person first. Most problems are misunderstandings. On the post, tap **Message**.
 - **About a person or a trade that has gone wrong:** talk to the admins of your community. They look after its server, and they can step in on a stuck trade.
 - **No community yet:** join the global community and ask there: people from everywhere, and a way to find a community near you. On a phone, beanpool.org/global opens the BeanPool app right at its way in, or your app store first if you don't have the app. See "Joining BeanPool".
 - **About the app itself:** visit beanpool.org. You can open it from **Settings**, under **BeanPool**.
 - **Running a community yourself:** the owners and admins who run a community's server have their own manual, in that server's Settings: sign in and press **Manual: running your community** in the side bar.
-- **Getting into Settings:** owners and admins see **Community admin** in the phone app's **Settings**. **Manage** opens Settings on the phone. On a computer, open Settings in a web browser and choose **Sign in with your phone**, then in the app tap **Manage this community from a computer** (older apps: **Sign in on a computer**) and scan the code. Check the 6-character code on the phone matches the one on the computer before you tap **Sign in**. If the phone then shows two digits, type them on the computer within 30 seconds.
+- **Getting into Settings:** owners and admins see **Community admin** in the phone app's **Settings**. **Manage** and your community's name opens its Settings on the phone. A moderator sees **Community moderation**, with **Moderate** and the community's name, which opens the reports. On a computer, open Settings in a web browser and choose **Sign in with your phone**, then in the app tap **Manage this community from a computer** (older apps: **Sign in on a computer**) and scan the code. Check the 6-character code on the phone matches the one on the computer before you tap **Sign in**. If the phone then shows two digits, type them on the computer within 30 seconds.
 
 ## When something is not right
 

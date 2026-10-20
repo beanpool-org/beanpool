@@ -25,28 +25,28 @@ On the phone, the same list is in **Commons**, under **Groups**, as **Your group
 ## Starting a group
 
 - On the phone, in **Talk**, under **Groups**, tap **New group**. Or in **Commons**, under **Groups**, tap the round **+** button. Both open the same **Create a Group** form. (On the **Projects** or **Enterprises** chip, the **+** starts a project or an enterprise instead.)
-- In the web app, open **Commons**, then **Groups**, and tap **+ Create Group**. You stay on **Commons** afterwards; inviting people is on the phone.
+- In the web app, open **Commons**, then **Groups**, and tap **+ Create Group**. You stay on **Commons** afterwards. To invite people, open the group and tap **Invite people**. You can also open **Chat**, tap **Groups**, then **New group**: that takes you straight into the new group's chat.
 - Give it a **Group Name**, up to 60 characters, and, if you like, a **Purpose / Description**, up to 300: what the group is for and who it is for.
 - Choose a **Category**: **Social Circle**, **General**, **Working Group** or **Guild**. On the phone **Social Circle** is chosen for you. In the web app **Working Group** is.
 - Choose a **Join Policy**: **Open**, **Request to Join** or **Invite Only**.
 - Tap **Create Group**. You become its **lead convenor**. On the phone, the app takes you straight into the new group's chat.
 
+You can start up to 5 groups in any 24 hours.
+
 With Beans involved? Start a project or an enterprise instead, from the bottom of the categories: on the phone **Start a project or an enterprise**, on the web **Start a project** or **Start an enterprise**. See "Projects and enterprises".
 
 ## Inviting people
 
-You invite people in the phone app. The web app cannot send invitations yet.
-
-A new group's chat asks **Who do you want to invite?**
+You can invite people on the phone and in the web app. On the phone, a new group's chat asks **Who do you want to invite?**
 
 - Tap **Invite people**, tick the people you want, and tap the button at the bottom (for example **Invite 2 people**).
 - Or tap **Not now** to skip it.
 
-Later, a convenor can invite people from the chat's **⋮** menu, **Invite people**. Each person you invite sees the group in **Commons**, under **Groups**, marked **INVITED** in the phone app (on the phone, in a community with no **Commons** tab, under **Find groups** in **Talk**). The web app does not mark invitations yet; accept them on the phone. When they join, the chat says so.
+Later, a convenor can invite people from the chat's **⋮** menu, **Invite people**. In the web app, a convenor opens the group and taps **Invite people**, ticks the people, and taps the button at the bottom in the same way. Each person you invite sees the group in **Commons**, under **Groups**, marked **INVITED** in the phone app (on the phone, in a community with no **Commons** tab, under **Find groups** in **Talk**). The web app does not mark invitations yet: there, they open the group and tap **Accept invitation**. When they join, the chat says so.
 
 ## The group's chat
 
-- On the phone, tap the group's name at the top of the chat to see the group: its members, **Leave Group**, and for convenors, **Convenor Tools**. In the web app, open the group from **Commons**, under **Groups**.
+- On the phone, tap the group's name at the top of the chat to see the group: its members, **Leave Group**, and for convenors, **Convenor Tools**. In the web app, tap the group's name at the top of its chat, or open the group from **Commons**, under **Groups**.
 - The **⋮** menu has **Invite people** (convenors), **Mute notifications** (or **Unmute**), **Search this chat**, **Confirm new phone** and **Group info**. The search runs on your phone, not on your community's server.
 - Joins, leaves and role changes show in the chat as small grey lines.
 - Write **@** and someone's name to alert them. See "Mentions".
@@ -60,7 +60,7 @@ A group's chat is end-to-end encrypted: only the group's members can read it, no
 - A message that does not check out as written by a member shows as **Unverified**, as nobody's, with **This message couldn't be verified.** A message whose key has not reached your phone yet reads **Waiting for the key to this message.**
 - If your community's server is older and cannot lock group chats yet, the chat says the server can read it, and that it will be locked once the server is updated. When it is updated, the group's earlier messages, which the server could read, are removed, and a line in the chat says so. Each earlier message then reads **An earlier message was removed when this chat was locked**, and several in a row show as one line, such as **11 earlier messages removed when this chat was locked**.
 
-In the web app your group chats are in **Chat**, marked 👥. You can read and write there, end-to-end encrypted as on the phone: reply, react, edit for 15 minutes and search the chat. Inviting people, muting, **Group info**, **Delete** and **Remove** are on the phone only. An enterprise's chat is not encrypted: see "Messages".
+In the web app your group chats are in **Chat**, marked 👥. You can read and write there, end-to-end encrypted as on the phone: reply, react, edit for 15 minutes and search the chat. Muting, **Delete** and **Remove** are on the phone only. In the web app, tap the group's name at the top of its chat to open the group; a convenor can invite people from there. An enterprise's chat is not encrypted: see "Messages".
 
 ## Talking in a group's chat
 
@@ -71,6 +71,8 @@ A group's chat works exactly like a chat with one person. Tap a message and smal
 - **Edit**, on your own messages, for 15 minutes. The message then shows **edited**.
 - **Delete**, on your own messages, at any time. It asks **Delete for everyone?** once, and the message then reads **This message was deleted** to everyone in the group.
 - **Remove**, for convenors, on anybody else's message. It asks once, and the message then reads **Removed by a convenor**. Your own message is a **Delete**, not a **Remove**.
+
+Two or more deleted or removed messages in a row show as one line, such as **3 messages were deleted**.
 
 Under your own message: a clock while it is sending, a tick once the group's server has it, or **! not delivered** if it could not be sent — tap that to **Resend** or **Discard** it. There are no blue double ticks in a group: a group has no single reader.
 
@@ -113,9 +115,9 @@ While your account is suspended, you cannot start a group, join one, ask to join
 
 ## Joining by invitation
 
-A group you are invited to shows in **Commons**, under **Groups**, marked **INVITED** in the phone app. The web app does not mark invitations yet; accept them on the phone. On the phone, in a community with no **Commons** tab, it is under **Find groups** in **Talk**. Tap it to see the invitation: who invited you, what the group is, who is in it (for an invite-only group, how many), and who can read its chat.
+A group you are invited to shows in **Commons**, under **Groups**, marked **INVITED** in the phone app. The web app does not mark invitations yet. Open the group and tap **Accept invitation**. On the phone, in a community with no **Commons** tab, it is under **Find groups** in **Talk**. Tap it to see the invitation: who invited you, what the group is, who is in it (for an invite-only group, how many), and who can read its chat.
 
-- Tap **Join the group**. You land in its chat.
+- Tap **Join the group** (in the web app, **Accept invitation**). You land in its chat.
 - Tap **Not now** to decide later. The invitation stays.
 - If it says **This invitation is no longer open**, it was withdrawn. Ask whoever invited you to invite you again.
 - If it says **Couldn't open this group**, your phone could not reach your community's server. Tap **Try again**.
@@ -135,7 +137,7 @@ In **Convenor Tools**, any convenor can:
 
 Beside a name in the **Roster**, any convenor can:
 
-- change a member's or an observer's role (**Role**), including making them a convenor;
+- change a member's or an observer's role (**Role** on the phone, a drop-down in the web app), including making them a convenor;
 - remove a member or an observer (**✕**).
 
 A convenor removes a post from the post itself, and on the phone a message in the chat. A group's name and description cannot be changed in the app yet.
@@ -193,4 +195,4 @@ Give it a title and say why, then tap **Open the vote**. A vote never moves Bean
 ## Coming soon
 
 - Removing a rogue lead convenor by a community Decision. Coming in a later update.
-- Invitations in the web app. Today you invite people, and accept an invitation to an invite-only group, in the phone app. The web app can already read and write in a group's chat (in **Chat**), and its **Commons** can list groups, start one, join one and vote in one.
+- Marking invitations on the web list of groups.

@@ -15,10 +15,10 @@ Tap **Talk** in the row of tabs, then **Messages**. Your chats with people are l
 Chats that belong to a group, an enterprise or an event are under **Groups**, not here. See "Groups".
 
 - Search with **Search chats, posts, partners...**.
-- The filter button sorts by **Recent**, **Unread** or credits, and can show **Unread Only** or **Friends Only**.
+- The filter button sorts by **Recent** or **Unread** (and, where your community uses Beans, by the Beans in each deal, highest or lowest first), and can show **Unread Only** or **Friends Only**.
 - On the phone, the search and filter button slide away as you scroll down. Scroll up a little and they come back. Tap **Talk** again to jump to the top.
 
-In the web app this is the **Chat** tab. It lists all your chats, groups' and events' too, with **All**, **Transactions** and **Direct** at the top, and it has no search or filter.
+In the web app this is the **Chat** tab. It lists all your chats, groups' and events' too, with **All**, **Transactions**, **Direct** and **Groups** at the top, and it has no search or filter.
 
 ## Starting a chat
 

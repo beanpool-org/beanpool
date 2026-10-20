@@ -20,7 +20,7 @@ Your account is not a password kept by someone else. It is a key kept on your ph
 - Keep the paper somewhere safe, away from your phone.
 - A photo or screenshot of the words is easy for someone else to find. Paper is safer.
 - While the phone app shows your 12 words, or while you type them, it blocks screenshots and screen recordings of that screen: the phone refuses the screenshot, or the picture comes out blank. Nothing stops a photo of the screen taken with another phone.
-- **Copy** puts the words on your phone's clipboard for one minute. Then the app clears them, if the clipboard still holds them. If you leave the app first, it clears them when you come back. Something you copied since is left alone.
+- **Copy Words** (**Copy All Words** while you join, and in the web app) puts the words on your phone's clipboard for one minute. Then the app clears them, if the clipboard still holds them. If you leave the app first, it clears them when you come back. Something you copied since is left alone. A keyboard's clipboard history, or a clipboard shared with your other devices, may keep a copy the app can't clear.
 - In the web app, the copy clears after a minute if you stay on that screen. On an iPhone or iPad, in Safari or in Firefox, the browser lets the app clear it only when you tap or press a key, so it clears at your first tap or key press after the minute. If you leave that screen or switch to another app or tab first, the app can't tell whether you copied something else, so it leaves your clipboard alone: copy something else over the words.
 - If your phone has no screen lock, anyone holding it can open your 12 words, and the app says so under them. A PIN, pattern, password, fingerprint or face lock, set in your phone's settings, keeps them safer.
 
@@ -59,7 +59,7 @@ Your phone checks that the words belong to your account, the same check as **Che
 
 You can join the global community with 12 secret words alone, without a Google, Apple or Facebook account (see "Joining BeanPool"). If that made you a new account, your 12 words are your only way back in. No copy of your account is kept anywhere but on your phone, and nobody can reset them: not BeanPool, and not the community. If you lose them and your phone, the account is gone for good. (If you joined with the account you already had, a sign-in you linked in another community still brings it back there.)
 
-The app says so at **Safety Backup**. After you join, a card on **Home** says it again (in the web app it also shows at the top of the other screens, except the map): **Your account has one way back: your 12 words. Check you still have them, or add a sign-in.** It never stops you doing anything.
+The app says so at **Safety Backup**. After you join, a card on **Home** says it again, on the phone and in the web app: **Your account has one way back: your 12 words. Check you still have them, or add a sign-in.** It never stops you doing anything.
 
 - **✕** puts the card away. It comes back once after your first post and once after a week, then stays only in **Settings**, under **Account Protection**.
 - **Show my 12 words** opens **Account Protection**, where you can see them again.

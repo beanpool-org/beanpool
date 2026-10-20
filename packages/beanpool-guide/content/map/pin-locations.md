@@ -18,13 +18,13 @@ On the global community, other members see your listing's pin to about a kilomet
 
 **If you post from home and do not want people to know your address, use Drop a pin and put it somewhere nearby instead:** a corner, a park, the shops. You can tell the other person the exact place in a message once you have agreed.
 
-You cannot move the pin later. To change it, delete the post and post it again.
+You cannot move an Offer's or a Need's pin later. To change it, delete the post and post it again. A host can move an event's pin by editing the event.
 
 ## Events
 
 When you create an event, place the pin first, then tap **Approximate (~100 m)**. The pin then shows only roughly where it is. If you move the pin afterwards, tap it again. On the global community a new pin starts Approximate, and **Use the exact spot** puts it back where you placed it. There, only the hosts and the people who can read the note see the exact spot; other members see it to about a kilometre.
 
-Everyone can see the event's place name, so do not type your home address there. Put the exact address in **Note for people who are going**, which only the hosts and the people who tap **Going** can read.
+Everyone can see the event's place name, so do not type your home address there. Put the exact address in **Note for people who are going**. The hosts can read it, and so can everyone who taps **Going**, unless the host ticked **Only people I let in see the note and chat**: then only the people the host lets in. That box starts ticked on the global community.
 
 ## What is never shown
 

@@ -22,9 +22,9 @@ The Ledger has two tabs: **Levels** (your trust, see "Trust badges") and **Walle
 - How many of your beans are held in deals that are under way, when there are some.
 - **Community Circulation:** shows when you hold beans. See "The circulation fee".
 - **Project pledges:** beans you have pledged to projects, if any.
-- **Send Credits:** send a gift. See "Sending a gift".
+- **Send Beans:** send a gift. See "Sending a gift".
 
-In the web app the Wallet tab is shorter: **Overdraft Floor**, **Commons Pool**, **Send Credits** and **Community Circulation**. Your balance is at the top of the Ledger.
+In the web app the Wallet tab is shorter: **Overdraft Floor**, **Commons Pool**, **Send Beans** and **Community Circulation**. Your balance is at the top of the Ledger.
 
 ## Recent transactions
 

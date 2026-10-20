@@ -8,7 +8,7 @@ related: your-profile, your-area, pin-locations, blocking, messages
 
 ## Opening Settings
 
-Tap the sliders button at the top right of the screen. Settings is not one of the tabs.
+Tap the sliders button at the top right of the screen. In the web app on a wide computer screen, it is a gear at the bottom of the left sidebar instead. Settings is not one of the tabs.
 
 ## What members of your community can see
 
@@ -32,17 +32,17 @@ The owners and admins who run your community's server can still see what is stor
 
 - **On your community:** nothing of your posts. Its listings, and their photos, are for its members, and so is your profile photo. Each photo opens only from the link that comes with its listing or with your name in the app, so someone outside sees one only if a member passes that link on. Someone who opens your community's address without joining is shown the way to the global community instead.
 - **On the global community:** anyone can look at its listings before joining, but they see only the words, the photos and roughly where each one is, never your name, your face or the exact spot.
-- Anything you share to the Pulse can be seen by anyone who opens it. See "Sharing your channels".
+- **Your Pulse posts:** nothing. The Pulse is for members. The video or post itself stays on its own site (YouTube, Instagram and so on), as public as it is there. See "Sharing your channels".
 
 ## What you control
 
 - **Contact details:** in your profile, choose **Who can see this?**: **Hidden**, **Trade Partners**, **Friends** or **Community**. See "Your profile".
 - **Connections in common:** when you and two people have each added each other, each of them can see your name on the other's profile, as someone they can ask. In Settings, under **Legal & Privacy**, turn off **Show me as a connection in common** and nobody sees your name there. It is on until you turn it off. See "People and friends".
 - **Who added you:** when you add someone, they see a line on their People tab saying you added them, so they can add you back. They are not sent a notification.
-- **Location:** in Settings, under **App Settings**, turn **Location** on to use your position for the map and nearby posts. To turn it off, change it in your phone's own settings; the app shows you how.
+- **Location (phone):** in Settings, under **App Settings**, turn **Location** on to use your position for the map and nearby posts. To turn it off, change it in your phone's own settings; the app shows you how. In a web browser there is no such switch: the browser asks you, and remembers your answer.
 - **Your area** (on the global community): in Settings, under **Your area**, see the area you gave, about 10 km around a town or two numbers, or **Not set**. **Clear** removes it. Below it, **Roughly where are you?** sets a new one with **Use my location** or **Type a town or suburb**, and **Cancel** (in a browser, **← Back to Settings**) leaves it as it is. Only the rounded area is ever sent. Other members see how far away you are, and a poll you make is shown at your area. Without one, you see the newest listings worldwide, and members nearby won't see a poll you make in their list, though they can still find it by searching. See "Your area".
 - **App Lock:** asks for your phone's screen lock (its PIN, pattern, password, fingerprint or face) when the app opens, and when you come back to it after 15 seconds or more away. The lock covers the app's screens and pop-ups. On an iPhone it also closes a web page the app opened, such as your community's Settings from **Manage**. It can't cover a web page the app opened on an Android phone, which opens outside the app, or the panel for sharing something on either phone: close them before you put your phone down. Your community's Settings, opened from **Manage**, signs you out after 15 minutes unused. While App Lock is on, the app goes blank as you leave it, and comes back when you return. It needs a screen lock on the phone: without one there is nothing for it to ask.
-- **Channels:** anything you share to the Pulse is shown with your name, to anyone who opens the Pulse. See "Sharing your channels".
+- **Channels:** anything you share to the Pulse is shown with your name, to everyone in your community. See "Sharing your channels".
 
 ## Who else can see things
 

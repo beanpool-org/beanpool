@@ -13,7 +13,7 @@ A Decision is binding: if it passes, your community's server carries it out by i
 
 The global community has no Decisions. Anyone can join it, with 12 words or a sign-in, so one person with several accounts could swing a vote there. Its moderators look after it instead: see "Reporting a problem". Decisions belong to local communities. Polls still work everywhere.
 
-On the global community, **Commons** shows an example Decision from a local community, marked **🏘️ Local community**, so you can see how one works. Its **Vote** button says why voting lives in a local community, and casts nothing. See "Beans and the global community".
+On the global community, **Commons** shows an example Decision from a local community, marked **🏘️ Local community**, so you can see how one works. Its **Vote YES** and **Vote NO** buttons say why voting lives in a local community, and cast nothing. See "Beans and the global community".
 
 ## Reading a Decision
 
@@ -45,4 +45,4 @@ Tap **Decisions History**. Choose **All**, **Executed**, **Failed** or **Void**.
 
 ## More
 
-On the phone, tap the **ⓘ** beside the Commons title for how the Commons' beans and voting work. In the web app, tap **Commons Pool ⓘ** on the **Ledger**.
+On the phone, tap the **ⓘ** beside the Commons title for how the Commons' beans and voting work. In the web app, open the **Ledger**, tap **Wallet**, then **Commons Pool ⓘ**.

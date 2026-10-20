@@ -16,7 +16,7 @@ Your trust badge does not matter.
 
 ## Sending
 
-- Tap **Ledger**, then **Wallet**, then **Send Credits**.
+- Tap **Ledger**, then **Wallet**, then **Send Beans**.
 - Tap **Select recipient...**, search for their name and tap it.
 - Type the **Amount**. Add a **Memo** if you like, such as "Thanks for the tomatoes".
 - Check **Recipient receives**. Gifts have no fee, so they get it all.

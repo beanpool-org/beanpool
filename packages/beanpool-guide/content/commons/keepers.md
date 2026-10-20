@@ -34,10 +34,10 @@ Only you see how much trust you have left to back with. The lead keeper sees you
 
 ## Stepping down
 
-Tap **Step down as a keeper**, then **Step down**.
+Tap **Step down as a keeper**, then confirm (**Step down** on the phone, **OK** in the web app).
 
 - The only keeper cannot step down. They can wind the enterprise up instead.
-- If the enterprise is below zero and needs your backing to cover it, the app says **Not yet**.
+- If the enterprise is below zero and needs your backing to cover it, the app says you can't yet (on the phone, **Not yet**).
 
 ## Votes among the keepers
 

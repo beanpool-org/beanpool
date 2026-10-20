@@ -14,7 +14,7 @@ Every event has its own chat. The host and everyone who has tapped **Going** can
 - Open the event and tap **Open event chat**.
 - Or find it in **Talk**, under **Groups**, marked 📅 **Event**. In the web app it is in the **Chat** tab, with your other chats.
 
-At the top, a pinned box shows the host's **Note for people who are going**, such as the exact address. Tap the event's name at the very top to go back to the event.
+At the top, a pinned box shows the host's **Note for people who are going**, such as the exact address. Tap the event's name at the very top (in the web app, **View event**) to go back to the event.
 
 ## Writing
 
@@ -25,4 +25,4 @@ Type in **Message everyone going…** and tap the send button. You can send up t
 - Event chats are not end-to-end encrypted. The host, everyone going (where the host lets people in, the ones the host has let in), and the people who run your community's server can read them. The chat says so above the message box.
 - The host can remove any message. Tap it, then **Remove**. It then says "removed by the host".
 - An event chat has no reply, no reactions, no editing and no deleting your own message — unlike a chat with a person or a group's chat. Ask the host to remove something you regret. If you delete your account, every message you wrote here reads **This message was deleted**.
-- When the event ends or is cancelled, the chat becomes read-only. Some time later it goes away.
+- When the event ends or is cancelled, the chat becomes read-only. A repeating event's chat stays open until its last date. Thirty days after the end it goes away.

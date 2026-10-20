@@ -7,7 +7,7 @@ related: notifications, blocking, groups, mentions, messages
 
 ## Muting a chat
 
-In any chat with a person, a group or an enterprise:
+In any chat with a person or a group, and in an enterprise's chat if you are one of its keepers:
 
 - Tap **⋮** at the top right (**⋯** in a chat with one person), then **Mute notifications**.
 - Choose **For 8 hours**, **For a week** or **Always**.
@@ -22,7 +22,7 @@ Muting is in the phone app only for now.
 - An enterprise's chat sends no alerts, so there are none to stop. Muting it keeps it out of the numbers below.
 - The chat still shows new messages.
 - In **Talk**, under **Groups**, a muted chat shows a bell with a line through it. Its unread number is grey, and it is not added to the number on **Groups**.
-- The top bar stays quiet about it too.
+- In a group's or an enterprise's chat, the top bar stays quiet about it too. A muted chat with one person still counts there.
 - The mute stays when you leave the chat. When you open a group's or an enterprise's chat again, the top says **muted**.
 
 ## Other chats

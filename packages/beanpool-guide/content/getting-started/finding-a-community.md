@@ -15,7 +15,7 @@ No community near you yet? You can start one: see "Nothing near you", below.
 
 ## Communities near you
 
-On the global community, the **Find your community** card on **Home** shows the communities nearest you. For your first 30 days it stays at the top of Home and can't be removed or moved; after that you can remove it like any other card. In the web app, each community on the card is a link to its own page. If it doesn't know where you are, tap **Share my area**, or **or type your town** and pick your town. The steps below are for the phone app.
+On the global community, the **Find your community** card on **Home** shows the communities nearest you. For your first 30 days it stays near the top of Home and can't be removed or moved; after that you can remove it like any other card. In the web app, each community on the card is a link to its own page. If it doesn't know where you are, tap **Share my area**, or **or type your town** and pick your town. The steps below are for the phone app.
 
 Not in the global community yet? Tap the bean at the top left and, under **Your communities**, tap **Global community**, then join it with the account you have: see "More than one community". With no account yet, tap **Explore BeanPool worldwide** on the app's first screen: see "Joining BeanPool".
 
@@ -63,4 +63,4 @@ People can ask to join your community from the global community. Tap **Talk**, t
 - **Invite:** makes an invite that only their account can use. Their app finds it by itself, and they join with one tap.
 - **Not now:** they are not told. They keep seeing "no answer yet", and can't ask again for 30 days.
 
-Any member can answer, whatever their trust badge, unless the community chose that only its admins invite (**Known** in Settings). Then only its owners and admins see the requests and answer them. A community's admins can turn requests to join off.
+Any member can answer, whatever their trust badge, unless the community chose that only its admins invite (**Known**, under **Who may invite** in the community server's Settings). Then only its owners and admins see the requests and answer them. A community's admins can turn requests to join off.

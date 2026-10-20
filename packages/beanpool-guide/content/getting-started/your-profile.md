@@ -43,9 +43,10 @@ Today the web app can show your contact details on your posts. The phone app doe
 Tap the round picture at the top right of the screen to see your own profile. Other members see much the same:
 
 - your name, when you joined and your bio;
-- your trust badge, how many trades you have done, with how many people, and how many you finished;
 - star ratings and reviews from people you traded with (nobody else can see who wrote a review);
 - your posts.
+
+On the phone, in a community with Beans, they also see your trust badge, how many trades you have done, with how many people, and the share you finished (**Completion**). The web app doesn't show these on another member's profile. The global community has no Beans, so it shows none of that.
 
 ## Your working style
 

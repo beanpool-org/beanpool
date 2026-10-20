@@ -1,7 +1,7 @@
 ---
 slug: whats-new
 title: What's new
-summary: What changed in each version of the app, in plain words.
+summary: What changed in the app, in plain words.
 related: home, the-bean, how-it-works, rules, faq, communities
 ---
 

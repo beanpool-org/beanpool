@@ -329,6 +329,37 @@ test('320px viewport layout in Arabic (ar) has no horizontal overflow in headles
     }
 });
 
+test('RTL navbar is mirrored at 1280px in headless Chromium with logo on the right', async () => {
+    const TYPES = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.png': 'image/png', '.woff2': 'font/woff2' };
+
+    const server = http.createServer((req, res) => {
+        let p = path.join(WEBSITE_DIR, decodeURIComponent(new URL(req.url, 'http://x').pathname));
+        if (fs.existsSync(p) && fs.statSync(p).isDirectory()) p = path.join(p, 'index.html');
+        if (!fs.existsSync(p)) { res.writeHead(404); res.end(); return; }
+        res.writeHead(200, { 'content-type': TYPES[path.extname(p)] || 'application/octet-stream' });
+        fs.createReadStream(p).pipe(res);
+    });
+
+    await new Promise(r => server.listen(0, '127.0.0.1', r));
+    const port = server.address().port;
+    const browser = await chromium.launch({ headless: true });
+
+    try {
+        const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+
+        await page.goto(`http://127.0.0.1:${port}/index.html`, { waitUntil: 'load' });
+        const enLogoBox = await page.locator('#navbar .logo').boundingBox();
+        assert.ok(enLogoBox && enLogoBox.x < 100, `English logo on left (x=${enLogoBox?.x})`);
+
+        await page.goto(`http://127.0.0.1:${port}/ar/index.html`, { waitUntil: 'load' });
+        const arLogoBox = await page.locator('#navbar .logo').boundingBox();
+        assert.ok(arLogoBox && arLogoBox.x > 800, `Arabic logo mirrored to right (x=${arLogoBox?.x})`);
+    } finally {
+        await browser.close();
+        server.close();
+    }
+});
+
 test('language banner on mobile (320px) does not overlap fixed navbar in headless Chromium', async () => {
     const TYPES = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.png': 'image/png', '.woff2': 'font/woff2' };
 

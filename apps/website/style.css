@@ -2155,9 +2155,6 @@ body[dir="rtl"] {
     direction: rtl;
     text-align: right;
 }
-body[dir="rtl"] .hero-actions {
-    flex-direction: row-reverse;
-}
 body[dir="rtl"] .cta-step code {
     padding: 0.7rem 0.7rem 0.7rem 2.6rem;
 }
@@ -2168,12 +2165,6 @@ body[dir="rtl"] .copy-btn {
 body[dir="rtl"] #navbar .logo img {
     margin-right: 0;
     margin-left: 0.2rem;
-}
-body[dir="rtl"] .nav-inner {
-    flex-direction: row-reverse;
-}
-body[dir="rtl"] .nav-links {
-    flex-direction: row-reverse;
 }
 body[dir="rtl"] .footer-inner {
     text-align: right;
@@ -2191,11 +2182,6 @@ body[dir="rtl"] .run-node-steps {
     text-align: right;
     padding-left: 0;
     padding-right: 1.25rem;
-}
-@media (max-width: 768px) {
-    body[dir="rtl"] .hero-actions {
-        flex-direction: column;
-    }
 }
 
 .card-links a, .guide-links a { position: relative; padding: 13px 4px; margin: 0 -4px; }

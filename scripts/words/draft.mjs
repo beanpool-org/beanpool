@@ -26,11 +26,11 @@ export const APP_CATALOG_DEFS = Object.freeze([
 ]);
 
 export const SAFETY_MONEY_PATTERNS = Object.freeze([
-    { name: 'recovery', pattern: /\brecovery\b/i },
+    { name: 'recovery', pattern: /\brecover(y|ing)?\b/i },
     { name: '12 words', pattern: /\b(12[- ]words?|twelve[- ]words?)\b/i },
     { name: 'sign-in', pattern: /\b(sign[- ]?in|signing[- ]?in)\b/i },
-    { name: 'delete/remove', pattern: /\b(delete|remove|leaving[- ]or[- ]deleting)\b/i },
-    { name: 'Beans amounts', pattern: /\b(\d+\s*beans|beans\s*(amount|balance|fee|limit|transfer|credit|fund|pool|circulation|trading)|(amount|balance|fee|limit|transfer|credit|fund|pool|circulation|trading)\s*(of\s*)?beans)\b/i },
+    { name: 'delete/remove', pattern: /\b(delet(e|ed|ing|ion)|remov(e|ed|ing|al)|leaving[- ]or[- ]deleting)\b/i },
+    { name: 'Beans amounts', pattern: /(?:(?:^|\s|\b)(\d+|\{[a-z0-9_-]+\})\s*beans\b|\bbeans\s*(amount|balance|fee|limit|transfer|credit|fund|pool|circulation|trading)\b|\b(amount|balance|fee|limit|transfer|credit|fund|pool|circulation|trading)\b[^\n]*\bbeans\b)/i },
     { name: 'limits', pattern: /\b(limits?|maximum|minimum|cap|threshold)\b/i },
     { name: 'privacy', pattern: /\b(who[- ]can[- ]see|who[- ]sees|privacy|private|what[- ]the[- ]admins[- ]can[- ]see)\b/i },
 ]);

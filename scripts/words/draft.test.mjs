@@ -46,6 +46,11 @@ test('isSafetyOrMoney matches reviewed safety and money patterns and ignores gen
     assert.equal(isSafetyOrMoney('who-can-see'), true);
     assert.equal(isSafetyOrMoney('what-the-admins-can-see'), true);
     assert.equal(isSafetyOrMoney('Community privacy settings'), true);
+    assert.equal(isSafetyOrMoney('Recover your account'), true);
+    assert.equal(isSafetyOrMoney('Account deletion'), true);
+    assert.equal(isSafetyOrMoney('Removing member'), true);
+    assert.equal(isSafetyOrMoney('Balance: {amount} Beans'), true);
+    assert.equal(isSafetyOrMoney('{n} Beans'), true);
 
     // Normal strings
     assert.equal(isSafetyOrMoney('Welcome home'), false);

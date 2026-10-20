@@ -50,8 +50,10 @@ describe('postFormRules', () => {
         expect(src).toContain("const avatarOk = !(await composerNeedsProfilePhoto(nodeFeatures, readCachedProfile)) || await hasUsableAvatar();");
         expect(src).not.toContain('const needBlocked = blockedFromTrading');
         // The photo label says "* (min 1)" only where a photo is required (review #1936 N4).
-        expect(src).toContain("Photos{photoRequired ? <>{' '}<Text style={styles.requiredStar}>*</Text>{' '}<Text style={styles.sectionLabelHint}>(min 1)</Text></> : null}</Text>");
+        // Its words go through t() (words S3m), the label in capitals the language's way.
+        expect(src).toContain("{upperCase(t('Photos'))}{photoRequired ? <>{' '}<Text style={styles.requiredStar}>*</Text>{' '}<Text style={styles.sectionLabelHint}>{t('(min 1)')}</Text></> : null}</Text>");
         expect(src).not.toContain('Photos <Text style={styles.requiredStar}>*</Text>');
+        expect(src).not.toContain("{upperCase(t('Photos'))} <Text style={styles.requiredStar}>*</Text>");
     });
 });
 

@@ -140,16 +140,16 @@ export async function composerNeedsProfilePhoto(
     return postFormRules(known, 'offer', false).profilePhoto;
 }
 
-/** The submit button's words: the next thing missing, or Post Offer / Post Need. */
+/** The submit button's words, in the member's language: the next thing missing, or Post Offer / Post Need. */
 export function postFormSubmitLabel(s: PostFormState, features: NodeFeatures | null | undefined): string {
-    return s.posting ? 'Posting...'
-        : s.needBlocked ? '🟢 List an Offer first to post Needs'
-        : (!s.category) ? '📂 Select a category'
-        : (!s.hasLocation) ? '📍 Set a location'
-        : (s.photoRequired !== false && s.photoCount < 1) ? '📷 Add a photo'
-        : postFormPriceMissing(s.credits, features) ? '💰 Set a price'
-        : (!s.title.trim() || !s.description.trim()) ? '✏️ Fill required fields'
-        : `Post ${s.postType === 'offer' ? 'Offer' : 'Need'}`;
+    return s.posting ? t('Posting...')
+        : s.needBlocked ? t('🟢 List an Offer first to post Needs')
+        : (!s.category) ? t('📂 Select a category')
+        : (!s.hasLocation) ? t('📍 Set a location')
+        : (s.photoRequired !== false && s.photoCount < 1) ? t('📷 Add a photo')
+        : postFormPriceMissing(s.credits, features) ? t('💰 Set a price')
+        : (!s.title.trim() || !s.description.trim()) ? t('✏️ Fill required fields')
+        : s.postType === 'offer' ? t('Post Offer') : t('Post Need');
 }
 
 /** Whether this node orders its listings from where the member is. */

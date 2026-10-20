@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/el by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="el">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Η πάνω γραμμή — BeanPool members' guide</title>
+    <meta name="description" content="Το φασόλι, τα μικρά εικονίδια που δείχνουν όταν κάτι σας χρειάζεται, και τα κουμπιά πάνω δεξιά.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#getting-started">Ξεκινώντας</a></p>
+        <h1>Η πάνω γραμμή</h1>
+        <p class="lede">Το φασόλι, τα μικρά εικονίδια που δείχνουν όταν κάτι σας χρειάζεται, και τα κουμπιά πάνω δεξιά.</p>
+        <h2>Τι περιέχει</h2>
+        <p>Στο τηλέφωνο, η γραμμή στο επάνω μέρος της οθόνης είναι η ίδια σε κάθε καρτέλα. Από αριστερά προς τα δεξιά:</p>
+        <ul>
+            <li><strong>Το φασόλι:</strong> η κοινότητά σας και αυτός ο οδηγός.</li>
+            <li><strong>Τα εικονίδια «σε χρειάζεται»:</strong> μόνο όσο κάτι σας περιμένει.</li>
+            <li><strong>Το εικονίδιο ?, το εικονίδιο πρόσκλησης, οι Ρυθμίσεις και η εικόνα σας.</strong></li>
+        </ul>
+        <p>Σε πρόγραμμα περιήγησης ιστού η επάνω γραμμή είναι απλούστερη. Περιλαμβάνει την κατάσταση σύνδεσης στα αριστερά, το όνομα της σελίδας και το προφίλ σας, το <strong>?</strong> και τις Ρυθμίσεις στα δεξιά. Δεν έχει παράθυρο φασολιού, δεν έχει εικονίδια «σε χρειάζεται» και δεν έχει εικονίδιο πρόσκλησης: οι <strong>Προσκλήσεις</strong> βρίσκονται στην ενότητα <strong>Άτομα</strong>. Οι καρτέλες βρίσκονται κατά μήκος του κάτω μέρους ή στην αριστερή πλευρά σε ευρεία οθόνη.</p>
+        <h2>Το φασόλι</h2>
+        <p>Πατήστε το φασόλι επάνω αριστερά για να ανοίξετε το παράθυρο <strong>BeanPool</strong>. Εμφανίζει:</p>
+        <ul>
+            <li><strong>Η κοινότητά σας:</strong> το όνομά της στην κορυφή και το αν είναι προσβάσιμη αυτήν τη στιγμή.</li>
+            <li><strong>Οι κοινότητές σας:</strong> πατήστε μία για να μεταβείτε σε αυτήν ή πατήστε <strong>Προσθήκη κοινότητας</strong>. Η <strong>Παγκόσμια κοινότητα</strong> είναι πάντα μία από αυτές: η δεύτερη γραμμή της αναφέρει αν μπορείτε να συμμετάσχετε σε αυτήν.</li>
+            <li><strong>Αναζήτηση στον οδηγό</strong>, στη συνέχεια <strong>Οδηγοί</strong> (πώς λειτουργεί το BeanPool, οι κανόνες, συχνές ερωτήσεις), <strong>Πώς να χρησιμοποιήσεις την εφαρμογή</strong> (αυτός ο οδηγός, ενότητα προς ενότητα) και <strong>Το εγχείρημα BeanPool</strong>, με το <strong>What's new</strong>.</li>
+            <li><strong>beanpool.org:</strong> ο δημόσιος ιστότοπος, με το <strong>Κοινοποίηση</strong> για αποστολή σε φίλο.</li>
+        </ul>
+        <p>Η μικρή κουκκίδα στο φασόλι σας λέει πώς έχουν τα πράγματα:</p>
+        <ul>
+            <li><strong>Πράσινο:</strong> συνδεδεμένο και είστε μέλος εδώ.</li>
+            <li><strong>Πορτοκαλί:</strong> επισκέπτεστε ως επισκέπτης.</li>
+            <li><strong>Κόκκινο:</strong> δεν είναι δυνατή η σύνδεση με τον διακομιστή της κοινότητάς σας αυτήν τη στιγμή ή αυτό το τηλέφωνο δεν είναι συνδεδεμένο σε κοινότητα ακόμα.</li>
+        </ul>
+        <p>Ένας μεμονωμένος αργός έλεγχος δεν κάνει την κουκκίδα κόκκινη. Γίνεται κόκκινη μόνο αφού αποτύχουν περισσότεροι από ένας έλεγχοι στη σειρά.</p>
+        <h2>Τα εικονίδια «σε χρειάζεται»</h2>
+        <p>Ανάμεσα στο φασόλι και στα κουμπιά στα δεξιά, εμφανίζονται μικρά εικονίδια μόνο όσο κάτι σας χρειάζεται. Κάθε ένα αντιπροσωπεύει ένα είδος θέματος. Πατήστε το για να μεταβείτε απευθείας εκεί.</p>
+        <ul>
+            <li><strong>Μια χειραψία:</strong> μια συμφωνία σας περιμένει. Κάποιος περιμένει να αποδεχτείτε το αίτημά του ή μια συμφωνία στην οποία συμμετέχετε δεν έχει ολοκληρωθεί ακόμα. Αν υπάρχει μία, το πάτημα ανοίγει εκείνη τη συμφωνία. Αν υπάρχουν περισσότερες, ανοίγει το <strong>Οι συμφωνίες μου</strong>.</li>
+            <li><strong>Μια κάλπη:</strong> μια ψήφος που δεν έχετε ρίξει ακόμα. Το πάτημα ανοίγει τα <strong>Κοινά</strong>, στις <strong>Αποφάσεις</strong>. Αν η πρώτη ψηφοφορία είναι σε ομάδα ή ψηφοφορία υπευθύνων σε εγχείρημα, το πάτημα ανοίγει εκείνη την ομάδα ή το εγχείρημα αντ' αυτού. Μια ψήφος που δεν μπορείτε να ρίξετε ακόμα δεν μετράει εδώ, για παράδειγμα μία που απαιτεί να ολοκληρώσετε πρώτα μια συναλλαγή.</li>
+            <li><strong>Μια φούσκα ομιλίας:</strong> ένα μη αναγνωσμένο μήνυμα από ένα άτομο. Αν είναι από ένα άτομο, το πάτημα ανοίγει εκείνη τη συνομιλία. Αν είναι από πολλά άτομα, ανοίγει τη <strong>Συζήτηση</strong>, στα <strong>Μηνύματα</strong>, εμφανίζοντας μόνο τα μη αναγνωσμένα.</li>
+            <li><strong>Μια ομάδα ανθρώπων:</strong> νέες δημοσιεύσεις στις ομάδες σας, συνομιλίες εγχειρημάτων ή συνομιλίες εκδηλώσεων. Οι συνομιλίες που έχετε θέσει σε σίγαση παραμένουν ήσυχες εδώ. Το πάτημα ανοίγει τη συνομιλία, ή τη <strong>Συζήτηση</strong>, στις <strong>Ομάδες</strong>, αν υπάρχουν περισσότερες.</li>
+            <li><strong>Μια ασπίδα:</strong> μόνο για άτομα που βοηθούν στη διαχείριση της κοινότητάς σας. Εμφανίζεται όσο υπάρχει εργασία διαχείρισης σε αναμονή, όπως μια αναφορά προς έλεγχο ή μια κολλημένη συναλλαγή που χρειάζεται απόφαση. Το πάτημα ζητά το κλείδωμα οθόνης του τηλεφώνου σας και στη συνέχεια ανοίγει τις ρυθμίσεις της κοινότητάς σας σε εκείνη την εργασία. Αν οι ρυθμίσεις της κοινότητάς σας χρησιμοποιούν κωδικό σύνδεσης, τον ζητά επίσης.</li>
+        </ul>
+        <p>Τα εικονίδια στοιβάζονται από τα δεξιά. Το πιο σημαντικό κάθεται δίπλα στο εικονίδιο ? και διατηρεί τη θέση του καθώς άλλα έρχονται και φεύγουν.</p>
+        <h3>Ο αριθμός και το χρώμα</h3>
+        <ul>
+            <li>Ένας μικρός αριθμός σε ένα εικονίδιο σημαίνει περισσότερα από ένα τέτοιου είδους: για παράδειγμα 3 άτομα που σας έγραψαν. Εμφανίζει <strong>9+</strong> πάνω από το 9.</li>
+            <li>Ένα εικονίδιο γίνεται <strong>πορτοκαλί</strong> όταν είναι πιο επείγον: μια συμφωνία που περιμένει από εσάς, εργασίες διαχείρισης ή μια ψηφοφορία που κλείνει εντός 2 ημερών. Τίποτα δεν γίνεται κόκκινο.</li>
+        </ul>
+        <h3>Σε μικρή οθόνη</h3>
+        <p>Αν δεν υπάρχει χώρος για κάθε εικονίδιο, ο τελευταίος χώρος εμφανίζει <strong>•••</strong>. Πατήστε το για να δείτε ολόκληρη τη λίστα, <strong>Σε χρειάζεται</strong>, με λέξεις. Πατήστε μια γραμμή για να πάτε εκεί.</p>
+        <h3>Μια ήσυχη γραμμή είναι καλά νέα</h3>
+        <p>Όταν τίποτα δεν σας χρειάζεται, δεν υπάρχουν καθόλου εικονίδια. Δεν έχετε χάσει τίποτα. Τα εικονίδια ενημερώνονται καθώς μετακινείστε στην εφαρμογή και όταν επιστρέφετε σε αυτήν.</p>
+        <h2>Συμμετοχή ή Σύνδεση</h2>
+        <p>Αντί για τα εικονίδια, μπορεί να δείτε ένα κουμπί:</p>
+        <ul>
+            <li><strong>Συμμετοχή</strong> (πορτοκαλί): επισκέπτεστε ως επισκέπτης. Πατήστε το για να ανοίξετε τις <strong>Προσκλήσεις</strong>. Σε μια τοπική κοινότητα συμμετέχετε εκεί με πρόσκληση. Στην παγκόσμια κοινότητα, πατήστε <strong>Join with 12 words or a sign-in</strong> (<strong>Join with a sign-in</strong> όπου μια κοινότητα δέχεται μόνο συνδέσεις).</li>
+            <li><strong>Σύνδεση</strong> (κόκκινο): αυτό το τηλέφωνο δεν είναι συνδεδεμένο σε κοινότητα. Πατήστε το για να ανοίξετε τις <strong>Ρυθμίσεις</strong>, όπου μπορείτε να προσθέσετε μία.</li>
+        </ul>
+        <p>Όσο εμφανίζεται ένα από αυτά, το εικονίδιο πρόσκλησης είναι κρυμμένο.</p>
+        <h2>Τα κουμπιά στα δεξιά</h2>
+        <ul>
+            <li><strong>Το εικονίδιο ?</strong> (ένα ερωτηματικό σε κύκλο): βοήθεια για την οθόνη στην οποία βρίσκεστε. Ανοίγει ένα σύντομο φύλλο με το σε τι χρησιμεύει αυτή η οθόνη, και στη συνέχεια <strong>Ανάγνωση σελίδας οδηγού ›</strong>, <strong>Αναζήτηση στον οδηγό</strong> και <strong>Περιήγηση ξανά</strong>. Βρίσκεται σε κάθε καρτέλα, για μέλη και επισκέπτες. Στην εφαρμογή ιστού κάθεται ανάμεσα στην εικόνα σας και στις Ρυθμίσεις στην κορυφή, και δίπλα στις Ρυθμίσεις στο κάτω μέρος της πλευρικής γραμμής σε ευρεία οθόνη.</li>
+            <li><strong>Το εικονίδιο πρόσκλησης</strong> (ένα άτομο με ένα συν): ανοίγει τις <strong>Προσκλήσεις</strong>, για να προσκαλέσετε κάποιον ή να γίνετε μέλος σε άλλη κοινότητα. Δείτε «Συμμετοχή στο BeanPool».</li>
+            <li><strong>Ρυθμίσεις</strong> (οι ολισθητές): ανοίγει τις <strong>Ρυθμίσεις</strong>. Πατήστε το ξανά για να επιστρέψετε εκεί που ήσασταν.</li>
+            <li><strong>Η εικόνα σας:</strong> ανοίγει το δικό σας προφίλ, όπως το βλέπουν οι άλλοι.</li>
+        </ul>
+        <h2>Μηνύματα ενημέρωσης</h2>
+        <p>Μερικές φορές εμφανίζεται μια πράσινη γραμμή κάτω από την επάνω γραμμή:</p>
+        <ul>
+            <li><strong>Update available:</strong> υπάρχει νεότερη έκδοση της εφαρμογής. Πατήστε <strong>Αναβάθμιση</strong> για να τη λάβετε ή τον σταυρό για να κλείσετε το μήνυμα.</li>
+            <li><strong>Your app is too old for this community:</strong> πρέπει να ενημερώσετε την εφαρμογή πριν λειτουργήσει σωστά εδώ. Αυτό το μήνυμα δεν μπορεί να κλείσει. Πατήστε <strong>Αναβάθμιση</strong>.</li>
+        </ul>
+        <h2>Οι καρτέλες</h2>
+        <p>Κάτω από την επάνω γραμμή βρίσκονται οι καρτέλες: <strong>Αρχική</strong>, <strong>Αγορά</strong>, <strong>Χάρτης</strong>, <strong>Συζήτηση</strong>, <strong>Κοινά</strong> και <strong>Καθολικό</strong>. Το όνομα κάθε καρτέλας βρίσκεται πάνω από το εικονίδιό της. Στο τηλέφωνο, μια τοπική κοινότητα χωρίς Φασόλια δεν εμφανίζει τα <strong>Κοινά</strong> ή το <strong>Καθολικό</strong>. Η παγκόσμια κοινότητα εμφανίζει και τα δύο, με παραδείγματα από μια τοπική κοινότητα. Δείτε «Φασόλια και η παγκόσμια κοινότητα».</p>
+        <p>Σε μια μεγάλη σελίδα, πατήστε την καρτέλα στην οποία βρίσκεστε ήδη για να μεταβείτε ξανά στην κορυφή. Αυτό λειτουργεί σε κάθε καρτέλα εκτός από το <strong>Χάρτης</strong>.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="home.html"><strong>Αρχική</strong><span>Τι είναι η Αρχική, ποιες κάρτες δείχνει στο τηλέφωνο και στον ιστό, πώς τις προσθέτετε, μετακινείτε ή αφαιρείτε, επιλογή ενδιαφερόντων και απόρρητο κατά την αποσύνδεση.</span></a></li>
+            <li><a href="the-bean.html"><strong>Αυτός ο οδηγός</strong><span>Πού θα βρείτε αυτόν τον οδηγό, πώς να κάνετε αναζήτηση σε αυτόν και πώς παραμένει ενημερωμένος.</span></a></li>
+            <li><a href="communities.html"><strong>Πάνω από μία κοινότητα</strong><span>Συμμετοχή σε πολλές κοινότητες με έναν λογαριασμό, εναλλαγή μεταξύ τους, ακολούθηση της κοινότητάς σας σε νέα διεύθυνση και τι σας δείχνει η παγκόσμια κοινότητα.</span></a></li>
+            <li><a href="../my-deals.html"><strong>My Deals</strong><span>One place for every trade you are in, every post you have up, and your past trades.</span></a></li>
+            <li><a href="../decisions.html"><strong>Voting on a Decision</strong><span>Find open Decisions, vote, change your vote, and see results.</span></a></li>
+            <li><a href="../messages.html"><strong>Messages</strong><span>Start a chat, send photos, reply, react, edit, delete, mute, and what is private.</span></a></li>
+            <li><a href="../notifications.html"><strong>Notifications</strong><span>Choose which alerts reach your phone, and when events remind you.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

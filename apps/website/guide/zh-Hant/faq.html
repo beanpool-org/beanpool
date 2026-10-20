@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/zh-Hant by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>常見問題 — BeanPool members' guide</title>
+    <meta name="description" content="成員最常提出問題的簡要解答。">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#about">關於 BeanPool</a></p>
+        <h1>常見問題</h1>
+        <p class="lede">成員最常提出問題的簡要解答。</p>
+        <h2>誰在營運我的社群？</h2>
+        <p>你的社群實行自治。其伺服器由社群選定的人員維護：即其所有者與管理員。你的交易、刊登與投票皆保存在該伺服器上。BeanPool 專案編寫應用程式軟體，任何人都可以使用它建立社群。</p>
+        <h2>債務會產生利息嗎？</h2>
+        <p>不會。餘額為負不產生任何費用。只有你持有的豆子超過 200 顆的部分，才需要繳納微薄的流通費。</p>
+        <h2>我可以用金錢買賣豆子嗎？</h2>
+        <p>應用程式沒有任何透過金錢買賣豆子的途徑。豆子只能透過幫助他人來賺取。</p>
+        <h2>為什麼我無法贈送豆子？</h2>
+        <p>贈送需要符合兩個條件。你必須曾在市集中完成過一筆交易（僅 1 或 2 顆豆子的交易過小，不計入此項），且你只能贈送自己持有的豆子。贈送絕不能讓你的餘額低於零。</p>
+        <h2>為什麼我無法支出至低於零？</h2>
+        <p>有兩件事決定了你可以透支至低於零多少。你透過交易所獲得的信譽決定了你最高可能達到的額度上限。你發布中的「提供」則決定了你當前可動用該額度的多大部分。在沒有發布中的「提供」時，你的餘額完全不能低於零。大多數人從提供服務或物品開始：發布一項「提供」，當有人接受時，你便賺取了豆子並建立了你的第一筆信譽。</p>
+        <h2>我的徽章顯示為「總管」，為什麼我能支出的額度這麼少？</h2>
+        <p>你的徽章代表你的信譽。你當前能支出的額度還取決於你發布中的「提供」數量。徽章本身絕不限制或開啟任何操作。</p>
+        <h2>我可以更改我的投票嗎？</h2>
+        <p>在「決策」或「投票」中，在投票結束之前都可以更改。在管理人投票、群組內部投票或推選新首席召集人的投票中，則無法更改。</p>
+        <h2>其他人看得到我的投票選擇嗎？</h2>
+        <p>在「決策」中，應用程式僅顯示總票數，且只對你本人顯示你的投票。你的選票保存在社群伺服器上。營運伺服器的所有者和管理員可以取得其檔案複本，並能在該處進行查閱。一般「投票」同樣匿名，除非發起人將其設為<strong>公開投票</strong>：此時成員可以看到誰選擇了什麼。投票前畫面上會註明是公開還是匿名。</p>
+        <h2>其他成員看得到我的餘額嗎？</h2>
+        <p>看不到。其他成員絕不會看到你的餘額。在手機上，在使用豆子的社群中，他們會看到你的信任徽章以及你完成的交易次數。每筆交易僅對參與的雙方顯示。若社群就移除你進行投票，有權投票的成員僅在該次投票中能看到你的餘額與任何欠款。管理員在某些特定情況下可以看到更多資訊，且這些查看記錄都會被記錄在日誌中：參見「管理員可見內容」。</p>
+        <h2>我遺失了手機。我的帳號是否消失了？</h2>
+        <p>沒有，只要你妥善保留了 12 個復原助記詞（皆為英文單字）。安裝應用程式並使用這 12 個助記詞即可還原你的帳號。如果你在「帳號保護」中連結了登入帳號，也可以使用該方式還原。請將你的 12 個助記詞存放在安全且私密的地方。任何擁有它們的人都可以使用你的帳號。</p>
+        <p>連 12 個助記詞也遺失了？你社群的管理員可以當面協助將你的帳號轉移至新手機：參見「找回你的帳號」中的「遺失手機與 12 個助記詞」。</p>
+        <h2>我需要 Google、Apple 或 Facebook 帳號嗎？</h2>
+        <p>不需要。在地社群允許你憑其成員之一發出的邀請加入。全球社群允許任何人憑 12 個機密助記詞加入，若你願意也可以使用登入方式。如果你僅憑 12 詞加入，它們是你找回帳號的唯一途徑，且以該方式建立的新帳號在首週的初始限制較嚴格。你可以稍後從已登入帳號的任何手機或瀏覽器新增登入方式（帳號處於停權狀態時除外）。參見「加入 BeanPool」與「你的 12 個助記詞」。</p>
+        <h2>為什麼全球社群沒有豆子？</h2>
+        <p>豆子是能夠再次聯繫到的人與人之間的承諾。任何人都可以在全球社群憑 12 詞加入，因此該處目前還沒有人能為彼此的身分進行擔保。豆子、交易、在地事業與決策存在於在地社群中。全球社群透過標記為<strong>🏘️ 在地社群</strong>的範例社群 Example Valley 向大家展示它們。參見「豆子與全球社群」。</p>
+        <h2>我該如何建立社群？</h2>
+        <p>在應用程式中點擊<strong>建立社群</strong>。社群運行在專屬的小型伺服器上：家裡一台閒置的電腦，或每月花費幾美元租用的伺服器。軟體完全免費，且社群不需要 beanpool.org。參見「豆子與全球社群」。</p>
+        <h2>我可以加入多個社群嗎？</h2>
+        <p>可以。在手機上你可以儲存多個社群並在它們之間自由切換，在每個社群中使用相同的身分。在網頁版應用程式中，每個社群以其專屬位址開啟。每個社群都有各自的豆子、規則與成員。</p>
+        <h2>我可以加入其他人人皆可加入的社群嗎？</h2>
+        <p>可以，使用你現有的帳號即可。某些社群像全球社群一樣允許任何人加入，並由其專屬人員在專屬位址上營運。當你的手機連線至一個你尚未加入的社群時，會提示<strong>你還不是這裡的成員</strong>並提供<strong>使用此帳號加入‹其名稱›</strong>。你以與加入全球社群相同的方式加入：使用手機上已有的 12 個助記詞，或者在社群要求時使用登入方式。加入是在該社群自身的名稱下進行，且會顯示其位址，因此你可以清楚看到自己加入的是哪裡。你的金鑰與 12 個助記詞保持不變，你在其他社群中的內容絲毫不受影響。連結僅會開啟該畫面，在你點擊之前沒有人會加入。為了顯示該畫面，手機會向該社群查詢其名稱以及是否允許加入，因此營運該位址的人可以看到有人開啟了連結（不會傳送任何關於你帳號的資訊）。</p>
+        <h2>我要外出休假。我應該怎麼做？</h2>
+        <p>在「設定」中開啟「休假模式」。你的「提供」會被隱藏，且沒有人能向你傳送新請求。請先完成或取消任何進行中的交易，因為在有進行中交易時無法開啟休假模式。</p>
+        <h2>我該如何離開社群？</h2>
+        <p>你可以在「設定」中刪除你的帳號。請先完成或取消任何進行中的交易。當你刪除帳號時，你持有的任何豆子都會轉入社群的公共板塊；若你的餘額為負，公共板塊會代為承擔。此操作無法撤銷，即使使用 12 個助記詞也無法恢復。這只會刪除你目前所使用社群中的帳號。若手機上的其他社群仍有你的帳號，手機會為其保留金鑰；只有當你刪除最後一個社群時，金鑰才會被移除。</p>
+        <h2>出現問題或有改進建議。我該向誰反映？</h2>
+        <p>若與某人或交易發生問題，請與你社群的管理員聯繫。若要檢舉刊登、活動或動態貼文，請點擊其 <strong>🚩 檢舉</strong> 旗標（在手機上，貼文的按鈕顯示為<strong>檢舉貼文</strong>）。在網頁版應用程式中，一對一聊天室也設有<strong>檢舉</strong>按鈕。你社群的管理員會收到通知。若涉及兒童可能面臨風險，請選擇<strong>兒少安全</strong>。參見「檢舉問題」。若對應用程式本身有任何想法，請造訪 beanpool.org。</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="your-12-words.html"><strong>你的 12 個助記詞</strong><span>這 12 個助記词是你帳號的金鑰。它們為何重要、在哪裡找到、如何安全保存，以及新增登入方式作為備用復原途徑。</span></a></li>
+            <li><a href="../recovery.html"><strong>Getting your account back</strong><span>Restore your account on a new phone, and protect it with a sign-in account.</span></a></li>
+            <li><a href="communities.html"><strong>加入多個社群</strong><span>用一個帳號加入多個社群、在它們之間切換、跟隨你的社群遷移到新位址，以及查看全球社群向你展示的內容。</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>豆子與全球社群</strong><span>全球社群的用途、眾多社群中的一員，以及你在那裡看到的內容：🏘️ 在地社區標記、範例社群 Example Valley、為什麼豆子在那裡等待，以及如何發起或尋找在地社群。</span></a></li>
+            <li><a href="../holiday-mode.html"><strong>Going away</strong><span>Holiday Mode hides your Offers and pauses new requests while you are away.</span></a></li>
+            <li><a href="../leaving-or-deleting.html"><strong>Leaving or deleting your account</strong><span>Sign out of this phone, or delete your account for good, and what happens to your beans.</span></a></li>
+            <li><a href="getting-help.html"><strong>取得協助</strong><span>遇到問題時在哪裡尋找答案，以及向誰求助。</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

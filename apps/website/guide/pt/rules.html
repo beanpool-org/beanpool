@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/pt by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Regras e decisões — BeanPool members' guide</title>
+    <meta name="description" content="Votação, quórum, voto secreto, quem pode votar, suspensão, remoção de membros, custódios, coordenadores e coordenadores principais.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#about">Sobre o BeanPool</a></p>
+        <h1>Regras e decisões</h1>
+        <p class="lede">Votação, quórum, voto secreto, quem pode votar, suspensão, remoção de membros, custódios, coordenadores e coordenadores principais.</p>
+        <h2>Duas formas de consultar a comunidade</h2>
+        <ul>
+            <li>Uma <strong>Enquete</strong> é uma pergunta no feed, como &quot;Mercado no domingo?&quot;. Ela mostra o que as pessoas pensam. Nunca altera nada por si só.</li>
+            <li>Uma <strong>Decisão</strong> tem caráter vinculativo. Se for aprovada, o servidor da sua comunidade a executa sozinho. Ninguém precisa apertar um botão e ninguém pode ignorá-la silenciosamente.</li>
+        </ul>
+        <p>A comunidade global tem Enquetes, mas não Decisões: qualquer um pode entrar nela, com 12 palavras ou um login, portanto uma pessoa com várias contas poderia influenciar uma votação. Tudo abaixo sobre Decisões se refere a comunidades locais.</p>
+        <h2>O que uma Decisão pode fazer</h2>
+        <p>Sobre um membro:</p>
+        <ul>
+            <li>Suspender um membro ou revogar uma suspensão.</li>
+            <li>Congelar o crédito de um membro ou descongelá-lo.</li>
+            <li>Conceder a um membro o direito de abonar novatos ou retirá-lo.</li>
+            <li>Remover o custódio principal de um empreendimento ou o líder de um projeto.</li>
+            <li>Remover um membro da comunidade ou readmiti-lo.</li>
+        </ul>
+        <p>Sobre os Bens comuns:</p>
+        <ul>
+            <li>Doar feijões dos Bens comuns para um projeto ou empreendimento.</li>
+            <li>Conceder um auxílio por dificuldade financeira dos Bens comuns a um membro.</li>
+            <li>Quitar a dívida de um projeto ou empreendimento com os Bens comuns.</li>
+            <li>Perdoar uma dívida que um membro que saiu devia aos Bens comuns. Nenhum feijão se move. O registro permanece, marcado como perdoado. Onde uma comunidade mantém uma lista de nomes, isso é iniciado a partir de lá.</li>
+        </ul>
+        <p>Um repasse não pode ser superior ao que os Bens comuns contêm agora mais o que entrou neles nos últimos 30 dias. Um valor maior é recusado quando você tenta criá-lo.</p>
+        <h2>Quem pode iniciar uma Decisão</h2>
+        <p>Qualquer membro ativo cujo crédito não esteja congelado e que tenha negociado no mercado ou recebido um emblema de confiança de um administrador. Um abono por si só não basta. Administradores também podem. Você pode ter uma Decisão aberta por vez. Você deve explicar o motivo, com pelo menos 10 caracteres.</p>
+        <h2>Quem pode votar</h2>
+        <p>Qualquer membro ativo cujo crédito não esteja congelado e que tenha entrado <strong>antes</strong> da abertura da Decisão. Pessoas que entram durante uma votação não podem votar nela. Contas de empreendimentos não podem votar.</p>
+        <h2>Como os votos são contados</h2>
+        <ul>
+            <li>Decisões sobre um membro: <strong>um membro, um voto</strong>. Sim ou Não.</li>
+            <li>Decisões sobre feijões dos Bens comuns: os votos são ponderados pelas trocas. Você pode dar mais de um voto, mas isso fica caro: 1 voto custa 1 crédito de voz, 2 votos custam 4, 3 votos custam 9. Seus créditos de voz vêm das suas trocas concluídas, contadas até 500 feijões por parceiro de trocas. Você recebe seus créditos de voz completos novamente a cada Decisão. Eles nunca se esgotam.</li>
+            <li>Se você nunca concluiu uma troca, ainda não pode votar sobre feijões dos Bens comuns.</li>
+            <li>Você pode alterar seu voto a qualquer momento até o encerramento da votação.</li>
+        </ul>
+        <h2>Voto secreto</h2>
+        <p>O aplicativo nunca mostra a ninguém como você votou, incluindo os administradores. Todos veem os totais e você vê o seu próprio voto. Seu voto fica armazenado no servidor da sua comunidade com sua conta, para que possa ser contabilizado e conferido. Os proprietários e administradores que operam o servidor podem fazer uma cópia dos arquivos dele e poderiam consultar seu voto ali.</p>
+        <p>As enquetes também são anônimas, a menos que a pessoa que criar a enquete a torne uma <strong>votação aberta</strong>: nesse caso, os membros podem ver quem escolheu o quê. A enquete informa qual é o caso.</p>
+        <h2>Quanto tempo dura uma votação</h2>
+        <p>Cada Decisão fica aberta por exatamente 7 dias. A votação abre imediatamente. Quando os 7 dias terminam, o servidor da sua comunidade conta os votos e aplica o resultado.</p>
+        <h2>Quórum</h2>
+        <p>Uma votação só tem validade se pessoas suficientes participarem.</p>
+        <ul>
+            <li>Pessoas suficientes significa 30% dos membros que podiam votar e estiveram ativos nos últimos 30 dias. Nunca é menos de 3 pessoas.</li>
+            <li>Para a remoção de um membro, são 25%.</li>
+            <li>&quot;Ativo&quot; significa que seu aplicativo enviou algo ao servidor da sua comunidade nesses 30 dias: uma publicação, uma troca, um voto, uma mensagem. No celular, apenas abrir o aplicativo geralmente também conta, porque ele faz login para verificar alertas cada vez que inicia.</li>
+            <li>O quórum conta pessoas, não o peso dos votos delas.</li>
+        </ul>
+        <p>Se poucas pessoas votarem, nada acontece. A Decisão é encerrada como &quot;não resolvida&quot;.</p>
+        <h2>Quanto de Sim é necessário</h2>
+        <ul>
+            <li>Na maioria das Decisões: 60% de Sim.</li>
+            <li>Remoção de um membro: 66% de Sim.</li>
+            <li>Desfazer uma ação (revogar suspensão, descongelar crédito, readmitir membro): mais da metade.</li>
+            <li>Um empate sempre resulta em rejeição.</li>
+        </ul>
+        <h2>Quando uma Decisão é aprovada</h2>
+        <ul>
+            <li>O servidor da sua comunidade verifica se a ação ainda faz sentido: se o membro ainda existe, se os Bens comuns têm feijões suficientes. Em seguida, ele a executa.</li>
+            <li>Se os Bens comuns não tiverem feijões suficientes para um repasse, o repasse aguarda até que haja saldo suficiente. Ele expira após 90 dias.</li>
+            <li>Apenas um repasse pode aguardar por vez. Se um segundo repasse for aprovado enquanto os Bens comuns ainda estiverem com saldo insuficiente, ele não aguarda: é encerrado definitivamente e a comunidade precisa votar novamente.</li>
+            <li>Se a pessoa ou o empreendimento já não existirem mais, a Decisão é encerrada sem fazer nada.</li>
+        </ul>
+        <h2>Remoção de um membro</h2>
+        <ul>
+            <li>Se uma remoção for aprovada, o membro é suspenso e seu crédito é congelado imediatamente.</li>
+            <li>Após mais 7 dias, ele é removido em definitivo. Nesses 7 dias, uma Decisão para readmiti-lo cancela a remoção.</li>
+            <li>Um membro que exclui sua própria conta não pode ser readmitido, mesmo após uma remoção. Ele pode entrar novamente com um novo convite.</li>
+            <li>Quando um membro é removido, suas publicações são retiradas. Se ele devia feijões, os Bens comuns cobrem a dívida. Se ele tinha feijões, esses feijões vão para os Bens comuns.</li>
+            <li>A comunidade pode votar para remover ou suspender qualquer membro, exceto um proprietário ou administrador do servidor da sua comunidade. Eles operam o próprio servidor, portanto uma votação não pode retirar isso; o aplicativo avisa sobre isso se você tentar. Um proprietário pode remover a função de um administrador primeiro, e depois disso essa pessoa passa a ser um membro como qualquer outro.</li>
+        </ul>
+        <h2>Suspensão de emergência</h2>
+        <p>Um administrador pode suspender um membro imediatamente, por exemplo, para evitar danos. Ele deve fornecer um motivo que os membros possam ler.</p>
+        <ul>
+            <li>No mesmo instante, uma Decisão de 7 dias se abre: &quot;Manter esta suspensão?&quot;.</li>
+            <li>Ela requer o quórum habitual e 60% de Sim.</li>
+            <li>Se não for aprovada ou se poucas pessoas votarem, a suspensão é revogada automaticamente.</li>
+            <li>Um administrador não pode suspender a si mesmo nem pode suspender o único proprietário do servidor. Apenas um proprietário pode suspender outro proprietário.</li>
+        </ul>
+        <p>Na comunidade global, não há votação. A suspensão dura 7 dias e depois se encerra sozinha, a menos que um administrador a revogue antes. Para manter alguém de fora por mais tempo, os administradores suspendem novamente ou removem a conta da pessoa.</p>
+        <h2>O que os administradores podem e não podem fazer</h2>
+        <p>O servidor da sua comunidade tem proprietários e administradores. Eles cuidam dele.</p>
+        <ul>
+            <li>Um administrador pode interromper uma Decisão aberta, mas deve fornecer uma justificativa por escrito. Os membros podem lê-la na Decisão.</li>
+            <li>Se uma remoção foi aprovada e está no período de espera de 7 dias, um administrador pode cancelá-la ou aplicá-la imediatamente.</li>
+            <li>Administradores podem conceder aos membros o direito de abonar novatos.</li>
+            <li>Administradores podem conceder a um membro um emblema de confiança. Isso também confere a esse membro a confiança exigida pelo emblema, ampliando sua linha de crédito.</li>
+            <li>Administradores resolvem trocas travadas, mas nunca uma da qual façam parte.</li>
+        </ul>
+        <h2>Enquetes</h2>
+        <ul>
+            <li>Qualquer membro ativo cujo crédito não esteja congelado pode iniciar uma Enquete com 2 a 4 opções de resposta. Ela fica aberta por 3, 7 ou 14 dias.</li>
+            <li>Você pode ter uma Enquete aberta por vez. Sua comunidade pode ter até 5 Enquetes abertas simultaneamente.</li>
+            <li>Uma Enquete publicada em um grupo só pode ser respondida pelos membros e coordenadores desse grupo. Observadores podem lê-la, mas não responder.</li>
+            <li>Para responder a uma Enquete também é necessário ter crédito não congelado. Você pode alterar sua resposta até o encerramento da Enquete. A pessoa que a criou pode encerrá-la mais cedo.</li>
+            <li>Uma Enquete é anônima: todos veem apenas os totais. Quem a cria pode torná-la uma <strong>votação aberta</strong>, permitindo que os membros vejam quem escolheu cada opção. Essa escolha é feita quando a Enquete começa e não pode ser alterada após a publicação.</li>
+            <li>Na comunidade global, uma Enquete anônima encerrada também informa quantos dos votos vieram de contas novas ou de contas de 12 palavras, caso haja algum. Cada voto continua valendo normalmente.</li>
+        </ul>
+        <h2>Empreendimentos e custódios</h2>
+        <p>Um empreendimento é administrado por seus custódios. Um deles é o custódio principal.</p>
+        <ul>
+            <li><strong>Entrada:</strong> você pede para se tornar um custódio e informa quanta da sua confiança acumulada você compromete (pode ser 0). Você não pode comprometer mais confiança do que acumulou por meio de trocas em todos os seus empreendimentos. O custódio principal aprova ou recusa.</li>
+            <li><strong>Compromisso em uma comunidade que confirma seus membros:</strong> um membro confirmado também pode comprometer parte da sua linha de crédito conhecida, até metade dela. Essa parte é deduzida de sua própria linha.</li>
+            <li><strong>Janela de objeção:</strong> quando um empreendimento já possui mais de um custódio, a aprovação do custódio principal aguarda 3 dias. Qualquer outro custódio pode se opor nesse período, e uma única objeção cancela a entrada.</li>
+            <li><strong>Remoção de um custódio:</strong> o custódio principal pode remover um custódio comum. A mesma janela de 3 dias se aplica, e qualquer outro custódio pode contestar.</li>
+            <li><strong>Administradores da comunidade:</strong> um administrador da sua comunidade que não seja custódio do empreendimento pode aprovar um custódio ou remover um custódio comum imediatamente, sem janela de 3 dias. Isso serve para destravar um empreendimento que precise de ajuda.</li>
+            <li><strong>Renúncia:</strong> qualquer custódio pode renunciar. Se o empreendimento estiver endividado e seu compromisso de confiança for necessário para cobrir a dívida, você deverá esperar até que a dívida diminua ou que outros custódios comprometam mais. O único custódio restante não pode renunciar; ele deve adicionar outro custódio primeiro ou encerrar as atividades do empreendimento.</li>
+            <li><strong>Seu compromisso de garantia</strong> apoia a linha de crédito do empreendimento. Um compromisso da confiança que você ganhou nunca é deduzido do seu saldo ou da sua própria linha de crédito.</li>
+            <li><strong>Um custódio principal inativo:</strong> se o custódio principal não tiver feito nada no aplicativo por 30 dias, os outros custódios podem escolher um novo principal entre eles. A votação dura até 14 dias, com Sim e Não. É aprovada quando mais da metade dos outros custódios votar Sim. Se o principal retornar e fizer qualquer coisa no aplicativo, a votação é cancelada. Enquanto a conta do principal estiver suspensa, nada do que ele fizer conta como retorno. Votos de custódios não podem ser alterados.</li>
+            <li><strong>Votações entre os custódios:</strong> em um empreendimento com dois ou mais custódios, qualquer custódio pode propor o pagamento de Feijões a partir da conta do próprio empreendimento (nunca mais do que ele possui, nunca para si mesmo, e para um custódio apenas do que foi obtido em ganhos, com a taxa de troca de 1,5%), a remoção de um custódio ou, em um empreendimento (mas não em um projeto), nomear outro custódio como principal. Os custódios existentes no momento da abertura votam; mais da metade precisa votar; exige-se 60% de Sim para pagamentos ou remoções, e mais da metade para escolher um líder. A votação dura 7 dias ou termina antes assim que o resultado não puder mais mudar, sendo executada automaticamente. Apenas os custódios a veem. Enquanto estiver aberta, mostra quantos votaram; Sim e Não aparecem assim que fechar. Ninguém vê quem votou como, mas em um grupo muito pequeno o resultado e quem votou podem deixar isso evidente. Essas votações nunca afetam os Bens comuns nem o status de ninguém na comunidade: essas são Decisões comunitárias. Uma votação não pode remover o principal (vote em um novo principal em vez disso), o único custódio ou um custódio cujo compromisso cubra uma dívida. Um custódio não pode propor sua própria remoção; ele deve renunciar.</li>
+            <li><strong>Se o custódio principal sair ou for removido,</strong> o custódio com mais tempo de casa torna-se principal de imediato, e os demais custódios podem substituí-lo em seguida. Se nenhum custódio restar, o empreendimento é pausado.</li>
+            <li><strong>Encerramento:</strong> o custódio principal ou o único custódio pode iniciar o encerramento de um empreendimento. Um administrador da comunidade também pode. Há então uma espera de 7 dias, e qualquer custódio ou administrador da comunidade pode cancelar o encerramento. Um empreendimento endividado não pode fechar até que a dívida seja paga ou a comunidade a anule. Nada conclui o encerramento sozinho: após os 7 dias, o custódio principal, o único custódio ou um administrador da comunidade deve finalizar o fechamento, e ele não pode ser finalizado enquanto houver uma negociação em aberto. Ao fechar, quaisquer feijões restantes vão para os Bens comuns.</li>
+        </ul>
+        <h2>Grupos e coordenadores</h2>
+        <p>Um grupo é administrado por seus coordenadores, e um deles é o seu <strong>coordenador principal</strong>. Quem cria um grupo torna-se o seu primeiro coordenador principal.</p>
+        <ul>
+            <li>Alguns grupos são abertos a todos. Alguns exigem a aprovação de um coordenador. Alguns são acessíveis apenas por convite.</li>
+            <li><strong>Qualquer coordenador</strong> pode aprovar e convidar membros, remover um membro ou observador, alterar o papel de um membro ou observador, tornar alguém coordenador, remover publicações e mensagens e editar o grupo e quem pode entrar nele.</li>
+            <li><strong>Apenas o coordenador principal</strong> pode remover um coordenador ou retirar o papel de coordenador de alguém. A própria votação do grupo também pode fazer isso.</li>
+            <li><strong>Ninguém pode remover o coordenador principal nem retirar a coordenação dele.</strong> Nem outro coordenador e nem um administrador da comunidade — administradores não têm autoridade dentro de um grupo. Além da transferência voluntária pelo líder, apenas a votação do próprio grupo pode escolher um novo coordenador principal.</li>
+            <li><strong>Um coordenador suspenso:</strong> enquanto a conta de um coordenador estiver suspensa, ele não pode usar nenhuma função de coordenação, e seus poderes como principal também ficam em espera. Ele permanece como coordenador e o principal continua como principal; tudo volta a funcionar quando a suspensão terminar. Outros coordenadores continuam suas atividades normalmente, e os membros continuam conversando e publicando. Um membro suspenso também não pode criar nem entrar em grupos até o término da suspensão.</li>
+            <li><strong>Passar a coordenação:</strong> o coordenador principal pode transferir a liderança para outra pessoa. Pode ser outro coordenador ou um membro, que se torna coordenador ao mesmo tempo. Feito isso, o antigo líder não pode desfazer a ação.</li>
+            <li><strong>Sair do grupo sendo o coordenador principal:</strong> transfira a liderança primeiro. Se não houver mais ninguém no grupo, o principal pode simplesmente sair.</li>
+            <li>O último coordenador não pode renunciar nem ser removido enquanto o grupo ainda tiver outros membros. Se não houver mais ninguém no grupo, ele pode simplesmente sair.</li>
+            <li><strong>Uma votação própria do grupo.</strong> Membros e coordenadores de um grupo podem votar sobre assuntos internos do grupo: escolher um novo coordenador principal, nomear alguém como coordenador, rebaixar um coordenador a membro comum, remover alguém do grupo, alterar quem pode entrar ou fechar o grupo. Qualquer membro ou coordenador pode propor uma votação; observadores acompanham, mas não votam. Todos que eram membros ou coordenadores no momento da abertura podem votar. Mais da metade deles precisa votar. A remoção de alguém e o fechamento do grupo exigem 60% de Sim; as demais exigem mais da metade. A votação dura 7 dias ou termina antes assim que o resultado não puder mais mudar, e o aplicativo a executa automaticamente. Os votos são secretos e não podem ser alterados. A votação de um grupo nunca transfere Feijões e nunca altera o status de ninguém na comunidade, e os administradores não podem impedi-la. Um grupo fechado não aceita novos membros nem novas mensagens, e suas publicações e eventos são cancelados. A conversa permanece disponível para leitura. Você encontrará a votação na página do grupo, sob <strong>Decisões</strong>. Para consultar a opinião de um grupo sem alterar nada, publique uma Enquete no grupo.</li>
+            <li><strong>Um coordenador principal inativo:</strong> se o coordenador principal de um grupo não tiver feito nada no aplicativo por 30 dias, o grupo pode escolher um novo líder. Seus <strong>outros coordenadores</strong> votam — ou seus <strong>membros</strong>, caso nenhum dos outros coordenadores tenha sido nomeado até a data em que o líder esteve ativo pela última vez. Apenas pessoas que já estavam no grupo nessa data participam: membros que entraram no grupo até então ou coordenadores nomeados até então. Quem entrou ou foi nomeado coordenador depois disso não pode propor, ser proposto nem votar, e não é contabilizado. Se você sair do grupo e entrar novamente, conta a partir da data da nova entrada. Se ninguém que estava lá na época tiver permanecido, nenhuma votação poderá ser aberta e a tela do grupo informará isso. Qualquer um dos participantes pode propor alguém entre eles, inclusive a si mesmo. A votação dura até 14 dias, com Sim ou Não, em sigilo. Ela é aprovada quando mais da metade dos participantes votar Sim. Se o líder retornar e fizer qualquer coisa no aplicativo, a votação é cancelada. Enquanto a conta do líder estiver suspensa, nada do que ele fizer conta como retorno. A pessoa escolhida se torna coordenadora e líder do grupo. O líder inativo continua como coordenador quando a votação foi feita pelos coordenadores, e torna-se um membro comum quando foi feita pelos membros. Você encontrará a votação na tela do próprio grupo, acima da lista de membros.</li>
+            <li><strong>Um coordenador principal desonesto</strong> pode ser removido por uma Decisão da comunidade. Isso será disponibilizado em uma atualização futura.</li>
+        </ul>
+        <h2>Apoio de confiança</h2>
+        <p>Apenas administradores e membros escolhidos por um administrador ou por uma Decisão da comunidade podem abonar novatos. Um abono concede ao novato uma pequena linha de crédito para começar: 25, 50 ou 100 feijões. Emblemas de confiança nunca conferem esse direito.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="../decisions.html"><strong>Voting on a Decision</strong><span>Find open Decisions, vote, change your vote, and see results.</span></a></li>
+            <li><a href="../proposing-a-decision.html"><strong>Proposing a Decision</strong><span>Ask the community to decide something binding.</span></a></li>
+            <li><a href="../polls.html"><strong>Polls</strong><span>Ask the community a quick question. Polls show opinion; they change nothing by themselves.</span></a></li>
+            <li><a href="../keepers.html"><strong>Keepers</strong><span>The people who run an enterprise and stand behind it. How to join, object, and step down.</span></a></li>
+            <li><a href="../groups.html"><strong>Groups</strong><span>Your groups and their chats, talking in them, starting a group, inviting people, joining by invitation, and the group's own votes.</span></a></li>
+            <li><a href="../people.html"><strong>People and friends</strong><span>Find members of your community, add friends, and vouch for someone.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

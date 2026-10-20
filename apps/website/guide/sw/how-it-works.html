@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/sw by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="sw">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kazi ya BeanPool — BeanPool members' guide</title>
+    <meta name="description" content="Maharagwe, biashara, ofa na mahitaji, na mikopo, kwa maneno rahisi.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#about">Kuhusu BeanPool</a></p>
+        <h1>Kazi ya BeanPool</h1>
+        <p class="lede">Maharagwe, biashara, ofa na mahitaji, na mikopo, kwa maneno rahisi.</p>
+        <h2>Maharagwe</h2>
+        <p>Jumuiya yako hufanya biashara katika <strong>maharagwe</strong>. Maharagwe si pesa kutoka benki. Ni rekodi ya nani aliyemsaidia nani.</p>
+        <p>Kila mtu huanzia sifuri. Unapomsaidia mtu, unapata maharagwe. Mtu anapokusaidia, unatumia maharagwe.</p>
+        <p>Mwongozo wa makadirio: maharagwe 40 ni takriban saa moja ya muda wa mtu. Wewe na mtu huyo mwingine mnakubaliana bei halisi.</p>
+        <h2>Ofa na Mahitaji</h2>
+        <p><strong>Ofa</strong> ni kitu unachoweza kufanya au kutoa: mkate, usafiri, saa moja ya kutunza bustani, ukarabati.</p>
+        <p><strong>Hitaji</strong> ni kitu unachokitafuta.</p>
+        <p>Katika jumuiya yenye Maharagwe, kabla hujaweza kuchapisha Hitaji, au kuomba Ofa ya mtu mwingine, lazima uwe umechapisha angalau Ofa moja yako mwenyewe. Kila mtu huleta kitu. Mahali ambapo hakuna Maharagwe, kama vile kwenye jumuiya ya kimataifa, chapisho lako la kwanza linaweza kuwa Hitaji.</p>
+        <h2>Jinsi biashara inavyofanya kazi</h2>
+        <ul>
+            <li>Unapata Ofa unayoitaka na kuiomba, au mtu anachukua Hitaji lako.</li>
+            <li>Biashara inapokubaliwa, maharagwe ya mnunuzi huwekwa salama. Hakuna mtu anayeweza kuyatumia wakati biashara ikiendelea.</li>
+            <li>Kazi inafanyika.</li>
+            <li>Mnunuzi anathibitisha kuwa imefanyika. Kisha maharagwe yanamwendea muuzaji.</li>
+        </ul>
+        <p>Biashara ikikwama, msimamizi wa jumuiya yako anaweza kuingilia kati. Anaweza kumlipa muuzaji, kumrudishia mnunuzi maharagwe, au kuyagawa. Msimamizi hawezi kuamua biashara ambayo yeye mwenyewe ni sehemu yake.</p>
+        <h2>Zawadi</h2>
+        <p>Unaweza pia kumtumia mtu maharagwe kama zawadi, bila biashara yoyote.</p>
+        <ul>
+            <li>Zawadi inaweza kutoka tu kwa maharagwe uliyo nayo. Haiwezi kamwe kukupeleka chini ya sifuri.</li>
+            <li>Unaweza kutuma zawadi mara tu unapokamilisha biashara katika soko. Biashara ya maharagwe 1 au 2 tu ni ndogo sana kuhesabiwa.</li>
+            <li>Zawadi hazina ada.</li>
+        </ul>
+        <h2>Kwenda chini ya sifuri: kikomo chako cha mkopo</h2>
+        <p>Unaweza kutumia zaidi kidogo ya ulichonacho, na kwenda chini ya sifuri. Hiki ni <strong>kikomo chako cha mkopo</strong>. Ni ahadi ya kuwasaidia wengine baadaye.</p>
+        <p>Kikomo chako cha mkopo huanzia sifuri. Hufunguka unapokamilisha biashara yako ya kwanza sokoni (biashara ya maharagwe 1 au 2 tu ni ndogo sana kuhesabiwa). Mtu ambaye jumuiya yako imemchagua kuwakaribisha wageni anaweza pia kukupa mwanzo mdogo kwa kukudhamini: maharagwe 25, 50 au 100.</p>
+        <p>Kikomo chako cha mkopo hukua kulingana na <strong>uaminifu</strong> wako:</p>
+        <ul>
+            <li>Unapata uaminifu kwa kukamilisha biashara sokoni. Zawadi hazipati uaminifu.</li>
+            <li>Kufanya biashara na watu wengi tofauti hujenga uaminifu zaidi. Biashara na mtu yeyote mmoja huhesabiwa hadi maharagwe 500.</li>
+            <li>Uaminifu hukua kwa kasi mwanzoni, kisha polepole zaidi baadaye.</li>
+            <li>Ukadiriaji wa nyota ni muhimu. Watu wakikukadiria, wastani wako wa ukadiriaji hupima uaminifu ambao biashara zako hupata: nyota 5 huweka yote, nyota 1 huweka 60%.</li>
+            <li>Kina cha juu zaidi ambacho kikomo chochote cha mkopo kinaweza kwenda ni maharagwe 2,000 chini ya sifuri. Jumuiya inayowathibitisha wanachama wake inaweza kuruhusu zaidi (tazama hapa chini).</li>
+        </ul>
+        <h2>Ofa zako hufungua mkopo wako</h2>
+        <p>Uaminifu huweka kiwango cha kina ambacho <strong>ungeweza</strong> kwenda. Ofa zako zilizo mtandaoni huweka kiwango cha kina ambacho <strong>unaruhusiwa</strong> kwenda hivi sasa. Unapata kiwango kidogo kati ya viwili hivyo.</p>
+        <ul>
+            <li>Bila Ofa zozote mtandaoni: huwezi kwenda chini ya sifuri.</li>
+            <li>Ofa 1: hadi 200 chini ya sifuri.</li>
+            <li>Ofa 2: hadi 500.</li>
+            <li>Ofa 3: hadi 1,000.</li>
+            <li>Ofa 4: hadi 1,500.</li>
+            <li>Ofa 5: hadi 2,000.</li>
+        </ul>
+        <p>Ukiondoa Ofa wakati uko chini ya sifuri, unaweza kuwa unadaiwa zaidi ya kile ambacho Ofa zako sasa zinashughulikia. Basi huwezi kutumia zaidi hadi utakapokuwa tena ndani ya kikomo chako. Bado unaweza kupata maharagwe, na hakuna kinachochukuliwa kutoka kwako.</p>
+        <p>Baadhi ya jumuiya huthibitisha wanachama wao ni nani. Huko, mwanachama aliyethibitishwa hupata kikomo cha mkopo moja kwa moja: maharagwe 1,000, isipokuwa kama jumuiya ilichagua kiasi kingine. Ofa moja iliyo mtandaoni hufungua yote. Kina cha juu zaidi huko kinaweza kuwa hadi 5,000. Tazama &quot;Kikomo chako cha mkopo&quot;.</p>
+        <h2>Beji za uaminifu</h2>
+        <p>Uaminifu wako huonyeshwa kama beji. Beji hizo ni Mgeni, Mkazi, Msimamizi na Mzee. Uaminifu ulio nyuma ya beji yako unajumuisha mambo matatu: mwanzo ambao udhamini ulikupa, uaminifu uliopata kwa kufanya biashara, na uaminifu wowote ambao msimamizi alikupa. Msimamizi anaweza kumpa mwanachama beji moja kwa moja, bila kufanya biashara. Katika jumuiya inayowathibitisha wanachama wake, kikomo cha mkopo ambacho mwanachama aliyethibitishwa hupata huhesabiwa pia.</p>
+        <ul>
+            <li>Mkazi kuanzia uaminifu wa 200.</li>
+            <li>Msimamizi kuanzia uaminifu wa 600.</li>
+            <li>Mzee kuanzia uaminifu wa 1,400.</li>
+        </ul>
+        <p>Beji ni utambuzi, hakuna zaidi. Haifungui chochote. Kila mtu anaweza kufanya biashara, kualika na kupiga kura, bila kujali beji yake.</p>
+        <h2>Ada na Mali za Pamoja</h2>
+        <p>Jumuiya yako ina hazina ya pamoja ya maharagwe inayoitwa <strong>Mali za Pamoja</strong>. Ada huenda humo. Wanachama huamua pamoja jinsi inavyotumika.</p>
+        <ul>
+            <li><strong>Ada ya soko:</strong> 1.5% ya kila malipo ya soko huenda kwenye Mali za Pamoja. Inatoka kwenye kile ambacho muuzaji anapokea.</li>
+            <li><strong>Ada ya mzunguko:</strong> maharagwe yamekusudiwa kusogea, si kukaa tu bila kufanya kazi. Maharagwe 200 ya kwanza unayoshikilia huwa bure kila wakati. Zaidi ya hayo, ada ndogo ya kila mwezi huenda kwenye Mali za Pamoja: 1% kwa mwezi kwa maharagwe kati ya 200 na 500, 1.5% kati ya 500 na 1,000, 2% kati ya 1,000 na 2,000, na 2.5% juu ya 2,000.</li>
+            <li>Masalio yaliyo chini ya sifuri hayalipi kamwe ada ya mzunguko. Zawadi hazilipi ada kamwe.</li>
+        </ul>
+        <h2>Mashirika na vikundi</h2>
+        <p><strong>Shirika</strong> huendelea na hufanya biashara kwa jina lake lenyewe: duka la kuoka mikate, maktaba ya vifaa, kibanda cha soko. Linaendeshwa na <strong>wasimamizi</strong>, likiongozwa na <strong>msimamizi mkuu</strong>. Wasimamizi wanaweza kuahidi sehemu ya uaminifu wao wenyewe ili kulipa shirika kikomo cha mkopo.</p>
+        <p><strong>Kikundi</strong> ni duara la wanachama lenye mazungumzo na machapisho yake yenyewe, linaloendeshwa na <strong>mratibu</strong> mmoja au zaidi. Mmoja wao ni <strong>mratibu mkuu</strong> — yeyote aliyetengeneza kikundi, mwanzoni.</p>
+        <p>Unaweza kusoma jinsi wasimamizi na waratibu wanavyochaguliwa katika &quot;Sheria na jinsi maamuzi hufanywa&quot;.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="../posting.html"><strong>Posting an Offer or a Need</strong><span>Put up something you can do or give, or something you are looking for.</span></a></li>
+            <li><a href="../a-deal-step-by-step.html"><strong>A deal, step by step</strong><span>From asking to getting paid, for an Offer and for a Need, and leaving a review.</span></a></li>
+            <li><a href="../credit-line.html"><strong>Your credit line</strong><span>How far below zero you can go, and how it grows.</span></a></li>
+            <li><a href="../gifts.html"><strong>Sending a gift</strong><span>Send beans to someone, with no trade.</span></a></li>
+            <li><a href="../circulation-fee.html"><strong>The circulation fee</strong><span>A small monthly fee on large balances, so beans keep moving. The first 200 are free.</span></a></li>
+            <li><a href="../trust-badges.html"><strong>Trust badges</strong><span>Newcomer, Resident, Steward and Elder. What they mean, and why they unlock nothing.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

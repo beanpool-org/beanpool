@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/uk by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Як працює BeanPool — BeanPool members' guide</title>
+    <meta name="description" content="Боби, обмін, пропозиції та потреби, а також кредит простими словами.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#about">Про BeanPool</a></p>
+        <h1>Як працює BeanPool</h1>
+        <p class="lede">Боби, обмін, пропозиції та потреби, а також кредит простими словами.</p>
+        <h2>Боби</h2>
+        <p>Ваша спільнота веде обмін у <strong>бобах</strong>. Боби — це не гроші з банку. Вони є обліком того, хто кому допоміг.</p>
+        <p>Кожен починає з нуля. Коли ви допомагаєте комусь, ви заробляєте боби. Коли хтось допомагає вам, ви витрачаєте боби.</p>
+        <p>Приблизний орієнтир: 40 бобів дорівнюють приблизно одній годині чийогось часу. Справжню ціну ви узгоджуєте з іншою людиною між собою.</p>
+        <h2>Пропозиції та Потреби</h2>
+        <p><strong>Пропозиція</strong> — це те, що ви можете зробити чи віддати: хліб, підвезення, година роботи в саду, ремонт.</p>
+        <p><strong>Потреба</strong> — це те, що ви шукаєте.</p>
+        <p>У спільноті з бобами, перш ніж ви зможете опублікувати Потребу або звернутися за чужою Пропозицією, ви маєте розмістити принаймні одну власну Пропозицію. Кожен щось приносить. Там, де бобів немає (як у глобальній спільноті), вашим першим дописом може бути Потреба.</p>
+        <h2>Як працює обмін</h2>
+        <ul>
+            <li>Ви знаходите потрібну Пропозицію та відгукуєтеся на неї, або хтось береться за вашу Потребу.</li>
+            <li>Коли про обмін домовлено, боби покупця надійно резервуються. Ніхто не може їх витратити, поки триває угода.</li>
+            <li>Робота виконується.</li>
+            <li>Покупець підтверджує виконання. Після цього боби переходять до продавця.</li>
+        </ul>
+        <p>Якщо обмін завис, адміністратор вашої спільноти може втрутитися. Він може переказати боби продавцю, повернути покупцю або розділити їх. Адміністратор не може вирішувати долю обміну, в якому він сам бере участь.</p>
+        <h2>Подарунки</h2>
+        <p>Ви також можете надіслати боби комусь як подарунок, без будь-якого обміну.</p>
+        <ul>
+            <li>Подарунок можна надіслати лише з наявних у вас бобів. Він ніколи не може завести вас нижче нуля.</li>
+            <li>Ви можете надсилати подарунки після того, як завершите обмін на ринку. Обмін лише на 1 чи 2 боби занадто малий, щоб зараховуватися.</li>
+            <li>За подарунки не стягується жодна комісія.</li>
+        </ul>
+        <h2>Баланс нижче нуля: ваша кредитна лінія</h2>
+        <p>Ви можете витратити трохи більше, ніж маєте, і піти нижче нуля. Це ваша <strong>кредитна лінія</strong>. Вона є обіцянкою допомогти іншим пізніше.</p>
+        <p>Ваша кредитна лінія починається з нуля. Вона стає доступною, коли ви завершите свій перший обмін на ринку (обмін лише на 1 чи 2 боби занадто малий, щоб зараховуватися). Людина, яку ваша спільнота обрала вітати новачків, також може дати вам невеликий початковий ліміт, поручившись за вас: 25, 50 або 100 бобів.</p>
+        <p>Ваша кредитна лінія зростає разом із вашим рівнем <strong>довіри</strong>:</p>
+        <ul>
+            <li>Ви заробляєте довіру, завершуючи обміни на ринку. Подарунки не приносять довіри.</li>
+            <li>Обміни з багатьма різними людьми приносять більше довіри. Обмін із будь-якою однією людиною зараховується в межах до 500 бобів.</li>
+            <li>Довіра зростає швидко спочатку, а потім повільніше.</li>
+            <li>Оцінки зірочками мають значення. Якщо люди оцінюють вас, ваш середній рейтинг масштабує отриману за обміни довіру: 5 зірок зберігають її повністю, 1 зірка зберігає 60%.</li>
+            <li>Найглибша межа будь-якої кредитної лінії становить 2000 бобів нижче нуля. Спільнота, яка підтверджує своїх учасників, може дозволити більше (дивіться нижче).</li>
+        </ul>
+        <h2>Ваші Пропозиції активують ваш кредит</h2>
+        <p>Довіра визначає, наскільки глибоко ви <strong>могли б</strong> піти. Ваші активні Пропозиції визначають, наскільки глибоко ви <strong>маєте право</strong> піти просто зараз. Ви отримуєте менше з двох значень.</p>
+        <ul>
+            <li>Немає активних Пропозицій: ви не можете піти нижче нуля.</li>
+            <li>1 Пропозиція: до 200 нижче нуля.</li>
+            <li>2 Пропозиції: до 500.</li>
+            <li>3 Пропозиції: до 1000.</li>
+            <li>4 Пропозиції: до 1500.</li>
+            <li>5 Пропозицій: до 2000.</li>
+        </ul>
+        <p>Якщо ви знімете Пропозиції, коли ваш баланс нижче нуля, ви можете опинитися в ситуації, коли винні більше, ніж покривають ваші наявні Пропозиції. Тоді ви не зможете витрачати більше, поки не повернетеся в межі свого ліміту. Ви все одно можете заробляти боби, і ніщо у вас не забирається.</p>
+        <p>Деякі спільноти підтверджують особи своїх учасників. Там підтверджений учасник отримує кредитну лінію одразу: 1000 бобів, якщо спільнота не обрала іншу суму. Одна активна Пропозиція активує її всю. Найглибша кредитна лінія там може досягати 5000. Дивіться «Ваша кредитна лінія».</p>
+        <h2>Значки довіри</h2>
+        <p>Ваша довіра відображається у вигляді значка. Значки мають такі рівні: Новачок, Мешканець, Опікун і Старійшина. Довіра за вашим значком складається з трьох частин: початковий ліміт від поруки, довіра від здійснених обмінів та довіра, надана адміністратором. Адміністратор може надати учаснику значок напряму, без обмінів. У спільноті, яка підтверджує учасників, кредитна лінія підтвердженого учасника також враховується.</p>
+        <ul>
+            <li>Мешканець — від 200 довіри.</li>
+            <li>Опікун — від 600 довіри.</li>
+            <li>Старійшина — від 1400 довіри.</li>
+        </ul>
+        <p>Значок — це лише визнання, нічого більше. Він нічого не блокує й не відкриває. Кожен може торгувати, запрошувати та голосувати незалежно від свого значка.</p>
+        <h2>Комісії та Спільне</h2>
+        <p>Ваша спільнота має спільний фонд бобів під назвою <strong>Спільне</strong>. До нього надходять комісії. Учасники разом вирішують, як їх витрачати.</p>
+        <ul>
+            <li><strong>Комісія ринку:</strong> 1,5% від кожного платежу на ринку йде до Спільного. Вона відраховується з того, що отримує продавець.</li>
+            <li><strong>Внесок за обіг:</strong> боби мають рухатися, а не лежати без діла. Перші 200 бобів, які ви тримаєте, завжди вільні від внеску. Понад цю суму до Спільного відраховується невеликий щомісячний внесок: 1% на місяць на боби між 200 і 500, 1,5% між 500 і 1000, 2% між 1000 і 2000, та 2,5% понад 2000.</li>
+            <li>З балансів нижче нуля внесок за обіг ніколи не сплачується. Подарунки ніколи не обкладаються комісією.</li>
+        </ul>
+        <h2>Підприємства та групи</h2>
+        <p><strong>Підприємство</strong> діє постійно й торгує від власного імені: пекарня, бібліотека інструментів, ринковий прилавок. Ним керують <strong>доглядачі</strong> на чолі зі <strong>старшим доглядачем</strong>. Доглядачі можуть внести частину власної довіри як забезпечення, щоб надати підприємству кредитну лінію.</p>
+        <p><strong>Група</strong> — це коло учасників із власним чатом і дописами, яким керує один або кілька <strong>координаторів</strong>. Один із них є її <strong>головним координатором</strong> — спочатку це той, хто створив групу.</p>
+        <p>Про те, як обираються доглядачі та координатори, можна прочитати в розділі «Правила та прийняття рішень».</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="../posting.html"><strong>Posting an Offer or a Need</strong><span>Put up something you can do or give, or something you are looking for.</span></a></li>
+            <li><a href="../a-deal-step-by-step.html"><strong>A deal, step by step</strong><span>From asking to getting paid, for an Offer and for a Need, and leaving a review.</span></a></li>
+            <li><a href="../credit-line.html"><strong>Your credit line</strong><span>How far below zero you can go, and how it grows.</span></a></li>
+            <li><a href="../gifts.html"><strong>Sending a gift</strong><span>Send beans to someone, with no trade.</span></a></li>
+            <li><a href="../circulation-fee.html"><strong>The circulation fee</strong><span>A small monthly fee on large balances, so beans keep moving. The first 200 are free.</span></a></li>
+            <li><a href="../trust-badges.html"><strong>Trust badges</strong><span>Newcomer, Resident, Steward and Elder. What they mean, and why they unlock nothing.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

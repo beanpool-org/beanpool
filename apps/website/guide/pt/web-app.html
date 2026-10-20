@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/pt by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BeanPool no navegador — BeanPool members' guide</title>
+    <meta name="description" content="O app web faz quase tudo o que o celular faz. Entrar na comunidade global pelo navegador, recuperar sua conta com seu login, usar a conta no celular e botões com nomes diferentes.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#getting-started">Primeiros passos</a></p>
+        <h1>BeanPool no navegador</h1>
+        <p class="lede">O app web faz quase tudo o que o celular faz. Entrar na comunidade global pelo navegador, recuperar sua conta com seu login, usar a conta no celular e botões com nomes diferentes.</p>
+        <h2>A mesma conta, uma tela diferente</h2>
+        <p>Sua comunidade também pode ser acessada em um navegador web, em um computador ou celular. Este guia foi escrito para o aplicativo de celular. O aplicativo web funciona da mesma forma, mas algumas coisas têm nomes ou posições diferentes.</p>
+        <p>Use uma única conta em ambos. Entrou pelo navegador? Coloque essa mesma conta no seu celular: veja &quot;Colocar sua conta da web em um celular&quot;, abaixo. Entrou pelo celular? Traga-a para o navegador: veja &quot;Usar a conta do celular em um computador&quot;. Entrar novamente cria uma segunda conta, e duas contas nunca podem ser unificadas em uma só.</p>
+        <h2>Entrar em global.beanpool.org pelo navegador</h2>
+        <p>A comunidade global em global.beanpool.org é aberta a qualquer pessoa, e você pode entrar diretamente por um navegador web. Não é preciso convite nem aplicativo de celular.</p>
+        <p>Antes de entrar, a página mostra o <strong>Início</strong>, o <strong>Mercado</strong>, o <strong>Mapa</strong> e o <strong>Registro</strong> (um exemplo de uma comunidade local) como um visitante os vê: os cartões públicos, anúncios, fotos e a localização aproximada, mas sem nomes, sem rostos e sem locais exatos. Nada ali permite publicar ou responder até que você entre. O botão <strong>Entrar</strong> fica no topo da página e no cartão acima dos anúncios.</p>
+        <p>No navegador de um celular, esse cartão oferece <strong>Abrir no app BeanPool</strong> primeiro. Ele abre o aplicativo BeanPool na tela de entrada da comunidade global, ou a loja de aplicativos do seu celular se o aplicativo ainda não estiver instalado, de modo que sua conta fique no aplicativo desde o início. Se o aplicativo já tiver uma conta, ele abre <strong>Participe da comunidade global</strong> com essa conta, ou a aba do <strong>BeanPool</strong> se essa conta já for membro por lá. Consulte &quot;Entrar no BeanPool&quot;. Abaixo disso, <strong>ou entre aqui pelo navegador</strong> permite entrar diretamente aqui, como descrito a seguir. Em um computador, o cartão exibe <strong>Entrar</strong>.</p>
+        <p>Enquanto a comunidade global tiver apenas poucos anúncios, seu <strong>Mercado</strong> também exibirá alguns cartões marcados como <strong>Exemplo</strong>. Eles são fictícios, para mostrar o que as pessoas publicam, e não podem ser abertos. Eles desaparecem assim que houver anúncios reais suficientes.</p>
+        <p>Se você veio a partir de um link compartilhado para um anúncio ou evento, ele se abre primeiro. Entre a partir dessa página e, assim que estiver dentro, ele se abre novamente, desta vez mostrando quem o publicou.</p>
+        <ul>
+            <li>Toque em <strong>Entrar</strong>, depois em <strong>Sou novo no BeanPool</strong>.</li>
+            <li>Escolha o nome que as pessoas verão. Ele precisa de pelo menos 2 letras e no máximo 20.</li>
+            <li>Escolha como entrar. <strong>Criar conta com 12 palavras secretas</strong> não precisa de nenhuma outra conta. Ou, sob <strong>Ou faça login</strong>, faça login uma vez com uma das contas que a página exibe: <strong>Google</strong>, <strong>Apple</strong> ou <strong>Facebook</strong>. A página leva você ao login daquela empresa e o traz de volta. Onde a comunidade aceita apenas logins, a página exibe somente os logins.</li>
+            <li>Em seguida, as mesmas etapas de todos: uma foto, aproximadamente onde você está, suas 12 palavras em inglês e um breve tour. A barra no topo diz <strong>Entrar</strong> (ou <strong>Seu nome</strong>, quando entrou com 12 palavras), <strong>Sua foto</strong>, <strong>Sua região</strong>, <strong>Backup de segurança</strong> e <strong>Como funciona</strong>. Em <strong>Sua região</strong>, <strong>Usar minha localização</strong> solicita a permissão do seu navegador uma única vez e arredonda o resultado para cerca de 10 km antes de enviar; <strong>Digite uma cidade ou bairro</strong> encontra um local por nome; <strong>Pular por enquanto</strong> não envia nada. O navegador não solicitará sua localização novamente ao final. Consulte &quot;Entrar no BeanPool&quot;.</li>
+        </ul>
+        <p><strong>Entrar com 12 palavras.</strong> Nenhuma conta Google, Apple ou Facebook é necessária, e a comunidade não guarda nada sobre você além do seu nome e, por um dia, uma referência codificada da rede a partir da qual você entrou. Enquanto você digita seu nome, a página executa uma pequena tarefa para a comunidade em segundo plano, para que ninguém possa criar contas de forma indefinidamente rápida. Você não precisa esperar por isso: se tocar antes de terminar, a página dirá <strong>Configurando sua conta…</strong> com uma barra de 8 etapas. Quando muitas pessoas estiverem entrando, levará mais tempo, e a página informará aproximadamente quanto tempo neste navegador: fazer login é mais rápido nesse caso. <strong>← Escolher outra forma</strong> volta para as duas opções de entrada, com o trabalho continuando. Suas 12 palavras são então sua única forma de voltar a entrar. Ninguém pode redefini-las, nem nós e nem a comunidade: o <strong>Backup de segurança</strong> informa isso e oferece <strong>Adicione um login como segunda forma de voltar</strong>: você escolhe o login ao final do breve tour, depois que sua foto for salva (veja &quot;Adicionar um login mais tarde&quot; abaixo). Ambas as escolhas dependem de você.</p>
+        <p><strong>Entrar com um login.</strong> A comunidade guarda apenas uma referência codificada dele, nunca seu e-mail ou o nome daquela conta. Cada conta de login pode entrar uma vez.</p>
+        <p>O mesmo login também é mantido como forma de recuperar sua conta. Enquanto a página diz <strong>Protegendo sua conta…</strong>, ela protege uma cópia da sua conta, com suas 12 palavras, e o processo de entrada a entrega à comunidade. Essa conta de login pode abri-la. Os administradores do servidor também podem abri-la, porque o servidor deles verifica seu login, assim como ocorre com uma conta de login vinculada pelo aplicativo de celular: consulte &quot;Recuperar sua conta&quot;. As Configurações exibem então <strong>Recuperação por login: conectada</strong> e qual foi o serviço utilizado. Se a cópia não puder ser criada ou guardada, você ainda entra, e as Configurações exibem <strong>Recuperação por login: não conectada</strong>: suas 12 palavras passam a ser sua única forma de recuperação.</p>
+        <p>Se preferir que a comunidade não guarde essa cópia, o aplicativo web ainda não permite removê-la. O aplicativo para celular permite, caso sua conta também esteja no celular: com a comunidade global aberta, vá em <strong>Configurações</strong>, toque em <strong>Proteção da conta</strong> e depois em <strong>Desconectar</strong> ao lado do login. De qualquer forma, guarde suas 12 palavras em segurança: elas são a forma de recuperação que pertence apenas a você.</p>
+        <p>Se outra pessoa aqui já tiver o nome que você escolheu, você o receberá com um número adicionado. Você pode alterá-lo nas Configurações.</p>
+        <p><strong>Já usa o BeanPool?</strong> Não crie uma segunda conta. Depois de <strong>Entrar</strong>, escolha <strong>Uso o BeanPool no meu celular</strong> para vincular a partir do aplicativo de celular, ou <strong>Tenho minhas 12 palavras</strong>. Se essa conta ainda não tiver entrado na comunidade global, a página oferece as mesmas formas de entrada (suas 12 palavras ou um login único), e ela entra como a conta que você já possui. Se você já entrou na comunidade global antes com um login, escolha <strong>Já entrei com um login antes</strong> (veja abaixo).</p>
+        <p>Se você fechar a página no meio do caminho, abra-a novamente dentro de 10 minutos e ela continuará com o mesmo nome.</p>
+        <p><strong>Uma conta por navegador.</strong> Se você entrar em duas abas ao mesmo tempo, a segunda dirá <strong>Este navegador já tem uma conta</strong> e oferecerá <strong>Aberta</strong> com o nome da conta. Nada a substitui. Se o cadastro da segunda aba também tiver sido concluído, essa conta será guardada neste navegador também, e a opção para exibir as 12 palavras mostrará suas palavras: anote-as se quiser mantê-la. Para usá-la, saia nas Configurações (<strong>Remover apenas deste aparelho</strong>) e restaure-a com essas palavras.</p>
+        <p><strong>Um cadastro enviado vem primeiro.</strong> Se este navegador enviou uma solicitação de entrada que possa ter sido processada, a página consulta a comunidade sobre ela antes de qualquer outra coisa, até mesmo antes de um convite ou da restauração de outra conta. Se você já estiver dentro, você continua. Se o cadastro ainda estiver em processamento, a página pedirá para esperar alguns minutos e depois clicar em <strong>Verificar novamente</strong>. Isso vale mesmo quando a comunidade parou de aceitar novos membros.</p>
+        <p>Se algo der errado na página depois que sua solicitação foi enviada, ela avisará e oferecerá <strong>Recarregar página</strong>. Seu pedido de entrada é mantido neste navegador, e a recarga verifica se você já entrou.</p>
+        <p><strong>Muitas pessoas entrando a partir de uma rede:</strong> quando muitas contas novas vêm de uma mesma conexão de internet, o cadastro exige um pouco mais de processamento do navegador em vez de recusar as pessoas. Todos na mesma rede contam juntos; portanto, em uma universidade, escritório ou encontro, podem ser outras pessoas entrando, não você. Somente após um número muito elevado a página recusa novas entradas por enquanto e informa quantos minutos esperar. Quando isso for dito sobre contas de 12 palavras, entrar com um login ainda funciona.</p>
+        <h2>Limites de uma nova conta</h2>
+        <p>Na comunidade global, uma nova conta possui alguns limites diários durante seus primeiros 3 dias e até que 3 de suas publicações permaneçam ativas: 3 publicações, 5 fotos e 10 novas pessoas para enviar mensagens em qualquer intervalo de 24 horas. Uma conta criada apenas com 12 palavras tem limites menores durante seus primeiros 7 dias e até que 3 de suas publicações permaneçam ativas: 2 publicações, 4 fotos e 3 novas pessoas para contatar. Adicionar um login eleva a conta aos limites habituais de imediato. Responder a quem escreveu para você primeiro nunca tem limite. Consulte &quot;Denunciar um problema&quot; para saber o motivo.</p>
+        <ul>
+            <li>Depois de entrar, um cartão chamado <strong>Sua conta é nova</strong> mostra quantas ações restam de cada tipo e quando novas são liberadas. Toque em <strong>✕</strong> para dispensá-lo. Ele permanece nas <strong>Configurações</strong> até que os limites terminem.</li>
+            <li>Se você atingir um limite, a opção <strong>Nova publicação</strong> ou o chat informará qual limite e quando ele será liberado, e <strong>Nova publicação</strong> mostrará o mesmo cartão.</li>
+            <li>Se os moderadores tiverem pausado suas publicações, a opção <strong>Nova publicação</strong> e o chat avisarão, e um cartão chamado <strong>Publicações pausadas</strong> informará até quando. Ele fica visível até que a pausa termine.</li>
+            <li>Se os moderadores ocultarem ou removerem uma de suas publicações, ou pausarem suas publicações enquanto o aplicativo web estiver fechado, o aplicativo web exibirá o alerta na próxima vez que você abri-lo, por até 60 dias. Cada alerta permanece até que você toque em <strong>Entendido</strong>, e depois não volta mais. Se houver vários pendentes, <strong>Close all</strong> dispensa todos. Se a sua conta também estiver no celular, o aplicativo web pode exibir um alerta que você já viu por lá.</li>
+        </ul>
+        <p>Sua própria comunidade local não possui nenhum desses limites.</p>
+        <h2>Recuperar sua conta com seu login</h2>
+        <p>Na comunidade global, o login com o qual você entrou traz sua conta de volta para um navegador: aquele cujos dados salvos foram apagados ou um novo navegador em outro computador. Você obtém a mesma conta, nunca uma segunda.</p>
+        <ul>
+            <li>Toque em <strong>Já usa o BeanPool?</strong>, depois em <strong>Usar meu login</strong>. (Após <strong>Entrar</strong>, a opção <strong>Já entrei com um login antes</strong> faz o mesmo.)</li>
+            <li>Um navegador antigo demais para manter uma conta do BeanPool exibirá um aviso em vez dessas opções, assim como faz no lugar de <strong>Entrar</strong>. Use uma versão atualizada do Chrome, Firefox, Safari ou Edge.</li>
+            <li>Digite seu nome aqui. Toque na sua conta quando ela aparecer.</li>
+            <li>Escolha o login com o qual você entrou: <strong>Google</strong>, <strong>Apple</strong> ou <strong>Facebook</strong>. Como ao entrar, a página leva você ao login dessa empresa e o traz de volta.</li>
+            <li>A página abre a cópia protegida da sua conta no navegador e confirma se ela realmente pertence à conta em que você tocou. Se não pertencer, dirá que não corresponde ao nome e não salvará nada.</li>
+            <li>Você está dentro, com suas 12 palavras quando a cópia as guardou: uma conta que entrou pelo navegador sempre as possui. Se a cópia não as guardou, este navegador não as tem, e as Configurações informam isso (veja &quot;Guarde suas 12 palavras&quot; abaixo).</li>
+        </ul>
+        <p>Os dispositivos da sua conta são avisados de que ela está sendo restaurada, caso não seja você.</p>
+        <p>Se você entrou com o GitHub, não é possível recuperar sua conta por ele: o BeanPool não utiliza mais o GitHub (consulte &quot;Recuperar sua conta&quot;). Use suas 12 palavras em vez disso.</p>
+        <p>Se você fizer login com uma conta diferente daquela com a qual entrou, a página avisará e permitirá que você escolha novamente. Se você tocar em <strong>Entrar</strong> e fizer login com uma conta que já faz parte, a página dirá <strong>Você já está aqui</strong> e oferecerá a opção de restaurar com esse login.</p>
+        <p><strong>Uma conta por navegador</strong> também se aplica aqui. Se este navegador já tiver outra conta, nada a substitui: a página dirá <strong>Este navegador já tem uma conta</strong> e oferecerá para abri-la. Para trazer a sua para cá, saia daquela conta primeiro. Se este navegador já tiver sua conta, a página informará que ela já está aqui.</p>
+        <h2>Adicionar um login mais tarde</h2>
+        <p>Se você entrou na comunidade global com 12 palavras, elas são sua única forma de recuperação. Depois de entrar, um cartão chamado <strong>Uma forma de recuperação</strong> informa isso, com <strong>Ver minhas 12 palavras</strong> e <strong>Adicionar um login</strong>. Toque em <strong>✕</strong> para dispensá-lo: ele volta uma vez após uma das suas publicações permanecer ativa, e outra quando sua primeira semana terminar. Ele permanece nas <strong>Configurações</strong> até que você adicione um login.</p>
+        <ul>
+            <li>Toque em <strong>Adicionar um login</strong>, depois em <strong>Google</strong>, <strong>Apple</strong> ou <strong>Facebook</strong>. Como na entrada, a página leva você ao login dessa empresa e o traz de volta.</li>
+            <li>As <strong>Configurações</strong> se abrem e informam se ele foi adicionado. A partir de então, esse login também recupera sua conta: a comunidade guarda uma cópia protegida da sua conta para ele, como quando você entra com um login, e as pessoas que operam o servidor podem abrir essa cópia. Os limites da sua conta nova passam a ser os limites padrão de imediato.</li>
+            <li>Uma conta de login que já possui outra conta do BeanPool aqui, ou que pertencia a uma conta que a comunidade removeu, não pode ser adicionada: a página avisa sobre isso e nada muda.</li>
+        </ul>
+        <h2>Nomes e locais diferentes</h2>
+        <ul>
+            <li><strong>Entrar com um convite:</strong> o botão da primeira etapa diz <strong>Criar identidade e entrar →</strong>. Se alguém aqui já tiver o nome escolhido, você o receberá com um número adicionado. <strong>← Voltar</strong> em <strong>Sua foto</strong> exibe seu nome sozinho, com <strong>Próximo →</strong>: altere-o (até 20 caracteres) ou mantenha-o, na mesma conta. Se alguém já tiver o novo nome, a página avisa e sugere outros.</li>
+            <li><strong>Abas:</strong> o aplicativo web tem <strong>Início</strong>, <strong>Mercado</strong>, <strong>Mapa</strong>, <strong>Bens comuns</strong>, <strong>Bate-papo</strong>, <strong>Pessoas</strong> e <strong>Registro</strong>. O que o aplicativo para celular chama de <strong>Conversas</strong> é <strong>Bate-papo</strong> na web, e <strong>Pessoas</strong> tem sua própria aba.</li>
+            <li><strong>Configurações e seu perfil:</strong> os pequenos botões no canto superior direito: seu perfil, o <strong>?</strong> e depois as Configurações. Em uma tela ampla, eles ficam na parte inferior do menu à esquerda.</li>
+            <li><strong>Publicar uma Oferta ou um Pedido:</strong> use <strong>Nova publicação</strong> na página do <strong>Mapa</strong>.</li>
+            <li><strong>Aparência:</strong> a opção chama-se <strong>Igual ao dispositivo</strong> em vez de &quot;Igual ao telefone&quot;.</li>
+            <li><strong>Bloqueio:</strong> as Configurações dizem <strong>Gerenciar membros bloqueados</strong>. Sua comunidade guarda seus bloqueios com sua conta, para que eles voltem quando você fizer login em qualquer navegador, e sair não deixa nada sobre eles no computador. As pessoas que operam o servidor da sua comunidade podem ver quem você bloqueou. Bloquear e desbloquear exige conexão: sem ela, o aplicativo web avisa e nada é alterado. Bloqueios feitos no aplicativo para celular permanecem no celular e não aparecem aqui.</li>
+            <li><strong>Conversas:</strong> o chat da web tem os botões <strong>Denunciar</strong> e <strong>Bloquear</strong> no topo.</li>
+            <li><strong>Sua área:</strong> na comunidade global, as Configurações do aplicativo web também têm <strong>Sua área</strong>, e seu Mercado e Mapa começam a partir dela. Consulte &quot;Sua área&quot;.</li>
+            <li><strong>Comunidade global:</strong> em uma comunidade local, as Configurações têm uma linha <strong>Comunidade global</strong> sob <strong>BEANPOOL</strong>, com seu endereço e a frase <strong>A comunidade global é uma comunidade entre várias. Sua própria comunidade roda em seu próprio servidor e nunca depende dela.</strong> Ela abre a comunidade mundial indicada pelo servidor da sua comunidade, em uma nova aba. Sua conta não está lá até que você a leve: nessa aba, toque em <strong>Entrar</strong>, depois em <strong>Tenho minhas 12 palavras</strong>. Se sua comunidade não indicar nenhuma, a linha não é exibida.</li>
+        </ul>
+        <h2>O que o aplicativo web não tem</h2>
+        <ul>
+            <li>Recuperar sua conta com um login em uma comunidade que não seja a global. Nessas comunidades, suas 12 palavras a trazem de volta, ou a vinculação pelo aplicativo de celular se sua conta também estiver no celular.</li>
+            <li>A faixa <strong>Aprender</strong> do Pulso.</li>
+            <li>O bloqueio de aplicativo do celular.</li>
+            <li>Login nas Configurações da comunidade com sua própria chave, para proprietários e administradores. O link <strong>Gerenciar</strong> do aplicativo web abre as Configurações, mas o navegador não tem autenticação própria. No computador, escolha <strong>Sign in with your phone</strong> nas Configurações e escaneie o código com o aplicativo do celular (<strong>Configurações</strong>, depois <strong>Gerenciar esta comunidade pelo computador</strong>; em versões antigas: <strong>Sign in on a computer</strong>).</li>
+        </ul>
+        <h2>Colocar sua conta da web em um celular</h2>
+        <p>Se você entrou por um navegador, leve a mesma conta para o aplicativo de celular. Não entre novamente no celular: isso cria uma segunda conta, e duas contas nunca podem ser unificadas em uma só. O <strong>Backup de segurança</strong>, ao lado das suas 12 palavras, e o cartão de recuperação por login nas Configurações explicam como:</p>
+        <ul>
+            <li>Instale o aplicativo BeanPool e abra-o.</li>
+            <li>Toque em <strong>Já é membro? Restaurar conta</strong>, depois em <strong>Recuperar com 12 palavras</strong>.</li>
+            <li>Digite suas 12 palavras em inglês e, sob <strong>Qual comunidade?</strong>, toque em <strong>Comunidade global</strong>. Em um aplicativo sem essa opção, digite o endereço da comunidade global, global.beanpool.org. Para outra comunidade, digite o endereço dela: o aplicativo web o exibe na mesma frase.</li>
+            <li>Se você entrou com um login, <strong>Recuperar com conta social</strong> também funciona, com esse mesmo login. Consulte &quot;Recuperar sua conta&quot;.</li>
+        </ul>
+        <p>A tela 1 da entrada no navegador diz o mesmo no sentido inverso: se você já usa o BeanPool em qualquer celular ou computador, traga essa conta em vez de iniciar uma nova.</p>
+        <h2>Usar a conta do celular em um computador</h2>
+        <ul>
+            <li>No aplicativo web no computador, escolha vincular com o aplicativo móvel. Um código QR será exibido.</li>
+            <li>No celular, abra as <strong>Configurações</strong> e toque em <strong>Vincular um aparelho</strong> (em versões antigas: <strong>Use your account on another device</strong>).</li>
+            <li>Aponte a câmera do celular para o código QR, toque em <strong>Confirmar e vincular aparelho</strong> e passe pela verificação de bloqueio de tela do celular.</li>
+            <li>O celular exibirá <strong>quatro dígitos</strong>. Digite-os no computador e pressione <strong>Confirmar</strong>. Sua conta é transferida para o computador somente depois disso. Três tentativas incorretas e nada é enviado: gere um novo código. Nunca leia os dígitos em voz alta nem os envie para ninguém.</li>
+            <li>Se o celular avisar que o aplicativo é muito antigo, atualize o aplicativo BeanPool nele e escaneie um novo código.</li>
+        </ul>
+        <h2>Como instalar</h2>
+        <p>O aplicativo web pode oferecer <strong>Instalar o BeanPool</strong> para que ele abra na sua tela inicial como um app. Se o seu navegador não puder fazer isso, toque em <strong>Como?</strong> para ver as instruções.</p>
+        <h2>Guarde suas 12 palavras</h2>
+        <p>Navegadores às vezes limpam dados salvos, por exemplo, o Safari após uma semana sem visitas. Até que você tenha conferido suas 12 palavras, as Configurações do aplicativo web mostram um aviso com <strong>Ver e salvar frase de recuperação</strong>. Faça isso e anote as palavras no papel (são palavras em inglês).</p>
+        <p>Um navegador que recuperou sua conta com um login cuja cópia não guardava suas 12 palavras não possui as palavras, portanto não exibe esse aviso. Ali, <strong>Ver frase de recuperação</strong> diz <strong>Não salvo neste navegador</strong> e abre uma página explicando o que recupera sua conta em vez disso: suas 12 palavras, caso você as tenha anotado no papel, ou o login que as Configurações mostram como conectado. Sem nenhum dos dois, apenas o aplicativo para celular poderá recuperá-la, caso a conta também esteja no seu celular. A opção <strong>Remover apenas deste aparelho</strong> alerta o mesmo antes de você sair.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="home.html"><strong>Início</strong><span>O que é o Início, quais cartões ele mostra no celular e na web, como adicionar, mover ou remover, escolher seus interesses e privacidade ao sair.</span></a></li>
+            <li><a href="the-bean.html"><strong>Este guia</strong><span>Onde encontrar este guia, como pesquisar nele e como ele se mantém atualizado.</span></a></li>
+            <li><a href="your-12-words.html"><strong>Suas 12 palavras</strong><span>As 12 palavras são a chave da sua conta. Por que importam, onde encontrá-las, como mantê-las seguras e como adicionar um login como alternativa.</span></a></li>
+            <li><a href="joining.html"><strong>Entrar no BeanPool</strong><span>Duas formas de entrar: uma comunidade com convite de membro, ou a comunidade global se estiver aberta, com 12 palavras secretas ou login. Pedir entrada e convidar outros.</span></a></li>
+            <li><a href="../messages.html"><strong>Messages</strong><span>Start a chat, send photos, reply, react, edit, delete, mute, and what is private.</span></a></li>
+            <li><a href="../reporting.html"><strong>Reporting a problem</strong><span>Tell your community's moderators about a post, an event, a Pulse post, a project or an enterprise.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

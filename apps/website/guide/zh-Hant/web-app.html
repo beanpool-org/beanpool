@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/zh-Hant by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>在網頁瀏覽器中使用 BeanPool — BeanPool members' guide</title>
+    <meta name="description" content="網頁版擁有手機版的大部分功能。在瀏覽器中加入全球社群、透過登入找回帳號、在手機上同步相同帳號，以及網頁版按鈕名稱的不同之處。">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#getting-started">開始使用</a></p>
+        <h1>在網頁瀏覽器中使用 BeanPool</h1>
+        <p class="lede">網頁版擁有手機版的大部分功能。在瀏覽器中加入全球社群、透過登入找回帳號、在手機上同步相同帳號，以及網頁版按鈕名稱的不同之處。</p>
+        <h2>同一個帳號，不同的螢幕</h2>
+        <p>你的社群也可以在電腦或手機的網頁瀏覽器中使用。本指南是針對手機應用程式編寫的。網頁版應用程式的運作方式相同，但有些功能名稱或位置有所不同。</p>
+        <p>請在兩端使用同一個帳號。在瀏覽器中加入了？把同一個帳號放到手機上：參見下文「將你的網頁帳號同步至手機」。在手機上加入了？將它帶到瀏覽器中：參見「在電腦上使用手機帳號」。再次加入會建立第二個帳號，而兩個帳號永遠無法合併為一個。</p>
+        <h2>在瀏覽器中加入 global.beanpool.org</h2>
+        <p>位於 global.beanpool.org 的全球社群對所有人開放，你可以直接在網頁瀏覽器中加入。不需要邀請碼，也不需要手機應用程式。</p>
+        <p>在你加入之前，頁面會以訪客視角顯示<strong>首頁</strong>、<strong>市集</strong>、<strong>地圖</strong>和<strong>帳本</strong>（來自在地社群的範例）：公開卡片、刊登項目、相片及其大約位置，但沒有姓名、面孔或精確地點。在加入之前，你在該處無法發布或回覆任何內容。<strong>加入</strong>位於頁面頂端以及刊登項目上方的卡片中。</p>
+        <p>在手機瀏覽器上，該卡片會優先提供<strong>在 BeanPool App 中開啟</strong>。它會在全球社群的加入途徑開啟 BeanPool 應用程式，若尚未安裝應用程式則會開啟手機的應用程式商店，讓你的帳號從一開始就在應用程式中。若應用程式中已有帳號，它會使用該帳號開啟<strong>加入全球社群</strong>；若該帳號已是成員，則會開啟 <strong>BeanPool</strong> 工作表。參見「加入 BeanPool」。其下方的<strong>或直接在瀏覽器中加入</strong>則可直接在瀏覽器中加入，如下所述。在電腦上，卡片顯示為<strong>加入</strong>。</p>
+        <p>當全球社群刊登項目很少時，其<strong>市集</strong>還會顯示幾張標有<strong>範例</strong>的卡片。這些是虛構的內容，用以展示大家發布的貼文範例，無法點開。一旦有足夠的真實刊登，它們就會消失。</p>
+        <p>如果你是透過他人分享的刊登或活動連結造訪，該連結會首先開啟。從該頁面加入後，一旦進入社群，該頁面會再次開啟，此時會顯示發布者是誰。</p>
+        <ul>
+            <li>點擊<strong>加入</strong>，然後點擊<strong>我是 BeanPool 新成員</strong>。</li>
+            <li>選擇其他人將看到的名稱。需要至少 2 個字元，最多 20 個字元。</li>
+            <li>選擇加入方式。<strong>使用 12 個機密助記詞建立帳號</strong>不需要任何其他帳號。或者，在<strong>或使用登入</strong>下方，使用頁面顯示的帳號之一完成一次性登入：<strong>Google</strong>、<strong>Apple</strong> 或 <strong>Facebook</strong>。頁面會帶你前往該公司的登入頁面並在完成後返回。在僅接受登入的社群中，頁面只會顯示登入選項。</li>
+            <li>接著與所有人相同的步驟：一張照片、你的大約位置、你的 12 個助記詞（皆為英文單字）以及簡短導覽。頂端列顯示<strong>登入</strong>（若憑 12 詞加入則為<strong>你的名字</strong>）、<strong>你的照片</strong>、<strong>你的區域</strong>、<strong>安全備份</strong>以及<strong>運作方式</strong>。在<strong>你的區域</strong>步驟中，<strong>使用我的位置</strong>會詢問你的瀏覽器一次，並在傳送前將結果模糊化至約 10 公里；<strong>輸入城鎮或郊區</strong>可按名稱尋找地點；<strong>暫時略過</strong>則不傳送任何內容。在最後不會再次向瀏覽器索取你的位置。參見「加入 BeanPool」。</li>
+        </ul>
+        <p><strong>使用 12 個助記詞加入。</strong> 不需要 Google、Apple 或 Facebook 帳號，社群除了你的名稱以及在一天內保留你加入時網路的雜湊識別碼外，不保留你的任何資訊。當你輸入名稱時，頁面會在背景為社群進行一小部分運算工作，以防有人無休止且快速地建立帳號。你無需等待它完成：如果在運算完成前點擊，頁面會顯示<strong>正在設定你的帳號…</strong>並帶有 8 個步驟的進度列。當許多人正在加入時，耗時會較長，頁面會顯示在此瀏覽器中大約需要多久：此時透過登入加入會更快。<strong>← 選擇其他方式</strong>會返回兩種加入途徑，背景運算仍會繼續進行。你的 12 個助記詞（皆為英文單字）隨後是你唯一的找回途徑。沒有人能重設它們，我們不能，社群也不能：<strong>安全備份</strong>會說明這一點，並提供<strong>新增登入方式作為第二種找回管道</strong>：在簡短導覽結束且照片儲存後，你可以挑選登入方式（參見下文「稍後新增登入方式」）。兩者皆由你自主決定。</p>
+        <p><strong>透過登入方式加入。</strong> 社群只會保留該登入的雜湊識別碼，絕不會保留來自該帳號的電子郵件或姓名。一個登入帳號只能加入一次。</p>
+        <p>該登入方式也會被保留作為找回帳號的途徑。當頁面顯示<strong>正在保護你的帳號…</strong>時，它會將你帳號的加鎖副本（包含其 12 個助記詞）交由社群保存。該登入帳號可以解鎖開啟它。營運伺服器的人員也可以開啟它，因為他們的伺服器會核驗你的登入，這與在手機應用程式中連結登入帳號相同：參見「找回你的帳號」。「設定」隨後會顯示<strong>登入找回功能：已連結</strong>以及連結的是哪一個。若無法建立或保留副本，你依然可以加入，但「設定」會顯示<strong>登入找回功能：未連結</strong>：此時你的 12 個助記詞就是你唯一的找回途徑。</p>
+        <p>如果你不希望社群保留該副本，網頁版應用程式目前尚無法將其移除。若你的帳號也同步在手機上，手機應用程式可以移除它：在全球社群開啟的狀態下，前往<strong>設定</strong>，點擊<strong>帳號保護</strong>，然後點擊該登入方式旁邊的<strong>斷開連線</strong>。無論哪種方式，請務必妥善保管你的 12 個助記詞：它們是專屬於你個人的找回途徑。</p>
+        <p>如果此處已有人使用你選擇的名稱，系統會為你的名稱加上數字。你可以在「設定」中進行修改。</p>
+        <p><strong>已經在使用 BeanPool？</strong> 切勿建立第二個帳號。在<strong>加入</strong>後，選擇<strong>我在手機上使用 BeanPool</strong> 以從手機應用程式進行連結，或選擇<strong>我有我的 12 個助記詞</strong>。若該帳號尚未加入全球社群，頁面會提供相同的加入途徑（你的 12 個助記詞，或一次性登入），並以你現有的帳號加入。如果你先前曾透過登入加入過全球社群，請選擇<strong>我先前使用登入方式加入過</strong>（見下文）。</p>
+        <p>如果中途關閉頁面，在 10 分鐘內重新開啟即可使用同一個名稱繼續進行。</p>
+        <p><strong>每個瀏覽器一個帳號。</strong> 如果你在兩個分頁中同時加入，第二個分頁會顯示<strong>這個瀏覽器已經有一個帳號</strong>並提供<strong>開啟</strong>加上該帳號的名稱。沒有任何內容會取代它。若第二個分頁的加入也已送出成功，該帳號也會保留在此瀏覽器中，點擊<strong>顯示</strong>（其名稱）<strong>12 個助記詞</strong>會顯示其助記詞：若想保留該帳號請將其抄寫下來。若想改用該帳號，請在「設定」中登出（<strong>僅從此裝置移除</strong>），然後使用那些助記詞進行還原。</p>
+        <p><strong>已送出的加入請求優先處理。</strong> 如果此瀏覽器送出的加入請求可能已經成功，頁面在處理任何其他操作之前（甚至是邀請或還原其他帳號）都會先向社群查詢該請求。如果你已成功加入，即可繼續使用。若該請求仍在處理中，頁面會請你等待幾分鐘，然後點擊<strong>再次檢查</strong>。即使社群已停止受理新成員，這項規則依然有效。</p>
+        <p>如果加入請求送出後頁面出現異常，系統會予以提示並提供<strong>重新載入頁面</strong>。你的加入資訊已保留在此瀏覽器中，重新載入會檢查你是否已成功加入。</p>
+        <p><strong>單一網路多人加入：</strong>當許多新帳號來自同一個網路連線時，加入過程會要求瀏覽器進行稍多的運算工作，而不是將大家拒之門外。同一網路下的所有人都合併計算，因此在校園、辦公室或聚會場所，可能是其他人在加入而非你自己。只有在超過極大數量時，頁面才會暫時婉拒，並提示需要等待的分鐘數。當針對 12 詞帳號出現該提示時，透過登入加入依然有效。</p>
+        <h2>新帳號的限制</h2>
+        <p>在全球社群中，新帳號在最初 3 天內，以及在有 3 則刊登維持發布狀態之前，設有幾項每日額度限制：在任何 24 小時內限發布 3 則刊登、5 張相片，以及向 10 位新對象傳送訊息。僅憑 12 詞建立的帳號在最初 7 天內限制更嚴格：限發布 2 則刊登、4 張相片和 3 位新訊息對象。新增登入方式可立即提升至一般新帳號限制。回覆主動發訊息給你的成員絕不受限。限制原因參見「檢舉問題」。</p>
+        <ul>
+            <li>加入後，名為<strong>你的帳號為新帳號</strong>的卡片會顯示各項剩餘額度以及何時恢復。點擊 <strong>✕</strong> 可將其關閉。在限制結束前它會保留在<strong>設定</strong>中。</li>
+            <li>若達到限制，<strong>新增刊登</strong>或聊天室會說明達到了哪項限制以及何時解鎖，且<strong>新增刊登</strong>會顯示相同的卡片。</li>
+            <li>若版主暫停了你的發文權限，<strong>新增刊登</strong>和聊天室會說明這一點，且名為<strong>發文功能已暫停</strong>的卡片會說明暫停至何時。它會一直保留到暫停結束為止。</li>
+            <li>若版主在網頁版應用程式關閉期間隱藏或移除了你的刊登，或者暫停了你的發文權限，網頁版會在下次開啟時顯示提醒，最長保留 60 天。每則提醒保留至你點擊<strong>知道了</strong>為止，點擊後不再重複出現。若有多則提醒等待處理，<strong>全部關閉</strong>可將它們全部收起。若你的帳號也同步在手機上，網頁版可能會顯示你已在手機上看過的提醒。</li>
+        </ul>
+        <p>你自己的在地社群沒有任何這些限制。</p>
+        <h2>透過登入方式找回你的帳號</h2>
+        <p>在全球社群中，你當初加入時使用的登入方式可以將帳號找回至瀏覽器中：無論是儲存資料已被清除的瀏覽器，還是另一台電腦上的全新瀏覽器。你找回的是同一個帳號，絕不會變成第二個帳號。</p>
+        <ul>
+            <li>點擊<strong>已經在使用 BeanPool？</strong>，然後點擊<strong>使用我的登入方式</strong>。（在<strong>加入</strong>後，<strong>我先前使用登入方式加入過</strong>作用相同。）</li>
+            <li>版本過舊無法支援 BeanPool 帳號的瀏覽器會在此處提示，就像在<strong>加入</strong>位置提示一樣。請使用最新版本的 Chrome、Firefox、Safari 或 Edge。</li>
+            <li>在此輸入你的名稱。當顯示你的帳號時點擊它。</li>
+            <li>選擇你當初加入時使用的登入方式：<strong>Google</strong>、<strong>Apple</strong> 或 <strong>Facebook</strong>。與加入時一樣，頁面會帶你前往該公司的登入頁面並在完成後返回。</li>
+            <li>頁面會在瀏覽器中開啟你帳號的加鎖副本，並核驗它確實是你點擊的那個帳號。若不符，會顯示<strong>該帳號不是</strong>（名稱）且不儲存任何內容。</li>
+            <li>你已成功登入；若副本保留了 12 個助記詞，你也會同時取回助記詞：在瀏覽器中加入的帳號始終保留有助記詞。若副本未保留助記詞，此瀏覽器便沒有它們，且「設定」會說明這一點（參見下文「妥善保管 12 個助記詞」）。</li>
+        </ul>
+        <p>你帳號的其他裝置會收到通知，得知帳號正在被找回，以防發起者不是你本人。</p>
+        <p>如果你當初是透過 GitHub 加入，它無法找回你的帳號：BeanPool 已不再支援 GitHub（參見「找回你的帳號」）。請改用你的 12 個助記詞。</p>
+        <p>如果你使用的登入帳號並非當初加入所用的帳號，頁面會提示並讓你重新選擇。如果你點擊<strong>加入</strong>並使用已加入過的帳號登入，頁面會提示<strong>你已經在社群中</strong>並提供<strong>使用</strong>（該登入方式）<strong>還原</strong>。</p>
+        <p><strong>每個瀏覽器一個帳號</strong>在此同樣適用。若此瀏覽器已有另一個帳號，任何內容都不會覆蓋它：頁面會顯示<strong>這個瀏覽器已經有一個帳號</strong>並提供開啟它。若想改為將你的帳號帶到此處，請先登出該帳號。若此瀏覽器已擁有你的帳號，頁面會提示它已經在此處。</p>
+        <h2>稍後新增登入方式</h2>
+        <p>如果你是憑 12 詞加入全球社群，它們就是你唯一的找回途徑。加入後，名為<strong>唯一找回途徑</strong>的卡片會說明這一點，並附帶<strong>查看我的 12 個助記詞</strong>與<strong>新增登入方式</strong>。點擊 <strong>✕</strong> 可將其關閉：在你的刊登之一持續發布後會出現一次，首週結束時會再出現一次。在新增登入方式之前，它會一直保留在<strong>設定</strong>中。</p>
+        <ul>
+            <li>點擊<strong>新增登入方式</strong>，然後選擇 <strong>Google</strong>、<strong>Apple</strong> 或 <strong>Facebook</strong>。與加入時一樣，頁面會帶你前往該公司的登入頁面並在完成後返回。</li>
+            <li><strong>設定</strong>隨即開啟並說明是否已成功新增。從此以後該登入方式也能找回你的帳號：社群會為其保留一份加鎖的帳號副本（與透過登入加入相同），營運其伺服器的人員可以開啟該副本。你的新帳號限制會立即轉為一般限制。</li>
+            <li>若登入帳號在此處已有另一個 BeanPool 帳號，或屬於社群已移除的帳號，則無法新增：頁面會提示且不進行任何變更。</li>
+        </ul>
+        <h2>不同的名稱與位置</h2>
+        <ul>
+            <li><strong>憑邀請加入：</strong>第一步的按鈕顯示為<strong>建立身分並加入 →</strong>。若此處已有人使用你選擇的名稱，你會獲得帶有編號的名稱。在<strong>你的照片</strong>步驟中點擊<strong>← 返回</strong>會只顯示你的名稱與<strong>下一步 →</strong>：在同一個帳號上修改名稱（最多 20 個字元）或保留它。若已有人使用新名稱，頁面會提示並建議其他名稱。</li>
+            <li><strong>各個分頁：</strong>網頁版應用程式包含<strong>首頁</strong>、<strong>市集</strong>、<strong>地圖</strong>、<strong>公共板塊</strong>、<strong>聊天</strong>、<strong>成員</strong>與<strong>帳本</strong>。手機應用程式稱為<strong>聊天</strong>的功能在網頁版中稱為<strong>聊天</strong>（Chat），且<strong>成員</strong>擁有專屬的分頁。</li>
+            <li><strong>設定與個人檔案：</strong>右上角的小型按鈕：你的個人檔案、<strong>?</strong>，然後是「設定」。在寬螢幕上，它們位於左側選單的底部。</li>
+            <li><strong>發布「提供」或「需求」：</strong>使用<strong>地圖</strong>頁面上的<strong>新增刊登</strong>。</li>
+            <li><strong>外觀模式：</strong>選項名稱為<strong>跟隨裝置</strong>，而非「跟隨手機」。</li>
+            <li><strong>封鎖成員：</strong>「設定」中顯示為<strong>管理已封鎖的成員</strong>。你的社群將你的封鎖名單與帳號一併保存，因此在任何瀏覽器登入時都會同步還原，登出時電腦上不會殘留任何相關記錄。營運你社群伺服器的人員可以看到你封鎖了誰。封鎖與解除封鎖都需要網路連線：沒有連線時網頁版會提示且不進行任何變更。在手機應用程式中進行的封鎖保留在手機上，不會在此處顯示。</li>
+            <li><strong>聊天室：</strong>網頁版聊天室頂端有<strong>檢舉</strong>與<strong>封鎖</strong>按鈕。</li>
+            <li><strong>所在地區：</strong>在全球社群中，網頁版的「設定」也包含<strong>你的區域</strong>，其市集和地圖均以此為起點。參見「所在地區」。</li>
+            <li><strong>全球社群：</strong>在地社群中，網頁版「設定」在 <strong>BEANPOOL</strong> 下方有一行<strong>全球社群</strong>，附帶其位址以及「全球社群是眾多社群中的一員。你自己的社群運行在專屬的伺服器上，完全不需要依賴全球社群。」點擊會在分頁中開啟你社群伺服器所指定的全球社群。你的帳號在親自帶入之前不會存在於該處：在該分頁中點擊<strong>加入</strong>，然後點擊<strong>我有我的 12 個助記詞</strong>。若你的社群未指定任何伺服器，則不會顯示此行。</li>
+        </ul>
+        <h2>網頁版沒有的功能</h2>
+        <ul>
+            <li>在全球社群以外的社群中透過登入方式找回帳號。在那些社群中，你的 12 個助記詞是唯一的找回途徑，或者如果帳號也同步在手機上，可以從手機應用程式進行連結。</li>
+            <li>Pulse 動態中的<strong>學習</strong>專區。</li>
+            <li>手機應用程式的應用程式鎖定功能。</li>
+            <li>所有者與管理員使用自己的金鑰登入社群的「設定」。網頁版的<strong>管理</strong>連結會開啟「設定」，但瀏覽器本身沒有解鎖機制。在電腦上，於「設定」中選擇「使用手機登入」，然後使用手機應用程式掃描代碼（<strong>設定</strong>，然後點擊<strong>在電腦上管理此社群</strong>；舊版應用程式顯示為<strong>在電腦上登入</strong>）。</li>
+        </ul>
+        <h2>將你的網頁帳號同步至手機</h2>
+        <p>如果你是在瀏覽器中加入的，請將同一個帳號同步至手機應用程式。切勿在手機上重新加入：那樣會建立第二個帳號，而兩個帳號永遠無法合併為一個。在你的 12 個助記詞旁邊的<strong>安全備份</strong>，以及「設定」中的<strong>登入找回功能</strong>卡片均說明了操作方法：</p>
+        <ul>
+            <li>安裝 BeanPool 應用程式並開啟。</li>
+            <li>點擊<strong>已經是會員?還原帳號</strong>，然後點擊<strong>透過 12 個助記詞找回</strong>。</li>
+            <li>輸入你的 12 個英文助記詞，然後在<strong>哪個社群？</strong>下方點擊<strong>全球社群</strong>。在沒有該選項的應用程式中，輸入全球社群的位址 global.beanpool.org。若是其他社群，輸入該社群的位址：網頁版會在同一句話中顯示該位址。</li>
+            <li>如果你是透過登入加入，<strong>透過社群帳號找回</strong>也能使用同一個登入方式發揮作用。參見「找回你的帳號」。</li>
+        </ul>
+        <p>在瀏覽器中加入的畫面 1 反過來也說明了同一點：如果你已經在任何手機或電腦上使用 BeanPool，請帶入該帳號，切勿建立新帳號。</p>
+        <h2>在電腦上使用手機帳號</h2>
+        <ul>
+            <li>在電腦上的網頁版應用程式中，選擇與行動應用程式連結。畫面上會顯示一個 QR 碼。</li>
+            <li>在手機上，開啟<strong>設定</strong>並點擊<strong>連結裝置</strong>（舊版應用程式顯示為<strong>在另一台裝置上使用你的帳號</strong>）。</li>
+            <li>將手機相機對準 QR 碼，點擊<strong>確認並連結裝置</strong>並通過手機螢幕解鎖驗證。</li>
+            <li>手機隨後會顯示<strong>四位數字</strong>。在電腦上輸入這四位數字並按<strong>確認</strong>。只有在此之後，你的帳號才會同步至電腦。三次嘗試錯誤後不會傳送任何內容：需要重新產生代碼。切勿大聲朗讀數字或將其傳送給任何人。</li>
+            <li>若手機提示應用程式版本過舊，請在手機上更新 BeanPool 應用程式，然後掃描新代碼。</li>
+        </ul>
+        <h2>安裝應用程式</h2>
+        <p>網頁版應用程式可能會提供<strong>安裝 BeanPool</strong>，使其能像應用程式一樣從主畫面開啟。若你的瀏覽器不支援此功能，點擊<strong>如何安裝？</strong>查看操作步驟。</p>
+        <h2>妥善保管 12 個助記詞</h2>
+        <p>瀏覽器有時會清除儲存的資料，例如 Safari 在一週未存取後會進行清理。在你檢視 12 個助記詞之前，網頁版的「設定」會顯示警告以及<strong>檢視並儲存復原助記詞</strong>。請點擊進行檢視，並將助記詞抄寫在紙上。</p>
+        <p>若瀏覽器是透過未保存助記詞的登入副本找回帳號，該瀏覽器就沒有這些助記詞，因此不會顯示此類警告。在那裡，<strong>檢視復原助記詞</strong>會顯示<strong>未儲存在此瀏覽器中</strong>，並開啟一個頁面說明可以改用什麼方式找回帳號：你的 12 個助記詞（如果你寫在紙上的話），或「設定」顯示已連結的登入方式。若兩者皆無，且帳號也同步在手機上，則只有手機應用程式能找回帳號。在登出之前，<strong>僅從此裝置移除</strong>也會說明同一點。</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="home.html"><strong>首頁</strong><span>首頁是什麼、在手機與網頁版上顯示的卡片、如何新增、移動或移除卡片、選擇興趣偏好以及登出時的隱私保護。</span></a></li>
+            <li><a href="the-bean.html"><strong>本指南</strong><span>在哪裡找到本指南、如何搜尋內容以及指南如何保持最新。</span></a></li>
+            <li><a href="your-12-words.html"><strong>你的 12 個助記詞</strong><span>這 12 個助記词是你帳號的金鑰。它們為何重要、在哪裡找到、如何安全保存，以及新增登入方式作為備用復原途徑。</span></a></li>
+            <li><a href="joining.html"><strong>加入 BeanPool</strong><span>兩種加入方式：憑成員邀請加入在地社群，或在開放時憑 12 個助記詞或一次登入加入全球社群。申請加入社群以及如何邀請他人。</span></a></li>
+            <li><a href="../messages.html"><strong>Messages</strong><span>Start a chat, send photos, reply, react, edit, delete, mute, and what is private.</span></a></li>
+            <li><a href="../reporting.html"><strong>Reporting a problem</strong><span>Tell your community's moderators about a post, an event, a Pulse post, a project or an enterprise.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

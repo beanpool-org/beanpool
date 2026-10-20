@@ -1,0 +1,2646 @@
+{
+  "schema": 2,
+  "version": 1,
+  "language": "it",
+  "hash": "3646275697ef05791819f0283342680e2db185bb1c947a6dea3d212f0eb7dff2",
+  "sections": [
+    {
+      "id": "about",
+      "title": "Info su BeanPool",
+      "summary": "Come funziona BeanPool, le regole e come si prendono le decisioni, le domande frequenti e le novità.",
+      "slugs": [
+        "how-it-works",
+        "rules",
+        "faq"
+      ]
+    },
+    {
+      "id": "getting-started",
+      "title": "Per iniziare",
+      "summary": "Home, iscriversi, trovare una comunità vicina, i fagioli e la comunità globale, i suoi limiti, le tue 12 parole, il tuo profilo, la barra in alto, questa guida, ricevere aiuto, usare più di una comunità e l'app web.",
+      "slugs": [
+        "home",
+        "joining",
+        "finding-a-community",
+        "beans-and-the-global-community",
+        "global-community-limits",
+        "your-12-words",
+        "your-profile",
+        "the-top-bar",
+        "the-bean",
+        "getting-help",
+        "communities",
+        "web-app"
+      ]
+    }
+  ],
+  "guides": [
+    {
+      "slug": "how-it-works",
+      "title": "Come funziona BeanPool",
+      "summary": "Fagioli, scambi, offerte e richieste, e credito, in parole semplici.",
+      "sourceHash": "64cee61091609f80",
+      "source-hash": "64cee61091609f80",
+      "section": "about",
+      "related": [
+        "posting",
+        "a-deal-step-by-step",
+        "credit-line",
+        "gifts",
+        "circulation-fee",
+        "trust-badges"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Fagioli"
+        },
+        {
+          "type": "p",
+          "text": "La tua comunità scambia in **fagioli**. I fagioli non sono denaro di una banca. Sono una registrazione di chi ha aiutato chi."
+        },
+        {
+          "type": "p",
+          "text": "Tutti iniziano da zero. Quando aiuti qualcuno, guadagni fagioli. Quando qualcuno aiuta te, spendi fagioli."
+        },
+        {
+          "type": "p",
+          "text": "Un'indicazione di massima: 40 fagioli corrispondono a circa un'ora del tempo di una persona. Tu e l'altra persona concordate il prezzo effettivo."
+        },
+        {
+          "type": "h2",
+          "text": "Offerte e Richieste"
+        },
+        {
+          "type": "p",
+          "text": "Un'**Offerta** è qualcosa che puoi fare o dare: pane, un passaggio, un'ora di giardinaggio, una riparazione."
+        },
+        {
+          "type": "p",
+          "text": "Una **Richiesta** è qualcosa che stai cercando."
+        },
+        {
+          "type": "p",
+          "text": "In una comunità con i fagioli, prima di poter pubblicare una Richiesta o chiedere l'Offerta di qualcun altro, devi aver pubblicato almeno un'Offerta tua. Ognuno porta qualcosa. Dove non ci sono fagioli, come sulla comunità globale, il tuo primo post può essere una Richiesta."
+        },
+        {
+          "type": "h2",
+          "text": "Come funziona uno scambio"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Trovi un'Offerta che ti interessa e la richiedi, oppure qualcuno risponde alla tua Richiesta.",
+            "Quando l'accordo è raggiunto, i fagioli dell'acquirente vengono custoditi al sicuro. Nessuno può spenderli mentre lo scambio è in corso.",
+            "Il lavoro viene svolto.",
+            "L'acquirente conferma che è completato. Quindi i fagioli passano al venditore."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Se uno scambio si blocca, un amministratore della tua comunità può intervenire. Può pagare il venditore, restituire i fagioli all'acquirente o suddividerli. Un amministratore non può decidere su uno scambio di cui fa parte."
+        },
+        {
+          "type": "h2",
+          "text": "Doni"
+        },
+        {
+          "type": "p",
+          "text": "Puoi anche inviare fagioli a qualcuno come dono, senza alcuno scambio."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Un dono può provenire solo dai fagioli che possiedi. Non può mai portarti sotto lo zero.",
+            "Puoi inviare doni dopo aver completato uno scambio nel mercato. Uno scambio di soli 1 o 2 fagioli è troppo piccolo per essere conteggiato.",
+            "I doni non hanno commissioni."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Andare sotto zero: la tua linea di credito"
+        },
+        {
+          "type": "p",
+          "text": "Puoi spendere un po' più di quanto hai e andare sotto zero. Questa è la tua **linea di credito**. È una promessa di aiutare gli altri in seguito."
+        },
+        {
+          "type": "p",
+          "text": "La tua linea di credito inizia a zero. Si apre quando completi il tuo primo scambio nel mercato (uno scambio di soli 1 o 2 fagioli è troppo piccolo per essere conteggiato). Qualcuno scelto dalla tua comunità per dare il benvenuto ai nuovi arrivati può anche offrirti un piccolo inizio facendoti da garante: 25, 50 o 100 fagioli."
+        },
+        {
+          "type": "p",
+          "text": "La tua linea di credito cresce con la tua **fiducia**:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Guadagni fiducia completando scambi nel mercato. I doni non fanno guadagnare fiducia.",
+            "Scambiare con molte persone diverse costruisce maggiore fiducia. Gli scambi con una singola persona contano fino a 500 fagioli.",
+            "La fiducia cresce rapidamente all'inizio, poi più lentamente.",
+            "Le valutazioni a stelle contano. Se le persone ti valutano, la tua valutazione media scala la fiducia guadagnata dai tuoi scambi: 5 stelle mantengono il 100%, 1 stella mantiene il 60%.",
+            "Il punto più profondo a cui può arrivare qualsiasi linea di credito è 2.000 fagioli sotto zero. Una comunità che conferma i propri membri può consentire di più (vedi sotto)."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Le tue Offerte aprono il tuo credito"
+        },
+        {
+          "type": "p",
+          "text": "La fiducia stabilisce quanto potresti scendere al massimo. Le tue Offerte attive stabiliscono quanto puoi scendere in questo momento. Ottieni il valore minore tra i due."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Nessuna Offerta attiva: non puoi andare sotto zero.",
+            "1 Offerta: fino a 200 sotto zero.",
+            "2 Offerte: fino a 500.",
+            "3 Offerte: fino a 1.000.",
+            "4 Offerte: fino a 1.500.",
+            "5 Offerte: fino a 2.000."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Se rimuovi delle Offerte mentre sei sotto zero, potresti trovarti a dovere più di quanto le tue Offerte attuali coprano. In tal caso non puoi spendere di più finché non rientri nel tuo limite. Puoi comunque guadagnare fagioli, e nulla ti viene tolto."
+        },
+        {
+          "type": "p",
+          "text": "Alcune comunità confermano l'identità dei loro membri. Lì, un membro confermato riceve subito una linea di credito: 1.000 fagioli, a meno che la comunità non abbia scelto un altro importo. Una sola Offerta attiva la rende interamente disponibile. La linea più profonda in quel caso può arrivare fino a 5.000. Vedi \"Linea di credito\"."
+        },
+        {
+          "type": "h2",
+          "text": "Badge di fiducia"
+        },
+        {
+          "type": "p",
+          "text": "La tua fiducia si mostra come un badge. I badge sono Nuovo arrivato, Residente, Custode e Saggio. La fiducia dietro il tuo badge somma tre elementi: l'avvio fornito da una garanzia, la fiducia guadagnata scambiando e l'eventuale fiducia concessa da un amministratore. Un amministratore può assegnare direttamente un badge a un membro, senza scambi. In una comunità che conferma i propri membri, conta anche la linea di credito che un membro confermato riceve."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Residente a partire da 200 di fiducia.",
+            "Custode a partire da 600 di fiducia.",
+            "Saggio a partire da 1.400 di fiducia."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Un badge è un riconoscimento, niente di più. Non vincola e non condiziona nulla: tutti possono scambiare, invitare e votare, qualunque sia il loro badge."
+        },
+        {
+          "type": "h2",
+          "text": "Commissioni e Beni comuni"
+        },
+        {
+          "type": "p",
+          "text": "La tua comunità ha un fondo condiviso di fagioli chiamato **Beni comuni**. Le commissioni confluiscono al suo interno. I membri decidono insieme come spenderle."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Commissione del mercato:** l'1,5% di ogni pagamento nel mercato va ai Beni comuni. Viene detratto da ciò che riceve il venditore.",
+            "**Commissione di circolazione:** i fagioli sono fatti per circolare, non per rimanere fermi. I primi 200 fagioli che possiedi sono sempre esenti. Oltre questa soglia, una piccola commissione mensile va ai Beni comuni: l'1% al mese sui fagioli tra 200 e 500, l'1,5% tra 500 e 1.000, il 2% tra 1.000 e 2.000 e il 2,5% oltre 2.000.",
+            "I saldi sotto zero non pagano mai la commissione di circolazione. I doni non pagano mai alcuna commissione."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Imprese e gruppi"
+        },
+        {
+          "type": "p",
+          "text": "Un'**impresa** prosegue nel tempo e commercia a proprio nome: un forno, una biblioteca degli attrezzi, un banco del mercato. È gestita da **custodi**, guidati da un **custode principale**. I custodi possono vincolare una parte della propria fiducia per assegnare all'impresa una linea di credito."
+        },
+        {
+          "type": "p",
+          "text": "Un **gruppo** è una cerchia di membri con la propria chat e i propri annunci, gestito da uno o più **coordinatori**. Uno di loro è il **coordinatore principale** — colui che ha creato il gruppo, per cominciare."
+        },
+        {
+          "type": "p",
+          "text": "Puoi scoprire come vengono scelti i custodi e i coordinatori in \"Regole e decisioni\"."
+        }
+      ]
+    },
+    {
+      "slug": "rules",
+      "title": "Regole e decisioni",
+      "summary": "Votazioni, partecipazione, voto segreto, chi può votare, sospensione, rimozione di un membro, custodi, coordinatori e coordinatori principali.",
+      "sourceHash": "be2e7321aab53ca8",
+      "source-hash": "be2e7321aab53ca8",
+      "section": "about",
+      "related": [
+        "decisions",
+        "proposing-a-decision",
+        "polls",
+        "keepers",
+        "groups",
+        "people"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Due modi per interpellare la comunità"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Un **Sondaggio** è una domanda nel feed, come \"Mercato di domenica?\". Mostra cosa pensano le persone. Non cambia mai nulla di per sé.",
+            "Una **Decisione** è vincolante. Se viene approvata, il server della tua comunità la esegue automaticamente. Nessuno deve premere un pulsante e nessuno può ignorarla silenziosamente."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "La comunità globale prevede Sondaggi ma nessuna Decisione: chiunque può entrarvi, con 12 parole o con un accesso, quindi una sola persona con diversi account potrebbe alterare una votazione. Tutto ciò che segue sulle Decisioni riguarda le comunità locali."
+        },
+        {
+          "type": "h2",
+          "text": "Cosa può fare una Decisione"
+        },
+        {
+          "type": "p",
+          "text": "Riguardo a un membro:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Sospendere un membro, o revocare una sospensione.",
+            "Congelare il credito di un membro, o scongelarlo.",
+            "Concedere a un membro il diritto di fare da garante per i nuovi arrivati, o revocarlo.",
+            "Rimuovere un custode principale da un'impresa, o un responsabile da un progetto.",
+            "Rimuovere un membro dalla comunità, o reintegrarlo."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Riguardo ai Beni comuni:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Assegnare fagioli dai Beni comuni a un progetto o a un'impresa.",
+            "Concedere un sussidio di difficoltà dai Beni comuni a un membro.",
+            "Saldare il debito di un progetto o di un'impresa attingendo dai Beni comuni.",
+            "Condonare un debito che un membro che ha lasciato la comunità doveva ai Beni comuni. Nessun fagiolo si sposta. La registrazione rimane, contrassegnata come condonata. Dove una comunità conserva un elenco dei nomi, la procedura viene avviata da lì."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Un sussidio non può superare quanto attualmente contenuto nei Beni comuni più quanto vi è affluito negli ultimi 30 giorni. Una richiesta di entità maggiore viene rifiutata all'avvio."
+        },
+        {
+          "type": "h2",
+          "text": "Chi può avviare una Decisione"
+        },
+        {
+          "type": "p",
+          "text": "Qualsiasi membro attivo il cui credito non sia congelato, e che abbia effettuato scambi nel mercato o a cui sia stato assegnato un badge di fiducia da un amministratore. Una garanzia da sola non è sufficiente. Anche gli amministratori possono farlo. Puoi avere una sola Decisione aperta alla volta. Devi spiegarne il motivo in almeno 10 caratteri."
+        },
+        {
+          "type": "h2",
+          "text": "Chi può votare"
+        },
+        {
+          "type": "p",
+          "text": "Qualsiasi membro attivo il cui credito non sia congelato e che si sia iscritto **prima** dell'apertura della Decisione. Le persone che si iscrivono durante una votazione non possono votare su di essa. Gli account delle imprese non possono votare."
+        },
+        {
+          "type": "h2",
+          "text": "Come vengono conteggiati i voti"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Decisioni riguardanti un membro: **un membro, un voto**. Sì o No.",
+            "Decisioni riguardanti i fagioli dei Beni comuni: i voti sono ponderati in base agli scambi. Puoi esprimere più di un voto, ma diventa costoso: 1 voto costa 1 credito di voto, 2 voti costano 4 crediti, 3 voti costano 9 crediti. I tuoi crediti di voto derivano dai tuoi scambi completati, conteggiati fino a 500 fagioli per partner di scambio. Ricevi nuovamente i tuoi crediti di voto completi per ogni Decisione. Non si esauriscono mai.",
+            "Se non hai mai completato uno scambio, non puoi ancora votare sui fagioli dei Beni comuni.",
+            "Puoi modificare il tuo voto in qualsiasi momento fino alla chiusura della votazione."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Voto segreto"
+        },
+        {
+          "type": "p",
+          "text": "L'app non mostra mai a nessuno come hai votato, amministratori compresi. Ognuno vede i totali e tu vedi il tuo voto. Il tuo voto viene memorizzato sul server della tua comunità con il tuo account, affinché possa essere conteggiato e verificato. I proprietari e gli amministratori che gestiscono il server possono creare una copia dei relativi file e potrebbero visualizzare il tuo voto lì."
+        },
+        {
+          "type": "p",
+          "text": "Anche i sondaggi sono anonimi, a meno che chi ne avvia uno non lo imposti come **voto palese**: in tal caso i membri possono vedere chi ha scelto cosa. Il sondaggio specifica di quale tipo si tratta."
+        },
+        {
+          "type": "h2",
+          "text": "Quanto dura una votazione"
+        },
+        {
+          "type": "p",
+          "text": "Ogni Decisione dura esattamente 7 giorni. La votazione si apre immediatamente. Al termine dei 7 giorni, il server della tua comunità conteggia i voti e applica il risultato."
+        },
+        {
+          "type": "h2",
+          "text": "Partecipazione"
+        },
+        {
+          "type": "p",
+          "text": "Una votazione è valida solo se partecipa un numero sufficiente di persone."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Un numero sufficiente corrisponde al 30% dei membri aventi diritto al voto che sono stati attivi negli ultimi 30 giorni. Non sono mai meno di 3 persone.",
+            "Per la rimozione di un membro la quota è del 25%.",
+            "\"Attivo\" significa che la tua app ha inviato qualcosa al server della tua comunità in quei 30 giorni: un post, uno scambio, un voto, un messaggio. Sul telefono, solitamente conta anche il solo fatto di aprire l'app, poiché effettua l'accesso per le notifiche a ogni avvio.",
+            "La partecipazione conta le persone, non il peso dei loro voti."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Se votano troppo poche persone, non succede nulla. La Decisione si chiude come \"irrisolta\"."
+        },
+        {
+          "type": "h2",
+          "text": "Quanti Sì sono necessari"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "La maggior parte delle Decisioni: 60% di Sì.",
+            "Rimozione di un membro: 66% di Sì.",
+            "Annullamento di un provvedimento (revoca di una sospensione, scongelamento del credito, reintegro di un membro): più della metà.",
+            "Un pareggio equivale sempre a un rifiuto."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Quando una Decisione viene approvata"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Il server della tua comunità verifica che abbia ancora senso: il membro esiste ancora, i Beni comuni hanno abbastanza fagioli. Quindi agisce.",
+            "Se nei Beni comuni mancano fagioli per un sussidio, il sussidio attende finché non ce ne sono a sufficienza. Rinuncia dopo 90 giorni.",
+            "Può rimanere in attesa un solo sussidio alla volta. Se un secondo sussidio viene approvato mentre i Beni comuni sono ancora insufficienti, questo non attende: si chiude definitivamente e la comunità deve votare di nuovo.",
+            "Se la persona o l'impresa non fa più parte della comunità, la Decisione si chiude senza eseguire alcuna azione."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Rimozione di un membro"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Se una rimozione viene approvata, il membro viene sospeso e il suo credito viene congelato immediatamente.",
+            "Dopo ulteriori 7 giorni viene rimosso definitivamente. Durante questi 7 giorni, una Decisione per reintegrarlo annulla la rimozione.",
+            "Un membro che elimina personalmente il proprio account non può essere reintegrato, nemmeno dopo una rimozione. Può iscriversi di nuovo con un nuovo invito.",
+            "Quando un membro viene rimosso, i suoi annunci vengono ritirati. Se doveva fagioli, i Beni comuni saldano il debito. Se possedeva fagioli, quei fagioli passano ai Beni comuni.",
+            "La comunità può votare per rimuovere o sospendere qualsiasi membro, a eccezione di un proprietario o amministratore del server della tua comunità. Essi gestiscono il server stesso, quindi una votazione non può revocare tale ruolo; l'app lo segnala se ci provi. Un proprietario può prima revocare il ruolo di un amministratore, dopodiché questo diventa un membro come tutti gli altri."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Sospensione d'emergenza"
+        },
+        {
+          "type": "p",
+          "text": "Un amministratore può sospendere immediatamente un membro, ad esempio per prevenire danni. Deve fornire una motivazione consultabile dai membri."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Nello stesso istante si apre una Decisione di 7 giorni: \"Mantenere questa sospensione?\".",
+            "Richiede la consueta partecipazione e il 60% di Sì.",
+            "Se non viene approvata, o se votano troppo poche persone, la sospensione decade automaticamente.",
+            "Un amministratore non può sospendere se stesso e non può sospendere l'unico proprietario del server. Solo un proprietario può sospendere un altro proprietario."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Sulla comunità globale non c'è votazione. La sospensione dura 7 giorni e poi decade da sola, a meno che un amministratore non la revochi prima. Per tenere fuori qualcuno più a lungo, gli amministratori lo sospendono di nuovo o rimuovono il suo account."
+        },
+        {
+          "type": "h2",
+          "text": "Cosa gli amministratori possono e non possono fare"
+        },
+        {
+          "type": "p",
+          "text": "Il server della tua comunità ha proprietari e amministratori. Se ne prendono cura."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Un amministratore può interrompere una Decisione aperta, ma deve fornire una motivazione scritta. I membri possono leggerla sulla Decisione.",
+            "Se una rimozione è stata approvata ed è nel suo periodo di attesa di 7 giorni, un amministratore può fermarla o renderla esecutiva immediatamente.",
+            "Gli amministratori possono concedere ai membri il diritto di fare da garanti per i nuovi arrivati.",
+            "Gli amministratori possono assegnare un badge di fiducia a un membro. Questo assegna al membro anche la fiducia necessaria per quel badge, ampliando la sua linea di credito.",
+            "Gli amministratori risolvono gli scambi bloccati, ma mai uno a cui partecipano direttamente."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Sondaggi"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Qualsiasi membro attivo il cui credito non sia congelato può avviare un Sondaggio con 2-4 risposte. Rimane attivo per 3, 7 o 14 giorni.",
+            "Puoi avere un solo Sondaggio aperto alla volta. La tua comunità può avere 5 Sondaggi aperti contemporaneamente.",
+            "A un Sondaggio pubblicato in un gruppo possono rispondere solo i membri e i coordinatori di quel gruppo. Gli osservatori possono leggerlo ma non rispondere.",
+            "Anche per rispondere a un Sondaggio è necessario avere il credito non congelato. Puoi modificare la tua risposta fino alla chiusura del Sondaggio. Chi lo ha avviato può chiuderlo in anticipo.",
+            "Un Sondaggio è anonimo: tutti vedono solo i totali. Chi lo avvia può impostarlo come **voto palese**, in modo che i membri vedano chi ha scelto cosa. Tale scelta viene effettuata all'avvio del Sondaggio e non può essere modificata dopo la pubblicazione.",
+            "Sulla comunità globale, un Sondaggio anonimo chiuso indica anche quanti dei suoi voti provengono da account nuovi o creati con 12 parole, se ce ne sono stati. Ogni voto viene comunque conteggiato."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Imprese e custodi"
+        },
+        {
+          "type": "p",
+          "text": "Un'impresa è gestita dai suoi custodi. Uno di loro è il custode principale."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Entrare:** chiedi di diventare custode e dichiari quanta della fiducia guadagnata intendi vincolare (può essere 0). Non puoi vincolare più fiducia di quanta ne hai guadagnata scambiando, su tutte le tue imprese. Il custode principale approva o rifiuta.",
+            "**Vincolare in una comunità che conferma i propri membri:** un membro confermato può anche vincolare parte della propria linea di credito nota, fino alla metà di essa. Quella quota viene detratta dalla sua linea personale.",
+            "**Finestra di opposizione:** quando un'impresa ha già più di un custode, l'approvazione del responsabile attende 3 giorni. Qualsiasi altro custode può opporsi in quel periodo, e una sola opposizione la annulla.",
+            "**Rimuovere un custode:** il responsabile può rimuovere un custode ordinario. Si applica la stessa finestra di 3 giorni, e qualsiasi altro custode può opporsi.",
+            "**Amministratori della comunità:** un amministratore della tua comunità che non sia custode dell'impresa può approvare un custode o rimuovere un custode ordinario immediatamente, senza la finestra di 3 giorni. Questo serve affinché un'impresa bloccata possa essere aiutata.",
+            "**Dimettersi:** qualsiasi custode può dimettersi. Se l'impresa è in debito e il tuo vincolo è necessario per coprirlo, devi attendere finché il debito non si riduce o gli altri custodi non vincolano di più. L'unico custode non può dimettersi; deve prima aggiungere un altro custode, oppure avviare la liquidazione dell'impresa.",
+            "**La tua garanzia** sostiene la linea di credito dell'impresa. Un vincolo di fiducia guadagnata non viene mai prelevato dal tuo saldo personale né dalla tua linea di credito personale.",
+            "**Un responsabile inattivo:** se il custode principale non ha svolto alcuna attività nell'app per 30 giorni, gli altri custodi possono scegliere un nuovo responsabile tra di loro. La votazione dura fino a 14 giorni, con Sì e No. Viene approvata quando più della metà degli altri custodi vota Sì. Se il responsabile torna e svolge un'attività nell'app, la votazione viene annullata. Mentre l'account del responsabile è sospeso, nessuna azione conta come rientro. I voti dei custodi non possono essere modificati.",
+            "**Votazioni tra i custodi:** in un'impresa con due o più custodi, qualsiasi custode può proporre di pagare fagioli dal conto dell'impresa (mai più di quanti ne contenga, mai a se stessi, e a un custode solo da quanto guadagnato, con la commissione di scambio dell'1,5%), rimuovere un custode o, in un'impresa ma non in un progetto, nominare responsabile un altro custode. Votano i custodi presenti al momento dell'apertura; più della metà deve votare; 60% di Sì per effettuare pagamenti o rimuovere, più della metà per scegliere un responsabile. Dura 7 giorni o termina prima quando il risultato non può più cambiare, e viene eseguita automaticamente. Solo i custodi possono vederla. Mentre è aperta mostra quanti hanno votato; Sì e No compaiono alla chiusura. Nessuno vede chi ha votato come, ma in un gruppo molto piccolo il risultato e l'elenco dei votanti potrebbero farlo dedurre. Queste votazioni non toccano mai i Beni comuni né la reputazione di alcuno nella comunità: quelle sono Decisioni della comunità. Una votazione non può rimuovere il responsabile (si vota invece per un nuovo responsabile), l'unico custode, o un custode il cui vincolo copre un debito. Un custode non può proporre la propria rimozione: deve invece dimettersi.",
+            "**Se il responsabile se ne va o viene rimosso,** il custode con maggiore anzianità diventa immediatamente responsabile, e gli altri custodi possono sostituirlo subito. Se non rimane alcun custode, l'impresa viene messa in pausa.",
+            "**Liquidazione:** il custode principale, o l'unico custode, può avviare la chiusura di un'impresa. Può farlo anche un amministratore della comunità. Si apre quindi un'attesa di 7 giorni, e qualsiasi custode o un amministratore della comunità può annullarla. Un'impresa indebitata non può chiudere finché il debito non viene saldato o la comunità non lo cancella. Nulla conclude una liquidazione automaticamente: trascorsi i 7 giorni, il custode principale, l'unico custode o un amministratore della comunità deve finalizzare la chiusura, che non può essere completata se c'è ancora uno scambio aperto. Quando si chiude, tutti i fagioli rimanenti vanno ai Beni comuni."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Gruppi e coordinatori"
+        },
+        {
+          "type": "p",
+          "text": "Un gruppo è gestito dai suoi coordinatori, e uno di essi è il suo **coordinatore principale**. Chiunque crei un gruppo ne è il primo coordinatore principale."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Alcuni gruppi sono aperti a tutti. Alcuni richiedono l'approvazione di un coordinatore. Alcuni sono solo su invito.",
+            "**Qualsiasi coordinatore** può approvare e invitare membri, rimuovere un membro o un osservatore, cambiare il ruolo di un membro o di un osservatore, nominare qualcuno coordinatore, rimuovere post e messaggi e modificare il gruppo e chi può unirsi ad esso.",
+            "**Solo il coordinatore principale** può rimuovere un coordinatore o revocare il ruolo di coordinatore a qualcuno. Anche la votazione interna del gruppo può farlo.",
+            "**Nessuno può rimuovere il coordinatore principale o togliergli la guida.** Né un altro coordinatore, né un amministratore della comunità — gli amministratori non hanno potere all'interno di un gruppo. Oltre al passaggio di consegne da parte del responsabile, solo la votazione interna del gruppo può scegliere un nuovo responsabile.",
+            "**Un coordinatore sospeso:** mentre l'account di un coordinatore è sospeso, questi non può usare alcun potere da coordinatore, e anche i suoi poteri di responsabile rimangono in sospeso. Rimane coordinatore e il responsabile rimane responsabile; tutto torna a funzionare al termine della sospensione. Gli altri coordinatori proseguono normalmente e i membri continuano a chattare e pubblicare. Un membro sospeso non può nemmeno avviare o unirsi a un gruppo finché la sospensione non termina.",
+            "**Passaggio della guida:** il responsabile può nominare qualcun altro responsabile. Può essere un altro coordinatore o un membro, che diventa coordinatore allo stesso tempo. Una volta effettuato, il responsabile non può revocarlo.",
+            "**Lasciare il gruppo, come responsabile:** prima trasferisci la guida. Se nessun altro è nel gruppo, il responsabile può semplicemente andarsene.",
+            "L'ultimo coordinatore non può dimettersi e non può essere rimosso finché il gruppo ha altri membri. Se nessun altro è nel gruppo, può semplicemente andarsene.",
+            "**La votazione interna del gruppo.** I membri e i coordinatori di un gruppo possono votare sulle questioni del gruppo: scegliere un nuovo coordinatore principale, nominare qualcuno coordinatore, riportare un coordinatore a membro ordinario, rimuovere qualcuno dal gruppo, modificare i criteri di accesso o chiudere il gruppo. Qualsiasi membro o coordinatore può proporne una; gli osservatori assistono ma non votano. Tutti coloro che erano membri o coordinatori all'apertura possono votare. Più della metà di essi deve votare. Rimuovere qualcuno e chiudere il gruppo richiedono il 60% di Sì; le altre opzioni richiedono più della metà. Dura 7 giorni, o termina prima quando il risultato non può più cambiare, dopodiché l'app la esegue automaticamente. I voti sono segreti e non possono essere modificati. Una votazione di gruppo non sposta mai fagioli e non modifica mai la reputazione di alcuno nella comunità, e gli amministratori non possono bloccarla. Un gruppo chiuso non accetta nuovi membri né nuovi messaggi, e i suoi post ed eventi vengono annullati. La chat rimane consultabile. Troverai la votazione sulla pagina del gruppo, sotto **Decisioni**. Per chiedere al gruppo cosa ne pensa senza modificare nulla, pubblica un Sondaggio nel gruppo.",
+            "**Un coordinatore principale inattivo:** se il coordinatore principale di un gruppo non ha svolto alcuna attività nell'app per 30 giorni, il gruppo può sceglierne uno nuovo. Votano gli **altri coordinatori** — oppure i suoi **membri**, se nessuno degli altri coordinatori era già tale il giorno in cui il responsabile è stato attivo per l'ultima volta. Partecipano solo le persone già presenti in quel giorno: membri iscritti al gruppo entro tale data, o coordinatori nominati tali entro allora. Chiunque si sia iscritto, o sia stato nominato coordinatore dopo quella data, non può proporre, essere proposto o votare, e non viene conteggiato. Se lasci il gruppo e ti iscrivi di nuovo, vieni conteggiato a partire dalla tua nuova iscrizione. Se non è rimasto nessuno di chi era presente allora, nessuna votazione può aprirsi, e la schermata del gruppo lo segnala. Chiunque tra i partecipanti può proporre qualcuno tra di loro, se stesso incluso. La votazione dura fino a 14 giorni, Sì o No, a scrutinio segreto. Viene approvata quando più della metà di coloro che rispondono vota Sì. Se il responsabile torna e svolge un'attività nell'app, la votazione viene annullata. Mentre l'account del responsabile è sospeso, nessuna sua azione conta come ritorno. La persona scelta diventa coordinatore e guida del gruppo. Il responsabile inattivo rimane coordinatore se hanno votato i coordinatori, e diventa membro ordinario se hanno votato i membri. Troverai la votazione sulla schermata del gruppo, sopra l'elenco dei membri.",
+            "**Un coordinatore principale scorretto** può essere rimosso da una Decisione della comunità. Questa funzionalità arriverà in un aggiornamento successivo."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Garanzie per i nuovi arrivati"
+        },
+        {
+          "type": "p",
+          "text": "Solo gli amministratori e i membri scelti da un amministratore o da una Decisione della comunità possono fare da garanti per i nuovi arrivati. Una garanzia fornisce al nuovo arrivato una piccola linea di credito per iniziare: 25, 50 o 100 fagioli. I badge di fiducia non conferiscono mai questo diritto."
+        }
+      ]
+    },
+    {
+      "slug": "faq",
+      "title": "Domande",
+      "summary": "Brevi risposte alle domande più frequenti dei membri.",
+      "sourceHash": "7f3d3c20a35ef66a",
+      "source-hash": "7f3d3c20a35ef66a",
+      "section": "about",
+      "related": [
+        "your-12-words",
+        "recovery",
+        "communities",
+        "beans-and-the-global-community",
+        "holiday-mode",
+        "leaving-or-deleting",
+        "getting-help"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Chi gestisce la mia comunità?"
+        },
+        {
+          "type": "p",
+          "text": "La tua comunità si autogestisce. Il suo server è curato da persone scelte dalla comunità stessa: i suoi proprietari e amministratori. I tuoi scambi, annunci e voti sono conservati su quel server. Il progetto BeanPool scrive l'app, e chiunque può utilizzarla per avviare una comunità."
+        },
+        {
+          "type": "h2",
+          "text": "Ci sono interessi sul debito?"
+        },
+        {
+          "type": "p",
+          "text": "No. Andare sotto zero non costa nulla. Solo i fagioli che possiedi oltre i 200 pagano la piccola commissione di circolazione."
+        },
+        {
+          "type": "h2",
+          "text": "Posso comprare o vendere fagioli con denaro reale?"
+        },
+        {
+          "type": "p",
+          "text": "L'app non prevede alcun modo per comprare o vendere fagioli in denaro. I fagioli si guadagnano aiutando le persone."
+        },
+        {
+          "type": "h2",
+          "text": "Perché non posso inviare un dono?"
+        },
+        {
+          "type": "p",
+          "text": "Un dono richiede due condizioni. Devi aver completato uno scambio nel mercato (1 o 2 fagioli è troppo poco per contare), e puoi donare solo fagioli che possiedi effettivamente. Un dono non può mai farti andare sotto zero."
+        },
+        {
+          "type": "h2",
+          "text": "Perché non posso spendere sotto zero?"
+        },
+        {
+          "type": "p",
+          "text": "Due fattori stabiliscono quanto puoi scendere sotto zero. La fiducia ottenuta scambiando stabilisce il massimo a cui potresti mai arrivare. Le tue Offerte attive stabiliscono quanto di quel margine puoi usare in questo momento. Senza Offerte attive, non puoi scendere sotto zero per niente. La maggior parte delle persone inizia vendendo: pubblica un'Offerta, e quando qualcuno la accetta, guadagni fagioli e la tua prima fiducia."
+        },
+        {
+          "type": "h2",
+          "text": "Il mio badge dice Custode. Perché posso spendere così poco?"
+        },
+        {
+          "type": "p",
+          "text": "Il tuo badge mostra la tua fiducia. Ciò che puoi spendere in questo momento dipende anche da quante Offerte attive possiedi. I badge non concedono nulla di per sé."
+        },
+        {
+          "type": "h2",
+          "text": "Posso modificare il mio voto?"
+        },
+        {
+          "type": "p",
+          "text": "Su una Decisione o su un Sondaggio, sì, fino alla chiusura della votazione. Su una votazione tra custodi, su una votazione interna di un gruppo o su una votazione per un nuovo coordinatore principale, no."
+        },
+        {
+          "type": "h2",
+          "text": "Qualcuno può vedere come ho votato?"
+        },
+        {
+          "type": "p",
+          "text": "Su una Decisione, l'app mostra solo i totali, e a te mostra il tuo voto personale. Il tuo voto viene memorizzato sul server della tua comunità. I proprietari e gli amministratori che gestiscono il server possono creare una copia dei relativi file e potrebbero visualizzarlo lì. Un Sondaggio è anonimo allo stesso modo, a meno che chi lo ha avviato non lo abbia impostato come **voto palese**: in tal caso i membri possono vedere chi ha scelto cosa. Il sondaggio specifica di quale tipo si tratta prima di votare."
+        },
+        {
+          "type": "h2",
+          "text": "Gli altri membri possono vedere il mio saldo?"
+        },
+        {
+          "type": "p",
+          "text": "No. Gli altri membri non vedono mai il tuo saldo. Sul telefono, in una comunità con i fagioli, vedono il tuo badge di fiducia e quanti scambi hai effettuato. Uno scambio mostra solo le due persone coinvolte. Se la comunità vota per la tua rimozione, i membri aventi diritto al voto vedono il tuo saldo e l'eventuale debito, esclusivamente nell'ambito di quella votazione. Gli amministratori possono vedere di più in alcuni casi, e tali consultazioni vengono registrate: vedi \"Cosa possono vedere gli admin\"."
+        },
+        {
+          "type": "h2",
+          "text": "Ho perso il telefono. Il mio account è perso?"
+        },
+        {
+          "type": "p",
+          "text": "No, se hai conservato la tua frase di recupero di 12 parole (parole in lingua inglese). Installa l'app e ripristina il tuo account con quelle 12 parole. Se hai collegato un account di accesso in Protezione dell'account, puoi usare anche quello. Conserva le tue 12 parole in un luogo sicuro e riservato. Chiunque le possieda può usare il tuo account."
+        },
+        {
+          "type": "p",
+          "text": "Hai perso anche le 12 parole? Un amministratore della tua comunità può trasferire il tuo account su un nuovo telefono, di persona: vedi \"Telefono e 12 parole smarriti\" in \"Recuperare il tuo account\"."
+        },
+        {
+          "type": "h2",
+          "text": "Ho bisogno di un account Google, Apple o Facebook?"
+        },
+        {
+          "type": "p",
+          "text": "No. Una comunità locale ti fa entrare con un invito da parte di uno dei suoi membri. La comunità globale fa entrare chiunque con 12 parole segrete, oppure con un account di accesso se preferisci. Se ti unisci solo con 12 parole, esse sono la tua unica via di recupero per il tuo account, e un nuovo account creato in questo modo parte più lentamente per la sua prima settimana. Puoi aggiungere un accesso in seguito, da qualsiasi telefono o browser in cui ti trovi nel tuo account, e non mentre il tuo account è sospeso. Vedi \"Entrare in BeanPool\" e \"Le tue 12 parole\"."
+        },
+        {
+          "type": "h2",
+          "text": "Perché non ci sono fagioli sulla comunità globale?"
+        },
+        {
+          "type": "p",
+          "text": "I fagioli sono una promessa tra persone che possono essere rintracciate. Chiunque può entrare nella comunità globale con 12 parole, quindi nessuno lì può ancora garantire per l'identità reciproca. I fagioli, gli accordi, le imprese e le Decisioni risiedono nelle comunità locali. La comunità globale li mostra attraverso una comunità di esempio, Valle di Esempio, contrassegnata come **🏘️ Comunità locale**. Vedi \"Fagioli e comunità globale\"."
+        },
+        {
+          "type": "h2",
+          "text": "Come faccio ad avviare una comunità?"
+        },
+        {
+          "type": "p",
+          "text": "Tocca **Avvia una comunità** nell'app. Una comunità opera su un proprio piccolo server: un computer di riserva a casa, o uno noleggiato per pochi euro al mese. Il software è gratuito e la comunità non ha bisogno di beanpool.org. Vedi \"Fagioli e comunità globale\"."
+        },
+        {
+          "type": "h2",
+          "text": "Posso appartenere a più di una comunità?"
+        },
+        {
+          "type": "p",
+          "text": "Sì. Sul telefono puoi salvare diverse comunità e passare dall'una all'altra, usando la stessa identità in ciascuna. Nell'app web, ogni comunità si apre al proprio indirizzo. Ciascuna comunità ha i propri fagioli, le proprie regole e i propri membri."
+        },
+        {
+          "type": "h2",
+          "text": "Posso unirmi a un'altra comunità a cui chiunque può accedere?"
+        },
+        {
+          "type": "p",
+          "text": "Sì, con l'account che già possiedi. Alcune comunità consentono a chiunque di entrare, esattamente come la comunità globale, e sono gestite dai propri responsabili ai rispettivi indirizzi. Quando il tuo telefono raggiunge una di queste comunità di cui non sei ancora membro, dice **Non sei ancora membro qui** e propone **Unisciti a ‹nome› con questo account**. Ti unisci nello stesso modo della comunità globale: con le 12 parole già presenti sul tuo telefono, oppure con un accesso se richiesto. Compare sotto il nome specifico di quella comunità e ne viene mostrato l'indirizzo, così puoi vedere a cosa ti stai unendo. La tua chiave e le tue 12 parole rimangono le stesse, e nulla cambia nelle altre tue comunità. Un link apre solo quella schermata, e nessuno si iscrive finché non tocchi. Per mostrarla, il tuo telefono chiede a quella comunità il suo nome e se consente alle persone di entrare, così chi gestisce quell'indirizzo può vedere che qualcuno ha aperto il link (nessun dato del tuo account viene inviato)."
+        },
+        {
+          "type": "h2",
+          "text": "Sto per assentarmi. Cosa dovrei fare?"
+        },
+        {
+          "type": "p",
+          "text": "Attiva la Modalità vacanza nelle Impostazioni. Le tue Offerte vengono nascoste e nessuno può inviarti nuove richieste. Completa o annulla prima gli scambi aperti, perché la Modalità vacanza non può iniziare mentre uno scambio è in corso."
+        },
+        {
+          "type": "h2",
+          "text": "Come faccio a lasciare la comunità?"
+        },
+        {
+          "type": "p",
+          "text": "Puoi eliminare il tuo account nelle Impostazioni. Prima completa o annulla eventuali scambi aperti. Quando elimini il tuo account, i fagioli che possiedi vanno ai Beni comuni della tua comunità, e se sei sotto zero, i Beni comuni coprono il disavanzo. Questa operazione non può essere annullata, nemmeno con le tue 12 parole. Elimina il tuo account solo nella comunità che stai usando. Se un'altra comunità sul telefono ti include ancora, il telefono mantiene la tua chiave per essa; la chiave scompare solo quando elimini l'account nell'ultima comunità rimasta."
+        },
+        {
+          "type": "h2",
+          "text": "Qualcosa non va o potrebbe funzionare meglio. A chi lo segnalo?"
+        },
+        {
+          "type": "p",
+          "text": "Per problemi con una persona o uno scambio, parla con gli amministratori della tua comunità. Per segnalare un annuncio, un evento o un post di The Pulse, tocca la bandierina **🚩 Segnala** (sul telefono, il pulsante di un annuncio indica **Segnala annuncio**). Nell'app web anche una chat con una singola persona ha un pulsante **Segnala**. Gli amministratori della tua comunità vengono avvisati. Seleziona **Sicurezza dei minori** se un minore potrebbe essere a rischio. Vedi \"Segnalare un problema\". Per idee sull'app in sé, visita beanpool.org."
+        }
+      ]
+    },
+    {
+      "slug": "home",
+      "title": "Home",
+      "summary": "Cos'è la Home, quali schede mostra su telefono e app web, come aggiungerle, spostarle o rimuoverle, scegliere i tuoi interessi e la privacy quando esci.",
+      "help": "Questa è la tua Home: schede su ciò di cui hai bisogno e ciò che c'è nei dintorni. Aggiungi schede in basso o tocca … per spostarle o rimuoverle.",
+      "sourceHash": "a2fcc28eabc05c1d",
+      "source-hash": "a2fcc28eabc05c1d",
+      "section": "getting-started",
+      "related": [
+        "the-top-bar",
+        "browsing-the-market",
+        "your-profile",
+        "finding-a-community",
+        "beans-and-the-global-community"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Che cos'è la Home"
+        },
+        {
+          "type": "p",
+          "text": "**Inizio** è la prima scheda, e la schermata su cui si apre l'app, sul telefono e nell'app web. È una bacheca di schede che risponde a cosa richiede il tuo intervento, cosa succede intorno a te e cosa potresti fare dopo. Ogni scheda è composta da poche righe e con un tocco porta a quella parte dell'app. Una scheda che non ha nulla da mostrare non occupa spazio sullo schermo."
+        },
+        {
+          "type": "p",
+          "text": "Il telefono e l'app web mostrano le stesse schede, con poche differenze. Questa pagina specifica \"sul telefono\" o \"nell'app web\" nei punti in cui differiscono."
+        },
+        {
+          "type": "h2",
+          "text": "Per iniziare"
+        },
+        {
+          "type": "p",
+          "text": "La Home di un nuovo membro inizia quasi vuota: una scheda, **Per iniziare**, tra **Richiede il tuo intervento** e **La tua comunità** (sulla comunità globale, **Trova la tua comunità** rimane sopra di essa). Dice \"Questa è la tua Home. Scegli tu cosa inserire qui. Prima di iniziare, dai un'occhiata di un minuto alle altre schede.\""
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Guardati intorno** avvia un breve tour. Una barra in fondo allo schermo sposta l'app su ciascuna scheda a turno e spiega a cosa serve, con una o due frasi per passaggio, con una dicitura come **Passaggio 2 di 8** in alto (il numero dipende dall'app e dalle schede della tua comunità). Tocca **Avanti** per proseguire, o **Salta** per fermarti. La scheda dietro la barra funziona normalmente: tocca qualsiasi cosa, o tocca un'altra scheda e il tour ti seguirà lì.",
+            "L'ultimo passaggio torna alla Home: **Aggiungi le tue prime schede**. Tocca una scheda per inserirla nella Home, o **Altre schede** per l'elenco completo. Tocca **Fine**. Se non hai scelto nulla, la Home si avvia con le solite cinque schede (sotto).",
+            "**Salta**, sulla scheda o sulla barra, conclude il tour. Se non hai inserito personalmente una scheda nella Home, ti assegna le solite cinque. Se lo hai fatto (da **Aggiungi una scheda**, o selezionandone una nell'ultimo passaggio del tour), la Home mantiene le schede che hai scelto.",
+            "Il tour non si avvia mai da solo. Se chiudi l'app a metà percorso, la scheda dice \"Riprendi il tour dal passaggio 3\".",
+            "Fine o Salta viene memorizzato sul tuo account, così la scheda non ricompare sugli altri tuoi telefoni o browser. Per rivedere il tour, tocca **?** in alto e **Rifai il tour**.",
+            "Se avevi impostato la tua Home prima che il tour esistesse, per te non cambia nulla. **Per iniziare** si trova in **Aggiungi una scheda**, sotto **Per iniziare**, se desideri aggiungerla."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Dopo aver toccato **Salta** durante il tour, compare un suggerimento di una riga sotto la prima scheda. Tocca **✕** per chiuderlo. Dopo aver toccato **Fine** non viene mostrato."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Sul telefono dice \"Questa è la tua Home. Aggiungi una scheda in fondo, o tocca … su una scheda per spostarla o rimuoverla.\" Viene mostrato una sola volta, e mai più, indipendentemente dal fatto che tu tocchi o meno **✕**. Anche aggiungere o rimuovere una scheda lo chiude.",
+            "Nell'app web dice le stesse parole. Ricompare ogni volta che apri la Home, finché non tocchi **✕**."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Le tue schede"
+        },
+        {
+          "type": "p",
+          "text": "Sul telefono e nell'app web, la tua Home è un elenco di schede che scegli tu. Dopo il tour, le solite cinque sono: **Primi passi**, **Consigli**, **Nuovo nel Mercato** (**Vicino a te** sulla comunità globale), **In arrivo** e **Dalla tua comunità**. Anche **Cosa ti interessa?** e **Come rientrare** compaiono, e vengono mostrate solo quando hanno qualcosa da comunicare. **Richiede il tuo intervento** è sempre in alto e **La tua comunità** è sempre in fondo."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Aggiungi una scheda**, sulla scheda della tua comunità in fondo alla Home, apre un elenco di tutte le schede che la tua comunità può mostrare, in tre gruppi: **Per te**, **Intorno a te** e **Per iniziare**. Tocca **Aggiungi** accanto a una scheda per inserirla nella Home. Va in cima, subito sotto **Richiede il tuo intervento**, e la Home scorre verso l'alto per mostrarla.",
+            "Una scheda già presente sulla Home indica **Su Home** invece di **Aggiungi**. Alcune schede possono essere aggiunte più di una volta, come **Una ricerca salvata**: indicano quante ne hai, ad esempio \"2 di 5 su Home\".",
+            "**Una ricerca salvata** richiede le parole da cercare prima di essere aggiunta, come \"uova\". Puoi anche scegliere **Offerte**, **Richieste** o **Entrambi**, una categoria e quanto lontano cercare: 1, 2, 5, 10 o 25 km. La distanza viene proposta solo se la tua comunità conosce la tua zona o se hai condiviso la tua posizione; senza di essa, la ricerca cerca ovunque.",
+            "**Sole e luna** chiede di chi usare la posizione prima di essere aggiunta: **La tua comunità** (la scelta consueta) o **La tua zona**.",
+            "Una Home può contenere al massimo 24 schede. Quando è piena, l'elenco lo segnala, e devi rimuovere una scheda per aggiungerne un'altra.",
+            "Le tue schede sono conservate sul tuo account, quindi ti seguono sugli altri tuoi telefoni e browser. Se il server della tua comunità non è ancora stato aggiornato, rimangono su questo telefono o in questo browser, e **Modifica home** dice \"Il server della tua comunità richiede un aggiornamento prima che le tue schede possano seguirti su altri dispositivi.\" Vengono inviate di nuovo ogni volta che apri la Home.",
+            "Se avevi già spostato o nascosto schede prima di questa modifica, la tua Home mantiene il tuo ordine, senza le schede che avevi nascosto. In caso contrario, vedi **Per iniziare** da sola, e toccare **Salta** o **Fine** nel tour ti assegna le cinque schede, o quelle che hai scelto (sopra). Se ti sei iscritto più di una settimana fa, la Home ti avvisa anche una volta, sotto **Per iniziare** la prima volta che si apre: \"La Home ora inizia con meno schede. Aggiungi una scheda recupera le altre.\""
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Salvare una ricerca dal Mercato"
+        },
+        {
+          "type": "p",
+          "text": "Mentre ci sono parole nella ricerca del Mercato, un pulsante sotto di essa dice **Salva questa ricerca nella Home**. Apre la Home con una ricerca salvata pronta da aggiungere: le tue parole, **Offerte** o **Richieste** se stavi guardando solo una delle due, la categoria che hai scelto e la distanza che hai selezionato (la più vicina tra 1, 2, 5, 10 o 25 km che la copre). Modifica tutto ciò che desideri, poi tocca **Aggiungi a Home**: la scheda va in cima. Mostra prima gli annunci più recenti corrispondenti; sulla comunità globale, prima i più vicini, esattamente come fa il suo Mercato. Se la stessa ricerca è già sulla Home, o ne hai cinque, la Home lo segnala e non aggiunge nulla. Sotto **Eventi** e **Sondaggi** non c'è alcun pulsante: una ricerca salvata cerca Offerte e Richieste."
+        },
+        {
+          "type": "h2",
+          "text": "Le schede"
+        },
+        {
+          "type": "p",
+          "text": "La Home mostra solo le schede che hanno qualcosa da dirti, nel tuo ordine personalizzato. Una scheda che aggiungi va in cima, sotto **Richiede il tuo intervento**. Queste sono le schede che puoi avere:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Richiede il tuo intervento:** solo quando qualcosa è in attesa di te: un accordo in attesa della tua risposta, messaggi non letti da persone, nuove righe nei tuoi gruppi, una votazione che non hai ancora espresso (in ambra quando si chiude entro due giorni) e, per proprietari, amministratori e moderatori, il lavoro amministrativo in attesa per loro, come le segnalazioni da esaminare. Sul telefono sono le stesse cose che mostrano le piccole icone in cima allo schermo. Questa scheda rimane per prima e non può essere spostata né nascosta.",
+            "**Come rientrare:** se ti sei iscritto con 12 parole e non hai collegato alcun accesso, questa scheda ti ricorda di tenerle al sicuro o di aggiungere un accesso. Tocca **✕** per chiuderla. Ricompare una volta dopo il tuo primo post e una volta dopo una settimana, poi risiede solo in **Impostazioni**: sotto **Protezione dell'account** sul telefono, e in cima a Impostazioni, con l'intestazione **Una sola via di ritorno**, nell'app web. Non compare se la cassaforte delle chiavi di BeanPool conserva già una copia della tua chiave.",
+            "**Trova la tua comunità:** solo sulla comunità globale. Mostra le comunità più vicine a te e ti consente di chiedere di unirti a loro (vedi \"Trovare una comunità vicina\"). Sul telefono ha **Comunità vicino a te**, **Avvia una comunità** e **Avvisami quando ne nasce una qui**. Nell'app web, ogni comunità è un collegamento alla propria pagina. Se non sa dove ti trovi, tocca **o inserisci il tuo comune** e seleziona la tua città invece di condividere la tua posizione, sul telefono e nell'app web. La scheda dell'app web ha anche **Condividi la mia zona**. Dopo aver selezionato una città, la scheda dell'app web dice \"Vicino a\" seguito dalla città, con **Modifica**. Se la scheda dell'app web ha già un luogo impostato, **Non è qui? Inserisci il tuo comune** fa la stessa cosa. Per i tuoi primi 30 giorni sulla comunità globale rimane in alto, e non può essere rimossa né spostata. Dopo questo periodo diventa una scheda come ogni altra.",
+            "**Primi passi:** una breve lista di controllo. In una comunità locale: pubblica la tua prima Offerta, aggiungi una foto profilo, scegli alcune cose che ti piacciono e, una volta pubblicata un'Offerta, dove gli inviti sono attivi, invita qualcuno. Dove solo gli amministratori possono invitare, il telefono mostra quest'ultima riga solo a proprietari e amministratori. L'app web la mostra a ogni membro, e una riga non completata mantiene visibile la scheda. Sul telefono la scheda scompare quando ogni riga è completata. Nell'app web rimane anche per i tuoi primi 14 giorni.",
+            "**Primi passi sulla comunità globale:** pubblica qualcosa di gratuito o per scambio e, se è presente una comunità entro 250 km da te, un suggerimento per chiederle di farti entrare (tale riga non tiene mai la scheda aperta). Può anche indicare i limiti di un nuovo account, come il numero di post e di nuove chat che puoi avviare al giorno all'inizio. Rimane per i tuoi primi 14 giorni, e successivamente finché il post non è completato e i limiti non sono terminati.",
+            "**Consigli:** un breve consiglio alla volta su come funziona BeanPool, per i membri. Tocca **Avanti** per il successivo, o **Leggi di più** per aprire la pagina di questa guida da cui proviene. Un nuovo consiglio viene mostrato anche alla tua prima visita di una nuova giornata. La scheda scompare da sola una volta che hai visto tutti i consigli, oppure subito quando tocchi **Non mostrare più i consigli**. Aggiungendola di nuovo con **Aggiungi una scheda** i consigli ripartono dal primo.",
+            "**Cosa ti interessa?:** ti consente di contrassegnare con una stella le categorie che ti piacciono. Solo per i membri. Viene mostrata quando non hai ancora categorie con la stella, oppure quando tocchi **Personalizza** sulla scheda del Mercato, e rimane sullo schermo mentre scegli.",
+            "**I tuoi accordi:** mostra i tuoi accordi aperti e gli accordi in attesa della tua risposta. Non presente sulla comunità globale: lì, **I miei accordi** nel Mercato mostra invece esempi di accordi di una comunità locale.",
+            "**La tua impresa:** mostra le richieste in attesa di approvazione per le imprese che custodisci. Si chiama **Il tuo progetto** quando ciò che gestisci è un progetto. Non presente sulla comunità globale: lì, **Beni comuni** mostra invece un'impresa di esempio di una comunità locale.",
+            "**In arrivo:** prossimi eventi vicino a te, con la tua partecipazione.",
+            "**Nuovo nel Mercato:** gli annunci più recenti, con le categorie con stella per prime. Sulla comunità globale si chiama **Vicino a te**, e i post più vicini compaiono per primi. Se hai inserito la tua città in **Trova la tua comunità**, il telefono calcola la distanza da quella città. Tocca **Personalizza** per scegliere i tuoi interessi, o **Vedi tutti** per aprire il Mercato. Se ci sono solo pochi annunci, potrebbe mostrare un paio di annunci di esempio, contrassegnati come esempi, se la tua comunità li ha attivati.",
+            "**Decisioni:** Decisioni aperte e sondaggi aperti, come righe separate sul telefono. Sul telefono, le Decisioni aprono **Decisioni** nei **Beni comuni** e i sondaggi aprono **Sondaggi** nel Mercato. Nell'app web è una riga sola, e toccandola si apre Beni comuni. Non presente sulla comunità globale: lì i sondaggi sono in **Sondaggi** del Mercato, e **Beni comuni** mostra una Decisione di esempio da una comunità locale.",
+            "**Una ricerca salvata:** annunci corrispondenti a parole da te scelte. Puoi averne fino a cinque. La sua prima riga è costituita dalle tue parole e dalla distanza, come \"uova · entro 5 km\". Poi compaiono fino a quattro annunci, ciascuno dei quali apre l'annuncio; **Vedi altro** apre il Mercato con le tue parole già inserite nella ricerca. Trova ciò che trova la ricerca del Mercato, quindi \"uova\" trova anche annunci con parole di significato molto simile. Quando nulla corrisponde lo segnala, ad esempio \"Nessun annuncio per uova entro 5 km al momento\". Una ricerca appena aggiunta o modificata senza connessione indica \"Mostra quando la tua comunità risponde\" finché il server della tua comunità non risponde. Per modificare le parole, tocca **…** poi **Impostazioni…**: la scheda rimane dove si trova.",
+            "**I tuoi gruppi:** i tuoi gruppi e le tue chat, con il conteggio dei messaggi non letti.",
+            "**Nuovi iscritti:** persone che si sono unite questa settimana. In una comunità locale mostra nomi e volti. Sulla comunità globale mostra solo un conteggio, per zona, e nessun nome.",
+            "**Il Polso:** post condivisi dai vicini da canali esterni come YouTube e blog, con le categorie con stella per prime. Tocca **Vedi tutti** per aprire The Pulse.",
+            "**Sole e luna:** la luna di stasera e l'alba e il tramonto di oggi, in una sola riga, ad esempio \"🌔 Gibbosa crescente, 72% · Alba 6:12 · Tramonto 17:48\". Il telefono o il browser la calcola autonomamente: la scheda non chiede nulla al server della tua comunità. Usa la posizione della tua comunità, arrotondata a circa un chilometro, o la tua zona se la tua comunità non ha una posizione (sulla comunità globale è sempre la tua zona). Sulla comunità globale, il telefono può anche usare l'ultima posizione in cui si trovava, ma solo se hai già consentito all'app di usare la tua posizione: non lo chiede mai di sua iniziativa. Se hai inserito la tua città in **Trova la tua comunità**, il telefono usa quella. Per usare la tua zona anche dove la tua comunità ha una posizione, tocca **…** poi **Impostazioni…** e scegli **La tua zona**. Gli orari seguono l'orologio del tuo telefono o del tuo computer, così quando viaggi li vedi nel tuo fuso orario locale. La luna viene disegnata come appare da quel lato dell'equatore. Dove il sole non sorge o non tramonta oggi, lo segnala, come \"Sole presente tutto il giorno\" o \"Nessun tramonto oggi\". Se nessun luogo è noto, la scheda non compare, e **Modifica home** indica \"Nulla da mostrare per ora: nessun luogo noto.\" Un lettore di schermo la legge a parole, come \"Luna gibbosa crescente, illuminata al 72 percento. Alba 6:12. Tramonto 17:48.\"",
+            "**I tuoi fagioli:** il tuo saldo e la linea di credito (margine di spesa). Non presente sulla comunità globale. Lì il telefono mostra invece una scheda di esempio: a cosa servono i fagioli in una comunità locale, e **Vedi un mastro di esempio**. Arriva una volta completato o saltato il tour (mentre è presente **Per iniziare**, il passaggio del tour relativo al Mastro mostra l'esempio), e rimane finché non tocchi **Nascondi questa scheda**, anche dopo che **Primi passi** è scomparsa.",
+            "**Dalla tua comunità:** comunicazioni e avvisi da parte degli amministratori della tua comunità.",
+            "**Fai crescere la tua comunità:** ti consente di invitare nuovi membri dopo la tua prima Offerta, dove gli inviti sono attivi. Non presente sulla comunità globale. Sul telefono, dove solo gli amministratori possono invitare, viene mostrata solo a un proprietario o amministratore. Nell'app web non compare affatto lì.",
+            "**La tua comunità:** l'ultima scheda, intitolata con il nome della tua comunità (**La comunità globale** sulla comunità globale). Mostra il numero dei membri e gli scambi di questo mese; sulla comunità globale, i membri e quante comunità sono elencate. Contiene **Aggiungi una scheda** e **Modifica home**. Questa scheda rimane in fondo e non può essere spostata né rimossa."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Sul telefono, quando la tua comunità si è trasferita a un nuovo indirizzo, una scheda sopra tutte queste chiede se utilizzarlo: vedi \"Quando la tua comunità si sposta a un nuovo indirizzo\" in \"Più di una comunità\"."
+        },
+        {
+          "type": "h2",
+          "text": "Il menu \"…\""
+        },
+        {
+          "type": "p",
+          "text": "La maggior parte delle schede ha un pulsante **…** in alto a destra. Queste non lo hanno:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Richiede il tuo intervento**, **Per iniziare** e **La tua comunità**. **Per iniziare** ha invece **Salta**.",
+            "**Come rientrare**, sul telefono. Ha la sua **✕**.",
+            "**Trova la tua comunità**, durante i tuoi primi 30 giorni sulla comunità globale."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Tocca **…** per:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Impostazioni…:** solo su una scheda che ha impostazioni, come **Una ricerca salvata** o **Sole e luna**. Modifica la scheda nella sua posizione attuale.",
+            "**Sposta su:** scambia la scheda con quella sopra di essa.",
+            "**Sposta giù:** scambia la scheda con quella sotto di essa.",
+            "**Rimuovi:** toglie la scheda dalla Home, insieme alle sue impostazioni. **Aggiungi una scheda** la ripristina. Nulla ti chiede di confermare. Rimuovere **Consigli** equivale a **Non mostrare più i consigli**."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Nell'app web, anche **Come rientrare** ha un **…**, con **Sposta su**, **Sposta giù** e **Rimuovi**."
+        },
+        {
+          "type": "p",
+          "text": "Uno spostamento appare disattivato in grigio quando non c'è posto dove andare: in cima o in fondo alle schede che puoi spostare. La prima scheda sotto **Richiede il tuo intervento** non può salire, e l'ultima scheda sopra **La tua comunità** non può scendere."
+        },
+        {
+          "type": "h2",
+          "text": "Modifica home"
+        },
+        {
+          "type": "p",
+          "text": "In fondo alla Home, sulla scheda della tua comunità, tocca **Modifica home**."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**＋ Aggiungi una scheda** viene per prima. Apre lo stesso elenco di **Aggiungi una scheda** sulla Home.",
+            "Poi arrivano le schede sulla tua Home, nel tuo ordine. Ciascuna ha frecce su e giù e il proprio **…** (Impostazioni…, Sposta su, Sposta giù, Rimuovi). Una ricerca salvata è elencata con le sue parole, e da **Offerte** o **Richieste** quando cerca solo una delle due categorie, come \"uova\" o \"Richieste · uova\", quindi due ricerche sono due righe distinte.",
+            "Una scheda che al momento non ha nulla da mostrare dice **Nulla da mostrare adesso**. **Consigli** indica **Hai visto tutti i suggerimenti** una volta che hai visto ogni consiglio, e **Sole e luna** indica **Nulla da mostrare per ora: nessun luogo noto.** finché non c'è un luogo da cui partire.",
+            "Tocca **Ripristina ai valori predefiniti** per tornare alle solite cinque schede.",
+            "Non ci sono interruttori né elenchi nascosti: una scheda rimossa si trova in **Aggiungi una scheda**.",
+            "Vengono elencate solo le schede che la tua comunità può mostrare, sul telefono e nell'app web. Ad esempio, l'elenco della comunità globale non include **I tuoi fagioli** o **I tuoi accordi**: lì, il Mastro e **I miei accordi** mostrano invece esempi da una comunità locale.",
+            "**Richiede il tuo intervento** rimane sempre in alto, e **La tua comunità** rimane sempre in fondo.",
+            "**Trova la tua comunità**, nei tuoi primi 30 giorni sulla comunità globale, non è elencata. Rimane vicino alla cima per ora.",
+            "**Come rientrare** è elencata, con le sue frecce e **…**, mentre si trova sulla tua Home."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Cosa ti interessa?"
+        },
+        {
+          "type": "p",
+          "text": "Tocca le categorie che ti piacciono (Cibo, Strumenti, Servizi, Giardino e altre) per contrassegnarle con una stella:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Le categorie con la stella compaiono per prime sulla Home in **Nuovo nel Mercato** e **Il Polso**.",
+            "Le categorie con la stella non nascondono mai nulla: gli altri annunci e post seguono subito dopo.",
+            "Le stelle che scegli sulla Home sono esattamente le stesse utilizzate sotto **★ Per te** nella scheda Mercato.",
+            "Tocca **Personalizza** sulla scheda del Mercato in qualsiasi momento per modificare le tue stelle."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Nella schermata di benvenuto web"
+        },
+        {
+          "type": "p",
+          "text": "Sul sito web della comunità globale, prima di unirti o effettuare l'accesso, un visitatore vede una Home più semplice (il sito di una comunità locale mostra invece la sua pagina di benvenuto):"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Una scheda **Partecipa** in alto.",
+            "Solo schede pubbliche: una scheda delle comunità vicino a te, **In arrivo**, **Cosa pubblicano le persone** (annunci con foto e categorie ma senza nomi o volti dei membri), e **La tua comunità**.",
+            "I visitatori non hanno il menu **…**, non hanno **Modifica home** e non hanno schede private come **Richiede il tuo intervento** o **I tuoi fagioli**."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Privacy e disconnessione"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Quando esci da un dispositivo (nell'app web, **Esci (solo dispositivo)**, denominato anche **Rimuovi solo da questo dispositivo**), le copie della tua Home conservate da quel dispositivo vengono rimosse da esso: la sua ultima risposta, la tua disposizione e le tue stelle. Nell'app web, **Forza cancellazione e risincronizzazione** e l'eliminazione del tuo account cancellano le stesse copie.",
+            "La tua disposizione e le categorie con la stella vengono salvate anche sul tuo account presso la tua comunità. Se accedi di nuovo, su questo dispositivo o su un altro, le ritrovi. Un account diverso inizia con la propria disposizione e le proprie stelle.",
+            "Nell'app web, uscire in un'altra scheda cancella immediatamente la Home dal browser."
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "joining",
+      "title": "Entrare in BeanPool",
+      "summary": "Due modi per entrare: una comunità, con l'invito di un membro, o la comunità globale se aperta, con 12 parole segrete o un accesso. Chiedere di entrare e invitare altri.",
+      "help": "Unisciti a una comunità con l'invito di un membro o alla comunità globale con 12 parole segrete o un account collegato.",
+      "sourceHash": "f78397c8a8d66d56",
+      "source-hash": "f78397c8a8d66d56",
+      "section": "getting-started",
+      "related": [
+        "home",
+        "finding-a-community",
+        "your-12-words",
+        "your-profile",
+        "communities",
+        "how-it-works",
+        "web-app"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Due modi per entrare"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Con un invito**, ti unisci a una comunità: le persone vicino a te, con i propri fagioli, scambi e Beni comuni. Un membro di quella comunità ti invita.",
+            "**Senza invito**, puoi unirti alla **comunità globale** quando è aperta: persone da ogni luogo, dove puoi pubblicare, inviare messaggi alle persone e trovare una comunità vicina a te. Lì non ci sono fagioli né votazioni della comunità. I fagioli, il credito, i Beni comuni e le relative Decisioni risiedono nelle comunità locali. La comunità globale ti mostra come funzionano, in una comunità di esempio. Vedi \"Fagioli e comunità globale\"."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Nessun invito, ma una comunità vicino a te? Unisciti alla comunità globale, poi chiedi a quella comunità di farti entrare: qualunque dei suoi membri può farlo, oppure, in una comunità in cui invitano solo gli amministratori, i suoi amministratori. Vedi \"Trovare una comunità vicina\"."
+        },
+        {
+          "type": "p",
+          "text": "In entrambi i casi, il tuo account è una chiave conservata sul tuo telefono, con 12 parole inglesi che lo ripristinano. Non c'è password."
+        },
+        {
+          "type": "h2",
+          "text": "Entrare con un invito"
+        },
+        {
+          "type": "p",
+          "text": "Un invito è un link, un codice QR o un codice. Un codice si presenta come **INV-** seguito da lettere, oppure come un lungo codice che inizia con **BP-**."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Un invito funziona **una volta sola**.",
+            "Un invito dura **30 giorni**. Trascorso questo periodo, chiedine uno nuovo."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Per entrare:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Installa BeanPool e aprila. Se tocchi prima un link di invito, l'app rileva l'invito automaticamente, anche subito dopo averla installata da Google Play.",
+            "Nella prima schermata, tocca **Unisciti con un invito**. Se l'invito è nei tuoi appunti, puoi toccare invece **Incolla**. Su Android il pulsante indica **Hai ricevuto un invito? Tocca per controllare gli appunti**. Nell'app web, il pulsante dice **È la mia prima volta**.",
+            "Incolla il link o il codice di invito. Se hai solo un codice, digita anche il nome o l'indirizzo della comunità. La persona che ti ha invitato può indicartelo.",
+            "Scegli il nome che le persone vedranno. Deve avere almeno 2 caratteri. Mantienilo breve: quando ti iscrivi, i nomi più lunghi di 20 caratteri vengono accorciati.",
+            "Tocca **Avanti**. L'app controlla l'invito e il nome. Se qualcuno ha già quel nome, ne suggerisce altri. Finché non ha terminato, **← Torna alla home** e **Ripristina l'identità esistente** non funzionano.",
+            "In alcune comunità la stessa schermata mostra anche **Cosa possono vedere gli amministratori di questa comunità**, con una casella facoltativa **Accetto**. Ti iscrivi in entrambi i casi. Vedi \"Cosa possono vedere gli admin\"."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Entrare nella comunità globale"
+        },
+        {
+          "type": "p",
+          "text": "Puoi entrare nell'app per telefono o in un browser web. In un browser, apri global.beanpool.org e tocca **Partecipa**: vedi \"Usare BeanPool nel browser web\" per i passaggi. Nell'app per telefono:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Nella prima schermata, tocca **Esplora BeanPool nel mondo**, proprio sotto **Unisciti con un invito**. Si trova sempre lì. Quando la comunità globale non può accoglierti in quel momento, una riga sotto spiega il motivo: **Non è possibile raggiungere la comunità globale in questo momento. Riprova, oppure unisciti con un invito.**, **Al momento non accetta nuovi membri.**, oppure **Questa comunità è in anteprima privata. Chiedi un invito al suo proprietario.** Toccandola viene effettuata nuovamente la richiesta.",
+            "Scegli uno dei due modi per entrare. **Crea un account con 12 parole segrete** è il primo. Non richiede alcun account Google, Apple o Facebook: le tue 12 parole (in inglese) sono l'unico modo per rientrare.",
+            "**Oppure accedi** una volta con Google, Apple (su un iPhone) o Facebook. Tale accesso è anche un modo per rientrare se perdi il telefono. BeanPool non vede mai la tua password e non pubblica mai nulla per te.",
+            "Scegli il nome che le persone vedranno, fino a 20 caratteri, e tocca **Partecipa**. Se qualcuno ha già quel nome, l'app ne suggerisce altri."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "**Dal sito web, su un telefono.** Su beanpool.org/global, **Apri nell'app BeanPool** apre l'app direttamente su questo punto di accesso: i due modi sopra su un telefono che non ha ancora un account, oppure **Unisciti alla comunità globale** con l'account che il telefono già possiede (vedi \"Hai già un account?\" sotto). Se quell'account è già membro lì, apre invece la scheda **BeanPool**, dove **Comunità globale** sotto **LE TUE COMUNITÀ** permette di passare ad essa. Se la comunità globale ha chiuso quell'account, l'app si apre semplicemente. Su Android, se l'app non è installata, si apre Google Play; dopo l'installazione, la prima volta che apri BeanPool si apre direttamente questo metodo di accesso. Su un iPhone, si apre l'App Store; dopo l'installazione, tocca **Esplora BeanPool nel mondo**. Il link apre solo una schermata: nessuno si iscrive finché non tocchi. Quando apre la scheda **BeanPool**, la scheda verifica, come fa sempre, se l'account di questo telefono è membro di ciascuna comunità che elenca. Un invito ha la precedenza: se te ne è stato inviato uno, l'app apre invece l'invito, e se eri a metà della procedura di iscrizione, prosegue con essa."
+        },
+        {
+          "type": "p",
+          "text": "Con 12 parole, il tuo telefono compie anche un attimo di elaborazione per configurare l'account. Inizia non appena vengono mostrati i due modi (quando il link del sito web li ha aperti, non appena ne tocchi uno), mentre leggi e digiti il tuo nome, quindi la maggior parte delle persone non attende affatto. Se tocchi **Partecipa** prima che sia completato, l'app dice **Configurazione del tuo account in corso…** con una barra, e **← Indietro** funziona ancora. Quando molte persone si stanno iscrivendo dalla tua rete, l'app lo segnala, indicando quanto tempo richiederà sul tuo telefono, e puoi invece accedere per iscriverti immediatamente. L'iscrizione con accesso richiede questo lavoro solo su una rete molto trafficata, e l'app lo fa automaticamente. **Scegli un altro modo** interrompe l'attesa e ti riporta ai due metodi. Se invece accedi, la configurazione con 12 parole si ferma per risparmiare la batteria, e **Scegli un altro modo** la riavvia."
+        },
+        {
+          "type": "p",
+          "text": "Se la comunità dice di attendere (troppe persone si stanno iscrivendo dalla tua rete), l'app indica per quanto tempo. Toccando **Partecipa** prima di allora ripete solo il messaggio, con il tempo rimanente; dopo l'attesa, o dopo un minuto se l'attesa è più lunga, **Partecipa** richiede di nuovo. Se la data e l'ora del tuo telefono sono errate, l'app dice di verificarle nelle impostazioni del telefono (impostandole su automatico), poi di riprovare. Se la comunità ha chiuso il tuo account (lo hai eliminato, o sei stato rimosso), l'app dice **Il posto di questo account nella comunità globale è stato chiuso, quindi non può unirsi di nuovo.** e non mostra più l'accesso ad essa."
+        },
+        {
+          "type": "p",
+          "text": "Se un'iscrizione con 12 parole, nell'app per telefono o in un browser web, indica che la comunità non ha potuto accettarla perché data e ora sembrano errate, l'orologio di quel telefono o computer è sfasato di più di qualche minuto. Imposta la data e l'ora su automatico nelle impostazioni del dispositivo, poi riprova. Non è stato salvato nulla, e accedere di nuovo non sarà d'aiuto. Le stesse parole compaiono se l'aggiunta di un accesso o il recupero dell'account in un browser viene rifiutato per lo stesso motivo."
+        },
+        {
+          "type": "p",
+          "text": "Se accedi, la comunità conserva solo un riferimento cifrato al tuo account di accesso, mai la tua email. Quell'accesso diventa anche un modo per rientrare nel tuo account se perdi il telefono, quindi non ti viene richiesto di accedere di nuovo in **Backup sicuro**. A tale scopo, la comunità conserva una copia bloccata del tuo account. Le persone che gestiscono il server possono aprire quella copia: vedi \"Recuperare il tuo account\". Dopo l'iscrizione non effettui l'accesso per aprire l'app: il tuo account è la chiave sul tuo telefono, come qualsiasi altro."
+        },
+        {
+          "type": "p",
+          "text": "Se entri con 12 parole, nulla di te giunge alla comunità se non la tua chiave e il tuo nome, e le tue 12 parole (parole inglesi) sono il tuo unico modo per rientrare: nessuno può reimpostarle, né BeanPool né la comunità. **Backup sicuro** lo dichiara, e offre **Aggiungi un accesso come seconda via di ritorno**. Dopo l'iscrizione, una scheda sulla **Inizio** dice che il tuo account ha una sola via di ritorno: le tue 12 parole, ricordando di verificare di averle ancora o di aggiungere un accesso. Tocca **✕** per chiuderla: ricompare una volta dopo il tuo primo post e una volta dopo una settimana, poi rimane in **Impostazioni**, sotto **Protezione dell'account**, finché non aggiungi un accesso o tocchi **Ho ancora le mie 12 parole**. Un account creato con 12 parole ha anche limiti più ridotti per i suoi primi 7 giorni, e finché 3 dei suoi post non sono rimasti attivi: 2 post, 4 foto e 3 nuove persone a cui inviare messaggi al giorno, e una sola segnalazione nasconde il suo post mentre è nuovo. L'aggiunta di un accesso, in qualsiasi momento, lo porta ai consueti limiti per i nuovi account. Puoi aggiungerne uno da qualsiasi telefono su cui ti trovi nel tuo account, non solo da quello su cui ti sei iscritto. Se la cassaforte delle chiavi di BeanPool conserva già una copia del tuo account, la scheda non viene mostrata e **Impostazioni** propone discretamente di aggiungere un accesso."
+        },
+        {
+          "type": "p",
+          "text": "**Hai già un account?** Unisciti alla comunità globale con quello, non con un secondo account. Tocca il fagiolo in alto a sinistra e, sotto **LE TUE COMUNITÀ**, tocca **Comunità globale**: è sempre lì, e quando puoi unirti la sua seconda riga dice **Unisciti con questo account: 12 parole o un accesso** (o **…: un accesso**). Se stai visitando la comunità globale come ospite, tocca **Partecipa** in alto, accanto a **?**, poi **Unisciti con 12 parole o un accesso** (**Unisciti con un accesso** dove una comunità accetta solo accessi). Se l'app dice **Non sei ancora membro qui** riguardo alla comunità globale, tocca **Unisciti con questo account**. Su un telefono, il link beanpool.org/global apre **Unisciti alla comunità globale** anche con il tuo account (vedi \"Dal sito web, su un telefono\", sopra). Ti unisci con le tue 12 parole o accedi una volta, verifichi il tuo nome e tocchi **Partecipa**. La tua chiave e le tue 12 parole rimangono le stesse, e nulla cambia nelle altre tue comunità. Vedi \"Più di una comunità\"."
+        },
+        {
+          "type": "p",
+          "text": "**Sei già iscritto, in un browser web o su un altro telefono?** Non iscriverti di nuovo su un telefono privo di account: ciò creerebbe un secondo account, e due account non possono mai essere uniti in uno solo. Porta con te quello che hai già: nella prima schermata, tocca **Fai già parte di BeanPool? Ripristina l'account**, poi **Recupera con 12 parole**. Digita le tue 12 parole e, sotto **Quale comunità?**, tocca **Comunità globale**. Se ti sei iscritto con un accesso, funziona anche **Recupera con social**. Vedi \"Recuperare il tuo account\"."
+        },
+        {
+          "type": "h2",
+          "text": "I passaggi"
+        },
+        {
+          "type": "p",
+          "text": "La barra in alto mostra **Il tuo nome**, **La tua foto**, **Backup sicuro** e **Come funziona**. In un browser web sulla comunità globale c'è un passaggio in più, **La tua zona**, dopo **La tua foto**. La prima iscrizione alla comunità globale tramite app per telefono non ha il passaggio della zona: impostala in **Impostazioni**, sotto **La tua zona**."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**La tua foto:** scegli una foto o una delle immagini predefinite, oppure saltala e aggiungine una in seguito dal tuo profilo. Alcune comunità richiedono un'immagine prima del tuo primo post. Le persone scambiano più facilmente con un volto o un'immagine che riconoscono.",
+            "Dopo un invito, **← Indietro** su **La tua foto** ti riporta al tuo nome, per modificarlo. Si tratta sempre dello stesso account: tocca **Avanti** e prosegui verso **La tua foto** e **Backup sicuro** con il nuovo nome. Se qualcuno lo possiede già, l'app ne suggerisce altri. Sulla comunità globale non c'è **← Indietro** qui: ti sei già unito.",
+            "**La tua zona** (in un browser web sulla comunità globale e nell'app per telefono quando ti unisci alla comunità globale con un account che possiedi già): **Più o meno dove sei?** La comunità globale ti mostra cosa c'è in offerta vicino a te: i 500 annunci più vicini entro 250 km. Tocca **Usa la mia posizione**, o **Scrivi una città o un quartiere**. La tua zona viene mantenuta con un'approssimazione di circa 10 km, mai la tua posizione esatta: il telefono o il browser la arrotonda prima che venga inviata. Gli altri membri vedono quanto sei lontano, e un sondaggio che crei viene mostrato nella tua zona. **Salta per ora** non invia nulla e non chiede nulla; entri comunque, e vedi gli annunci più recenti nel mondo finché non la imposti. Puoi modificarla o cancellarla in qualsiasi momento in **Impostazioni**, sotto **La tua zona**.",
+            "**Backup sicuro:** l'app mostra le tue 12 parole inglesi. Scrivile su carta e conservale al sicuro. La casella di spunta **Ho salvato queste parole** (in un browser web, **Ho scritto queste parole in un posto sicuro**) è presente per ricordartelo. Nulla ti blocca se la salti, ma leggi presto \"Le tue 12 parole\". Se ti sei unito alla comunità globale con un accesso nell'app per telefono, questo passaggio mostra il tuo accesso che protegge il tuo account, e le tue parole sono a un tocco di distanza sotto **Preferisci annotare 12 parole?**. Se ti sei unito con 12 parole, dice prima che queste 12 parole sono il tuo account, e propone **Aggiungi un accesso come seconda via di ritorno**: puoi saltare anche questo.",
+            "**Come funziona:** un breve tour. Tocca **Cominciamo!** per iniziare."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Se chiudi l'app a metà percorso, la volta successiva riprende dallo stesso passaggio."
+        },
+        {
+          "type": "h2",
+          "text": "Se l'invito non funziona"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Già utilizzato:** ogni invito funziona esattamente una sola volta. Chiedine uno nuovo. Se era il tuo e sei già un membro, usa invece **Ripristina l'identità esistente**.",
+            "**Scaduto:** gli inviti durano 30 giorni. Chiedine uno nuovo.",
+            "**Non riconosciuto:** controlla di averlo copiato per intero e che il nome o l'indirizzo della comunità sia corretto.",
+            "**Creato da un membro, e ora solo gli admin fanno entrare le persone:** la comunità ha stabilito che solo i suoi amministratori possano invitare, e un biglietto generato da un membro senza connessione non è più valido. Chiedi a un amministratore un invito nuovo.",
+            "**Registrazione dell'identità non riuscita** (dopo aver toccato **Avanti**): solitamente assenza di connessione o nessuna risposta in tempo. Controlla la tua connessione e tocca nuovamente **Avanti**. Se il tuo primo tentativo è andato a buon fine, l'app prosegue verso **La tua foto** e **Backup sicuro** con lo stesso account."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Se l'ingresso nella comunità globale non funziona"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Non è possibile raggiungere la comunità globale in questo momento** (la riga sotto **Esplora BeanPool nel mondo**): controlla la tua connessione, poi tocca il pulsante: effettua nuovamente la richiesta. Puoi comunque unirti a una comunità con un invito.",
+            "**Impossibile raggiungere la comunità globale:** verifica la connessione e tocca **Riprova**. Puoi comunque unirti a una comunità con un invito.",
+            "**La comunità globale non ha risposto in tempo** (dopo aver toccato **Partecipa**): il tuo nome non è stato verificato e non è stato inviato nulla. Controlla la tua connessione e tocca di nuovo **Partecipa**, oppure torna indietro. Mentre l'app verifica il tuo nome, **Scegli un altro modo** e **← Torna alla home** funzionano ancora.",
+            "**Questo accesso possiede già un'identità BeanPool:** ti sei unito in precedenza, forse su un altro telefono. Tocca **Ripristina il mio account**, poi usa le tue 12 parole o lo stesso accesso.",
+            "**Questo account di accesso si è già unito alla comunità globale con un diverso account BeanPool** (iscrizione dall'account sul tuo telefono): quell'accesso possiede già un suo account lì. Tocca **Usa un account di accesso diverso**.",
+            "**Questa comunità non può verificare gli accessi in questo momento:** la comunità globale si è spostata su un altro server e non è ancora in grado di distinguere un account che ritorna da uno nuovo, quindi per ora non accetta nuovi membri con questo metodo. Non è stato salvato nulla. Riprova più tardi.",
+            "**Troppi nuovi account da questa rete:** esiste un limite sui nuovi account provenienti da una stessa connessione Internet. Tutti gli utenti sulla stessa rete vengono conteggiati insieme, quindi in un campus, un ufficio o un incontro potrebbero essere altre persone a iscriversi, non tu. Riprova più tardi.",
+            "**Al momento non accetta nuovi membri:** unisciti invece a una comunità con un invito."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Invitare qualcuno"
+        },
+        {
+          "type": "p",
+          "text": "Qualsiasi membro può invitare persone, a meno che la comunità non abbia stabilito che possano farlo solo i suoi amministratori (vedi sotto). Il tuo badge di fiducia non ha importanza."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Tocca l'icona di invito (una persona con un segno più) in alto a destra dello schermo. Si apre **Inviti**.",
+            "Se vuoi, scrivi per chi è l'invito, solo per i tuoi appunti personali.",
+            "Tocca **Genera biglietto**. Senza connessione, il pulsante dice **Genera biglietto offline**, e funziona ugualmente.",
+            "Mostra il codice QR, oppure tocca **Condividi invito** per inviare il link e il codice.",
+            "Nell'app web, apri **Persone**, poi **Inviti**, e tocca **Genera nuovo invito**. Quindi seleziona **Copia** o **Condividi**.",
+            "Gli inviti che nessuno ha ancora utilizzato sono elencati sotto **In attesa**, ciascuno con l'opzione **Condividi** per inviarlo di nuovo.",
+            "Puoi creare 20 inviti al giorno e averne fino a 50 che nessuno ha ancora usato. Un invito non utilizzato da nessuno viene eliminato dopo i suoi 30 giorni e scompare da **In attesa**."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Gli amministratori di una comunità possono disattivare gli inviti per l'intera comunità."
+        },
+        {
+          "type": "p",
+          "text": "**Dove invitano solo gli amministratori.** Una comunità può stabilire che solo i suoi proprietari e amministratori possano far entrare persone. In tal caso, se non sei uno di loro, **Inviti** mostra **Invita qualcuno qui** invece di **Genera biglietto**, e indica di chiedere a un amministratore. Sull'app web l'**Albero** rimane visibile, così come i codici creati in precedenza: continuano a funzionare fino alla loro scadenza. Un proprietario o un amministratore senza segnale può comunque creare un biglietto cartaceo, in base all'ultimo ruolo assegnatogli dalla comunità. Se la comunità accetta richieste di adesione, **Condividi il link** ne invia l'indirizzo: la persona lo apre nell'app BeanPool, chiede di entrare e un amministratore risponde. Essere amministratore è un incarico che la comunità assegna a qualcuno, non un badge di fiducia."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "I codici di invito che hai creato prima che la comunità scegliesse questa modalità funzionano ancora fino alla scadenza dei loro 30 giorni.",
+            "Un biglietto creato senza connessione non funziona: a chi lo possiede viene chiesto di ottenere un invito nuovo da un amministratore."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "La comunità globale non ha inviti: chiunque vi accede nell'app BeanPool, con 12 parole segrete o con un accesso. Lì, l'icona di invito apre **Invita qualcuno qui**, con **Condividi il link** per inviare l'indirizzo della comunità globale. Non c'è nulla da generare, e un codice di invito creato per essa non funziona."
+        },
+        {
+          "type": "h2",
+          "text": "Richieste di adesione"
+        },
+        {
+          "type": "p",
+          "text": "Le persone possono chiedere di entrare nella tua comunità dalla comunità globale. Quando qualcuno lo fa, **Inviti** mostra un conteggio, e le richieste sono elencate in alto sotto **Vogliono entrare**. Alle richieste si risponde nell'app per telefono: l'app web non le elenca."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Invita** crea un invito utilizzabile esclusivamente dal loro account. La loro app lo trova da sola, quindi non devi inviare loro nulla, e possono entrare con un solo tocco.",
+            "**Non ora** comunica loro soltanto \"nessuna risposta per ora\"."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Qualsiasi membro può rispondere. In una comunità in cui invitano solo gli amministratori, solo i suoi proprietari e amministratori vedono le richieste e vi rispondono. Vedi \"Trovare una comunità vicina\"."
+        }
+      ]
+    },
+    {
+      "slug": "finding-a-community",
+      "title": "Trovare una comunità vicina",
+      "summary": "Dalla comunità globale, trova una comunità vicina e chiedi di entrare, ricevi una notifica quando ne apre una, oppure creane una tu.",
+      "sourceHash": "db053bd200fde55d",
+      "source-hash": "db053bd200fde55d",
+      "section": "getting-started",
+      "related": [
+        "joining",
+        "home",
+        "communities",
+        "beans-and-the-global-community",
+        "near-you",
+        "recovery"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Perché una comunità locale"
+        },
+        {
+          "type": "p",
+          "text": "La comunità globale è il luogo in cui si incontrano persone da ogni parte del mondo. Una comunità locale è il luogo in cui i vicini commerciano e collaborano: ha i propri fagioli, scambi e Beni comuni. Sulla comunità globale puoi vedere come funzionano, in una comunità di esempio contrassegnata come **🏘️ Comunità locale**, ma nulla lì guadagna o spende fagioli. Pertanto un post lì descrive nella sua spiegazione cosa la persona desidera in cambio: gratuito, uno scambio o chiedere direttamente. Vedi \"Fagioli e comunità globale\"."
+        },
+        {
+          "type": "p",
+          "text": "La comunità globale è una comunità tra tante. La tua comunità risiede su un proprio server e non ha mai bisogno di essa: la comunità globale serve solo ad aiutarti a trovarla."
+        },
+        {
+          "type": "p",
+          "text": "Non c'è ancora nessuna comunità vicino a te? Puoi avviarne una: vedi \"Nulla vicino a te\" sotto."
+        },
+        {
+          "type": "h2",
+          "text": "Comunità vicino a te"
+        },
+        {
+          "type": "p",
+          "text": "Sulla comunità globale, la scheda **Trova la tua comunità** sulla **Inizio** mostra le comunità più vicine a te. Per i tuoi primi 30 giorni rimane vicino alla parte superiore della Home e non può essere rimossa né spostata; dopo tale periodo puoi rimuoverla come qualsiasi altra scheda. Nell'app web, ogni comunità presente sulla scheda è un collegamento alla propria pagina. Se l'app non sa dove ti trovi, tocca **Condividi la mia zona**, oppure **o inserisci il tuo comune** e seleziona la tua città. I passaggi seguenti si riferiscono all'app per telefono."
+        },
+        {
+          "type": "p",
+          "text": "Non sei ancora nella comunità globale? Tocca il fagiolo in alto a sinistra e, sotto **LE TUE COMUNITÀ**, tocca **Comunità globale**, quindi unisciti ad essa con l'account che possiedi: vedi \"Più di una comunità\". Se non hai ancora un account, tocca **Esplora BeanPool nel mondo** nella prima schermata dell'app: vedi \"Entrare in BeanPool\"."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Tocca **Comunità vicino a te** per visualizzare l'elenco completo.",
+            "Le comunità sono elencate a partire dalla più vicina quando l'app conosce la tua posizione. In caso contrario, tocca **Usa la mia posizione**, oppure cerca per nome. Preferisci non condividere la tua posizione? Tocca **o inserisci il tuo comune**, inizia a digitare e seleziona la tua città dall'elenco: viene conservato solo un punto approssimativo, e **Modifica** ne seleziona un'altra.",
+            "Le comunità situate all'incirca alla stessa distanza da te vengono mostrate in ordine casuale, così che nessuna singola comunità si trovi sempre in cima.",
+            "Ciascuna mostra quanto è distante e quanti membri conta, quando la comunità lo ha comunicato."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Una comunità che non ha pubblicato il proprio indirizzo viene elencata, ma non è ancora possibile richiederne l'accesso da qui."
+        },
+        {
+          "type": "h2",
+          "text": "Chiedere di entrare"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Tocca **Chiedi di unirti** su una comunità.",
+            "Controlla il tuo nome e scrivi qualche parola su di te, fino a 280 caratteri: dove vivi, cosa ti piacerebbe condividere o imparare.",
+            "Tocca **Invia**."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "La tua richiesta va direttamente a quella comunità, non attraverso la comunità globale, con il tuo nome, il tuo messaggio e la tua foto. Solo i suoi membri possono vederla. Dove la comunità consente di invitare solo ai propri amministratori, la vedono solo i suoi proprietari e amministratori. Un membro di quella comunità può farti entrare: tocca **Invita**, e viene creato un invito utilizzabile esclusivamente dal tuo account."
+        },
+        {
+          "type": "p",
+          "text": "Mentre aspetti, la scheda della comunità dice **Hai chiesto di unirti. Nessuna risposta per ora**. Le comunità rispondono di solito entro pochi giorni. Puoi avere una sola richiesta aperta con ciascuna comunità, e ogni comunità accetta solo poche richieste al giorno da una singola connessione Internet."
+        },
+        {
+          "type": "p",
+          "text": "Se nessuno risponde entro 30 giorni, la scheda dice **Nessuna risposta ricevuta. Puoi chiedere di nuovo.**"
+        },
+        {
+          "type": "p",
+          "text": "Se una comunità non può accettare la tua richiesta, la scheda mostra il motivo con le proprie parole, ad esempio che sono arrivate troppe richieste dalla tua rete oggi, oppure che al momento non accetta richieste di adesione."
+        },
+        {
+          "type": "h2",
+          "text": "Quando dicono di sì"
+        },
+        {
+          "type": "p",
+          "text": "La scheda dice **Un membro ti ha invitato**. Tocca **Partecipa** con il nome della comunità."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Il tuo account viene con te: la stessa chiave e le stesse 12 parole (in lingua inglese). Viene anche il tuo nome. Se qualcuno lì ha già quel nome, viene aggiunto un numero, ad esempio \"Sarah2\". Puoi cambiarlo nel passaggio successivo.",
+            "I tuoi annunci, le tue chat e i tuoi scambi rimangono in ciascuna comunità. Su quella nuova inizi da zero.",
+            "Successivamente verifichi il tuo nome e la tua foto per la nuova comunità.",
+            "Un account di accesso che protegge il tuo account viene conservato da ciascuna comunità. L'app ti chiede di proteggere il tuo account anche nella nuova comunità: tocca **Proteggilo**, oppure **Più tardi**, e fallo in qualsiasi momento in **Impostazioni**."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Rimani membro della comunità globale e puoi passare dall'una all'altra: vedi \"Più di una comunità\"."
+        },
+        {
+          "type": "h2",
+          "text": "Nulla vicino a te"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Avvisami quando ne nasce una qui:** ricevi una notifica quando nasce una comunità vicino a dove ti trovi. Viene conservata solo la zona, con un raggio di circa 10 km, mai la tua posizione esatta. Puoi monitorare fino a 3 luoghi e smettere di monitorarne uno con **Ferma**.",
+            "**Avvia una comunità:** ogni comunità dispone di un proprio piccolo server, gestito da qualcuno del posto. Richiede un computer di riserva a casa o pochi euro al mese, e circa mezz'ora: vedi \"Fagioli e comunità globale\". L'app mostra tre modi per gestirne una: un computer di riserva a casa, un piccolo server noleggiato o chiedere aiuto. Inserisci il nome, il luogo e come le persone possono contattarti, quindi tocca **Copia i dettagli della mia comunità** per incollarli nelle impostazioni del tuo nuovo server. I recapiti rimangono esclusi dalla directory pubblica a meno che tu non decida di renderli visibili lì."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Se sei membro di una comunità locale"
+        },
+        {
+          "type": "p",
+          "text": "Le persone possono chiedere di entrare nella tua comunità dalla comunità globale. Tocca **Chat**, poi **Persone**, quindi **Inviti**: le richieste sono elencate sotto **Vogliono entrare**, con il loro nome, le loro parole e la loro provenienza. Alle richieste si risponde nell'app per telefono: l'app web non le elenca."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Invita:** crea un invito utilizzabile esclusivamente dal loro account. La loro app lo trova da sola ed essi entrano con un solo tocco.",
+            "**Non ora:** non viene inviata alcuna notifica. Continuano a vedere \"nessuna risposta per ora\" e non possono richiedere di nuovo per 30 giorni."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Qualsiasi membro può rispondere, qualunque sia il suo badge di fiducia, a meno che la comunità non abbia scelto che solo i suoi amministratori possano invitare (**Known**, sotto **Who may invite** nelle Impostazioni del server della comunità). In tal caso solo i proprietari e gli amministratori vedono le richieste e rispondono. Gli amministratori di una comunità possono disattivare le richieste di adesione."
+        }
+      ]
+    },
+    {
+      "slug": "beans-and-the-global-community",
+      "title": "Fagioli e comunità globale",
+      "summary": "A cosa serve la comunità globale, una comunità tra tante, e cosa vi trovi: il contrassegno 🏘️ Comunità, la comunità d'esempio Example Valley, perché i fagioli attendono lì e come trovare o avviare una comunità locale.",
+      "sourceHash": "fc6f598d1fa0bb26",
+      "source-hash": "fc6f598d1fa0bb26",
+      "section": "getting-started",
+      "related": [
+        "finding-a-community",
+        "how-it-works",
+        "joining",
+        "communities",
+        "your-balance",
+        "decisions"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "A cosa serve la comunità globale"
+        },
+        {
+          "type": "p",
+          "text": "La comunità globale è il luogo in cui la maggior parte delle persone incontra BeanPool per la prima volta. Chiunque può entrarvi, da qualsiasi parte del mondo, con 12 parole o con un account di accesso."
+        },
+        {
+          "type": "p",
+          "text": "È uno spazio per scoprire cos'è BeanPool e poi avviare una comunità locale vicino a te, oppure unirti a una già esistente."
+        },
+        {
+          "type": "p",
+          "text": "La comunità globale è una comunità tra tante. La tua comunità risiede su un proprio server e non ne ha mai bisogno. BeanPool gestisce la comunità globale; ogni comunità locale ha il proprio server e i propri proprietari, e continuerebbe a funzionare perfettamente per intero se la comunità globale dovesse sparire. La comunità globale non conserva nulla della tua comunità se non quanto la tua comunità ha scelto di mostrare nell'elenco delle comunità vicino a te."
+        },
+        {
+          "type": "h2",
+          "text": "Aiutarsi reciprocamente viene prima di tutto"
+        },
+        {
+          "type": "p",
+          "text": "BeanPool è vicini che aiutano i vicini. Offri ciò che sai fare o che puoi condividere e chiedi ciò di cui hai bisogno."
+        },
+        {
+          "type": "p",
+          "text": "Puoi farlo già oggi sulla comunità globale:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "pubblicare qualcosa di gratuito o per scambio, oppure chiedere aiuto;",
+            "inviare messaggi alle persone e unirti a gruppi ed eventi;",
+            "avviare un sondaggio, per vedere cosa pensano le persone."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Una comunità locale aggiunge un registro di chi ha aiutato chi, in **fagioli**. Aiutare fa guadagnare fagioli, e ricevere aiuto li spende. Così l'aiuto può girare in circolo: aiuti un vicino, un altro vicino aiuta te e nessuno deve per forza ripagare la stessa persona."
+        },
+        {
+          "type": "h2",
+          "text": "Il contrassegno 🏘️ Comunità locale"
+        },
+        {
+          "type": "p",
+          "text": "Alcune parti di BeanPool risiedono in una comunità locale:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "I fagioli e il tuo Mastro;",
+            "gli accordi, dove i fagioli sono custoditi al sicuro fino al completamento del lavoro;",
+            "le imprese e i fagioli condivisi dei Beni comuni;",
+            "le Decisioni, le votazioni che vincolano una comunità;",
+            "gli inviti."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Sulla comunità globale queste parti non sono nascoste. Vengono mostrate con un contrassegno: **🏘️ Comunità locale**. Significa \"questo funziona in una comunità locale oggi, ed ecco come si presenta\"."
+        },
+        {
+          "type": "p",
+          "text": "Il contrassegno non è mai un blocco. Non c'è nulla di sbagliato nel tuo account e non c'è nulla da guadagnare o pagare per usarlo."
+        },
+        {
+          "type": "p",
+          "text": "Lo incontri in diverse forme:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "una piccola etichetta su una schermata o una scheda;",
+            "un riquadro nella parte superiore di una schermata di esempio;",
+            "un pulsante che mantiene la propria posizione, come **Richiesta · Fagioli custoditi al sicuro 🏘️** su un annuncio;",
+            "una riga dove una comunità locale si differenzia, come \"🏘️ In una comunità locale questo è un prezzo in fagioli ›\"."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Tocca uno qualsiasi di essi per aprire **Perché si trova in una comunità locale**. Ne spiega il motivo in una o due frasi, poi propone **Avvia una comunità** e, ove possibile, **Comunità vicino a te** e **Come funziona**."
+        },
+        {
+          "type": "h2",
+          "text": "Valle di Esempio"
+        },
+        {
+          "type": "p",
+          "text": "Le schermate con il contrassegno mostrano **Valle di Esempio**: una comunità immaginaria creata affinché tu possa vedere le schermate di una comunità locale con dei contenuti al loro interno."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Mastro:** un membro di esempio con 85 fagioli, margine di spesa fino a −200, un badge di fiducia e alcuni scambi recenti, come pane, un'ora di giardinaggio e alcune piantine.",
+            "**Beni comuni:** il Forno della Valle di Esempio, un'impresa gestita dai suoi membri, e una Decisione: un'area per il compostaggio, pagata con i fagioli condivisi dei Beni comuni.",
+            "**I miei accordi,** nel Mercato: tre accordi di esempio: uno in attesa della tua risposta, uno con i fagioli custoditi al sicuro e uno completato."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Nessuno in Valle di Esempio ha un nome reale. Vedi \"un vicino\", \"i Beni comuni\" o \"il Forno della Valle di Esempio\". Nulla di tutto questo è reale e nulla ti appartiene."
+        },
+        {
+          "type": "p",
+          "text": "I pulsanti **ⓘ** e le pagine della guida su queste schermate sono quelli reali: descrivono come funziona in una comunità locale."
+        },
+        {
+          "type": "p",
+          "text": "Un pulsante che comporterebbe l'invio di fagioli, la creazione di un accordo, una votazione, un impegno o un invito apre invece **Perché si trova in una comunità locale**. Non invia nulla e non modifica nulla."
+        },
+        {
+          "type": "p",
+          "text": "Il riquadro nella parte superiore di una schermata di esempio contiene una **✕**. Toccandola, il riquadro si riduce a una sola riga, \"🏘️ Un esempio · Perché? ›\". Il telefono o il browser memorizza questa scelta per questa comunità. Sul telefono, tocca la riga per aprire nuovamente il riquadro. Nell'app web, tocca la riga per scoprirne il motivo, oppure **▾** per aprire di nuovo il riquadro."
+        },
+        {
+          "type": "p",
+          "text": "In un browser web puoi visualizzare il Mastro di esempio prima di iscriverti: è una scheda accanto a Home, Mercato e Mappa."
+        },
+        {
+          "type": "h2",
+          "text": "Perché i fagioli attendono sulla comunità globale"
+        },
+        {
+          "type": "p",
+          "text": "I fagioli sono una promessa tra persone che possono essere rintracciate. I fagioli che guadagni indicano che la tua comunità ti deve dell'aiuto in cambio."
+        },
+        {
+          "type": "p",
+          "text": "Questo funziona solo dove le persone possono garantire per l'identità reciproca. Sulla comunità globale chiunque può entrare con 12 parole, quindi nessuno può ancora farlo. Una persona potrebbe creare più account, assegnarsi fagioli e non essere mai più rintracciata."
+        },
+        {
+          "type": "p",
+          "text": "Per questo la comunità globale non ha fagioli, né accordi, né imprese, né Decisioni. Nulla di ciò che fai lì guadagna o spende fagioli, e nessuno deve nulla a nessuno."
+        },
+        {
+          "type": "p",
+          "text": "I sondaggi funzionano ugualmente lì. Mostrano cosa pensano le persone e non decidono nulla."
+        },
+        {
+          "type": "p",
+          "text": "Gli inviti rimangono disattivati sulla comunità globale. La sua porta aperta è il metodo per entrare."
+        },
+        {
+          "type": "p",
+          "text": "Se la comunità globale sarà un giorno in grado di verificare l'identità delle persone, alcune di queste funzioni potrebbero attivarsi lì, una alla volta. Fino ad allora, sono già attive oggi in ogni comunità locale."
+        },
+        {
+          "type": "h2",
+          "text": "Avviare una comunità"
+        },
+        {
+          "type": "p",
+          "text": "Una comunità locale opera su un proprio piccolo server, gestito da qualcuno del posto. Quel qualcuno potresti essere tu."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Cosa costa:** un computer di riserva che resta acceso a casa, oppure un piccolo server noleggiato per pochi euro al mese. Il software è gratuito.",
+            "**Chi la gestisce:** tu, sulla tua macchina o su quella noleggiata. Non ha bisogno di beanpool.org: può avere un proprio indirizzo web.",
+            "**Cosa ti assumi:** le segnalazioni dei tuoi membri arrivano a te. Il backup dei dati della comunità spetta a te, con un codice di recupero. Mantieni due proprietari e tieni il server acceso e aggiornato.",
+            "**Cosa non vedi mai:** le chat dei tuoi membri con una singola persona. Sono protette in modo che il server non possa leggerle.",
+            "**Quanto tempo serve:** circa mezz'ora, per chiunque sia in grado di seguire una ricetta."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Per iniziare, tocca **Avvia una comunità** in qualsiasi pannello **Perché si trova in una comunità locale** oppure, sul telefono, sulla scheda **Trova la tua comunità** della Home. Mostra tre modi per gestirne una: un computer di riserva a casa, un piccolo server noleggiato o chiedere aiuto sulla comunità globale. **Copia i dettagli della mia comunità** copia il nome della tua comunità, il luogo e come le persone possono contattarti, da incollare nelle impostazioni del tuo nuovo server."
+        },
+        {
+          "type": "p",
+          "text": "I passaggi si trovano in \"Configurazione iniziale\", nella guida per chi gestisce una comunità, su beanpool.org. Quando il tuo server è attivo, ne prendi possesso con il tuo telefono: inquadra con la fotocamera del telefono il codice QR mostrato dal server, oppure in BeanPool tocca **Configura un nuovo server per la comunità** (in **Trova una comunità** o **Avvia una comunità**), poi **Scansiona il codice**. Impostazioni ti aiuta quindi a dare un nome alla tua comunità, ad aggiungere un secondo proprietario e a creare i tuoi primi inviti. Imposta anche la posizione della tua comunità in Impostazioni, così che le persone vicine a te possano trovarla."
+        },
+        {
+          "type": "h2",
+          "text": "Unirsi a una comunità vicina"
+        },
+        {
+          "type": "p",
+          "text": "Sul telefono:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Comunità vicino a te** elenca le comunità più vicine a te che hanno scelto di essere elencate.",
+            "Tocca **Chiedi di unirti**: un membro del posto potrà farti entrare. Dove la comunità consente di invitare solo ai propri amministratori, lo farà un proprietario o un amministratore.",
+            "Non c'è ancora nulla vicino a te? **Avvisami quando ne nasce una qui** ti avviserà non appena ne nascerà una."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Nell'app web, la scheda **Trova la tua comunità** della Home collega ciascuna comunità vicino a te alla propria pagina."
+        },
+        {
+          "type": "p",
+          "text": "Il tuo account viene con te, con le stesse 12 parole, e rimani membro della comunità globale. Vedi \"Trovare una comunità vicina\"."
+        },
+        {
+          "type": "h2",
+          "text": "In una comunità locale"
+        },
+        {
+          "type": "p",
+          "text": "Tutto ciò che il contrassegno mostra è reale lì. Il tuo Mastro mostra il tuo saldo effettivo, partendo da zero. Un accordo custodisce i fagioli al sicuro fino al completamento del lavoro e una Decisione è vincolante."
+        },
+        {
+          "type": "p",
+          "text": "Lì non è presente alcun contrassegno 🏘️, e nulla di Valle di Esempio ti segue."
+        }
+      ]
+    },
+    {
+      "slug": "global-community-limits",
+      "title": "Limiti della comunità globale",
+      "summary": "La comunità globale è gratuita, con pochi limiti per contenerne i costi. Gli annunci vengono archiviati 90 giorni dopo l'ultima modifica. Fino a 5 foto per annuncio, il telefono conserva i 500 annunci più vicini e puoi seguire 3 luoghi.",
+      "sourceHash": "dfb5755e94829e1d",
+      "source-hash": "dfb5755e94829e1d",
+      "section": "getting-started",
+      "related": [
+        "beans-and-the-global-community",
+        "posting",
+        "your-area",
+        "finding-a-community",
+        "reporting"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Gratuita, con limiti"
+        },
+        {
+          "type": "p",
+          "text": "La comunità globale è gratuita. Chiunque, da qualsiasi luogo, può entrarvi, quindi potrebbe crescere all'infinito. Alcuni limiti mantengono stabili i costi di gestione, consentendole di rimanere gratuita."
+        },
+        {
+          "type": "p",
+          "text": "Sono gli stessi per tutti e sono tutti riportati in questa pagina."
+        },
+        {
+          "type": "p",
+          "text": "Questi sono i limiti della comunità globale. Una comunità locale opera sul proprio server e stabilisce i propri."
+        },
+        {
+          "type": "h2",
+          "text": "I limiti"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Un annuncio viene archiviato 90 giorni dopo la sua ultima modifica.** Viene rimosso dal Mercato e dalla Mappa, e le relative foto vengono eliminate. Modificarlo, metterlo in pausa o ripubblicarlo contano tutti come una modifica: aprirlo con **Modifica annuncio** e toccare **Salva** lo mantiene attivo per altri 90 giorni. Quando uno dei tuoi annunci viene archiviato, ricevi una notifica insieme ai tuoi avvisi di **Attività del marketplace**. Puoi pubblicarlo di nuovo in qualsiasi momento.",
+            "**Fino a 5 foto per annuncio.**",
+            "**Il tuo telefono conserva i 500 annunci più vicini**, entro 250 km dalla tua zona. Conserva anche i tuoi annunci e qualsiasi annuncio per cui hai un accordo o una conversazione. La ricerca del Mercato trova comunque annunci da ogni parte del mondo. Vedi \"La tua zona\".",
+            "**Puoi seguire fino a 3 luoghi** con **Avvisami quando ne nasce una qui**. Per seguirne un altro, smetti di seguirne uno. Vedi \"Trovare una comunità vicina\"."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Un nuovo account ha anche alcuni limiti giornalieri per i suoi primi giorni. Vedi \"Segnalare un problema\"."
+        },
+        {
+          "type": "h2",
+          "text": "Perché questi limiti"
+        },
+        {
+          "type": "p",
+          "text": "Le foto costituiscono la maggior parte dei dati archiviati dalla comunità globale, quindi un annuncio di cui nessuno si occupa non conserva le proprie foto per sempre. Un annuncio che si desidera mantenere attivo richiede solo una modifica ogni tre mesi per rimanere online."
+        },
+        {
+          "type": "p",
+          "text": "Gli altri limiti mantengono leggero il carico che ciascun telefono e il server devono gestire, ovunque tu sia."
+        },
+        {
+          "type": "h2",
+          "text": "Cosa non viene archiviato"
+        },
+        {
+          "type": "p",
+          "text": "Solo le Offerte e le Richieste vengono archiviate in questo modo. Il tuo account non lo viene mai: viene rimosso solo se decidi di eliminarlo tu. Vedi \"Lasciare o eliminare l'account\"."
+        }
+      ]
+    },
+    {
+      "slug": "your-12-words",
+      "title": "Le tue 12 parole",
+      "summary": "Le 12 parole sono la chiave del tuo account. Perché sono importanti, dove trovarle, come custodirle e come aggiungere un accesso come metodo secondario.",
+      "sourceHash": "2603104dec9afccc",
+      "source-hash": "2603104dec9afccc",
+      "section": "getting-started",
+      "related": [
+        "recovery",
+        "joining",
+        "communities",
+        "faq"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Perché sono importanti"
+        },
+        {
+          "type": "p",
+          "text": "Il tuo account non è una password custodita da qualcun altro. È una chiave conservata sul tuo telefono. Le tue **12 parole** (parole in lingua inglese) sono quella chiave, scritta sotto forma di parole."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Con le 12 parole puoi recuperare il tuo account su un nuovo telefono: il tuo nome, i tuoi fagioli e la tua reputazione.",
+            "Senza di esse, un telefono smarrito o rotto può significare la perdita definitiva dell'account.",
+            "La chiave rimane sul telefono che la contiene. Non viene copiata nei backup del telefono, quindi un nuovo telefono, anche un iPhone ripristinato da un backup di quello vecchio, necessita delle tue 12 parole o di un account di accesso collegato (vedi \"Recuperare il tuo account\").",
+            "Chiunque possieda le tue 12 parole può utilizzare il tuo account. Non condividerle mai, non digitarle mai da nessuna parte tranne che nell'app BeanPool o nell'app web BeanPool della tua comunità, e non inviarle mai in un messaggio. Nessuno di BeanPool o della tua comunità te le chiederà mai."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Scrivile su carta"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Scrivi le 12 parole su carta, in ordine, e controlla l'ortografia (le parole sono in lingua inglese).",
+            "Conserva il foglio in un luogo sicuro, lontano dal telefono.",
+            "Una foto o uno screenshot delle parole è facile da trovare per qualcun altro. La carta è più sicura.",
+            "Mentre l'app per telefono mostra le tue 12 parole o mentre le digiti, blocca gli screenshot e le registrazioni dello schermo di quella schermata: il telefono rifiuta lo screenshot oppure l'immagine risulta vuota. Nulla impedisce di scattare una foto dello schermo con un altro telefono.",
+            "**Copia parole** (**Copia tutte le parole** durante l'iscrizione e nell'app web) copia le parole negli appunti del telefono per un minuto. Dopodiché l'app le cancella, se gli appunti le contengono ancora. Se esci prima dall'app, le cancella al tuo rientro. Qualsiasi cosa tu abbia copiato nel frattempo non viene toccata. La cronologia degli appunti della tastiera o gli appunti condivisi con altri dispositivi potrebbero conservare una copia che l'app non può cancellare.",
+            "Nell'app web, la copia si cancella dopo un minuto se rimani su quella schermata. Su iPhone o iPad, in Safari o in Firefox, il browser consente all'app di cancellarla solo quando tocchi o premi un tasto, quindi si cancella al primo tocco o pressione di un tasto dopo quel minuto. Se lasci quella schermata o passi prima a un'altra app o scheda, l'app non può sapere se hai copiato qualcos'altro, quindi lascia invariati gli appunti: copia qualcos'altro sopra le parole.",
+            "Se il tuo telefono non ha il blocco dello schermo, chiunque lo prenda in mano può visualizzare le tue 12 parole, e l'app lo segnala sotto di esse. Un PIN, una sequenza, una password, un'impronta digitale o il riconoscimento facciale, impostati nelle impostazioni del telefono, le mantengono più al sicuro."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Il tuo kit di recupero"
+        },
+        {
+          "type": "p",
+          "text": "Il kit di recupero è una pagina stampabile: le tue 12 parole in ordine, il nome e l'indirizzo della tua comunità, la data di creazione e i passaggi per rientrare su un telefono e in un browser web. Non specifica a chi appartiene l'account. È facoltativo: puoi proseguire senza di esso."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Sul telefono**: accanto alle tue 12 parole (in Backup sicuro al momento dell'iscrizione e in Impostazioni), tocca **Stampa il tuo kit di recupero** per stamparlo, oppure **Salva come PDF** per creare un PDF e scegliere dove salvarlo. Prima di salvare, l'app avverte: \"Conserva questo file lontano da backup su cloud e chat. Chiunque lo possieda può accedere come te.\" Successivamente il telefono elimina la propria copia del PDF.",
+            "**Nell'app web**: accanto alle tue 12 parole (quando ti iscrivi e in Impostazioni sotto **Visualizza frase di recupero**), fai clic su **Stampa o salva il tuo kit di recupero**. L'app avverte: \"Conserva questa pagina o questo file lontano da backup su cloud e chat. Chiunque lo possieda può accedere come te.\" Fai clic su **Continua** per aprire la finestra di stampa del browser. Per conservare un PDF invece della carta, seleziona **Salva come PDF**.",
+            "Custodisci il foglio esattamente come faresti con le parole: chiunque lo possieda può accedere come te."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Dove visualizzarle di nuovo"
+        },
+        {
+          "type": "p",
+          "text": "Apri **Impostazioni** con il pulsante dei cursori nella parte superiore dello schermo. Poi puoi scegliere una delle due opzioni:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Sotto **ACCOUNT E IDENTITÀ**, tocca **Visualizza frase di recupero**. Digita **CONFIRM**, tocca **Mostra frase di recupero** e supera il controllo della schermata di blocco del telefono.",
+            "Oppure tocca **Protezione dell'account**, poi **Mostra le mie 12 parole di recupero** e supera il controllo della schermata di blocco del telefono. Tocca **Nascondi** quando hai finito."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "In entrambi i casi, le parole si nascondono anche quando lasci quella schermata o esci dall'app per 15 secondi o più, e il telefono richiederà nuovamente l'autenticazione la volta successiva. Un controllo del blocco schermo che richiede più di due minuti non mostra nulla: tocca di nuovo."
+        },
+        {
+          "type": "p",
+          "text": "Nell'app web, **Visualizza frase di recupero** sotto **ACCOUNT E IDENTITÀ** le mostra immediatamente."
+        },
+        {
+          "type": "p",
+          "text": "Un telefono ripristinato con un account di accesso recupera le tue 12 parole solo se tale account di accesso è stato collegato da un telefono che le possedeva, con un'app aggiornata. Altrimenti il telefono non ne ha alcuna copia: non possono essere ricostruite da un account di accesso. **Visualizza frase di recupero** è comunque presente e indica che non c'è ancora nessuna copia su questo telefono. Su quel telefono un account di accesso collegato è il metodo per rientrare, quindi mantienine uno collegato sotto **Protezione dell'account**."
+        },
+        {
+          "type": "h2",
+          "text": "Reinserire le tue 12 parole su questo telefono"
+        },
+        {
+          "type": "p",
+          "text": "Se questo telefono non possiede una copia delle tue 12 parole e le hai scritte su carta, puoi aggiungerle:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Apri **Impostazioni**. Sotto **ACCOUNT E IDENTITÀ**, tocca **Visualizza frase di recupero**. (Oppure, in **Protezione dell'account**, tocca **Mostra le mie 12 parole di recupero**.) Su un telefono privo di copia, entrambe le opzioni aprono **Aggiungi le tue 12 parole a questo telefono**.",
+            "Digita le 12 parole in ordine (parole in lingua inglese), oppure tocca **Incolla**. Maiuscole e spazi aggiuntivi non hanno importanza. Una parola non presente nell'elenco ufficiale delle parole di recupero viene evidenziata mentre digiti.",
+            "Tocca **Aggiungi queste parole**."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Il tuo telefono verifica che le parole appartengano al tuo account, lo stesso controllo di **Verifica le tue 12 parole** per i proprietari. Non vengono inviate da nessuna parte. Se appartengono a un account diverso, nulla cambia e l'app lo segnala. Una volta aggiunte, **Visualizza frase di recupero** le mostra, in ogni comunità presente su questo telefono."
+        },
+        {
+          "type": "h2",
+          "text": "Se sei entrato nella comunità globale con 12 parole"
+        },
+        {
+          "type": "p",
+          "text": "Puoi unirti alla comunità globale solo con 12 parole segrete, senza un account Google, Apple o Facebook (vedi \"Entrare in BeanPool\"). Se questo ha creato un nuovo account, le tue 12 parole sono il tuo unico modo per rientrare. Nessuna copia del tuo account è conservata altrove se non sul tuo telefono, e nessuno può reimpostarle: né BeanPool, né la comunità. Se perdi le parole e il telefono, l'account è perso per sempre. (Se ti sei unito con l'account che avevi già, un accesso che hai collegato in un'altra comunità consente comunque di recuperarlo lì.)"
+        },
+        {
+          "type": "p",
+          "text": "L'app lo segnala in **Backup sicuro**. Dopo esserti unito, una scheda sulla **Inizio** lo ribadisce, sul telefono e nell'app web: **Il tuo account ha una sola via di ritorno: le tue 12 parole. Verifica di averle ancora o aggiungi un accesso.** Non ti impedisce mai di fare nulla. Sul telefono:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**✕** chiude la scheda. Ricompare una volta dopo il tuo primo post e una volta dopo una settimana, poi rimane solo in **Impostazioni**, sotto **Protezione dell'account**.",
+            "**Mostra le mie 12 parole** apre **Protezione dell'account**, dove puoi vederle di nuovo.",
+            "In **Protezione dell'account**, **Ho ancora le mie 12 parole** elimina definitivamente la scheda. **Aggiungi un accesso** rimane lì."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Nell'app web la scheda è intitolata **Una sola via di ritorno**, con **Visualizza le mie 12 parole** e **Aggiungi un accesso**. **✕** la chiude: ricompare una volta dopo che uno dei tuoi post è rimasto attivo, e una volta terminata la tua prima settimana. Toccando **Visualizza le mie 12 parole** sulla scheda della **Inizio** le parole vengono mostrate, e la scheda non compare più lì. Rimane in cima a **Impostazioni** finché non aggiungi un accesso."
+        },
+        {
+          "type": "p",
+          "text": "Un account creato con 12 parole parte anche più lentamente rispetto a uno creato con un accesso, durante la sua prima settimana. Vedi \"Segnalare un problema\" per i suoi limiti e le relative motivazioni."
+        },
+        {
+          "type": "h3",
+          "text": "Aggiungere un accesso in seguito"
+        },
+        {
+          "type": "p",
+          "text": "Puoi aggiungere un accesso in seguito, da qualsiasi telefono o browser in cui ti trovi nel tuo account, non solo da quello su cui ti sei iscritto. Su un telefono su cui hai ripristinato il tuo account con le tue 12 parole, apri la comunità globale nell'app: la comunità segnala che il tuo account possiede solo le sue 12 parole, e compaiono la scheda e **Aggiungi un accesso** (potrebbe richiedere un momento). Non puoi aggiungerne uno mentre il tuo account è sospeso, o se la comunità ha chiuso il tuo account (l'app lo segnala e nulla cambia). Diventa una seconda via di ritorno ed elimina immediatamente i limiti dell'account a 12 parole."
+        },
+        {
+          "type": "p",
+          "text": "Se la cassaforte delle chiavi di BeanPool conserva già una copia del tuo account, anche quella copia rappresenta una via di ritorno. In tal caso l'app non mostra la scheda della sola via di ritorno. **Aggiungi un accesso** viene comunque offerto discretamente in **Protezione dell'account** nelle **Impostazioni**, poiché rimuove i limiti dell'account a 12 parole."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Tocca **Aggiungi un accesso**: sulla scheda, o in **Impostazioni** sotto **Protezione dell'account**. In **Backup sicuro** il pulsante recita **Aggiungi un accesso come seconda via di ritorno**.",
+            "Tocca **Continua con Google**, **Continua con Facebook** o, su un iPhone, **Continua con Apple**, ed effettua l'accesso una volta. L'app potrebbe prima richiedere lo sblocco del telefono.",
+            "Un messaggio conferma che l'accesso è stato aggiunto. Il tuo account ora ha i consueti limiti per i nuovi account, e quell'accesso lo ripristina se perdi il telefono, esattamente come per chi si è iscritto usandolo. Vedi \"Recuperare il tuo account\" per scoprire chi può aprire la copia conservata per esso."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Se la copia del tuo account non può essere salvata in quel momento, l'accesso viene comunque aggiunto e i limiti vengono comunque rimossi, ma le tue 12 parole rimangono il tuo metodo di ripristino. L'app lo segnala. Un account di accesso che appartiene già a un altro account BeanPool nella comunità globale, o che apparteneva a un account rimosso dalla comunità, non può essere aggiunto e nulla cambia."
+        },
+        {
+          "type": "p",
+          "text": "L'opzione di protezione presente più in basso in **Protezione dell'account**, sotto i fornitori di recupero dell'accesso, collega anch'essa un accesso come via di ritorno, ma lascia invariati i limiti delle 12 parole e la scheda. Usa **Aggiungi un accesso** per entrambi gli scopi."
+        },
+        {
+          "type": "h2",
+          "text": "Una seconda via di ritorno: un account di accesso"
+        },
+        {
+          "type": "p",
+          "text": "Nell'app per telefono puoi anche collegare un account Google o Facebook (e Apple su un iPhone). Se perdi il telefono, quell'account può ripristinare il tuo account su un nuovo telefono, tramite il server della tua comunità, che ne conserva una copia protetta. Le persone che gestiscono quel server possono aprire tale copia. Vedi \"Recuperare il tuo account\"."
+        },
+        {
+          "type": "p",
+          "text": "Un account di accesso collegato da un telefono che possiede le tue 12 parole conserva anche queste ultime, quindi il ripristino con esso le restituisce. Un account collegato su una versione precedente dell'app ripristina il tuo account senza di esse: sotto **Protezione dell'account**, tocca **Collega di nuovo** accanto ad esso e supera il controllo della schermata di blocco del telefono per includerle. Conserva comunque anche il foglio di carta."
+        },
+        {
+          "type": "h2",
+          "text": "Nel browser web"
+        },
+        {
+          "type": "p",
+          "text": "Sulla comunità globale, un accesso utilizzato per iscriversi in un browser viene conservato come seconda via di ritorno: Impostazioni mostra il recupero tramite accesso come collegato. In un browser azzerato o nuovo, tocca **Hai già BeanPool?**, poi **Usa il mio accesso**, e il tuo account verrà ripristinato, insieme alle sue 12 parole (vedi \"Usare BeanPool nel browser web\"). Se invece ti iscrivi lì con 12 parole, esse rappresentano il tuo unico modo per rientrare finché non aggiungi un accesso: una scheda denominata **Una sola via di ritorno** lo segnala, con **Visualizza le mie 12 parole** e **Aggiungi un accesso**, dopo l'iscrizione e nelle Impostazioni. Nelle altre comunità l'app web non prevede il recupero tramite account di accesso, e le tue 12 parole sono l'unico metodo per rientrare. I browser possono anche cancellare i dati salvati, quindi scrivi le parole su carta prima di affidarti all'app web."
+        }
+      ]
+    },
+    {
+      "slug": "your-profile",
+      "title": "Il tuo profilo",
+      "summary": "Il tuo nome, la foto, qualche parola su di te e chi può vedere i tuoi dettagli di contatto.",
+      "sourceHash": "7adea0e9b76c043c",
+      "source-hash": "7adea0e9b76c043c",
+      "section": "getting-started",
+      "related": [
+        "privacy",
+        "trust-badges",
+        "joining",
+        "people"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Modificare nome, foto o biografia"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Apri **Impostazioni** con il pulsante dei cursori nella parte superiore dello schermo.",
+            "Sulla tua scheda in alto, tocca **Modifica**, oppure tocca la tua foto.",
+            "Modifica ciò che desideri:",
+            "**Nominativo** è il nome che le persone vedono.",
+            "**Biografia** sono alcune parole su di te, fino a 200 caratteri.",
+            "Tocca la foto per modificarla.",
+            "Tocca **Salva profilo**."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Nell'app web, tocca **Modifica profilo**, cambia la foto con **Fotocamera** o **Galleria**, e tocca **Salva modifiche al profilo**."
+        },
+        {
+          "type": "p",
+          "text": "Puoi anche toccare **Riesegui configurazione** nelle Impostazioni. Ti guida nuovamente attraverso il nome e la foto, la tua posizione approssimativa (sulla comunità globale, nell'app per telefono) e il breve tour su come funziona BeanPool. In un browser web, imposta la tua zona in **Impostazioni**, sotto **La tua zona**."
+        },
+        {
+          "type": "h2",
+          "text": "Prima di pubblicare"
+        },
+        {
+          "type": "p",
+          "text": "In una comunità con i fagioli hai bisogno di un nome e di una foto prima di poter pubblicare o accettare uno scambio. Dove non ci sono fagioli, come sulla comunità globale, un nome è sufficiente. Se manca qualcosa, l'app dice **Completa prima il tuo profilo**. Tocca **Configura profilo** per aggiungerlo."
+        },
+        {
+          "type": "h2",
+          "text": "Dettagli di contatto"
+        },
+        {
+          "type": "p",
+          "text": "Sotto **Dettagli di contatto** puoi aggiungere un numero di telefono, un'email o un numero WhatsApp, fino a 200 caratteri. Non sei obbligato a farlo."
+        },
+        {
+          "type": "p",
+          "text": "Una volta inserito, scegli **Chi può vedere questo?**:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Nascosto:** nessuno.",
+            "**Partner di scambio:** membri con cui hai un accordo. Vale dal momento in cui uno di voi tocca **Accetta Offerta** o **Offriti di soddisfare** sul post dell'altro, anche se l'accordo viene successivamente annullato o rifiutato. Inviare solo fagioli non costituisce un accordo.",
+            "**Amici:** persone che hai aggiunto come amici.",
+            "**Comunità:** ogni membro della tua comunità."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Un membro sospeso non vede nessuno di questi dettagli per tutta la durata della sospensione. Lo stesso vale per chiunque non si sia unito alla tua comunità, anche se un membro gli ha inviato messaggi o fagioli."
+        },
+        {
+          "type": "p",
+          "text": "Oggi l'app web può mostrare i tuoi dettagli di contatto sui tuoi annunci. L'app per telefono non mostra ancora i dettagli di contatto degli altri membri."
+        },
+        {
+          "type": "h2",
+          "text": "Cosa vedono gli altri"
+        },
+        {
+          "type": "p",
+          "text": "Tocca la foto rotonda in alto a destra dello schermo per vedere il tuo profilo. Gli altri membri vedono più o meno la stessa cosa:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "il tuo nome, quando ti sei iscritto e la tua biografia;",
+            "valutazioni a stelle e recensioni da parte delle persone con cui hai scambiato (nessun altro può vedere chi ha scritto una recensione);",
+            "i tuoi annunci."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Sul telefono, in una comunità con i fagioli, vedono anche il tuo badge di fiducia, quanti scambi hai effettuato, con quante persone e la percentuale che hai portato a termine (**Completamento**). L'app web non mostra questi dati sul profilo di un altro membro. La comunità globale non ha fagioli, quindi non mostra nulla di tutto ciò."
+        },
+        {
+          "type": "h2",
+          "text": "Il tuo stile di lavoro"
+        },
+        {
+          "type": "p",
+          "text": "Sul tuo profilo è presente un breve quiz facoltativo, **Fai il quiz di 60s**. Descrive come ti piace collaborare con gli altri. Sul profilo di qualcun altro mostra quanto i vostri stili siano compatibili. Non modifica nient'altro."
+        }
+      ]
+    },
+    {
+      "slug": "the-top-bar",
+      "title": "Barra in alto",
+      "summary": "Il fagiolo, le piccole icone che segnalano quando qualcosa richiede attenzione e i pulsanti in alto a destra.",
+      "sourceHash": "f384da792affb84e",
+      "source-hash": "f384da792affb84e",
+      "section": "getting-started",
+      "related": [
+        "home",
+        "the-bean",
+        "communities",
+        "my-deals",
+        "decisions",
+        "messages",
+        "notifications"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Cosa contiene"
+        },
+        {
+          "type": "p",
+          "text": "Sul telefono, la barra nella parte superiore dello schermo è la stessa in ogni scheda. Da sinistra a destra:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Il fagiolo:** la tua comunità e questa guida.",
+            "**Le icone \"richiede il tuo intervento\":** solo quando qualcosa è in attesa di te.",
+            "**L'icona ?, l'icona di invito, Impostazioni e la tua foto.**"
+          ]
+        },
+        {
+          "type": "p",
+          "text": "In un browser web la barra in alto è più semplice. Presenta lo stato della connessione a sinistra, il nome della pagina e il tuo profilo, il **?** e le Impostazioni a destra. Non ha il pannello del fagiolo, non ha le icone \"richiede il tuo intervento\" né l'icona di invito: **Inviti** si trova sotto **Persone**. Le schede sono disposte lungo la parte inferiore, oppure sul lato sinistro su uno schermo ampio."
+        },
+        {
+          "type": "h2",
+          "text": "Il fagiolo"
+        },
+        {
+          "type": "p",
+          "text": "Tocca il fagiolo in alto a sinistra per aprire il pannello **BeanPool**. Mostra:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**La tua comunità:** il suo nome in alto e se può essere raggiunta in questo momento.",
+            "**LE TUE COMUNITÀ:** toccane una per passare ad essa, oppure tocca **Aggiungi una comunità**. La riga **Comunità globale** è sempre presente: la sua seconda riga indica se puoi unirti ad essa.",
+            "**Cerca nella guida**, poi **Guide** (come funziona BeanPool, le regole, le domande frequenti), **Come usare l'app** (questa guida, sezione per sezione) e **Il progetto BeanPool**, con **Novità**.",
+            "**beanpool.org:** il sito web pubblico, con **Condividi** per inviarlo a un amico."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Il piccolo puntino sul fagiolo ti indica come stanno le cose:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Verde:** connesso, e sei un membro qui.",
+            "**Ambra:** stai visitando come ospite.",
+            "**Rosso:** il server della tua comunità non può essere raggiunto in questo momento, oppure questo telefono non è ancora connesso a una comunità."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Un singolo controllo lento non fa diventare rosso il puntino. Diventa rosso solo dopo che più di un controllo consecutivo è fallito."
+        },
+        {
+          "type": "h2",
+          "text": "Le icone \"richiede il tuo intervento\""
+        },
+        {
+          "type": "p",
+          "text": "Tra il fagiolo e i pulsanti a destra, compaiono piccole icone solo quando qualcosa richiede la tua attenzione. Ognuna rappresenta un tipo di attività. Toccala per andare direttamente lì."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Una stretta di mano:** un accordo ti attende. Qualcuno sta aspettando che tu accetti la sua richiesta, oppure un accordo in cui sei coinvolto non è ancora completato. Se ce n'è uno, il tocco apre quell'accordo. Se ce ne sono di più, apre **I miei accordi**.",
+            "**Un'urna elettorale:** una votazione che non hai ancora espresso. Il tocco apre **Beni comuni**, su **Decisioni**. Se la prima votazione è all'interno di un gruppo o una votazione dei custodi in un'impresa, il tocco apre invece quel gruppo o quell'impresa. Una votazione a cui non puoi ancora partecipare non viene conteggiata qui, ad esempio una che richiede prima il completamento di uno scambio.",
+            "**Un fumetto:** un messaggio non letto da una persona. Se proviene da una sola persona, il tocco apre quella chat. Se proviene da più persone, apre **Chat**, su **Messaggi**, mostrando solo quelli non letti.",
+            "**Un gruppo di persone:** nuove righe nei tuoi gruppi, nelle chat d'impresa o nelle chat di eventi. Le chat che hai silenziato rimangono silenziose qui. Il tocco apre la chat, oppure **Chat**, su **Gruppi**, se ce ne sono diverse.",
+            "**Uno scudo:** solo per chi aiuta a gestire la tua comunità. Compare quando c'è lavoro amministrativo in attesa, come una segnalazione da esaminare o uno scambio bloccato che necessita di una decisione. Il tocco richiede il blocco dello schermo del telefono, poi apre le impostazioni della tua comunità in corrispondenza di quell'attività. Se le impostazioni della tua comunità usano un codice di accesso, richiede anche quello."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Le icone si allineano da destra. La più importante si posiziona accanto all'icona ? e mantiene il suo posto man mano che le altre compaiono e scompaiono."
+        },
+        {
+          "type": "h3",
+          "text": "Il numero e il colore"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Un piccolo numero su un'icona indica più di un elemento di quel tipo: ad esempio 3 persone che ti hanno scritto. Mostra **9+** sopra il 9.",
+            "Un'icona diventa **ambra** quando è più urgente: un accordo in attesa della tua risposta, lavoro amministrativo o una votazione che scade entro 2 giorni. Nulla diventa rosso."
+          ]
+        },
+        {
+          "type": "h3",
+          "text": "Su uno schermo piccolo"
+        },
+        {
+          "type": "p",
+          "text": "Se non c'è spazio per ogni icona, l'ultimo spazio mostra **•••**. Toccalo per vedere l'elenco completo, **Richiede il tuo intervento**, per esteso. Tocca una riga per andare lì."
+        },
+        {
+          "type": "h3",
+          "text": "Una barra vuota è una buona notizia"
+        },
+        {
+          "type": "p",
+          "text": "Quando nulla richiede il tuo intervento, non ci sono icone. Non ti sei perso nulla. Le icone si aggiornano man mano che navighi nell'app e quando vi ritorni."
+        },
+        {
+          "type": "h2",
+          "text": "Partecipa o Connetti"
+        },
+        {
+          "type": "p",
+          "text": "Al posto delle icone, potresti vedere un pulsante:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Partecipa** (ambra): stai visitando come ospite. Toccalo per aprire **Inviti**. In una comunità locale ti unisci lì con un invito. Nella comunità globale, tocca **Unisciti con 12 parole o un accesso** (**Unisciti con un accesso** dove una comunità accetta solo accessi).",
+            "**Connetti** (rosso): questo telefono non è connesso a una comunità. Toccalo per aprire **Impostazioni**, dove puoi aggiungerne una."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Mentre compare uno di questi pulsanti, l'icona di invito è nascosta."
+        },
+        {
+          "type": "h2",
+          "text": "I pulsanti a destra"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**L'icona ?** (un punto interrogativo in un cerchio): aiuto per la schermata in cui ti trovi. Apre un breve pannello con la spiegazione di quella schermata, poi **Leggi la pagina della guida**, **Cerca nella guida** e **Rifai il tour**. È presente su ogni scheda, per membri e ospiti. Nell'app web si trova tra la tua foto e le Impostazioni in alto, e accanto a Impostazioni in fondo alla barra laterale su uno schermo ampio.",
+            "**L'icona di invito** (una persona con un segno più): apre **Inviti**, per invitare qualcuno o unirti a un'altra comunità. Vedi \"Entrare in BeanPool\".",
+            "**Impostazioni** (i cursori): apre **Impostazioni**. Toccalo di nuovo per tornare dove ti trovavi.",
+            "**La tua foto:** apre il tuo profilo personale, così come lo vedono gli altri."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Messaggi di aggiornamento"
+        },
+        {
+          "type": "p",
+          "text": "A volte sotto la barra in alto compare una barra verde:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Aggiornamento disponibile:** è uscita una nuova versione dell'app. Tocca **Aggiorna** per ottenerla, oppure la crocetta per chiudere il messaggio.",
+            "**L'app è obsoleta per questa comunità:** devi aggiornare prima che l'app funzioni correttamente qui. Questo messaggio non può essere chiuso. Tocca **Aggiorna**."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Le schede"
+        },
+        {
+          "type": "p",
+          "text": "Sotto la barra in alto si trovano le schede: **Inizio**, **Mercato**, **Mappa**, **Chat**, **Beni comuni** e **Mastro**. Il nome di ciascuna scheda si trova sopra la sua icona. Sul telefono, una comunità locale priva di fagioli non mostra né **Beni comuni** né **Mastro**. La comunità globale mostra entrambi, con esempi tratti da una comunità locale. Vedi \"Fagioli e comunità globale\"."
+        },
+        {
+          "type": "p",
+          "text": "In una pagina lunga, tocca la scheda su cui ti trovi già per tornare direttamente in cima. Funziona su ogni scheda tranne che su **Mappa**."
+        }
+      ]
+    },
+    {
+      "slug": "the-bean",
+      "title": "Questa guida",
+      "summary": "Dove trovare questa guida, come effettuare ricerche al suo interno e come resta sempre aggiornata.",
+      "sourceHash": "3f81c6f1fb085719",
+      "source-hash": "3f81c6f1fb085719",
+      "section": "getting-started",
+      "related": [
+        "getting-help",
+        "how-it-works",
+        "faq",
+        "whats-new",
+        "the-top-bar"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Come aprirla"
+        },
+        {
+          "type": "p",
+          "text": "Sul telefono, tocca il fagiolo in alto a sinistra dello schermo. Oppure:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Apri **Impostazioni** con il pulsante dei cursori nella parte superiore dello schermo.",
+            "Sotto **BeanPool**, tocca **Guida e funzionamento**."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Nell'app web si trova nello stesso posto: **Impostazioni**, poi **Guida e funzionamento** sotto **BeanPool**."
+        },
+        {
+          "type": "h2",
+          "text": "Cosa contiene"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**La tua comunità:** il suo nome (il suo indirizzo nell'app web) e se il suo server può essere raggiunto in questo momento. Sul telefono, sotto di esso, **LE TUE COMUNITÀ**: toccane una per passare ad essa, oppure tocca **Aggiungi una comunità**. La riga **Comunità globale** è sempre presente, con una seconda riga che indica se sei un membro, se puoi unirti o il motivo per cui non può essere utilizzata in questo momento. Vedi \"Più di una comunità\".",
+            "**Guide:** come funziona BeanPool, le regole e come vengono prese le decisioni, e le domande frequenti.",
+            "**Come usare l'app:** una breve pagina per ciascuna attività, raggruppate nello stesso modo in cui è organizzata l'app: Per iniziare, Mercato, Mappa, Chat, The Pulse, Beni comuni, Mastro e Impostazioni e sicurezza.",
+            "**Il progetto BeanPool:** le novità di questa versione e un collegamento al sito web beanpool.org (sul telefono, con un pulsante **Condividi** per inviarlo a un amico)."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Ricerca"
+        },
+        {
+          "type": "p",
+          "text": "Digita una parola o due in **Cerca nella guida** (in alto nell'app web; sotto **LE TUE COMUNITÀ** sul telefono). Mostra ogni pagina che contiene tutte le tue parole. Funziona anche senza connessione."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Funzionano anche le parole brevi: \"vot\" trova \"voto\" e \"votare\".",
+            "Se non compare nulla, prova con una parola più semplice, come \"dono\", \"foto\" o \"blocca\"."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Sempre disponibile, mantenuta aggiornata"
+        },
+        {
+          "type": "p",
+          "text": "La guida è integrata nell'app, quindi funziona anche in totale assenza di connessione. Quando sei online, l'app verifica su beanpool.org la presenza di una versione più recente della guida e la utilizza se disponibile. In fondo alla guida viene mostrata la versione che stai leggendo."
+        },
+        {
+          "type": "p",
+          "text": "La stessa guida è disponibile sul sito web all'indirizzo beanpool.org/guide."
+        },
+        {
+          "type": "h2",
+          "text": "Video"
+        },
+        {
+          "type": "p",
+          "text": "Alcune pagine possono mostrare **Watch:** e il nome di un video. Quel collegamento compare solo quando BeanPool ha realizzato un video per quella pagina e la tua comunità lo include in The Pulse, sotto **Impara** (**Come funziona** nell'app web). I video aggiunti dai membri a Impara non compaiono mai in una pagina della guida. Ogni pagina è completa anche senza il video."
+        }
+      ]
+    },
+    {
+      "slug": "getting-help",
+      "title": "Chiedere aiuto",
+      "summary": "Dove guardare quando hai un dubbio e a chi rivolgerti.",
+      "sourceHash": "c2f55bbef94860d8",
+      "source-hash": "c2f55bbef94860d8",
+      "section": "getting-started",
+      "related": [
+        "the-bean",
+        "reporting",
+        "faq",
+        "blocking",
+        "the-top-bar"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Consultare le informazioni"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Il ? in alto:** su ogni scheda, tocca **?** per una breve nota sulla schermata in cui ti trovi. Da lì, **Leggi la pagina della guida** apre la pagina dedicata, **Cerca nella guida** apre la ricerca di questa guida e **Rifai il tour** ti mostra nuovamente le schede.",
+            "**Questa guida:** cercala per parola chiave, come \"dono\" o \"foto\".",
+            "**I pulsanti ⓘ:** molte schermate hanno una piccola ⓘ. Toccala per una breve spiegazione di quella schermata. Il Mastro ne ha diverse.",
+            "**La guida ai prezzi:** sul telefono, in **Impostazioni**, sotto **Guida ai prezzi della comunità**, tocca **Sfoglia oltre 500 stime di articoli** per vedere quanto costano abitualmente le cose in fagioli. Nell'app web, tocca **💡 Guida ai prezzi** nel Mercato. Sul telefono compare solo dove la tua comunità usa i fagioli; l'app web la nasconde sulla comunità globale."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Chiedere a una persona"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Su uno scambio:** invia prima un messaggio all'altra persona. La maggior parte dei problemi è dovuta a incomprensioni. Sull'annuncio, tocca **Messaggio**.",
+            "**Su una persona o uno scambio andato storto:** parla con gli amministratori della tua comunità. Loro gestiscono il server e possono intervenire su uno scambio bloccato.",
+            "**Nessuna comunità ancora:** unisciti alla comunità globale e chiedi lì: persone da ogni luogo e un modo per trovare una comunità vicino a te. Su un telefono, beanpool.org/global apre l'app BeanPool direttamente al punto di accesso, oppure prima l'app store se non possiedi ancora l'app. Vedi \"Entrare in BeanPool\".",
+            "**Sull'app stessa:** visita beanpool.org. Puoi aprirla da **Impostazioni**, sotto **BeanPool**.",
+            "**Gestire personalmente una comunità:** i proprietari e gli amministratori che gestiscono il server di una comunità hanno il proprio manuale, nelle Impostazioni di quel server: accedi e premi **Manual: running your community** nella barra laterale.",
+            "**Accedere alle Impostazioni:** i proprietari e gli amministratori vedono **AMMINISTRAZIONE DELLA COMUNITÀ** nelle **Impostazioni** dell'app per telefono. **Gestisci** e il nome della tua comunità aprono le sue Impostazioni sul telefono. Un moderatore vede **MODERAZIONE DELLA COMUNITÀ**, con **Modera** e il nome della comunità, che apre le segnalazioni. Su un computer, apri le Impostazioni in un browser web e scegli **Sign in with your phone**, poi nell'app tocca **Gestisci questa comunità da un computer** (un moderatore vede **Modera questa comunità da un computer**; nelle app precedenti: **Sign in on a computer**) e scansiona il codice. Verifica che il codice di 6 caratteri sul telefono corrisponda a quello sul computer prima di toccare **Accedi**. Se il telefono mostra poi due cifre, digitali sul computer entro 30 secondi."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Quando qualcosa non va"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Se un annuncio è una truffa, è offensivo o ingannevole, segnalalo. Vedi \"Segnalare un problema\".",
+            "Se qualcuno ti infastidisce, bloccalo. Vedi \"Bloccare qualcuno\".",
+            "Se non ti sei unito alla comunità globale e questa non è raggiungibile, la riga **Comunità globale** nel pannello **BeanPool** (tocca il fagiolo in alto a sinistra) indica **Non raggiungibile in questo momento**. Mentre sei connesso a un'altra comunità di cui fai parte, una riga sotto dice **La tua comunità non ne risente.** La comunità globale è una comunità tra tante. La tua comunità risiede sul proprio server e non ne ha mai bisogno, quindi tutto il resto continua a funzionare come prima."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Pagine di sicurezza"
+        },
+        {
+          "type": "p",
+          "text": "In **Impostazioni**, sotto **NOTE LEGALI E PRIVACY**, puoi leggere l'**Informativa sulla privacy**, i **Termini di servizio ed EULA** e gli **Standard di sicurezza dei minori**. Si aprono su beanpool.org."
+        }
+      ]
+    },
+    {
+      "slug": "communities",
+      "title": "Più di una comunità",
+      "summary": "Fai parte di diverse comunità con un solo account, passa da una all'altra, segui la tua comunità a un nuovo indirizzo e scopri cosa mostra la comunità globale.",
+      "sourceHash": "b123b0f66fb01c9d",
+      "source-hash": "b123b0f66fb01c9d",
+      "section": "getting-started",
+      "related": [
+        "joining",
+        "finding-a-community",
+        "your-area",
+        "leaving-or-deleting",
+        "your-12-words",
+        "faq",
+        "the-top-bar"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Un solo account, diverse comunità"
+        },
+        {
+          "type": "p",
+          "text": "Il tuo telefono conserva un solo account: un nome, una chiave, un unico insieme di 12 parole (parole in inglese). Puoi usarlo per unirti a più di una comunità. Ciascuna comunità conserva i propri fagioli, scambi e annunci."
+        },
+        {
+          "type": "h2",
+          "text": "Unirsi a un'altra comunità"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Una comunità ti fa entrare con un invito da parte di uno dei suoi membri. Non hai un invito? Dalla comunità globale puoi chiedere a una comunità vicina a te di farti entrare: vedi \"Trovare una comunità vicina\".",
+            "Tocca l'icona di invito (una persona con un segno più) in alto a destra dello schermo per aprire **Inviti**.",
+            "Sotto **Unisciti a un'altra comunità**, incolla il link o il codice di invito. Se hai solo un codice, inserisci anche l'indirizzo della comunità.",
+            "Tocca **Unisciti alla comunità**."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "La tua chiave, le tue 12 parole e il tuo nome vengono con te. I tuoi post, le tue chat e i tuoi scambi rimangono in ciascuna comunità. Successivamente verifichi il tuo nome e la tua foto per la nuova comunità. Un account di accesso che protegge il tuo account viene conservato da ciascuna comunità, quindi l'app ti chiede di proteggere il tuo account anche nella nuova comunità: tocca **Proteggilo**, oppure **Più tardi**."
+        },
+        {
+          "type": "h2",
+          "text": "Entrare nella comunità globale dal tuo account"
+        },
+        {
+          "type": "p",
+          "text": "La comunità globale non richiede alcun invito, e vi puoi accedere con l'account che già possiedi: la stessa chiave e le stesse 12 parole. L'app lo propone quando la comunità globale è aperta e non ha ancora segnalato all'app che questo account ne è già membro."
+        },
+        {
+          "type": "p",
+          "text": "Sotto **LE TUE COMUNITÀ** è sempre presente una riga per la **Comunità globale**. La sua seconda riga indica la tua situazione: il suo indirizzo quando ne sei membro (toccandolo puoi passare ad essa), **Unisciti con questo account: 12 parole o un accesso** (**Unisciti con questo account: un accesso** dove la comunità non accetta le 12 parole) quando puoi unirti, o il motivo per cui non puoi farlo al momento: **Controllo in corso…**, **Non raggiungibile in questo momento** (con **Tocca per riprovare.** mentre questo telefono non ha ancora salvato la comunità globale), **Al momento non accetta nuovi membri.**, **Questa comunità è in anteprima privata. Chiedi un invito al suo proprietario.**, oppure **Il tuo account lì è stato chiuso.** Quando la comunità globale non è raggiungibile e sei connesso a una comunità di cui sei membro, una riga sotto indica **La tua comunità non ne risente.** Nient'altro sul telefono dipende da essa."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Tocca il fagiolo in alto a sinistra. Nel pannello **BeanPool**, sotto **LE TUE COMUNITÀ**, tocca **Comunità globale** (la sua seconda riga dice **Unisciti con questo account**). Si trova anche in **Impostazioni**, sotto **Avanzate / Sottosistema**. Se stai visitando la comunità globale come ospite, tocca **Partecipa** in alto, accanto a **?**, poi **Unisciti con 12 parole o un accesso** (**Unisciti con un accesso** dove una comunità accetta solo accessi). Se l'app mostra **Non sei ancora membro qui** per la comunità globale, tocca **Unisciti con questo account**.",
+            "Scegli come entrare: **Crea un account con 12 parole segrete**, che usa le 12 parole che il tuo account già possiede (nessun accesso esterno, quindi nessun blocco del telefono richiesto), oppure **Oppure accedi** una volta con Google, Apple (su un iPhone) o Facebook. Per un accesso esterno, l'app richiede prima lo sblocco del telefono, perché questo accesso diventa anche una via per rientrare nel tuo account.",
+            "Controlla il nome che le persone vedranno lì e tocca **Partecipa**. Se qualcuno ha già quel nome, l'app ne suggerisce altri.",
+            "Poi scegli la tua foto per la comunità globale, come per qualsiasi nuova comunità, e quindi più o meno dove ti trovi (**Più o meno dove sei?**; puoi toccare **Salta per ora**): la comunità globale ti mostra gli annunci vicino a te. Vedi \"Entrare in BeanPool\"."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Nulla cambia nelle altre tue comunità e le tue 12 parole rimangono le stesse. Un accesso esterno diventa anche una via di ritorno nello stesso account: viene conservata una copia protetta per quell'accesso, quindi se perdi il telefono, ripristina questo account e non uno nuovo. Vedi \"Recuperare il tuo account\". Un accesso che avevi collegato al tuo account in precedenza continua a funzionare. Se entri con 12 parole e nessun accesso conserva una copia del tuo account, l'app mostra la scheda **Il tuo account ha una sola via di ritorno**, come per chiunque si unisca con 12 parole (vedi \"Entrare in BeanPool\")."
+        },
+        {
+          "type": "p",
+          "text": "Se l'app indica che questo accesso si è già unito alla comunità globale con un diverso account BeanPool, quell'accesso possiede già un suo account lì. Usa un accesso diverso: un account di accesso esterno crea un solo account nella comunità globale."
+        },
+        {
+          "type": "p",
+          "text": "Su un nuovo telefono che non possiede ancora un account, usa invece **Esplora BeanPool nel mondo** nella prima schermata. Vedi \"Entrare in BeanPool\"."
+        },
+        {
+          "type": "h2",
+          "text": "Cosa ti mostra la comunità globale"
+        },
+        {
+          "type": "p",
+          "text": "La comunità globale contiene annunci da ogni parte del mondo, molti più di quanti un telefono debba contenerne. Pertanto il telefono conserva quelli vicini a te:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "i 500 annunci più vicini entro 250 km dalla tua zona, la posizione approssimativa che hai indicato quando ti sei iscritto. Vedi \"La tua zona\";",
+            "i tuoi annunci personali e qualsiasi annuncio per cui hai un accordo in corso o una conversazione aperta, ovunque si trovino."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "L'elenco del Mercato e la Mappa sul tuo telefono mostrano ciò che il telefono conserva. I nuovi annunci vicino alla tua zona arrivano man mano che vengono pubblicati. Se cambi la tua zona, il telefono sostituisce gli annunci con quelli vicini alla nuova zona."
+        },
+        {
+          "type": "p",
+          "text": "Nulla di ciò che è lontano è irraggiungibile:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "La **Cerca** nel Mercato interroga la comunità, quindi trova annunci da ogni luogo, non solo vicino a te. Senza connessione, cerca tra ciò che è già presente sul tuo telefono.",
+            "**Un annuncio che apri** da un messaggio, da un link o dalla Home viene scaricato dalla comunità, ovunque si trovi. Se la comunità non lo possiede più, indica **Annuncio non trovato**.",
+            "**La Mappa** mostra solo ciò che il telefono conserva, quindi lontano dalla tua zona ha pochi segnaposto o nessuno. Cerca nel Mercato per trovare annunci lì."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Senza una zona impostata, il telefono conserva invece i 100 annunci più recenti da ogni parte del mondo, e una riga sopra il Mercato dice che stai vedendo gli annunci più recenti a livello mondiale, invitando a impostare la tua zona per vedere cosa c'è vicino a te. Toccala per impostarne una. Puoi comunque pubblicare, inviare messaggi e cercare come prima."
+        },
+        {
+          "type": "p",
+          "text": "Un sondaggio non ha una propria posizione geografica, quindi viene mostrato nella zona del membro che lo ha creato: i sondaggi che vedi sono per lo più quelli creati vicino a te."
+        },
+        {
+          "type": "p",
+          "text": "Nell'app web, il Mercato e la Mappa interrogano la comunità ogni volta: per gli annunci vicini alla tua zona o vicini a un luogo scelto, oppure per i più recenti da ogni parte del mondo. Vedi \"Trovare cose vicino a te\"."
+        },
+        {
+          "type": "p",
+          "text": "Le altre tue comunità funzionano come prima."
+        },
+        {
+          "type": "h2",
+          "text": "Cambiare comunità"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Tocca il fagiolo in alto a sinistra. Si apre il pannello **BeanPool**, con **LE TUE COMUNITÀ** vicino alla cima.",
+            "Tocca quella che desideri."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Puoi anche cambiare comunità in **Impostazioni**, sotto **Sistema**, poi **Avanzate / Sottosistema**. Le tue comunità sono elencate lì. Quella che stai usando è contrassegnata come attiva. Tocca **Passa a Città** su un'altra comunità per spostarti su di essa."
+        },
+        {
+          "type": "h2",
+          "text": "Quando la tua comunità si sposta a un nuovo indirizzo"
+        },
+        {
+          "type": "p",
+          "text": "Una comunità può trasferirsi a un nuovo indirizzo: ad esempio, dall'indirizzo IP del suo server (come 203.0.113.5) a un nome di dominio. Sul telefono, la Home mostra allora una scheda in alto: **Questa comunità si trova anche su beans.example.org. Vuoi usare questo indirizzo d'ora in poi?** Compare solo dopo che il telefono ha verificato con il server della comunità che il nuovo indirizzo appartiene alla stessa comunità."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Tocca **Usa il nuovo indirizzo**. Il telefono si sposta lì con tutto ciò che conserva per quella comunità, inclusi i tuoi messaggi, e riapre la comunità, esattamente come quando cambi comunità.",
+            "Tocca **Non ora**, e la scheda lo riproporrà dopo 7 giorni. Il telefono non si sposta mai di propria iniziativa.",
+            "Se il nuovo indirizzo risponde come una comunità diversa, l'app dice **Questo telefono rimane dove si trova**, e mantiene l'indirizzo attuale. Se il controllo non può essere effettuato, dice **Non è cambiato nulla. Riprova tra poco.**",
+            "Se il vecchio indirizzo ha smesso di rispondere prima che il telefono venisse a conoscenza di quello nuovo, nulla può comunicare al telefono dove si è trasferita la comunità. Chiedi ai suoi proprietari il nuovo indirizzo, poi tocca il fagiolo, seleziona **Aggiungi una comunità** e digitalo lì."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Dimenticare una comunità su questo telefono"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "In **Avanzate / Sottosistema**, tocca **Dimentica** su una comunità che non stai usando in questo momento. Questo rimuove la comunità e i suoi dati salvati da questo telefono.",
+            "Nel pannello **BeanPool**, sotto **LE TUE COMUNITÀ**, tenere premuta una comunità e toccare **Rimuovi** la toglie soltanto dall'elenco. I suoi dati rimangono sul telefono."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Nessuna delle due opzioni elimina il tuo account lì, e le tue altre comunità non ne risentono."
+        },
+        {
+          "type": "p",
+          "text": "Per eliminare il tuo account in una comunità, aprila e usa **Elimina definitivamente l'account** in Impostazioni. Il telefono mantiene la tua chiave per le altre tue comunità. Vedi \"Lasciare o eliminare l'account\"."
+        },
+        {
+          "type": "h2",
+          "text": "Visitare come ospite"
+        },
+        {
+          "type": "p",
+          "text": "Se aggiungi una comunità senza un invito, sei un ospite in quella comunità. Compare un pulsante **Partecipa** in alto, accanto a **?**. Un ospite vede pochissimo finché non si registra con un invito. Nella comunità globale, che non ha inviti, un ospite entra invece con le sue 12 parole o con un accesso: vedi \"Entrare nella comunità globale dal tuo account\" sopra."
+        }
+      ]
+    },
+    {
+      "slug": "web-app",
+      "title": "Usare BeanPool nel browser web",
+      "summary": "L'app web fa quasi tutto ciò che fa l'app per telefono. Accedere alla comunità globale da browser, recuperare l'account con il login, sincronizzarlo sul telefono e dove i pulsanti hanno nomi diversi.",
+      "sourceHash": "a209ede1df9c7ec7",
+      "source-hash": "a209ede1df9c7ec7",
+      "section": "getting-started",
+      "related": [
+        "home",
+        "the-bean",
+        "your-12-words",
+        "joining",
+        "messages",
+        "reporting"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Lo stesso account, uno schermo diverso"
+        },
+        {
+          "type": "p",
+          "text": "La tua comunità può essere utilizzata anche in un browser web, su un computer o su un telefono. Questa guida è scritta per l'app per telefono. L'app web funziona nello stesso modo, ma alcuni elementi hanno nomi o posizioni differenti."
+        },
+        {
+          "type": "p",
+          "text": "Usa un solo account su entrambi. Ti sei iscritto in un browser? Inserisci quello stesso account sul tuo telefono: vedi \"Mettere il tuo account web su un telefono\" sotto. Ti sei iscritto sul tuo telefono? Portalo nel browser: vedi \"Usare il tuo account del telefono su un computer\". Iscriversi di nuovo crea un secondo account, e due account non possono mai essere uniti in uno solo."
+        },
+        {
+          "type": "h2",
+          "text": "Entrare in global.beanpool.org da un browser"
+        },
+        {
+          "type": "p",
+          "text": "La comunità globale all'indirizzo global.beanpool.org è aperta a tutti, e puoi entrarvi direttamente da un browser web. Non hai bisogno di un invito né dell'app per telefono."
+        },
+        {
+          "type": "p",
+          "text": "Prima di entrare, la pagina mostra **Inizio**, il **Mercato**, la **Mappa** e il **Mastro** (un esempio tratto da una comunità locale) così come li vede un visitatore: le schede pubbliche, gli annunci, le foto e la loro posizione approssimativa, ma senza nomi, senza volti e senza posizioni esatte. Nulla consente di pubblicare o rispondere finché non entri. **Partecipa** si trova nella parte superiore della pagina e nella scheda sopra gli annunci."
+        },
+        {
+          "type": "p",
+          "text": "Nel browser di un telefono, quella scheda propone prima **Apri nell'app BeanPool**. Apre l'app BeanPool direttamente al metodo di accesso della comunità globale, oppure l'app store del telefono se l'app non è ancora installata, così che il tuo account sia nell'app fin dall'inizio. Se l'app possiede già un account, apre **Unisciti alla comunità globale** con quello, oppure il pannello **BeanPool** se quell'account ne è già membro. Vedi \"Entrare in BeanPool\". Sotto di esso, **oppure unisciti qui nel tuo browser** ti fa entrare direttamente qui, come descritto sotto. Su un computer la scheda mostra **Partecipa**."
+        },
+        {
+          "type": "p",
+          "text": "Mentre la comunità globale conta solo pochi annunci, il suo **Mercato** mostra anche alcune schede contrassegnate come **Esempio**. Sono fittizie, create per mostrare cosa pubblicano le persone, e non possono essere aperte. Scompaiono non appena ci sono abbastanza annunci reali."
+        },
+        {
+          "type": "p",
+          "text": "Se sei arrivato da un link condiviso relativo a un annuncio o a un evento, questo si apre per primo. Entra da quella pagina e, una volta dentro, si apre di nuovo, questa volta mostrando chi lo ha pubblicato."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Tocca **Partecipa**, poi **Sono nuovo su BeanPool**.",
+            "Scegli il nome che le persone vedranno. Deve contenere almeno 2 lettere e al massimo 20.",
+            "Scegli come entrare. **Crea un account con 12 parole segrete** non richiede alcun altro account. Oppure, sotto **Oppure accedi**, accedi una volta con uno degli account mostrati dalla pagina: **Google**, **Apple** o **Facebook**. La pagina ti reindirizza all'accesso di tale servizio e ti riporta indietro. Dove la comunità accetta solo accessi esterni, la pagina mostra solo questi ultimi.",
+            "Poi segui gli stessi passaggi validi per tutti: una foto, la tua posizione approssimativa, le tue 12 parole (parole in inglese) e un breve tour. La barra in alto indica **Accedi** (o **Il tuo nome**, se sei entrato con 12 parole), **La tua foto**, **La tua zona**, **Backup sicuro** e **Come funziona**. In **La tua zona**, **Usa la mia posizione** chiede il consenso al tuo browser una sola volta e arrotonda la risposta a circa 10 km prima di inviarla; **Scrivi una città o un quartiere** cerca un luogo per nome; **Salta per ora** non invia nulla. Al termine non verrà chiesta nuovamente la posizione al browser. Vedi \"Entrare in BeanPool\"."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "**Entrare con 12 parole.** Non è richiesto alcun account Google, Apple o Facebook, e la comunità non conserva nulla su di te tranne il tuo nome e, per un giorno, un riferimento cifrato alla rete da cui ti sei iscritto. Mentre digiti il tuo nome, la pagina compie una piccola operazione di calcolo per la comunità in background, affinché nessuno possa creare account all'infinito ad alta velocità. Non devi attendere: se tocchi prima che sia completata, la pagina mostra **Configurazione del tuo account in corso…** con una barra di 8 passaggi. Quando molte persone si stanno iscrivendo, l'operazione richiede più tempo e la pagina indica approssimativamente quanto tempo ci vorrà in questo browser: accedere tramite account esterno è più rapido in tal caso. **← Scegli un altro modo** torna a entrambi i metodi di accesso, con il calcolo ancora in corso. Le tue 12 parole sono quindi il tuo unico modo per rientrare. Nessuno può reimpostarle, né noi né la comunità: **Backup sicuro** lo specifica e propone **Aggiungi un accesso come seconda via di ritorno**: puoi scegliere l'account di accesso al termine del breve tour, una volta salvata la tua foto (vedi \"Aggiungere un accesso in seguito\" sotto). Entrambe le scelte sono a tua discrezione."
+        },
+        {
+          "type": "p",
+          "text": "**Entrare con un account di accesso.** La comunità conserva solo un riferimento cifrato ad esso, mai la tua email o il tuo nome da quell'account. Un account di accesso può iscriversi una sola volta."
+        },
+        {
+          "type": "p",
+          "text": "Lo stesso accesso viene conservato anche come via di recupero per il tuo account. Mentre la pagina dice **Protezione dell'account in corso…**, protegge una copia del tuo account, con le sue 12 parole, e l'iscrizione la consegna alla comunità. Quell'account di accesso può aprirla. Anche le persone che gestiscono il server possono aprirla, poiché il loro server verifica il tuo accesso, come per un account di accesso collegato sull'app per telefono: vedi \"Recuperare il tuo account\". Le Impostazioni mostrano poi **Recupero tramite accesso: collegato** e quale fornitore è in uso. Se la copia non può essere creata o conservata, entri comunque, e le Impostazioni indicano **Recupero tramite accesso: non collegato**: le tue 12 parole sono allora la tua unica via di recupero."
+        },
+        {
+          "type": "p",
+          "text": "Se preferisci che la comunità non conservi quella copia, l'app web non può ancora rimuoverla. L'app per telefono può farlo, se il tuo account si trova anche sul tuo telefono: con la comunità globale aperta, vai in **Impostazioni**, tocca **Protezione dell'account**, poi **Disconnetti** accanto all'accesso. In entrambi i casi, custodisci con cura le tue 12 parole: sono l'unico metodo di recupero che appartiene esclusivamente a te."
+        },
+        {
+          "type": "p",
+          "text": "Se qualcun altro ha già il nome che hai scelto, lo ricevi con un numero aggiunto. Puoi modificarlo nelle Impostazioni."
+        },
+        {
+          "type": "p",
+          "text": "**Usi già BeanPool?** Non creare un secondo account. Dopo **Partecipa**, scegli **Uso BeanPool sul mio telefono** per collegarlo dall'app per telefono, oppure **Ho le mie 12 parole**. Se quell'account non è ancora entrato nella comunità globale, la pagina propone gli stessi metodi di accesso (le tue 12 parole, oppure un accesso esterno per una volta), ed entra con l'account che già possiedi. Se in precedenza sei entrato nella comunità globale con un accesso, scegli **Mi sono già iscritto con un accesso** (vedi sotto)."
+        },
+        {
+          "type": "p",
+          "text": "Se chiudi la pagina a metà procedura, riaprila entro 10 minuti e riprenderà con lo stesso nome."
+        },
+        {
+          "type": "p",
+          "text": "**Un solo account per browser.** Se entri in due schede contemporaneamente, la seconda dice **Questo browser ha già un account** e propone **Apri** con il nome di quell'account. Nulla lo sostituisce. Se anche l'iscrizione della seconda scheda è andata a buon fine, quell'account viene conservato anche in questo browser, e l'opzione mostra le sue 12 parole: annotale se vuoi conservarlo. Per usarlo al suo posto, esci nelle Impostazioni (**Rimuovi solo da questo dispositivo**), poi ripristinalo con quelle parole."
+        },
+        {
+          "type": "p",
+          "text": "**Un'iscrizione già inviata ha la precedenza.** Se questo browser ha inviato un'iscrizione che potrebbe essere andata a buon fine, la pagina interroga la comunità a riguardo prima di qualsiasi altra operazione, persino prima di un invito o del ripristino di un altro account. Se sei dentro, prosegui. Se potrebbe ancora andare a buon fine, la pagina ti chiede di attendere qualche minuto, poi di selezionare **Verifica di nuovo**. Questo vale anche se la comunità ha smesso di accettare nuovi membri."
+        },
+        {
+          "type": "p",
+          "text": "Se qualcosa va storto sulla pagina dopo l'invio dell'iscrizione, viene segnalato e viene proposto **Ricarica pagina**. La tua iscrizione è conservata su questo browser, e ricaricando viene verificato se sei entrato."
+        },
+        {
+          "type": "p",
+          "text": "**Molte persone che si iscrivono da una stessa rete:** quando arrivano molti nuovi account da una singola connessione Internet, l'iscrizione richiede un po' più di lavoro di calcolo al browser invece di respingere le persone. Tutti gli utenti sulla stessa rete vengono conteggiati insieme, quindi in un campus, un ufficio o un incontro potrebbero essere altre persone a iscriversi, non tu. Solo oltre una cifra molto elevata la pagina rifiuta temporaneamente l'accesso, indicando quanti minuti attendere. Quando lo segnala per gli account con 12 parole, l'accesso con account esterno continua a funzionare."
+        },
+        {
+          "type": "h2",
+          "text": "I limiti di un nuovo account"
+        },
+        {
+          "type": "p",
+          "text": "Sulla comunità globale un nuovo account è soggetto ad alcuni limiti giornalieri per i suoi primi 3 giorni e finché 3 dei suoi annunci non sono rimasti attivi: 3 annunci, 5 foto e 10 nuove persone a cui inviare messaggi nell'arco di 24 ore. Un account creato solo con 12 parole ha limiti più ridotti per i suoi primi 7 giorni e finché 3 dei suoi annunci non sono rimasti attivi: 2 annunci, 4 foto e 3 nuove persone da contattare. L'aggiunta di un accesso lo porta immediatamente ai limiti ordinari. Rispondere a qualcuno che ti ha scritto per primo non è mai limitato. Vedi \"Segnalare un problema\" per le motivazioni."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Dopo essere entrato, una scheda intitolata **Il tuo account è nuovo** mostra quanti ne rimangono per ciascuna voce e quando ne avrai altri a disposizione. Tocca **✕** per chiuderla. Rimane in **Impostazioni** fino al termine dei limiti.",
+            "Se raggiungi un limite, **Nuovo annuncio** o la chat specifica quale limite è stato raggiunto e quando si sbloccherà, e **Nuovo annuncio** mostra la stessa scheda.",
+            "Se i moderatori hanno sospeso la tua possibilità di pubblicare, **Nuovo annuncio** e la chat lo indicano, e una scheda intitolata **Pubblicazione sospesa** specifica fino a quando. Rimane visibile finché non termina la sospensione.",
+            "Se i moderatori nascondono o rimuovono uno dei tuoi annunci, o sospendono le tue pubblicazioni, mentre l'app web è chiusa, l'app web mostra l'avviso alla successiva apertura, per un massimo di 60 giorni. Ogni avviso rimane visibile finché non tocchi **Ho capito**, dopodiché non ricompare più. Se ce ne sono diversi in attesa, **Chiudi tutto** li elimina tutti. Se il tuo account si trova anche sul tuo telefono, l'app web può mostrare un avviso che hai già visto lì."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "La tua comunità locale non applica nessuno di questi limiti."
+        },
+        {
+          "type": "h2",
+          "text": "Recuperare il tuo account con l'accesso"
+        },
+        {
+          "type": "p",
+          "text": "Sulla comunità globale, l'accesso con cui ti sei iscritto permette di recuperare il tuo account in un browser: in uno in cui i dati salvati sono stati cancellati, oppure in uno nuovo su un altro computer. Ottieni lo stesso account, mai un secondo."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Tocca **Hai già BeanPool?**, poi **Usa il mio accesso**. (Dopo **Partecipa**, **Mi sono già iscritto con un accesso** fa la stessa cosa.)",
+            "Un browser troppo obsoleto per gestire un account BeanPool lo segnala qui invece di offrire queste opzioni, esattamente come fa al posto di **Partecipa**. Usa una versione aggiornata di Chrome, Firefox, Safari o Edge.",
+            "Digita il tuo nome qui. Tocca il tuo account quando compare.",
+            "Scegli l'accesso con cui ti sei iscritto: **Google**, **Apple** o **Facebook**. Come al momento dell'iscrizione, la pagina ti reindirizza all'accesso del servizio e ti riporta indietro.",
+            "La pagina apre la copia protetta del tuo account nel browser e verifica che sia effettivamente l'account selezionato. In caso contrario, dice che non è quello e non salva nulla.",
+            "Sei dentro, con le tue 12 parole se la copia le conservava: un account iscritto in un browser le ha sempre. Se la copia non le conservava, questo browser non le possiede, e le Impostazioni lo segnalano (vedi \"Conserva le tue 12 parole\" sotto)."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "I dispositivi collegati al tuo account vengono informati che l'account è in fase di ripristino, nel caso non fossi tu."
+        },
+        {
+          "type": "p",
+          "text": "Se ti eri iscritto con GitHub, questo non può ripristinare il tuo account: BeanPool non usa più GitHub (vedi \"Recuperare il tuo account\"). Usa invece le tue 12 parole."
+        },
+        {
+          "type": "p",
+          "text": "Se accedi con un account diverso da quello con cui ti sei iscritto, la pagina lo segnala e ti permette di scegliere di nuovo. Se tocchi **Partecipa** e accedi con un account già iscritto, la pagina dice **Ci sei già** e propone **Ripristina con** (quell'accesso)."
+        },
+        {
+          "type": "p",
+          "text": "La regola **Un solo account per browser** vale anche qui. Se questo browser possiede già un altro account, nulla lo sostituisce: la pagina dice **Questo browser ha già un account** e propone di aprirlo. Per portare qui il tuo account, esci prima dall'altro. Se questo browser possiede già il tuo account, la pagina dice che è già presente."
+        },
+        {
+          "type": "h2",
+          "text": "Aggiungere un accesso in seguito"
+        },
+        {
+          "type": "p",
+          "text": "Se sei entrato nella comunità globale con 12 parole, esse rappresentano il tuo unico modo per rientrare. Dopo l'iscrizione, una scheda intitolata **Una sola via di ritorno** lo segnala, con **Visualizza le mie 12 parole** e **Aggiungi un accesso**. Tocca **✕** per chiuderla: ricompare una volta dopo che uno dei tuoi annunci è rimasto attivo e una volta terminata la tua prima settimana. Rimane in **Impostazioni** finché non aggiungi un accesso."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Tocca **Aggiungi un accesso**, poi **Google**, **Apple** o **Facebook**. Come al momento dell'iscrizione, la pagina ti reindirizza all'accesso del servizio e ti riporta indietro.",
+            "Si apre **Impostazioni** e comunica se l'aggiunta è andata a buon fine. Da quel momento anche quell'accesso permette di recuperare il tuo account: la comunità ne conserva una copia protetta, come quando ti iscrivi con un accesso, e le persone che gestiscono il server possono aprire quella copia. I limiti del tuo nuovo account diventano immediatamente quelli ordinari.",
+            "Un account di accesso che appartiene già a un altro account BeanPool qui, o che apparteneva a un account rimosso dalla comunità, non può essere aggiunto: la pagina lo segnala e nulla cambia."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Nomi e posizioni differenti"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Iscriversi con un invito:** il pulsante del primo passaggio dice **Crea l'identità e unisciti →**. Se qualcuno qui ha già il nome scelto, lo ricevi con un numero aggiunto. **← Indietro** su **La tua foto** mostra solo il tuo nome, con **Avanti →**: modificalo (fino a 20 caratteri) o mantienilo, sullo stesso account. Se qualcuno possiede già il nuovo nome, la pagina lo segnala e ne suggerisce altri.",
+            "**Schede:** l'app web ha **Inizio**, **Mercato**, **Mappa**, **Beni comuni**, **Chat**, **Persone** e **Mastro**. Ciò che l'app per telefono chiama **Chat** è **Chat** sul web, e **Persone** ha una propria scheda.",
+            "**Impostazioni e il tuo profilo:** i piccoli pulsanti in alto a destra: il tuo profilo, il **?**, poi Impostazioni. Su uno schermo ampio si trovano in fondo al menu sulla sinistra.",
+            "**Pubblicare un'Offerta o una Richiesta:** usa **Nuovo annuncio** sulla pagina della **Mappa**.",
+            "**Aspetto:** l'opzione si chiama **Come il dispositivo** anziché \"Come il telefono\".",
+            "**Bloccare:** Impostazioni indica **Gestisci membri bloccati**. La tua comunità conserva i tuoi blocchi con il tuo account, così che vengano ripristinati quando accedi su qualsiasi browser, e disconnettersi non lascia alcuna traccia di essi sul computer. Le persone che gestiscono il server della comunità possono vedere chi hai bloccato. Il blocco e lo sblocco richiedono una connessione: in assenza di segnale, l'app web lo segnala e nulla cambia. I blocchi effettuati nell'app per telefono rimangono sul telefono e non compaiono qui.",
+            "**Chat:** la chat web ha i pulsanti **Segnala** e **Blocca** in alto.",
+            "**La tua zona:** sulla comunità globale anche le Impostazioni dell'app web includono **La tua zona**, e il suo Mercato e la Mappa partono da essa. Vedi \"La tua zona\".",
+            "**Comunità globale:** in una comunità locale, Impostazioni ha una riga **Comunità globale** sotto **BEANPOOL**, con il relativo indirizzo e il testo che ricorda che la comunità globale è una tra tante, e che la tua comunità opera sul proprio server e non ne ha mai bisogno. Apre la comunità globale indicata dal server della tua comunità in una nuova scheda. Il tuo account non è presente lì finché non lo porti tu: in quella scheda, seleziona **Partecipa**, poi **Ho le mie 12 parole**. Se la tua comunità non ne indica nessuna, la riga non compare."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Cosa non è presente nell'app web"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Il recupero dell'account con un accesso su una comunità diversa da quella globale. Lì sono le tue 12 parole a permetterne il recupero, oppure il collegamento dall'app per telefono se il tuo account si trova anche sul telefono.",
+            "La corsia **Impara** di The Pulse.",
+            "Il blocco dell'app del telefono.",
+            "L'accesso alle Impostazioni della comunità con la propria chiave, per proprietari e amministratori. Il link **Gestisci** dell'app web apre Impostazioni, ma un browser non dispone di uno sblocco autonomo. Sul computer, scegli **Sign in with your phone** nelle Impostazioni e scansiona il codice con l'app per telefono (**Impostazioni**, poi **Gestisci questa comunità da un computer**; nelle app precedenti: **Sign in on a computer**)."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Mettere il tuo account web su un telefono"
+        },
+        {
+          "type": "p",
+          "text": "Se ti sei iscritto in un browser, porta lo stesso account nell'app per telefono. Non iscriverti di nuovo sul telefono: ciò creerebbe un secondo account, e due account non possono mai essere uniti in uno solo. **Backup sicuro**, accanto alle tue 12 parole, e la scheda del recupero nelle Impostazioni spiegano come procedere:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Installa l'app BeanPool e aprila.",
+            "Tocca **Fai già parte di BeanPool? Ripristina l'account**, poi **Recupera con 12 parole**.",
+            "Digita le tue 12 parole (parole inglesi), poi sotto **Quale comunità?** tocca **Comunità globale**. In un'app che non include tale scelta, digita l'indirizzo della comunità globale: global.beanpool.org. Per un'altra comunità, digita l'indirizzo di quella comunità: l'app web lo mostra nella stessa frase.",
+            "Se ti sei iscritto con un accesso, funziona anche **Recupera con social**, con quello stesso account di accesso. Vedi \"Recuperare il tuo account\"."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "La schermata 1 dell'iscrizione in un browser dice la stessa cosa al contrario: se sei già su BeanPool, su qualsiasi telefono o computer, porta quell'account invece di iniziarne uno nuovo."
+        },
+        {
+          "type": "h2",
+          "text": "Usare il tuo account del telefono su un computer"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Nell'app web sul computer, scegli di effettuare il collegamento con l'app mobile. Mostra un codice QR.",
+            "Sul telefono, apri **Impostazioni** e tocca **Collega un dispositivo** (nelle app precedenti: **Usa il tuo account su un altro dispositivo**).",
+            "Inquadra il codice QR con la fotocamera del telefono, tocca **Conferma e collega dispositivo** e supera il controllo della schermata di blocco del telefono.",
+            "Il telefono mostra quindi **quattro cifre**. Digitali sul computer e premi **Conferma**. Il tuo account passa al computer solo dopo questo passaggio. Tre tentativi errati e non viene inviato nulla: crea un nuovo codice. Non leggere mai le cifre ad alta voce e non inviarle a nessuno.",
+            "Se il telefono segnala che l'app è obsoleta, aggiorna l'app BeanPool su di esso, poi scansiona un nuovo codice."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Installazione"
+        },
+        {
+          "type": "p",
+          "text": "L'app web potrebbe proporre **Installa BeanPool** affinché si apra dalla schermata iniziale come un'app. Se il tuo browser non supporta questa operazione, tocca **Come?** per visualizzare i passaggi."
+        },
+        {
+          "type": "h2",
+          "text": "Conserva le tue 12 parole"
+        },
+        {
+          "type": "p",
+          "text": "I browser a volte cancellano i dati salvati, ad esempio Safari dopo una settimana senza visite. Finché non hai visualizzato le tue 12 parole, le Impostazioni dell'app web mostrano un avviso con **Visualizza e salva frase di recupero**. Fallo e scrivile su carta."
+        },
+        {
+          "type": "p",
+          "text": "Un browser che ha recuperato il tuo account con un accesso la cui copia non conservava le tue 12 parole non ne è in possesso, quindi non mostra tale avviso. In quel caso, **Visualizza frase di recupero** indica **Non salvata in questo browser** e apre una pagina che illustra cosa consente invece di recuperare il tuo account: le tue 12 parole, se le hai scritte su carta, o l'accesso che Impostazioni mostra come collegato. In assenza di entrambi, può farlo solo l'app per telefono, se il tuo account è presente anche sul telefono. **Rimuovi solo da questo dispositivo** segnala la stessa cosa prima di uscire."
+        }
+      ]
+    }
+  ]
+}

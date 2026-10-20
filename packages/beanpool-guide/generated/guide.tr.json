@@ -1,0 +1,2646 @@
+{
+  "schema": 2,
+  "version": 1,
+  "language": "tr",
+  "hash": "a2f3cf7e0d6fc7f6f25a47d86c655e16bda966c478b181cc5c7cc6abf56bbf6e",
+  "sections": [
+    {
+      "id": "about",
+      "title": "BeanPool Hakkında",
+      "summary": "BeanPool nasıl çalışır, kurallar ve kararların nasıl alındığı, sık sorulan sorular ve yenilikler.",
+      "slugs": [
+        "how-it-works",
+        "rules",
+        "faq"
+      ]
+    },
+    {
+      "id": "getting-started",
+      "title": "Başlarken",
+      "summary": "Ana Sayfa, katılma, yakındaki toplulukları bulma, Fasulye ve küresel topluluk, sınırları, 12 kelimeniz, profiliniz, üst çubuk, bu kılavuz, yardım alma, birden fazla topluluk kullanma ve web uygulaması.",
+      "slugs": [
+        "home",
+        "joining",
+        "finding-a-community",
+        "beans-and-the-global-community",
+        "global-community-limits",
+        "your-12-words",
+        "your-profile",
+        "the-top-bar",
+        "the-bean",
+        "getting-help",
+        "communities",
+        "web-app"
+      ]
+    }
+  ],
+  "guides": [
+    {
+      "slug": "how-it-works",
+      "title": "BeanPool nasıl çalışır",
+      "summary": "Fasulye, takas, teklifler, ihtiyaçlar ve kredi hakkında sade açıklamalar.",
+      "sourceHash": "64cee61091609f80",
+      "source-hash": "64cee61091609f80",
+      "section": "about",
+      "related": [
+        "posting",
+        "a-deal-step-by-step",
+        "credit-line",
+        "gifts",
+        "circulation-fee",
+        "trust-badges"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Fasulye"
+        },
+        {
+          "type": "p",
+          "text": "Topluluğunuz **fasulye** ile takas yapar. Fasulye bir bankadan gelen para değildir. Kimin kime yardım ettiğinin bir kaydıdır."
+        },
+        {
+          "type": "p",
+          "text": "Herkes sıfırdan başlar. Birine yardım ettiğinizde fasulye kazanırsınız. Biri size yardım ettiğinde fasulye harcarsınız."
+        },
+        {
+          "type": "p",
+          "text": "Yaklaşık bir rehber: 40 fasulye, birinin yaklaşık bir saatlik zamanıdır. Gerçek fiyat üzerinde siz ve diğer kişi anlaşırsınız."
+        },
+        {
+          "type": "h2",
+          "text": "Teklifler ve İhtiyaçlar"
+        },
+        {
+          "type": "p",
+          "text": "Bir **Teklif**, yapabileceğiniz veya verebileceğiniz bir şeydir: ekmek, arabayla bir yere bırakma, bir saatlik bahçe işi, bir tamirat."
+        },
+        {
+          "type": "p",
+          "text": "Bir **İhtiyaç**, aradığınız bir şeydir."
+        },
+        {
+          "type": "p",
+          "text": "Fasulyeli bir toplulukta bir İhtiyaç paylaşabilmeniz veya başka birinin Teklifini isteyebilmeniz için önce kendinize ait en az bir Teklif paylaşmış olmanız gerekir. Herkes bir şeyler getirir. Küresel toplulukta olduğu gibi Fasulyenin olmadığı yerlerde ilk gönderiniz bir İhtiyaç olabilir."
+        },
+        {
+          "type": "h2",
+          "text": "Bir takas nasıl işler"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "İstediğiniz bir Teklif bulup onu talep edersiniz veya biri İhtiyacınızı karşılar.",
+            "Takas üzerinde anlaşıldığında alıcının fasulyeleri güvenle tutulur. Takas devam ederken bunları kimse harcayamaz.",
+            "İş yapılır.",
+            "Alıcı yapıldığını onaylar. Ardından fasulyeler satıcıya geçer."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Bir takas tıkanırsa topluluğunuzun bir yöneticisi müdahale edebilir. Satıcıya ödeme yapabilir, fasulyeleri alıcıya geri verebilir veya bölüştürebilirler. Bir yönetici parçası olduğu bir takas hakkında karar veremez."
+        },
+        {
+          "type": "h2",
+          "text": "Hediyeler"
+        },
+        {
+          "type": "p",
+          "text": "Bir takas olmadan da birine hediye olarak fasulye gönderebilirsiniz."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Bir hediye yalnızca sahip olduğunuz fasulyelerden verilebilir. Sizi asla sıfırın altına düşüremez.",
+            "Pazarda bir takası tamamladıktan sonra hediye gönderebilirsiniz. Yalnızca 1 veya 2 fasulyelik bir takas sayılmak için çok küçüktür.",
+            "Hediyelerin ücreti yoktur."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Sıfırın altına inme: kredi limitiniz"
+        },
+        {
+          "type": "p",
+          "text": "Sahip olduğunuzdan biraz daha fazlasını harcayabilir ve sıfırın altına inebilirsiniz. Bu sizin **kredi limitinizdir**. Daha sonra başkalarına yardım etme sözüdür."
+        },
+        {
+          "type": "p",
+          "text": "Kredi limitiniz sıfırdan başlar. Pazardaki ilk takasınızı tamamladığınızda açılır (yalnızca 1 veya 2 fasulyelik bir takas sayılmak için çok küçüktür). Topluluğunuzun yeni gelenleri karşılamak için seçtiği biri de size kefil olarak küçük bir başlangıç sağlayabilir: 25, 50 veya 100 fasulye."
+        },
+        {
+          "type": "p",
+          "text": "Kredi limitiniz **güveninizle** büyür:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Pazarda takasları tamamlayarak güven kazanırsınız. Hediyeler güven kazandırmaz.",
+            "Birçok farklı kişiyle takas yapmak daha fazla güven oluşturur. Herhangi bir kişiyle yapılan takas 500 fasulyeye kadar sayılır.",
+            "Güven ilk başta hızlı, ardından daha yavaş büyür.",
+            "Yıldız değerlendirmeleri önemlidir. İnsanlar sizi değerlendirirse, ortalama puanınız takaslarınızın kazandığı güveni ölçeklendirir: 5 yıldız tamamını korur, 1 yıldız %60'ını korur.",
+            "Herhangi bir kredi limitinin inebileceği en derin nokta sıfırın altında 2.000 fasulyedir. Üyelerini teyit eden bir topluluk daha fazlasına izin verebilir (aşağıya bakın)."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Teklifleriniz kredinizi açar"
+        },
+        {
+          "type": "p",
+          "text": "Güven ne kadar derine **inebileceğinizi** belirler. Yayındaki Teklifleriniz ise şu anda ne kadar derine **inmenize izin verildiğini** belirler. İkisinden küçük olanını alırsınız."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Yayında Teklif yok: sıfırın altına inemezsiniz.",
+            "1 Teklif: sıfırın altında 200'e kadar.",
+            "2 Teklif: 500'e kadar.",
+            "3 Teklif: 1.000'e kadar.",
+            "4 Teklif: 1.500'e kadar.",
+            "5 Teklif: 2.000'e kadar."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Sıfırın altındayken Teklifleri kaldırırsanız, Tekliflerinizin şu anda karşıladığından daha fazlasını borçlu olabilirsiniz. Bu durumda tekrar limitinizin içine girene kadar daha fazla harcama yapamazsınız. Yine de fasulye kazanabilirsiniz ve sizden hiçbir şey alınmaz."
+        },
+        {
+          "type": "p",
+          "text": "Bazı topluluklar üyelerinin kim olduğunu teyit eder. Orada, teyit edilmiş bir üye doğrudan bir kredi limiti alır: topluluk başka bir miktar seçmedikçe 1.000 fasulye. Yayındaki tek bir Teklif bunun tamamını kullanılabilir hale getirir. Oradaki en derin limit 5.000'e kadar olabilir. \"Kredi limitiniz\" bölümüne bakın."
+        },
+        {
+          "type": "h2",
+          "text": "Güven rozetleri"
+        },
+        {
+          "type": "p",
+          "text": "Güveniniz bir rozet olarak görünür. Rozetler Yeni Gelen, Sakin, Temsilci ve Büyük'tür. Rozetinizin arkasındaki güven üç şeyi toplar: bir kefaletin size sağladığı başlangıç, takas yaparak kazandığınız güven ve bir yöneticinin size tanıdığı her türlü güven. Bir yönetici bir üyeye takas olmadan doğrudan bir rozet verebilir. Üyelerini teyit eden bir toplulukta teyit edilmiş bir üyenin aldığı kredi limiti de sayılır."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "200 güvenden itibaren Sakin.",
+            "600 güvenden itibaren Temsilci.",
+            "1.400 güvenden itibaren Büyük."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Rozet bir takdirdir, daha fazlası değildir. Hiçbir özelliğe erişim şartı koymaz. Rozeti ne olursa olsun herkes takas yapabilir, davet edebilir ve oy kullanabilir."
+        },
+        {
+          "type": "h2",
+          "text": "Ücretler ve Ortak Alan"
+        },
+        {
+          "type": "p",
+          "text": "Topluluğunuzun **Ortak Alan** adı verilen ortak bir fasulye havuzu vardır. Ücretler buraya gider. Üyeler nasıl harcanacağına birlikte karar verir."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Pazar ücreti:** her pazar ödemesinin %1,5'i Ortak Alana gider. Satıcının aldığı miktardan kesilir.",
+            "**Dolaşım ücreti:** fasulyelerin hareketsiz durması değil, dolaşımda olması amaçlanır. Elinizde tuttuğunuz ilk 200 fasulye her zaman ücretsizdir. Bunun üzerinde, aylık küçük bir ücret Ortak Alana gider: 200 ile 500 arasındaki fasulyeler için ayda %1, 500 ile 1.000 arasında %1,5, 1.000 ile 2.000 arasında %2 ve 2.000'in üzerinde %2,5.",
+            "Sıfırın altındaki bakiyeler asla dolaşım ücreti ödemez. Hediyeler asla bir ücret ödemez."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Girişimler ve gruplar"
+        },
+        {
+          "type": "p",
+          "text": "Bir **girişim** süreklidir ve kendi adına takas yapar: bir fırın, bir alet kütüphanesi, bir pazar tezgahı. Bir **baş sorumlu** önderliğinde **sorumlular** tarafından yönetilir. Sorumlular girişime bir kredi limiti sağlamak için kendi güvenlerinin bir kısmını taahhüt edebilir."
+        },
+        {
+          "type": "p",
+          "text": "Bir **grup**, bir veya daha fazla **koordinatör** tarafından yönetilen, kendi sohbeti ve gönderileri olan bir üye çevresidir. Bunlardan biri grubun **baş koordinatörüdür**; başlangıçta grubu oluşturan kişi kimse odur."
+        },
+        {
+          "type": "p",
+          "text": "Sorumluların ve koordinatörlerin nasıl seçildiğini \"Kurallar ve kararların nasıl işlediği\" bölümünden okuyabilirsiniz."
+        }
+      ]
+    },
+    {
+      "slug": "rules",
+      "title": "Kurallar ve karar alma süreci",
+      "summary": "Oylama, katılım, gizli oylama, kimlerin oy verebileceği, askıya alma, üye çıkarma, sorumlular ve kolaylaştırıcılar.",
+      "sourceHash": "be2e7321aab53ca8",
+      "source-hash": "be2e7321aab53ca8",
+      "section": "about",
+      "related": [
+        "decisions",
+        "proposing-a-decision",
+        "polls",
+        "keepers",
+        "groups",
+        "people"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Topluluğa sormanın iki yolu"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Bir **Anket**, akışta yer alan \"Pazar Pazar günü olsun mu?\" gibi bir sorudur. İnsanların ne düşündüğünü gösterir. Kendi başına hiçbir şeyi asla değiştirmez.",
+            "Bir **Karar** bağlayıcıdır. Kabul edilirse topluluğunuzun sunucusu bunu kendiliğinden yürütür. Hiç kimsenin bir düğmeye basması gerekmez ve hiç kimse bunu sessizce görmezden gelemez."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Küresel toplulukta Anketler vardır ancak Kararlar yoktur: herkes 12 kelimeyle veya bir girişle katılabilir; bu nedenle birden fazla hesabı olan bir kişi oylamayı etkileyebilir. Aşağıda Kararlar hakkında yer alan her şey yerel topluluklar hakkındadır."
+        },
+        {
+          "type": "h2",
+          "text": "Bir Karar neleri yapabilir"
+        },
+        {
+          "type": "p",
+          "text": "Bir üye hakkında:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Bir üyeyi askıya alabilir veya askıya almayı kaldırabilir.",
+            "Bir üyenin kredisini dondurabilir veya çözebilir.",
+            "Bir üyeye yeni gelenlere kefil olma hakkı verebilir veya bu hakkı geri alabilir.",
+            "Bir girişimden bir baş sorumluyu veya bir projeden bir lideri görevden alabilir.",
+            "Bir üyeyi topluluktan çıkarabilir veya geri kabul edebilir."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Ortak Alan hakkında:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Ortak Alandan bir projeye veya girişime fasulye verebilir.",
+            "Ortak Alandan bir üyeye zor durum hibesi verebilir.",
+            "Bir projenin veya girişimin borcunu Ortak Alandan ödeyebilir.",
+            "Ayrılan bir üyenin Ortak Alana olan borcunu bağışlayabilir. Hiçbir fasulye hareket etmez. Kayıt, bağışlanmış olarak işaretli kalır. Bir topluluğun İsim listesi tuttuğu yerlerde bu oradan başlatılır."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Bir hibe, Ortak Alanın şu anda tuttuğu miktar ile son 30 gün içinde giren miktarın toplamından fazla olamaz. Daha büyük bir hibe başlattığınızda reddedilir."
+        },
+        {
+          "type": "h2",
+          "text": "Kimler bir Karar başlatabilir"
+        },
+        {
+          "type": "p",
+          "text": "Kredisi dondurulmamış ve pazarda takas yapmış veya bir yönetici tarafından güven rozeti verilmiş herhangi bir aktif üye. Tek başına kefalet yeterli değildir. Yöneticiler de başlatabilir. Aynı anda açık bir Kararınız olabilir. Nedenini en az 10 karakterle açıklamanız gerekir."
+        },
+        {
+          "type": "h2",
+          "text": "Kimler oy verebilir"
+        },
+        {
+          "type": "p",
+          "text": "Kredisi dondurulmamış ve Karar açılmadan **önce** katılmış olan herhangi bir aktif üye. Bir oylama sırasında katılan kişiler bu oylamada oy kullanamaz. Girişim hesapları oy kullanamaz."
+        },
+        {
+          "type": "h2",
+          "text": "Oylar nasıl sayılır"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Bir üye hakkındaki Kararlar: **bir üye, bir oy**. Evet veya Hayır.",
+            "Ortak Alan fasulyeleri hakkındaki Kararlar: oylar takas ile ağırlıklandırılır. Birden fazla oy kullanabilirsiniz ancak maliyeti artar: 1 oy 1 oy kredisine, 2 oy 4 krediye, 3 oy 9 krediye mal olur. Oy kredileriniz, tamamlanan takaslarınızdan gelir ve takas ortağı başına 500 fasulyeye kadar sayılır. Her Kararda tam oy kredinizi tekrar alırsınız. Asla tükenmezler.",
+            "Hiç takas tamamlamadıysanız henüz Ortak Alan fasulyeleri hakkında oy kullanamazsınız.",
+            "Oylama kapanana kadar oyunuzu istediğiniz zaman değiştirebilirsiniz."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Gizli oylama"
+        },
+        {
+          "type": "p",
+          "text": "Uygulama yöneticiler dahil hiç kimseye nasıl oy kullandığınızı göstermez. Herkes toplamları görür ve siz kendi oyunuzu görürsünüz. Oyunuz, sayılabilmesi ve kontrol edilebilmesi için hesabınızla birlikte topluluğunuzun sunucusunda saklanır. Sunucuyu işleten sahipler ve yöneticiler dosyaların bir kopyasını alabilir ve orada oyunuzu inceleyebilir."
+        },
+        {
+          "type": "p",
+          "text": "Anketi başlatan kişi onu bir **açık oylama** yapmadığı sürece Anketler de anonimdir: bu durumda üyeler kimin neyi seçtiğini görebilir. Anket hangisi olduğunu belirtir."
+        },
+        {
+          "type": "h2",
+          "text": "Bir oylama ne kadar sürer"
+        },
+        {
+          "type": "p",
+          "text": "Her Karar tam olarak 7 gün sürer. Oylama hemen açılır. 7 gün dolduğunda topluluğunuzun sunucusu oyları sayar ve sonuca göre hareket eder."
+        },
+        {
+          "type": "h2",
+          "text": "Katılım oranı"
+        },
+        {
+          "type": "p",
+          "text": "Bir oylama yalnızca yeterli sayıda kişi katılırsa geçerli sayılır."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Yeterli insan, oy kullanabilecek ve son 30 gün içinde aktif olan üyelerin %30'u anlamına gelir. Asla 3 kişiden az olamaz.",
+            "Bir üyeyi çıkarmak için bu oran %25'tir.",
+            "\"Aktif\", uygulamanızın bu 30 gün içinde topluluğunuzun sunucusuna bir şey gönderdiği anlamına gelir: bir gönderi, bir takas, bir oy, bir mesaj. Telefonda, uygulamanın her açılışında uyarılar için oturum açması nedeniyle genellikle yalnızca uygulamayı açmak da sayılır.",
+            "Katılım oranı oyların ağırlığını değil, kişileri sayar."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Çok az kişi oy kullanırsa hiçbir şey olmaz. Karar \"sonuçlanmadı\" olarak kapanır."
+        },
+        {
+          "type": "h2",
+          "text": "Ne kadar Evet oyu gerekir"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Çoğu Karar: %60 Evet.",
+            "Bir üyeyi çıkarma: %66 Evet.",
+            "Bir şeyi geri alma (askıya almayı kaldırma, krediyi çözme, üyeyi geri kabul etme): yarıdan fazlası.",
+            "Eşitlik her zaman başarısız sayılır."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Bir Karar kabul edildiğinde"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Topluluğunuzun sunucusu bunun hâlâ geçerli olduğunu kontrol eder: üye hâlâ mevcuttur, Ortak Alanda yeterli fasulye vardır. Ardından harekete geçer.",
+            "Bir hibe için Ortak Alanda fasulye yetersizse hibe yeterli miktar olana kadar bekler. 90 gün sonra vazgeçer.",
+            "Aynı anda yalnızca bir hibe bekleyebilir. Ortak Alan hâlâ yetersizken ikinci bir hibe kabul edilirse beklemez: tamamen kapanır ve topluluk tekrar oylamalıdır.",
+            "Kişi veya girişim zaten ayrılmışsa Karar hiçbir şey yapmadan kapanır."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Bir üyeyi çıkarma"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Bir çıkarma kabul edilirse üye derhal askıya alınır ve kredisi dondurulur.",
+            "7 gün daha geçtikten sonra tamamen çıkarılırlar. Bu 7 gün içinde onları geri kabul etmeye yönelik bir Karar çıkarmayı iptal eder.",
+            "Kendi hesabını silen bir üye, bir çıkarmanın ardından bile olsa geri kabul edilemez. Yeni bir davetle tekrar katılabilirler.",
+            "Bir üye çıkarıldığında gönderileri kaldırılır. Fasulye borçları varsa Ortak Alan borcu öder. Fasulyeleri varsa o fasulyeler Ortak Alana geçer.",
+            "Topluluk, topluluğunuzun sunucusunun bir sahibi veya yöneticisi dışındaki herhangi bir üyeyi çıkarmak veya askıya almak için oy kullanabilir. Sunucunun kendisini onlar çalıştırır, bu nedenle bir oylama bunu ellerinden alamaz; denerseniz uygulama bunu belirtir. Bir sahip önce yöneticinin rolünü alabilir ve bundan sonra diğerleri gibi bir üye olurlar."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Acil askıya alma"
+        },
+        {
+          "type": "p",
+          "text": "Bir yönetici, örneğin zararı durdurmak için bir üyeyi derhal askıya alabilir. Üyelerin okuyabileceği bir gerekçe belirtmelidirler."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Aynı anda 7 günlük bir Karar açılır: \"Bu askıya alma korunsun mu?\".",
+            "Olağan katılım oranına ve %60 Evet oyuna ihtiyaç duyar.",
+            "Kabul edilmezse veya çok az kişi oy kullanırsa askıya alma kendiliğinden kalkar.",
+            "Bir yönetici kendisini askıya alamaz ve sunucunun tek sahibini askıya alamaz. Yalnızca bir sahip başka bir sahibi askıya alabilir."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Küresel toplulukta oylama yoktur. Bir yönetici daha önce kaldırmadığı sürece askıya alma 7 gün sürer ve ardından kendiliğinden kalkar. Birini daha uzun süre dışarıda tutmak için yöneticiler onu tekrar askıya alır veya hesabını kaldırır."
+        },
+        {
+          "type": "h2",
+          "text": "Yöneticilerin yapabilecekleri ve yapamayacakları"
+        },
+        {
+          "type": "p",
+          "text": "Topluluğunuzun sunucusunun sahipleri ve yöneticileri vardır. Ona bakarlar."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Bir yönetici açık bir Kararı durdurabilir ancak yazılı bir gerekçe belirtmelidir. Üyeler bunu Karar üzerinde okuyabilir.",
+            "Bir çıkarma kabul edilmişse ve 7 günlük bekleme süresindeyse bir yönetici onu durdurabilir veya derhal gerçekleşmesini sağlayabilir.",
+            "Yöneticiler üyelere yeni gelenlere kefil olma hakkı verebilir.",
+            "Yöneticiler bir üyeye güven rozeti verebilir. Bu ayrıca o üyeye o rozetin gerektirdiği güveni verir, böylece kredi limitlerini derinleştirir.",
+            "Yöneticiler tıkanmış takasları çözer ancak parçası oldukları bir takası asla çözemezler."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Anketler"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Kredisi dondurulmamış herhangi bir aktif üye 2 ila 4 yanıtlı bir Anket başlatabilir. 3, 7 veya 14 gün sürer.",
+            "Aynı anda açık bir Anketiniz olabilir. Topluluğunuz aynı anda 5 açık Ankete sahip olabilir.",
+            "Bir gruba paylaşılan bir Anket yalnızca o grubun üyeleri ve koordinatörleri tarafından yanıtlanabilir. Gözlemciler okuyabilir ancak yanıtlayamaz.",
+            "Bir Anketi yanıtlamak için de kredinin dondurulmamış olması gerekir. Anket kapanana kadar yanıtınızı değiştirebilirsiniz. Başlatan kişi erken kapatabilir.",
+            "Bir Anket anonimdir: herkes yalnızca toplamları görür. Başlatan kişi bunun yerine üyelerin kimin neyi seçtiğini görmesi için **açık oylama** yapabilir. Bu seçim Anket başladığında yapılır ve Anket paylaşıldıktan sonra değiştirilemez.",
+            "Küresel toplulukta kapalı bir anonim Anket, varsa oylarının kaç tanesinin yeni veya 12 kelimelik hesaplardan geldiğini de söyler. Yine de her oy sayılır."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Girişimler ve sorumlular"
+        },
+        {
+          "type": "p",
+          "text": "Bir girişim sorumluları tarafından yönetilir. Bunlardan biri baş sorumludur."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Katılma:** sorumlu olmak istersiniz ve kazandığınız güvenin ne kadarını taahhüt ettiğinizi söylersiniz (0 olabilir). Tüm girişimlerinizde takas yaparak kazandığınızdan daha fazla güven taahhüt edemezsiniz. Baş sorumlu onaylar veya reddeder.",
+            "**Üyelerini teyit eden bir toplulukta taahhüt:** teyit edilmiş bir üye, bilinen kredi limitinin bir kısmını (en fazla yarısını) da taahhüt edebilir. Bu kısım kendi limitlerinden düşer.",
+            "**İtiraz süresi:** bir girişimin halihazırda birden fazla sorumlusu olduğunda baş sorumlunun onayı 3 gün bekler. Diğer herhangi bir sorumlu bu süre içinde itiraz edebilir ve tek bir itiraz bunu iptal eder.",
+            "**Bir sorumluyu çıkarma:** baş sorumlu sıradan bir sorumluyu çıkarabilir. Aynı 3 günlük süre geçerlidir ve diğer herhangi bir sorumlu itiraz edebilir.",
+            "**Topluluk yöneticileri:** topluluğunuzun girişimin bir sorumlusu olmayan bir yöneticisi, 3 günlük süre olmadan bir sorumluyu derhal onaylayabilir veya sıradan bir sorumluyu derhal çıkarabilir. Bu, tıkanmış bir girişime yardım edilebilmesi içindir.",
+            "**Görevden çekilme:** herhangi bir sorumlu görevden çekilebilir. Girişim borçtaysa ve bunu karşılamak için taahhüdünüze ihtiyaç varsa borç küçülene veya diğer sorumlular daha fazla taahhütte bulunana kadar beklemeniz gerekir. Tek sorumlu görevden çekilemez; önce başka bir sorumlu ekler veya girişimi tasfiye eder.",
+            "**Taahhüdünüz** girişimin kredi limitini destekler. Kazandığınız güvene ait bir taahhüt kendi bakiyenizden veya kendi kredi limitinizden asla alınmaz.",
+            "**Sessiz bir baş sorumlu:** baş sorumlu 30 gün boyunca uygulamada hiçbir şey yapmadıysa diğer sorumlular kendi aralarından yeni bir baş sorumlu seçebilir. Oylama Evet ve Hayır seçenekleriyle 14 güne kadar sürer. Diğer sorumluların yarıdan fazlası Evet dediğinde kabul edilir. Baş sorumlu geri gelip uygulamada herhangi bir şey yaparsa oylama iptal edilir. Baş sorumlunun hesabı askıya alınmışken yaptığı hiçbir şey geri gelme sayılmaz. Sorumlu oyları değiştirilemez.",
+            "**Sorumlular arasındaki oylamalar:** iki veya daha fazla sorumlusu olan bir girişimde herhangi bir sorumlu, girişimin kendi hesabından Fasulye ödenmesini (asla tuttuğundan fazla değil, asla kendilerine değil ve bir sorumluya yalnızca %1,5 takas ücretiyle kazandıklarından), bir sorumlunun çıkarılmasını veya bir projede değil ama bir girişimde başka bir sorumlunun baş sorumlu yapılmasını önerebilir. Açıldığı andaki sorumlular oy kullanır; yarıdan fazlası oy kullanmalıdır; ödeme yapmak veya çıkarmak için %60 Evet, bir baş sorumlu seçmek için yarıdan fazlası gerekir. 7 gün sürer veya yanıt değişemez hale geldiğinde daha erken biter ve kendiliğinden yürütülür. Yalnızca sorumlular görür. Açıkken kaç kişinin oy kullandığını gösterir; Evet ve Hayır kapandığında gösterilir. Kimin nasıl oy kullandığını kimse görmez ancak çok küçük bir grupta sonuç ve kimlerin oy kullandığı bunu belli edebilir. Bu oylamalar Ortak Alana veya birinin topluluktaki konumuna asla dokunmaz: bunlar topluluk Kararlarıdır. Bir oylama baş sorumluyu (bunun yerine yeni bir baş sorumlu için oy kullanın), tek sorumluyu veya taahhüdü bir borcu karşılayan bir sorumluyu çıkaramaz. Bir sorumlu kendi çıkarılmasını öneremez; bunun yerine görevden çekilir.",
+            "**Baş sorumlu ayrılır veya çıkarılırsa,** en uzun süredir görev yapan sorumlu derhal baş sorumlu olur ve diğer sorumlular onu hemen değiştirebilir. Hiç sorumlu kalmazsa girişim duraklatılır.",
+            "**Tasfiye:** baş sorumlu veya tek sorumlu bir girişimi kapatmayı başlatabilir. Bir topluluk yöneticisi de yapabilir. Ardından 7 günlük bir bekleme süresi vardır ve herhangi bir sorumlu veya bir topluluk yöneticisi bunu iptal edebilir. Borçlu bir girişim, borç ödenene veya topluluk borcu silene kadar kapanamaz. Hiçbir şey bir tasfiyeyi kendiliğinden tamamlamaz: 7 günün ardından baş sorumlu, tek sorumlu veya bir topluluk yöneticisi kapatma işlemini tamamlamalıdır ve bir takas hâlâ açıkken tamamlanamaz. Kapandığında kalan fasulyeler Ortak Alana gider."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Gruplar ve koordinatörler"
+        },
+        {
+          "type": "p",
+          "text": "Bir grup koordinatörleri tarafından yönetilir ve bunlardan biri grubun **baş koordinatörüdür**. Grubu oluşturan kişi ilk baş koordinatördür."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Bazı gruplar herkese açıktır. Bazıları sizi bir koordinatörün onaylamasına ihtiyaç duyar. Bazıları yalnızca davetiyelidir.",
+            "**Herhangi bir koordinatör** üyeleri onaylayabilir ve davet edebilir, bir üyeyi veya gözlemciyi çıkarabilir, bir üyenin veya gözlemcinin rolünü değiştirebilir, birini koordinatör yapabilir, gönderileri ve mesajları kaldırabilir ve grubu ile kimlerin katılabileceğini düzenleyebilir.",
+            "**Yalnızca baş koordinatör** bir koordinatörü çıkarabilir veya birinden koordinatör rolünü alabilir. Grubun kendi oylaması da bunu yapabilir.",
+            "**Hiç kimse baş koordinatörü çıkaramaz veya liderliği ondan alamaz.** Ne başka bir koordinatör ne de bir topluluk yöneticisi — yöneticilerin bir grubun içinde söz hakkı yoktur. Baş koordinatörün görevi devretmesi dışında yalnızca grubun kendi oylaması yeni bir lider seçebilir.",
+            "**Askıya alınan bir koordinatör:** bir koordinatörün hesabı askıya alınmışken hiçbir koordinatörlük yetkisini kullanamaz ve lider olarak kendi yetkileri de bekler. Koordinatör olarak kalır ve lider lider olarak kalır; askıya alma bittiğinde hepsi tekrar çalışır. Diğer koordinatörler her zamanki gibi devam eder ve üyeler sohbet etmeye ve paylaşım yapmaya devam eder. Askıya alınan bir üye de askıya alma bitene kadar bir grup başlatamaz veya bir gruba katılamaz.",
+            "**Liderliği devretme:** baş koordinatör başka birini lider yapabilir. Başka bir koordinatör veya aynı anda koordinatör olan bir üye olabilir. Yapıldıktan sonra lider bunu geri alamaz.",
+            "**Lider olarak ayrılma:** önce liderliği devredin. Grupta başka kimse yoksa lider doğrudan ayrılabilir.",
+            "Son koordinatör görevden çekilemez ve grup hâlâ başka üyelere sahipken çıkarılamaz. Grupta başka kimse yoksa doğrudan ayrılabilir.",
+            "**Grubun kendi oylaması.** Bir grubun üyeleri ve koordinatörleri grubun kendi meseleleri hakkında oy kullanabilir: yeni bir baş koordinatör seçmek, birini koordinatör yapmak, bir koordinatörü üye yapmak, birini gruptan çıkarmak, kimlerin katılabileceğini değiştirmek veya grubu kapatmak. Herhangi bir üye veya koordinatör bir öneride bulunabilir; gözlemciler izler ancak oy kullanmaz. Açıldığı sırada üye veya koordinatör olan herkes oy kullanabilir. Bunların yarıdan fazlası oy kullanmalıdır. Birini çıkarmak ve grubu kapatmak %60 Evet gerektirir; geri kalanı yarıdan fazlasını gerektirir. 7 gün sürer veya yanıt değişemez hale geldiğinde daha erken biter ve ardından uygulama bunu kendiliğinden yürütür. Oylar gizlidir ve değiştirilemez. Bir grubun oylaması hiçbir zaman Fasulye hareket ettirmez ve hiç kimsenin topluluktaki konumunu değiştirmez ve yöneticiler bunu durduramaz. Kapatılan bir grup yeni üye ve yeni mesaj kabul etmez; gönderileri ve etkinlikleri iptal edilir. Sohbeti okunabilir kalır. Oylamayı grubun sayfasında **Kararlar** altında bulabilirsiniz. Bir gruba hiçbir şeyi değiştirmeden ne düşündüğünü sormak için gruba bir Anket paylaşın.",
+            "**Sessiz bir baş koordinatör:** bir grubun baş koordinatörü 30 gün boyunca uygulamada hiçbir şey yapmadıysa grup yeni birini seçebilir. **Diğer koordinatörleri** oy kullanır — veya diğer koordinatörlerden hiçbiri liderin son aktif olduğu güne kadar koordinatör yapılmadıysa **üyeleri** oy kullanır. Yalnızca o gün zaten orada olan kişiler katılır: o zamana kadar gruba katılmış olan üyeler veya o zamana kadar koordinatör yapılmış olan koordinatörler. Bundan sonra katılan veya koordinatör yapılan hiç kimse öneremez, önerilemez veya oy kullanamaz ve sayılmaz. Gruptan ayrılıp tekrar katılırsanız tekrar katıldığınız andan itibaren sayılırsınız. Orada bulunanlardan hiç kimse kalmadıysa hiçbir oylama açılamaz ve grubun ekranı bunu belirtir. Katılanlardan herhangi biri kendileri dahil aralarından birini önerebilir. Oylama gizli olarak, Evet veya Hayır şeklinde 14 güne kadar sürer. Yanıt verenlerin yarıdan fazlası Evet dediğinde kabul edilir. Baş koordinatör geri gelip uygulamada herhangi bir şey yaparsa oylama iptal edilir. Liderin hesabı askıya alınmışken yaptığı hiçbir şey geri gelme sayılmaz. Seçilen kişi koordinatör ve grubun lideri olur. Sessiz lider, oy kullananlar koordinatörler olduğunda koordinatör olarak kalır; üyeler olduğunda ise sıradan bir üye olur. Oylamayı grubun kendi ekranında, listenin üzerinde bulabilirsiniz.",
+            "**Kötü niyetli bir baş koordinatör** bir topluluk Kararı ile görevden alınabilir. Bu özellik sonraki bir güncellemede gelecektir."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Kefil olma"
+        },
+        {
+          "type": "p",
+          "text": "Yalnızca yöneticiler ve bir yönetici tarafından veya bir topluluk Kararı ile seçilen üyeler yeni gelenlere kefil olabilir. Bir kefalet, yeni gelene başlaması için küçük bir kredi limiti verir: 25, 50 veya 100 fasulye. Güven rozetleri bu hakkı asla vermez."
+        }
+      ]
+    },
+    {
+      "slug": "faq",
+      "title": "Sorular",
+      "summary": "Üyelerin en çok sorduğu sorulara kısa ve net yanıtlar.",
+      "sourceHash": "7f3d3c20a35ef66a",
+      "source-hash": "7f3d3c20a35ef66a",
+      "section": "about",
+      "related": [
+        "your-12-words",
+        "recovery",
+        "communities",
+        "beans-and-the-global-community",
+        "holiday-mode",
+        "leaving-or-deleting",
+        "getting-help"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Topluluğumu kim yönetiyor?"
+        },
+        {
+          "type": "p",
+          "text": "Topluluğunuz kendini yönetir. Sunucusu, topluluğunuzun seçtiği kişiler olan sahipleri ve yöneticileri tarafından gözetilir. Takaslarınız, gönderileriniz ve oylarınız bu sunucuda tutulur. BeanPool projesi uygulamayı yazar ve herkes bir topluluk başlatmak için uygulamayı kullanabilir."
+        },
+        {
+          "type": "h2",
+          "text": "Borca faiz var mı?"
+        },
+        {
+          "type": "p",
+          "text": "Hayır. Sıfırın altında olmak hiçbir masraf getirmez. Yalnızca 200'ün üzerinde elinizde tuttuğunuz fasulyeler küçük dolaşım ücretini öder."
+        },
+        {
+          "type": "h2",
+          "text": "Parayla fasulye alıp satabilir miyim?"
+        },
+        {
+          "type": "p",
+          "text": "Uygulamanın parayla fasulye almak veya satmak için hiçbir yolu yoktur. Fasulyeler insanlara yardım ederek kazanılır."
+        },
+        {
+          "type": "h2",
+          "text": "Neden hediye gönderemiyorum?"
+        },
+        {
+          "type": "p",
+          "text": "Bir hediye için iki şey gerekir. Pazar'da tamamlanmış bir takasınız olmalıdır (1 veya 2 fasulye sayılmayacak kadar küçüktür) ve yalnızca sahip olduğunuz fasulyeleri verebilirsiniz. Bir hediye sizi asla sıfırın altına düşüremez."
+        },
+        {
+          "type": "h2",
+          "text": "Neden sıfırın altında harcama yapamıyorum?"
+        },
+        {
+          "type": "p",
+          "text": "Sıfırın ne kadar altına inebileceğinizi iki şey belirler. Takaslardan kazandığınız güven, en fazla ne kadar inebileceğinizi belirler. Yayındaki Teklifleriniz ise şu anda bunun ne kadarını kullanabileceğinizi belirler. Yayında hiç Teklifiniz yoksa, sıfırın altına hiçbir şekilde inemezsiniz. Çoğu kişi satış yaparak başlar: bir Teklif paylaşın ve biri bunu kabul ettiğinde fasulye ile ilk güveninizi kazanın."
+        },
+        {
+          "type": "h2",
+          "text": "Rozetimde Temsilci yazıyor. Neden bu kadar az harcayabiliyorum?"
+        },
+        {
+          "type": "p",
+          "text": "Rozetiniz güveninizi gösterir. Şu anda ne kadar harcayabileceğiniz, aynı zamanda yayında kaç Teklifiniz olduğuna da bağlıdır. Rozetler kendi başlarına hiçbir şeyin kilidini açmaz."
+        },
+        {
+          "type": "h2",
+          "text": "Oyumu değiştirebilir miyim?"
+        },
+        {
+          "type": "p",
+          "text": "Bir Karar veya Anket üzerinde, oylama kapanana kadar evet. Bir sorumlular oylamasında, bir grubun kendi oylamasında veya yeni bir baş koordinatör oylamasında hayır."
+        },
+        {
+          "type": "h2",
+          "text": "Nasıl oy verdiğimi kimse görebilir mi?"
+        },
+        {
+          "type": "p",
+          "text": "Bir Karar'da uygulama yalnızca toplamları ve size kendi oyunuzu gösterir. Oyunuz topluluğunuzun sunucusunda saklanır. Sunucuyu yöneten sahipler ve yöneticiler sunucu dosyalarının bir kopyasını alabilir ve oradan bakabilir. Bir Anket de aynı şekilde anonimdir; ancak onu başlatan kişi anket için **açık oylama** seçmişse üyeler kimin neyi seçtiğini görebilir. Anket, oy vermeden önce hangisi olduğunu belirtir."
+        },
+        {
+          "type": "h2",
+          "text": "Diğer üyeler bakiyemi görebilir mi?"
+        },
+        {
+          "type": "p",
+          "text": "Hayır. Diğer üyeler bakiyenizi asla göremez. Telefonda, Fasulyeli bir toplulukta güven rozetinizi ve kaç takas yaptığınızı görürler. Bir takas yalnızca ilgili iki kişiyi gösterir. Topluluk sizin çıkarılmanız yönünde oy kullanırsa, yalnızca bu oylamada oy kullanabilen üyeler bakiyenizi ve varsa borcunuzu görür. Yöneticiler bazı durumlarda daha fazlasını görebilir ve bu görüntülemeler günlüğe kaydedilir: \"Yöneticilerin görebildikleri\" bölümüne bakın."
+        },
+        {
+          "type": "h2",
+          "text": "Telefonumu kaybettim. Hesabım silindi mi?"
+        },
+        {
+          "type": "p",
+          "text": "12 kelimelik kurtarma ifadenizi sakladıysanız hayır (bu kelimeler İngilizce kelimelerdir). Uygulamayı yükleyin ve bu 12 kelimeyle hesabınızı geri yükleyin. Hesap Koruması'nda bir oturum açma hesabı bağladıysanız onu da kullanabilirsiniz. 12 kelimenizi güvenli ve özel bir yerde saklayın. Onlara sahip olan herkes hesabınızı kullanabilir."
+        },
+        {
+          "type": "p",
+          "text": "12 kelimenizi de mi kaybettiniz? Topluluğunuzun bir yöneticisi, hesabınızı yüz yüze görüşerek yeni bir telefona taşıyabilir: \"Hesabınızı geri alma\" altındaki \"Telefonunuzu ve 12 kelimenizi kaybettiyseniz\" bölümüne bakın."
+        },
+        {
+          "type": "h2",
+          "text": "Google, Apple veya Facebook hesabına ihtiyacım var mı?"
+        },
+        {
+          "type": "p",
+          "text": "Hayır. Yerel bir topluluk, üyelerinden birinin davetiyle girmenize izin verir. Küresel topluluk, 12 gizli kelimeyle (kelimeler İngilizce kelimelerdir) veya tercih ederseniz bir oturum açma yöntemiyle herkesin girmesine izin verir. Yalnızca 12 kelimeyle katılırsanız, hesabınıza geri dönmenin tek yolu onlar olur ve bu şekilde oluşturulan yeni bir hesap ilk haftasında daha yavaş başlar. Hesabınızda oturum açtığınız herhangi bir telefondan veya tarayıcıdan (hesabınız askıya alınmamışken) daha sonra bir oturum açma yöntemi ekleyebilirsiniz. \"BeanPool'a katılma\" ve \"12 kelimeniz\" bölümlerine bakın."
+        },
+        {
+          "type": "h2",
+          "text": "Küresel toplulukta neden Fasulye yok?"
+        },
+        {
+          "type": "p",
+          "text": "Fasulyeler, tekrar bulunabilecek insanlar arasındaki bir sözdür. Herkes 12 kelimeyle küresel topluluğa katılabilir, bu nedenle oradaki hiç kimse henüz kimin kim olduğuna kefil olamaz. Fasulyeler, anlaşmalar, girişimler ve Kararlar yerel topluluklarda yaşar. Küresel topluluk bunları **🏘️ Yerel topluluk** olarak işaretlenmiş örnek bir topluluk olan Example Valley'den gösterir. \"Fasulye ve küresel topluluk\" bölümüne bakın."
+        },
+        {
+          "type": "h2",
+          "text": "Bir topluluğu nasıl başlatırım?"
+        },
+        {
+          "type": "p",
+          "text": "Uygulamada **Bir topluluk başlat**'a dokunun. Bir topluluk kendi küçük sunucusunda çalışır: evde yedek bir bilgisayar veya ayda birkaç dolara kiralanan bir sunucu. Yazılım ücretsizdir ve topluluğun beanpool.org'a ihtiyacı yoktur. \"Fasulye ve küresel topluluk\" bölümüne bakın."
+        },
+        {
+          "type": "h2",
+          "text": "Birden fazla topluluğa ait olabilir miyim?"
+        },
+        {
+          "type": "p",
+          "text": "Evet. Telefonda her birinde aynı kimliği kullanarak birkaç topluluk kaydedebilir ve bunlar arasında geçiş yapabilirsiniz. Web uygulamasında her topluluk kendi adresinde açılır. Her topluluğun kendi fasulyeleri, kuralları ve üyeleri vardır."
+        },
+        {
+          "type": "h2",
+          "text": "Herkesin katılabileceği başka bir topluluğa katılabilir miyim?"
+        },
+        {
+          "type": "p",
+          "text": "Evet, sahip olduğunuz hesapla katılabilirsiniz. Bazı topluluklar, küresel topluluk gibi herkesin katılmasına izin verir ve bunları kendi insanları kendi adreslerinde çalıştırır. Telefonunuz henüz üye olmadığınız bir topluluğa ulaştığında **Henüz burada üye değilsin** der ve **Bu hesapla ‹adı› topluluğuna katıl** seçeneğini sunar. Oraya da tıpkı küresel toplulukta olduğu gibi katılırsınız: telefonunuzdaki mevcut 12 kelimeyle veya isterse bir oturum açma yöntemiyle. Topluluğun kendi adı altındadır ve adresi gösterilir, böylece nereye katıldığınızı görebilirsiniz. Anahtarınız ve 12 kelimeniz aynı kalır ve diğer topluluklarınızda hiçbir şey değişmez. Bir bağlantı yalnızca o ekranı açar ve siz dokunana kadar kimse katılmış olmaz. Bunu göstermek için telefonunuz o topluluğa adını ve insanların katılmasına izin verip vermediğini sorar; böylece o adresi çalıştıran kişi birinin bağlantıyı açtığını görebilir (hesabınız hakkında hiçbir şey gönderilmez)."
+        },
+        {
+          "type": "h2",
+          "text": "Bir yere gidiyorum. Ne yapmalıyım?"
+        },
+        {
+          "type": "p",
+          "text": "Ayarlar'da Tatil Modu'nu açın. Teklifleriniz gizlenir ve hiç kimse size yeni istek gönderemez. Önce açık takasları tamamlayın veya iptal edin; çünkü bir takas açıkken Tatil Modu başlatılamaz."
+        },
+        {
+          "type": "h2",
+          "text": "Nasıl ayrılırım?"
+        },
+        {
+          "type": "p",
+          "text": "Hesabınızı Ayarlar'dan silebilirsiniz. Önce açık takasları tamamlayın veya iptal edin. Hesabınızı sildiğinizde elinizdeki tüm fasulyeler topluluğunuzun Ortak Alanı'na gider ve sıfırın altındaysanız Ortak Alan bunu karşılar. Bu işlem, 12 kelimenizle bile geri alınamaz. Hesabınızı yalnızca kullandığınız toplulukta siler. Telefondaki başka bir toplulukta hâlâ varsanız telefon onun için anahtarınızı tutar; anahtar yalnızca son topluluğunuzu sildiğinizde gider."
+        },
+        {
+          "type": "h2",
+          "text": "Bir sorun var veya daha iyi olabilir. Kime söylemeliyim?"
+        },
+        {
+          "type": "p",
+          "text": "Bir kişiyle veya bir takasla ilgili sorunlar için topluluğunuzun yöneticileriyle görüşün. Bir ilanı, bir etkinliği veya bir Nabız gönderisini bildirmek için **🚩 Bildir** bayrağına dokunun (telefonda bir ilanın düğmesinde **İlanı Bildir** yazar). Web uygulamasında tek bir kişiyle yapılan sohbette de bir **Bildir** düğmesi bulunur. Topluluğunuzun yöneticilerine haber verilir. Bir çocuk risk altında olabileceği durumlarda **Çocuk güvenliği** seçeneğini belirleyin. \"Sorun bildirme\" bölümüne bakın. Uygulamanın kendisiyle ilgili fikirler için beanpool.org adresini ziyaret edin."
+        }
+      ]
+    },
+    {
+      "slug": "home",
+      "title": "Ana Sayfa",
+      "summary": "Ana Sayfa nedir, telefonda ve web uygulamasında hangi kartları gösterir, nasıl eklenir, taşınır veya kaldırılır, ilgi alanları seçimi ve çıkışta gizlilik.",
+      "help": "Burası Ana Sayfanız: size ihtiyaç duyan ve yakınınızda olan şeyleri gösterir. Alta kart ekleyin veya taşımak ya da kaldırmak için … simgesine dokunun.",
+      "sourceHash": "a2fcc28eabc05c1d",
+      "source-hash": "a2fcc28eabc05c1d",
+      "section": "getting-started",
+      "related": [
+        "the-top-bar",
+        "browsing-the-market",
+        "your-profile",
+        "finding-a-community",
+        "beans-and-the-global-community"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Ana Sayfa nedir"
+        },
+        {
+          "type": "p",
+          "text": "**Ana Sayfa** ilk sekmedir ve telefonda ile web uygulamasında uygulamanın açıldığı ekrandır. Size neyin ihtiyaç duyduğunu, etrafınızda neler olduğunu ve bundan sonra ne yapabileceğinizi yanıtlayan kartlardan oluşan bir panodur. Her kart birkaç satırdan oluşur ve uygulamanın o bölümüne tek bir dokunuşla ulaşmanızı sağlar. Söyleyecek bir şeyi olmayan kart ekranda yer kaplamaz."
+        },
+        {
+          "type": "p",
+          "text": "Telefon ve web uygulaması birkaç fark dışında aynı kartları gösterir. Bu sayfada farklı oldukları yerlerde \"telefonda\" veya \"web uygulamasında\" ifadesi yer alır."
+        },
+        {
+          "type": "h2",
+          "text": "Başlarken"
+        },
+        {
+          "type": "p",
+          "text": "Yeni bir üyenin Ana Sayfası neredeyse boş başlar: **Sana ihtiyacı var** ile **Topluluğun** arasında tek bir kart, **Başlarken** (küresel toplulukta, **Topluluğunu bul** bunun üstünde durur). Şöyle yazar: \"Burası Ana Sayfanız. Buraya nelerin geleceğini siz seçersiniz. Başlamadan önce diğer sekmelere bir dakika göz atın.\""
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Göz at** kısa bir tur başlatır. Ekranın altındaki bir çubuk, uygulamayı sırayla her sekmeye taşır ve üstte **Adım 2 / 8** gibi bir başlıkla her adımda bir veya iki cümleyle sekmenin ne işe yaradığını anlatır (sayı, uygulamaya ve topluluğunuzun sekmelerine bağlıdır). Devam etmek için **İleri**'ye, durdurmak için **Atla**'ya dokunun. Çubuğun arkasındaki sekme normal şekilde çalışır: herhangi bir şeye dokunun veya başka bir sekmeye dokunduğunuzda tur sizi oraya kadar takip eder.",
+            "Son adım Ana Sayfa'ya geri döner: **İlk kartlarını ekle**. Ana Sayfa'ya koymak için bir karta veya tüm liste için **Daha fazla kart**'a dokunun. **Bitti**'ye dokunun. Hiçbir şey seçmediyseniz, Ana Sayfa her zamanki beş kartla başlar (aşağıda).",
+            "Karttaki veya çubuktaki **Atla**, turu sonlandırır. Ana Sayfa'ya kendiniz bir kart koymadıysanız, size her zamanki beş kartı verir. Koyduysanız (**Kart ekle**'den veya turun son adımındaki bir seçimden), Ana Sayfa seçtiğiniz kartları korur.",
+            "Tur asla kendiliğinden başlamaz. Uygulamayı turun ortasında kapatırsanız, kart \"Tura 3. adımdan devam et\" der.",
+            "Bitti veya Atla hesabınızda tutulur, bu nedenle kart diğer telefonlarınızda veya tarayıcılarınızda tekrar görünmez. Turu tekrar görmek için üstteki **?** işaretine ve **Turu tekrar yap**'a dokunun.",
+            "Ana Sayfanızı tur çıkmadan önce ayarladıysanız, sizin için hiçbir şey değişmez. İsterseniz **Başlarken**, **Kart ekle** içinde, **Başlarken** altındadır."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Turda **Atla**'ya dokunduktan sonra ilk kartın altında tek satırlık bir ipucu belirir. Kapatmak için **✕** işaretine dokunun. **Bitti**'den sonra görünmez."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Telefonda \"Burası Ana Sayfanız. Alta bir kart ekleyin veya taşımak ya da kaldırmak için bir kart üzerindeki … simgesine dokunun.\" yazar. **✕** işaretine dokunsanız da dokunmasanız da bir kez gösterilir ve bir daha gösterilmez. Bir kart eklemek veya kaldırmak da onu kaldırır.",
+            "Web uygulamasında da aynı kelimeler yazar. **✕** işaretine dokunana kadar Ana Sayfa'yı her açtığınızda tekrar gelir."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Kartlarınız"
+        },
+        {
+          "type": "p",
+          "text": "Telefonda ve web uygulamasında Ana Sayfanız, seçtiğiniz kartların bir listesidir. Turdan sonra her zamanki beş kart şunlardır: **İlk adımlar**, **İpuçları**, **Pazar'da Yeni** (küresel toplulukta **Yakınında**), **Yaklaşanlar** ve **Topluluğundan**. **Nelerle ilgileniyorsun?** ve **Geri dönüş yolun** da eklenir ve yalnızca söyleyecek bir şeyleri olduğunda gösterilir. **Sana ihtiyacı var** her zaman en üstte, **Topluluğun** ise her zaman en alttadır."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Ana Sayfa'nın altındaki topluluğunuzun kartında yer alan **Kart ekle**, topluluğunuzun gösterebileceği her kartın listesini üç grup halinde açar: **Sana özel**, **Çevrende** ve **Başlarken**. Ana Sayfa'ya koymak için bir kartın yanındaki **Ekle**'ye dokunun. Kart, **Sana ihtiyacı var**'ın hemen altına, en üste gider ve Ana Sayfa onu göstermek için yukarı kayar.",
+            "Zaten Ana Sayfa'da olan bir kart, **Ekle** yerine **Ana Sayfa'da** der. **Kayıtlı bir arama** gibi bazı kartlar birden fazla kez eklenebilir: kaç tanesine sahip olduğunuzu belirtirler, örneğin \"2 / 5 Ana Sayfa'da\".",
+            "**Kayıtlı bir arama**, eklenmeden önce \"yumurta\" gibi aranacak kelimeleri sorar. Ayrıca **Teklifler**, **İhtiyaçlar** veya **İkisi de**, bir kategori ve ne kadar uzağa bakılacağını seçebilirsiniz: 1, 2, 5, 10 veya 25 km. Mesafe yalnızca topluluğunuz bölgenizi bildiğinde veya konumunuzu paylaştığınızda sunulur; bunlar olmadan arama her yere bakar.",
+            "**Güneş ve ay**, eklenmeden önce kimin konumunun kullanılacağını sorar: **Topluluğun** (olağan seçim) veya **Bölgen**.",
+            "Bir Ana Sayfa en fazla 24 kart tutabilir. Dolduğunda liste bunu belirtir ve başka bir kart eklemek için bir kartı kaldırırsınız.",
+            "Kartlarınız hesabınızda tutulur, bu nedenle sizi diğer telefonlarınıza ve tarayıcılarınıza kadar takip eder. Topluluğunuzun sunucusu henüz güncellenmediyse, bu telefonda veya bu tarayıcıda kalırlar ve **Ana Sayfayı düzenle** \"Kartlarınızın diğer cihazlara aktarılabilmesi için topluluğunuzun sunucusunun güncellenmesi gerekiyor.\" der. Ana Sayfa'yı her açtığınızda tekrar gönderilirler.",
+            "Bu değişiklikten önce kartları zaten taşıdıysanız veya gizlediyseniz, Ana Sayfanız gizlediğiniz kartlar olmadan sıranızı korur. Taşımadıysanız, **Başlarken**'i tek başına görürsünüz ve turun **Atla** veya **Bitti** seçeneği size beş kartı veya seçtiğiniz kartları verir (yukarıda). Bir haftadan daha uzun bir süre önce katıldıysanız, Ana Sayfa ilk açıldığında **Başlarken** altında size bir kez şunu da söyler: \"Ana Sayfa artık daha az kartla başlıyor. Kart ekle geri kalanları geri getirir.\""
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Pazar'dan bir aramayı kaydetme"
+        },
+        {
+          "type": "p",
+          "text": "Pazar'ın aramasında kelimeler varken, altındaki bir düğmede **Bu aramayı Ana Sayfaya kaydet** yazar. Ana Sayfa'yı eklenmeye hazır kayıtlı bir aramayla açar: kelimeleriniz, yalnızca birine bakıyorsanız **Teklifler** veya **İhtiyaçlar**, seçtiğiniz kategori ve seçtiğiniz mesafe (kapsayan 1, 2, 5, 10 veya 25 km'den en yakını). İstediğiniz her şeyi değiştirin, ardından **Ana Sayfaya Ekle**'ye dokunun: kart en üste gider. Eşleşen en yeni ilanları ilk olarak gösterir; dünya çapındaki toplulukta, Pazar'ının yaptığı gibi, en yakın olanı ilk olarak gösterir. Aynı arama zaten Ana Sayfa'da varsa veya beş tanesine sahipseniz, Ana Sayfa bunu belirtir ve hiçbir şey eklemez. **Etkinlikler** ve **Anketler** altında düğme yoktur: kayıtlı bir arama Teklifler ve İhtiyaçlar'ı arar."
+        },
+        {
+          "type": "h2",
+          "text": "Kartlar"
+        },
+        {
+          "type": "p",
+          "text": "Ana Sayfa yalnızca size söyleyecek bir şeyi olan kartları, kendi sıranızda gösterir. Eklediğiniz bir kart en üste, **Sana ihtiyacı var**'ın altına gider. Sahip olabileceğiniz kartlar şunlardır:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Sana ihtiyacı var:** yalnızca sizi bekleyen bir şey varken: sizi bekleyen bir anlaşma, kişilerden gelen okunmamış mesajlar, gruplarınızdaki yeni satırlar, henüz kullanmadığınız bir oy (iki gün içinde kapandığında kehribar rengi) ve mülk sahipleri, yöneticiler ile moderatörler için onları bekleyen inceleme raporları gibi yönetici işleri. Telefonda bunlar ekranın üst kısmındaki küçük simgelerin gösterdiği şeylerle aynıdır. Bu kart ilk sırada kalır, taşınamaz veya gizlenemez.",
+            "**Geri dönüş yolun:** 12 kelimeyle katıldıysanız ve bağlı bir giriş yönteminiz yoksa, bu kart onları güvende tutmanızı veya bir giriş yöntemi eklemenizi hatırlatır. Kapatmak için **✕** işaretine dokunun. İlk gönderinizden sonra bir kez ve bir hafta sonra bir kez tekrar gelir, ardından yalnızca **Ayarlar**'da yer alır: telefonda **Hesap Koruması** altında ve web uygulamasında Ayarlar'ın üst kısmında, **Tek bir geri dönüş yolu** başlığı altında. BeanPool'un anahtar kasasının anahtarınızın bir kopyasını zaten tuttuğu yerlerde görünmez.",
+            "**Topluluğunu bul:** yalnızca küresel toplulukta. Size en yakın toplulukları gösterir ve onlara katılma talebinde bulunmanızı sağlar (\"Yakınınızda bir topluluk bulma\" bölümüne bakın). Telefonda **Yakınındaki topluluklar**, **Bir topluluk başlat** ve **Burada bir topluluk başladığında bana haber ver** seçenekleri bulunur. Web uygulamasında her topluluk kendi sayfasına bir bağlantıdır. Nerede olduğunuzu bilmiyorsa, konumunuzu paylaşmak yerine telefonda ve web uygulamasında **veya kasabanı yaz** seçeneğine dokunup kasabanızı seçin. Web uygulamasının kartında ayrıca **Bölgemi paylaş** bulunur. Bir kasaba seçtikten sonra, web uygulamasının kartında \"Yakınında\" ve kasaba adı ile birlikte **değiştir** yazar. Web uygulamasının kartında zaten bir yer varsa, **Burada değil mi? Şehrini yaz** da aynısını yapar. Küresel topluluktaki ilk 30 gününüz boyunca en üstte kalır ve kaldırılamaz veya taşınamaz. Bundan sonra diğerleri gibi bir karttır.",
+            "**İlk adımlar:** kısa bir kontrol listesi. Yerel bir toplulukta: ilk Teklifinizi paylaşın, bir profil fotoğrafı ekleyin, beğendiğiniz birkaç şeyi seçin ve bir Teklif paylaştıktan sonra davetler açıksa birini davet edin. Yalnızca yöneticilerin davet ettiği yerlerde, telefon bu son satırı yalnızca mülk sahiplerine ve yöneticilere gösterir. Web uygulaması bunu her üyeye gösterir ve tamamlanmamış bir satır kartı tutar. Telefonda kart her satır tamamlandığında gider. Web uygulamasında ayrıca ilk 14 gününüz boyunca kalır.",
+            "**Küresel toplulukta ilk adımlar:** ücretsiz veya takas için bir şey paylaşın ve 250 km yakınınızda bir topluluk listelenmişse sizi içeri almasını isteme önerisi sunar (bu satır kartı asla açık tutmaz). Ayrıca yeni bir hesaptaki sınırlamaları da söyleyebilir, örneğin ilk başta günde kaç gönderi ve yeni sohbet yapabileceğiniz gibi. İlk 14 gününüz boyunca ve sonrasında gönderi tamamlanana ve sınırlar bitene kadar kalır.",
+            "**İpuçları:** üyeler için BeanPool'un nasıl çalıştığına dair her seferinde kısa bir ipucu. Bir sonraki için **İleri**'ye veya bu kılavuzun geldiği sayfasını açmak için **Daha fazla oku**'ya dokunun. Yeni bir günün ilk ziyaretinde de yeni bir ipucu gösterilir. Her ipucunu gördüğünüzde veya **İpuçlarını bir daha gösterme**'ye dokunduğunuzda kart kendiliğinden gider. **Kart ekle** ile tekrar eklemek ipuçlarını ilk baştan yeniden başlatır.",
+            "**Nelerle ilgileniyorsun?:** beğendiğiniz kategorileri yıldızlamanızı sağlar. Yalnızca üyeler içindir. Henüz yıldızlanmış bir kategoriniz olmadığında veya Pazar kartında **Ayarla**'ya dokunduğunuzda gösterilir ve siz seçim yaparken ekranda kalır.",
+            "**Anlaşmaların:** açık anlaşmalarınızı ve sizi bekleyen anlaşmaları gösterir. Küresel toplulukta yoktur: orada, Pazar'daki **Takaslarım** bunun yerine yerel bir topluluktan örnek anlaşmaları gösterir.",
+            "**Girişimin:** sorumlusu olduğunuz girişimler için onay bekleyen istekleri gösterir. Sorumlusu olduğunuz bir proje olduğunda **Projen** olarak adlandırılır. Küresel toplulukta yoktur: orada, **Ortak** bunun yerine yerel bir topluluktan örnek bir girişimi gösterir.",
+            "**Yaklaşanlar:** katılım durumunuzla birlikte yakınınızdaki yaklaşan etkinlikler.",
+            "**Pazar'da Yeni:** yıldızlı kategoriler başta olmak üzere en yeni ilanlar. Küresel toplulukta **Yakınında** olarak adlandırılır ve en yakın ilanlar ilk sırada gelir. **Topluluğunu bul** bölümünde kasabanızı yazdıysanız, telefon o kasabadan itibaren hesaplar. İlgi alanlarınızı seçmek için **Ayarla**'ya veya Pazar'ı açmak için **Tümünü gör**'e dokunun. Yalnızca birkaç ilan varken, topluluğunuz bunları etkinleştirdiyse, örnek olarak işaretlenmiş birkaç örnek ilan gösterebilir.",
+            "**Karar Al:** telefonda ayrı satırlar olarak açık Kararlar ve açık anketler. Telefonda, Kararlar **Ortak** içindeki **Karar Al**'ı, anketler ise Pazar'daki **Anketler**'i açar. Web uygulamasında tek bir satırdır ve dokunulduğunda Ortak açılır. Küresel toplulukta yoktur: oradaki anketler Pazar'ın **Anketler** bölümündedir ve **Ortak** yerel bir topluluktan örnek bir Karar gösterir.",
+            "**Kayıtlı bir arama:** seçtiğiniz kelimelerle eşleşen ilanlar. En fazla beş taneye sahip olabilirsiniz. İlk satırı kelimeleriniz ve mesafedir, örneğin \"yumurta · 5 km içinde\". Ardından her biri ilanı açan en fazla dört ilan gelir; **Daha fazlasını gör**, kelimeleriniz aramasında hazır olacak şekilde Pazar'ı açar. Pazar aramasının bulduğu şeyleri bulur, böylece \"yumurta\" aynı anlama gelen kelimelere sahip ilanları da bulur. Hiçbir şey eşleşmediğinde \"Şu anda 5 km içinde yumurta yok\" gibi bunu belirtir. Bağlantı olmadan yeni eklediğiniz veya değiştirdiğiniz bir arama, topluluğunuzun sunucusu yanıt verene kadar \"Topluluğunuz yanıt verdiğinde gösterilir\" der. Kelimeleri değiştirmek için **…** simgesine, ardından **Ayarlar…** seçeneğine dokunun: kart olduğu yerde kalır.",
+            "**Grupların:** okunmamış mesaj sayılarıyla birlikte gruplarınız ve sohbetleriniz.",
+            "**Kimler katıldı:** bu hafta katılan kişiler. Yerel bir toplulukta isimleri ve yüzleri gösterir. Küresel toplulukta ise isimleri değil, yalnızca bölgeye göre sayıyı gösterir.",
+            "**Nabız:** yıldızlı kategoriler başta olmak üzere komşular tarafından YouTube ve bloglar gibi harici kanallardan paylaşılan gönderiler. Pulse'ı açmak için **Tümünü gör**'e dokunun.",
+            "**Güneş ve ay:** bu gecenin ayı ile bugünün gün doğumu ve gün batımı tek bir satırda, örneğin \"🌔 Şişkin ay, %72 · Gün doğumu 6:12 · Gün batımı 17:48\". Telefonunuz veya tarayıcınız bunu kendisi hesaplar: kart, topluluğunuzun sunucusundan hiçbir şey istemez. Topluluğunuzun yaklaşık bir kilometreye yuvarlanmış yerini veya topluluğunuzun bir yeri olmadığında bölgenizi kullanır (küresel toplulukta bu her zaman bölgenizdir). Küresel toplulukta telefon en son bulunduğu yeri de kullanabilir, ancak yalnızca uygulamanın konumunuzu kullanmasına zaten izin verdiyseniz: asla sormaz. **Topluluğunu bul** bölümünde kasabanızı yazdıysanız, telefon bunun yerine onu kullanır. Topluluğunuzun bir yeri olduğu durumlarda bile bölgenizi kullanmak için **…** simgesine, ardından **Ayarlar…** seçeneğine dokunun ve **Bölgen**'i seçin. Saatler kendi telefonunuzun veya bilgisayarınızın saatine göredir, bu nedenle seyahat ettiğinizde onları kendi saatinizde görürsünüz. Ay, ekvatorun o tarafından göründüğü şekilde çizilir. Güneşin bugün doğmadığı veya batmadığı yerlerde \"Güneş bütün gün tepede\" veya \"Bugün gün batımı yok\" gibi bunu belirtir. Bilinen bir yer yoksa kart gösterilmez ve **Ana Sayfayı düzenle** \"Şimdi gösterilecek bir şey yok: bilinen bir yer yok.\" der. Ekran okuyucu bunu kelimelerle okur, örneğin \"Ay şişkin ay, yüzde 72 aydınlık. Gün doğumu 06:12. Gün batımı 17:48.\"",
+            "**Fasulyelerin:** bakiyeniz ve kredi limitiniz (harcama alanı). Küresel toplulukta yoktur. Orada telefon bunun yerine örnek bir kart gösterir: Fasulyelerin yerel bir toplulukta ne işe yaradığı ve **Örnek bir defter gör**. Tur bittiğinde veya atlandığında gelir (**Başlarken** açıkken, turun Defter adımı örneği gösterir) ve **İlk adımlar** gitmiş olsa bile siz **Bu kartı gizle**'ye dokunana kadar kalır.",
+            "**Topluluğundan:** topluluğunuzun yöneticilerinden duyurular ve bildirimler.",
+            "**Topluluğunu büyüt:** davetlerin açık olduğu yerlerde ilk Teklifinizden sonra yeni üyeler davet etmenizi sağlar. Küresel toplulukta yoktur. Telefonda, yalnızca yöneticilerin davet ettiği yerlerde, yalnızca bir sahip veya yönetici için gösterilir. Web uygulamasında orada hiç gösterilmez.",
+            "**Topluluğun:** topluluğunuzun adıyla başlıklandırılmış son kart (küresel toplulukta **Dünya çapındaki topluluk**). Bu ayki üye sayısını ve takasları gösterir; küresel toplulukta ise üyeleri ve kaç topluluğun listelendiğini gösterir. **Kart ekle** ve **Ana Sayfayı düzenle** seçeneklerine sahiptir. Bu kart en altta kalır ve taşınamaz veya kaldırılamaz."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Telefonda, topluluğunuz yeni bir adrese taşındığında, tüm bunların üzerindeki bir kart onun kullanılıp kullanılmayacağını sorar: \"Birden fazla topluluk\" içindeki \"Topluluğunuz yeni bir adrese taşındığında\" bölümüne bakın."
+        },
+        {
+          "type": "h2",
+          "text": "\"…\" menüsü"
+        },
+        {
+          "type": "p",
+          "text": "Çoğu kartın sağ üst köşesinde bir **…** düğmesi bulunur. Bunlarda bulunmaz:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Sana ihtiyacı var**, **Başlarken** ve **Topluluğun**. **Başlarken** kartında bunun yerine **Atla** vardır.",
+            "Telefonda **Geri dönüş yolun**. Kendi **✕** simgesine sahiptir.",
+            "Küresel topluluktaki ilk 30 gününüz boyunca **Topluluğunu bul**."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Şunları yapmak için **…** simgesine dokunun:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Ayarlar…:** yalnızca **Kayıtlı bir arama** veya **Güneş ve ay** gibi ayarları olan bir kartta bulunur. Kartı bulunduğu yerde değiştirir.",
+            "**Yukarı taşı:** kartı üstündeki kartla değiştirir.",
+            "**Aşağı taşı:** kartı altındaki kartla değiştirir.",
+            "**Kaldır:** kartı ayarlarıyla birlikte Ana Sayfa'dan çıkarır. **Kart ekle** onu geri koyar. Hiçbir şey onaylamanızı istemez. **İpuçları**'nı kaldırmak, **İpuçlarını bir daha gösterme** ile aynıdır."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Web uygulamasında **Geri dönüş yolun** kartının da bir **…** menüsü vardır ve **Yukarı taşı**, **Aşağı taşı** ile **Kaldır** seçeneklerini içerir."
+        },
+        {
+          "type": "p",
+          "text": "Gidecek yer olmadığında taşıma seçeneği soluk renkte görünür: taşıyabileceğiniz kartların en üstünde veya en altında. **Sana ihtiyacı var** altındaki ilk kart yukarı taşınamaz ve **Topluluğun** üstündeki son kart aşağı taşınamaz."
+        },
+        {
+          "type": "h2",
+          "text": "Ana Sayfayı düzenle"
+        },
+        {
+          "type": "p",
+          "text": "Ana Sayfa'nın en altında, topluluğunuzun kartında **Ana Sayfayı düzenle**'ye dokunun."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "İlk olarak **＋ Bir kart ekle** gelir. Ana Sayfa'daki **Kart ekle** ile aynı listeyi açar.",
+            "Ardından kendi sıranızla Ana Sayfanızdaki kartlar gelir. Her birinin yukarı ve aşağı okları ve kendi **…** menüsü vardır (Ayarlar…, Yukarı taşı, Aşağı taşı, Kaldır). Kayıtlı bir arama, kelimelerine göre ve yalnızca birini aradığında **Teklifler** veya **İhtiyaçlar**'a göre listelenir, örneğin \"yumurta\" veya \"İhtiyaçlar · yumurta\", böylece iki arama iki farklı satır olur.",
+            "Şu anda gösterecek bir şeyi olmayan kart **Şu anda gösterilecek bir şey yok** der. Her ipucunu gördüğünüzde **İpuçları** kartı **Tüm ipuçları görüldü** der ve üzerinde çalışılacak bir yer yokken **Güneş ve ay** kartı **Şimdi gösterilecek bir şey yok: bilinen bir yer yok.** der.",
+            "Her zamanki beş karta geri dönmek için **Varsayılanlara sıfırla**'ya dokunun.",
+            "Anahtar ve gizli liste yoktur: kaldırdığınız bir kart **Kart ekle** içindedir.",
+            "Telefonda ve web uygulamasında yalnızca topluluğunuzun gösterebileceği kartlar listelenir. Örneğin küresel topluluğun listesinde **Fasulyelerin** veya **Anlaşmaların** yoktur: orada Defter ve **Takaslarım** bunun yerine yerel bir topluluktan örnekler gösterir.",
+            "**Sana ihtiyacı var** her zaman en üstte kalır ve **Topluluğun** her zaman en altta kalır.",
+            "Küresel topluluktaki ilk 30 gününüzde **Topluluğunu bul** listelenmez. Şimdilik üste yakın kalır.",
+            "**Geri dönüş yolun**, Ana Sayfanızda olduğu sürece okları ve **…** simgesiyle birlikte listelenir."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Nelerle ilgileniyorsun?"
+        },
+        {
+          "type": "p",
+          "text": "Beğendiğiniz kategorileri (Yiyecek, Aletler, Hizmetler, Bahçe ve diğerleri) yıldızlamak için dokunun:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Yıldızlı kategoriler Ana Sayfa'da **Pazar'da Yeni** ve **Nabız** bölümlerinde ilk sırada gelir.",
+            "Yıldızlı kategoriler hiçbir şeyi gizlemez: diğer ilanlar ve gönderiler hemen ardından gelir.",
+            "Ana Sayfa'da seçtiğiniz yıldızlar, Pazar sekmesindeki **★ Sana Özel** altında kullanılan yıldızlarla tamamen aynıdır.",
+            "Yıldızlarınızı değiştirmek için istediğiniz zaman Pazar kartındaki **Ayarla**'ya dokunun."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Web lobisinde"
+        },
+        {
+          "type": "p",
+          "text": "Küresel topluluğun web sitesinde, katılmadan veya giriş yapmadan önce bir ziyaretçi daha sade bir Ana Sayfa görür (yerel bir topluluğun web sitesi bunun yerine hoş geldiniz sayfasını gösterir):"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "En üstte bir **Katıl** kartı.",
+            "Yalnızca herkese açık kartlar: yakınınızdaki toplulukların bir kartı, **Yaklaşanlar**, **İnsanların paylaştıkları** (fotoğraflar ve kategoriler içeren ancak üye adı veya yüzü içermeyen ilanlar) ve **Topluluğun**.",
+            "Ziyaretçilerin **…** menüsü, **Ana Sayfayı düzenle** seçeneği ve **Sana ihtiyacı var** ya da **Fasulyelerin** gibi özel kartları yoktur."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Gizlilik ve çıkış yapma"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Bir cihazdan çıkış yaptığınızda (web uygulamasında **Çıkış Yap (Yalnızca Bu Cihaz)**, ayrıca **Yalnızca Bu Cihazdan Kaldır** olarak etiketlenmiştir), o cihazın tuttuğu Ana Sayfanızın kopyaları cihazdan kaldırılır: son yanıtı, düzeniniz ve yıldızlarınız. Web uygulamasında **Veritabanını Zorla Temizle ve Yeniden Eşitle** ve hesabınızı silmek de aynı kopyaları temizler.",
+            "Düzeniniz ve yıldızlı kategorileriniz topluluğunuzdaki hesabınızda da kaydedilir. Bu cihazda veya başka bir cihazda yeniden giriş yaptığınızda onları geri alırsınız. Farklı bir hesap kendi düzeni ve yıldızlarıyla başlar.",
+            "Web uygulamasında, başka bir sekmede çıkış yapmak Ana Sayfa'yı tarayıcıdan hemen temizler."
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "joining",
+      "title": "BeanPool'a katılma",
+      "summary": "Giriş için iki yol: bir üyenin davetiyle yerel topluluğa katılmak veya açık olduğunda 12 gizli kelime ya da tek bir girişle küresel topluluğa katılmak. Katılım isteme ve başkalarını davet etme.",
+      "help": "Bir üyenin davetiyle bir topluluğa katılın veya 12 gizli kelime ya da tek girişle küresel topluluğa katılın.",
+      "sourceHash": "f78397c8a8d66d56",
+      "source-hash": "f78397c8a8d66d56",
+      "section": "getting-started",
+      "related": [
+        "home",
+        "finding-a-community",
+        "your-12-words",
+        "your-profile",
+        "communities",
+        "how-it-works",
+        "web-app"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "İki giriş yolu"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Bir davetle**, bir topluluğa katılırsınız: yakınınızdaki insanlar, kendi Fasulyeleri, takasları ve Ortak Alanı ile. O topluluğun bir üyesi sizi davet eder.",
+            "**Davet olmadan**, açık olduğunda **küresel topluluğa** katılabilirsiniz: her yerden insanlar, gönderi paylaşabileceğiniz, insanlara mesaj atabileceğiniz ve yakınınızda bir topluluk bulabileceğiniz yerdir. Orada Fasulye ve topluluk oylamaları yoktur. Fasulye, kredi, Ortak Alan ve Kararları yerel topluluklarda yaşar. Küresel topluluk, bunların nasıl çalıştığını örnek bir toplulukta gösterir. \"Fasulye ve küresel topluluk\" bölümüne bakın."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Davetiniz yok ama yakınınızda bir topluluk mu var? Küresel topluluğa katılın, ardından o topluluktan sizi içeri almasını isteyin: üyelerinden herhangi biri veya yalnızca yöneticilerin davet ettiği bir toplulukta yöneticileri alabilir. \"Yakınınızda bir topluluk bulma\" bölümüne bakın."
+        },
+        {
+          "type": "p",
+          "text": "Her iki durumda da hesabınız, onu geri getiren 12 kelimeyle birlikte telefonunuzda tutulan bir anahtardır. Parola yoktur."
+        },
+        {
+          "type": "h2",
+          "text": "Bir davetle katılma"
+        },
+        {
+          "type": "p",
+          "text": "Bir davet, bir bağlantı, bir QR kodu veya bir koddur. Bir kod, harflerin takip ettiği **INV-** veya **BP-** ile başlayan uzun bir koda benzer."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Bir davet **bir kez** çalışır.",
+            "Bir davet **30 gün** sürer. Bundan sonra yenisini isteyin."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Katılmak için:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "BeanPool'u yükleyin ve açın. Önce bir davet bağlantısına dokunursanız uygulama, doğrudan Google Play'den yükledikten sonra bile daveti kendiliğinden algılar.",
+            "İlk ekranda **Davetle katıl** seçeneğine dokunun. Davet panonuzdaysa bunun yerine **Yapıştır** seçeneğine dokunabilirsiniz. Android'de düğmede **Sana davet mi gönderildi? Açmak için Yapıştır'a dokun** yazar. Web uygulamasında düğmede **Buraya Yeni Geldim** yazar.",
+            "Davet bağlantısını veya kodunu yapıştırın. Yalnızca bir kodunuz varsa, topluluğun adını veya adresini de yazın. Sizi davet eden kişi bunu size söyleyebilir.",
+            "İnsanların göreceği adı seçin. En az 2 karakter olmalıdır. Kısa tutun: katıldığınızda 20 karakterden uzun adlar kısaltılır.",
+            "**İleri**'ye dokunun. Uygulama daveti ve adı kontrol eder. Birisi bu ada zaten sahipse başkalarını önerir. İşlem tamamlanana kadar **← Ana sayfaya dön** ve **Var olan kimliği geri yükle** çalışmaz.",
+            "Bazı topluluklarda aynı ekranda isteğe bağlı bir **Kabul ediyorum** kutusuyla birlikte **Bu topluluğun yöneticilerinin neleri görebildiği** de gösterilir. Her iki durumda da katılırsınız. \"Yöneticilerin neleri görebildiği\" bölümüne bakın."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Küresel topluluğa katılma"
+        },
+        {
+          "type": "p",
+          "text": "Telefon uygulamasında veya bir web tarayıcısında katılabilirsiniz. Bir tarayıcıda global.beanpool.org adresini açın ve **Katıl**'a dokunun: adımlar için \"BeanPool'u web tarayıcısında kullanma\" bölümüne bakın. Telefon uygulamasında:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "İlk ekranda, **Davetle katıl**'ın hemen altındaki **BeanPool'u dünya çapında keşfet**'e dokunun. Her zaman oradadır. Küresel topluluk sizi şu anda alamadığında, altındaki bir satır nedenini söyler: **Küresel topluluğa şu anda ulaşılamıyor. Yeniden dene ya da bir davetle katıl.**, **Şu anda yeni üye almıyor.** veya **Bu topluluk özel önizlemede. Sahibinden bir davet iste.** Dokunmak tekrar sorar.",
+            "İki giriş yolundan birini seçin. **12 gizli kelimeyle hesap oluşturun** ilktir. Google, Apple veya Facebook hesabı gerektirmez: 12 kelimeniz tek geri dönüş yoludur.",
+            "**Veya giriş yapın** (Google, bir iPhone'da Apple veya Facebook ile bir kez). Bu giriş, telefonunuzu kaybetmeniz durumunda da bir geri dönüş yoludur. BeanPool parolanızı asla görmez ve sizin adınıza asla hiçbir şey paylaşmaz.",
+            "İnsanların göreceği adı 20 karaktere kadar seçin ve **Katıl**'a dokunun. Birisi bu ada zaten sahipse, uygulama başkalarını önerir."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "**Web sitesinden, bir telefonda.** beanpool.org/global adresinde **BeanPool uygulamasında aç**, uygulamayı doğrudan bu giriş yolunda açar: henüz hesabı olmayan bir telefonda yukarıdaki iki yol veya telefonun halihazırda sahip olduğu hesapla **Küresel topluluğa katılın** (aşağıdaki \"Zaten bir hesabınız var mı?\" bölümüne bakın). Bu hesap orada zaten bir üyeyse, bunun yerine **Topluluklarınız** altındaki **Küresel topluluk** seçeneğinin ona geçiş yaptığı **BeanPool** sayfasını açar. Küresel topluluk bu hesabı kapattıysa, uygulama yalnızca açılır. Android'de uygulama yüklü değilse Google Play açılır; yükledikten sonra BeanPool'u ilk açtığınızda doğrudan bu giriş yoluna gider. Bir iPhone'da App Store açılır; yükledikten sonra **BeanPool'u dünya çapında keşfet** seçeneğine dokunun. Bağlantı yalnızca bir ekran açar: siz dokunana kadar kimse katılmaz. **BeanPool** sayfasını açtığında sayfa, her zaman yaptığı gibi bu telefonun hesabının listelediği her topluluğun bir üyesi olup olmadığını kontrol eder. Önce bir davet gelir: size bir davet gönderilmişse, uygulama bunun yerine daveti açar ve katılımın yarısındaysanız buna devam eder."
+        },
+        {
+          "type": "p",
+          "text": "12 kelimeyle telefonunuz, hesabı kurmak için kısa bir işlem de yapar. İki yol gösterilir gösterilmez başlar (web sitesinin bağlantısı onları açtığında birine dokunduğunuz anda), siz okurken ve adınızı yazarken gerçekleşir, bu yüzden çoğu insan bunu hiç beklemez. Tamamlanmadan önce **Katıl**'a dokunursanız, uygulama bir çubukla birlikte **Hesabınız kuruluyor…** der ve **← Geri** çalışmaya devam eder. Ağınızdan çok sayıda kişi katılıyorsa, uygulama telefonunuzda bunun ne kadar süreceğini belirterek bunu söyler ve hemen katılmak için bunun yerine giriş yapabilirsiniz. Giriş yaparak katılma durumunda bu işlem yalnızca çok meşgul bir ağda istenir ve uygulama bunu kendiliğinden yapar. **Başka bir yol seç**, beklemeyi durdurur ve sizi iki yola geri götürür. Bunun yerine giriş yaparsanız, pilinizi korumak için 12 kelimelik kurulum durur ve **Başka bir yol seç** onu yeniden başlatır."
+        },
+        {
+          "type": "p",
+          "text": "Topluluk beklemenizi söylerse (ağınızdan çok fazla kişi katılıyor), uygulama ne kadar süreceğini belirtir. Bundan önce **Katıl**'a dokunmak yalnızca kalan süreyle birlikte bunu tekrar söyler; beklemeden sonra veya bekleme daha uzunsa bir dakika sonra **Katıl** tekrar sorar. Telefonunuzun tarihi ve saati yanlışsa uygulama **Telefonunun ayarlarından kontrol et (otomatike ayarla)**, sonra tekrar dene der. Topluluk hesabınızı kapattıysa (sildiyseniz veya çıkarıldıysanız), uygulama **Bu hesabın küresel topluluktaki yeri kapatıldı, bu nedenle tekrar katılamaz.** der ve kapısını bir daha sunmaz."
+        },
+        {
+          "type": "p",
+          "text": "Telefon uygulamasında veya bir web tarayıcısında 12 kelimeyle katılma, **tarihiniz ve saatiniz yanlış görünüyor** gerekçesiyle topluluğun bunu kabul edemediğini söylüyorsa, o telefondaki veya bilgisayardaki saat birkaç dakikadan fazla sapmıştır. Ayarlarından tarihini ve saatini otomatiğe ayarlayın, ardından tekrar deneyin. Hiçbir şey kaydedilmemiştir ve yeniden giriş yapmak yardımcı olmaz. Bir tarayıcıda oturum açma yöntemi ekleme veya hesabınızı geri alma aynı nedenle reddedildiğinde de aynı sözler görünür."
+        },
+        {
+          "type": "p",
+          "text": "Giriş yaparsanız, topluluk giriş hesabınıza ait yalnızca şifrelenmiş bir referansı tutar, e-postanızı asla tutmaz. Bu giriş, telefonunuzu kaybetmeniz durumunda hesabınıza geri dönüş yolu da olur, bu nedenle **Yedek** adımında tekrar giriş yapmanız istenmez. Bunun için topluluk hesabınızın kilitli bir kopyasını tutar. Sunucusunu işleten kişiler bu kopyayı açabilir: \"Hesabınızı geri alma\" bölümüne bakın. Katıldıktan sonra uygulamayı açmak için giriş yapmazsınız: hesabınız, diğerleri gibi telefonunuzdaki anahtardır."
+        },
+        {
+          "type": "p",
+          "text": "12 kelimeyle katılırsanız, anahtarınız ve adınız dışında hakkınızda hiçbir şey topluluğa ulaşmaz ve 12 kelimeniz tek geri dönüş yolunuzdur: onları hiç kimse sıfırlayamaz, ne BeanPool ne de topluluk. **Yedek** bunu belirtir ve **Geri dönmek için ikinci bir yol olarak giriş ekleyin** seçeneğini sunar. Katıldıktan sonra **Ana Sayfa**'daki bir kart **Hesabınızın tek bir geri dönüş yolu var: 12 kelimeniz. Onlara hâlâ sahip olduğunuzu kontrol edin veya bir oturum açma yöntemi ekleyin.** der. Kapatmak için **✕** işaretine dokunun: ilk gönderinizden sonra bir kez ve bir hafta sonra bir kez tekrar gelir, ardından bir giriş yöntemi ekleyene veya **12 kelimem hâlâ duruyor** seçeneğine dokunana kadar **Ayarlar**'da, **Hesap Koruması** altında kalır. 12 kelimeyle oluşturulan bir hesabın ilk 7 günü boyunca ve 3 gönderisi yayında kalana kadar daha küçük limitleri de vardır: günde 2 gönderi, 4 fotoğraf ve mesaj atılacak 3 yeni kişi; ayrıca yeni olduğu sürece tek bir şikayet gönderisini gizler. İstediğiniz zaman bir giriş yöntemi eklemek, hesabı olağan yeni hesap limitlerine yükseltir. Yalnızca katıldığınız telefondan değil, hesabınızda olduğunuz herhangi bir telefondan ekleyebilirsiniz. BeanPool'un anahtar kasası hesabınızın bir kopyasını zaten tutuyorsa kart gösterilmez ve **Ayarlar** sessizce **Giriş ekle** seçeneğini sunar."
+        },
+        {
+          "type": "p",
+          "text": "**Zaten bir hesabınız var mı?** İkinci bir hesapla değil, onunla küresel topluluğa katılın. Sol üstteki fasulyeye dokunun ve **Topluluklarınız** altında **Küresel topluluk** seçeneğine dokunun: her zaman oradadır ve katılabileceğinizde ikinci satırında **Bu hesapla katıl: 12 sözcük veya oturum açma** (veya **…: oturum açma**) yazar. Küresel topluluğu misafir olarak ziyaret ediyorsanız, üstteki **?** işaretinin yanındaki **Katıl**'a dokunun, ardından **12 kelime veya bir girişle katılın** seçeneğine dokunun (bir topluluğun yalnızca girişleri kabul ettiği yerlerde **Girişle katılın**). Uygulama küresel topluluk hakkında **Henüz burada üye değilsin** derse, **Bu hesapla katıl** seçeneğine dokunun. Bir telefonda, beanpool.org/global bağlantısı da hesabınızla **Küresel topluluğa katılın** ekranını açar (yukarıdaki \"Web sitesinden, bir telefonda\" bölümüne bakın). 12 kelimenizle katılırsınız veya bir kez giriş yaparsınız, adınızı kontrol edip **Katıl**'a dokunursunuz. Anahtarınız ve 12 kelimeniz aynı kalır ve diğer topluluklarınızda hiçbir şey değişmez. \"Birden fazla topluluk\" bölümüne bakın."
+        },
+        {
+          "type": "p",
+          "text": "**Bir web tarayıcısında veya başka bir telefonda zaten katıldınız mı?** Henüz hesabı olmayan bir telefonda tekrar katılmayın: bu ikinci bir hesap oluşturur ve iki hesap asla tek bir hesapta birleştirilemez. Sahip olduğunuz hesabı getirin: ilk ekranda **Zaten üye misin? Hesabını geri yükle**'ye, ardından **12 Kelime ile Kurtar**'a dokunun. 12 kelimenizi yazın ve **Hangi topluluk?** altında **Küresel topluluk**'a dokunun. Bir girişle katıldıysanız **Sosyal Hesapla Kurtar** da çalışır. \"Hesabınızı geri alma\" bölümüne bakın."
+        },
+        {
+          "type": "h2",
+          "text": "Adımlar"
+        },
+        {
+          "type": "p",
+          "text": "Üstteki çubuk **Adın**, **Fotoğraf**, **Yedek** ve **Nasıl işler** adımlarını gösterir. Küresel toplulukta bir web tarayıcısında, **Fotoğraf** adımından sonra bir tane daha vardır: **Bölgeniz**. Telefon uygulamasının küresel topluluğa ilk katılımında bölge adımı yoktur: bunu **Ayarlar**'da, **Bölgen** altında ayarlayın."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Fotoğraf:** bir fotoğraf veya hazır resimlerden birini seçin ya da bunu atlayıp daha sonra profilinizden bir tane ekleyin. Bazı topluluklar ilk gönderinizden önce bir resim ister. İnsanlar tanıdıkları bir yüz veya resimle daha kolay takas yaparlar.",
+            "Bir davetten sonra, **Fotoğraf** üzerindeki **← Geri**, adınızı değiştirmek için sizi adınıza geri götürür. Hâlâ aynı hesaptır: **İleri**'ye dokunun ve yeni adla **Fotoğraf** ve **Yedek** adımlarına devam edin. Birisi bu ada zaten sahipse, uygulama başkalarını önerir. Küresel toplulukta burada **← Geri** yoktur: zaten katılmışsınızdır.",
+            "**Bölgeniz** (küresel toplulukta bir web tarayıcısında ve telefon uygulamasında küresel topluluğa halihazırda sahip olduğunuz bir hesapla katıldığınızda): **Kabaca neredesiniz?** Küresel topluluk size yakınınızda neler sunulduğunu gösterir: 250 km içindeki en yakın 500 ilan. **Konumumu kullan**'a veya **Bir kasaba veya semt yazın**'a dokunun. Bölgeniz yaklaşık 10 km olarak tutulur, asla tam noktanız tutulmaz: telefonunuz veya tarayıcınız gönderilmeden önce bunu yuvarlar. Diğer üyeler ne kadar uzakta olduğunuzu görür ve yaptığınız bir anket bölgenizde gösterilir. **Şimdilik atla** hiçbir şey göndermez ve hiçbir şey istemez; yine de içeri girersiniz ve siz ayarlayana kadar dünya çapındaki en yeni ilanları görürsünüz. İstediğiniz zaman **Ayarlar**'da, **Bölgen** altında değiştirebilir veya temizleyebilirsiniz.",
+            "**Yedek:** uygulama 12 kelimenizi gösterir. Bunları kağıda yazın ve güvende tutun. **Bu kelimeleri kaydettim** onay kutusu (bir web tarayıcısında **Bu kelimeleri güvenli bir yere yazdım**) size hatırlatmak içindir. Atlarsanız sizi hiçbir şey durdurmaz, ancak yakında \"12 kelimeniz\" bölümünü okuyun. Telefon uygulamasında küresel topluluğa bir girişle katıldıysanız, bu adım hesabınızı koruyan girişinizi gösterir ve kelimeleriniz **Bunun yerine 12 kelime yazmak ister misiniz?** altında bir dokunuş uzağınızdadır. 12 kelimeyle katıldıysanız, önce bu 12 kelimenin hesabınız olduğunu söyler ve **Geri dönmek için ikinci bir yol olarak giriş ekleyin** seçeneğini sunar: bunu da atlayabilirsiniz.",
+            "**Nasıl işler:** kısa bir tur. Başlamak için **Hadi Başlayalım!**'a dokunun."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Uygulamayı yarıda kapatırsanız, bir sonraki sefer aynı adımdan devam eder."
+        },
+        {
+          "type": "h2",
+          "text": "Davet çalışmazsa"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Zaten kullanılmış:** her davet tam olarak bir kez çalışır. Yenisini isteyin. Size aitse ve zaten üyeyseniz, bunun yerine **Var olan hesabı kurtarma ifadesiyle geri yükle**'yi kullanın.",
+            "**Süresi dolmuş:** davetler 30 gün geçerlidir. Yenisini isteyin.",
+            "**Tanınmadı:** tamamını kopyaladığınızı ve topluluk adının veya adresinin doğru olduğunu kontrol edin.",
+            "**Bir üye tarafından oluşturulmuş ve artık insanları yalnızca yöneticiler dahil ediyor:** topluluk yalnızca yöneticilerinin davet etmesini seçmiştir ve bir üyenin bağlantı olmadan oluşturduğu bilet artık çalışmaz. Bir yöneticiden yeni bir davet isteyin.",
+            "**Kimlik kaydedilemedi** (**İleri**'ye dokunduktan sonra): genellikle bağlantı yoktur veya zamanında yanıt gelmemiştir. Bağlantınızı kontrol edin ve tekrar **İleri**'ye dokunun. İlk denemeniz ulaştıysa, uygulama aynı hesapla **Fotoğraf** ve **Yedek** adımlarına devam eder."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Küresel topluluğa katılma çalışmazsa"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Küresel topluluğa şu anda ulaşılamıyor** (**BeanPool'u dünya çapında keşfet** altındaki satır): bağlantınızı kontrol edin, ardından düğmeye dokunun: tekrar sorar. Yine de bir davetle bir topluluğa katılabilirsiniz.",
+            "**Küresel topluluğa ulaşılamıyor:** bağlantınızı kontrol edin ve **Tekrar dene**'ye dokunun. Yine de bir davetle bir topluluğa katılabilirsiniz.",
+            "**Küresel topluluk zamanında yanıt vermedi** (**Katıl**'a dokunduktan sonra): adınız kontrol edilmedi ve hiçbir şey gönderilmedi. Bağlantınızı kontrol edin ve tekrar **Katıl**'a dokunun ya da geri dönün. Uygulama adınızı kontrol ederken **Başka bir yol seç** ve **← Ana sayfaya dön** çalışmaya devam eder.",
+            "**Bu girişin zaten bir BeanPool kimliği var:** daha önce, belki başka bir telefonda katıldınız. **Hesabımı geri yükle**'ye dokunun, ardından 12 kelimenizi veya aynı girişi kullanın.",
+            "**Bu giriş bilgisi başka bir BeanPool hesabıyla zaten küresel topluluğa katılmış** (telefonunuzdaki hesaptan katılırken): bu girişin orada kendi hesabı vardır. **Farklı bir giriş yöntemi kullan**'a dokunun.",
+            "**Bu topluluk şu anda girişleri kontrol edemiyor:** küresel topluluk başka bir sunucuya taşındı ve geri dönen bir hesabı henüz yeni bir hesaptan ayırt edemiyor, bu nedenle şimdilik bu yolla yeni kimseyi almıyor. Hiçbir şey kaydedilmedi. Daha sonra tekrar deneyin.",
+            "**Bu ağdan çok fazla yeni hesap:** tek bir internet bağlantısından yeni hesaplar için bir sınır vardır. Aynı ağdaki herkes birlikte sayılır, bu nedenle bir kampüste, ofiste veya buluşmada katılanlar siz değil başkaları olabilir. Daha sonra tekrar deneyin.",
+            "**Şu anda yeni üye almıyor:** bunun yerine bir davetle bir topluluğa katılın."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Birini davet etme"
+        },
+        {
+          "type": "p",
+          "text": "Topluluk yalnızca yöneticilerinin bunu yapmasını seçmediği sürece herhangi bir üye insanları davet edebilir (aşağıya bakın). Güven rozetinizin bir önemi yoktur."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Ekranın sağ üst köşesindeki davet simgesine (artı işaretli kişi) dokunun. Bu, **Davetler**'i açar.",
+            "İsterseniz yalnızca kendi kayıtlarınız için davetin kimin için olduğunu yazın.",
+            "**Bilet Oluştur**'a dokunun. Bağlantı olmadan düğmede **Çevrimdışı Bilet Oluştur** yazar ve bu da işe yarar.",
+            "Onlara QR kodunu gösterin veya bağlantıyı ve kodu göndermek için **Daveti Paylaş**'a dokunun.",
+            "Web uygulamasında **Kişiler**'i, ardından **Davetler**'i açın ve **Yeni Davetiye Oluştur**'a dokunun. Ardından **Kopyala** veya **Paylaş**'a dokunun.",
+            "Henüz kimsenin kullanmadığı davetler **Bekleyenler** altında listelenir ve her birinde tekrar göndermek için **Paylaş** bulunur.",
+            "Günde 20 davet oluşturabilir ve henüz kimsenin kullanmadığı 50 davete sahip olabilirsiniz. Kimsenin kullanmadığı bir davet 30 gününün ardından silinir ve **Bekleyenler**'den ayrılır."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Bir topluluğun yöneticileri tüm topluluk için davetleri kapatabilir."
+        },
+        {
+          "type": "p",
+          "text": "**Yalnızca yöneticilerin davet ettiği yerlerde.** Bir topluluk yalnızca mülk sahiplerinin ve yöneticilerinin insanları dahil etmesini seçebilir. Orada, onlardan biri değilseniz, **Davetler** bölümü **Bilet Oluştur** yerine **Buraya birini getir** gösterir ve bir yöneticiye sormanızı söyler. Web uygulamasında **Ağaç** kalır ve daha önce oluşturduğunuz kodlar da kalır: süreleri dolana kadar çalışmaya devam ederler. Sinyali olmayan bir sahip veya yönetici, topluluğun kendilerine verdiği son rolden yola çıkarak yine de basılı bir bilet oluşturabilir. Topluluk katılım isteklerini kabul ediyorsa, **Bağlantıyı paylaş** topluluğun adresini gönderir: kişi bunu BeanPool uygulamasında açar, katılma talebinde bulunur ve bir yönetici yanıtlar. Yönetici olmak topluluğun birine verdiği bir görevdir, bir güven rozeti değildir."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Topluluk bunu seçmeden önce oluşturduğunuz davet kodları 30 günlük süreleri dolana kadar çalışmaya devam eder.",
+            "Bağlantı olmadan oluşturduğunuz bir bilet çalışmaz: buna sahip olan kişiden bir yöneticiden yeni bir davet alması istenir."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Küresel topluluğun davetleri yoktur: herkes BeanPool uygulamasında 12 gizli kelimeyle veya bir oturum açma yöntemiyle katılır. Orada davet simgesi, küresel topluluğun adresini göndermek için **Bağlantıyı paylaş** ile birlikte **Buraya birini getir** seçeneğini açar. Oluşturulacak bir şey yoktur ve onun için oluşturulmuş bir davet kodu çalışmaz."
+        },
+        {
+          "type": "h2",
+          "text": "Katılma istekleri"
+        },
+        {
+          "type": "p",
+          "text": "İnsanlar küresel topluluktan topluluğunuza katılma talebinde bulunabilir. Biri talepte bulunduğunda, **Davetler** bir sayı gösterir ve istekler en üstte **Katılmak istiyor** altında listelenir. İstekler telefon uygulamasında yanıtlanır: web uygulaması bunları listelemez."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Davet et**, yalnızca onların hesabının kullanabileceği bir davet oluşturur. Uygulamaları bunu kendiliğinden bulur, bu yüzden onlara hiçbir şey göndermezsiniz ve tek bir dokunuşla katılırlar.",
+            "**Şimdi değil**, onlara \"henüz yanıt yok\"tan başka bir şey söylemez."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Herhangi bir üye yanıt verebilir. Yalnızca yöneticilerin davet ettiği bir toplulukta yalnızca mülk sahipleri ve yöneticileri istekleri görür ve yanıtlar. \"Yakınınızda bir topluluk bulma\" bölümüne bakın."
+        }
+      ]
+    },
+    {
+      "slug": "finding-a-community",
+      "title": "Yakınınızda bir topluluk bulma",
+      "summary": "Küresel topluluktan yakınınızdaki bir topluluğu bulup katılma isteği gönderin, yakınınızda yeni bir topluluk başladığında bildirim alın veya kendiniz başlatın.",
+      "sourceHash": "db053bd200fde55d",
+      "source-hash": "db053bd200fde55d",
+      "section": "getting-started",
+      "related": [
+        "joining",
+        "home",
+        "communities",
+        "beans-and-the-global-community",
+        "near-you",
+        "recovery"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Neden yerel bir topluluk"
+        },
+        {
+          "type": "p",
+          "text": "Küresel topluluk her yerden insanların buluştuğu yerdir. Yerel bir topluluk ise komşuların takas yaptığı yerdir: kendi Fasulyeleri, takasları ve Ortak Alanı vardır. Küresel toplulukta bunların nasıl çalıştığını **🏘️ Yerel topluluk** olarak işaretlenmiş örnek bir toplulukta görebilirsiniz, ancak oradaki hiçbir şey Fasulye kazandırmaz veya harcatmaz. Bu nedenle oradaki bir gönderi açıklamasında kişinin karşılığında ne istediğini söyler: ücretsiz, takas veya kendilerine sorma. \"Fasulye ve küresel topluluk\" bölümüne bakın."
+        },
+        {
+          "type": "p",
+          "text": "Küresel topluluk birçok topluluktan biridir. Kendi topluluğunuz kendi sunucusunda çalışır ve küresel topluluğa asla ihtiyaç duymaz: küresel topluluk yalnızca onu bulmanıza yardımcı olur."
+        },
+        {
+          "type": "p",
+          "text": "Yakınınızda henüz bir topluluk yok mu? Bir tane başlatabilirsiniz: aşağıdaki \"Yakınınızda hiçbir şey yoksa\" bölümüne bakın."
+        },
+        {
+          "type": "h2",
+          "text": "Yakınınızdaki topluluklar"
+        },
+        {
+          "type": "p",
+          "text": "Küresel toplulukta, **Ana Sayfa**'daki **Topluluğunu bul** kartı size en yakın toplulukları gösterir. İlk 30 gününüz boyunca Ana Sayfa'nın üst kısmına yakın durur ve kaldırılamaz veya taşınamaz; bundan sonra diğer kartlar gibi kaldırabilirsiniz. Web uygulamasında karttaki her topluluk kendi sayfasına bir bağlantıdır. Nerede olduğunuzu bilmiyorsa **Bölgemi paylaş**'a veya **veya kasabanı yaz**'a dokunup kasabanızı seçin. Aşağıdaki adımlar telefon uygulaması içindir."
+        },
+        {
+          "type": "p",
+          "text": "Henüz küresel toplulukta değil misiniz? Sol üstteki fasulyeye dokunun ve **Topluluklarınız** altında **Küresel topluluk**'a dokunun, ardından sahip olduğunuz hesapla katılın: \"Birden fazla topluluk\" bölümüne bakın. Henüz bir hesabınız yoksa uygulamanın ilk ekranında **BeanPool'u dünya çapında keşfet** seçeneğine dokunun: \"BeanPool'a katılma\" bölümüne bakın."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Tüm listeyi görmek için **Yakınındaki topluluklar** seçeneğine dokunun.",
+            "Uygulama nerede olduğunuzu bildiğinde topluluklar en yakından başlayarak listelenir. Bilmiyorsa **Konumumu kullan** seçeneğine dokunun veya ada göre arayın. Konumunuzu paylaşmamayı mı tercih edersiniz? **veya kasabanı yaz** seçeneğine dokunun, yazmaya başlayın ve listeden kasabanızı seçin: yalnızca yaklaşık bir nokta tutulur ve **değiştir** başka birini seçer.",
+            "Size yaklaşık olarak aynı mesafedeki topluluklar karıştırılır, böylece hiçbir topluluk her zaman en üstte kalmaz.",
+            "Topluluk belirttiğinde her biri ne kadar uzakta olduğunu ve kaç üyesi olduğunu gösterir."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Adresini yayınlamayan bir topluluk listelenir ancak buradan henüz katılım istenemez."
+        },
+        {
+          "type": "h2",
+          "text": "Katılma isteği gönderme"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Bir topluluk üzerinde **Katılmak iste** seçeneğine dokunun.",
+            "Adınızı kontrol edin ve kendiniz hakkında 280 karaktere kadar birkaç kelime yazın: nerede yaşadığınız, ne paylaşmak veya öğrenmek istediğiniz.",
+            "**Gönder**'e dokunun."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "İsteğiniz küresel topluluk üzerinden değil, adınız, sözleriniz ve resminizle birlikte doğrudan o topluluğa gider. Yalnızca üyeleri görür. Topluluğun yalnızca yöneticilerinin davet etmesine izin verdiği yerlerde yalnızca mülk sahipleri ve yöneticileri görür. Oradaki bir üye sizi içeri alabilir: **Davet et** seçeneğine dokunurlar ve yalnızca sizin hesabınızın kullanabileceği bir davet oluşturulur."
+        },
+        {
+          "type": "p",
+          "text": "Siz beklerken topluluk kartı **Katılma isteği gönderdiniz. Henüz yanıt yok** der. Topluluklar genellikle birkaç gün içinde yanıt verir. Her toplulukta açık bir isteğiniz olabilir ve her topluluk tek bir internet bağlantısından günde yalnızca birkaç istek alır."
+        },
+        {
+          "type": "p",
+          "text": "30 gün içinde kimse yanıt vermezse kart **Yanıt gelmedi. Tekrar istek gönderebilirsiniz.** der."
+        },
+        {
+          "type": "p",
+          "text": "Bir topluluk isteğinizi kabul edemezse kart kendi sözlerini gösterir; örneğin bugün ağınızdan çok fazla istek geldiği veya şu anda katılma isteklerini kabul etmediği gibi."
+        },
+        {
+          "type": "h2",
+          "text": "Evet dediklerinde"
+        },
+        {
+          "type": "p",
+          "text": "Kartta **Bir üye sizi davet etti** yazar. Topluluğun adıyla birlikte **Katıl**'a dokunun."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Hesabınız sizinle gelir: aynı anahtar ve aynı 12 kelime (İngilizce kelimelerdir). Adınız da gelir. Orada birisi bu ada zaten sahipse \"Ayşe2\" gibi bir sayı eklenir. Bir sonraki adımda değiştirebilirsiniz.",
+            "Gönderileriniz, sohbetleriniz ve takaslarınız her toplulukta kalır. Yenisinde tertemiz başlarsınız.",
+            "Ardından yeni topluluk için adınızı ve fotoğrafınızı kontrol edersiniz.",
+            "Hesabınızı koruyan bir oturum açma yöntemi her topluluk tarafından tutulur. Uygulama yeni toplulukta da hesabınızı korumanızı ister: **Hesabı koru** veya **Daha sonra**'ya dokunun ve bunu istediğiniz zaman **Ayarlar**'da yapın."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Küresel topluluğun bir üyesi olarak kalırsınız ve aralarında geçiş yapabilirsiniz: \"Birden fazla topluluk\" bölümüne bakın."
+        },
+        {
+          "type": "h2",
+          "text": "Yakınınızda hiçbir şey yoksa"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Burada bir topluluk başladığında bana haber ver:** bulunduğunuz yere yakın bir topluluk başladığında bir bildirim alırsınız. Yalnızca yaklaşık 10 km genişliğindeki bölge tutulur, tam olarak nerede olduğunuz asla tutulmaz. En fazla 3 yeri izleyebilir ve birini izlemeyi **Durdur** ile durdurabilirsiniz.",
+            "**Bir topluluk başlat:** her topluluğun yöreden birinin ilgilendiği kendi küçük sunucusu vardır. Evde yedek bir bilgisayar veya ayda birkaç dolar ve yaklaşık yarım saat sürer: \"Fasulye ve küresel topluluk\" bölümüne bakın. Uygulama bir topluluk çalıştırmanın üç yolunu gösterir: evde yedek bir bilgisayar, küçük bir kiralık sunucu veya yardım istemek. Adı, yeri ve insanların size nasıl ulaşabileceğini doldurun ve yeni sunucunuzun ayarlarına yapıştırmak için **Topluluğumun ayrıntılarını kopyala** seçeneğine dokunun. İnsanların size nasıl ulaşabileceği, orada açmadığınız sürece genel dizinin dışında kalır."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Yerel bir topluluğun üyesiyseniz"
+        },
+        {
+          "type": "p",
+          "text": "İnsanlar küresel topluluktan topluluğunuza katılma talebinde bulunabilir. **Sohbet**'e, ardından **Kişiler**'e, sonra **Davetler**'e dokunun: istekler adları, sözleri ve nereden geldikleriyle birlikte **Katılmak istiyor** altında listelenir. İstekler telefon uygulamasında yanıtlanır: web uygulaması bunları listelemez."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Davet et:** yalnızca onların hesabının kullanabileceği bir davet oluşturur. Uygulamaları bunu kendiliğinden bulur ve tek bir dokunuşla katılırlar.",
+            "**Şimdi değil:** onlara söylenmez. \"Henüz yanıt yok\" görmeye devam ederler ve 30 gün boyunca tekrar soramazlar."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Topluluk yalnızca yöneticilerinin davet etmesini seçmediği sürece (topluluk sunucusunun Ayarlar'ında **Kimler davet edebilir** altında **Bilinen**), güven rozeti ne olursa olsun herhangi bir üye yanıt verebilir. Bu durumda istekleri yalnızca mülk sahipleri ve yöneticileri görür ve yanıtlar. Bir topluluğun yöneticileri katılma isteklerini kapatabilir."
+        }
+      ]
+    },
+    {
+      "slug": "beans-and-the-global-community",
+      "title": "Fasulye ve küresel topluluk",
+      "summary": "Küresel topluluğun amacı, birçok topluluktan biri olması, orada gördükleriniz: 🏘️ Yerel topluluk işareti, örnek topluluk Example Valley, Fasulyelerin neden beklediği ve yerel topluluk başlatma veya bulma.",
+      "sourceHash": "fc6f598d1fa0bb26",
+      "source-hash": "fc6f598d1fa0bb26",
+      "section": "getting-started",
+      "related": [
+        "finding-a-community",
+        "how-it-works",
+        "joining",
+        "communities",
+        "your-balance",
+        "decisions"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Küresel topluluğun amacı"
+        },
+        {
+          "type": "p",
+          "text": "Küresel topluluk, çoğu insanın BeanPool ile ilk karşılaştığı yerdir. Herkes her yerden 12 kelimeyle veya bir oturum açma yöntemiyle katılabilir."
+        },
+        {
+          "type": "p",
+          "text": "Burası BeanPool'un ne olduğunu görmek ve ardından yakınınızda yerel bir topluluk başlatmak veya birine katılmak için bir yerdir."
+        },
+        {
+          "type": "p",
+          "text": "Küresel topluluk birçok topluluktan biridir. Kendi topluluğunuz kendi sunucusunda çalışır ve küresel topluluğa asla ihtiyaç duymaz. BeanPool küresel topluluğu çalıştırır; her yerel topluluğun kendi sunucusu ve kendi mülk sahipleri vardır ve küresel topluluk ortadan kalksa bile tam olarak çalışmaya devam eder. Küresel topluluk, topluluğunuzun yakınınızdaki topluluklar listesinde göstermeyi seçtiği şeyler dışında topluluğunuza ait hiçbir şeyi tutmaz."
+        },
+        {
+          "type": "h2",
+          "text": "Birbirine yardım etmek önce gelir"
+        },
+        {
+          "type": "p",
+          "text": "BeanPool, komşuların komşulara yardım etmesidir. Yapabileceğiniz veya ayırabileceğiniz şeyleri teklif eder, ihtiyacınız olanı istersiniz."
+        },
+        {
+          "type": "p",
+          "text": "Bunu bugün küresel toplulukta yapabilirsiniz:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "ücretsiz veya takas için bir şey paylaşabilir ya da yardım isteyebilirsiniz;",
+            "insanlara mesaj gönderebilir, gruplara ve etkinliklere katılabilirsiniz;",
+            "insanların ne düşündüğünü görmek için bir anket başlatabilirsiniz."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Yerel bir topluluk, kimin kime yardım ettiğinin kaydını **Fasulye** cinsinden ekler. Yardım etmek Fasulye kazandırır, yardım almak ise onları harcatır. Böylece yardımlaşma bir döngü halinde devam edebilir: siz bir komşuya yardım edersiniz, başka bir komşu size yardım eder ve kimse aynı kişiye geri ödeme yapmak zorunda kalmaz."
+        },
+        {
+          "type": "h2",
+          "text": "🏘️ Yerel topluluk işareti"
+        },
+        {
+          "type": "p",
+          "text": "BeanPool'un bazı bölümleri yerel bir toplulukta yaşar:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Fasulye ve Defteriniz;",
+            "iş tamamlanana kadar Fasulyelerin güvenle tutulduğu anlaşmalar;",
+            "girişimler ve Ortak Alanın paylaşılan Fasulyeleri;",
+            "Kararlar, bir topluluğu bağlayan oylamalar;",
+            "davetler."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Küresel toplulukta bunlar gizlenmez. Tek bir işaretle gösterilirler: **🏘️ Yerel topluluk**. Bu, \"bu özellik bugün yerel bir toplulukta çalışır ve işte böyle görünür\" anlamına gelir."
+        },
+        {
+          "type": "p",
+          "text": "Bu işaret hiçbir zaman bir kilit değildir. Hesabınızda yanlış bir şey yoktur ve onu kullanmak için kazanılacak ya da ödenecek hiçbir şey yoktur."
+        },
+        {
+          "type": "p",
+          "text": "Bununla birkaç şekilde karşılaşırsınız:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "bir ekranda veya kartta küçük bir etiket;",
+            "örnek bir ekranın üst kısmında boydan boya bir kutu;",
+            "bir ilanda **Talep et · Fasulyeler güvende tutulur 🏘️** gibi yerini koruyan bir düğme;",
+            "\"🏘️ Yerel bir toplulukta bu, Fasulye cinsinden bir fiyattır ›\" gibi yerel bir topluluğun farklı olduğu tek bir satır."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "**Bunun neden yerel bir toplulukta yaşadığı** ekranını açmak için bunlardan herhangi birine dokunun. Bir veya iki cümleyle nedenini söyler, ardından **Bir topluluk başlat** ve yapabildiği durumlarda **Yakınındaki topluluklar** ile **Nasıl işler** seçeneklerini sunar."
+        },
+        {
+          "type": "h2",
+          "text": "Example Valley"
+        },
+        {
+          "type": "p",
+          "text": "İşareti taşıyan ekranlar **Örnek Vadi**'yi gösterir: yerel bir topluluğun ekranlarını üzerlerinde bir şeyler varken görebilmeniz için oluşturulmuş hayali bir topluluk."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Defter:** 85 Fasulyeye, −200'e kadar harcama alanına, bir güven rozetine ve ekmek, bir saatlik bahçe işi ve birkaç fide gibi yakın tarihli birkaç takasa sahip örnek bir üye.",
+            "**Ortak:** üyelerinin sorumlusu olduğu bir girişim olan Example Valley Bakery ve bir Karar: Ortak Alanın paylaşılan Fasulyelerinden ödenen bir kompost alanı.",
+            "Pazar'da **Takaslarım:** üç örnek anlaşma: biri sizi bekliyor, birinde Fasulyeler güvenle tutuluyor ve biri tamamlanmış."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Example Valley'deki hiç kimsenin adı yoktur. \"Bir komşu\", \"Ortak Alan\" veya \"Örnek Vadi Fırını\" görürsünüz. Bunların hiçbiri gerçek değildir ve hiçbiri sizin değildir."
+        },
+        {
+          "type": "p",
+          "text": "Bu ekranlardaki **ⓘ** düğmeleri ve kılavuz sayfaları gerçektir: yerel bir toplulukta nasıl çalıştığını anlatırlar."
+        },
+        {
+          "type": "p",
+          "text": "Fasulye gönderecek, bir anlaşma yapacak, oy verecek, taahhütte bulunacak veya davet edecek bir düğme bunun yerine **Bunun neden yerel bir toplulukta yaşadığı** ekranını açar. Hiçbir şey göndermez ve hiçbir şeyi değiştirmez."
+        },
+        {
+          "type": "p",
+          "text": "Örnek bir ekranın üst kısmındaki kutuda bir **✕** bulunur. Ona dokunduğunuzda kutu tek bir satıra küçülür: \"🏘️ Bir örnek · Neden? ›\". Telefonunuz veya tarayıcınız bu topluluk için bunu hatırlar. Telefonda kutuyu tekrar açmak için satıra dokunun. Web uygulamasında nedenini görmek için satıra veya kutuyu tekrar açmak için **▾** simgesine dokunun."
+        },
+        {
+          "type": "p",
+          "text": "Bir web tarayıcısında katılmadan önce örnek Defteri görebilirsiniz: Ana Sayfa, Pazar ve Harita'nın yanındaki bir sekmedir."
+        },
+        {
+          "type": "h2",
+          "text": "Fasulyelerin küresel toplulukta neden beklediği"
+        },
+        {
+          "type": "p",
+          "text": "Fasulyeler, tekrar bulunabilecek insanlar arasındaki bir sözdür. Kazandığınız Fasulyeler, topluluğunuzun size karşılığında bir miktar yardım borçlu olduğunu söyler."
+        },
+        {
+          "type": "p",
+          "text": "Bu yalnızca insanların kimin kim olduğuna kefil olabildiği yerlerde çalışır. Küresel toplulukta herkes 12 kelimeyle katılabilir, bu nedenle henüz kimse bunu yapamaz. Bir kişi birden fazla hesap oluşturabilir, kendine Fasulye verebilir ve bir daha asla bulunamayabilir."
+        },
+        {
+          "type": "p",
+          "text": "Bu nedenle küresel toplulukta Fasulye, anlaşma, girişim ve Karar yoktur. Orada yaptığınız hiçbir şey Fasulye kazandırmaz veya harcatmaz ve oradaki kimse kimseye borçlu değildir."
+        },
+        {
+          "type": "p",
+          "text": "Anketler orada yine de çalışır. İnsanların ne düşündüğünü gösterirler ve hiçbir şeye karar vermezler."
+        },
+        {
+          "type": "p",
+          "text": "Küresel toplulukta davetler kapalı kalır. Açık kapısı giriş yoludur."
+        },
+        {
+          "type": "p",
+          "text": "Küresel topluluk bir gün kimin kim olduğunu kontrol edebilirse, bunlardan bazıları teker teker orada açılabilir. O zamana kadar bunlar bugün her yerel toplulukta canlıdır."
+        },
+        {
+          "type": "h2",
+          "text": "Bir topluluk başlatın"
+        },
+        {
+          "type": "p",
+          "text": "Yerel bir topluluk, yöreden birinin ilgilendiği kendi küçük sunucusunda çalışır. Bu kişi siz olabilirsiniz."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Maliyeti nedir:** evde açık kalan yedek bir bilgisayar veya ayda birkaç dolara kiralanan küçük bir sunucu. Yazılım ücretsizdir.",
+            "**Kim çalıştırır:** kendi makinenizde veya kiraladığınız makinede siz çalıştırırsınız. beanpool.org'a ihtiyaç duymaz: kendi web adresine sahip olabilir.",
+            "**Neleri üstlenirsiniz:** üyelerinizden gelen şikayetler size gelir. Bir kurtarma koduyla birlikte topluluğun verilerini yedeklemek size aittir. İki sahip bulundurun ve sunucuyu açık ve güncel tutun.",
+            "**Neleri asla görmezsiniz:** üyelerinizin bir kişiyle yaptığı sohbetleri. Sunucunun bunları okuyamaması için kilitlenmiştir.",
+            "**Ne kadar sürer:** bir tarifi uygulayabilen biri için yaklaşık yarım saat."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Başlamak için herhangi bir **Bunun neden yerel bir toplulukta yaşadığı** sayfasında veya telefonda Ana Sayfa'nın **Topluluğunu bul** kartında **Bir topluluk başlat**'a dokunun. Bir topluluk çalıştırmanın üç yolunu gösterir: evde yedek bir bilgisayar, küçük bir kiralık sunucu veya küresel toplulukta yardım istemek. **Topluluğumun ayrıntılarını kopyala**, yeni sunucunuzun ayarlarına yapıştırmak için topluluğunuzun adını, yerini ve insanların size nasıl ulaşabileceğini kopyalar."
+        },
+        {
+          "type": "p",
+          "text": "Adımlar beanpool.org adresinde bir topluluk işleten kişiler için hazırlanan kılavuzdaki \"İlk kurulum\" bölümündedir. Sunucunuz hazır olduğunda telefonunuzla sahipliğini alırsınız: telefonun kamerasını sunucunuzun gösterdiği QR koduna doğrultun veya BeanPool'da **Yeni bir topluluk sunucusu kur**'a (**Bir topluluk bul** veya **Bir topluluk başlat** içinde), ardından **Kodu tara** seçeneğine dokunun. Ayarlar daha sonra topluluğunuzu adlandırmanıza, ikinci bir sahip eklemenize ve ilk davetlerinizi oluşturmanıza yardımcı olur. Yakınınızdaki kişilerin bulabilmesi için Ayarlar'da topluluğunuzun yerini de belirleyin."
+        },
+        {
+          "type": "h2",
+          "text": "Yakınınızdaki birine katılın"
+        },
+        {
+          "type": "p",
+          "text": "Telefonda:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Yakınındaki topluluklar**, listelenmeyi seçen ve size en yakın olan toplulukları listeler.",
+            "**Katılmak iste** seçeneğine dokunun: oradaki bir üye sizi içeri alabilir. Topluluğun yalnızca yöneticilerinin davet etmesine izin verdiği yerlerde, bunu bir sahip veya yönetici yapar.",
+            "Yakınınızda henüz hiçbir şey yok mu? **Burada bir topluluk başladığında bana haber ver**, bir topluluk başladığında size haber verir."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Web uygulamasında Ana Sayfa'nın **Topluluğunu bul** kartı, yakınınızdaki her topluluğu kendi sayfasına bağlar."
+        },
+        {
+          "type": "p",
+          "text": "Hesabınız aynı 12 kelimeyle sizinle birlikte gelir ve küresel topluluğun bir üyesi olarak kalırsınız. \"Yakınınızda bir topluluk bulma\" bölümüne bakın."
+        },
+        {
+          "type": "h2",
+          "text": "Yerel bir toplulukta"
+        },
+        {
+          "type": "p",
+          "text": "İşaretin gösterdiği her şey orada gerçektir. Defteriniz sıfırdan başlayarak kendi bakiyenizi gösterir. Bir anlaşma iş bitene kadar Fasulyeleri güvenle tutar ve bir Karar bağlayıcıdır."
+        },
+        {
+          "type": "p",
+          "text": "Orada 🏘️ işareti yoktur ve Example Valley'den hiçbir şey sizinle birlikte gelmez."
+        }
+      ]
+    },
+    {
+      "slug": "global-community-limits",
+      "title": "Küresel topluluğun sınırları",
+      "summary": "Küresel topluluk ücretsizdir ve maliyetleri düşük tutmak için birkaç sınırı vardır. Bir ilan en son değişiklikten 90 gün sonra arşivlenir. En fazla 5 fotoğraf, telefonunuzda en yakın 500 ilan ve izlenebilecek 3 konum.",
+      "sourceHash": "dfb5755e94829e1d",
+      "source-hash": "dfb5755e94829e1d",
+      "section": "getting-started",
+      "related": [
+        "beans-and-the-global-community",
+        "posting",
+        "your-area",
+        "finding-a-community",
+        "reporting"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Sınırları olan, ücretsiz bir yapı"
+        },
+        {
+          "type": "p",
+          "text": "Küresel topluluk ücretsizdir. Herkes, her yerden katılabilir, bu nedenle sonsuza kadar büyüyebilir. Birkaç sınır, işletme maliyetlerini sabit tutar; böylece ücretsiz kalabilir."
+        },
+        {
+          "type": "p",
+          "text": "Herkes için aynıdırlar ve hepsi bu sayfadadır."
+        },
+        {
+          "type": "p",
+          "text": "Bunlar küresel topluluğun sınırlarıdır. Yerel bir topluluk kendi sunucusunda çalışır ve kendi sınırlarını belirler."
+        },
+        {
+          "type": "h2",
+          "text": "Sınırlar"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Bir ilan en son değiştirilmesinden 90 gün sonra arşivlenir.** Pazar'dan ve Harita'dan kaldırılır ve fotoğrafları silinir. Düzenlemek, duraklatmak veya tekrar yayına almak bir değişiklik sayılır: ilanı **İlanı Düzenle** ile açıp **Kaydet**'e dokunmak onu 90 gün daha tutar. Sizin bir ilanınız arşivlendiğinde, **Pazaryeri Etkinliği** uyarılarınızla bir bildirim alırsınız. İstediğiniz zaman tekrar paylaşabilirsiniz.",
+            "**Bir ilanda en fazla 5 fotoğraf.**",
+            "**Telefonunuz**, bölgenizin 250 km yakınındaki **en yakın 500 ilanı tutar**. Ayrıca kendi ilanlarınızı ve bir anlaşmanız ya da hakkında bir sohbetiniz olan tüm ilanları tutar. Pazar'ın araması yine de her yerdeki ilanları bulur. \"Bölgeniz\" bölümüne bakın.",
+            "**Burada bir topluluk başladığında bana haber ver** ile **en fazla 3 yeri izleyebilirsiniz**. Başka birini izlemek için birini izlemeyi durdurun. \"Yakınınızda bir topluluk bulma\" bölümüne bakın."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Yeni bir hesabın ilk günlerinde birkaç günlük sınırı da vardır. \"Sorun bildirme\" bölümüne bakın."
+        },
+        {
+          "type": "h2",
+          "text": "Neden bu sınırlar"
+        },
+        {
+          "type": "p",
+          "text": "Fotoğraflar, küresel topluluğun depoladığı şeylerin çoğunu oluşturur; bu nedenle kimsenin ilgilenmediği bir ilan fotoğraflarını sonsuza kadar tutmaz. Hâlâ istenen bir ilanın yayında kalması için yalnızca üç ayda bir değiştirilmesi gerekir."
+        },
+        {
+          "type": "p",
+          "text": "Diğer sınırlar, nerede olursanız olun her bir telefonun ve sunucunun taşımak zorunda olduğu veriyi küçük tutar."
+        },
+        {
+          "type": "h2",
+          "text": "Neler arşivlenmez"
+        },
+        {
+          "type": "p",
+          "text": "Bu şekilde yalnızca Teklifler ve İhtiyaçlar arşivlenir. Hesabınız arşivlenmez: yalnızca siz silerseniz gider. \"Hesabınızdan ayrılma veya silme\" bölümüne bakın."
+        }
+      ]
+    },
+    {
+      "slug": "your-12-words",
+      "title": "12 kelimeniz",
+      "summary": "12 kelime hesabınızın anahtarıdır. Neden önemli oldukları, nerede bulunacakları, nasıl güvende tutulacakları ve ikinci bir kurtarma yolu olarak giriş hesabı ekleme.",
+      "sourceHash": "2603104dec9afccc",
+      "source-hash": "2603104dec9afccc",
+      "section": "getting-started",
+      "related": [
+        "recovery",
+        "joining",
+        "communities",
+        "faq"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Neden önemlidirler"
+        },
+        {
+          "type": "p",
+          "text": "Hesabınız başkası tarafından tutulan bir parola değildir. Telefonunuzda tutulan bir anahtardır. **12 kelimeniz**, kelimeler olarak yazılmış bu anahtardır (bunlar İngilizce kelimelerdir)."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "12 kelimeyle, hesabınızı yeni bir telefonda geri alabilirsiniz: adınız, fasulyeleriniz ve güveniniz.",
+            "Onlar olmadan, kaybolan veya kırılan bir telefon, kaybolan bir hesap anlamına gelebilir.",
+            "Anahtar, onu tutan telefonda kalır. Telefonunuzun yedeklerine kopyalanmaz; bu nedenle yeni bir telefon, hatta eskisinin yedeğinden geri yüklenen bir iPhone bile 12 kelimenize veya bağlantılı bir oturum açma hesabına ihtiyaç duyar (\"Hesabınızı geri alma\" bölümüne bakın).",
+            "12 kelimenize sahip olan herkes hesabınızı kullanabilir. Onları asla paylaşmayın, BeanPool uygulaması veya kendi topluluğunuzun BeanPool web uygulaması dışında hiçbir yere yazmayın ve asla bir mesajla göndermeyin. BeanPool'dan veya topluluğunuzdan hiç kimse bunları sizden asla istemez."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Onları bir yere yazın"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "12 kelimeyi kağıda sırayla yazın ve yazılışlarını kontrol edin (kelimeler İngilizce kelimelerdir).",
+            "Kağıdı telefonunuzdan uzakta, güvenli bir yerde saklayın.",
+            "Kelimelerin bir fotoğrafını veya ekran görüntüsünü başkasının bulması kolaydır. Kağıt daha güvenlidir.",
+            "Telefon uygulaması 12 kelimenizi gösterirken veya siz onları yazarken o ekranın ekran görüntülerini ve ekran kayıtlarını engeller: telefon ekran görüntüsünü reddeder veya resim boş çıkar. Başka bir telefonla çekilen ekran fotoğrafını ise hiçbir şey engelleyemez.",
+            "**Kelimeleri Kopyala** (katılırken ve web uygulamasında **Tüm Kelimeleri Kopyala**), kelimeleri bir dakikalığına telefonunuzun panosuna koyar. Pano onları hâlâ tutuyorsa, uygulama ardından onları temizler. Önce uygulamadan ayrılırsanız, geri döndüğünüzde onları temizler. O zamandan beri kopyaladığınız başka bir şeye dokunulmaz. Bir klavyenin pano geçmişi veya diğer cihazlarınızla paylaşılan bir pano, uygulamanın temizleyemeyeceği bir kopyayı saklayabilir.",
+            "Web uygulamasında o ekranda kalırsanız kopya bir dakika sonra temizlenir. Bir iPhone veya iPad'de, Safari veya Firefox'ta, tarayıcı uygulamanın bunu temizlemesine yalnızca dokunduğunuzda veya bir tuşa bastığınızda izin verir, bu nedenle bir dakikanın ardından ilk dokunuşunuzda veya tuşa basışınızda temizlenir. Önce o ekrandan ayrılırsanız veya başka bir uygulamaya ya da sekmeye geçerseniz, uygulama başka bir şey kopyalayıp kopyalamadığınızı anlayamaz, bu nedenle panonuza dokunmaz: kelimelerin üzerine başka bir şey kopyalayın.",
+            "Telefonunuzun ekran kilidi yoksa elinde tutan herkes 12 kelimenizi açabilir ve uygulama onların altında bunu söyler. Telefonunuzun ayarlarında belirlenen PIN, desen, parola, parmak izi veya yüz kilidi onları daha güvende tutar."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Kurtarma kitiniz"
+        },
+        {
+          "type": "p",
+          "text": "Kurtarma kiti yazdırılabilir tek bir sayfadır: sırasıyla 12 kelimeniz (İngilizce kelimelerdir), topluluğunuzun adı ve adresi, onu oluşturduğunuz tarih ve bir telefonda ile bir web tarayıcısında hesaba tekrar giriş yapma adımları. Kimin hesabı olduğunu söylemez. İsteğe bağlıdır: o olmadan da devam edebilirsiniz."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Telefonda**: 12 kelimenizin yanında (katılırken Yedek adımında ve Ayarlar'da), yazdırmak için **Kurtarma kitinizi yazdırın**'a veya bir PDF oluşturup nereye gideceğini seçmek için **PDF olarak kaydet**'e dokunun. Kaydetmeden önce uygulama şu uyarıda bulunur: \"Bu dosyayı bulut yedeklemelerinden ve sohbetlerden uzak tutun. Buna sahip olan herkes sizin adınıza giriş yapabilir.\" Telefon daha sonra PDF'nin kendi kopyasını siler.",
+            "**Web uygulamasında**: 12 kelimenizin yanında (katıldığınızda ve Ayarlar'da **Kurtarma İfadesini Görüntüle** altında), **Kurtarma setinizi yazdırın veya kaydedin** seçeneğine tıklayın. Uygulama şu uyarıda bulunur: \"Bu sayfayı veya dosyayı bulut yedeklemelerinden ve sohbetlerden uzak tutun. Buna sahip olan herkes sizin adınıza giriş yapabilir.\" Tarayıcınızın yazdırma penceresi için **Devam et** seçeneğine tıklayın. Kağıt yerine PDF saklamak için orada **PDF olarak kaydet** seçeneğini belirleyin.",
+            "Sayfayı kelimeleri sakladığınız gibi saklayın: ona sahip olan herkes sizin adınıza giriş yapabilir."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Onları tekrar nerede görebilirsiniz"
+        },
+        {
+          "type": "p",
+          "text": "Ekranın üst kısmındaki kaydırıcı düğmesiyle **Ayarlar**'ı açın. Ardından şunlardan birini yapın:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Hesap ve Kimlik** altında, **Kurtarma İfadesini Görüntüle** seçeneğine dokunun. **CONFIRM** yazın, **Kurtarma İfadesini Göster**'e dokunun ve telefonunuzun kilit ekranı kontrolünü geçin.",
+            "Veya **Hesap Koruması**'na, ardından **12 Kurtarma Kelimemi Göster**'e dokunun ve telefonunuzun kilit ekranı kontrolünü geçin. İşiniz bittiğinde **Gizle**'ye dokunun."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Her iki durumda da o ekrandan ayrıldığınızda veya uygulamadan 15 saniye ya da daha uzun süre ayrıldığınızda kelimeler gizlenir ve telefon bir sonraki sefer tekrar sorar. İki dakikadan uzun süren bir kilit ekranı kontrolü hiçbir şey göstermez: tekrar dokunun."
+        },
+        {
+          "type": "p",
+          "text": "Web uygulamasında, **Hesap ve Kimlik** altındaki **Kurtarma İfadesini Görüntüle** onları doğrudan gösterir."
+        },
+        {
+          "type": "p",
+          "text": "Bir oturum açma hesabıyla geri yüklenen bir telefon, 12 kelimenizi yalnızca o oturum açma hesabı, güncel bir uygulamada bu kelimelere sahip bir telefondan bağlanmışsa geri alır. Aksi takdirde telefonun bunlara dair bir kopyası olmaz: bir oturum açma hesabından yeniden oluşturulamazlar. **Kurtarma İfadesini Görüntüle** hâlâ oradadır ve **Bu telefonda henüz bir kopya yok** der. O telefonda bağlantılı bir oturum açma hesabı geri dönme yolunuzdur, bu nedenle **Hesap Koruması** altında bir tanesini bağlı tutun."
+        },
+        {
+          "type": "h2",
+          "text": "12 kelimenizi bu telefona geri koyun"
+        },
+        {
+          "type": "p",
+          "text": "Bu telefonda 12 kelimenizin bir kopyası yoksa ve bunları bir yere yazdıysanız ekleyebilirsiniz:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Ayarlar**'ı açın. **Hesap ve Kimlik** altında **Kurtarma İfadesini Görüntüle**'ye dokunun. (Veya **Hesap Koruması**'nda **12 Kurtarma Kelimemi Göster**'e dokunun.) Kopyası olmayan bir telefonda ikisinden biri **12 kelimenizi bu telefona ekleyin** ekranını açar.",
+            "12 kelimeyi sırayla yazın veya **Yapıştır**'a dokunun (kelimeler İngilizce kelimelerdir). Büyük harfler ve fazladan boşluklar fark etmez. Kurtarma kelimeleri listesinde (İngilizce kelime listesi) olmayan bir kelime siz yazarken işaretlenir.",
+            "**Bu kelimeleri ekle**'ye dokunun."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Telefonunuz, kelimelerin hesabınıza ait olduğunu kontrol eder; bu, sahipler için yapılan **12 kelimenizi kontrol edin** ile aynı kontroldür. Hiçbir yere gönderilmezler. Farklı bir hesaba aitlerse hiçbir şey değişmez ve uygulama bunu belirtir. Eklendikten sonra **Kurtarma İfadesini Görüntüle**, bu telefondaki her toplulukta onları gösterir."
+        },
+        {
+          "type": "h2",
+          "text": "Küresel topluluğa 12 kelimeyle katıldıysanız"
+        },
+        {
+          "type": "p",
+          "text": "Google, Apple veya Facebook hesabı olmadan, yalnızca 12 gizli kelimeyle küresel topluluğa katılabilirsiniz (\"BeanPool'a katılma\" bölümüne bakın). Bu size yeni bir hesap oluşturduysa 12 kelimeniz tek geri dönüş yolunuzdur (bu kelimeler İngilizce kelimelerdir). Hesabınızın telefonunuz dışında hiçbir yerde kopyası tutulmaz ve onları kimse sıfırlayamaz: ne BeanPool ne de topluluk. Onları ve telefonunuzu kaybederseniz hesap temelli olarak gider. (Zaten sahip olduğunuz hesapla katıldıysanız, başka bir toplulukta bağladığınız bir giriş onu orada yine de geri getirir.)"
+        },
+        {
+          "type": "p",
+          "text": "Uygulama **Yedek** adımında bunu söyler. Katıldıktan sonra telefonda ve web uygulamasında **Ana Sayfa**'daki bir kart bunu tekrar söyler: **Hesabınızın tek bir geri dönüş yolu var: 12 kelimeniz. Onlara hâlâ sahip olduğunuzu kontrol edin veya bir oturum açma yöntemi ekleyin.** Hiçbir şey yapmanıza asla engel olmaz. Telefonda:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**✕** kartı kapatır. İlk gönderinizden sonra bir kez ve bir hafta sonra bir kez tekrar gelir, ardından yalnızca **Ayarlar**'da, **Hesap Koruması** altında kalır.",
+            "**12 kelimemi göster**, onları tekrar görebileceğiniz **Hesap Koruması**'nı açar.",
+            "**Hesap Koruması**'nda, **12 kelimem hâlâ duruyor** kartı temelli olarak kapatır. **Oturum açma yöntemi ekle** orada kalır."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Web uygulamasında kart **Tek bir geri dönüş yolu** başlığını taşır ve **12 kelimemi gör** ile **Oturum açma yöntemi ekle** seçeneklerini içerir. **✕** onu kapatır: gönderilerinizden biri yayında kaldıktan sonra bir kez ve ilk haftanız bittiğinde bir kez tekrar gelir. **Ana Sayfa** kartında **12 kelimemi gör**'e dokunmak onları gösterir ve kart artık orada tekrar görünmez. Bir oturum açma yöntemi ekleyene kadar **Ayarlar**'ın en üstünde kalır."
+        },
+        {
+          "type": "p",
+          "text": "12 kelimeyle oluşturulan bir hesap ilk haftasında bir girişle oluşturulan hesaba göre daha yavaş başlar. Sınırları ve nedenleri için \"Sorun bildirme\" bölümüne bakın."
+        },
+        {
+          "type": "h3",
+          "text": "Daha sonra bir oturum açma yöntemi ekleme"
+        },
+        {
+          "type": "p",
+          "text": "Yalnızca katıldığınız telefondan değil, hesabınızda olduğunuz herhangi bir telefondan veya tarayıcıdan daha sonra bir oturum açma yöntemi ekleyebilirsiniz. Hesabınızı 12 kelimenizle geri yüklediğiniz bir telefonda, uygulamada küresel topluluğu açın: topluluk hesabınızın yalnızca 12 kelimesi olduğunu söyler ve kart ile **Oturum açma yöntemi ekle** görünür (biraz zaman alabilir). Hesabınız askıya alınmışken veya topluluk hesabınızı kapatmışsa ekleyemezsiniz (uygulama bunu belirtir ve hiçbir şey değişmez). İkinci bir geri dönüş yolu haline gelir ve 12 kelimelik sınırları hemen kaldırır."
+        },
+        {
+          "type": "p",
+          "text": "BeanPool'un anahtar kasası hesabınızın bir kopyasını zaten tutuyorsa bu kopya da bir geri dönüş yoludur. Uygulama bu durumda tek geri dönüş yolu kartını göstermez. 12 kelimelik sınırları kaldırdığı için **Ayarlar**'daki **Hesap Koruması** altında sessizce **Oturum açma yöntemi ekle** yine de sunulur."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Oturum açma yöntemi ekle**'ye dokunun: kartta veya **Ayarlar**'da **Hesap Koruması** altında. **Yedek** adımında düğmede **Geri dönmek için ikinci bir yol olarak giriş ekleyin** yazar.",
+            "**Google ile devam et**, **Facebook ile devam et** veya bir iPhone'da **Apple ile devam et**'e dokunun ve bir kez giriş yapın. Uygulama önce telefonunuzun kilidini isteyebilir.",
+            "**Giriş eklendi** çalıştığını belirtir. Hesabınız artık olağan yeni hesap sınırlarına sahiptir ve bu giriş, onunla katılan birinde olduğu gibi telefonunuzu kaybetmeniz durumunda onu geri getirir. Bunun için saklanan kopyayı kimlerin açabileceğini öğrenmek için \"Hesabınızı geri alma\" bölümüne bakın."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Hesabınızın kopyası o anda tutulamıyorsa oturum açma yöntemi yine de eklenir ve sınırlarınız yine de kalkar, ancak 12 kelimeniz geri dönüş yolunuz olarak kalır. Uygulama bunu belirtir. Küresel toplulukta zaten başka bir BeanPool hesabına sahip olan veya topluluğun kaldırdığı bir hesaba ait olan bir oturum açma hesabı eklenemez ve hiçbir şey değişmez."
+        },
+        {
+          "type": "p",
+          "text": "**Hesap Koruması**'nda daha aşağıda **Oturum Açma Kurtarma Sağlayıcıları** altındaki **İle koru** da bir oturum açma yöntemini geri dönüş yolu olarak bağlar, ancak 12 kelimelik sınırları ve kartı olduğu gibi bırakır. İkisi için de **Oturum açma yöntemi ekle**'yi kullanın."
+        },
+        {
+          "type": "h2",
+          "text": "İkinci bir geri dönüş yolu: bir oturum açma hesabı"
+        },
+        {
+          "type": "p",
+          "text": "Telefon uygulamasında bir Google veya Facebook hesabı da bağlayabilirsiniz (ve bir iPhone'da Apple). Telefonunuzu kaybederseniz o hesap, kendisi için kilitli bir kopya tutan topluluğunuzun sunucusu aracılığıyla yeni bir telefonda hesabınızı geri yükleyebilir. O sunucuyu işleten kişiler bu kopyayı açabilir. \"Hesabınızı geri alma\" bölümüne bakın."
+        },
+        {
+          "type": "p",
+          "text": "12 kelimenize sahip bir telefondan bağladığınız bir oturum açma hesabı onları da tutar, bu nedenle onunla geri yüklemek onları geri verir. Uygulamanın daha eski bir sürümünde bağladığınız bir hesap ise hesabınızı onlar olmadan geri getirir: **Hesap Koruması** altında yanındaki **Yeniden bağla**'ya dokunun ve onları dahil etmek için telefonunuzun kilit ekranı kontrolünü geçin. Kağıdı da saklayın."
+        },
+        {
+          "type": "h2",
+          "text": "Bir web tarayıcısında"
+        },
+        {
+          "type": "p",
+          "text": "Küresel toplulukta bir tarayıcıda katıldığınız bir oturum açma yöntemi ikinci bir geri dönüş yolu olarak tutulur: Ayarlar **Girişle kurtarma: bağlı** gösterir. Temizlenmiş veya yeni bir tarayıcıda **Zaten BeanPool hesabınız var mı?** seçeneğine, ardından **Giriş yöntemimi kullan**'a dokunun; hesabınızı 12 kelimesiyle birlikte geri getirir (\"BeanPool'u web tarayıcısında kullanma\" bölümüne bakın). Bunun yerine orada 12 kelimeyle katılırsanız bir oturum açma yöntemi ekleyene kadar tek geri dönüş yolunuz onlardır: katıldıktan sonra ve Ayarlar'da **Tek bir geri dönüş yolu** adlı bir kart **12 kelimemi gör** ve **Oturum açma yöntemi ekle** ile bunu söyler. Diğer topluluklarda web uygulamasının oturum açma kurtarması yoktur ve 12 kelimeniz geri dönüş yoludur. Tarayıcılar kayıtlı verileri de temizleyebilir, bu nedenle web uygulamasına güvenmeden önce kelimeleri bir yere yazın (kelimeler İngilizce kelimelerdir)."
+        }
+      ]
+    },
+    {
+      "slug": "your-profile",
+      "title": "Profiliniz",
+      "summary": "Adınız, fotoğrafınız, hakkınızda birkaç kelime ve iletişim bilgilerinizi kimlerin görebileceği.",
+      "sourceHash": "7adea0e9b76c043c",
+      "source-hash": "7adea0e9b76c043c",
+      "section": "getting-started",
+      "related": [
+        "privacy",
+        "trust-badges",
+        "joining",
+        "people"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Adınızı, fotoğrafınızı veya biyografinizi değiştirme"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Ekranın üst kısmındaki kaydırıcı düğmesiyle **Ayarlar**'ı açın.",
+            "En üstteki kartınızda **Düzenle**'ye veya fotoğrafınıza dokunun.",
+            "İstediğinizi değiştirin:",
+            "**Çağrı kodu**, insanların gördüğü addır.",
+            "**Biyografi**, hakkınızda 200 karaktere kadar birkaç kelimedir.",
+            "Değiştirmek için fotoğrafa dokunun.",
+            "**Profili Kaydet**'e dokunun."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Web uygulamasında **Profili Düzenle**'ye dokunun, fotoğrafı **Kamera** veya **Galeri** ile değiştirin ve **Profil Değişikliklerini Kaydet**'e dokunun."
+        },
+        {
+          "type": "p",
+          "text": "Ayrıca Ayarlar'da **Kurulumu Yeniden Çalıştır** seçeneğine de dokunabilirsiniz. Sizi adınız ve fotoğrafınız, kabaca nerede olduğunuz (küresel toplulukta, telefon uygulamasında) ve BeanPool'un nasıl çalıştığına dair kısa tur boyunca tekrar yönlendirir. Bir web tarayıcısında bölgenizi **Ayarlar**'da **Bölgen** altında ayarlayın."
+        },
+        {
+          "type": "h2",
+          "text": "Gönderi paylaşmadan önce"
+        },
+        {
+          "type": "p",
+          "text": "Fasulyeli bir toplulukta gönderi paylaşabilmeniz veya bir takası kabul edebilmeniz için önce bir ada ve fotoğrafa ihtiyacınız vardır. Küresel topluluk gibi Fasulyenin olmadığı yerlerde bir ad yeterlidir. Bir şeyler eksikse uygulama **Önce profilini tamamla** der. Eklemek için **Profil oluştur**'a dokunun."
+        },
+        {
+          "type": "h2",
+          "text": "İletişim bilgileri"
+        },
+        {
+          "type": "p",
+          "text": "**İletişim bilgileri** altında 200 karaktere kadar bir telefon numarası, bir e-posta veya bir WhatsApp numarası ekleyebilirsiniz. Eklemek zorunda değilsiniz."
+        },
+        {
+          "type": "p",
+          "text": "Bir tane ekledikten sonra **Bunu kimler görebilir?** seçeneğini belirleyin:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Gizli:** hiç kimse.",
+            "**Takas Ortakları:** bir anlaşmanız olan üyeler. Anlaşma daha sonra iptal edilse veya reddedilse bile, birinizin diğerinin gönderisinde **Teklifi Kabul Et** veya **Karşılamayı Teklif Et**'e dokunduğu andan itibaren sayılır. Kendi başına fasulye göndermek bir anlaşma değildir.",
+            "**Arkadaşlar:** arkadaş olarak eklediğiniz kişiler.",
+            "**Topluluk:** topluluğunuzun her üyesi."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Askıya alınan bir üye, askıya alma sürdüğü sürece bunların hiçbirini göremez. Topluluğunuza katılmamış hiç kimse de göremez; bir üyenin mesaj gönderdiği veya fasulye yolladığı biri bile olsa."
+        },
+        {
+          "type": "p",
+          "text": "Bugün web uygulaması gönderilerinizde iletişim bilgilerinizi gösterebilir. Telefon uygulaması henüz diğer üyelerin iletişim bilgilerini göstermemektedir."
+        },
+        {
+          "type": "h2",
+          "text": "Başkalarının gördükleri"
+        },
+        {
+          "type": "p",
+          "text": "Kendi profilinizi görmek için ekranın sağ üst köşesindeki yuvarlak resme dokunun. Diğer üyeler de hemen hemen aynısını görür:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "adınız, ne zaman katıldığınız ve biyografiniz;",
+            "takas yaptığınız kişilerden gelen yıldız değerlendirmeleri ve yorumlar (yorumu kimin yazdığını başka hiç kimse göremez);",
+            "gönderileriniz."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Telefonda, Fasulyeli bir toplulukta güven rozetinizi, kaç kişiyle kaç takas yaptığınızı ve tamamladığınız oranı (**Tamamlama**) da görürler. Web uygulaması bunları başka bir üyenin profilinde göstermez. Küresel toplulukta Fasulye yoktur, bu nedenle bunların hiçbirini göstermez."
+        },
+        {
+          "type": "h2",
+          "text": "Çalışma tarzınız"
+        },
+        {
+          "type": "p",
+          "text": "Profilinizde isteğe bağlı kısa bir test vardır: **60sn Testi Çöz**. Başkalarıyla nasıl çalışmayı sevdiğinizi tanımlar. Başka birinin profilinde tarzlarınızın birbirine ne kadar uyduğunu gösterir. Başka hiçbir şeyi değiştirmez."
+        }
+      ]
+    },
+    {
+      "slug": "the-top-bar",
+      "title": "Üst çubuk",
+      "summary": "Fasulye simgesi, dikkatiniz gerektiğinde beliren küçük simgeler ve sağ üstteki düğmeler.",
+      "sourceHash": "f384da792affb84e",
+      "source-hash": "f384da792affb84e",
+      "section": "getting-started",
+      "related": [
+        "home",
+        "the-bean",
+        "communities",
+        "my-deals",
+        "decisions",
+        "messages",
+        "notifications"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "İçinde neler var"
+        },
+        {
+          "type": "p",
+          "text": "Telefonda ekranın üst kısmındaki çubuk her sekmede aynıdır. Soldan sağa:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Fasulye:** topluluğunuz ve bu kılavuz.",
+            "**\"Sana ihtiyacı var\" simgeleri:** yalnızca sizi bekleyen bir şey varken.",
+            "**? simgesi, davet simgesi, Ayarlar ve resminiz.**"
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Bir web tarayıcısında üst çubuk daha sadedir. Solda bağlantı durumu, sayfanın adı; sağda ise profiliniz, **?** ve Ayarlar bulunur. Fasulye sayfası, \"sana ihtiyacı var\" simgeleri ve davet simgesi yoktur: **Davetler**, **Kişiler** altındadır. Sekmeler alt kısımda veya geniş bir ekranda sol tarafta yer alır."
+        },
+        {
+          "type": "h2",
+          "text": "Fasulye"
+        },
+        {
+          "type": "p",
+          "text": "**BeanPool** sayfasını açmak için sol üstteki fasulyeye dokunun. Şunları gösterir:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Topluluğun:** en üstte adı ve şu anda ulaşılıp ulaşılamadığı.",
+            "**Topluluklarınız:** geçiş yapmak için birine dokunun veya **Topluluk ekle** seçeneğine dokunun. **Küresel topluluk** her zaman bunlardan biridir: ikinci satırı katılıp katılamayacağınızı belirtir.",
+            "**Rehberde ara**, ardından **Kılavuzlar** (BeanPool nasıl çalışır, kurallar, sık sorulan sorular), **Uygulama nasıl kullanılır** (bölüm bölüm bu kılavuz) ve **Yenilikler** ile birlikte **BeanPool projesi**.",
+            "**beanpool.org:** bir arkadaşa göndermek için **Paylaş** seçeneğiyle birlikte herkese açık web sitesi."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Fasulyenin üzerindeki küçük nokta durumun nasıl olduğunu anlatır:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Yeşil:** bağlı ve burada bir üyesiniz.",
+            "**Kehribar:** misafir olarak ziyaret ediyorsunuz.",
+            "**Kırmızı:** topluluğunuzun sunucusuna şu anda ulaşılamıyor veya bu telefon henüz bir topluluğa bağlı değil."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Tek bir yavaş kontrol noktayı kırmızıya çevirmez. Yalnızca art arda birden fazla kontrol başarısız olduğunda kırmızıya döner."
+        },
+        {
+          "type": "h2",
+          "text": "\"Sana ihtiyacı var\" simgeleri"
+        },
+        {
+          "type": "p",
+          "text": "Fasulye ile sağdaki düğmeler arasında küçük simgeler yalnızca size ihtiyaç duyan bir şey varken görünür. Her biri bir tür durumu ifade eder. Doğrudan oraya gitmek için dokunun."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Bir el sıkışma:** bir anlaşma sizi bekliyor. Birisi isteğini kabul etmenizi bekliyor veya içinde olduğunuz bir anlaşma henüz tamamlanmadı. Bir tane varsa dokunmak o anlaşmayı açar. Daha fazlası varsa **Takaslarım**'ı açar.",
+            "**Bir oy sandığı:** henüz kullanmadığınız bir oy. Dokunmak, **Ortak**'ı **Karar Al** bölümünde açar. İlk oy bir gruptaki oylama veya bir girişimdeki sorumluların oyu ise dokunmak bunun yerine o grubu veya girişimi açar. Henüz kullanamayacağınız bir oy burada sayılmaz; örneğin önce bir takası tamamlamanızı gerektiren bir oy gibi.",
+            "**Bir konuşma balonu:** bir kişiden gelen okunmamış mesaj. Bir kişidense dokunmak o sohbeti açar. Birkaç kişidense **Sohbet**'i yalnızca okunmamış olanları göstererek **Mesajlar** bölümünde açar.",
+            "**Bir grup insan:** gruplarınızda, girişim sohbetlerinde veya etkinlik sohbetlerinde yeni satırlar. Sessize aldığınız sohbetler burada sessiz kalır. Dokunmak o sohbeti veya birkaç tane varsa **Sohbet**'i **Gruplar** bölümünde açar.",
+            "**Bir kalkan:** yalnızca topluluğunuzun yönetilmesine yardımcı olan kişiler içindir. İncelenecek bir şikayet veya karar verilmesi gereken duraksamış bir takas gibi bekleyen yönetici işi varken gösterilir. Dokunmak telefonunuzun ekran kilidini ister, ardından topluluğunuzun ayarlarını o işte açar. Topluluğunuzun ayarları bir giriş kodu kullanıyorsa onu da ister."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Simgeler sağdan itibaren dizilir. En önemlisi ? simgesinin yanında durur ve diğerleri gelip gittikçe yerini korur."
+        },
+        {
+          "type": "h3",
+          "text": "Sayı ve renk"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Bir simge üzerindeki küçük bir sayı o türden birden fazla olduğunu belirtir: örneğin size yazan 3 kişi. 9'un üzerinde **9+** gösterir.",
+            "Daha acil olduğunda bir simge **kehribar** rengine döner: sizi bekleyen bir anlaşma, yönetici işi veya 2 gün içinde kapanacak bir oylama. Hiçbir şey kırmızıya dönmez."
+          ]
+        },
+        {
+          "type": "h3",
+          "text": "Küçük bir ekranda"
+        },
+        {
+          "type": "p",
+          "text": "Her simge için yer yoksa son alanda **•••** gösterilir. Tüm listeyi, **Sana ihtiyacı var**, kelimelerle görmek için ona dokunun. Oraya gitmek için bir satıra dokunun."
+        },
+        {
+          "type": "h3",
+          "text": "Sakin bir çubuk iyi haberdir"
+        },
+        {
+          "type": "p",
+          "text": "Size ihtiyaç duyan hiçbir şey olmadığında hiç simge görünmez. Hiçbir şey kaçırmadınız. Simgeler siz uygulamada gezinirken ve uygulamaya geri döndüğünüzde güncellenir."
+        },
+        {
+          "type": "h2",
+          "text": "Katıl veya Bağlan"
+        },
+        {
+          "type": "p",
+          "text": "Simgelerin yerine bir düğme görebilirsiniz:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Katıl** (kehribar): misafir olarak ziyaret ediyorsunuz. **Davetler**'i açmak için dokunun. Yerel bir toplulukta bir davetle oradan katılırsınız. Küresel toplulukta **12 kelime veya bir girişle katılın** seçeneğine dokunun (bir topluluğun yalnızca girişleri kabul ettiği yerlerde **Girişle katılın**).",
+            "**Bağlan** (kırmızı): bu telefon bir topluluğa bağlı değil. Bir tane ekleyebileceğiniz **Ayarlar**'ı açmak için dokunun."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Bunlardan biri gösterilirken davet simgesi gizlenir."
+        },
+        {
+          "type": "h2",
+          "text": "Sağdaki düğmeler"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**? simgesi** (daire içinde soru işareti): bulunduğunuz ekran için yardım. Bu ekranın ne işe yaradığını anlatan kısa bir sayfa açar, ardından **Rehber sayfasını oku**, **Rehberde ara** ve **Turu tekrar yap** seçeneklerini sunar. Üyeler ve misafirler için her sekmede bulunur. Web uygulamasında üstte resminiz ile Ayarlar arasında ve geniş bir ekranda kenar çubuğunun altındaki Ayarlar'ın yanında yer alır.",
+            "**Davet simgesi** (artı işaretli kişi): birini davet etmek veya başka bir topluluğa katılmak için **Davetler**'i açar. \"BeanPool'a katılma\" bölümüne bakın.",
+            "**Ayarlar** (kaydırıcılar): **Ayarlar**'ı açar. Bulunduğunuz yere geri dönmek için tekrar dokunun.",
+            "**Resminiz:** başkalarının gördüğü şekliyle kendi profilinizi açar."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Güncelleme mesajları"
+        },
+        {
+          "type": "p",
+          "text": "Bazen üst çubuğun altında yeşil bir çubuk görünür:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Güncelleme mevcut:** uygulamanın daha yeni bir sürümü çıktı. Almak için **Yükselt**'e veya mesajı kapatmak için çarpı işaretine dokunun.",
+            "**Uygulamanız bu topluluk için çok eski:** uygulamanın burada düzgün çalışması için önce güncellemeniz gerekir. Bu mesaj kapatılamaz. **Yükselt**'e dokunun."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Sekmeler"
+        },
+        {
+          "type": "p",
+          "text": "Üst çubuğun altında sekmeler yer alır: **Ana Sayfa**, **Pazar**, **Harita**, **Sohbet**, **Ortak** ve **Defter**. Her sekmenin adı simgesinin üzerinde bulunur. Telefonda, Fasulyesi olmayan yerel bir topluluk **Ortak** veya **Defter** göstermez. Küresel topluluk, yerel bir topluluktan örneklerle her ikisini de gösterir. \"Fasulye ve küresel topluluk\" bölümüne bakın."
+        },
+        {
+          "type": "p",
+          "text": "Uzun bir sayfada en başa geri dönmek için halihazırda bulunduğunuz sekmeye dokunun. Bu, **Harita** dışındaki her sekmede çalışır."
+        }
+      ]
+    },
+    {
+      "slug": "the-bean",
+      "title": "Bu kılavuz",
+      "summary": "Bu kılavuzu nerede bulacağınız, içinde nasıl arama yapacağınız ve nasıl güncel kaldığı.",
+      "sourceHash": "3f81c6f1fb085719",
+      "source-hash": "3f81c6f1fb085719",
+      "section": "getting-started",
+      "related": [
+        "getting-help",
+        "how-it-works",
+        "faq",
+        "whats-new",
+        "the-top-bar"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Kılavuzu açma"
+        },
+        {
+          "type": "p",
+          "text": "Telefonda ekranın sol üst köşesindeki fasulyeye dokunun. Veya:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Ekranın üst kısmındaki kaydırıcı düğmesiyle **Ayarlar**'ı açın.",
+            "**BeanPool** altında, **Yardım ve nasıl çalışır** seçeneğine dokunun."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Web uygulamasında da aynı yerdedir: **Ayarlar**, ardından **BeanPool** altında **Yardım ve nasıl çalışır**."
+        },
+        {
+          "type": "h2",
+          "text": "İçinde neler var"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Topluluğun:** adı (web uygulamasında adresi) ve sunucusuna şu anda ulaşılıp ulaşılamadığı. Telefonda, onun altında **Topluluklarınız**: geçiş yapmak için birine dokunun veya **Topluluk ekle** seçeneğine dokunun. **Küresel topluluk** her zaman satırlardan biridir ve ikinci satırında üye olup olmadığınızı, katılıp katılamayacağınızı veya şu anda neden kullanılamadığını belirtir. \"Birden fazla topluluk\" bölümüne bakın.",
+            "**Kılavuzlar:** BeanPool'un nasıl çalıştığı, kurallar ve kararların nasıl alındığı ile sık sorulan sorular.",
+            "**Uygulama nasıl kullanılır:** uygulamanın düzenlendiği şekilde gruplandırılmış her görev için kısa bir sayfa: Başlarken, Pazar, Harita, Sohbet, Pulse, Ortak Alan, Defter ve Ayarlar ile güvenlik.",
+            "**BeanPool projesi:** bu sürümde nelerin yeni olduğu ve beanpool.org web sitesine bir bağlantı (telefonda, bir arkadaşa göndermek için bir **Paylaş** düğmesiyle birlikte)."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Arama yapma"
+        },
+        {
+          "type": "p",
+          "text": "**Rehberde ara** kutusuna bir iki kelime yazın (web uygulamasında en üstte; telefonda **Topluluklarınız** altında). Kelimelerinizin tümünü içeren her sayfayı gösterir. Bağlantı olmadan da çalışır."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Kısa kelimeler çalışır: \"oy\", \"oylar\" ve \"oylama\" kelimelerini bulur.",
+            "Hiçbir şey çıkmazsa \"hediye\", \"fotoğraf\" veya \"engelle\" gibi daha basit tek bir kelime deneyin."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Her zaman elinizin altında, güncel tutulur"
+        },
+        {
+          "type": "p",
+          "text": "Kılavuz uygulamaya yerleşiktir, bu nedenle hiçbir bağlantı olmadan da çalışır. Çevrimiçi olduğunuzda uygulama daha yeni bir kılavuz olup olmadığını beanpool.org üzerinden kontrol eder ve varsa onu kullanır. Kılavuzun alt kısmı hangi sürümü okuduğunuzu gösterir."
+        },
+        {
+          "type": "p",
+          "text": "Aynı kılavuz, web sitesinde beanpool.org/guide adresinde de yer alır."
+        },
+        {
+          "type": "h2",
+          "text": "Videolar"
+        },
+        {
+          "type": "p",
+          "text": "Bazı sayfalar **İzle:** ve bir videonun adını gösterebilir. Bu bağlantı yalnızca BeanPool o sayfa için bir video hazırladığında ve topluluğunuz bunu Pulse'ta, **Öğren** altında (web uygulamasında **Nasıl işler**) bulundurduğunda görünür. Üyelerin Öğren bölümüne eklediği videolar hiçbir zaman kılavuz sayfasında gösterilmez. Her sayfa video olmadan da eksiksizdir."
+        }
+      ]
+    },
+    {
+      "slug": "getting-help",
+      "title": "Yardım alma",
+      "summary": "Takıldığınızda nereye bakacağınız ve kime soracağınız.",
+      "sourceHash": "c2f55bbef94860d8",
+      "source-hash": "c2f55bbef94860d8",
+      "section": "getting-started",
+      "related": [
+        "the-bean",
+        "reporting",
+        "faq",
+        "blocking",
+        "the-top-bar"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Rehbere ve bilgilere bakın"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Üstteki ? işareti:** her sekmede, bulunduğunuz ekran hakkında kısa bir not için **?** işaretine dokunun. Buradan, **Rehber sayfasını oku** onunla ilgili sayfayı açar, **Rehberde ara** bu kılavuzun aramasını açar ve **Turu tekrar yap** sekmeleri size bir kez daha gezdirir.",
+            "**Bu kılavuz:** \"hediye\" veya \"fotoğraf\" gibi bir kelime için içinde arama yapın.",
+            "**ⓘ düğmeleri:** birçok ekranda küçük bir ⓘ bulunur. O ekranın kısa bir açıklaması için ona dokunun. Defter'de birkaç tane vardır.",
+            "**Fiyat rehberi:** telefonda **Ayarlar** içinde, **Topluluk Fiyat Rehberi** altında, eşyaların genellikle Fasulye cinsinden ne kadara mal olduğunu görmek için **500+ Ürün Tahminine Göz Atın** seçeneğine dokunun. Web uygulamasında Pazar'daki **💡 Fiyatlandırma Kılavuzu** seçeneğine dokunun. Telefonda yalnızca topluluğunuz Fasulye kullandığında yer alır; web uygulaması bunu küresel toplulukta gizler."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Bir kişiye sorun"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Bir takas hakkında:** önce diğer kişiye mesaj gönderin. Çoğu sorun yanlış anlaşılmalardan kaynaklanır. Gönderi üzerinde **Mesaj** seçeneğine dokunun.",
+            "**Bir kişi veya ters giden bir takas hakkında:** topluluğunuzun yöneticileriyle konuşun. Sunucusuna onlar bakar ve tıkanmış bir takasa müdahale edebilirler.",
+            "**Henüz topluluk yoksa:** küresel topluluğa katılın ve orada sorun: her yerden insanlar ve yakınınızda bir topluluk bulmanın bir yolu. Bir telefonda, beanpool.org/global BeanPool uygulamasını doğrudan giriş yolunda açar veya uygulamanız yoksa önce uygulama mağazanızı açar. \"BeanPool'a katılma\" bölümüne bakın.",
+            "**Uygulamanın kendisi hakkında:** beanpool.org adresini ziyaret edin. **Ayarlar**'dan, **BeanPool** altından açabilirsiniz.",
+            "**Bir topluluğu kendiniz çalıştırıyorsanız:** bir topluluğun sunucusunu çalıştıran sahipler ve yöneticiler, o sunucunun Ayarlar'ında kendi kılavuzlarına sahiptir: giriş yapın ve kenar çubuğundaki **Kılavuz: topluluğunuzu yönetme** seçeneğine basın.",
+            "**Ayarlar'a girme:** sahipler ve yöneticiler, telefon uygulamasının **Ayarlar** bölümünde **Topluluk yöneticisi** başlığını görür. **Yönet** ve topluluğunuzun adı, Ayarlarını telefonda açar. Bir moderatör, raporları açan **Modere et** ve topluluğun adı ile birlikte **Topluluk moderasyonu** başlığını görür. Bir bilgisayarda Ayarlar'ı bir web tarayıcısında açın ve **Telefonunuzla giriş yapın**'ı seçin, ardından uygulamada **Bu topluluğu bir bilgisayardan yönetin** seçeneğine dokunun (moderatörler **Bu topluluğu bir bilgisayardan yönetin** görür; eski uygulamalar: **Bir bilgisayarda giriş yap**) ve kodu tarayın. **Giriş yap**'a dokunmadan önce telefondaki 6 karakterlik kodun bilgisayardakiyle eşleştiğini kontrol edin. Telefon ardından iki basamak gösterirse bunları 30 saniye içinde bilgisayara yazın."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Bir şeyler doğru gitmediğinde"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Bir gönderi dolandırıcılık, saldırgan veya yanıltıcı ise şikayet edin. \"Sorun bildirme\" bölümüne bakın.",
+            "Biri sizi rahatsız ediyorsa engelleyin. \"Birini engelleme\" bölümüne bakın.",
+            "Küresel topluluğa katılmadıysanız ve ona ulaşılamıyorsa, **BeanPool** sayfasındaki (sol üstteki fasulyeye dokunun) **Küresel topluluk** satırı **Şu anda ulaşılamıyor** der. Üyesi olduğunuz başka bir topluluğa bağlıyken altındaki bir satır **Kendi topluluğun bundan etkilenmez.** der. Küresel topluluk birçok topluluktan biridir. Kendi topluluğunuz kendi sunucusunda çalışır ve küresel topluluğa asla ihtiyaç duymaz; bu nedenle diğer her şey eskisi gibi çalışmaya devam eder."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Güvenlik sayfaları"
+        },
+        {
+          "type": "p",
+          "text": "**Ayarlar** içinde, **Yasal ve Gizlilik** altında **Gizlilik Politikası**, **Hizmet Şartları ve EULA** ile **Çocuk Güvenliği Standartları** belgelerini okuyabilirsiniz. Bunlar beanpool.org üzerinde açılır."
+        }
+      ]
+    },
+    {
+      "slug": "communities",
+      "title": "Birden fazla topluluk",
+      "summary": "Tek bir hesapla birden fazla topluluğa üye olma, aralarında geçiş yapma, topluluğunuzu yeni bir adrese taşıma ve küresel topluluğun size neler gösterdiği.",
+      "sourceHash": "b123b0f66fb01c9d",
+      "source-hash": "b123b0f66fb01c9d",
+      "section": "getting-started",
+      "related": [
+        "joining",
+        "finding-a-community",
+        "your-area",
+        "leaving-or-deleting",
+        "your-12-words",
+        "faq",
+        "the-top-bar"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Tek hesap, birden fazla topluluk"
+        },
+        {
+          "type": "p",
+          "text": "Telefonunuz tek bir hesap tutar: bir ad, bir anahtar, 12 kelimelik bir set (İngilizce kelimelerdir). Bunu birden fazla topluluğa katılmak için kullanabilirsiniz. Her topluluk kendi fasulyelerini, takaslarını ve gönderilerini tutar."
+        },
+        {
+          "type": "h2",
+          "text": "Başka bir topluluğa katılma"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Bir topluluk, üyelerinden birinin davetiyle sizi içeri alır. Davetiniz yok mu? Küresel topluluktan yakınınızdaki bir topluluktan sizi içeri almasını isteyebilirsiniz: \"Yakınınızda bir topluluk bulma\" bölümüne bakın.",
+            "**Davetler**'i açmak için ekranın sağ üst köşesindeki davet simgesine (artı işaretli kişi) dokunun.",
+            "**Başka Bir Topluluğa Katıl** altında davet bağlantısını veya kodunu yapıştırın. Yalnızca bir kodunuz varsa topluluğun adresini de doldurun.",
+            "**Topluluğa Katıl**'a dokunun."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Anahtarınız, 12 kelimeniz ve adınız sizinle gelir. Gönderileriniz, sohbetleriniz ve takaslarınız her toplulukta kalır. Ardından yeni topluluk için adınızı ve fotoğrafınızı kontrol edersiniz. Hesabınızı koruyan bir oturum açma yöntemi her topluluk tarafından tutulur, bu nedenle uygulama hesabınızı yenisinde de korumanızı ister: **Hesabı koru** veya **Daha sonra**'ya dokunun."
+        },
+        {
+          "type": "h2",
+          "text": "Hesabınızdan küresel topluluğa katılma"
+        },
+        {
+          "type": "p",
+          "text": "Küresel topluluk davet gerektirmez ve ona zaten sahip olduğunuz hesapla katılırsınız: aynı anahtar ve aynı 12 kelime. Küresel topluluk açık olduğunda ve uygulamaya bu hesabın orada zaten üye olduğunu bildirmediğinde uygulama bunu sunar."
+        },
+        {
+          "type": "p",
+          "text": "**Topluluklarınız** altında her zaman **Küresel topluluk** için bir satır bulunur. İkinci satırı durumunuzu belirtir: üye olduğunuzda adresi (geçiş yapmak için dokunun), katılabileceğinizde **Bu hesapla katıl: 12 sözcük veya oturum açma** (topluluğun 12 kelimeyi kabul etmediği yerlerde **Bu hesapla katıl: oturum açma**) ya da şu anda neden katılamadığınızı söyler: **Kontrol ediliyor…**, **Şu anda ulaşılamıyor** (bu telefon küresel topluluğu kaydetmemişken **Yeniden denemek için dokunun.** ile birlikte), **Şu anda yeni üye almıyor.**, **Bu topluluk özel önizlemede. Sahibinden bir davet iste.** veya **Oradaki hesabınız kapatıldı.** Küresel topluluğa ulaşılamadığında ve üyesi olduğunuz bir topluluğa bağlı olduğunuzda, altındaki bir satır **Kendi topluluğun bundan etkilenmez.** der. Telefondaki başka hiçbir şey buna bağlı değildir."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Sol üstteki fasulyeye dokunun. **BeanPool** sayfasında, **Topluluklarınız** altında **Küresel topluluk**'a dokunun (ikinci satırında **Bu hesapla katıl** yazar). Ayrıca **Ayarlar**'da **Gelişmiş / Alt Sistem** altındadır. Küresel topluluğu misafir olarak ziyaret ediyorsanız, üstteki **?** işaretinin yanındaki **Katıl**'a dokunun, ardından **12 kelime veya bir girişle katılın** seçeneğine dokunun (bir topluluğun yalnızca girişleri kabul ettiği yerlerde **Girişle katılın**). Uygulama küresel topluluk için **Henüz burada üye değilsin** gösteriyorsa, **Bu hesapla katıl**'a dokunun.",
+            "Nasıl katılacağınızı seçin: hesabınızın halihazırda sahip olduğu 12 kelimeyi kullanan **12 gizli kelimeyle hesap oluşturun** (giriş yok, bu nedenle telefon kilidi yok) veya Google, Apple (iPhone'da) ya da Facebook ile bir kez **Veya giriş yapın**. Bir oturum açma yöntemi için uygulama önce telefonunuzun kilidini ister, çünkü bu oturum açma yöntemi hesabınıza bir geri dönüş yolu da olur.",
+            "Oradaki insanların göreceği adı kontrol edin ve **Katıl**'a dokunun. Birisi bu ada zaten sahipse uygulama başkalarını önerir.",
+            "Ardından herhangi bir yeni toplulukta olduğu gibi küresel topluluk için fotoğrafınızı seçin ve sonra kabaca nerede olduğunuzu belirleyin (**Kabaca neredesiniz?**; **Şimdilik atla**'ya dokunabilirsiniz): küresel topluluk size yakındaki ilanları gösterir. \"BeanPool'a katılma\" bölümüne bakın."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Diğer topluluklarınızda hiçbir şey değişmez ve 12 kelimeniz aynı kalır. Bir oturum açma yöntemi aynı hesaba geri dönüş yolu da olur: bu oturum açma yöntemi için hesabın kilitli bir kopyası tutulur, bu nedenle telefonunuzu kaybederseniz yeni bir hesap değil, bu hesabı geri getirir. \"Hesabınızı geri alma\" bölümüne bakın. Hesabınıza daha önce bağladığınız bir oturum açma yöntemi çalışmaya devam eder. 12 kelimeyle katılırsanız ve hiçbir oturum açma yöntemi hesabınızın bir kopyasını tutmuyorsa, uygulama 12 kelimeyle katılan herkes için olduğu gibi **Hesabınızın tek bir geri dönüş yolu var** kartını gösterir (\"BeanPool'a katılma\" bölümüne bakın)."
+        },
+        {
+          "type": "p",
+          "text": "Uygulama **Bu giriş bilgisi başka bir BeanPool hesabıyla zaten küresel topluluğa katılmış** derse, o girişin orada kendi hesabı vardır. Farklı bir giriş kullanın: bir oturum açma hesabı, küresel toplulukta bir hesap oluşturur."
+        },
+        {
+          "type": "p",
+          "text": "Henüz hesabı olmayan yeni bir telefonda bunun yerine ilk ekrandaki **BeanPool'u dünya çapında keşfet** seçeneğini kullanın. \"BeanPool'a katılma\" bölümüne bakın."
+        },
+        {
+          "type": "h2",
+          "text": "Küresel topluluğun size gösterdikleri"
+        },
+        {
+          "type": "p",
+          "text": "Küresel topluluk her yerden ilanlara sahiptir; bu bir telefonun tutması gerekenden çok daha fazlasıdır. Bu nedenle telefonunuz yakınınızdakileri tutar:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "katıldığınızda verdiğiniz yaklaşık konum olan bölgenizin 250 km yakınındaki en yakın 500 ilan. \"Bölgeniz\" bölümüne bakın;",
+            "nerede olurlarsa olsunlar kendi ilanlarınız ve devam eden bir anlaşmanız veya hakkında bir sohbetiniz olan tüm ilanlar."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Telefonunuzdaki Pazar listesi ve Harita, telefonunuzun tuttuklarını gösterir. Bölgenizin yakınındaki yeni ilanlar paylaşıldıkça gelir. Bölgenizi değiştirirseniz telefonunuz yeni bölgenin yakınındaki ilanlarla değiştirir."
+        },
+        {
+          "type": "p",
+          "text": "Uzaktaki hiçbir şey ulaşılamaz değildir:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Pazar'daki **Ara**, topluluğa sorar; böylece yalnızca yakınınızdaki değil, her yerdeki ilanları bulur. Bağlantı olmadan yalnızca telefonunuzda bulunanları arar.",
+            "Bir mesajdan, bağlantıdan veya Ana Sayfa'dan **açtığınız bir ilan**, nerede olursa olsun topluluktan getirilir. Toplulukta artık yoksa **İlan bulunamadı** der.",
+            "**Harita** yalnızca telefonunuzun tuttuklarını gösterir, bu nedenle bölgenizden uzakta çok az iğne bulunur veya hiç bulunmaz. Oradaki şeyleri bulmak için Pazar'da arama yapın."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Bir bölge olmadan telefonunuz bunun yerine her yerden en yeni 100 ilanı tutar ve Pazar'ın üzerindeki bir satır **Dünya çapındaki en yeni ilanları görüyorsunuz. Yakınınızda ne olduğunu görmek için bölgenizi belirleyin.** der. Bir tane ayarlamak için dokunun. Yine de eskisi gibi gönderi paylaşabilir, mesaj atabilir ve arama yapabilirsiniz."
+        },
+        {
+          "type": "p",
+          "text": "Bir anketin kendine ait bir yeri yoktur, bu nedenle onu oluşturan üyenin bölgesinde gösterilir: gördüğünüz anketler çoğunlukla yakınınızda yapılanlardır."
+        },
+        {
+          "type": "p",
+          "text": "Web uygulamasında Pazar ve Harita her seferinde topluluğa sorar: bölgenizin veya seçtiğiniz bir yerin yakınındaki ilanlar ya da her yerden en yeniler için. \"Yakınınızdaki şeyleri bulma\" bölümüne bakın."
+        },
+        {
+          "type": "p",
+          "text": "Diğer topluluklarınız eskisi gibi çalışır."
+        },
+        {
+          "type": "h2",
+          "text": "Geçiş yapma"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Sol üstteki fasulyeye dokunun. Üst kısma yakın yerde **Topluluklarınız** ile birlikte **BeanPool** sayfası açılır.",
+            "İstediğinize dokunun."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Ayrıca **Ayarlar**'da **Sistem**, ardından **Gelişmiş / Alt Sistem** altında geçiş yapabilirsiniz. Topluluklarınız orada listelenir. Kullandığınız topluluk etkin olarak işaretlenir. Başka birine geçmek için üzerindeki **Kasabaya Geç** seçeneğine dokunun."
+        },
+        {
+          "type": "h2",
+          "text": "Topluluğunuz yeni bir adrese taşındığında"
+        },
+        {
+          "type": "p",
+          "text": "Bir topluluk yeni bir adrese taşınabilir: örneğin sunucusunun numarasından (203.0.113.5 gibi) bir ada. Telefonda Ana Sayfa en üstte bir kart gösterir: **Bu topluluk artık beans.example.org adresinde de bulunuyor. Bundan sonra bu adres kullanılsın mı?** Yalnızca telefonunuz topluluğun sunucusuyla yeni adresin aynı topluluk olduğunu kontrol ettikten sonra gösterilir."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Yeni adresi kullan**'a dokunun. Telefonunuz mesajlarınız dahil o topluluk için tuttuklarıyla birlikte oraya taşınır ve geçiş yaptığınızdaki gibi topluluğu tekrar açar.",
+            "**Şimdi değil**'e dokunun, kart 7 gün sonra tekrar sorar. Telefonunuz asla kendiliğinden taşınmaz.",
+            "Yeni adres farklı bir topluluk olarak yanıt verirse uygulama **Bu telefon olduğu yerde kalır** der ve sahip olduğu adresi korur. Kontrol yapılamıyorsa **Hiçbir şey değişmedi. Kısa bir süre sonra tekrar deneyin.** der.",
+            "Eski adres telefonunuz yenisini duymadan önce yanıt vermeyi durdurduysa hiçbir şey telefonunuza topluluğun nereye gittiğini söyleyemez. Sahiplerinden yeni adresi isteyin, ardından fasulyeye dokunun, sonra **Topluluk ekle**'ye dokunun ve oraya yazın."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Bu telefonda bir topluluğu unutma"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Gelişmiş / Alt Sistem**'de şu anda kullanmadığınız bir toplulukta **Unut** seçeneğine dokunun. Bu, onu ve kayıtlı verilerini bu telefondan kaldırır.",
+            "**BeanPool** sayfasında, **Topluluklarınız** altında bir topluluğa basılı tutup **Kaldır**'a dokunmak onu yalnızca listeden çıkarır. Verileri telefonda kalır."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "İkisi de oradaki hesabınızı silmez ve diğer topluluklarınız bundan etkilenmez."
+        },
+        {
+          "type": "p",
+          "text": "Bir topluluktaki hesabınızı silmek için o topluluğu açın ve Ayarlar'da **Hesabı Kalıcı Olarak Sil** seçeneğini kullanın. Telefon diğer topluluklarınız için anahtarınızı tutar. \"Hesabınızdan ayrılma veya silme\" bölümüne bakın."
+        },
+        {
+          "type": "h2",
+          "text": "Misafir olarak ziyaret etme"
+        },
+        {
+          "type": "p",
+          "text": "Bir topluluğu davet olmadan eklerseniz orada misafir olursunuz. Üst kısımda **?** işaretinin yanında bir **Katıl** düğmesi görünür. Bir misafir, bir davetle kaydolana kadar çok az şey görür. Daveti olmayan küresel toplulukta bir misafir bunun yerine 12 kelimesiyle veya bir oturum açma yöntemiyle katılır: yukarıdaki \"Hesabınızdan küresel topluluğa katılma\" bölümüne bakın."
+        }
+      ]
+    },
+    {
+      "slug": "web-app",
+      "title": "Web tarayıcısında BeanPool kullanımı",
+      "summary": "Web uygulaması mobil uygulamanın yaptıklarının çoğunu yapar. Tarayıcıda küresel topluluğa katılma, girişle hesabı kurtarma, aynı hesabı telefona bağlama ve farklı düğme adları.",
+      "sourceHash": "a209ede1df9c7ec7",
+      "source-hash": "a209ede1df9c7ec7",
+      "section": "getting-started",
+      "related": [
+        "home",
+        "the-bean",
+        "your-12-words",
+        "joining",
+        "messages",
+        "reporting"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Aynı hesap, farklı bir ekran"
+        },
+        {
+          "type": "p",
+          "text": "Topluluğunuz bir bilgisayarda veya telefonda, bir web tarayıcısında da kullanılabilir. Bu kılavuz telefon uygulaması için yazılmıştır. Web uygulaması da aynı şekilde çalışır ancak bazı şeyler farklı şekilde adlandırılmış veya yerleştirilmiştir."
+        },
+        {
+          "type": "p",
+          "text": "Her ikisinde de tek bir hesap kullanın. Bir tarayıcıda mı katıldınız? Aynı hesabı telefonunuza koyun: aşağıdaki \"Web hesabınızı bir telefona koyma\" bölümüne bakın. Telefonunuzda mı katıldınız? Onu tarayıcıya getirin: \"Telefon hesabınızı bir bilgisayarda kullanma\" bölümüne bakın. Yeniden katılmak ikinci bir hesap oluşturur ve iki hesap asla tek bir hesapta birleştirilemez."
+        },
+        {
+          "type": "h2",
+          "text": "Bir tarayıcıda global.beanpool.org adresine katılma"
+        },
+        {
+          "type": "p",
+          "text": "global.beanpool.org adresindeki küresel topluluk herkese açıktır ve doğrudan bir web tarayıcısından katılabilirsiniz. Davete ve telefon uygulamasına ihtiyacınız yoktur."
+        },
+        {
+          "type": "p",
+          "text": "Katılmadan önce sayfa, bir ziyaretçinin gördüğü şekliyle **Ana Sayfa**, **Pazar**, **Harita** ve **Defter**'i (yerel bir topluluktan bir örnek) gösterir: herkese açık kartlar, ilanlar, fotoğraflar ve kabaca nerede oldukları; ancak isim, yüz ve kesin konumlar yer almaz. Siz katılana kadar oradaki hiçbir şey paylaşım yapmanıza veya yanıt vermenize izin vermez. **Katıl**, sayfanın en üstünde ve ilanların üzerindeki kartta yer alır."
+        },
+        {
+          "type": "p",
+          "text": "Bir telefonun tarayıcısında bu kart önce **BeanPool uygulamasında aç** seçeneğini sunar. BeanPool uygulamasını küresel topluluğun giriş yolunda veya uygulama henüz yüklü değilse telefonunuzun uygulama mağazasında açar; böylece hesabınız en başından itibaren uygulamada yer alır. Uygulamada zaten bir hesap varsa onunla **Küresel topluluğa katılın** ekranını veya o hesap orada zaten üye ise **BeanPool** sayfasını açar. \"BeanPool'a katılma\" bölümüne bakın. Altındaki **veya burada tarayıcınızda katılın**, aşağıda olduğu gibi doğrudan burada katılır. Bir bilgisayarda kart **Katıl** seçeneğini gösterir."
+        },
+        {
+          "type": "p",
+          "text": "Küresel toplulukta yalnızca birkaç ilan varken, **Pazar** ayrıca **Örnek** olarak işaretlenmiş birkaç kart gösterir. İnsanların ne paylaştığını göstermek için uydurulmuşlardır ve açılamazlar. Yeterince gerçek ilan olduğunda kaybolurlar."
+        },
+        {
+          "type": "p",
+          "text": "Birinin bir ilana veya etkinliğe paylaştığı bir bağlantıdan geldiyseniz önce o açılır. O sayfadan katılın ve içeri girdiğinizde, bu kez kimin paylaştığı bilgisiyle birlikte tekrar açılır."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Katıl**'a, ardından **BeanPool'da yeniyim** seçeneğine dokunun.",
+            "İnsanların göreceği adı seçin. En az 2, en fazla 20 harf olmalıdır.",
+            "Nasıl katılacağınızı seçin. **12 gizli kelimeyle hesap oluşturun** başka bir hesap gerektirmez. Veya **Veya giriş yapın** altında sayfanın gösterdiği hesaplardan biriyle bir kez giriş yapın: **Google**, **Apple** veya **Facebook**. Sayfa sizi o şirketin kendi oturum açma sayfasına götürür ve geri getirir. Topluluğun yalnızca girişleri kabul ettiği yerlerde sayfa yalnızca giriş yöntemlerini gösterir.",
+            "Ardından herkesle aynı adımlar: bir fotoğraf, kabaca nerede olduğunuz, 12 kelimeniz (İngilizce kelimelerdir) ve kısa bir tur. Üstteki çubukta **Giriş yap** (veya 12 kelimeyle katıldığınızda **Adın**), **Fotoğraf**, **Bölgeniz**, **Yedek** ve **Nasıl işler** yazar. **Bölgeniz** adımında **Konumumu kullan**, tarayıcınıza bir kez sorar ve yanıtı gönderilmeden önce yaklaşık 10 km'ye yuvarlar; **Bir kasaba veya semt yazın** ada göre bir yer bulur; **Şimdilik atla** hiçbir şey göndermez. Sonda tarayıcıdan konumunuz tekrar istenmez. \"BeanPool'a katılma\" bölümüne bakın."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "**12 kelimeyle katılma.** Google, Apple veya Facebook hesabı gerekmez ve topluluk adınız ile bir gün boyunca katıldığınız ağın şifrelenmiş referansı dışında hakkınızda hiçbir şey tutmaz. Siz adınızı yazarken sayfa arka planda topluluk için küçük bir işlem yapar, böylece kimse sonsuz hızda hesap oluşturamaz. Bunu beklemezsiniz: tamamlanmadan dokunursanız sayfa 8 adımlı bir çubukla birlikte **Hesabınız kuruluyor…** der. Çok sayıda insan katılırken bu daha uzun sürer ve sayfa bu tarayıcıda yaklaşık ne kadar süreceğini belirtir: bu durumda giriş yapmak daha hızlıdır. **← Başka bir yol seç**, işlem devam ederken her iki giriş yoluna geri döner. 12 kelimeniz bu durumda tek geri dönüş yolunuzdur. Onları hiç kimse sıfırlayamaz, ne biz ne de topluluk: **Yedek** bunu belirtir ve **Geri dönmek için ikinci bir yol olarak giriş ekleyin** seçeneğini sunar: fotoğrafınız kaydedildikten sonra kısa turun sonunda giriş yöntemini seçersiniz (aşağıdaki \"Daha sonra bir oturum açma yöntemi ekleme\" bölümüne bakın). İkisi de sizin tercihinize bağlıdır."
+        },
+        {
+          "type": "p",
+          "text": "**Bir oturum açma yöntemiyle katılma.** Topluluk buna ait yalnızca şifrelenmiş bir referans tutar; o hesaptaki e-postanızı veya adınızı asla tutmaz. Bir oturum açma hesabı bir kez katılabilir."
+        },
+        {
+          "type": "p",
+          "text": "Aynı giriş yöntemi hesabınıza bir geri dönüş yolu olarak da tutulur. Sayfa **Hesabınız güvene alınıyor…** derken, hesabınızın 12 kelimesiyle birlikte bir kopyasını kilitler ve katılım işlemi bunu topluluğa iletir. Bu oturum açma hesabı onu açabilir. Sunucuyu işleten kişiler de onu açabilir, çünkü tıpkı telefon uygulamasında bağlanan bir oturum açma hesabında olduğu gibi sunucuları girişinizi kontrol eder: \"Hesabınızı geri alma\" bölümüne bakın. Ayarlar daha sonra **Girişle kurtarma: bağlı** seçeneğini ve hangisi olduğunu gösterir. Kopya oluşturulamaz veya tutulamazsa yine de katılırsınız ve Ayarlar **Girişle kurtarma: bağlı değil** der: bu durumda 12 kelimeniz tek geri dönüş yolunuz olur."
+        },
+        {
+          "type": "p",
+          "text": "Topluluğun bu kopyayı tutmamasını tercih ederseniz web uygulaması bunu henüz kaldıramaz. Hesabınız telefonunuzda da varsa telefon uygulaması kaldırabilir: küresel topluluk açıkken **Ayarlar**'a gidin, **Hesap Koruması**'na dokunun, ardından girişin yanındaki **Bağlantıyı Kes** seçeneğine dokunun. Her iki durumda da 12 kelimenizi güvende tutun: onlar yalnızca size ait olan geri dönüş yoludur."
+        },
+        {
+          "type": "p",
+          "text": "Buradaki başka biri seçtiğiniz ada zaten sahipse bir sayı eklenmiş olarak alırsınız. Bunu Ayarlar'dan değiştirebilirsiniz."
+        },
+        {
+          "type": "p",
+          "text": "**BeanPool'u zaten kullanıyor musunuz?** İkinci bir hesap oluşturmayın. **Katıl**'dan sonra, telefon uygulamasından bağlamak için **BeanPool'u telefonumda kullanıyorum** seçeneğini veya **12 kelimem var** seçeneğini belirleyin. Bu hesap henüz küresel topluluğa katılmadıysa, sayfa aynı giriş yollarını (12 kelimeniz veya bir kez giriş) sunar ve halihazırda sahip olduğunuz hesap olarak katılır. Küresel topluluğa daha önce bir oturum açma yöntemiyle katıldıysanız **Daha önce bir girişle katılmıştım** seçeneğini belirleyin (aşağıya bakın)."
+        },
+        {
+          "type": "p",
+          "text": "Sayfayı yarıda kapatırsanız 10 dakika içinde tekrar açtığınızda aynı adla devam eder."
+        },
+        {
+          "type": "p",
+          "text": "**Tarayıcı başına bir hesap.** Aynı anda iki sekmede katılırsanız ikincisi **Bu tarayıcıda zaten bir hesap var** der ve o hesabın adıyla **Aç** seçeneğini sunar. Hiçbir şey onun yerine geçmez. İkinci sekmenin katılımı da tamamlandıysa o hesap da bu tarayıcıda tutulur ve **12 kelimeyi göster** (adıyla) kelimelerini gösterir: saklamak istiyorsanız bir yere yazın. Bunun yerine onu kullanmak için Ayarlar'dan çıkış yapın (**Yalnızca Bu Cihazdan Kaldır**), ardından bu kelimelerle geri yükleyin."
+        },
+        {
+          "type": "p",
+          "text": "**Gönderilmiş bir katılım isteği önce gelir.** Bu tarayıcı gerçekleşmiş olabilecek bir katılım isteği gönderdiyse sayfa başka herhangi bir şeyden, hatta bir davetten veya başka bir hesabı geri yüklemekten önce topluluğa bunu sorar. İçerideyseniz devam edersiniz. Hâlâ gerçekleşme ihtimali varsa sayfa birkaç dakika beklemenizi, ardından **Tekrar kontrol et** seçeneğini kullanmanızı ister. Bu, topluluk yeni üye almayı durdurduğunda bile geçerlidir."
+        },
+        {
+          "type": "p",
+          "text": "Katılım isteğiniz gönderildikten sonra sayfada bir sorun çıkarsa bunu söyler ve **Sayfayı yenile** seçeneğini sunar. Katılımınız bu tarayıcıda tutulur ve yenileme işlemi içeride olup olmadığınızı kontrol eder."
+        },
+        {
+          "type": "p",
+          "text": "**Bir ağdan çok sayıda kişinin katılması:** tek bir internet bağlantısından çok sayıda yeni hesap geldiğinde, insanları geri çevirmek yerine katılım tarayıcıdan biraz daha fazla işlem yapmasını ister. Aynı ağdaki herkes birlikte sayılır, bu nedenle bir kampüste, ofiste veya buluşmada katılanlar siz değil başkaları olabilir. Yalnızca çok büyük bir sayıyı aştığında sayfa şimdilik hayır der ve kaç dakika bekleneceğini belirtir. 12 kelimelik hesaplar hakkında bunu söylediğinde bir oturum açma yöntemiyle katılmak yine de çalışır."
+        },
+        {
+          "type": "h2",
+          "text": "Yeni bir hesabın sınırları"
+        },
+        {
+          "type": "p",
+          "text": "Küresel toplulukta yeni bir hesabın ilk 3 günü boyunca ve 3 gönderisi yayında kalana kadar birkaç günlük sınırı vardır: herhangi bir 24 saat içinde 3 gönderi, 5 fotoğraf ve mesaj atılacak 10 yeni kişi. Yalnızca 12 kelimeyle oluşturulan bir hesabın ilk 7 günü boyunca ve 3 gönderisi yayında kalana kadar daha küçük sınırları vardır: 2 gönderi, 4 fotoğraf ve mesaj atılacak 3 yeni kişi. Bir oturum açma yöntemi eklemek onu hemen olağan sınırlara taşır. Önce size yazan birine yanıt vermek hiçbir zaman sınırlandırılmaz. Nedenleri için \"Sorun bildirme\" bölümüne bakın."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Katıldıktan sonra **Hesabınız yeni** adlı bir kart her birinden kaç tane kaldığını ve yenilerinin ne zaman geleceğini gösterir. Kapatmak için **✕** işaretine dokunun. Sınırlar bitene kadar **Ayarlar**'da kalır.",
+            "Bir sınıra ulaşırsanız **Yeni İlan** veya sohbet hangisi olduğunu ve ne zaman kalkacağını söyler ve **Yeni İlan** aynı kartı gösterir.",
+            "Moderatörler gönderi paylaşımınızı duraklattıysa **Yeni İlan** ve sohbet bunu belirtir ve **Paylaşım duraklatıldı** adlı bir kart ne zamana kadar olduğunu söyler. Duraklatma bitene kadar kalır.",
+            "Web uygulaması kapalıyken moderatörler gönderilerinizden birini gizler veya kaldırırsa ya da paylaşımınızı duraklatırsa, web uygulaması 60 güne kadar uygulamayı bir sonraki açışınızda uyarıyı gösterir. Her uyarı siz **Anladım** seçeneğine dokunana kadar kalır ve ardından tekrar gelmez. Birkaç tanesi bekliyorsa **Tümünü kapat** hepsini kaldırır. Hesabınız telefonunuzda da varsa web uygulaması orada zaten gördüğünüz bir uyarıyı gösterebilir."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Kendi yerel topluluğunuzda bu sınırların hiçbiri yoktur."
+        },
+        {
+          "type": "h2",
+          "text": "Giriş yönteminizle hesabınızı geri alma"
+        },
+        {
+          "type": "p",
+          "text": "Küresel toplulukta katıldığınız oturum açma yöntemi hesabınızı bir tarayıcıya geri getirir: kayıtlı verileri temizlenmiş bir tarayıcıya veya başka bir bilgisayardaki yeni bir tarayıcıya. İkinci bir hesap değil, aynı hesabı alırsınız."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Zaten BeanPool hesabınız var mı?** seçeneğine, ardından **Giriş yöntemimi kullan**'a dokunun. (**Katıl**'dan sonra **Daha önce bir girişle katılmıştım** da aynısını yapar.)",
+            "Bir BeanPool hesabını tutamayacak kadar eski bir tarayıcı, **Katıl** yerine yaptığı gibi bunları sunmak yerine bunu burada belirtir. Güncel bir Chrome, Firefox, Safari veya Edge kullanın.",
+            "Adınızı buraya yazın. Göründüğünde hesabınıza dokunun.",
+            "Katıldığınız giriş yöntemini seçin: **Google**, **Apple** veya **Facebook**. Tıpkı katılırken olduğu gibi sayfa sizi o şirketin kendi oturum açma sayfasına götürür ve geri getirir.",
+            "Sayfa hesabınızın kilitli kopyasını tarayıcıda açar ve gerçekten dokunduğunuz hesap olup olmadığını kontrol eder. Değilse **Bu kişi o değil** (ad) der ve hiçbir şeyi kaydetmez.",
+            "Kopya onları tuttuğunda 12 kelimenizle birlikte içeridesiniz demektir: bir tarayıcıda katılan bir hesap her zaman onlara sahiptir. Kopya onları tutmadıysa bu tarayıcıda onlar bulunmaz ve Ayarlar bunu belirtir (aşağıdaki \"12 kelimenizi saklayın\" bölümüne bakın)."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Siz olmama ihtimalinize karşı hesabınızın cihazlarına hesabın geri getirildiği bildirilir."
+        },
+        {
+          "type": "p",
+          "text": "GitHub ile katıldıysanız hesabınızı geri getiremez: BeanPool artık GitHub kullanmamaktadır (\"Hesabınızı geri alma\" bölümüne bakın). Bunun yerine 12 kelimenizi kullanın."
+        },
+        {
+          "type": "p",
+          "text": "Katıldığınız hesap olmayan bir hesapla giriş yaparsanız sayfa bunu söyler ve tekrar seçim yapmanıza izin verir. **Katıl**'a dokunup zaten katılmış bir hesapla giriş yaparsanız sayfa **Zaten buradasınız** der ve **İle geri yükle** (o giriş) seçeneğini sunar."
+        },
+        {
+          "type": "p",
+          "text": "**Tarayıcı başına bir hesap** kuralı burada da geçerlidir. Bu tarayıcıda zaten başka bir hesap varsa hiçbir şey onun yerine geçmez: sayfa **Bu tarayıcıda zaten bir hesap var** der ve onu açmayı teklif eder. Bunun yerine sizinkini buraya getirmek için önce o hesaptan çıkış yapın. Bu tarayıcıda zaten sizin hesabınız varsa sayfa hesabın zaten burada olduğunu belirtir."
+        },
+        {
+          "type": "h2",
+          "text": "Daha sonra bir oturum açma yöntemi ekleme"
+        },
+        {
+          "type": "p",
+          "text": "Küresel topluluğa 12 kelimeyle katıldıysanız onlar tek geri dönüş yolunuzdur. Katıldıktan sonra **Tek bir geri dönüş yolu** adlı bir kart **12 kelimemi gör** ve **Oturum açma yöntemi ekle** ile bunu söyler. Kapatmak için **✕** işaretine dokunun: gönderilerinizden biri yayında kaldıktan sonra bir kez ve ilk haftanız bittiğinde bir kez tekrar gelir. Bir giriş yöntemi ekleyene kadar **Ayarlar**'da kalır."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Oturum açma yöntemi ekle**'ye, ardından **Google**, **Apple** veya **Facebook**'a dokunun. Tıpkı katılırken olduğu gibi sayfa sizi o şirketin kendi oturum açma sayfasına götürür ve geri getirir.",
+            "**Ayarlar** açılır ve eklenip eklenmediğini söyler. O andan itibaren bu oturum açma yöntemi de hesabınızı geri getirir: bir oturum açma yöntemiyle katıldığınızdaki gibi topluluk bunun için hesabınızın kilitli bir kopyasını tutar ve sunucusunu işleten kişiler bu kopyayı açabilir. Yeni hesap sınırlarınız hemen olağan sınırlara dönüşür.",
+            "Burada zaten başka bir BeanPool hesabına sahip olan veya topluluğun kaldırdığı bir hesaba ait olan bir oturum açma hesabı eklenemez: sayfa bunu belirtir ve hiçbir şey değişmez."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Farklı adlar ve yerler"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Bir davetle katılma:** ilk adımın düğmesinde **Kimlik Oluştur ve Katıl →** yazar. Buradaki biri seçtiğiniz ada zaten sahipse bir sayı eklenmiş olarak alırsınız. **Fotoğraf** üzerindeki **← Geri**, **İleri →** ile birlikte yalnızca adınızı gösterir: aynı hesap üzerinde değiştirin (20 karaktere kadar) veya koruyun. Biri yeni ada zaten sahipse sayfa bunu belirtir ve başkalarını önerir.",
+            "**Sekmeler:** web uygulamasında **Ana Sayfa**, **Pazar**, **Harita**, **Ortak**, **Sohbet**, **Kişiler** ve **Defter** bulunur. Telefon uygulamasının **Sohbet** dediği yer web'de **Sohbet**'tir ve **Kişiler** kendi sekmesine sahiptir.",
+            "**Ayarlar ve profiliniz:** sağ üstteki küçük düğmeler: profiliniz, **?**, ardından Ayarlar. Geniş bir ekranda soldaki menünün altındadırlar.",
+            "**Bir Teklif veya İhtiyaç paylaşma:** **Harita** sayfasında **Yeni İlan** seçeneğini kullanın.",
+            "**Görünüm:** bu seçenek \"Telefonla aynı\" yerine **Cihazla aynı** olarak adlandırılır.",
+            "**Engelleme:** Ayarlar **Engellenen Üyeleri Yönet** der. Topluluğunuz engellemelerinizi hesabınızla birlikte tutar; bu nedenle herhangi bir tarayıcıda giriş yaptığınızda geri gelirler ve çıkış yapmak bilgisayarda bunlara dair hiçbir şey bırakmaz. Topluluğunuzun sunucusunu işleten kişiler kimi engellediğinizi görebilir. Engelleme ve engeli kaldırma bağlantı gerektirir: bağlantı olmadan web uygulaması bunu belirtir ve hiçbir şey değişmez. Telefon uygulamasında yapılan engellemeler telefonda kalır ve burada görünmez.",
+            "**Sohbetler:** web sohbetinin üst kısmında **Şikayet et** ve **Engelle** düğmeleri bulunur.",
+            "**Bölgeniz:** küresel toplulukta web uygulamasının Ayarlar bölümünde de **Bölgen** bulunur ve Pazar ile Harita buradan başlar. \"Bölgeniz\" bölümüne bakın.",
+            "**Küresel topluluk:** yerel bir toplulukta Ayarlar'da **BEANPOOL** altında adresi ve **Küresel topluluk birçok topluluktan biridir. Kendi topluluğunuz kendi sunucusunda çalışır ve küresel topluluğa asla ihtiyaç duymaz.** yazısı bulunan bir **Küresel topluluk** satırı yer alır. Topluluğunuzun sunucusunun belirttiği dünya çapındaki topluluğu yeni bir sekmede açar. Siz getirene kadar hesabınız orada değildir: o sekmede **Katıl**, ardından **12 kelimem var**. Topluluğunuz hiçbir isim belirtmemişse satır bulunmaz."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Web uygulamasında olmayanlar"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Küresel topluluk dışındaki bir toplulukta bir giriş yöntemiyle hesabınızı geri alma. Orada 12 kelimeniz onu geri getirir veya hesabınız telefonunuzda da varsa telefon uygulamasından bağlamak getirir.",
+            "Pulse'ın **Öğren** şeridi.",
+            "Telefonun uygulama kilidi.",
+            "Sahipler ve yöneticiler için kendi anahtarınızla topluluğunuzun Ayarlarına giriş yapma. Web uygulamasının **Yönet** bağlantısı Ayarları açar ancak bir tarayıcının kendine ait kilit açma mekanizması yoktur. Bilgisayarda Ayarlar'da **Telefonunuzla giriş yapın**'ı seçin ve telefon uygulamasıyla kodu tarayın (**Ayarlar**, ardından **Bu topluluğu bir bilgisayardan yönetin**; eski uygulamalarda: **Bir bilgisayarda giriş yap**)."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Web hesabınızı bir telefona koyma"
+        },
+        {
+          "type": "p",
+          "text": "Bir tarayıcıda katıldıysanız aynı hesabı telefon uygulamasına getirin. Telefonda tekrar katılmayın: bu ikinci bir hesap oluşturur ve iki hesap asla tek bir hesapta birleştirilemez. 12 kelimenizin yanındaki **Yedek** ve Ayarlar'daki **Girişle kurtarma** kartı nasıl yapılacağını açıklar:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "BeanPool uygulamasını yükleyin ve açın.",
+            "**Zaten üye misin? Hesabını geri yükle**'ye, ardından **12 Kelime ile Kurtar**'a dokunun.",
+            "12 kelimenizi yazın (İngilizce kelimelerdir), ardından **Hangi topluluk?** altında **Küresel topluluk** seçeneğine dokunun. Bu seçeneğin olmadığı bir uygulamada küresel topluluğun adresini, global.beanpool.org yazın. Başka bir topluluk için o topluluğun adresini yazın: web uygulaması bunu aynı cümlede gösterir.",
+            "Bir giriş yöntemiyle katıldıysanız aynı giriş yöntemiyle **Sosyal Hesapla Kurtar** da çalışır. \"Hesabınızı geri alma\" bölümüne bakın."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Bir tarayıcıda katılmanın 1. ekranı da tam tersini söyler: herhangi bir telefonda veya bilgisayarda zaten BeanPool'daysanız yeni bir hesap başlatmak yerine o hesabı getirin."
+        },
+        {
+          "type": "h2",
+          "text": "Telefon hesabınızı bir bilgisayarda kullanma"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Bilgisayardaki web uygulamasında mobil uygulamayla bağlamayı seçin. Bir QR kodu gösterir.",
+            "Telefonda **Ayarlar**'ı açın ve **Cihaz bağla**'ya dokunun (eski uygulamalarda: **Hesabınızı başka bir cihazda kullanın**).",
+            "Telefonun kamerasını QR koduna doğrultun, **Onayla ve Cihazı Bağla**'ya dokunun ve telefonunuzun kilit ekranı kontrolünü geçin.",
+            "Telefon ardından **dört basamak** gösterir. Bunları bilgisayara yazın ve **Onayla**'ya basın. Hesabınız ancak bundan sonra bilgisayara aktarılır. Üç yanlış denemede hiçbir şey gönderilmez: yeni bir kod oluşturun. Basamakları asla sesli okumayın veya kimseye göndermeyin.",
+            "Telefon uygulamasının çok eski olduğunu söylerse üzerindeki BeanPool uygulamasını güncelleyin, ardından yeni bir kod tarayın."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Yükleme"
+        },
+        {
+          "type": "p",
+          "text": "Web uygulaması, bir uygulama gibi ana ekranınızdan açılması için **BeanPool'u Yükle** seçeneğini sunabilir. Tarayıcınız bunu yapamıyorsa adımlar için **Nasıl?** seçeneğine dokunun."
+        },
+        {
+          "type": "h2",
+          "text": "12 kelimenizi saklayın"
+        },
+        {
+          "type": "p",
+          "text": "Tarayıcılar bazen kayıtlı verileri temizler; örneğin Safari ziyaret edilmeyen bir haftanın ardından temizler. 12 kelimenize bakana kadar web uygulamasının Ayarlar bölümü **Kurtarma İfadesini Görüntüle ve Kaydet** ile bir uyarı gösterir. Bunu yapın ve onları bir yere yazın (bunlar İngilizce kelimelerdir)."
+        },
+        {
+          "type": "p",
+          "text": "Hesabınızı, kopyası 12 kelimenizi tutmayan bir oturum açma yöntemiyle geri alan bir tarayıcı bunlara sahip değildir; bu nedenle böyle bir uyarı göstermez. Orada **Kurtarma İfadesini Görüntüle**, **Bu tarayıcıya kaydedilmedi** der ve bunun yerine hesabınızı neyin geri getirdiğini söyleyen bir sayfa açar: bir yere yazdıysanız 12 kelimeniz veya Ayarlar'ın bağlı gösterdiği oturum açma yöntemi. İkisi de yoksa hesabınız telefonunuzda da bulunuyorsa yalnızca telefon uygulaması getirebilir. **Yalnızca Bu Cihazdan Kaldır**, siz çıkış yapmadan önce aynı şeyi söyler."
+        }
+      ]
+    }
+  ]
+}

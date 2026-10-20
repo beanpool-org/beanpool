@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ta by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ta">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>மேல் பட்டை — BeanPool members' guide</title>
+    <meta name="description" content="பயறு, உங்கள் கவனம் தேவைப்படும்போது காட்டும் சிறிய சின்னங்கள் மற்றும் மேல் வலதுபுறத்தில் உள்ள பொத்தான்கள்.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#getting-started">தொடங்குதல்</a></p>
+        <h1>மேல் பட்டை</h1>
+        <p class="lede">பயறு, உங்கள் கவனம் தேவைப்படும்போது காட்டும் சிறிய சின்னங்கள் மற்றும் மேல் வலதுபுறத்தில் உள்ள பொத்தான்கள்.</p>
+        <h2>இதில் என்ன இருக்கிறது</h2>
+        <p>தொலைபேசியில், திரையின் மேற்புறத்தில் உள்ள பட்டை ஒவ்வொரு தாவலிலும் ஒரே மாதிரியாக இருக்கும். இடமிருந்து வலமாக:</p>
+        <ul>
+            <li><strong>பீனைக் குறிக்கும் சின்னம்:</strong> உங்கள் சமூகம் மற்றும் இந்த வழிகாட்டி.</li>
+            <li><strong>&quot;உங்கள் உதவி தேவை&quot; சின்னங்கள்:</strong> உங்களுக்காக ஏதேனும் காத்திருக்கும் போது மட்டுமே.</li>
+            <li><strong>? சின்னம், அழைப்புச் சின்னம், அமைப்புகள் மற்றும் உங்கள் படம்.</strong></li>
+        </ul>
+        <p>வலை உலாவியில் மேல் பட்டை எளிமையானது. இது இடதுபுறத்தில் இணைப்பு நிலை, பக்கத்தின் பெயர் மற்றும் வலதுபுறத்தில் உங்கள் சுயவிவரம், <strong>?</strong> மற்றும் அமைப்புகள் ஆகியவற்றைக் கொண்டுள்ளது. இதில் பீன் தாள் இல்லை, &quot;உங்கள் உதவி தேவை&quot; சின்னங்கள் இல்லை மற்றும் அழைப்புச் சின்னம் இல்லை: <strong>Invites</strong> என்பது <strong>நபர்கள்</strong> என்பதன் கீழ் உள்ளது. தாவல்கள் அடிப்பகுதியில் உள்ளன, அல்லது அகன்ற திரையில் இடது பக்கத்தில் உள்ளன.</p>
+        <h2>பீன் சின்னம்</h2>
+        <p><strong>BeanPool</strong> தாளைத் திறக்க மேல் இடதுபுறத்தில் உள்ள பீனைத் தட்டவும். இது காட்டுவது:</p>
+        <ul>
+            <li><strong>உங்கள் சமூகம்:</strong> மேலே அதன் பெயர், மற்றும் அதை இப்போது தொடர்பு கொள்ள முடியுமா என்பது.</li>
+            <li><strong>Your communities:</strong> ஒன்றிற்கு மாற அதைத் தட்டவும், அல்லது <strong>ஒரு சமூகத்தைச் சேர்க்கவும்</strong> என்பதைத் தட்டவும். <strong>உலகளாவிய சமூகம்</strong> எப்போதும் அவற்றில் ஒன்றாக இருக்கும்: நீங்கள் அதில் இணைய முடியுமா என்பதை அதன் இரண்டாவது வரி கூறுகிறது.</li>
+            <li><strong>வழிகாட்டியில் தேடுங்கள்</strong>, பின்னர் <strong>வழிகாட்டிகள்</strong> (BeanPool எவ்வாறு செயல்படுகிறது, விதிகள், பொதுவான கேள்விகள்), <strong>செயலியை எவ்வாறு பயன்படுத்துவது</strong> (இந்த வழிகாட்டி, பிரிவு வாரியாக) மற்றும் <strong>BeanPool திட்டம்</strong>, <strong>What's new</strong> உடன்.</li>
+            <li><strong>beanpool.org:</strong> பொது இணையதளம், நண்பருக்கு அனுப்ப <strong>பகிர்</strong> உடன்.</li>
+        </ul>
+        <p>பீன் சின்னத்தின் மீதுள்ள சிறிய புள்ளி நிலைமை எவ்வாறு உள்ளது என்பதை உங்களுக்குக் கூறுகிறது:</p>
+        <ul>
+            <li><strong>பச்சை:</strong> இணைக்கப்பட்டுள்ளது, மேலும் நீங்கள் இங்கு ஓர் உறுப்பினர்.</li>
+            <li><strong>அம்பர்:</strong> நீங்கள் ஒரு விருந்தினராகப் பார்வையிடுகிறீர்கள்.</li>
+            <li><strong>சிவப்பு:</strong> உங்கள் சமூகத்தின் சேவையகத்தை இப்போது தொடர்பு கொள்ள முடியவில்லை, அல்லது இந்தத் தொலைபேசி இன்னும் ஒரு சமூகத்துடன் இணைக்கப்படவில்லை.</li>
+        </ul>
+        <p>ஒரு முறை சரிபார்ப்பு மெதுவாக இருப்பது புள்ளியைச் சிவப்பு நிறமாக மாற்றாது. அடுத்தடுத்து ஒன்றுக்கு மேற்பட்ட சரிபார்ப்புகள் தோல்வியடைந்த பின்னரே அது சிவப்பு நிறமாக மாறும்.</p>
+        <h2>&quot;உங்கள் உதவி தேவை&quot; சின்னங்கள்</h2>
+        <p>பீன் சின்னத்திற்கும் வலதுபுறத்தில் உள்ள பொத்தான்களுக்கும் இடையில், உங்கள் உதவி தேவைப்படும் போது மட்டுமே சிறிய சின்னங்கள் தோன்றும். ஒவ்வொன்றும் ஒரு வகை நிகழ்வாகும். நேரடியாக அங்கு செல்ல அதைத் தட்டவும்.</p>
+        <ul>
+            <li><strong>கைகுலுக்கல்:</strong> உங்களுக்காக ஒரு பரிமாற்றம் காத்திருக்கிறது. யாராவது அவர்களின் கோரிக்கையை நீங்கள் ஏற்கக் காத்திருக்கிறார்கள், அல்லது நீங்கள் உள்ள ஒரு பரிமாற்றம் இன்னும் முடிவடையவில்லை. ஒன்று இருந்தால், தட்டினால் அந்தப் பரிமாற்றம் திறக்கப்படும். அதிகமாக இருந்தால், அது <strong>என் பரிமாற்றங்கள்</strong> என்பதைத் திறக்கும்.</li>
+            <li><strong>வாக்குப் பெட்டி:</strong> நீங்கள் இன்னும் அளிக்காத வாக்கு. தட்டினால் <strong>பொது</strong> என்பதில் உள்ள <strong>தீர்மானி</strong> திறக்கப்படும். முதல் வாக்கு ஒரு குழுவில் உள்ள வாக்காகவோ அல்லது ஒரு கூட்டு முயற்சியில் பொறுப்பாளர்களின் வாக்காகவோ இருந்தால், தட்டினால் அதற்குப் பதிலாக அந்தக் குழு அல்லது கூட்டு முயற்சி திறக்கப்படும். நீங்கள் இன்னும் அளிக்க முடியாத வாக்கு இங்கு கணக்கிடப்படாது, எடுத்துக்காட்டாக முதலில் நீங்கள் ஒரு வர்த்தகத்தை முடிக்க வேண்டியிருக்கும் வாக்கு.</li>
+            <li><strong>பேச்சு குமிழி:</strong> ஒரு நபரிடமிருந்து படிக்காத செய்தி. அது ஒரு நபரிடமிருந்து வந்திருந்தால், தட்டினால் அந்த அரட்டை திறக்கப்படும். அது பல நபர்களிடமிருந்து வந்திருந்தால், அது <strong>அரட்டை</strong> என்பதில் உள்ள <strong>செய்திகள்</strong> என்பதைத் திறந்து, படிக்காத செய்திகளை மட்டுமே காட்டும்.</li>
+            <li><strong>மக்கள் குழு:</strong> உங்கள் குழுக்கள், கூட்டு முயற்சி அரட்டைகள் அல்லது நிகழ்வு அரட்டைகளில் புதிய வரிகள். நீங்கள் முடக்கிய அரட்டைகள் இங்கே அமைதியாக இருக்கும். தட்டினால் அரட்டை திறக்கப்படும், அல்லது பல இருந்தால், <strong>அரட்டை</strong> என்பதில் உள்ள <strong>குழுக்கள்</strong> திறக்கப்படும்.</li>
+            <li><strong>ஒரு கேடயம்:</strong> உங்கள் சமூகத்தை இயக்க உதவும் நபர்களுக்கு மட்டுமே. மதிப்பாய்வு செய்ய வேண்டிய ஒரு புகார் அல்லது தீர்ப்பு தேவைப்படும் முடங்கிய வர்த்தகம் போன்ற நிர்வாகப் பணிகள் காத்திருக்கும் போது இது காட்டப்படும். தட்டினால் உங்கள் தொலைபேசியின் பூட்டுத் திரையைக் கேட்கும், பின்னர் அந்தப் பணியில் உங்கள் சமூகத்தின் அமைப்புகளைத் திறக்கும். உங்கள் சமூகத்தின் அமைப்புகள் ஓர் உள்நுழைவுக் குறியீட்டைப் பயன்படுத்தினால், அதையும் கேட்கும்.</li>
+        </ul>
+        <p>சின்னங்கள் வலமிருந்து அடுக்கப்படுகின்றன. மிக முக்கியமான ஒன்று ? சின்னத்திற்கு அருகில் இருக்கும், மற்றவை வந்து போகும்போது அதன் இடத்தை அது தக்க வைத்துக் கொள்ளும்.</p>
+        <h3>எண்ணும் நிறமும்</h3>
+        <ul>
+            <li>ஒரு சின்னத்தில் உள்ள ஒரு சிறிய எண் அந்த வகையில் ஒன்றுக்கு மேற்பட்டவை இருப்பதைக் குறிக்கிறது: எடுத்துக்காட்டாக உங்களுக்கு எழுதிய 3 நபர்கள். 9-க்கு மேல் இருந்தால் அது <strong>9+</strong> என்பதைக் காட்டுகிறது.</li>
+            <li>மிகவும் அவசியமானதாக இருக்கும் போது ஒரு சின்னம் <strong>அம்பர்</strong> நிறமாக மாறும்: உங்களுக்காகக் காத்திருக்கும் ஒரு பரிமாற்றம், நிர்வாகப் பணி அல்லது 2 நாட்களுக்குள் முடிவடையும் ஒரு வாக்கு. எதுவும் சிவப்பு நிறமாக மாறாது.</li>
+        </ul>
+        <h3>சிறிய திரையில்</h3>
+        <p>ஒவ்வொரு சின்னத்திற்கும் இடம் இல்லையென்றால், கடைசி இடம் <strong>•••</strong> என்பதைக் காட்டுகிறது. முழுப் பட்டியலான <strong>உங்கள் உதவி தேவை</strong> என்பதைச் சொற்களில் பார்க்க அதைத் தட்டவும். அங்கு செல்ல ஒரு வரியைத் தட்டவும்.</p>
+        <h3>அமைதியான பட்டை நல்ல செய்தி</h3>
+        <p>உங்கள் உதவி எதுவும் தேவைப்படாத போது, சின்னங்கள் எதுவும் இருக்காது. நீங்கள் எதையும் தவறவிடவில்லை. நீங்கள் செயலியில் நகரும் போதும், அதற்குத் திரும்பி வரும் போதும் சின்னங்கள் புதுப்பிக்கப்படும்.</p>
+        <h2>இணை அல்லது இணையவும்</h2>
+        <p>சின்னங்களுக்குப் பதிலாக, நீங்கள் ஒரு பொத்தானைக் காணலாம்:</p>
+        <ul>
+            <li><strong>இணையவும்</strong> (அம்பர்): நீங்கள் ஒரு விருந்தினராகப் பார்வையிடுகிறீர்கள். <strong>Invites</strong> என்பதைத் திறக்க அதைத் தட்டவும். ஒரு உள்ளூர் சமூகத்தில் நீங்கள் ஓர் அழைப்புடன் அங்கு இணைகிறீர்கள். உலகளாவிய சமூகத்தில், <strong>Join with 12 words or a sign-in</strong> என்பதைத் தட்டவும் (ஒரு சமூகம் உள்நுழைவுகளை மட்டுமே ஏற்கும் இடங்களில் <strong>Join with a sign-in</strong>).</li>
+            <li><strong>இணை</strong> (சிவப்பு): இந்தத் தொலைபேசி ஒரு சமூகத்துடன் இணைக்கப்படவில்லை. <strong>அமைப்புகள்</strong> என்பதைத் திறக்க அதைத் தட்டவும், அங்கு நீங்கள் ஒன்றைச் சேர்க்கலாம்.</li>
+        </ul>
+        <p>இவற்றில் ஒன்று காட்டப்படும் போது, அழைப்புச் சின்னம் மறைக்கப்படும்.</p>
+        <h2>வலதுபுறத்தில் உள்ள பொத்தான்கள்</h2>
+        <ul>
+            <li><strong>? சின்னம்</strong> (வட்டத்திற்குள் உள்ள கேள்விக்குறி): நீங்கள் இருக்கும் திரைப் பற்றிய உதவி. அந்தத் திரை எதற்காக என்ற சிறிய தாளை இது திறக்கிறது, பின்னர் <strong>வழிகாட்டிப் பக்கத்தைப் படிக்கவும்</strong>, <strong>வழிகாட்டியில் தேடுங்கள்</strong> மற்றும் <strong>வழிகாட்டலை மீண்டும் காண்க</strong>. இது உறுப்பினர்கள் மற்றும் விருந்தினர்களுக்கு ஒவ்வொரு தாவலிலும் உள்ளது. வலைப் பயன்பாட்டில் இது உங்கள் படத்திற்கும் மேலே உள்ள அமைப்புகளுக்கும் இடையில் உள்ளது, மேலும் அகன்ற திரையில் பக்கப் பட்டையின் அடிப்பகுதியில் அமைப்புகளுக்கு அருகில் உள்ளது.</li>
+            <li><strong>அழைப்புச் சின்னம்</strong> (கூட்டல் குறியுடன் கூடிய ஒரு நபர்): ஒருவரை அழைக்க அல்லது மற்றொரு சமூகத்தில் இணைய <strong>Invites</strong> என்பதைத் திறக்கிறது. &quot;BeanPool-ல் இணைதல்&quot; என்பதைப் பார்க்கவும்.</li>
+            <li><strong>அமைப்புகள்</strong> (ஸ்லைடர்கள்): <strong>அமைப்புகள்</strong> என்பதைத் திறக்கும். நீங்கள் இருந்த இடத்திற்குத் திரும்ப அதை மீண்டும் தட்டவும்.</li>
+            <li><strong>உங்கள் படம்:</strong> மற்றவர்கள் பார்ப்பது போல் உங்கள் சொந்த சுயவிவரத்தைத் திறக்கிறது.</li>
+        </ul>
+        <h2>புதுப்பிப்புச் செய்திகள்</h2>
+        <p>சில நேரங்களில் மேல் பட்டைக்குக் கீழே ஒரு பச்சைப் பட்டை காட்டப்படும்:</p>
+        <ul>
+            <li><strong>Update available:</strong> செயலியின் புதிய பதிப்பு வந்துள்ளது. அதைப் பெற <strong>மேம்படுத்து</strong> என்பதைத் தட்டவும், அல்லது செய்தியை மூட குறுக்குக் குறியைத் தட்டவும்.</li>
+            <li><strong>Your app is too old for this community:</strong> செயலி இங்கு சரியாகச் செயல்படுவதற்கு முன் நீங்கள் புதுப்பிக்க வேண்டும். இதை மூட முடியாது. <strong>மேம்படுத்து</strong> என்பதைத் தட்டவும்.</li>
+        </ul>
+        <h2>தாவல்கள்</h2>
+        <p>மேல் பட்டைக்குக் கீழே தாவல்கள் உள்ளன: <strong>முகப்பு</strong>, <strong>சந்தை</strong>, <strong>வரைபடம்</strong>, <strong>அரட்டை</strong>, <strong>பொது</strong> மற்றும் <strong>பேரேடு</strong>. ஒவ்வொரு தாவலின் பெயரும் அதன் சின்னத்திற்கு மேலே இருக்கும். தொலைபேசியில், பயறுகள் இல்லாத ஒரு உள்ளூர் சமூகம் <strong>பொது</strong> அல்லது <strong>பேரேடு</strong> ஆகியவற்றைக் காட்டாது. உலகளாவிய சமூகம் உள்ளூர் சமூகத்தின் எடுத்துக்காட்டுகளுடன் இரண்டையும் காட்டுகிறது. &quot;பயறுகளும் உலகளாவிய சமூகமும்&quot; என்பதைப் பார்க்கவும்.</p>
+        <p>ஒரு நீண்ட பக்கத்தில், மீண்டும் மேலே செல்ல நீங்கள் ஏற்கனவே இருக்கும் தாவலைத் தட்டவும். <strong>வரைபடம்</strong> தவிர மற்ற எல்லாத் தாவல்களிலும் இது செயல்படும்.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="home.html"><strong>முகப்பு</strong><span>முகப்பு என்றால் என்ன, தொலைபேசி மற்றும் வலைப் பயன்பாட்டில் காட்டும் அட்டைகள், அவற்றைச் சேர்த்தல், நகர்த்துதல் அல்லது நீக்குதல், ஆர்வங்களைத் தேர்ந்தெடுத்தல் மற்றும் வெளியேறும்போது தனியுரிமை.</span></a></li>
+            <li><a href="the-bean.html"><strong>இந்த வழிகாட்டி</strong><span>இந்த வழிகாட்டியை எங்கு காண்பது, எவ்வாறு தேடுவது மற்றும் அது எவ்வாறு புதுப்பித்த நிலையில் உள்ளது என்பது.</span></a></li>
+            <li><a href="communities.html"><strong>ஒன்றுக்கு மேற்பட்ட சமூகங்கள்</strong><span>ஒரே கணக்கைக் கொண்டு பல சமூகங்களில் இணைந்திருப்பது, அவற்றுக்கிடையே மாறுவது, புதிய முகவரிக்கு சமூகத்தைப் பின்பற்றுவது மற்றும் உலகளாவிய சமூகம் காட்டுவதைப் பார்ப்பது.</span></a></li>
+            <li><a href="../my-deals.html"><strong>My Deals</strong><span>One place for every trade you are in, every post you have up, and your past trades.</span></a></li>
+            <li><a href="../decisions.html"><strong>Voting on a Decision</strong><span>Find open Decisions, vote, change your vote, and see results.</span></a></li>
+            <li><a href="../messages.html"><strong>Messages</strong><span>Start a chat, send photos, reply, react, edit, delete, mute, and what is private.</span></a></li>
+            <li><a href="../notifications.html"><strong>Notifications</strong><span>Choose which alerts reach your phone, and when events remind you.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

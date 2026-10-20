@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ur by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ur">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BeanPool کیسے کام کرتا ہے — BeanPool members' guide</title>
+    <meta name="description" content="پھلیاں، تجارت، پیشکشیں اور ضروریات، اور کریڈٹ آسان الفاظ میں۔">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#about">BeanPool کا تعارف</a></p>
+        <h1>BeanPool کیسے کام کرتا ہے</h1>
+        <p class="lede">پھلیاں، تجارت، پیشکشیں اور ضروریات، اور کریڈٹ آسان الفاظ میں۔</p>
+        <h2>پھلیاں</h2>
+        <p>آپ کی کمیونٹی <strong>پھلیوں (beans)</strong> میں لین دین کرتی ہے۔ پھلیاں کسی بینک کے پیسے نہیں ہیں۔ وہ اس بات کا ریکارڈ ہیں کہ کس نے کس کی مدد کی ہے۔</p>
+        <p>ہر شخص صفر سے شروعات کرتا ہے۔ جب آپ کسی کی مدد کرتے ہیں، تو آپ پھلیاں کماتے ہیں۔ جب کوئی آپ کی مدد کرتا ہے، تو آپ پھلیاں خرچ کرتے ہیں۔</p>
+        <p>ایک عمومی رہنمائی: 40 پھلیاں کسی شخص کے تقریباً ایک گھنٹے کے وقت کے برابر ہوتی ہیں۔ اصل قیمت پر آپ اور دوسرا شخص باہمی اتفاق کرتے ہیں۔</p>
+        <h2>پیشکشیں اور ضروریات</h2>
+        <p>ایک <strong>پیشکش</strong> وہ چیز ہے جو آپ کر سکتے ہیں یا دے سکتے ہیں: روٹی، سواری، باغبانی کا ایک گھنٹہ، کوئی مرمت کا کام۔</p>
+        <p>ایک <strong>ضرورت</strong> وہ چیز ہے جسے آپ تلاش کر رہے ہیں۔</p>
+        <p>پھلیوں والی کمیونٹی میں، اس سے پہلے کہ آپ کوئی ضرورت پوسٹ کر سکیں، یا کسی دوسرے کی پیشکش طلب کر سکیں، آپ کو اپنی کم از کم ایک پیشکش ضرور پوسٹ کرنی ہوگی۔ ہر شخص کچھ نہ کچھ ساتھ لاتا ہے۔ جہاں کوئی پھلیاں نہیں ہوتیں، جیسا کہ عالمی کمیونٹی پر، آپ کی پہلی پوسٹ کوئی ضرورت ہو سکتی ہے۔</p>
+        <h2>لین دین کیسے کام کرتا ہے</h2>
+        <ul>
+            <li>آپ کو اپنی مطلوبہ پیشکش ملتی ہے اور آپ اس کی درخواست کرتے ہیں، یا کوئی آپ کی ضرورت کو پورا کرنے کا بیڑا اٹھاتا ہے۔</li>
+            <li>جب لین دین پر اتفاق ہو جاتا ہے، تو خریدار کی پھلیاں امانت میں محفوظ رکھی جاتی ہیں۔ جب تک لین دین جاری رہتا ہے کوئی بھی انہیں خرچ نہیں کر سکتا۔</li>
+            <li>کام مکمل ہو جاتا ہے۔</li>
+            <li>خریدار تصدیق کرتا ہے کہ کام ہو گیا ہے۔ اس کے بعد پھلیاں فروخت کنندہ کو چلی جاتی ہیں۔</li>
+        </ul>
+        <p>اگر کوئی لین دین رک جاتا ہے، تو آپ کی کمیونٹی کا ایڈمن مداخلت کر سکتا ہے۔ وہ فروخت کنندہ کو ادائیگی کر سکتے ہیں، خریدار کو پھلیاں واپس کر سکتے ہیں، یا انہیں آپس میں تقسیم کر سکتے ہیں۔ کوئی بھی ایڈمن ایسے لین دین کا فیصلہ نہیں کر سکتا جس کا وہ خود حصہ ہو۔</p>
+        <h2>تحائف</h2>
+        <p>آپ کسی لین دین کے بغیر بھی کسی کو تحفے کے طور پر پھلیاں بھیج سکتے ہیں۔</p>
+        <ul>
+            <li>تحفہ صرف ان پھلیوں سے دیا جا سکتا ہے جو آپ کے پاس موجود ہوں۔ یہ آپ کو کبھی بھی صفر سے نیچے نہیں لے جا سکتا۔</li>
+            <li>آپ مارکیٹ میں ایک لین دین مکمل کرنے کے بعد تحائف بھیج سکتے ہیں۔ صرف 1 یا 2 پھلیوں کا لین دین شمار ہونے کے لیے بہت چھوٹا ہوتا ہے۔</li>
+            <li>تحائف پر کوئی فیس نہیں ہوتی۔</li>
+        </ul>
+        <h2>صفر سے نیچے جانا: آپ کی کریڈٹ لائن</h2>
+        <p>آپ اپنے پاس موجود رقم سے تھوڑا سا زیادہ خرچ کر سکتے ہیں، اور صفر سے نیچے جا سکتے ہیں۔ یہ آپ کی <strong>کریڈٹ لائن</strong> ہے۔ یہ بعد میں دوسروں کی مدد کرنے کا ایک وعدہ ہے۔</p>
+        <p>آپ کی کریڈٹ لائن صفر سے شروع ہوتی ہے۔ یہ اس وقت کھلتی ہے جب آپ مارکیٹ میں اپنا پہلا لین دین مکمل کرتے ہیں (صرف 1 یا 2 پھلیوں کا لین دین شمار ہونے کے لیے بہت چھوٹا ہوتا ہے)۔ جسے آپ کی کمیونٹی نے نئے آنے والوں کو خوش آمدید کہنے کے لیے چنا ہو وہ آپ کی ضمانت دے کر آپ کو ایک چھوٹی شروعات بھی دے سکتا ہے: 25، 50 یا 100 پھلیاں۔</p>
+        <p>آپ کی کریڈٹ لائن آپ کے <strong>اعتماد</strong> کے ساتھ بڑھتی ہے:</p>
+        <ul>
+            <li>آپ مارکیٹ میں لین دین مکمل کر کے اعتماد حاصل کرتے ہیں۔ تحائف سے اعتماد حاصل نہیں ہوتا۔</li>
+            <li>بہت سے مختلف لوگوں کے ساتھ لین دین سے زیادہ اعتماد بنتا ہے۔ کسی ایک شخص کے ساتھ لین دین 500 پھلیوں تک شمار ہوتا ہے۔</li>
+            <li>اعتماد شروع میں تیزی سے بڑھتا ہے، پھر زیادہ آہستہ۔</li>
+            <li>اسٹار ریٹنگز اہمیت رکھتی ہیں۔ اگر لوگ آپ کی درجہ بندی کرتے ہیں، تو آپ کی اوسط درجہ بندی آپ کے لین دین سے حاصل ہونے والے اعتماد کا تناسب طے کرتی ہے: 5 ستارے تمام اعتماد کو برقرار رکھتے ہیں، 1 ستارہ 60٪ برقرار رکھتا ہے۔</li>
+            <li>کسی بھی کریڈٹ لائن کی آخری حد صفر سے 2,000 پھلیاں نیچے تک ہے۔ جو کمیونٹی اپنے اراکین کی تصدیق کرتی ہے وہ اس سے زیادہ کی اجازت دے سکتی ہے (نیچے دیکھیں)۔</li>
+        </ul>
+        <h2>آپ کی پیشکشیں آپ کا کریڈٹ کھولتی ہیں</h2>
+        <p>اعتماد طے کرتا ہے کہ آپ کتنا نیچے <strong>جا سکتے تھے</strong>۔ آپ کی فعال پیشکشیں طے کرتی ہیں کہ آپ ابھی کتنا نیچے <strong>جا سکتے ہیں</strong>۔ آپ کو دونوں میں سے کم رقم ملتی ہے۔</p>
+        <ul>
+            <li>کوئی فعال پیشکش نہیں: آپ صفر سے نیچے نہیں جا سکتے۔</li>
+            <li>1 پیشکش: صفر سے 200 نیچے تک۔</li>
+            <li>2 پیشکشیں: 500 نیچے تک۔</li>
+            <li>3 پیشکشیں: 1,000 نیچے تک۔</li>
+            <li>4 پیشکشیں: 1,500 نیچے تک۔</li>
+            <li>5 پیشکشیں: 2,000 نیچے تک۔</li>
+        </ul>
+        <p>اگر آپ صفر سے نیچے ہونے کی حالت میں پیشکشیں ہٹا دیتے ہیں، تو ہو سکتا ہے آپ پر اتنی رقم واجب الادا ہو جائے جو اب آپ کی پیشکشوں کے دائرے سے باہر ہو۔ پھر آپ اس وقت تک مزید خرچ نہیں کر سکتے جب تک کہ آپ دوبارہ اپنی حد کے اندر نہ آ جائیں۔ آپ تب بھی پھلیاں کما سکتے ہیں، اور آپ سے کچھ بھی چھینا نہیں جاتا۔</p>
+        <p>کچھ کمیونٹیز تصدیق کرتی ہیں کہ ان کے اراکین کون ہیں۔ وہاں، ایک تصدیق شدہ رکن کو فوراً ایک کریڈٹ لائن مل جاتی ہے: 1,000 پھلیاں، الا یہ کہ کمیونٹی نے کوئی اور رقم منتخب کی ہو۔ ایک فعال پیشکش اس تمام کو دستیاب بنا دیتی ہے۔ وہاں سب سے گہری حد 5,000 تک ہو سکتی ہے۔ &quot;آپ کی کریڈٹ لائن&quot; دیکھیں۔</p>
+        <h2>ٹرسٹ بیجز</h2>
+        <p>آپ کا اعتماد ایک بیج کے طور پر ظاہر ہوتا ہے۔ بیجز نیا آنے والا (Newcomer)، رہائشی (Resident)، منتظم (Steward) اور بزرگ (Elder) ہیں۔ آپ کے بیج کے پیچھے موجود اعتماد تین چیزوں کو جمع کرتا ہے: ضمانت سے ملنے والی شروعات، تجارت سے حاصل کردہ اعتماد، اور ایڈمن کی طرف سے دیا گیا کوئی بھی اعتماد۔ ایڈمن کسی رکن کو تجارت کے بغیر بھی براہ راست بیج دے سکتا ہے۔ ایسی کمیونٹی میں جو اپنے اراکین کی تصدیق کرتی ہے، تصدیق شدہ رکن کو ملنے والی کریڈٹ لائن بھی شمار ہوتی ہے۔</p>
+        <ul>
+            <li>200 اعتماد سے رہائشی۔</li>
+            <li>600 اعتماد سے منتظم۔</li>
+            <li>1,400 اعتماد سے بزرگ۔</li>
+        </ul>
+        <p>بیج صرف ایک شناخت ہے، اس سے زیادہ کچھ نہیں۔ یہ کسی چیز کو روکتا یا مقفل نہیں کرتا۔ ہر کوئی اپنے بیج سے قطع نظر تجارت، مدعو اور ووٹ کر سکتا ہے۔</p>
+        <h2>فیسیں اور کامنز</h2>
+        <p>آپ کی کمیونٹی کے پاس پھلیوں کا ایک مشترکہ پول ہوتا ہے جسے <strong>کامنز</strong> کہا جاتا ہے۔ فیسیں اس میں جاتی ہیں۔ اراکین مل کر فیصلہ کرتے ہیں کہ اسے کیسے خرچ کیا جائے۔</p>
+        <ul>
+            <li><strong>مارکیٹ فیس:</strong> مارکیٹ کی ہر ادائیگی کا 1.5% کامنز میں جاتا ہے۔ یہ اس رقم سے کٹتا ہے جو فروخت کنندہ وصول کرتا ہے۔</li>
+            <li><strong>گردشی فیس:</strong> پھلیاں گردش کرنے کے لیے ہیں، جامد رہنے کے لیے نہیں۔ آپ کے پاس پہلی 200 پھلیاں ہمیشہ مفت ہوتی ہیں۔ اس سے اوپر، ایک چھوٹی ماہانہ فیس کامنز کو جاتی ہے: 200 اور 500 کے درمیان پھلیوں پر 1% ماہانہ، 500 اور 1,000 کے درمیان 1.5%، 1,000 اور 2,000 کے درمیان 2%، اور 2,000 سے اوپر 2.5%۔</li>
+            <li>صفر سے نیچے کے بیلنس پر کبھی بھی گردشی فیس ادا نہیں کی جاتی۔ تحائف پر کبھی فیس نہیں لگتی۔</li>
+        </ul>
+        <h2>انٹرپرائزز اور گروپس</h2>
+        <p>ایک <strong>انٹرپرائز</strong> جاری رہتا ہے اور اپنے نام سے لین دین کرتا ہے: ایک بیکری، اوزاروں کی لائبریری، مارکیٹ کا اسٹال۔ اسے <strong>نگران</strong> چلاتے ہیں، جس کی قیادت ایک <strong>سربراہ نگران</strong> کرتا ہے۔ نگران انٹرپرائز کو کریڈٹ لائن دینے کے لیے اپنے کچھ اعتماد کا عہد کر سکتے ہیں۔</p>
+        <p>ایک <strong>گروپ</strong> اراکین کا ایک حلقہ ہوتا ہے جس کی اپنی چیٹ اور پوسٹس ہوتی ہیں، جسے ایک یا زیادہ <strong>کنوینرز</strong> چلاتے ہیں۔ ان میں سے ایک اس کا <strong>سربراہ کنوینر</strong> ہوتا ہے — جس نے شروعات میں گروپ بنایا تھا۔</p>
+        <p>آپ پڑھ سکتے ہیں کہ نگرانوں اور کنوینرز کا انتخاب کیسے کیا جاتا ہے &quot;قواعد اور فیصلے کیسے کام کرتے ہیں&quot; میں۔</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="../posting.html"><strong>Posting an Offer or a Need</strong><span>Put up something you can do or give, or something you are looking for.</span></a></li>
+            <li><a href="../a-deal-step-by-step.html"><strong>A deal, step by step</strong><span>From asking to getting paid, for an Offer and for a Need, and leaving a review.</span></a></li>
+            <li><a href="../credit-line.html"><strong>Your credit line</strong><span>How far below zero you can go, and how it grows.</span></a></li>
+            <li><a href="../gifts.html"><strong>Sending a gift</strong><span>Send beans to someone, with no trade.</span></a></li>
+            <li><a href="../circulation-fee.html"><strong>The circulation fee</strong><span>A small monthly fee on large balances, so beans keep moving. The first 200 are free.</span></a></li>
+            <li><a href="../trust-badges.html"><strong>Trust badges</strong><span>Newcomer, Resident, Steward and Elder. What they mean, and why they unlock nothing.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

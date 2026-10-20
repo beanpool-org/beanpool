@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/es by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Barra superior — BeanPool members' guide</title>
+    <meta name="description" content="El frijol, los pequeños íconos que avisan si algo te necesita y los botones arriba a la derecha.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#getting-started">Primeros pasos</a></p>
+        <h1>Barra superior</h1>
+        <p class="lede">El frijol, los pequeños íconos que avisan si algo te necesita y los botones arriba a la derecha.</p>
+        <h2>Qué contiene</h2>
+        <p>En el teléfono, la barra en la parte superior de la pantalla es la misma en cada pestaña. De izquierda a derecha:</p>
+        <ul>
+            <li><strong>El frijol:</strong> tu comunidad y esta guía.</li>
+            <li><strong>Los íconos de &quot;te necesita&quot;:</strong> solo mientras algo esté esperando por ti.</li>
+            <li><strong>El ícono ?, el ícono de invitación, Ajustes y tu foto.</strong></li>
+        </ul>
+        <p>En un navegador web, la barra superior es más simple. Tiene el estado de la conexión a la izquierda, el nombre de la página, y tu perfil, el <strong>?</strong> y Configuración a la derecha. No tiene panel del frijol, ni íconos de &quot;te necesita&quot; ni ícono de invitación: <strong>Invitaciones</strong> está bajo <strong>Personas</strong>. Las pestañas están en la parte inferior, o en el lateral izquierdo en una pantalla ancha.</p>
+        <h2>El frijol</h2>
+        <p>Toca el frijol en la parte superior izquierda para abrir el panel de <strong>BeanPool</strong>. Muestra:</p>
+        <ul>
+            <li><strong>Tu comunidad:</strong> su nombre en la parte superior y si se puede conectar con ella en este momento.</li>
+            <li><strong>Tus comunidades:</strong> toca una para cambiar a ella, o toca <strong>Añadir una comunidad</strong>. La <strong>Comunidad global</strong> es siempre una de ellas: su segunda línea dice si puedes unirte a ella.</li>
+            <li><strong>Buscar en la guía</strong>, luego <strong>Guías</strong> (cómo funciona BeanPool, las reglas, preguntas frecuentes), <strong>Cómo usar la app</strong> (esta guía, sección por sección) y <strong>El proyecto BeanPool</strong>, con <strong>Novedades</strong>.</li>
+            <li><strong>beanpool.org:</strong> el sitio web público, con <strong>Compartir</strong> para enviárselo a un amigo.</li>
+        </ul>
+        <p>El pequeño punto sobre el frijol te indica el estado de las cosas:</p>
+        <ul>
+            <li><strong>Verde:</strong> conectado y eres miembro aquí.</li>
+            <li><strong>Ámbar:</strong> estás visitando como invitado.</li>
+            <li><strong>Rojo:</strong> no se puede conectar con el servidor de tu comunidad en este momento, o este teléfono aún no está conectado a una comunidad.</li>
+        </ul>
+        <p>Una sola verificación lenta no pone el punto rojo. Solo se pone rojo después de que fallen varias verificaciones seguidas.</p>
+        <h2>Los íconos de &quot;te necesita&quot;</h2>
+        <p>Entre el frijol y los botones de la derecha, aparecen pequeños íconos solo mientras algo te necesita. Cada uno representa un tipo de asunto. Tócalo para ir directamente allí.</p>
+        <ul>
+            <li><strong>Un apretón de manos:</strong> un trato te está esperando. Alguien espera que aceptes su solicitud, o un trato en el que participas aún no ha terminado. Si hay uno, al tocarlo se abre ese trato. Si hay más, abre <strong>Mis tratos</strong>.</li>
+            <li><strong>Una urna de votación:</strong> un voto que aún no has emitido. Al tocarlo se abre <strong>Bienes comunes</strong>, en <strong>Decidir</strong>. Si el primer voto es en un grupo o una votación de custodios en un emprendimiento, al tocarlo se abre ese grupo o emprendimiento en su lugar. Un voto que aún no puedes emitir no cuenta aquí, por ejemplo uno que requiere que completes un intercambio primero.</li>
+            <li><strong>Una burbuja de diálogo:</strong> un mensaje no leído de una persona. Si es de una sola persona, al tocarlo se abre ese chat. Si es de varias personas, abre <strong>Charlas</strong>, en <strong>Mensajes</strong>, mostrando solo los no leídos.</li>
+            <li><strong>Un grupo de personas:</strong> nuevas líneas en tus grupos, chats de emprendimientos o chats de eventos. Los chats que has silenciado permanecen en silencio aquí. Al tocarlo se abre el chat, o <strong>Charlas</strong>, en <strong>Grupos</strong>, si hay varios.</li>
+            <li><strong>Un escudo:</strong> solo para personas que ayudan a administrar tu comunidad. Se muestra mientras hay trabajo administrativo esperando, como un reporte para revisar o un trato estancado que necesita una resolución. Al tocarlo se pide el bloqueo de pantalla de tu teléfono y luego se abren los ajustes de tu comunidad en esa tarea. Si los ajustes de tu comunidad usan un código de inicio de sesión, también lo pide.</li>
+        </ul>
+        <p>Los íconos se acumulan desde la derecha. El más importante se ubica junto al ícono ?, y conserva su lugar a medida que otros aparecen y desaparecen.</p>
+        <h3>El número y el color</h3>
+        <ul>
+            <li>Un número pequeño en un ícono indica más de uno de ese tipo: por ejemplo, 3 personas que te escribieron. Muestra <strong>9+</strong> por encima de 9.</li>
+            <li>Un ícono se vuelve <strong>ámbar</strong> cuando es más urgente: un trato esperando por ti, trabajo de administración o un voto que cierra en 2 días. Ninguno se vuelve rojo.</li>
+        </ul>
+        <h3>En una pantalla pequeña</h3>
+        <p>Si no hay espacio para cada ícono, el último espacio muestra <strong>•••</strong>. Tócalo para ver la lista completa, <strong>Te necesita</strong>, en palabras. Toca una línea para ir allí.</p>
+        <h3>Una barra silenciosa es una buena noticia</h3>
+        <p>Cuando nada te necesita, no hay íconos en absoluto. No te has perdido nada. Los íconos se actualizan a medida que te desplazas por la app y cuando regresas a ella.</p>
+        <h2>Unirse o Conectar</h2>
+        <p>En lugar de los íconos, puedes ver un botón:</p>
+        <ul>
+            <li><strong>Unirse</strong> (ámbar): estás visitando como invitado. Tócalo para abrir <strong>Invitaciones</strong>. En una comunidad local te unes allí con una invitación. En la comunidad global, toca <strong>Unirme con 12 palabras o un inicio de sesión</strong> (<strong>Unirme con un inicio de sesión</strong> donde una comunidad solo admite inicios de sesión).</li>
+            <li><strong>Conectar</strong> (rojo): este teléfono no está conectado a una comunidad. Tócalo para abrir <strong>Ajustes</strong>, donde puedes añadir una.</li>
+        </ul>
+        <p>Mientras se muestra uno de estos, el ícono de invitación se oculta.</p>
+        <h2>Los botones de la derecha</h2>
+        <ul>
+            <li><strong>El ícono ?</strong> (un signo de interrogación en un círculo): ayuda para la pantalla en la que estás. Abre un breve panel con la función de esa pantalla, luego <strong>Leer la página de la guía</strong>, <strong>Buscar en la guía</strong> y <strong>Volver a hacer el recorrido</strong>. Está en cada pestaña, para miembros e invitados. En la app web se encuentra entre tu foto y Configuración en la parte superior, y junto a Configuración en la parte inferior de la barra lateral en una pantalla ancha.</li>
+            <li><strong>El ícono de invitación</strong> (una persona con un más): abre <strong>Invitaciones</strong>, para invitar a alguien o unirte a otra comunidad. Consulta &quot;Unirse a BeanPool&quot;.</li>
+            <li><strong>Ajustes</strong> (los controles deslizantes): abre <strong>Ajustes</strong>. Tócalo de nuevo para regresar a donde estabas.</li>
+            <li><strong>Tu foto:</strong> abre tu propio perfil, tal como lo ven los demás.</li>
+        </ul>
+        <h2>Mensajes de actualización</h2>
+        <p>A veces aparece una barra verde debajo de la barra superior:</p>
+        <ul>
+            <li><strong>Actualización disponible:</strong> hay una versión más nueva de la app. Toca <strong>Actualizar</strong> para obtenerla, o la cruz para cerrar el mensaje.</li>
+            <li><strong>Tu app es demasiado antigua para esta comunidad:</strong> debes actualizar antes de que la app funcione correctamente aquí. Este mensaje no se puede cerrar. Toca <strong>Actualizar</strong>.</li>
+        </ul>
+        <h2>Las pestañas</h2>
+        <p>Debajo de la barra superior están las pestañas: <strong>Inicio</strong>, <strong>Mercado</strong>, <strong>Mapa</strong>, <strong>Charlas</strong>, <strong>Bienes comunes</strong> y <strong>Registro</strong>. El nombre de cada pestaña se encuentra encima de su ícono. En el teléfono, una comunidad local sin frijoles no muestra <strong>Bienes comunes</strong> ni <strong>Registro</strong>. La comunidad global muestra ambas, con ejemplos de una comunidad local. Consulta &quot;Frijoles y la comunidad global&quot;.</p>
+        <p>En una página larga, toca la pestaña en la que ya estás para volver rápidamente a la parte superior. Esto funciona en todas las pestañas excepto en <strong>Mapa</strong>.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="home.html"><strong>Inicio</strong><span>Qué es Inicio, qué tarjetas muestra en el teléfono y la app web, cómo agregarlas, moverlas o quitarlas, elegir tus intereses y la privacidad al cerrar sesión.</span></a></li>
+            <li><a href="the-bean.html"><strong>Esta guía</strong><span>Dónde encontrar esta guía, cómo buscar en ella y cómo se mantiene al día.</span></a></li>
+            <li><a href="communities.html"><strong>Más de una comunidad</strong><span>Pertenecer a varias comunidades con una sola cuenta, cambiar entre ellas, seguir a tu comunidad a una nueva dirección y ver qué te muestra la comunidad global.</span></a></li>
+            <li><a href="../my-deals.html"><strong>My Deals</strong><span>One place for every trade you are in, every post you have up, and your past trades.</span></a></li>
+            <li><a href="../decisions.html"><strong>Voting on a Decision</strong><span>Find open Decisions, vote, change your vote, and see results.</span></a></li>
+            <li><a href="../messages.html"><strong>Messages</strong><span>Start a chat, send photos, reply, react, edit, delete, mute, and what is private.</span></a></li>
+            <li><a href="../notifications.html"><strong>Notifications</strong><span>Choose which alerts reach your phone, and when events remind you.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

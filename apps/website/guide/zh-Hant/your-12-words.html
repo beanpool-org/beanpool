@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/zh-Hant by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>你的 12 個助記詞 — BeanPool members' guide</title>
+    <meta name="description" content="這 12 個助記词是你帳號的金鑰。它們為何重要、在哪裡找到、如何安全保存，以及新增登入方式作為備用復原途徑。">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#getting-started">開始使用</a></p>
+        <h1>你的 12 個助記詞</h1>
+        <p class="lede">這 12 個助記词是你帳號的金鑰。它們為何重要、在哪裡找到、如何安全保存，以及新增登入方式作為備用復原途徑。</p>
+        <h2>它們為何重要</h2>
+        <p>你的帳號不是由他人保管的密碼。它是保存在你手機上的一把金鑰。你的 <strong>12 個助記詞</strong>（皆為英文單字）就是以文字形式呈現的該金鑰。</p>
+        <ul>
+            <li>憑藉這 12 個英文助記詞，你可以在新手機上找回你的帳號：你的名稱、你的豆子和你的信譽。</li>
+            <li>若沒有它們，手機遺失或損壞可能就意味著帳號永久遺失。</li>
+            <li>金鑰只會保存在持有它的手機上。它不會被複製到你手機的備份中，因此新手機（即使是從舊手機備份還原的 iPhone）也需要你的 12 個助記詞或已連結的登入帳號（參見「找回你的帳號」）。</li>
+            <li>任何擁有你 12 個助記詞的人都可以使用你的帳號。絕不要與任何人分享它們，絕不要在 BeanPool 應用程式或你自己社群的 BeanPool 網頁版應用程式以外的任何地方輸入它們，也絕不要在訊息中傳送它們。BeanPool 或你社群中的任何人都絕不會向你索取這些助記詞。</li>
+        </ul>
+        <h2>把它們寫在紙上</h2>
+        <ul>
+            <li>將這 12 個助記詞（皆為英文單字）依序寫在紙上，並仔細核對拼字。</li>
+            <li>將紙張妥善存放在遠離手機的安全之處。</li>
+            <li>照片或螢幕截圖很容易被他人找到。紙張更加安全。</li>
+            <li>當手機應用程式顯示你的 12 個助記詞，或當你輸入它們時，系統會封鎖該畫面的截圖與螢幕錄影：手機會拒絕截圖，或者截取出來的圖片會是一片空白。但這無法防止有人使用另一部手機拍攝螢幕。</li>
+            <li><strong>複製助記詞</strong>（在加入過程中以及在網頁版應用程式中為<strong>複製所有詞</strong>）會將這些字詞放入手機剪貼簿一分鐘。若剪貼簿中仍保留著它們，應用程式隨後會自動將其清除。如果你先離開應用程式，當你返回時它會將其清除。在此之後你複製的其他內容不會受到影響。鍵盤自帶的剪貼簿歷史記錄，或與其他裝置共享的剪貼簿，可能會保留應用程式無法清除的複本。</li>
+            <li>在網頁版應用程式中，如果你停留在該畫面上，複製內容會在滿一分鐘後清除。在 iPhone 或 iPad 上的 Safari 或 Firefox 中，瀏覽器僅允許應用程式在你點擊或按鍵時清除它，因此它會在滿一分鐘後的第一次點擊或按鍵時清除。如果你先離開該畫面或切換至其他應用程式或分頁，應用程式無法判斷你是否複製了其他內容，因此不會更動剪貼簿：請自行複製其他文字以覆蓋這些助記詞。</li>
+            <li>如果你的手機沒有設定螢幕鎖定，任何拿到手機的人都可以開啟查看你的 12 個助記詞，應用程式會在助記詞下方提醒這一點。在手機設定中啟用 PIN 碼、圖形、密碼、指紋或臉部辨識鎖定，能讓它們更加安全。</li>
+        </ul>
+        <h2>你的復原工具包</h2>
+        <p>復原工具包是一張可列印的頁面：包含你的 12 個英文助記詞（依序排列）、你社群的名稱與位址、建立日期，以及在手機和網頁瀏覽器中找回帳號的步驟。它不會標明這是誰的帳號。這是可選的：沒有它你也可以繼續使用。</p>
+        <ul>
+            <li><strong>在手機上</strong>：在你的 12 個助記詞旁邊（加入時的安全備份畫面上，以及「設定」中），點擊<strong>列印你的復原工具包</strong>將其列印出來，或點擊<strong>另存為 PDF</strong> 產生 PDF 並選擇儲存位置。儲存之前，應用程式會警告：「請勿將此檔案存放於雲端備份與聊天室中。任何取得此檔案的人皆能以你的身分登入。」手機隨後會刪除自身持有的 PDF 複本。</li>
+            <li><strong>在網頁版中</strong>：在你的 12 個助記詞旁邊（加入時，以及在「設定」中的<strong>檢視復原助記詞</strong>下方），點擊<strong>列印或儲存你的復原工具組</strong>。應用程式會警告：「請勿將此頁面或檔案存放於雲端備份與聊天室中。任何取得此檔案的人皆能以你的身分登入。」點擊<strong>繼續</strong>即可開啟瀏覽器的列印對話方塊。若想保留 PDF 而非紙本，請在該處選擇<strong>另存為 PDF</strong>。</li>
+            <li>請像保管助記詞一樣保管此頁面：任何擁有它的人都可以以你的身分登入。</li>
+        </ul>
+        <h2>在哪裡可以再次查看</h2>
+        <p>點擊螢幕頂端的滑桿圖示按鈕開啟<strong>設定</strong>。然後可以透過以下兩種方式之一：</p>
+        <ul>
+            <li>在<strong>帳號與身分</strong>下方，點擊<strong>檢視復原助記詞</strong>。輸入 <strong>CONFIRM</strong>，點擊<strong>顯示復原助記詞</strong>，並通過手機的螢幕鎖定驗證。</li>
+            <li>或者點擊<strong>帳號保護</strong>，然後點擊<strong>顯示我的 12 個復原助記詞</strong>，並通過手機的螢幕鎖定驗證。完成後點擊<strong>隱藏</strong>。</li>
+        </ul>
+        <p>無論哪種方式，當你離開該畫面，或離開應用程式 15 秒以上時，助記詞也會自動隱藏，下次存取時手機會再次要求驗證。螢幕鎖定驗證若超過兩分鐘則不會顯示任何內容：請再次點擊。</p>
+        <p>在網頁版應用程式中，<strong>帳號與身分</strong>下方的<strong>檢視復原助記詞</strong>會立即顯示它們。</p>
+        <p>透過登入帳號還原的手機，僅在該登入帳號是從持有助記詞的手機（且為最新版應用程式）進行連結的情況下，才能取回 12 個助記詞。否則手機上沒有它們的複本：助記詞無法透過登入重新推導衍生。<strong>檢視復原助記詞</strong>依然存在，並提示<strong>此手機暫無副本</strong>。在該手機上，已連結的登入帳號是你找回帳號的途徑，因此請在<strong>帳號保護</strong>下方保持連結至少一種登入方式。</p>
+        <h2>將你的 12 個助記詞加回此手機</h2>
+        <p>如果此手機上沒有你 12 個助記詞的複本，而你已將它們寫在紙上，你可以將它們新增至手機中：</p>
+        <ul>
+            <li>開啟<strong>設定</strong>。在<strong>帳號與身分</strong>下方，點擊<strong>檢視復原助記詞</strong>。（或者在<strong>帳號保護</strong>中，點擊<strong>顯示我的 12 個復原助記詞</strong>。）在沒有副本的手機上，兩者都會開啟<strong>將你的 12 個助記詞新增至此手機</strong>。</li>
+            <li>依序輸入這 12 個英文單字，或點擊<strong>貼上</strong>。大小寫與多餘空格均不影響。不在復原助記詞清單（皆為英文單字）中的字詞會在輸入時被標記出來。</li>
+            <li>點擊<strong>新增這些助記詞</strong>。</li>
+        </ul>
+        <p>你的手機會檢查這些單字是否屬於你的帳號，該檢查與所有者的<strong>檢查你的 12 個助記詞</strong>相同。它們不會被傳送至任何地方。如果它們屬於其他帳號，則不會進行任何變更，應用程式也會予以提示。一旦成功新增，<strong>檢視復原助記詞</strong>便會顯示它們，並適用於此手機上的每個社群。</p>
+        <h2>如果你是憑 12 詞加入全球社群</h2>
+        <p>你可以僅憑 12 個機密助記詞加入全球社群，無需 Google、Apple 或 Facebook 帳號（參見「加入 BeanPool」）。如果這為你建立了一個新帳號，你的 12 個助記詞就是你唯一的找回途徑。除了你的手機之外，任何地方都不會保留你帳號的複本，且沒有人可以重設它們：BeanPool 不能，社群也不能。如果你遺失了助記詞和手機，該帳號將永久消失。（如果你是使用既有帳號加入，在其他社群中連結的登入方式依然可以在該處將其找回。）</p>
+        <p>應用程式會在<strong>安全備份</strong>步驟中明確提示這一點。加入後，<strong>首頁</strong>上的一張卡片會再次提示（在手機與網頁版皆然）：<strong>你的帳號只有一條找回途徑：你的 12 個助記詞。請確認你仍妥善保存，或新增一種登入方式。</strong>它絕不會阻止你進行任何操作。在手機上：</p>
+        <ul>
+            <li>點擊 <strong>✕</strong> 可將卡片關閉。它會在你的第一則刊登後出現一次，一週後再次出現一次，隨後僅保留在<strong>設定</strong>中的<strong>帳號保護</strong>下方。</li>
+            <li><strong>顯示我的 12 個助記詞</strong>會開啟<strong>帳號保護</strong>，你在該處可以再次查看它們。</li>
+            <li>在<strong>帳號保護</strong>中，點擊<strong>我仍保存著 12 個助記詞</strong>可永久關閉此卡片。<strong>新增登入方式</strong>會保留在那裡。</li>
+        </ul>
+        <p>在網頁版中，該卡片標題為<strong>唯一找回途徑</strong>，附有<strong>查看我的 12 個助記詞</strong>與<strong>新增登入方式</strong>。點擊 <strong>✕</strong> 可將其關閉：在你的刊登之一持續發布後會出現一次，首週結束時會再出現一次。在<strong>首頁</strong>卡片上點擊<strong>查看我的 12 個助記詞</strong>會顯示助記詞，此後卡片不再於首頁重複出現。它會一直保留在<strong>設定</strong>頂部，直到你新增登入方式為止。</p>
+        <p>以 12 詞建立的帳號在第一週的初始限制也比透過登入建立的帳號更嚴格。限制內容及其原因參見「檢舉問題」。</p>
+        <h3>稍後新增登入方式</h3>
+        <p>你可以稍後再新增登入方式，可從已登入帳號的任何手機或瀏覽器操作，不僅限於加入時所用的那部裝置。在透過 12 詞還原帳號的手機上，於應用程式中開啟全球社群：社群會識別出你的帳號僅有 12 詞保護，此時卡片與<strong>新增登入方式</strong>便會出現（可能需要片刻時間）。當帳號遭到停權，或社群已關閉你的帳號時，無法新增登入方式（應用程式會提示且不進行任何變更）。它會成為第二種找回管道，並立即解除 12 詞的嚴格限制。</p>
+        <p>若 BeanPool 的金鑰保險庫已保存你帳號的副本，該副本也是一種找回途徑。此時應用程式不會顯示「唯一找回途徑」卡片。但在<strong>設定</strong>中的<strong>帳號保護</strong>裡仍會低調提供<strong>新增登入方式</strong>，因為它能解除 12 詞的各項限制。</p>
+        <ul>
+            <li>點擊<strong>新增登入方式</strong>：在卡片上，或在<strong>設定</strong>的<strong>帳號保護</strong>下方。在<strong>安全備份</strong>步驟中，按鈕顯示為<strong>新增登入方式作為第二種找回管道</strong>。</li>
+            <li>點擊<strong>使用 Google 繼續</strong>、<strong>使用 Facebook 繼續</strong>，或在 iPhone 上點擊<strong>使用 Apple 繼續</strong>，並完成一次性登入。應用程式可能會先要求進行手機螢幕解鎖驗證。</li>
+            <li>提示<strong>已新增登入方式</strong>表示已成功綁定。你的帳號現已套用一般新帳號限制，若遺失手機，該登入方式可找回帳號，效果與當初以此登入加入的成員相同。關於誰可以開啟為其保留的副本，參見「找回你的帳號」。</li>
+        </ul>
+        <p>如果當時無法儲存帳號副本，登入方式依然會成功新增且限制依然會解除，但 12 個助記詞仍是你唯一的找回管道。應用程式會說明此情況。若登入帳號在全球社群中已連結其他 BeanPool 帳號，或屬於社群已移除的帳號，則無法新增，且不會進行任何變更。</p>
+        <p>在<strong>帳號保護</strong>下方<strong>登入還原提供者</strong>中的<strong>使用 Apple 保護</strong>等選項，也可以連結登入方式作為找回管道，但它不會解除 12 詞的限制，也不會關閉提醒卡片。若兩者皆需，請使用<strong>新增登入方式</strong>。</p>
+        <h2>第二種找回途徑：登入帳號</h2>
+        <p>在手機應用程式中，你也可以連結 Google 或 Facebook 帳號（在 iPhone 上亦可連結 Apple）。若遺失手機，該帳號可透過你社群的伺服器在新手機上還原你的帳號，伺服器會為其保存一份加鎖的副本。營運該伺服器的人員可以開啟該副本。參見「找回你的帳號」。</p>
+        <p>從持有 12 個助記詞的手機所連結的登入帳號也會保留這些助記詞，因此透過該帳號還原時會一併找回助記詞。若是在舊版應用程式中連結的帳號，還原時則不包含助記詞：在<strong>帳號保護</strong>下方，點擊其旁邊的<strong>重新連結</strong>並通過手機螢幕鎖定驗證即可將其包含進去。紙上記錄的助記詞也請務必妥善保留。</p>
+        <h2>在網頁瀏覽器中</h2>
+        <p>在全球社群上，你在瀏覽器中用於加入的登入方式會被保留為第二種找回管道：設定中會顯示<strong>登入找回功能：已連結</strong>。在已清除資料或全新的瀏覽器中，點擊<strong>已經在使用 BeanPool？</strong>，然後點擊<strong>使用我的登入方式</strong>，即可找回你的帳號及其 12 個助記詞（參見「在網頁瀏覽器中使用 BeanPool」）。若你改為憑 12 詞加入，在新增登入方式之前它們就是你唯一的找回途徑：加入後以及在設定中，名為<strong>唯一找回途徑</strong>的卡片會說明這一點，並附有<strong>查看我的 12 個助記詞</strong>與<strong>新增登入方式</strong>。在其他社群中，網頁版應用程式沒有登入找回功能，你的 12 個助記詞就是唯一的找回途徑。瀏覽器也可能會清除儲存的資料，因此在依賴網頁版之前，請務必將助記詞記錄在紙上。</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="../recovery.html"><strong>Getting your account back</strong><span>Restore your account on a new phone, and protect it with a sign-in account.</span></a></li>
+            <li><a href="joining.html"><strong>加入 BeanPool</strong><span>兩種加入方式：憑成員邀請加入在地社群，或在開放時憑 12 個助記詞或一次登入加入全球社群。申請加入社群以及如何邀請他人。</span></a></li>
+            <li><a href="communities.html"><strong>加入多個社群</strong><span>用一個帳號加入多個社群、在它們之間切換、跟隨你的社群遷移到新位址，以及查看全球社群向你展示的內容。</span></a></li>
+            <li><a href="faq.html"><strong>常見問題</strong><span>成員最常提出問題的簡要解答。</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

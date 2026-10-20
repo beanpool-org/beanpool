@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/es by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tus 12 palabras — BeanPool members' guide</title>
+    <meta name="description" content="Las 12 palabras son la llave de tu cuenta. Por qué importan, dónde encontrarlas, cómo protegerlas y cómo vincular un inicio de sesión como alternativa.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#getting-started">Primeros pasos</a></p>
+        <h1>Tus 12 palabras</h1>
+        <p class="lede">Las 12 palabras son la llave de tu cuenta. Por qué importan, dónde encontrarlas, cómo protegerlas y cómo vincular un inicio de sesión como alternativa.</p>
+        <h2>Por qué son importantes</h2>
+        <p>Tu cuenta no es una contraseña guardada por otra persona. Es una clave que se conserva en tu teléfono. Tus <strong>12 palabras</strong> son esa clave, escrita en palabras (las palabras están en inglés).</p>
+        <ul>
+            <li>Con las 12 palabras, puedes recuperar tu cuenta en un teléfono nuevo: tu nombre, tus frijoles y tu confianza.</li>
+            <li>Sin ellas, perder o romper tu teléfono puede significar perder tu cuenta.</li>
+            <li>La clave permanece en el teléfono que la contiene. No se copia en las copias de seguridad de tu teléfono, por lo que un teléfono nuevo, incluso un iPhone restaurado a partir de una copia de seguridad de tu teléfono anterior, necesita tus 12 palabras o una cuenta de inicio de sesión vinculada (consulta &quot;Recuperar tu cuenta&quot;).</li>
+            <li>Cualquiera que tenga tus 12 palabras puede usar tu cuenta. Nunca las compartas, nunca las escribas en ningún lugar que no sea la app BeanPool o la app web BeanPool de tu propia comunidad, y nunca las envíes en un mensaje. Nadie de BeanPool ni de tu comunidad te las pedirá jamás.</li>
+        </ul>
+        <h2>Anótalas en papel</h2>
+        <ul>
+            <li>Escribe las 12 palabras en papel, en orden, y verifica la ortografía (son palabras en inglés).</li>
+            <li>Guarda el papel en un lugar seguro, lejos de tu teléfono.</li>
+            <li>Una foto o captura de pantalla de las palabras es fácil de encontrar para otra persona. El papel es más seguro.</li>
+            <li>Mientras la app para teléfono muestra tus 12 palabras, o mientras las escribes, bloquea las capturas de pantalla y las grabaciones de pantalla de esa pantalla: el teléfono rechaza la captura de pantalla o la imagen sale en blanco. Nada impide que se tome una foto de la pantalla con otro teléfono.</li>
+            <li><strong>Copiar palabras</strong> (<strong>Copiar todas las palabras</strong> mientras te unes y en la app web) coloca las palabras en el portapapeles de tu teléfono durante un minuto. Luego, la app las borra si el portapapeles aún las contiene. Si sales de la app antes, las borra cuando regresas. Lo que hayas copiado después no se modifica. El historial del portapapeles de un teclado, o un portapapeles compartido con tus otros dispositivos, puede conservar una copia que la app no pueda borrar.</li>
+            <li>En la app web, la copia se borra después de un minuto si permaneces en esa pantalla. En un iPhone o iPad, en Safari o en Firefox, el navegador permite que la app la borre solo cuando tocas o presionas una tecla, por lo que se borra al primer toque o pulsación de tecla después del minuto. Si sales de esa pantalla o cambias a otra app o pestaña antes, la app no puede saber si copiaste algo más, por lo que no modifica tu portapapeles: copia algo diferente encima de las palabras.</li>
+            <li>Si tu teléfono no tiene bloqueo de pantalla, cualquiera que lo tenga en sus manos puede abrir tus 12 palabras, y la app lo indica debajo de ellas. Un PIN, patrón, contraseña, huella dactilar o bloqueo facial, configurado en los ajustes de tu teléfono, las mantiene más seguras.</li>
+        </ul>
+        <h2>Tu kit de recuperación</h2>
+        <p>El kit de recuperación es una página imprimible: tus 12 palabras en orden, el nombre y la dirección de tu comunidad, la fecha en que lo creaste y los pasos para volver a entrar en un teléfono y en un navegador web. No dice de quién es la cuenta. Es opcional: puedes continuar sin él.</p>
+        <ul>
+            <li><strong>En el teléfono</strong>: junto a tus 12 palabras (en Respaldo seguro cuando te unes y en Ajustes), toca <strong>Imprimir tu kit de recuperación</strong> para imprimirlo, o <strong>Guardar como PDF</strong> para crear un PDF y elegir a dónde va. Antes de guardar, la app advierte: &quot;Mantén este archivo fuera de copias de seguridad en la nube y chats. Cualquiera que lo tenga puede iniciar sesión como tú.&quot; El teléfono elimina su propia copia del PDF después.</li>
+            <li><strong>En la app web</strong>: junto a tus 12 palabras (cuando te unes y en Ajustes bajo <strong>Ver frase de recuperación</strong>), haz clic en <strong>Imprimir o guardar tu kit de recuperación</strong>. La app advierte: &quot;Mantén esta página o archivo fuera de copias de seguridad en la nube y chats. Cualquier persona que lo tenga puede iniciar sesión en tu nombre.&quot; Haz clic en <strong>Continuar</strong> para abrir el cuadro de diálogo de impresión de tu navegador. Para conservar un PDF en lugar de papel, elige <strong>Guardar como PDF</strong> allí.</li>
+            <li>Guarda la página tal como guardarías las palabras: cualquiera que la tenga puede iniciar sesión en tu nombre.</li>
+        </ul>
+        <h2>Dónde verlas nuevamente</h2>
+        <p>Abre <strong>Ajustes</strong> con el botón de controles deslizantes en la parte superior de la pantalla. Luego:</p>
+        <ul>
+            <li>Bajo <strong>Cuenta e identidad</strong>, toca <strong>Ver frase de recuperación</strong>. Escribe <strong>CONFIRM</strong>, toca <strong>Mostrar frase de recuperación</strong> y pasa la comprobación de bloqueo de pantalla de tu teléfono.</li>
+            <li>O toca <strong>Protección de la cuenta</strong>, luego <strong>Mostrar mis 12 palabras de recuperación</strong> y pasa la comprobación de bloqueo de pantalla de tu teléfono. Toca <strong>Ocultar</strong> cuando hayas terminado.</li>
+        </ul>
+        <p>De cualquier forma, las palabras también se ocultan cuando sales de esa pantalla o sales de la app durante 15 segundos o más, y el teléfono vuelve a preguntar la próxima vez. Una comprobación de pantalla de bloqueo que tarde más de dos minutos no muestra nada: toca nuevamente.</p>
+        <p>En la app web, <strong>Ver frase de recuperación</strong> bajo <strong>Cuenta e identidad</strong> las muestra de inmediato.</p>
+        <p>Un teléfono restaurado con una cuenta de inicio de sesión recupera tus 12 palabras solo si esa cuenta de inicio de sesión se vinculó desde un teléfono que las tenía, en una app actualizada. De lo contrario, el teléfono no tiene copia de ellas: no se pueden reconstruir a partir de un inicio de sesión. <strong>Ver frase de recuperación</strong> sigue estando allí y dice <strong>Aún no hay copia en este teléfono</strong>. En ese teléfono, una cuenta de inicio de sesión vinculada es la forma en que vuelves a entrar, así que mantén una vinculada bajo <strong>Protección de la cuenta</strong>.</p>
+        <h2>Volver a poner tus 12 palabras en este teléfono</h2>
+        <p>Si este teléfono no tiene copia de tus 12 palabras y las tienes anotadas, puedes añadirlas:</p>
+        <ul>
+            <li>Abre <strong>Ajustes</strong>. Bajo <strong>Cuenta e identidad</strong>, toca <strong>Ver frase de recuperación</strong>. (O, en <strong>Protección de la cuenta</strong>, toca <strong>Mostrar mis 12 palabras de recuperación</strong>). En un teléfono sin copia, cualquiera de las dos abre <strong>Añade tus 12 palabras a este teléfono</strong>.</li>
+            <li>Escribe las 12 palabras en orden (las palabras son en inglés), o toca <strong>Pegar</strong>. Las mayúsculas y los espacios adicionales no importan. Una palabra que no esté en la lista de palabras de recuperación (que son en inglés) se marca a medida que escribes.</li>
+            <li>Toca <strong>Añadir estas palabras</strong>.</li>
+        </ul>
+        <p>Tu teléfono comprueba que las palabras pertenezcan a tu cuenta, la misma comprobación que <strong>Comprueba tus 12 palabras</strong> para propietarios. No se envían a ningún lado. Si pertenecen a una cuenta diferente, nada cambia y la app lo indica. Una vez añadidas, <strong>Ver frase de recuperación</strong> las muestra, en cada comunidad de este teléfono.</p>
+        <h2>Si te uniste a la comunidad global con 12 palabras</h2>
+        <p>Puedes unirte a la comunidad global solo con 12 palabras secretas, sin una cuenta de Google, Apple o Facebook (consulta &quot;Unirse a BeanPool&quot;). Si eso te creó una cuenta nueva, tus 12 palabras son tu única forma de volver a entrar. No se guarda ninguna copia de tu cuenta en ningún lugar excepto en tu teléfono, y nadie puede restablecerlas: ni BeanPool ni la comunidad. Si las pierdes junto con tu teléfono, la cuenta se pierde para siempre. (Si te uniste con la cuenta que ya tenías, un inicio de sesión que hayas vinculado en otra comunidad todavía la recupera allí).</p>
+        <p>La app lo indica en <strong>Respaldo seguro</strong>. Después de unirte, una tarjeta en <strong>Inicio</strong> lo dice de nuevo, en el teléfono y en la app web: <strong>Tu cuenta tiene una sola forma de volver: tus 12 palabras. Revisa que todavía las tengas o añade un inicio de sesión.</strong> Nunca te impide hacer nada. En el teléfono:</p>
+        <ul>
+            <li><strong>✕</strong> descarta la tarjeta. Regresa una vez después de tu primera publicación y una vez después de una semana, luego permanece únicamente en <strong>Ajustes</strong>, bajo <strong>Protección de la cuenta</strong>.</li>
+            <li><strong>Mostrar mis 12 palabras</strong> abre <strong>Protección de la cuenta</strong>, donde puedes verlas nuevamente.</li>
+            <li>En <strong>Protección de la cuenta</strong>, <strong>Aún tengo mis 12 palabras</strong> descarta la tarjeta definitivamente. <strong>Añadir un inicio de sesión</strong> permanece allí.</li>
+        </ul>
+        <p>En la app web la tarjeta tiene el encabezado <strong>Una forma de volver</strong>, con <strong>Ver mis 12 palabras</strong> y <strong>Añadir un inicio de sesión</strong>. <strong>✕</strong> la descarta: regresa una vez después de que una de tus publicaciones haya permanecido activa, y una vez que termine tu primera semana. Al tocar <strong>Ver mis 12 palabras</strong> en la tarjeta de <strong>Inicio</strong>, se muestran y la tarjeta ya no vuelve a aparecer allí. Permanece en la parte superior de <strong>Configuración</strong> hasta que añadas un inicio de sesión.</p>
+        <p>Una cuenta creada con 12 palabras también comienza más lento que una creada con un inicio de sesión, durante su primera semana. Consulta &quot;Reportar un problema&quot; para conocer sus límites y por qué.</p>
+        <h3>Añadir un inicio de sesión más tarde</h3>
+        <p>Puedes añadir un inicio de sesión más tarde, desde cualquier teléfono o navegador donde estés en tu cuenta, no solo en aquel en el que te uniste. En un teléfono en el que restauraste tu cuenta con tus 12 palabras, abre la comunidad global en la app: la comunidad indica que tu cuenta solo tiene sus 12 palabras, y aparecen la tarjeta y <strong>Añadir un inicio de sesión</strong> (puede tomar un momento). No puedes añadir uno mientras tu cuenta esté suspendida, o si la comunidad ha cerrado tu cuenta (la app lo indica y nada cambia). Se convierte en una segunda vía de acceso y elimina los límites de las 12 palabras de inmediato.</p>
+        <p>Si la bóveda de claves de BeanPool ya conserva una copia de tu cuenta, esa copia también es una vía de acceso. La app entonces no muestra la tarjeta de una sola vía de acceso. <strong>Añadir un inicio de sesión</strong> todavía se ofrece, de forma discreta, en <strong>Protección de la cuenta</strong> en <strong>Ajustes</strong>, porque elimina los límites de las 12 palabras.</p>
+        <ul>
+            <li>Toca <strong>Añadir un inicio de sesión</strong>: en la tarjeta o en <strong>Ajustes</strong> bajo <strong>Protección de la cuenta</strong>. En <strong>Respaldo seguro</strong> el botón dice <strong>Añade un inicio de sesión como segunda vía de acceso</strong>.</li>
+            <li>Toca <strong>Continuar con Google</strong>, <strong>Continuar con Facebook</strong> o, en un iPhone, <strong>Continuar con Apple</strong>, e inicia sesión una vez. La app puede pedir el bloqueo de tu teléfono primero.</li>
+            <li><strong>Inicio de sesión añadido</strong> indica que funcionó. Tu cuenta ahora tiene los límites habituales para cuentas nuevas, y ese inicio de sesión la recupera si pierdes tu teléfono, al igual que para alguien que se unió con él. Consulta &quot;Recuperar tu cuenta&quot; para saber quién puede abrir la copia guardada para ello.</li>
+        </ul>
+        <p>Si la copia de tu cuenta no se puede guardar en ese momento, el inicio de sesión se añade de todos modos y tus límites aún se levantan, pero tus 12 palabras siguen siendo tu vía de acceso. La app lo indica. Una cuenta de inicio de sesión que ya tiene otra cuenta de BeanPool en la comunidad global, o que perteneció a una cuenta que la comunidad eliminó, no se puede añadir y nada cambia.</p>
+        <p><strong>Proteger con</strong>, más abajo en <strong>Protección de la cuenta</strong> bajo <strong>Proveedores de recuperación por inicio de sesión</strong>, también vincula un inicio de sesión como vía de acceso, pero deja los límites de las 12 palabras y la tarjeta tal como están. Usa <strong>Añadir un inicio de sesión</strong> para ambos.</p>
+        <h2>Una segunda vía de acceso: una cuenta de inicio de sesión</h2>
+        <p>En la app para teléfono también puedes vincular una cuenta de Google o Facebook (y Apple en un iPhone). Si pierdes tu teléfono, esa cuenta puede restaurar tu cuenta en un teléfono nuevo, a través del servidor de tu comunidad, que conserva una copia cifrada para ella. Las personas que administran ese servidor pueden abrir esa copia. Consulta &quot;Recuperar tu cuenta&quot;.</p>
+        <p>Una cuenta de inicio de sesión que vincules desde un teléfono que tiene tus 12 palabras también las conserva, por lo que restaurar con ella te las devuelve. Una vinculada en una versión anterior de la app recupera tu cuenta sin ellas: bajo <strong>Protección de la cuenta</strong>, toca <strong>Conectar de nuevo</strong> junto a ella y pasa la comprobación de bloqueo de pantalla de tu teléfono para incluirlas. Conserva el papel también.</p>
+        <h2>En un navegador web</h2>
+        <p>En la comunidad global, un inicio de sesión con el que te unas en un navegador se guarda como una segunda vía de acceso: Configuración muestra <strong>Recuperación por inicio de sesión: conectada</strong>. En un navegador nuevo o con datos borrados, toca <strong>¿Ya tienes BeanPool?</strong>, luego <strong>Usar mi inicio de sesión</strong>, y recuperará tu cuenta, con sus 12 palabras (consulta &quot;BeanPool en el navegador&quot;). Si en su lugar te unes allí con 12 palabras, son tu única vía de acceso hasta que añadas un inicio de sesión: una tarjeta llamada <strong>Una forma de volver</strong> lo indica, con <strong>Ver mis 12 palabras</strong> y <strong>Añadir un inicio de sesión</strong>, después de unirte y en Configuración. En otras comunidades, la app web no tiene recuperación por inicio de sesión, y tus 12 palabras son la vía de acceso. Los navegadores también pueden borrar datos guardados, por lo que anota las palabras en papel antes de confiar en la app web.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="../recovery.html"><strong>Getting your account back</strong><span>Restore your account on a new phone, and protect it with a sign-in account.</span></a></li>
+            <li><a href="joining.html"><strong>Unirse a BeanPool</strong><span>Dos vías: una comunidad con invitación de un miembro, o la comunidad global si está abierta, con 12 palabras secretas o un inicio de sesión. Pedir entrar e invitar a otros.</span></a></li>
+            <li><a href="communities.html"><strong>Más de una comunidad</strong><span>Pertenecer a varias comunidades con una sola cuenta, cambiar entre ellas, seguir a tu comunidad a una nueva dirección y ver qué te muestra la comunidad global.</span></a></li>
+            <li><a href="faq.html"><strong>Preguntas</strong><span>Respuestas breves a las preguntas más frecuentes de los miembros.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

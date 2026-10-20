@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/zh-Hans by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="zh-Hans">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>首页 — BeanPool members' guide</title>
+    <meta name="description" content="首页是什么、在手机与网页版上显示的卡片、如何添加、移动或移除卡片、选择兴趣偏好以及退出登录时的隐私保护。">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#getting-started">新手入门</a></p>
+        <h1>首页</h1>
+        <p class="lede">首页是什么、在手机与网页版上显示的卡片、如何添加、移动或移除卡片、选择兴趣偏好以及退出登录时的隐私保护。</p>
+        <h2>首页是什么</h2>
+        <p><strong>首页</strong>是第一个标签页，也是手机端和网页版应用打开时显示的界面。它是一个卡片式仪表盘，回答了有哪些事项需要你处理、你身边正在发生什么，以及你接下来可以做什么。每张卡片都只有寥寥数行，点按一下即可进入应用的相应板块。没有任何内容需要展示的卡片不会占用屏幕空间。</p>
+        <p>手机端和网页版显示相同的卡片，但有少许差异。本页在两者存在差异之处会注明“在手机上”或“在网页版中”。</p>
+        <h2>新手入门</h2>
+        <p>新成员的首页一开始几乎是空的：在<strong>需要你处理</strong>和<strong>你的社区</strong>之间只有一张卡片 <strong>新手入门</strong>（在全球社区中，<strong>寻找你的社区</strong> 保持在其上方）。卡片上写着：“这是你的首页。由你决定这里放什么。在开始前，请花一分钟看看其他标签页。”</p>
+        <ul>
+            <li><strong>Look around</strong> 会开启简短导览。屏幕底部的栏目会依次将应用切换至各个标签页并说明其用途，每步一两句话，上方带有类似 <strong>Step 2 of 8</strong> 的说明（具体数字取决于应用以及你所在社区启用的标签页）。点按<strong>下一步</strong>继续，或点按<strong>跳过</strong>停止。栏目背后的标签页仍可正常操作：点按任意内容，或点按另一个标签页，导览都会随你前往。</li>
+            <li>最后一步会返回首页：<strong>Add your first cards</strong>。点按卡片即可将其放入首页，或点按 <strong>More cards</strong> 查看完整列表。点按<strong>完成</strong>。如果你未选择任何卡片，首页将以常用的五张卡片开始（见下文）。</li>
+            <li>点按卡片或栏目上的<strong>跳过</strong>会结束导览。如果你尚未亲自将卡片添加到首页，它会为你提供常用的五张卡片。如果你已经添加过（通过<strong>添加卡片</strong>，或在导览最后一步中所选），首页将保留你选择的卡片。</li>
+            <li>导览绝不会自行启动。如果你中途关闭了应用，卡片会提示“Pick up the tour at step 3”。</li>
+            <li>完成或跳过会保存在你的账户中，因此该卡片不会在你其他的手机或浏览器上重复出现。如需重新查看导览，请点按顶部的 <strong>?</strong> 并选择<strong>重新查看导览</strong>。</li>
+            <li>如果你在导览功能推出之前就已设置好首页，则没有任何变化。如果你需要，<strong>新手入门</strong> 位于<strong>添加卡片</strong>的 <strong>新手入门</strong> 分类下。</li>
+        </ul>
+        <p>在导览中点按<strong>跳过</strong>后，第一张卡片下方会出现一行提示。点按 <strong>✕</strong> 可将其关闭。点按<strong>完成</strong>后则不会显示。</p>
+        <ul>
+            <li>在手机上，它显示“这是你的首页。可在底部添加卡片，或点击卡片上的 … 进行移动或移除。”无论你是否点按 <strong>✕</strong>，它都只显示一次，绝不再出现。添加或移除卡片也会使其关闭。</li>
+            <li>在网页版中，它显示相同的字句。每次打开首页时它都会出现，直到你点按 <strong>✕</strong>。</li>
+        </ul>
+        <h2>你的卡片</h2>
+        <p>在手机上和网页版中，你的首页都是由你所选卡片组成的列表。导览结束后，常用的五张卡片为：<strong>起步指南</strong>、<strong>使用提示</strong>、<strong>市集新动态</strong>（全球社区中为<strong>离你最近</strong>）、<strong>即将发生</strong> 和<strong>社区公告</strong>。<strong>你对什么感兴趣？</strong> 与 <strong>找回账户方式</strong> 也会随之出现，并且仅在有内容要传达时才会显示。<strong>需要你处理</strong>始终位于顶部，而<strong>你的社区</strong>始终位于底部。</p>
+        <ul>
+            <li><strong>添加卡片</strong>位于首页底部的社区卡片上，可打开你所在社区能显示的所有卡片列表，分为三组：<strong>为你推荐</strong>、<strong>你身边</strong> 和 <strong>新手入门</strong>。点按卡片旁边的<strong>添加</strong>即可将其置于首页。它会移动到顶部，紧挨在<strong>需要你处理</strong>下方，首页会自动向上滚动显示它。</li>
+            <li>已经在首页上的卡片会显示<strong>已在首页</strong>而非<strong>添加</strong>。有些卡片可以多次添加，例如 <strong>已保存的搜索</strong>：它们会显示你已添加的数量，例如“2 of 5 on Home”。</li>
+            <li><strong>已保存的搜索</strong> 在添加前会询问要查找的字词，例如“鸡蛋”。你还可以选择<strong>提供</strong>、<strong>需求</strong>或<strong>两者兼有</strong>、分类以及查找距离范围：1、2、5、10 或 25 公里。仅在你所在社区知晓你的区域，或你已分享自身位置时才会提供距离选项；若没有这些信息，搜索将在所有范围内查找。</li>
+            <li><strong>日月天象</strong> 在添加前会询问使用哪里的位置：<strong>你的社区</strong>（常用选项）或<strong>你的区域</strong>。</li>
+            <li>首页最多可容纳 24 张卡片。满额时列表中会予以提示，你需要移除一张卡片才能添加另一张。</li>
+            <li>你的卡片保存在你的账户中，因此会同步到你的其他手机和浏览器。如果你所在社区的服务器尚未更新，它们将保留在此手机或此浏览器中，并且<strong>编辑首页</strong>会提示“需要更新社区服务器，卡片配置才能同步至其他设备。”每次打开首页时，它们都会重新发送。</li>
+            <li>如果在此次变更前你已移动或隐藏过卡片，你的首页将保持你的排序，且不包含你已隐藏的卡片。如果你未曾调整过，你将单独看到 <strong>新手入门</strong>，导览中的<strong>跳过</strong>或<strong>完成</strong>会为你提供上述五张常用卡片或你所选的卡片（见上文）。如果你加入已超过一周，首次打开时，首页还会在 <strong>新手入门</strong> 下方提示你一次：“现在首页初始卡片更精简。“添加卡片”可以将其余卡片找回。”</li>
+        </ul>
+        <h2>从市集保存搜索</h2>
+        <p>当市集的搜索框中有字词时，其下方会显示一个按钮 <strong>将此搜索保存到首页</strong>。它会打开首页，并准备好要添加的保存搜索：你输入的字词、如果你当时只查看单项时的<strong>提供</strong>或<strong>需求</strong>、你选择的分类以及你选择的距离（覆盖该范围的 1、2、5、10 或 25 公里中最接近的值）。随意修改任何内容，然后点按<strong>添加到首页</strong>：该卡片将置于顶部。它会优先显示最新匹配的刊登；在全球社区中，则像其市集一样优先显示最近的刊登。如果首页上已有相同的搜索，或者你已保存了五个搜索，首页会予以提示且不会添加。在<strong>活动</strong>和<strong>投票</strong>下没有该按钮：保存搜索仅查找“提供”和“需求”。</p>
+        <h2>各类卡片</h2>
+        <p>首页仅按你自己的排序显示有内容要传达的卡片。你添加的卡片会置于顶部，位于<strong>需要你处理</strong>下方。以下是你可以拥有的卡片：</p>
+        <ul>
+            <li><strong>需要你处理：</strong>仅在有事项等待你处理时显示：等待你的交易、未读的个人消息、群组中的新动态、你尚未投出的投票（距离截止不到两天时显示为琥珀色），以及对于所有者、管理员和版主而言等待他们处理的管理工作，例如待审查的举报。在手机上，这些与屏幕顶部小图标所展示的内容相同。此卡片始终排在最前面，无法移动或隐藏。</li>
+            <li><strong>Your way back in：</strong>如果你是通过 12 个词加入且未关联登录方式，此卡片会提醒你妥善保管助记词或添加登录方式。点按 <strong>✕</strong> 可将其关闭。在你首次发布后以及一周后它会各再次出现一次，之后仅存在于<strong>设置</strong>中：在手机上位于<strong>账户保护</strong>下，在网页版中则位于设置顶部，标题为<strong>单一恢复途径</strong>。若 BeanPool 的密钥保险库中已存有你的密钥副本，则不会显示该卡片。</li>
+            <li><strong>Find your community：</strong>仅在全球社区中显示。它会展示离你最近的社区，并允许你申请加入（参见“寻找离你最近的社区”）。在手机上，它包含<strong>你附近的社区</strong>、<strong>创建社区</strong>和<strong>当此地有社区成立时通知我</strong>。在网页版中，每个社区都是指向其自身页面的链接。如果应用不知道你的位置，在手机和网页版中均可点按 <strong>或输入你的城镇</strong>，选择你的城镇而不是共享你的位置。网页版的卡片还包含<strong>分享我的区域</strong>。一旦选定了城镇，网页版的卡片会显示“Near”和城镇名称，并带有<strong>更改</strong>。如果网页版的卡片已设定了地点，<strong>不在列表中？输入你的城镇</strong> 具有相同的作用。在你加入全球社区的前 30 天内，该卡片始终固定在顶部，无法被移除或移动。之后它就和普通卡片一样。</li>
+            <li><strong>First steps：</strong>简要核对清单。在本地社区中：发布你的首个“提供”、添加个人资料照片、挑选几项你的兴趣，以及在你发布“提供”后（若已开启邀请功能）邀请他人。在仅限管理员邀请的社区中，手机上该最后一行仅向所有者和管理员展示。网页版向所有成员展示，未完成的条目会使该卡片保持显示。在手机上，当所有条目完成后卡片即消失。在网页版中，它还会保留你的前 14 天。</li>
+            <li><strong>First steps on the global community：</strong>发布免费赠送或交换的物品，并且如果列表中有距离你 250 公里以内的社区，还会建议你申请加入（该行绝不会强行保留卡片）。它还可以说明新账户的限制，例如起初每天可以发布多少帖子和发起多少新聊天。它会在你的前 14 天内保留，此后一直保留至完成发布且限制结束为止。</li>
+            <li><strong>Tips：</strong>专为成员准备，每次一条关于 BeanPool 运作方式的简短提示。点按<strong>下一步</strong>查看下一条，或点按<strong>阅读更多</strong>打开本指南中对应的页面。新的一天首次访问时也会显示一条新提示。当你看完所有提示后，卡片会自动消失；或者当你点按 <strong>不再显示提示</strong> 时卡片会立即消失。通过<strong>添加卡片</strong>重新添加它会从第一条提示重新开始。</li>
+            <li><strong>What are you into?：</strong>允许你为你喜欢的分类加星标。仅限成员。当你尚未给任何分类加星标时，或点按市集卡片上的<strong>定制</strong>时会显示，并在你选择期间停留在屏幕上。</li>
+            <li><strong>Your deals：</strong>显示你进行中的交易以及等待你处理的交易。不适用于全球社区：在那里，市集中的<strong>我的交易</strong>会改为展示来自本地社区的交易示例。</li>
+            <li><strong>Your enterprise：</strong>显示你负责的企业中等待批准的请求。如果你负责的是项目，则称为<strong>你的项目</strong>。不适用于全球社区：在那里，<strong>公共资金池</strong>会改为展示来自本地社区的企业示例。</li>
+            <li><strong>Coming up：</strong>你附近即将举办的活动，包含你的报名回应。</li>
+            <li><strong>New in the Market：</strong>最新的刊登，加星标的分类优先显示。在全球社区中它被称为<strong>离你最近</strong>，且距离最近的刊登优先显示。如果你在 <strong>寻找你的社区</strong> 中输入了所在城镇，手机将从该城镇起算距离。点按<strong>定制</strong>以选择你的兴趣，或点按<strong>查看全部</strong>打开市集。当刊登较少时，如果你所在社区开启了示例，它可能会展示几条标记为示例的刊登。</li>
+            <li><strong>Decide：</strong>开放中的决策与投票，在手机上分为独立的两行。在手机上，决策会打开<strong>公共资金池</strong>中的<strong>决策</strong>，投票会打开市集中的<strong>投票</strong>。在网页版中它为单行，点按即可打开公共资金池。不适用于全球社区：那里的投票位于市集的<strong>投票</strong>中，而<strong>公共资金池</strong>则展示来自本地社区的决策示例。</li>
+            <li><strong>A saved search：</strong>匹配你所选字词的刊登。你最多可以添加五个。第一行是你设定的字词与距离，例如“eggs · within 5 km”。接下来最多展示四条刊登，点按均可打开相应刊登；<strong>查看更多</strong>会打开市集并已填入你的搜索词。它与市集搜索找到的结果一致，因此“鸡蛋”也会找到含义相近的字词刊登。当没有任何匹配时会明确说明，例如“No eggs within 5 km right now”。在没有网络连接的情况下刚添加或修改的搜索会显示“将在社区响应后显示”，直到你所在社区的服务器作出响应。若要更改字词，请点按 <strong>…</strong> 然后点按<strong>设置…</strong>：卡片仍保持在原位。</li>
+            <li><strong>你的群组：</strong>你的群组与聊天，附带未读消息计数。</li>
+            <li><strong>Who joined：</strong>本周加入的人员。在本地社区中，它会显示姓名和头像。在全球社区中，它仅按区域显示人数统计，不显示姓名。</li>
+            <li><strong>动态：</strong>邻里从 YouTube 和博客等外部渠道分享的帖子，加星标的分类优先显示。点按<strong>查看全部</strong>以打开动态。</li>
+            <li><strong>Sun and moon：</strong>今晚的月相以及今天的日出日落，以单行显示，例如“🌔 Waxing gibbous, 72% · Sunrise 6:12 · Sunset 17:48”。你的手机或浏览器会自行计算：该卡片不会向社区服务器请求任何数据。它使用社区所在的位置（精确到约一公里左右），若社区没有具体位置则使用你的区域（在全球社区中始终是你的区域）。在全球社区中，手机还可以使用其最近所在的位置，但前提是你已经允许应用使用你的位置信息：它绝不会主动索取。如果你在 <strong>寻找你的社区</strong> 中输入了所在城镇，手机将改用该城镇。即使社区有具体位置，若你仍想使用你的区域，请点按 <strong>…</strong> 然后点按<strong>设置…</strong>并选择<strong>你的区域</strong>。时间以你自己的手机或电脑时钟为准，因此当你旅行时会按你所在的当地时间显示。月相图样会按照赤道相应一侧所见绘制。在今天太阳不会升起或落下的地区，它会明确注明，例如“全天极昼”或“今日无日落”。如果位置未知，卡片将不予显示，且<strong>编辑首页</strong>会提示“目前暂无可显示内容：地点未知。”屏幕阅读器会以文字读出，例如“Moon waxing gibbous, 72 percent lit. Sunrise 6:12 am. Sunset 5:48 pm.”。</li>
+            <li><strong>你的豆子：</strong>你的余额和信用额度（可支出空间）。不适用于全球社区。在手机端，全球社区会改为展示一张示例卡片：豆子在本地社区中的作用，以及<strong>查看账本示例</strong>。它会在导览完成或跳过后显示（当 <strong>新手入门</strong> 显示时，导览的账本步骤会展示该示例），并一直保留直到你点按<strong>隐藏此卡片</strong>，即使 <strong>起步指南</strong> 已经消失也会继续保留。</li>
+            <li><strong>社区公告：</strong>来自社区管理员的公告与通知。</li>
+            <li><strong>Grow your community：</strong>在发布首个“提供”后允许你邀请新成员（在已开启邀请的社区）。不适用于全球社区。在仅限管理员邀请的社区中，手机上仅对所有者或管理员显示。在网页版中则完全不显示。</li>
+            <li><strong>你的社区：</strong>最后一张卡片，以你的社区名称为标题（在全球社区中为<strong>全球社区</strong>）。它显示成员数量和本月交易笔数；在全球社区中，则显示成员数量及列出的社区数量。它包含<strong>添加卡片</strong>和<strong>编辑首页</strong>。此卡片始终固定在底部，无法移动或移除。</li>
+        </ul>
+        <p>在手机上，当你的社区迁至新网址时，在所有这些卡片上方会出现一张卡片询问是否使用该网址：参见“多个社区”中的“当你的社区迁至新网址时”。</p>
+        <h2>“…”菜单</h2>
+        <p>大多数卡片的右上角都有一个 <strong>…</strong> 按钮。以下卡片除外：</p>
+        <ul>
+            <li><strong>需要你处理</strong>、<strong>新手入门</strong> 和<strong>你的社区</strong>。<strong>新手入门</strong> 改为提供<strong>跳过</strong>按钮。</li>
+            <li>在手机上的 <strong>找回账户方式</strong>。它有自己的 <strong>✕</strong> 按钮。</li>
+            <li>加入全球社区前 30 天内的 <strong>寻找你的社区</strong>。</li>
+        </ul>
+        <p>点按 <strong>…</strong> 可执行以下操作：</p>
+        <ul>
+            <li><strong>设置…：</strong>仅出现在具有设置选项的卡片上，例如 <strong>已保存的搜索</strong> 或 <strong>日月天象</strong>。它直接在当前卡片上更改设置。</li>
+            <li><strong>上移：</strong>将该卡片与上方的卡片对调位置。</li>
+            <li><strong>下移：</strong>将该卡片与下方的卡片对调位置。</li>
+            <li><strong>移除：</strong>将该卡片连同其设置从首页移除。<strong>添加卡片</strong>可将其重新添加。不会弹出任何确认提示。移除 <strong>使用提示</strong> 等同于 <strong>不再显示提示</strong>。</li>
+        </ul>
+        <p>在网页版中，<strong>找回账户方式</strong> 也有一个 <strong>…</strong> 按钮，包含<strong>上移</strong>、<strong>下移</strong>和<strong>移除</strong>。</p>
+        <p>当卡片无法再移动时，移动选项会显示为灰色：即位于可移动卡片的最顶端或最底端。<strong>需要你处理</strong>下方的第一张卡片无法上移，<strong>你的社区</strong>上方的最后一张卡片无法下移。</p>
+        <h2>编辑首页</h2>
+        <p>在首页底部，点按你的社区卡片上的<strong>编辑首页</strong>。</p>
+        <ul>
+            <li>首先是 <strong>＋ 添加卡片</strong>。它会打开与首页上的<strong>添加卡片</strong>相同的列表。</li>
+            <li>接下来是按你的排序显示在首页上的卡片。每张卡片都带有向上和向下的箭头以及独立的 <strong>…</strong>（设置…、上移、下移、移除）。保存的搜索会按其字词列出，若只查找单项，则会按<strong>提供</strong>或<strong>需求</strong>列出，例如“鸡蛋”或“Needs · eggs”，因此两项不同的搜索会显示为两个独立的行。</li>
+            <li>当前没有任何内容可展示的卡片会显示<strong>目前没有可展示的内容</strong>。看完整体提示后，<strong>使用提示</strong> 会显示<strong>提示已全部看完</strong>；而在没有位置数据可供使用时，<strong>日月天象</strong> 会显示 <strong>目前暂无可显示内容：地点未知。</strong>。</li>
+            <li>点按<strong>恢复默认</strong>可恢复至常用的五张卡片。</li>
+            <li>这里没有开关，也没有隐藏列表：你移除的卡片可以在<strong>添加卡片</strong>中找到。</li>
+            <li>无论在手机还是网页版中，列表中仅会列出你所在社区能够展示的卡片。例如，全球社区的列表中不包含<strong>你的豆子</strong>或 <strong>你的交易</strong>：在那里，账本和<strong>我的交易</strong>会改为展示来自本地社区的示例。</li>
+            <li><strong>需要你处理</strong>始终固定在顶部，<strong>你的社区</strong>始终固定在底部。</li>
+            <li>加入全球社区的前 30 天内，<strong>寻找你的社区</strong> 不会列出。目前它保持在靠近顶部的位置。</li>
+            <li>当 <strong>找回账户方式</strong> 位于首页上时，它会被列出，并附带箭头和 <strong>…</strong>。</li>
+        </ul>
+        <h2>你的兴趣偏好</h2>
+        <p>点按你喜欢的分类（食物、工具、服务、花园等）为其加星标：</p>
+        <ul>
+            <li>加星标的分类会在首页的 <strong>市集新动态</strong> 和<strong>动态</strong>中优先显示。</li>
+            <li>加星标的分类绝不会隐藏任何内容：其他刊登和帖子会紧随其后。</li>
+            <li>你在首页上挑选的星标分类，与市集标签页中 <strong>★ 为你推荐</strong> 下使用的星标完全一致。</li>
+            <li>随时点按市集卡片上的<strong>定制</strong>即可修改你的星标。</li>
+        </ul>
+        <h2>网页大厅</h2>
+        <p>在全球社区的网站上，在加入或登录之前，访客会看到一个更简洁的首页（本地社区的网站则会显示其欢迎页面）：</p>
+        <ul>
+            <li>顶部的<strong>加入</strong>卡片。</li>
+            <li>仅公开卡片：你附近的社区卡片、<strong>即将发生</strong>、<strong>What people post</strong>（带有照片和分类但不含成员姓名或头像的刊登）以及<strong>你的社区</strong>。</li>
+            <li>访客没有 <strong>…</strong> 菜单，没有<strong>编辑首页</strong>，也没有像<strong>需要你处理</strong>或<strong>你的豆子</strong>这样的私密卡片。</li>
+        </ul>
+        <h2>隐私与退出登录</h2>
+        <ul>
+            <li>当你从某台设备退出登录时（在网页版中为<strong>退出登录（仅限本机）</strong>，亦标为<strong>仅从本机移除</strong>），该设备保留的首页副本将从中清除：其最后接收的响应、你的布局以及你的星标。在网页版中，<strong>Force Clear &amp; Re-Sync</strong> 和注销账户也会清除相同的副本。</li>
+            <li>你的布局和加星标的分类也会保存在社区中的个人账户上。在此设备或其他设备上重新登录后，它们便会恢复。使用不同的账户登录则会以其自有的布局和星标开始。</li>
+            <li>在网页版中，在另一个标签页中退出登录会立即从浏览器中清除首页内容。</li>
+        </ul>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="the-top-bar.html"><strong>顶部栏</strong><span>豆子图标、有待处理事项时显示的小图标，以及右上角的按钮。</span></a></li>
+            <li><a href="../browsing-the-market.html"><strong>Browsing the market</strong><span>Find Offers and Needs with search, filters and distance.</span></a></li>
+            <li><a href="your-profile.html"><strong>个人资料</strong><span>你的昵称、头像、个人简述以及谁可以查看你的联系方式。</span></a></li>
+            <li><a href="finding-a-community.html"><strong>寻找附近的社区</strong><span>从全球社区出发，寻找附近的社区并申请加入，在附近有新社区成立时获得通知，或者自己发起一个社区。</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>豆子与全球社区</strong><span>全球社区的用途、众多社区中的一员，以及你在那里看到的内容：🏘️ 本地社区标记、示例社区 Example Valley、为什么豆子在那里等待，以及如何发起或寻找本地社区。</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

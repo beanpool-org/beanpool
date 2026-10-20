@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/id by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Menemukan komunitas di dekatmu — BeanPool members' guide</title>
+    <meta name="description" content="Dari komunitas global, temukan komunitas di dekatmu dan minta bergabung, dapatkan kabar saat ada yang baru dibuka, atau buat sendiri.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#getting-started">Memulai</a></p>
+        <h1>Menemukan komunitas di dekatmu</h1>
+        <p class="lede">Dari komunitas global, temukan komunitas di dekatmu dan minta bergabung, dapatkan kabar saat ada yang baru dibuka, atau buat sendiri.</p>
+        <h2>Mengapa komunitas lokal</h2>
+        <p>Komunitas global adalah tempat orang-orang dari mana saja bertemu. Komunitas lokal adalah tempat tetangga bertransaksi: komunitas lokal memiliki Kacang, transaksi, dan Sarana Bersama miliknya sendiri. Di komunitas global kamu dapat melihat cara kerjanya, dalam sebuah komunitas contoh yang ditandai <strong>🏘️ Komunitas lokal</strong>, tetapi tidak ada yang menghasilkan atau menghabiskan Kacang di sana. Jadi sebuah postingan di sana menyebutkan dalam deskripsinya apa yang diinginkan oleh orang tersebut sebagai imbalan: gratis, barter, atau silakan tanyakan kepada mereka. Lihat &quot;Beans and the global community&quot;.</p>
+        <p>Komunitas global adalah satu komunitas di antara banyak komunitas. Komunitasmu sendiri berjalan di servernya sendiri dan tidak pernah membutuhkannya: komunitas global hanya membantumu menemukannya.</p>
+        <p>Belum ada komunitas di dekatmu? Kamu bisa memulainya: lihat &quot;Belum ada yang dekat denganmu&quot;, di bawah.</p>
+        <h2>Komunitas di sekitar Anda</h2>
+        <p>Di komunitas global, kartu <strong>Temukan komunitas Anda</strong> di <strong>Beranda</strong> menampilkan komunitas-komunitas yang paling dekat denganmu. Selama 30 hari pertamamu, kartu ini tetap berada di dekat bagian atas Beranda dan tidak dapat dihapus atau dipindahkan; setelah itu kamu dapat menghapusnya seperti kartu lainnya. Di web app, setiap komunitas pada kartu merupakan tautan ke halamannya sendiri. Jika tidak mengetahui lokasimu, ketuk <strong>Bagikan areaku</strong>, atau <strong>atau ketik kota Anda</strong> dan pilih kotamu. Langkah-langkah di bawah ini adalah untuk aplikasi ponsel.</p>
+        <p>Belum berada di komunitas global? Ketuk ikon kacang di kiri atas dan, di bawah <strong>KOMUNITASMU</strong>, ketuk <strong>Komunitas global</strong>, lalu bergabunglah dengannya menggunakan akun yang kamu miliki: lihat &quot;More than one community&quot;. Jika belum memiliki akun, ketuk <strong>Jelajahi BeanPool di seluruh dunia</strong> pada layar pertama aplikasi: lihat &quot;Joining BeanPool&quot;.</p>
+        <ul>
+            <li>Ketuk <strong>Komunitas di sekitar Anda</strong> untuk melihat seluruh daftarnya.</li>
+            <li>Komunitas dicantumkan dengan yang terdekat terlebih dahulu ketika aplikasi mengetahui lokasimu. Jika tidak, ketuk <strong>Gunakan lokasiku</strong>, atau cari berdasarkan nama. Lebih suka tidak membagikan lokasimu? Ketuk <strong>atau ketik kota Anda</strong>, mulailah mengetik, dan pilih kotamu dari daftar: hanya perkiraan titik yang disimpan, dan <strong>ubah</strong> memilih yang lain.</li>
+            <li>Komunitas dengan jarak yang kurang lebih sama darimu akan diacak, sehingga tidak ada satu komunitas pun yang selalu berada di paling atas.</li>
+            <li>Masing-masing menampilkan seberapa jauh jaraknya dan berapa banyak anggotanya, jika komunitas telah mengatakannya.</li>
+        </ul>
+        <p>Komunitas yang belum mempublikasikan alamatnya tetap dicantumkan, tetapi belum dapat diminta bergabung dari sini.</p>
+        <h2>Meminta bergabung</h2>
+        <ul>
+            <li>Ketuk <strong>Minta bergabung</strong> pada suatu komunitas.</li>
+            <li>Periksa namamu, dan tulis beberapa kata tentang dirimu, hingga 280 karakter: tempat tinggalmu, apa yang ingin kamu bagikan atau pelajari.</li>
+            <li>Ketuk <strong>Kirim</strong>.</li>
+        </ul>
+        <p>Permintaanmu langsung dikirimkan ke komunitas tersebut, bukan melalui komunitas global, dengan namamu, kata-katamu, dan fotomu. Hanya anggotanya yang melihatnya. Jika komunitas hanya mengizinkan adminnya yang mengundang, hanya pemilik dan adminnya yang melihatnya. Seorang anggota di sana dapat mengizinkanmu masuk: mereka mengetuk <strong>Undang</strong>, dan sebuah undangan dibuat yang hanya dapat digunakan oleh akunmu.</p>
+        <p>Saat kamu menunggu, kartu komunitas bertuliskan <strong>You asked to join. No answer yet</strong>. Komunitas biasanya menjawab dalam beberapa hari. Kamu dapat memiliki satu permintaan terbuka dengan setiap komunitas, dan setiap komunitas hanya menerima beberapa permintaan per hari dari satu koneksi internet.</p>
+        <p>Jika tidak ada yang menjawab dalam 30 hari, kartu bertuliskan <strong>Tidak ada jawaban. Kamu bisa bertanya lagi.</strong></p>
+        <p>Jika suatu komunitas tidak dapat menerima permintaanmu, kartu akan menampilkan kata-katanya sendiri, misalnya bahwa terlalu banyak permintaan datang dari jaringanmu hari ini, atau bahwa komunitas sedang tidak menerima permintaan bergabung saat ini.</p>
+        <h2>Ketika mereka menyetujuinya</h2>
+        <p>Kartu bertuliskan <strong>A member invited you</strong>. Ketuk <strong>Gabung</strong> bersama nama komunitas tersebut.</p>
+        <ul>
+            <li>Akunmu ikut bersamamu: kunci yang sama dan 12 kata yang sama. Namamu juga ikut. Jika seseorang di sana sudah memilikinya, sebuah angka ditambahkan, seperti &quot;Sarah2&quot;. Kamu bisa mengubahnya pada langkah berikutnya.</li>
+            <li>Postingan, obrolan, dan transaksimu tetap berada di masing-masing komunitas. Di komunitas yang baru kamu memulai dari awal.</li>
+            <li>Selanjutnya kamu memeriksa nama dan fotomu untuk komunitas baru tersebut.</li>
+            <li>Akun masuk yang melindungi akunmu disimpan oleh setiap komunitas. Aplikasi memintamu untuk melindungi akunmu di komunitas baru juga: ketuk <strong>Lindungi akun</strong>, atau <strong>Nanti</strong>, dan lakukan kapan saja di <strong>Pengaturan</strong>.</li>
+        </ul>
+        <p>Kamu tetap menjadi anggota komunitas global, dan dapat berpindah di antara keduanya: lihat &quot;More than one community&quot;.</p>
+        <h2>Belum ada yang dekat denganmu</h2>
+        <ul>
+            <li><strong>Beri tahu saya jika ada yang dimulai di sini:</strong> kamu mendapatkan notifikasi saat sebuah komunitas dimulai di dekat tempatmu berada. Hanya perkiraan wilayah yang disimpan, dengan lebar sekitar 10 km, tidak pernah lokasi persismu. Kamu dapat memantau hingga 3 tempat, dan berhenti memantau salah satunya dengan <strong>Hentikan</strong>.</li>
+            <li><strong>Mulai komunitas:</strong> setiap komunitas memiliki server kecilnya sendiri, yang dirawat oleh seseorang dari warga setempat. Ini hanya memerlukan komputer cadangan di rumah atau beberapa dolar per bulan, dan waktu sekitar setengah jam: lihat &quot;Beans and the global community&quot;. Aplikasi menampilkan tiga cara untuk menjalankannya: komputer cadangan di rumah, server sewa kecil, atau meminta bantuan. Isi nama, lokasi, dan bagaimana orang dapat menghubungimu, lalu ketuk <strong>Salin detail komunitas saya</strong> untuk menempelkannya ke pengaturan server barumu. Cara orang menghubungimu tidak akan masuk ke direktori publik kecuali kamu mengaktifkannya di sana.</li>
+        </ul>
+        <h2>Jika kamu adalah anggota komunitas lokal</h2>
+        <p>Orang dapat meminta bergabung dengan komunitasmu dari komunitas global. Ketuk <strong>Obrolan</strong>, lalu <strong>Orang</strong>, lalu <strong>Invites</strong>: permintaan dicantumkan di bawah <strong>Wants to join</strong>, beserta nama mereka, kata-kata mereka, dan dari mana mereka berasal. Permintaan dijawab di aplikasi ponsel: web app tidak mencantumkannya.</p>
+        <ul>
+            <li><strong>Undang:</strong> membuat undangan yang hanya dapat digunakan oleh akun mereka. Aplikasi mereka menemukannya dengan sendirinya, dan mereka bergabung dengan satu ketukan.</li>
+            <li><strong>Nanti saja:</strong> mereka tidak diberi tahu. Mereka tetap melihat pesan &quot;belum ada jawaban&quot;, dan tidak dapat meminta lagi selama 30 hari.</li>
+        </ul>
+        <p>Setiap anggota dapat menjawab, apa pun lencana kepercayaan mereka, kecuali komunitas memilih bahwa hanya adminnya yang mengundang (<strong>Known</strong>, di bawah <strong>Who may invite</strong> di Pengaturan server komunitas). Jika demikian, hanya pemilik dan adminnya yang melihat permintaan tersebut dan menjawabnya. Admin komunitas dapat mematikan fitur permintaan bergabung.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="joining.html"><strong>Bergabung ke BeanPool</strong><span>Dua cara masuk: komunitas dengan undangan anggota, atau komunitas global saat terbuka dengan 12 kata rahasia atau satu akun masuk. Meminta bergabung ke komunitas, dan mengundang orang lain.</span></a></li>
+            <li><a href="home.html"><strong>Beranda</strong><span>Apa itu Beranda, kartu apa saja yang muncul di ponsel dan web app, cara menambah, memindah, atau menghapusnya, memilih minatmu, dan privasi saat keluar.</span></a></li>
+            <li><a href="communities.html"><strong>Lebih dari satu komunitas</strong><span>Bergabung di beberapa komunitas dengan satu akun, berpindah antar komunitas, mengikuti komunitas saat pindah alamat, dan melihat apa yang ditampilkan komunitas global.</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>Kacang dan komunitas global</strong><span>Untuk apa komunitas global, satu komunitas di antara banyak komunitas, dan apa yang kamu lihat: penanda 🏘️ Komunitas, contoh komunitas Example Valley, mengapa Kacang menunggu di sana, dan cara mencari atau memulai komunitas lokal.</span></a></li>
+            <li><a href="../near-you.html"><strong>Finding things near you</strong><span>Show only posts within a distance of you, or of any place you choose.</span></a></li>
+            <li><a href="../recovery.html"><strong>Getting your account back</strong><span>Restore your account on a new phone, and protect it with a sign-in account.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/zh-Hans by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="zh-Hans">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>你的 12 个助记词 — BeanPool members' guide</title>
+    <meta name="description" content="这 12 个助记词是你账户的密钥。它们为何重要、在哪里找到、如何安全保存，以及添加登录方式作为备用找回途径。">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#getting-started">新手入门</a></p>
+        <h1>你的 12 个助记词</h1>
+        <p class="lede">这 12 个助记词是你账户的密钥。它们为何重要、在哪里找到、如何安全保存，以及添加登录方式作为备用找回途径。</p>
+        <h2>为什么它们至关重要</h2>
+        <p>你的账户不是由他人保管的密码。它是一把保存在你手机上的密钥。你的<strong>12 个助记词</strong>就是以单词形式呈现的这把密钥（这些词都是英文单词）。</p>
+        <ul>
+            <li>凭这 12 个助记词，你可以在新手机上找回自己的账户：你的名字、你的豆子以及你的信任评价。</li>
+            <li>如果没有它们，手机丢失或损坏可能意味着账户永久丢失。</li>
+            <li>密钥仅保存在持有它的手机上。它不会被复制到手机的云备份中，因此在新手机上（即使是从旧手机备份中恢复的 iPhone），都需要你的 12 个助记词或关联的登录账户（参见“找回你的账户”）。</li>
+            <li>任何拥有你 12 个助记词的人都可以使用你的账户。切勿与他人分享，切勿在除 BeanPool 应用或你所在社区的 BeanPool 网页版之外的任何地方输入它们，也绝不要在消息中发送它们。BeanPool 或你所在社区的任何人都绝不会向你索取这些词。</li>
+        </ul>
+        <h2>抄写下来</h2>
+        <ul>
+            <li>请将这 12 个英文助记词按顺序抄写在纸上，并仔细核对拼写。</li>
+            <li>将纸张存放在安全的地方，远离你的手机。</li>
+            <li>助记词的照片或屏幕截图很容易被他人发现。纸质记录更为安全。</li>
+            <li>当手机应用显示你的 12 个助记词或你在输入它们时，应用会阻止该界面的截屏和录屏：手机会拒绝截屏，或者截出的图片是一片空白。但这无法阻止他人使用另一部手机对着屏幕拍照。</li>
+            <li><strong>📋 复制助记词</strong>（在你加入时以及在网页版中为 <strong>📋 复制全部词语</strong>）会将这些词放入手机剪贴板中一分钟。如果剪贴板中依然保留这些词，随后应用会自动将其清除。如果你先退出了应用，重新返回时应用会立即清除它们。在此期间你复制的其他内容则不受影响。键盘的剪贴板历史记录，或与其他设备共享的剪贴板，可能会保留一份应用无法清除的副本。</li>
+            <li>在网页版中，如果你停留在此界面上，复制的内容会在一分钟后自动清除。在 iPhone 或 iPad 上的 Safari 或 Firefox 中，浏览器仅允许应用在你点按屏幕或按键时进行清除，因此它会在一分钟后你首次点按或按键时清除。如果你先离开该界面或切换到其他应用或标签页，应用无法判断你是否复制了其他内容，因此不会改动你的剪贴板：请复制其他内容以覆盖掉这些助记词。</li>
+            <li>如果你的手机没有设置屏幕锁，任何拿到底部手机的人都可以打开查看你的 12 个助记词，应用也会在它们下方予以提示。在手机设置中配置 PIN 码、图案、密码、指纹或面部识别锁，可以让助记词更加安全。</li>
+        </ul>
+        <h2>你的恢复工具包</h2>
+        <p>恢复工具包是一页可打印的内容：按顺序列出你的 12 个英文助记词、你所在社区的名称与地址、创建日期，以及在手机和网页浏览器中重新登录的步骤。它不会指明这是谁的账户。它是可选的：没有它你依然可以继续使用。</p>
+        <ul>
+            <li><strong>在手机上</strong>：在你的 12 个助记词旁边（加入时的“安全备份”界面以及设置中），点按<strong>打印你的恢复工具包</strong>进行打印，或点按<strong>另存为 PDF</strong> 生成 PDF 并选择保存位置。在保存前，应用会警告：“切勿将此文件存放在云备份和聊天记录中。任何拥有此文件的人都可以作为你登录。”手机随后会删除自身生成的 PDF 副本。</li>
+            <li><strong>在网页版中</strong>：在你的 12 个助记词旁边（加入时，以及在设置的<strong>查看恢复助记词</strong>下），点击<strong>打印或保存你的恢复套件</strong>。应用会警告：“切勿将此页面或文件存放在云备份和聊天记录中。任何拥有此文件的人都可以作为你登录。”点击<strong>继续</strong>打开浏览器的打印对话框。如需保存 PDF 而非纸质打印，请在打印对话框中选择<strong>另存为 PDF</strong>。</li>
+            <li>请像保管助记词一样保管此页面：任何拥有它的人都可以作为你登录。</li>
+        </ul>
+        <h2>如何再次查看它们</h2>
+        <p>使用屏幕顶部的滑块按钮打开<strong>设置</strong>。然后选择以下任一方式：</p>
+        <ul>
+            <li>在<strong>账户与身份</strong>下，点按<strong>查看恢复助记词</strong>。输入 <strong>CONFIRM</strong>，点按<strong>显示恢复助记词</strong>，并通过手机的锁屏验证。</li>
+            <li>或者点按<strong>账户保护</strong>，然后点按<strong>显示我的 12 位恢复助记词</strong>，并通过手机的锁屏验证。查看完毕后点按<strong>隐藏</strong>。</li>
+        </ul>
+        <p>无论哪种方式，当你离开该界面，或离开应用 15 秒以上时，助记词也会自动隐藏，下次查看时手机会重新要求验证。如果锁屏验证耗时超过两分钟，则不会显示任何内容：请重新点按。</p>
+        <p>在网页版中，<strong>账户与身份</strong>下的<strong>查看恢复助记词</strong>会直接显示它们。</p>
+        <p>通过登录账户恢复的手机，只有在该登录账户最初是从持有助记词且运行最新版应用的手机上关联时，才能取回你的 12 个助记词。否则该手机中没有它们的副本：助记词无法从第三方登录凭据中反推重建。<strong>查看恢复助记词</strong>依然存在，并提示“本机暂无副本”。在那部手机上，关联的登录账户是你找回账户的途径，因此请在<strong>账户保护</strong>下保持关联一个登录方式。</p>
+        <h2>将你的 12 个助记词恢复到此手机</h2>
+        <p>如果这部手机上没有你的 12 个助记词副本，而你已将它们抄写在纸上，你可以将它们添加进来：</p>
+        <ul>
+            <li>打开<strong>设置</strong>。在<strong>账户与身份</strong>下，点按<strong>查看恢复助记词</strong>。（或者在<strong>账户保护</strong>中，点按<strong>显示我的 12 位恢复助记词</strong>。）在没有副本的手机上，两者都会打开<strong>将你的 12 个助记词添加到此手机</strong>。</li>
+            <li>按顺序输入 12 个英文助记词，或点按<strong>粘贴</strong>。大写字母和多余空格均不影响。输入时不在恢复词列表中的单词会被即时标出。</li>
+            <li>点按<strong>添加这些助记词</strong>。</li>
+        </ul>
+        <p>你的手机会核对这些助记词是否属于你的账户，核对方式与所有者的<strong>检查你的 12 位助记词</strong>相同。它们不会被发送到任何地方。如果它们属于另一个账户，则不会发生任何变更，应用也会予以说明。一旦添加成功，<strong>查看恢复助记词</strong>便会在该手机上的每个社区中显示它们。</p>
+        <h2>如果你凭 12 个助记词加入全球社区</h2>
+        <p>你可以仅凭 12 个保密英文助记词加入全球社区，无需 Google、Apple 或 Facebook 账户（参见“加入 BeanPool”）。如果这为你创建了一个新账户，那么你的 12 个助记词是你找回账户的唯一途径。除了你的手机之外，任何地方都不会保留你账户的副本，也没有任何人能重置它们：无论是 BeanPool 还是社区都无能为力。如果你丢失了助记词和手机，账户将永久丢失。（如果你是使用已有账户加入的，你在其他社区中关联的登录凭据仍可在那里找回账户。）</p>
+        <p>应用在<strong>安全备份</strong>步骤会明确说明这一点。加入后，<strong>首页</strong>上的一张卡片会再次予以提醒，无论在手机还是网页版中：<strong>你的账户仅有一种恢复方式：你的 12 个助记词。请确认你仍保留着它们，或添加一种登录方式。</strong>。这绝不会妨碍你进行任何操作。在手机上：</p>
+        <ul>
+            <li>点按 <strong>✕</strong> 可关闭该卡片。它会在你首次发布后以及一周后各再次出现一次，之后仅保留在<strong>设置</strong>的<strong>账户保护</strong>下。</li>
+            <li><strong>显示我的 12 个助记词</strong>会打开<strong>账户保护</strong>，你可以在那里再次查看它们。</li>
+            <li>在<strong>账户保护</strong>中，点按<strong>我仍保留着我的 12 个助记词</strong>可永久关闭该卡片。<strong>添加登录方式</strong>则继续保留在那里。</li>
+        </ul>
+        <p>在网页版中，该卡片标题为<strong>单一恢复途径</strong>，包含<strong>查看我的 12 个助记词</strong>和<strong>添加登录方式</strong>。点按 <strong>✕</strong> 可关闭卡片：它会在你发布的一条帖子保持发布状态后，以及在第一周结束时各再次出现一次。在<strong>首页</strong>卡片上点按<strong>查看我的 12 个助记词</strong>会展示助记词，且卡片不会再出现在首页。它会一直保留在<strong>设置</strong>顶部，直到你添加了登录方式。</p>
+        <p>使用 12 个助记词创建的账户在第一周内的操作限制也比使用登录方式创建的账户更严格。具体限制及其原因请参见“举报问题”。</p>
+        <h3>稍后添加登录方式</h3>
+        <p>你可以稍后从登录了你账户的任何手机或浏览器添加登录方式，不仅限于你加入时所用的设备。在通过 12 个助记词恢复了账户的手机上，在应用中打开全球社区：社区会识别出你的账户仅有 12 个助记词，随后便会出现该卡片和<strong>添加登录方式</strong>（可能需要稍等片刻）。在账户被封禁期间，或社区已关闭你的账户时，你无法添加登录方式（应用会予以提示，且不会进行任何更改）。它会成为第二种找回途径，并立即解除针对 12 个助记词账户的限制。</p>
+        <p>如果 BeanPool 的密钥保险库中已保留了你账户的副本，该副本同样也是一种找回途径。此时应用不会显示“单一恢复途径”卡片。在<strong>设置</strong>的<strong>账户保护</strong>中依然会静默提供<strong>添加登录方式</strong>，因为它可以解除 12 个助记词账户的新手限制。</p>
+        <ul>
+            <li>点按<strong>添加登录方式</strong>：可在卡片上点按，或在<strong>设置</strong>的<strong>账户保护</strong>下点按。在<strong>安全备份</strong>步骤中，该按钮显示为<strong>添加登录方式作为备用找回途径</strong>。</li>
+            <li>点按<strong>通过 Google 继续</strong>、<strong>通过 Facebook 继续</strong>，或在 iPhone 上点按<strong>通过 Apple 继续</strong>，并完成一次登录。应用可能会先要求进行手机锁屏验证。</li>
+            <li>显示<strong>已添加登录方式</strong>即表示成功。你的账户现在享有常规的新账户限制，且如果你丢失了手机，该登录凭据可以找回账户，如同最初就凭其加入的用户一样。关于谁能打开为其保留的副本，请参见“找回你的账户”。</li>
+        </ul>
+        <p>如果当时无法保存你账户的副本，登录方式依然会被添加，你的限制依然会被解除，但你的 12 个助记词仍然是找回账户的途径。应用会予以说明。如果某个登录账户在全球社区中已关联了另一个 BeanPool 账户，或者该登录账户曾属于已被社区移出的账户，则无法添加，也不会进行任何更改。</p>
+        <p>在<strong>账户保护</strong>较下方的 <strong>Sign-In Recovery Providers</strong> 中的 <strong>Protect with</strong> 同样可以关联登录方式作为找回途径，但它会保持 12 个助记词限制和卡片原状不变。若想同时解除限制，请使用<strong>添加登录方式</strong>。</p>
+        <h2>第二种找回途径：登录账户</h2>
+        <p>在手机应用中，你还可以关联 Google 或 Facebook 账户（在 iPhone 上为 Apple）。如果你丢失了手机，该账户可以通过社区服务器在新手机上恢复你的账户，社区服务器会为其保留一份锁定副本。运行该服务器的人员可以打开该副本。参见“找回你的账户”。</p>
+        <p>从存有你 12 个助记词的手机上关联的登录账户也会一并保留这些助记词，因此使用该登录方式恢复时会同时恢复助记词。而在旧版应用上关联的登录账户恢复时则不包含助记词：在<strong>账户保护</strong>下，点按其旁边的<strong>重新连接</strong>并通过手机锁屏验证即可将其包含在内。纸质记录也请妥善保管。</p>
+        <h2>在网页浏览器中</h2>
+        <p>在全球社区中，在浏览器中用于加入的登录方式会被保留为第二种找回途径：设置中会显示 <strong>Sign-in recovery: connected</strong>。在清理过数据或全新的浏览器中，点按<strong>已经拥有 BeanPool 账户？</strong>，然后点按<strong>使用我的登录方式</strong>，即可找回你的账户及其 12 个英文助记词（参见“在网页浏览器中使用 BeanPool”）。如果你改为使用 12 个助记词在浏览器中加入，在添加登录方式之前它们是你唯一的找回途径：加入后以及在设置中，名为<strong>单一恢复途径</strong>的卡片会予以说明，并附带<strong>查看我的 12 个助记词</strong>和<strong>添加登录方式</strong>。在其他社区中，网页版没有登录恢复功能，你的 12 个助记词是找回账户的途径。浏览器也可能会清除保存的数据，因此在依赖网页版之前，请务必将助记词抄写在纸上。</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="../recovery.html"><strong>Getting your account back</strong><span>Restore your account on a new phone, and protect it with a sign-in account.</span></a></li>
+            <li><a href="joining.html"><strong>加入 BeanPool</strong><span>两种加入方式：凭成员邀请加入本地社区，或在开放时凭 12 个助记词或一次登录加入全球社区。申请加入社区以及如何邀请他人。</span></a></li>
+            <li><a href="communities.html"><strong>加入多个社区</strong><span>用一个账户加入多个社区、在它们之间切换、跟随你的社区迁移到新地址，以及查看全球社区向你展示的内容。</span></a></li>
+            <li><a href="faq.html"><strong>常见问题</strong><span>成员最常提出问题的简要解答。</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

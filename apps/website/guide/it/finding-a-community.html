@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/it by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trovare una comunità vicina — BeanPool members' guide</title>
+    <meta name="description" content="Dalla comunità globale, trova una comunità vicina e chiedi di entrare, ricevi una notifica quando ne apre una, oppure creane una tu.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#getting-started">Per iniziare</a></p>
+        <h1>Trovare una comunità vicina</h1>
+        <p class="lede">Dalla comunità globale, trova una comunità vicina e chiedi di entrare, ricevi una notifica quando ne apre una, oppure creane una tu.</p>
+        <h2>Perché una comunità locale</h2>
+        <p>La comunità globale è il luogo in cui si incontrano persone da ogni parte del mondo. Una comunità locale è il luogo in cui i vicini commerciano e collaborano: ha i propri fagioli, scambi e Beni comuni. Sulla comunità globale puoi vedere come funzionano, in una comunità di esempio contrassegnata come <strong>🏘️ Comunità locale</strong>, ma nulla lì guadagna o spende fagioli. Pertanto un post lì descrive nella sua spiegazione cosa la persona desidera in cambio: gratuito, uno scambio o chiedere direttamente. Vedi &quot;Fagioli e comunità globale&quot;.</p>
+        <p>La comunità globale è una comunità tra tante. La tua comunità risiede su un proprio server e non ha mai bisogno di essa: la comunità globale serve solo ad aiutarti a trovarla.</p>
+        <p>Non c'è ancora nessuna comunità vicino a te? Puoi avviarne una: vedi &quot;Nulla vicino a te&quot; sotto.</p>
+        <h2>Comunità vicino a te</h2>
+        <p>Sulla comunità globale, la scheda <strong>Trova la tua comunità</strong> sulla <strong>Inizio</strong> mostra le comunità più vicine a te. Per i tuoi primi 30 giorni rimane vicino alla parte superiore della Home e non può essere rimossa né spostata; dopo tale periodo puoi rimuoverla come qualsiasi altra scheda. Nell'app web, ogni comunità presente sulla scheda è un collegamento alla propria pagina. Se l'app non sa dove ti trovi, tocca <strong>Condividi la mia zona</strong>, oppure <strong>o inserisci il tuo comune</strong> e seleziona la tua città. I passaggi seguenti si riferiscono all'app per telefono.</p>
+        <p>Non sei ancora nella comunità globale? Tocca il fagiolo in alto a sinistra e, sotto <strong>LE TUE COMUNITÀ</strong>, tocca <strong>Comunità globale</strong>, quindi unisciti ad essa con l'account che possiedi: vedi &quot;Più di una comunità&quot;. Se non hai ancora un account, tocca <strong>Esplora BeanPool nel mondo</strong> nella prima schermata dell'app: vedi &quot;Entrare in BeanPool&quot;.</p>
+        <ul>
+            <li>Tocca <strong>Comunità vicino a te</strong> per visualizzare l'elenco completo.</li>
+            <li>Le comunità sono elencate a partire dalla più vicina quando l'app conosce la tua posizione. In caso contrario, tocca <strong>Usa la mia posizione</strong>, oppure cerca per nome. Preferisci non condividere la tua posizione? Tocca <strong>o inserisci il tuo comune</strong>, inizia a digitare e seleziona la tua città dall'elenco: viene conservato solo un punto approssimativo, e <strong>Modifica</strong> ne seleziona un'altra.</li>
+            <li>Le comunità situate all'incirca alla stessa distanza da te vengono mostrate in ordine casuale, così che nessuna singola comunità si trovi sempre in cima.</li>
+            <li>Ciascuna mostra quanto è distante e quanti membri conta, quando la comunità lo ha comunicato.</li>
+        </ul>
+        <p>Una comunità che non ha pubblicato il proprio indirizzo viene elencata, ma non è ancora possibile richiederne l'accesso da qui.</p>
+        <h2>Chiedere di entrare</h2>
+        <ul>
+            <li>Tocca <strong>Chiedi di unirti</strong> su una comunità.</li>
+            <li>Controlla il tuo nome e scrivi qualche parola su di te, fino a 280 caratteri: dove vivi, cosa ti piacerebbe condividere o imparare.</li>
+            <li>Tocca <strong>Invia</strong>.</li>
+        </ul>
+        <p>La tua richiesta va direttamente a quella comunità, non attraverso la comunità globale, con il tuo nome, il tuo messaggio e la tua foto. Solo i suoi membri possono vederla. Dove la comunità consente di invitare solo ai propri amministratori, la vedono solo i suoi proprietari e amministratori. Un membro di quella comunità può farti entrare: tocca <strong>Invita</strong>, e viene creato un invito utilizzabile esclusivamente dal tuo account.</p>
+        <p>Mentre aspetti, la scheda della comunità dice <strong>Hai chiesto di unirti. Nessuna risposta per ora</strong>. Le comunità rispondono di solito entro pochi giorni. Puoi avere una sola richiesta aperta con ciascuna comunità, e ogni comunità accetta solo poche richieste al giorno da una singola connessione Internet.</p>
+        <p>Se nessuno risponde entro 30 giorni, la scheda dice <strong>Nessuna risposta ricevuta. Puoi chiedere di nuovo.</strong></p>
+        <p>Se una comunità non può accettare la tua richiesta, la scheda mostra il motivo con le proprie parole, ad esempio che sono arrivate troppe richieste dalla tua rete oggi, oppure che al momento non accetta richieste di adesione.</p>
+        <h2>Quando dicono di sì</h2>
+        <p>La scheda dice <strong>Un membro ti ha invitato</strong>. Tocca <strong>Partecipa</strong> con il nome della comunità.</p>
+        <ul>
+            <li>Il tuo account viene con te: la stessa chiave e le stesse 12 parole (in lingua inglese). Viene anche il tuo nome. Se qualcuno lì ha già quel nome, viene aggiunto un numero, ad esempio &quot;Sarah2&quot;. Puoi cambiarlo nel passaggio successivo.</li>
+            <li>I tuoi annunci, le tue chat e i tuoi scambi rimangono in ciascuna comunità. Su quella nuova inizi da zero.</li>
+            <li>Successivamente verifichi il tuo nome e la tua foto per la nuova comunità.</li>
+            <li>Un account di accesso che protegge il tuo account viene conservato da ciascuna comunità. L'app ti chiede di proteggere il tuo account anche nella nuova comunità: tocca <strong>Proteggilo</strong>, oppure <strong>Più tardi</strong>, e fallo in qualsiasi momento in <strong>Impostazioni</strong>.</li>
+        </ul>
+        <p>Rimani membro della comunità globale e puoi passare dall'una all'altra: vedi &quot;Più di una comunità&quot;.</p>
+        <h2>Nulla vicino a te</h2>
+        <ul>
+            <li><strong>Avvisami quando ne nasce una qui:</strong> ricevi una notifica quando nasce una comunità vicino a dove ti trovi. Viene conservata solo la zona, con un raggio di circa 10 km, mai la tua posizione esatta. Puoi monitorare fino a 3 luoghi e smettere di monitorarne uno con <strong>Ferma</strong>.</li>
+            <li><strong>Avvia una comunità:</strong> ogni comunità dispone di un proprio piccolo server, gestito da qualcuno del posto. Richiede un computer di riserva a casa o pochi euro al mese, e circa mezz'ora: vedi &quot;Fagioli e comunità globale&quot;. L'app mostra tre modi per gestirne una: un computer di riserva a casa, un piccolo server noleggiato o chiedere aiuto. Inserisci il nome, il luogo e come le persone possono contattarti, quindi tocca <strong>Copia i dettagli della mia comunità</strong> per incollarli nelle impostazioni del tuo nuovo server. I recapiti rimangono esclusi dalla directory pubblica a meno che tu non decida di renderli visibili lì.</li>
+        </ul>
+        <h2>Se sei membro di una comunità locale</h2>
+        <p>Le persone possono chiedere di entrare nella tua comunità dalla comunità globale. Tocca <strong>Chat</strong>, poi <strong>Persone</strong>, quindi <strong>Inviti</strong>: le richieste sono elencate sotto <strong>Vogliono entrare</strong>, con il loro nome, le loro parole e la loro provenienza. Alle richieste si risponde nell'app per telefono: l'app web non le elenca.</p>
+        <ul>
+            <li><strong>Invita:</strong> crea un invito utilizzabile esclusivamente dal loro account. La loro app lo trova da sola ed essi entrano con un solo tocco.</li>
+            <li><strong>Non ora:</strong> non viene inviata alcuna notifica. Continuano a vedere &quot;nessuna risposta per ora&quot; e non possono richiedere di nuovo per 30 giorni.</li>
+        </ul>
+        <p>Qualsiasi membro può rispondere, qualunque sia il suo badge di fiducia, a meno che la comunità non abbia scelto che solo i suoi amministratori possano invitare (<strong>Known</strong>, sotto <strong>Who may invite</strong> nelle Impostazioni del server della comunità). In tal caso solo i proprietari e gli amministratori vedono le richieste e rispondono. Gli amministratori di una comunità possono disattivare le richieste di adesione.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="joining.html"><strong>Entrare in BeanPool</strong><span>Due modi per entrare: una comunità, con l'invito di un membro, o la comunità globale se aperta, con 12 parole segrete o un accesso. Chiedere di entrare e invitare altri.</span></a></li>
+            <li><a href="home.html"><strong>Home</strong><span>Cos'è la Home, quali schede mostra su telefono e app web, come aggiungerle, spostarle o rimuoverle, scegliere i tuoi interessi e la privacy quando esci.</span></a></li>
+            <li><a href="communities.html"><strong>Più di una comunità</strong><span>Fai parte di diverse comunità con un solo account, passa da una all'altra, segui la tua comunità a un nuovo indirizzo e scopri cosa mostra la comunità globale.</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>Fagioli e comunità globale</strong><span>A cosa serve la comunità globale, una comunità tra tante, e cosa vi trovi: il contrassegno 🏘️ Comunità, la comunità d'esempio Example Valley, perché i fagioli attendono lì e come trovare o avviare una comunità locale.</span></a></li>
+            <li><a href="../near-you.html"><strong>Finding things near you</strong><span>Show only posts within a distance of you, or of any place you choose.</span></a></li>
+            <li><a href="../recovery.html"><strong>Getting your account back</strong><span>Restore your account on a new phone, and protect it with a sign-in account.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

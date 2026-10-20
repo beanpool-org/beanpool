@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/it by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Come funziona BeanPool — BeanPool members' guide</title>
+    <meta name="description" content="Fagioli, scambi, offerte e richieste, e credito, in parole semplici.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#about">Info su BeanPool</a></p>
+        <h1>Come funziona BeanPool</h1>
+        <p class="lede">Fagioli, scambi, offerte e richieste, e credito, in parole semplici.</p>
+        <h2>Fagioli</h2>
+        <p>La tua comunità scambia in <strong>fagioli</strong>. I fagioli non sono denaro di una banca. Sono una registrazione di chi ha aiutato chi.</p>
+        <p>Tutti iniziano da zero. Quando aiuti qualcuno, guadagni fagioli. Quando qualcuno aiuta te, spendi fagioli.</p>
+        <p>Un'indicazione di massima: 40 fagioli corrispondono a circa un'ora del tempo di una persona. Tu e l'altra persona concordate il prezzo effettivo.</p>
+        <h2>Offerte e Richieste</h2>
+        <p>Un'<strong>Offerta</strong> è qualcosa che puoi fare o dare: pane, un passaggio, un'ora di giardinaggio, una riparazione.</p>
+        <p>Una <strong>Richiesta</strong> è qualcosa che stai cercando.</p>
+        <p>In una comunità con i fagioli, prima di poter pubblicare una Richiesta o chiedere l'Offerta di qualcun altro, devi aver pubblicato almeno un'Offerta tua. Ognuno porta qualcosa. Dove non ci sono fagioli, come sulla comunità globale, il tuo primo post può essere una Richiesta.</p>
+        <h2>Come funziona uno scambio</h2>
+        <ul>
+            <li>Trovi un'Offerta che ti interessa e la richiedi, oppure qualcuno risponde alla tua Richiesta.</li>
+            <li>Quando l'accordo è raggiunto, i fagioli dell'acquirente vengono custoditi al sicuro. Nessuno può spenderli mentre lo scambio è in corso.</li>
+            <li>Il lavoro viene svolto.</li>
+            <li>L'acquirente conferma che è completato. Quindi i fagioli passano al venditore.</li>
+        </ul>
+        <p>Se uno scambio si blocca, un amministratore della tua comunità può intervenire. Può pagare il venditore, restituire i fagioli all'acquirente o suddividerli. Un amministratore non può decidere su uno scambio di cui fa parte.</p>
+        <h2>Doni</h2>
+        <p>Puoi anche inviare fagioli a qualcuno come dono, senza alcuno scambio.</p>
+        <ul>
+            <li>Un dono può provenire solo dai fagioli che possiedi. Non può mai portarti sotto lo zero.</li>
+            <li>Puoi inviare doni dopo aver completato uno scambio nel mercato. Uno scambio di soli 1 o 2 fagioli è troppo piccolo per essere conteggiato.</li>
+            <li>I doni non hanno commissioni.</li>
+        </ul>
+        <h2>Andare sotto zero: la tua linea di credito</h2>
+        <p>Puoi spendere un po' più di quanto hai e andare sotto zero. Questa è la tua <strong>linea di credito</strong>. È una promessa di aiutare gli altri in seguito.</p>
+        <p>La tua linea di credito inizia a zero. Si apre quando completi il tuo primo scambio nel mercato (uno scambio di soli 1 o 2 fagioli è troppo piccolo per essere conteggiato). Qualcuno scelto dalla tua comunità per dare il benvenuto ai nuovi arrivati può anche offrirti un piccolo inizio facendoti da garante: 25, 50 o 100 fagioli.</p>
+        <p>La tua linea di credito cresce con la tua <strong>fiducia</strong>:</p>
+        <ul>
+            <li>Guadagni fiducia completando scambi nel mercato. I doni non fanno guadagnare fiducia.</li>
+            <li>Scambiare con molte persone diverse costruisce maggiore fiducia. Gli scambi con una singola persona contano fino a 500 fagioli.</li>
+            <li>La fiducia cresce rapidamente all'inizio, poi più lentamente.</li>
+            <li>Le valutazioni a stelle contano. Se le persone ti valutano, la tua valutazione media scala la fiducia guadagnata dai tuoi scambi: 5 stelle mantengono il 100%, 1 stella mantiene il 60%.</li>
+            <li>Il punto più profondo a cui può arrivare qualsiasi linea di credito è 2.000 fagioli sotto zero. Una comunità che conferma i propri membri può consentire di più (vedi sotto).</li>
+        </ul>
+        <h2>Le tue Offerte aprono il tuo credito</h2>
+        <p>La fiducia stabilisce quanto potresti scendere al massimo. Le tue Offerte attive stabiliscono quanto puoi scendere in questo momento. Ottieni il valore minore tra i due.</p>
+        <ul>
+            <li>Nessuna Offerta attiva: non puoi andare sotto zero.</li>
+            <li>1 Offerta: fino a 200 sotto zero.</li>
+            <li>2 Offerte: fino a 500.</li>
+            <li>3 Offerte: fino a 1.000.</li>
+            <li>4 Offerte: fino a 1.500.</li>
+            <li>5 Offerte: fino a 2.000.</li>
+        </ul>
+        <p>Se rimuovi delle Offerte mentre sei sotto zero, potresti trovarti a dovere più di quanto le tue Offerte attuali coprano. In tal caso non puoi spendere di più finché non rientri nel tuo limite. Puoi comunque guadagnare fagioli, e nulla ti viene tolto.</p>
+        <p>Alcune comunità confermano l'identità dei loro membri. Lì, un membro confermato riceve subito una linea di credito: 1.000 fagioli, a meno che la comunità non abbia scelto un altro importo. Una sola Offerta attiva la rende interamente disponibile. La linea più profonda in quel caso può arrivare fino a 5.000. Vedi &quot;Linea di credito&quot;.</p>
+        <h2>Badge di fiducia</h2>
+        <p>La tua fiducia si mostra come un badge. I badge sono Nuovo arrivato, Residente, Custode e Saggio. La fiducia dietro il tuo badge somma tre elementi: l'avvio fornito da una garanzia, la fiducia guadagnata scambiando e l'eventuale fiducia concessa da un amministratore. Un amministratore può assegnare direttamente un badge a un membro, senza scambi. In una comunità che conferma i propri membri, conta anche la linea di credito che un membro confermato riceve.</p>
+        <ul>
+            <li>Residente a partire da 200 di fiducia.</li>
+            <li>Custode a partire da 600 di fiducia.</li>
+            <li>Saggio a partire da 1.400 di fiducia.</li>
+        </ul>
+        <p>Un badge è un riconoscimento, niente di più. Non vincola e non condiziona nulla: tutti possono scambiare, invitare e votare, qualunque sia il loro badge.</p>
+        <h2>Commissioni e Beni comuni</h2>
+        <p>La tua comunità ha un fondo condiviso di fagioli chiamato <strong>Beni comuni</strong>. Le commissioni confluiscono al suo interno. I membri decidono insieme come spenderle.</p>
+        <ul>
+            <li><strong>Commissione del mercato:</strong> l'1,5% di ogni pagamento nel mercato va ai Beni comuni. Viene detratto da ciò che riceve il venditore.</li>
+            <li><strong>Commissione di circolazione:</strong> i fagioli sono fatti per circolare, non per rimanere fermi. I primi 200 fagioli che possiedi sono sempre esenti. Oltre questa soglia, una piccola commissione mensile va ai Beni comuni: l'1% al mese sui fagioli tra 200 e 500, l'1,5% tra 500 e 1.000, il 2% tra 1.000 e 2.000 e il 2,5% oltre 2.000.</li>
+            <li>I saldi sotto zero non pagano mai la commissione di circolazione. I doni non pagano mai alcuna commissione.</li>
+        </ul>
+        <h2>Imprese e gruppi</h2>
+        <p>Un'<strong>impresa</strong> prosegue nel tempo e commercia a proprio nome: un forno, una biblioteca degli attrezzi, un banco del mercato. È gestita da <strong>custodi</strong>, guidati da un <strong>custode principale</strong>. I custodi possono vincolare una parte della propria fiducia per assegnare all'impresa una linea di credito.</p>
+        <p>Un <strong>gruppo</strong> è una cerchia di membri con la propria chat e i propri annunci, gestito da uno o più <strong>coordinatori</strong>. Uno di loro è il <strong>coordinatore principale</strong> — colui che ha creato il gruppo, per cominciare.</p>
+        <p>Puoi scoprire come vengono scelti i custodi e i coordinatori in &quot;Regole e decisioni&quot;.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="../posting.html"><strong>Posting an Offer or a Need</strong><span>Put up something you can do or give, or something you are looking for.</span></a></li>
+            <li><a href="../a-deal-step-by-step.html"><strong>A deal, step by step</strong><span>From asking to getting paid, for an Offer and for a Need, and leaving a review.</span></a></li>
+            <li><a href="../credit-line.html"><strong>Your credit line</strong><span>How far below zero you can go, and how it grows.</span></a></li>
+            <li><a href="../gifts.html"><strong>Sending a gift</strong><span>Send beans to someone, with no trade.</span></a></li>
+            <li><a href="../circulation-fee.html"><strong>The circulation fee</strong><span>A small monthly fee on large balances, so beans keep moving. The first 200 are free.</span></a></li>
+            <li><a href="../trust-badges.html"><strong>Trust badges</strong><span>Newcomer, Resident, Steward and Elder. What they mean, and why they unlock nothing.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

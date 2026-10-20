@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ja by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ホーム — BeanPool members' guide</title>
+    <meta name="description" content="ホームの概要、スマートフォンやWebアプリで表示されるカード、追加・移動・削除方法、興味の設定、サインアウト時のプライバシーについて説明します。">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#getting-started">はじめに</a></p>
+        <h1>ホーム</h1>
+        <p class="lede">ホームの概要、スマートフォンやWebアプリで表示されるカード、追加・移動・削除方法、興味の設定、サインアウト時のプライバシーについて説明します。</p>
+        <h2>ホームとは</h2>
+        <p><strong>ホーム</strong>は最初のタブで、スマートフォンでもWebアプリでも、アプリを開いたときに最初に表示される画面です。要対応の用件、周辺の出来事、次にできることなどをカード形式で一覧表示するダッシュボードです。各カードは数行でまとまっており、タップするだけで該当の機能に移動できます。表示することが何もないカードは、画面に表示されず場所を取りません。</p>
+        <p>スマートフォンとWebアプリでは、一部の違いを除いて同じカードが表示されます。違いがある箇所には、このページで「スマートフォンでは」「Webアプリでは」と明記しています。</p>
+        <h2>はじめに</h2>
+        <p>新しく参加したメンバーのホームは、ほぼ空の状態で始まります。<strong>要対応</strong>と<strong>あなたのコミュニティ</strong>の間に、<strong>はじめに</strong>というカードが1枚だけ表示されます（グローバルコミュニティでは、その上に<strong>コミュニティを見つける</strong>が表示されます）。そこには「ここはあなたのホームです。ここに何を並べるかは自分で選べます。使い始める前に、ほかのタブを1分ほど見てみましょう。」と書かれています。</p>
+        <ul>
+            <li><strong>見てみる</strong>をタップすると、簡単なツアーが始まります。画面下のバーが各タブを順番に案内し、タブの目的を1〜2文で説明します。上には<strong>ステップ 2 / 8</strong>のような見出しが表示されます（数字はアプリの種類やコミュニティのタブ構成によって異なります）。<strong>次へ</strong>をタップして進むか、<strong>スキップ</strong>で終了できます。バーの背後にあるタブは通常どおり操作できます。何かをタップすることも、別のタブをタップしてツアーをそこへ移動させることも可能です。</li>
+            <li>最後のステップでホームに戻り、<strong>最初のカードを追加</strong>が表示されます。カードをタップしてホームに配置するか、<strong>その他のカード</strong>をタップして全一覧を表示します。<strong>完了</strong>をタップします。何も選ばなかった場合、ホームは通常の5枚（下記参照）で始まります。</li>
+            <li>カード上または案内バーの<strong>スキップ</strong>をタップするとツアーが終了します。自分でカードを配置していなかった場合は通常の5枚が表示されます。配置していた場合（<strong>カードを追加</strong>から、またはツアーの最終ステップでの選択から）は、選んだカードがそのまま維持されます。</li>
+            <li>ツアーが勝手に始まることはありません。途中でアプリを閉じた場合、カードには「ステップ3からツアーを再開」と表示されます。</li>
+            <li>完了またはスキップの状態はお客さまのアカウントに保存されるため、ほかのスマートフォンやブラウザでこのカードが再表示されることはありません。ツアーをもう一度見たいときは、画面上の<strong>？</strong>をタップして<strong>もう一度ツアーを見る</strong>を選んでください。</li>
+            <li>ツアー機能が導入される前からホームを設定していた場合、何も変わりません。使いたい場合は、<strong>カードを追加</strong>内の<strong>はじめに</strong>グループに<strong>はじめに</strong>カードがあります。</li>
+        </ul>
+        <p>ツアーで<strong>スキップ</strong>をタップすると、最初のカードの下に1行のヒントが表示されます。<strong>✕</strong>をタップすると消えます。<strong>完了</strong>の後は表示されません。</p>
+        <ul>
+            <li>スマートフォンでは「ここはあなたのホームです。下部でカードを追加したり、カードの…をタップして移動や削除ができます。」と表示されます。<strong>✕</strong>をタップしたかどうかにかかわらず、1回だけ表示され、二度と表示されません。カードを追加または削除しても非表示になります。</li>
+            <li>Webアプリでも同じ文言が表示されます。こちらは<strong>✕</strong>をタップするまで、ホームを開くたびに表示されます。</li>
+        </ul>
+        <h2>配置できるカード</h2>
+        <p>スマートフォンでもWebアプリでも、ホームは自分で選んだカードの並び順で構成されます。ツアー後の通常の5枚は、<strong>最初のステップ</strong>、<strong>ヒント</strong>、<strong>市場の新着</strong>（グローバルコミュニティでは<strong>近くの投稿</strong>）、<strong>近日開催</strong>、<strong>コミュニティからのお知らせ</strong>です。<strong>興味のある分野は？</strong>と<strong>アカウント復元方法</strong>も追加され、表示すべき内容があるときにだけ現れます。<strong>要対応</strong>は常に最上部に、<strong>あなたのコミュニティ</strong>は常に最下部に配置されます。</p>
+        <ul>
+            <li>ホーム最下部にある自分のコミュニティのカードで<strong>カードを追加</strong>をタップすると、コミュニティで表示可能な全カードの一覧が、<strong>おすすめ</strong>、<strong>周辺</strong>、<strong>はじめに</strong>の3グループに分かれて開きます。カードの横にある<strong>追加</strong>をタップするとホームに配置されます。カードは<strong>要対応</strong>のすぐ下の最上部に追加され、ホームがスクロールしてそのカードを表示します。</li>
+            <li>すでにホームに配置されているカードには、<strong>追加</strong>の代わりに<strong>ホームに配置中</strong>と表示されます。<strong>保存した検索</strong>など、一部のカードは複数回追加できます。その場合、「5枚中2枚をホームに配置中」のように現在の枚数が表示されます。</li>
+            <li><strong>保存した検索</strong>は、追加する前に対象のキーワード（例：「卵」）を尋ねられます。また、<strong>提供</strong>、<strong>求め</strong>、または<strong>両方</strong>、カテゴリー、検索範囲（1、2、5、10、25 km）も選べます。距離の指定は、コミュニティがお客さまの地域を把握している場合、または現在地を共有している場合にのみ利用できます。未設定の場合は、すべての場所が対象になります。</li>
+            <li><strong>太陽と月</strong>は、追加する前に基準とする場所を尋ねられます。<strong>あなたのコミュニティ</strong>（通常の選択肢）または<strong>あなたの地域</strong>から選びます。</li>
+            <li>1つのホームに配置できるカードは最大24枚です。上限に達すると一覧にその旨が表示され、別のカードを追加するには既存のカードを削除する必要があります。</li>
+            <li>カードの設定はお客さまのアカウントに保存されるため、ほかのスマートフォンやブラウザにも引き継がれます。コミュニティのサーバーがまだ更新されていない場合は、このスマートフォンまたはブラウザ内だけにとどまり、<strong>ホームを編集</strong>に「ほかの端末にもカードを引き継ぐには、コミュニティのサーバーの更新が必要です。」と表示されます。カード設定はホームを開くたびに再送信されます。</li>
+            <li>この仕様変更の前にすでにカードを移動または非表示にしていた場合、非表示にしたカードを除き、当時の並び順が維持されます。設定していなかった場合は<strong>はじめに</strong>だけが表示され、ツアーの<strong>スキップ</strong>または<strong>完了</strong>によって上記の5枚、または選択したカードが配置されます。1週間以上前に参加していた場合、最初に開いたときに<strong>はじめに</strong>の下に「ホームが少ないカード数から始まるようになりました。「カードを追加」で残りを再表示できます。」と1回だけ表示されます。</li>
+        </ul>
+        <h2>マーケットから検索を保存する</h2>
+        <p>マーケットの検索バーにキーワードが入力されているとき、その下に<strong>この検索をホームに保存</strong>ボタンが表示されます。これをタップすると、検索キーワード、片方だけを見ていた場合は<strong>提供</strong>または<strong>求め</strong>、選択したカテゴリー、選択した距離（条件をカバーする1、2、5、10、25 kmのうち最も近いもの）が入力済みの状態でホームが開き、すぐに保存した検索を追加できます。必要に応じて内容を変更し、<strong>ホームに追加</strong>をタップすると、カードが最上部に配置されます。条件に一致する最新の出品が優先して表示されます。グローバルコミュニティでは、そのマーケットの仕様に準じて最も近いものが優先されます。同じ検索条件がすでにホームにある場合や、保存した検索がすでに5件ある場合は、その旨が表示されて何も追加されません。<strong>イベント</strong>や<strong>投票</strong>の下にはこのボタンはありません。保存した検索が探すのは提供と求めです。</p>
+        <h2>カード一覧</h2>
+        <p>ホームには、お知らせすべき情報があるカードだけが、自分で設定した順序で表示されます。新しく追加したカードは最上部（<strong>要対応</strong>のすぐ下）に入ります。利用できるカードは以下のとおりです。</p>
+        <ul>
+            <li><strong>要対応:</strong> 自分宛ての用件がある場合にのみ表示されます。対応待ちの取引、メンバーからの未読メッセージ、参加グループの新着メッセージ、まだ投票していない投票（締切まで2日以内の場合は黄褐色で表示）、およびオーナー、管理者、モデレーター向けには確認待ちの通報など対応待ちの管理業務が含まれます。スマートフォンでは、画面上部の小さなアイコンが表示するものと同じ内容です。このカードは常に先頭に固定され、移動や非表示にすることはできません。</li>
+            <li><strong>アカウント復元方法:</strong> 12個の単語で参加し、連携済みのサインイン方法がない場合、このカードが単語を安全に保管するかサインイン方法を追加するよう促します。<strong>✕</strong>をタップすると消えます。最初の投稿後と1週間後にそれぞれ1回ずつ再表示され、その後は<strong>設定</strong>にのみ残ります（スマートフォンでは<strong>アカウント保護</strong>の下、Webアプリでは設定の最上部にある<strong>復元方法は1つ</strong>の見出しの下）。BeanPoolの鍵の金庫にすでに鍵のコピーが保管されている場合は表示されません。</li>
+            <li><strong>コミュニティを見つける:</strong> グローバルコミュニティでのみ表示されます。最寄りのコミュニティを表示し、参加申請を送ることができます（「近くのコミュニティを見つける」参照）。スマートフォンでは<strong>近くのコミュニティ</strong>、<strong>コミュニティを立ち上げる</strong>、<strong>ここで始まったら通知する</strong>があります。Webアプリでは、各コミュニティがそれぞれのページへのリンクになっています。現在地が不明な場合は、スマートフォンでもWebアプリでも<strong>または市区町村を入力</strong>をタップし、現在地を共有する代わりに市区町村を選択できます。Webアプリのカードには<strong>自分のエリアを共有</strong>もあります。市区町村を選択すると、Webアプリのカードには「周辺：」と市区町村名が表示され、<strong>変更</strong>ボタンが付きます。Webアプリのカードにすでに場所が設定されている場合、<strong>見つかりませんか？市区町村を入力</strong>でも同じ操作ができます。グローバルコミュニティへの参加後30日間は最上部に固定され、削除や移動はできません。30日を過ぎると、ほかのカードと同じように扱えます。</li>
+            <li><strong>最初のステップ:</strong> 簡単なチェックリストです。ローカルコミュニティの場合：最初の提供を投稿する、プロフィール写真を追加する、好きな分野をいくつか選ぶ、そして提供を1件投稿した後は（招待が有効な場合）だれかを招待する、の各項目です。管理者のみが招待できる設定の場合、スマートフォンでは最後の項目はオーナーと管理者にのみ表示されます。Webアプリでは全メンバーに表示され、未完了の項目が残っている間はカードが表示され続けます。スマートフォンでは、全項目が完了するとカードが消えます。Webアプリでは最初の14日間も表示され続けます。</li>
+            <li><strong>First steps on the global community:</strong> 無料または交換の品を投稿する項目と、250 km以内にコミュニティがある場合は参加申請を促す提案です（この提案項目によってカードが残り続けることはありません）。また、初めのうちは1日に投稿できる件数や新しく開始できるチャット数など、新しいアカウントに対する制限事項も表示されます。最初の14日間表示され、その後は投稿が完了して制限が解除されるまで残ります。</li>
+            <li><strong>ヒント:</strong> メンバー向けに、BeanPoolの仕組みに関する短いヒントを1度に1つずつ表示します。<strong>次へ</strong>をタップすると次のヒントが表示され、<strong>続きを読む</strong>をタップすると本ガイドの該当ページが開きます。新しい日になって初めてアクセスした際にも新しいヒントが表示されます。すべてのヒントを見終わると自動的に消えるほか、<strong>ヒントを再表示しない</strong>をタップすればすぐに非表示にできます。<strong>カードを追加</strong>から再度追加すると、最初のヒントからやり直せます。</li>
+            <li><strong>興味のある分野は？:</strong> 好きなカテゴリーに星を付けられます。メンバー限定です。星を付けたカテゴリーがまだない場合や、マーケットカードの<strong>調整</strong>をタップしたときに表示され、選択を行っている間画面に留まります。</li>
+            <li><strong>あなたの取引:</strong> 進行中の取引や対応待ちの取引を表示します。グローバルコミュニティにはありません。グローバルコミュニティでは、代わりにマーケットの<strong>自分の取引</strong>にローカルコミュニティのサンプル取引が表示されます。</li>
+            <li><strong>あなたの事業体:</strong> 自分が運営者を務める事業体の承認待ちリクエストを表示します。運営しているのがプロジェクトの場合は<strong>あなたのプロジェクト</strong>という名称になります。グローバルコミュニティにはありません。グローバルコミュニティでは、代わりに<strong>コモンズ</strong>にローカルコミュニティのサンプル事業体が表示されます。</li>
+            <li><strong>近日開催:</strong> 近隣で開催予定のイベントと、自分の出欠返答を表示します。</li>
+            <li><strong>市場の新着:</strong> 最新の出品を表示し、星を付けたカテゴリーが優先されます。グローバルコミュニティでは<strong>近くの投稿</strong>と呼ばれ、最も近い出品が先頭に表示されます。<strong>コミュニティを見つける</strong>で市区町村を入力した場合、スマートフォンはその市区町村を起点に計算します。<strong>調整</strong>をタップして興味のある分野を選ぶか、<strong>すべて見る</strong>をタップしてマーケットを開きます。出品が数件しかない間は、コミュニティでサンプル機能が有効になっていれば、サンプルと明記された出品例が2〜3件表示されることがあります。</li>
+            <li><strong>決定:</strong> 進行中の決定事項と投票を、スマートフォンでは個別の行として表示します。スマートフォンでは、決定事項をタップすると<strong>コモンズ</strong>の<strong>決定</strong>が開き、投票をタップするとマーケットの<strong>投票</strong>が開きます。Webアプリでは1行で表示され、タップするとコモンズが開きます。グローバルコミュニティにはありません。グローバルコミュニティの投票はマーケットの<strong>投票</strong>にあり、<strong>コモンズ</strong>にはローカルコミュニティのサンプル決定事項が表示されます。</li>
+            <li><strong>保存した検索:</strong> 指定したキーワードに一致する出品を表示します。最大5件まで設定できます。最初の行にはキーワードと距離（例：「卵 · 5 km以内」）が表示されます。その下には最大4件の出品が並び、それぞれタップして詳細を開けます。<strong>さらに表示</strong>をタップすると、検索バーにそのキーワードが入力された状態でマーケットが開きます。マーケットの検索と同じ結果が見つかるため、「卵」で検索すれば同義の言葉を含む出品も見つかります。一致する出品がない場合は、「現在5 km以内に卵はありません」のように表示されます。オフラインの状態で追加または変更した直後の検索には、コミュニティのサーバーが応答するまで「コミュニティからの応答時に表示されます」と表示されます。キーワードを変更するには、<strong>…</strong>をタップして<strong>設定…</strong>を選びます。カードの位置はそのまま変わりません。</li>
+            <li><strong>参加中のグループ:</strong> 参加しているグループとチャットが表示され、未読メッセージ数が確認できます。</li>
+            <li><strong>新メンバー:</strong> 今週参加したメンバーを表示します。ローカルコミュニティでは名前と顔写真が表示されます。グローバルコミュニティでは地域ごとの人数のみが表示され、名前は表示されません。</li>
+            <li><strong>パルス:</strong> YouTubeやブログなどの外部チャンネルから近隣メンバーが共有した投稿を表示し、星を付けたカテゴリーが優先されます。<strong>すべて見る</strong>をタップするとThe Pulseが開きます。</li>
+            <li><strong>太陽と月:</strong> 今夜の月相と本日の日の出・日の入り時刻を、「🌔 満月前（72%） · 日の出 6:12 · 日の入り 17:48」のように1行で表示します。スマートフォンまたはブラウザが自前で計算するため、コミュニティのサーバーには一切問い合わせません。約1キロメートル単位に四捨五入したコミュニティの所在地、またはコミュニティに位置情報がない場合はお客さまの地域情報を使用します（グローバルコミュニティでは常に自身の地域を使用します）。グローバルコミュニティでは、アプリへの位置情報の使用をすでに許可している場合に限り、スマートフォンが直近にいた場所を使用することもできます（勝手に許可を求めることはありません）。<strong>コミュニティを見つける</strong>で市区町村を入力した場合は、スマートフォンはその市区町村を使用します。コミュニティに位置情報がある場合でも自分の地域を使用したいときは、<strong>…</strong>をタップして<strong>設定…</strong>を選び、<strong>あなたの地域</strong>を指定してください。時刻はお手元のスマートフォンやパソコンの時計に準拠しているため、旅行中も現地時間で確認できます。月相は赤道のどちら側にいるかに合わせた見え方で描かれます。白夜や極夜などで太陽が出ない・沈まない日は、「一日中沈まない」や「本日の日の入りなし」のように表示されます。場所が不明な場合カードは表示されず、<strong>ホームを編集</strong>に「表示する項目がありません：場所が未設定です。」と表示されます。スクリーンリーダーでは、「満月前の月、照度72パーセント。日の出 午前6時12分。日の入り 午後5時48分。」のように読み上げられます。</li>
+            <li><strong>あなたの豆:</strong> 残高とクレジット枠（利用可能枠）を表示します。グローバルコミュニティにはありません。グローバルコミュニティでは、スマートフォンに代わりにサンプルのカードが表示され、ローカルコミュニティで豆が果たす役割と<strong>台帳の例を見る</strong>が案内されます。このカードはツアーを完了またはスキップすると表示され（<strong>はじめに</strong>が表示されている間は、ツアーの台帳ステップでサンプルが表示されます）、<strong>最初のステップ</strong>が消えた後でも、<strong>カードを隠す</strong>をタップするまで表示され続けます。</li>
+            <li><strong>コミュニティからのお知らせ:</strong> コミュニティ管理者からのアナウンスやお知らせを表示します。</li>
+            <li><strong>コミュニティを広げる:</strong> 最初の提供を投稿した後、招待機能が有効な場合に新しいメンバーを招待できます。グローバルコミュニティにはありません。スマートフォンでは、管理者のみが招待できる設定の場合、オーナーまたは管理者にのみ表示されます。Webアプリではそこには一切表示されません。</li>
+            <li><strong>あなたのコミュニティ:</strong> 最後のカードで、コミュニティの名前がタイトルになります（グローバルコミュニティでは<strong>グローバルコミュニティ</strong>）。メンバー数と今月の取引件数が表示されます。グローバルコミュニティでは、メンバー数と登録コミュニティ数が表示されます。<strong>カードを追加</strong>と<strong>ホームを編集</strong>ボタンがあります。このカードは常に最下部に固定され、移動や削除はできません。</li>
+        </ul>
+        <p>スマートフォンでは、コミュニティが新しいアドレスに移転した際、これらすべてのカードの上に新しいアドレスを使用するか尋ねるカードが表示されます。「複数のコミュニティ」内の「コミュニティが新しいアドレスに移転したとき」を参照してください。</p>
+        <h2>「…」メニュー</h2>
+        <p>ほとんどのカードには、右上に<strong>…</strong>ボタンがあります。ただし、次のカードにはありません。</p>
+        <ul>
+            <li><strong>要対応</strong>、<strong>はじめに</strong>、<strong>あなたのコミュニティ</strong>。<strong>はじめに</strong>には代わりに<strong>スキップ</strong>があります。</li>
+            <li>スマートフォンの<strong>アカウント復元方法</strong>。これには専用の<strong>✕</strong>ボタンがあります。</li>
+            <li>グローバルコミュニティでの最初の30日間の<strong>コミュニティを見つける</strong>。</li>
+        </ul>
+        <p><strong>…</strong>をタップすると、次の操作ができます。</p>
+        <ul>
+            <li><strong>設定…:</strong> <strong>保存した検索</strong>や<strong>太陽と月</strong>など、設定項目を持つカードでのみ表示されます。その場でカードの設定を変更します。</li>
+            <li><strong>上に移動:</strong> 1つ上のカードと位置を入れ替えます。</li>
+            <li><strong>下に移動:</strong> 1つ下のカードと位置を入れ替えます。</li>
+            <li><strong>削除:</strong> 設定内容とともにカードをホームから外します。<strong>カードを追加</strong>で元に戻せます。確認画面は表示されません。<strong>ヒント</strong>を削除することは、<strong>ヒントを再表示しない</strong>を選ぶことと同じです。</li>
+        </ul>
+        <p>Webアプリでは、<strong>アカウント復元方法</strong>にも<strong>…</strong>があり、<strong>上に移動</strong>、<strong>下に移動</strong>、<strong>削除</strong>が選べます。</p>
+        <p>移動先にカードがない場合（移動可能な範囲の最上部または最下部）、移動ボタンはグレー表示になります。<strong>要対応</strong>のすぐ下にある最初のカードは上へ移動できず、<strong>あなたのコミュニティ</strong>のすぐ上にある最後のカードは下へ移動できません。</p>
+        <h2>ホームを編集</h2>
+        <p>ホームの最下部にある自分のコミュニティのカードで、<strong>ホームを編集</strong>をタップします。</p>
+        <ul>
+            <li><strong>＋ カードを追加</strong>が最初にあります。ホーム上の<strong>カードを追加</strong>と同じ一覧が開きます。</li>
+            <li>次に、設定した並び順でホームのカードが一覧表示されます。各カードには上下の矢印と専用の<strong>…</strong>（設定…、上に移動、下に移動、削除）があります。保存した検索は検索キーワードで表示され、片方だけを検索している場合は<strong>提供</strong>または<strong>求め</strong>が付記されます（例：「卵」や「求め · 卵」）。そのため、2つの異なる検索は別々の行として表示されます。</li>
+            <li>現在表示すべき内容がないカードには、<strong>現在表示する項目はありません</strong>と表示されます。すべてのヒントを見終わると<strong>ヒント</strong>には<strong>ヒントはすべて見ました</strong>と表示され、基準となる場所がない間は<strong>太陽と月</strong>に<strong>表示する項目がありません：場所が未設定です。</strong>と表示されます。</li>
+            <li><strong>デフォルトに戻す</strong>をタップすると、通常の5枚のカードに戻ります。</li>
+            <li>切り替えスイッチや非表示リストはありません。削除したカードは<strong>カードを追加</strong>の中にあります。</li>
+            <li>スマートフォンでもWebアプリでも、そのコミュニティで表示可能なカードのみが一覧に並びます。たとえばグローバルコミュニティの一覧には、<strong>あなたの豆</strong>や<strong>あなたの取引</strong>はありません。そこでは、台帳や<strong>自分の取引</strong>にローカルコミュニティのサンプルが表示されます。</li>
+            <li><strong>要対応</strong>は常に最上部に留まり、<strong>あなたのコミュニティ</strong>は常に最下部に留まります。</li>
+            <li>グローバルコミュニティでの最初の30日間は、<strong>コミュニティを見つける</strong>は一覧に表示されません。当面の間は最上部付近に固定されます。</li>
+            <li><strong>アカウント復元方法</strong>は、ホームに配置されている間は上下矢印や<strong>…</strong>とともに一覧に表示されます。</li>
+        </ul>
+        <h2>興味のある分野は？</h2>
+        <p>好きなカテゴリー（<strong>食品・料理</strong>、<strong>工具・道具</strong>、<strong>サービス</strong>、<strong>園芸・農園</strong>など）をタップして星を付けます。</p>
+        <ul>
+            <li>星を付けたカテゴリーは、ホームの<strong>市場の新着</strong>や<strong>パルス</strong>で先頭に優先表示されます。</li>
+            <li>星を付けたカテゴリーによってほかの情報が隠されることはありません。すぐ後ろにほかの出品や投稿が続きます。</li>
+            <li>ホームで選んだ星は、マーケットタブの<strong>★ おすすめ</strong>で使用される星とまったく同一です。</li>
+            <li>星を変更したいときは、マーケットカードの<strong>調整</strong>をいつでもタップできます。</li>
+        </ul>
+        <h2>Webロビーでの表示</h2>
+        <p>グローバルコミュニティのウェブサイトでは、参加またはサインインする前の訪問者には、よりシンプルなホームが表示されます（ローカルコミュニティのウェブサイトでは、代わりにようこそページが表示されます）。</p>
+        <ul>
+            <li>最上部に<strong>参加</strong>カードが表示されます。</li>
+            <li>公開カードのみが表示されます。近くのコミュニティのカード、<strong>近日開催</strong>、<strong>What people post</strong>（写真とカテゴリーのみで、メンバー名や顔写真は表示されない出品一覧）、および<strong>あなたのコミュニティ</strong>です。</li>
+            <li>訪問者には<strong>…</strong>メニューや<strong>ホームを編集</strong>はなく、<strong>要対応</strong>や<strong>あなたの豆</strong>のようなプライベートカードも表示されません。</li>
+        </ul>
+        <h2>プライバシーとサインアウト</h2>
+        <ul>
+            <li>端末からサインアウトすると（Webアプリでは<strong>サインアウト（この端末のみ）</strong>、別名<strong>この端末からのみ削除</strong>）、その端末に保持されていたホームのコピー（直近の応答、レイアウト、星の設定）が端末から消去されます。Webアプリでは、<strong>強制消去してデータベースを再同期</strong>やアカウント削除を行っても同じコピーが消去されます。</li>
+            <li>レイアウトと星を付けたカテゴリーは、コミュニティにあるお客さまのアカウントにも保存されています。この端末または別の端末で再度サインインすると復元されます。別のアカウントでサインインした場合は、そのアカウント固有のレイアウトと星の設定で始まります。</li>
+            <li>Webアプリでは、別のタブでサインアウトすると、ブラウザ上のホームが直ちに消去されます。</li>
+        </ul>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="the-top-bar.html"><strong>トップバー</strong><span>豆のアイコン、確認が必要な項目を示す小さなアイコン、右上のボタンについて説明します。</span></a></li>
+            <li><a href="../browsing-the-market.html"><strong>Browsing the market</strong><span>Find Offers and Needs with search, filters and distance.</span></a></li>
+            <li><a href="your-profile.html"><strong>プロフィール</strong><span>名前、写真、自己紹介、連絡先情報を閲覧できる範囲について説明します。</span></a></li>
+            <li><a href="finding-a-community.html"><strong>近くのコミュニティを探す</strong><span>グローバルコミュニティから近くのコミュニティを探して参加申請したり、近隣で新しいコミュニティが始まった際に通知を受け取ったり、自分で立ち上げることができます。</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>豆とグローバルコミュニティ</strong><span>グローバルコミュニティの目的、多数のコミュニティの1つとしての位置付け、表示内容（🏘️ コミュニティマーカー、サンプルコミュニティExample Valley、豆がそこで待機する理由、ローカルコミュニティの探し方や立ち上げ方）を説明します。</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

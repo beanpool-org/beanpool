@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/fa by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="fa">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>نحوه کار BeanPool — BeanPool members' guide</title>
+    <meta name="description" content="لوبیا، معامله، پیشنهادها و نیازها و اعتبار، به زبان ساده.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#about">درباره BeanPool</a></p>
+        <h1>نحوه کار BeanPool</h1>
+        <p class="lede">لوبیا، معامله، پیشنهادها و نیازها و اعتبار، به زبان ساده.</p>
+        <h2>لوبیا</h2>
+        <p>جامعه شما با <strong>لوبیا</strong> مبادله می‌کند. لوبیاها پول بانکی نیستند. آن‌ها سابقه‌ای از این هستند که چه کسی به چه کسی کمک کرده است.</p>
+        <p>همه از صفر شروع می‌کنند. وقتی به کسی کمک می‌کنید، لوبیا کسب می‌کنید. وقتی کسی به شما کمک می‌کند، لوبیا خرج می‌کنید.</p>
+        <p>یک راهنمای تقریبی: ۴۰ لوبیا تقریباً معادل یک ساعت از وقت یک فرد است. شما و طرف مقابل بر سر قیمت واقعی توافق می‌کنید.</p>
+        <h2>پیشنهادها و نیازها</h2>
+        <p>یک <strong>پیشنهاد</strong> چیزی است که می‌توانید انجام دهید یا ارائه دهید: نان، هم‌سفری، یک ساعت باغبانی، یک تعمیر.</p>
+        <p>یک <strong>نیاز</strong> چیزی است که به دنبال آن هستید.</p>
+        <p>در یک جامعه دارای لوبیا، قبل از اینکه بتوانید نیازی ثبت کنید یا درخواست پیشنهاد فرد دیگری را داشته باشید، باید حداقل یک پیشنهاد از خودتان ثبت کرده باشید. هر کس چیزی ارائه می‌دهد. در جایی که لوبیایی وجود ندارد، مانند جامعه جهانی، اولین پست شما می‌تواند یک نیاز باشد.</p>
+        <h2>یک معامله چگونه کار می‌کند</h2>
+        <ul>
+            <li>پیشنهادی را که می‌خواهید پیدا می‌کنید و درخواست آن را می‌دهید، یا فردی نیاز شما را تقبل می‌کند.</li>
+            <li>هنگامی که توافق معامله انجام شد، لوبیاهای خریدار به صورت امن نگهداری می‌شوند. هیچ‌کس نمی‌تواند آن‌ها را در حین انجام معامله خرج کند.</li>
+            <li>کار انجام می‌شود.</li>
+            <li>خریدار تأیید می‌کند که انجام شده است. سپس لوبیاها به فروشنده می‌رسند.</li>
+        </ul>
+        <p>اگر معامله‌ای متوقف شود، یکی از مدیران جامعه شما می‌تواند وارد عمل شود. آن‌ها می‌توانند به فروشنده پرداخت کنند، لوبیاها را به خریدار برگردانند، یا آن‌ها را تقسیم کنند. یک مدیر نمی‌تواند در مورد معامله‌ای که خود در آن مشارکت دارد تصمیم‌گیری کند.</p>
+        <h2>هدایا</h2>
+        <p>همچنین می‌توانید بدون هیچ معامله‌ای، به عنوان هدیه برای کسی لوبیا بفرستید.</p>
+        <ul>
+            <li>یک هدیه فقط می‌تواند از لوبیاهایی باشد که دارید. هرگز نمی‌تواند موجودی شما را به زیر صفر ببرد.</li>
+            <li>پس از تکمیل یک معامله در بازار می‌توانید هدیه بفرستید. معامله‌ای با فقط ۱ یا ۲ لوبیا برای محاسبه شدن بیش از حد کوچک است.</li>
+            <li>هدایا هیچ کارمزدی ندارند.</li>
+        </ul>
+        <h2>رفتن به زیر صفر: سقف اعتبار شما</h2>
+        <p>می‌توانید کمی بیشتر از آنچه دارید خرج کنید و به زیر صفر بروید. این <strong>سقف اعتبار</strong> شما است. این قولی برای کمک به دیگران در آینده است.</p>
+        <p>سقف اعتبار شما از صفر شروع می‌شود. زمانی فعال می‌شود که اولین معامله خود را در بازار تکمیل کنید (معامله‌ای با فقط ۱ یا ۲ لوبیا برای محاسبه شدن بسیار کوچک است). شخصی که جامعه شما برای خوش‌آمدگویی به تازه‌واردان انتخاب کرده است نیز می‌تواند با ضمانت شما، شروعی کوچک به شما بدهد: ۲۵، ۵۰ یا ۱۰۰ لوبیا.</p>
+        <p>سقف اعتبار شما با <strong>اعتماد</strong> شما رشد می‌کند:</p>
+        <ul>
+            <li>با تکمیل معاملات در بازار، اعتماد کسب می‌کنید. هدایا اعتمادی کسب نمی‌کنند.</li>
+            <li>معامله با افراد گوناگون اعتماد بیشتری می‌سازد. معامله با هر فرد واحد تا سقف ۵۰۰ لوبیا محاسبه می‌شود.</li>
+            <li>اعتماد در ابتدا سریع رشد می‌کند، سپس با سرعت کمتری افزایش می‌یابد.</li>
+            <li>امتیازهای ستاره‌ای اهمیت دارند. اگر افراد به شما امتیاز دهند، میانگین امتیاز شما اعتبار کسب‌شده از معاملاتتان را تنظیم می‌کند: ۵ ستاره همه آن را نگه می‌دارد، ۱ ستاره ۶۰٪ را نگه می‌دارد.</li>
+            <li>بیشترین مقداری که هر سقف اعتبار می‌تواند پایین برود ۲۰۰۰ لوبیا زیر صفر است. جامعه‌ای که اعضای خود را تأیید می‌کند می‌تواند اجازه مقدار بیشتری بدهد (در زیر ببینید).</li>
+        </ul>
+        <h2>پیشنهادهای شما اعتبار شما را در دسترس قرار می‌دهند</h2>
+        <p>اعتماد تعیین می‌کند که تا چه اندازه <strong>می‌توانید</strong> پایین بروید. پیشنهادهای فعال شما تعیین می‌کنند که همین حالا تا چه حد <strong>مجازید</strong> پایین بروید. شما مقدار کمتر از این دو را دریافت می‌کنید.</p>
+        <ul>
+            <li>بدون پیشنهاد فعال: نمی‌توانید به زیر صفر بروید.</li>
+            <li>۱ پیشنهاد: تا ۲۰۰ زیر صفر.</li>
+            <li>۲ پیشنهاد: تا ۵۰۰ زیر صفر.</li>
+            <li>۳ پیشنهاد: تا ۱۰۰۰ زیر صفر.</li>
+            <li>۴ پیشنهاد: تا ۱۵۰۰ زیر صفر.</li>
+            <li>۵ پیشنهاد: تا ۲۰۰۰ زیر صفر.</li>
+        </ul>
+        <p>اگر در حالی که زیر صفر هستید پیشنهادها را بردارید، ممکن است بیشتر از مقداری که اکنون پیشنهادهایتان پوشش می‌دهند بدهکار باشید. در این صورت تا زمانی که به محدوده مجاز خود بازنگردید نمی‌توانید بیشتر خرج کنید. همچنان می‌توانید لوبیا کسب کنید، و چیزی از شما گرفته نمی‌شود.</p>
+        <p>برخی جوامع هویت اعضای خود را تأیید می‌کنند. در آنجا، یک عضو تأییدشده فوراً سقف اعتبار دریافت می‌کند: ۱۰۰۰ لوبیا، مگر اینکه جامعه مقدار دیگری انتخاب کرده باشد. یک پیشنهاد فعال همه آن را در دسترس قرار می‌دهد. عمیق‌ترین سقف در آنجا می‌تواند تا ۵۰۰۰ باشد. به «سقف اعتبار» مراجعه کنید.</p>
+        <h2>نشان‌های اعتماد</h2>
+        <p>اعتماد شما به صورت یک نشان نمایش داده می‌شود. نشان‌ها عبارتند از تازه‌وارد، ساکن، پیشکار و ریش‌سفید. اعتماد پشت نشان شما حاصل جمع سه چیز است: شروعی که یک ضمانت به شما داده، اعتمادی که با معامله کسب کرده‌اید، و هر اعتمادی که یک مدیر به شما اعطا کرده است. یک مدیر می‌تواند بدون معامله، مستقیماً به یک عضو نشان بدهد. در جامعه‌ای که اعضای خود را تأیید می‌کند، سقف اعتباری که یک عضو تأییدشده دریافت می‌کند نیز به حساب می‌آید.</p>
+        <ul>
+            <li>ساکن از ۲۰۰ اعتماد.</li>
+            <li>پیشکار از ۶۰۰ اعتماد.</li>
+            <li>ریش‌سفید از ۱۴۰۰ اعتماد.</li>
+        </ul>
+        <p>یک نشان فقط نشانه قدردانی است، نه چیزی بیشتر. هیچ چیزی را در انحصار نمی‌گذارد. هر کسی می‌تواند معامله کند، دعوت کند و رأی دهد، با هر نشانی که داشته باشد.</p>
+        <h2>کارمزدها و مشاع</h2>
+        <p>جامعه شما صندوق مشترکی از لوبیاها به نام <strong>مشاع</strong> دارد. کارمزدها به آن واریز می‌شوند. اعضا با هم تصمیم می‌گیرند که چگونه خرج شود.</p>
+        <ul>
+            <li><strong>کارمزد بازار:</strong> ۱.۵٪ از هر پرداخت در بازار به مشاع می‌رود. این مبلغ از آنچه فروشنده دریافت می‌کند کسر می‌شود.</li>
+            <li><strong>کارمزد گردش:</strong> لوبیاها برای حرکت کردن هستند، نه ساکن ماندن. ۲۰۰ لوبیای اولی که نگه می‌دارید همیشه رایگان است. بالاتر از آن، کارمزد ماهانه اندکی به مشاع می‌رود: ۱٪ در ماه برای لوبیاهای بین ۲۰۰ تا ۵۰۰، ۱.۵٪ بین ۵۰۰ تا ۱۰۰۰، ۲٪ بین ۱۰۰۰ تا ۲۰۰۰، و ۲.۵٪ برای بالاتر از ۲۰۰۰.</li>
+            <li>موجودی‌های زیر صفر هرگز کارمزد گردش پرداخت نمی‌کنند. هدایا هرگز کارمزدی پرداخت نمی‌کنند.</li>
+        </ul>
+        <h2>طرح‌های تجاری و گروه‌ها</h2>
+        <p>یک <strong>طرح تجاری</strong> به فعالیت ادامه می‌دهد و با نام خودش مبادله می‌کند: یک نانوایی، یک کتابخانه ابزار، یک غرفه در بازار. این طرح توسط <strong>مدیران</strong>، به رهبری یک <strong>مدیر ارشد</strong> اداره می‌شود. مدیران می‌توانند بخشی از اعتماد خود را متعهد شوند تا به طرح تجاری سقف اعتبار بدهند.</p>
+        <p>یک <strong>گروه</strong> جمعی از اعضا با گفتگو و پست‌های مخصوص به خود است که توسط یک یا چند <strong>هماهنگ‌کننده</strong> اداره می‌شود. یکی از آن‌ها <strong>هماهنگ‌کننده ارشد</strong> آن است — کسی که در ابتدا گروه را ایجاد کرده است.</p>
+        <p>می‌توانید نحوه انتخاب مدیران و هماهنگ‌کنندگان را در «قوانین و نحوه تصمیم‌گیری» بخوانید.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="../posting.html"><strong>Posting an Offer or a Need</strong><span>Put up something you can do or give, or something you are looking for.</span></a></li>
+            <li><a href="../a-deal-step-by-step.html"><strong>A deal, step by step</strong><span>From asking to getting paid, for an Offer and for a Need, and leaving a review.</span></a></li>
+            <li><a href="../credit-line.html"><strong>Your credit line</strong><span>How far below zero you can go, and how it grows.</span></a></li>
+            <li><a href="../gifts.html"><strong>Sending a gift</strong><span>Send beans to someone, with no trade.</span></a></li>
+            <li><a href="../circulation-fee.html"><strong>The circulation fee</strong><span>A small monthly fee on large balances, so beans keep moving. The first 200 are free.</span></a></li>
+            <li><a href="../trust-badges.html"><strong>Trust badges</strong><span>Newcomer, Resident, Steward and Elder. What they mean, and why they unlock nothing.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

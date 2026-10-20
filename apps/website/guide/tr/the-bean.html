@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/tr by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bu kılavuz — BeanPool members' guide</title>
+    <meta name="description" content="Bu kılavuzu nerede bulacağınız, içinde nasıl arama yapacağınız ve nasıl güncel kaldığı.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#getting-started">Başlarken</a></p>
+        <h1>Bu kılavuz</h1>
+        <p class="lede">Bu kılavuzu nerede bulacağınız, içinde nasıl arama yapacağınız ve nasıl güncel kaldığı.</p>
+        <h2>Kılavuzu açma</h2>
+        <p>Telefonda ekranın sol üst köşesindeki fasulyeye dokunun. Veya:</p>
+        <ul>
+            <li>Ekranın üst kısmındaki kaydırıcı düğmesiyle <strong>Ayarlar</strong>'ı açın.</li>
+            <li><strong>BeanPool</strong> altında, <strong>Yardım ve nasıl çalışır</strong> seçeneğine dokunun.</li>
+        </ul>
+        <p>Web uygulamasında da aynı yerdedir: <strong>Ayarlar</strong>, ardından <strong>BeanPool</strong> altında <strong>Yardım ve nasıl çalışır</strong>.</p>
+        <h2>İçinde neler var</h2>
+        <ul>
+            <li><strong>Topluluğun:</strong> adı (web uygulamasında adresi) ve sunucusuna şu anda ulaşılıp ulaşılamadığı. Telefonda, onun altında <strong>Topluluklarınız</strong>: geçiş yapmak için birine dokunun veya <strong>Topluluk ekle</strong> seçeneğine dokunun. <strong>Küresel topluluk</strong> her zaman satırlardan biridir ve ikinci satırında üye olup olmadığınızı, katılıp katılamayacağınızı veya şu anda neden kullanılamadığını belirtir. &quot;Birden fazla topluluk&quot; bölümüne bakın.</li>
+            <li><strong>Kılavuzlar:</strong> BeanPool'un nasıl çalıştığı, kurallar ve kararların nasıl alındığı ile sık sorulan sorular.</li>
+            <li><strong>Uygulama nasıl kullanılır:</strong> uygulamanın düzenlendiği şekilde gruplandırılmış her görev için kısa bir sayfa: Başlarken, Pazar, Harita, Sohbet, Pulse, Ortak Alan, Defter ve Ayarlar ile güvenlik.</li>
+            <li><strong>BeanPool projesi:</strong> bu sürümde nelerin yeni olduğu ve beanpool.org web sitesine bir bağlantı (telefonda, bir arkadaşa göndermek için bir <strong>Paylaş</strong> düğmesiyle birlikte).</li>
+        </ul>
+        <h2>Arama yapma</h2>
+        <p><strong>Rehberde ara</strong> kutusuna bir iki kelime yazın (web uygulamasında en üstte; telefonda <strong>Topluluklarınız</strong> altında). Kelimelerinizin tümünü içeren her sayfayı gösterir. Bağlantı olmadan da çalışır.</p>
+        <ul>
+            <li>Kısa kelimeler çalışır: &quot;oy&quot;, &quot;oylar&quot; ve &quot;oylama&quot; kelimelerini bulur.</li>
+            <li>Hiçbir şey çıkmazsa &quot;hediye&quot;, &quot;fotoğraf&quot; veya &quot;engelle&quot; gibi daha basit tek bir kelime deneyin.</li>
+        </ul>
+        <h2>Her zaman elinizin altında, güncel tutulur</h2>
+        <p>Kılavuz uygulamaya yerleşiktir, bu nedenle hiçbir bağlantı olmadan da çalışır. Çevrimiçi olduğunuzda uygulama daha yeni bir kılavuz olup olmadığını beanpool.org üzerinden kontrol eder ve varsa onu kullanır. Kılavuzun alt kısmı hangi sürümü okuduğunuzu gösterir.</p>
+        <p>Aynı kılavuz, web sitesinde beanpool.org/guide adresinde de yer alır.</p>
+        <h2>Videolar</h2>
+        <p>Bazı sayfalar <strong>İzle:</strong> ve bir videonun adını gösterebilir. Bu bağlantı yalnızca BeanPool o sayfa için bir video hazırladığında ve topluluğunuz bunu Pulse'ta, <strong>Öğren</strong> altında (web uygulamasında <strong>Nasıl işler</strong>) bulundurduğunda görünür. Üyelerin Öğren bölümüne eklediği videolar hiçbir zaman kılavuz sayfasında gösterilmez. Her sayfa video olmadan da eksiksizdir.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="getting-help.html"><strong>Yardım alma</strong><span>Takıldığınızda nereye bakacağınız ve kime soracağınız.</span></a></li>
+            <li><a href="how-it-works.html"><strong>BeanPool nasıl çalışır</strong><span>Fasulye, takas, teklifler, ihtiyaçlar ve kredi hakkında sade açıklamalar.</span></a></li>
+            <li><a href="faq.html"><strong>Sorular</strong><span>Üyelerin en çok sorduğu sorulara kısa ve net yanıtlar.</span></a></li>
+            <li><a href="../whats-new.html"><strong>What's new</strong><span>What changed in the app, in plain words.</span></a></li>
+            <li><a href="the-top-bar.html"><strong>Üst çubuk</strong><span>Fasulye simgesi, dikkatiniz gerektiğinde beliren küçük simgeler ve sağ üstteki düğmeler.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

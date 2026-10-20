@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/uk by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Верхня панель — BeanPool members' guide</title>
+    <meta name="description" content="Боб, маленькі піктограми, які з'являються, коли потрібна ваша дія, і кнопки у верхньому правому кутку.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#getting-started">Початок роботи</a></p>
+        <h1>Верхня панель</h1>
+        <p class="lede">Боб, маленькі піктограми, які з'являються, коли потрібна ваша дія, і кнопки у верхньому правому кутку.</p>
+        <h2>Що на ній розташовано</h2>
+        <p>На телефоні панель у верхній частині екрана однакова на кожній вкладці. Зліва направо:</p>
+        <ul>
+            <li><strong>Боб:</strong> ваша спільнота та цей посібник.</li>
+            <li><strong>Піктограми «потребує вас»:</strong> з'являються лише тоді, коли щось очікує на вашу дію.</li>
+            <li><strong>Значок ?, значок запрошення, Налаштування та ваше фото.</strong></li>
+        </ul>
+        <p>У веббраузері верхня панель простіша. Вона містить стан підключення ліворуч, назву сторінки, а також ваш профіль, <strong>?</strong> та Налаштування праворуч. Вона не має панелі боба, піктограм «потребує вас» і значка запрошення: розділ <strong>Invites</strong> знаходиться в пункті <strong>Люди</strong>. Вкладки розташовані вздовж нижнього краю або вздовж лівого краю на широкому екрані.</p>
+        <h2>Боб</h2>
+        <p>Торкніться значка боба у верхньому лівому куті, щоб відкрити панель <strong>BeanPool</strong>. Вона показує:</p>
+        <ul>
+            <li><strong>Ваша спільнота:</strong> її назва вгорі та інформація про те, чи доступний її сервер зараз.</li>
+            <li><strong>Your communities:</strong> торкніться спільноти, щоб перемкнутися на неї, або торкніться <strong>Додати спільноту</strong>. <strong>Глобальна спільнота</strong> завжди присутня серед них: її другий рядок зазначає, чи можете ви приєднатися до неї.</li>
+            <li><strong>Пошук у посібнику</strong>, потім <strong>Посібники</strong> (як працює BeanPool, правила, поширені запитання), <strong>Як користуватися додатком</strong> (цей посібник, розділ за розділом) та <strong>Проєкт BeanPool</strong> із посиланням <strong>What's new</strong>.</li>
+            <li><strong>beanpool.org:</strong> загальнодоступний вебсайт із кнопкою <strong>Поділитися</strong>, щоб надіслати посилання другу.</li>
+        </ul>
+        <p>Маленька крапка на значку боба показує поточний стан:</p>
+        <ul>
+            <li><strong>Зелена:</strong> підключено, і ви є учасником цієї спільноти.</li>
+            <li><strong>Жовта:</strong> ви перебуваєте тут у статусі гостя.</li>
+            <li><strong>Червона:</strong> сервер вашої спільноти зараз недоступний або цей телефон ще не підключено до спільноти.</li>
+        </ul>
+        <p>Одна повільна перевірка не робить крапку червоною. Вона стає червоною лише після того, як кілька перевірок поспіль зазнали невдачі.</p>
+        <h2>Піктограми «потребує вас»</h2>
+        <p>Між бобом і кнопками праворуч з'являються маленькі піктограми, але лише тоді, коли щось потребує вашої уваги. Кожна з них відповідає певному типу подій. Торкніться її, щоб перейти безпосередньо туди.</p>
+        <ul>
+            <li><strong>Рукостискання:</strong> угода чекає на вас. Хтось очікує, поки ви приймете його запит, або розпочата вами угода ще не завершена. Якщо угода одна, дотик відкриває її. Якщо їх кілька, відкривається розділ <strong>Мої обміни</strong>.</li>
+            <li><strong>Виборча скринька:</strong> голосування, в якому ви ще не взяли участь. Дотик відкриває розділ <strong>Спільне</strong> на пункті <strong>Рішення</strong>. Якщо першим голосуванням є опитування в групі або голосування доглядачів у підприємстві, дотик відкриває цю групу чи підприємство. Голосування, в якому ви поки не можете взяти участь, тут не враховується — наприклад, таке, що вимагає спочатку завершити обмін.</li>
+            <li><strong>Хмарка з текстом:</strong> непрочитане повідомлення від людини. Якщо воно від однієї людини, дотик відкриває цей чат. Якщо від кількох людей, відкривається <strong>Чат</strong> на вкладці <strong>Повідомлення</strong>, показуючи лише непрочитані.</li>
+            <li><strong>Група людей:</strong> нові репліки у ваших групах, чатах підприємств або чатах подій. Чати, де ви вимкнули сповіщення, тут не з'являються. Дотик відкриває чат або вкладку <strong>Групи</strong> в розділі <strong>Чат</strong>, якщо їх кілька.</li>
+            <li><strong>Щит:</strong> лише для людей, які допомагають керувати спільнотою. Він показується, коли чекає адміністративна робота, наприклад скарга на розгляд або завислий обмін, що потребує рішення. Дотик просить підтвердити блокування екрана телефону, а потім відкриває налаштування спільноти на цьому завданні. Якщо налаштування спільноти захищені кодом входу, додаток запитає і його.</li>
+        </ul>
+        <p>Піктограми шикуються справа наліво. Найважливіша з них розташована поруч зі значком ? і зберігає своє місце, поки інші з'являються та зникають.</p>
+        <h3>Цифра та колір</h3>
+        <ul>
+            <li>Маленька цифра на піктограмі означає кілька подій цього типу: наприклад, 3 людини, які написали вам. Якщо їх більше 9, відображається <strong>9+</strong>.</li>
+            <li>Піктограма стає <strong>жовтою</strong>, коли справа більш термінова: угода, що очікує на вас, адміністративна робота або голосування, яке закривається протягом 2 днів. Червоним нічого не підсвічується.</li>
+        </ul>
+        <h3>На маленькому екрані</h3>
+        <p>Якщо місця для всіх піктограм недостатньо, на останньому місці відображається <strong>•••</strong>. Торкніться трьох крапок, щоб побачити весь перелік, <strong>Потребує вас</strong>, словами. Торкніться потрібного рядка, щоб перейти туди.</p>
+        <h3>Спокійна панель — гарна новина</h3>
+        <p>Коли ніщо не потребує вашої дії, піктограм немає взагалі. Ви нічого не пропустили. Піктограми оновлюються, коли ви переходите по додатку або повертаєтеся до нього.</p>
+        <h2>Кнопка «Приєднатися» або «Підключитися»</h2>
+        <p>Замість піктограм ви можете побачити кнопку:</p>
+        <ul>
+            <li><strong>Приєднатися</strong> (жовта): ви переглядаєте спільноту як гість. Торкніться її, щоб відкрити <strong>Invites</strong>. У місцевій спільноті ви приєднуєтеся там за запрошенням. У глобальній спільноті торкніться <strong>Join with 12 words or a sign-in</strong> (<strong>Join with a sign-in</strong>, де спільнота приймає лише входи).</li>
+            <li><strong>Підключитися</strong> (червона): цей телефон не підключено до спільноти. Торкніться її, щоб відкрити <strong>Налаштування</strong>, де можна додати спільноту.</li>
+        </ul>
+        <p>Поки відображається одна з цих кнопок, значок запрошення приховано.</p>
+        <h2>Кнопки праворуч</h2>
+        <ul>
+            <li><strong>Значок ?</strong> (знак питання в колі): довідка для поточного екрана. Він відкриває коротке вікно з поясненням призначення цього екрана, кнопками <strong>Read the guide page</strong>, <strong>Пошук у посібнику</strong> та <strong>Пройти знайомство знову</strong>. Він присутній на кожній вкладці як для учасників, так і для гостей. У вебдодатку він розташований між вашим фото та Налаштуваннями вгорі, а на широкому екрані — поруч із Налаштуваннями внизу бічної панелі.</li>
+            <li><strong>Значок запрошення</strong> (людина з плюсом): відкриває розділ <strong>Invites</strong>, щоб запросити когось або приєднатися до іншої спільноти. Дивіться «Приєднання до BeanPool».</li>
+            <li><strong>Налаштування</strong> (повзунки): відкриває <strong>Налаштування</strong>. Торкніться знову, щоб повернутися туди, де ви були.</li>
+            <li><strong>Ваше фото:</strong> відкриває ваш власний профіль таким, яким його бачать інші.</li>
+        </ul>
+        <h2>Повідомлення про оновлення</h2>
+        <p>Іноді під верхньою панеллю з'являється зелена смуга:</p>
+        <ul>
+            <li><strong>Update available:</strong> вийшла новіша версія додатка. Торкніться <strong>Оновити</strong>, щоб отримати її, або натисніть хрестик, щоб закрити повідомлення.</li>
+            <li><strong>Your app is too old for this community:</strong> вам потрібно оновитися, перш ніж додаток зможе нормально працювати тут. Це повідомлення не можна закрити. Торкніться <strong>Оновити</strong>.</li>
+        </ul>
+        <h2>Вкладки</h2>
+        <p>Під верхньою панеллю розташовані вкладки: <strong>Головна</strong>, <strong>Ринок</strong>, <strong>Карта</strong>, <strong>Чат</strong>, <strong>Спільне</strong> та <strong>Реєстр</strong>. Назва кожної вкладки знаходиться над її піктограмою. На телефоні місцева спільнота без бобів не показує вкладки <strong>Спільне</strong> та <strong>Реєстр</strong>. Глобальна спільнота показує обидві з прикладами з місцевої спільноти. Дивіться «Боби та всесвітня спільнота».</p>
+        <p>На довгій сторінці торкніться вкладки, на якій ви вже перебуваєте, щоб миттєво повернутися на самий верх. Це працює на кожній вкладці, крім <strong>Карта</strong>.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="home.html"><strong>Головна</strong><span>Що таке Головна, які картки вона показує в телефоні та вебдодатку, як їх додавати, переміщувати чи видаляти, вибір інтересів і конфіденційність під час виходу.</span></a></li>
+            <li><a href="the-bean.html"><strong>Цей посібник</strong><span>Де знайти цей посібник, як шукати в ньому та як він підтримується в актуальному стані.</span></a></li>
+            <li><a href="communities.html"><strong>Кілька спільнот</strong><span>Належати до кількох спільнот з одним обліковим записом, перемикатися між ними, переходити за спільнотою на нову адресу та бачити інформацію з глобальної спільноти.</span></a></li>
+            <li><a href="../my-deals.html"><strong>My Deals</strong><span>One place for every trade you are in, every post you have up, and your past trades.</span></a></li>
+            <li><a href="../decisions.html"><strong>Voting on a Decision</strong><span>Find open Decisions, vote, change your vote, and see results.</span></a></li>
+            <li><a href="../messages.html"><strong>Messages</strong><span>Start a chat, send photos, reply, react, edit, delete, mute, and what is private.</span></a></li>
+            <li><a href="../notifications.html"><strong>Notifications</strong><span>Choose which alerts reach your phone, and when events remind you.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/fil by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="fil">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Paggamit ng BeanPool sa web browser — BeanPool members' guide</title>
+    <meta name="description" content="Karamihan sa kaya ng phone app ay kaya rin ng web app. Pagsali sa pandaigdigang komunidad sa browser, pagbawi sa account doon gamit ang sign-in, paglalagay ng account sa telepono, at saan iba ang pangalan ng mga button sa web.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#getting-started">Pagsisimula</a></p>
+        <h1>Paggamit ng BeanPool sa web browser</h1>
+        <p class="lede">Karamihan sa kaya ng phone app ay kaya rin ng web app. Pagsali sa pandaigdigang komunidad sa browser, pagbawi sa account doon gamit ang sign-in, paglalagay ng account sa telepono, at saan iba ang pangalan ng mga button sa web.</p>
+        <h2>Ang parehong account, ibang screen</h2>
+        <p>Ang iyong komunidad ay maaari ding gamitin sa isang web browser, sa isang computer o isang telepono. Isinulat ang gabay na ito para sa app sa telepono. Gumagana ang web app sa parehong paraan, ngunit ang ilang mga bagay ay may ibang pangalan o pwesto.</p>
+        <p>Gumamit ng isang account sa pareho. Sumali sa browser? Ilagay ang parehong account na iyon sa iyong telepono: tingnan ang &quot;Paglalagay ng iyong web account sa telepono&quot;, sa ibaba. Sumali sa iyong telepono? Dalhin ito sa browser: tingnan ang &quot;Paggamit ng account sa telepono sa computer&quot;. Ang pagsali muli ay gumagawa ng pangalawang account, at ang dalawang account ay hindi kailanman maaaring pagsamahin sa isa.</p>
+        <h2>Pagsali sa global.beanpool.org sa browser</h2>
+        <p>Ang pandaigdigang komunidad sa global.beanpool.org ay bukas sa sinuman, at maaari kang sumali rito mismo sa isang web browser. Hindi mo kailangan ng imbitasyon at walang app sa telepono na kailangan.</p>
+        <p>Bago ka sumali, ipinapakita ng pahina ang <strong>Home</strong>, ang <strong>Merkado</strong>, ang <strong>Mapa</strong> at ang <strong>Talaan</strong> (isang halimbawa mula sa isang lokal na komunidad) gaya ng nakikita ng isang bisita: ang mga pampublikong card, mga listing, mga larawan at humigit-kumulang kung nasaan ang mga ito, ngunit walang mga pangalan, walang mga mukha at walang eksaktong lokasyon. Walang anuman doon ang nagpapahintulot sa iyo na mag-post o sumagot hanggang sa sumali ka. Ang <strong>Sumali</strong> ay nasa itaas ng pahina at sa card sa itaas ng mga listing.</p>
+        <p>Sa browser ng telepono, iniaalok muna ng card na iyon ang <strong>Buksan sa BeanPool app</strong>. Binubuksan nito ang BeanPool app sa paraan para makapasok sa pandaigdigang komunidad, o ang app store ng iyong telepono kung hindi pa naka-install ang app, kaya nasa app na ang iyong account mula sa simula. Kung may account na ang app, binubuksan nito ang <strong>Sumali sa pandaigdigang komunidad</strong> gamit ang isang iyon, o ang sheet ng <strong>BeanPool</strong> kung miyembro na roon ang account na iyon. Tingnan ang &quot;Pagsali sa BeanPool&quot;. Sa ilalim nito, ang <strong>o sumali rito sa iyong browser</strong> ay sumasali rito mismo, gaya ng nasa ibaba. Sa isang computer, ipinapakita ng card ang <strong>Sumali</strong>.</p>
+        <p>Habang kakaunti pa lamang ang mga listing sa pandaigdigang komunidad, ang <strong>Merkado</strong> nito ay nagpapakita rin ng ilang card na minarkahang <strong>Halimbawa</strong>. Ang mga ito ay kathang-isip, upang ipakita kung ano ang ipinopost ng mga tao, at hindi mabubuksan. Mawawala ang mga ito kapag may sapat nang totoong mga listing.</p>
+        <p>Kung nagmula ka sa isang link na ibinahagi ng isang tao patungo sa isang listing o event, ito ang unang magbubukas. Sumali mula sa pahinang iyon, at kapag nakapasok ka na, magbubukas itong muli, sa pagkakataong ito kasama ang nag-post nito.</p>
+        <ul>
+            <li>I-tap ang <strong>Sumali</strong>, pagkatapos ay <strong>Bago ako sa BeanPool</strong>.</li>
+            <li>Piliin ang pangalang makikita ng mga tao. Kailangan nito ng hindi bababa sa 2 titik, at hindi hihigit sa 20.</li>
+            <li>Piliin kung paano sasali. Ang <strong>Gumawa ng account gamit ang 12 lihim na salita</strong> ay hindi nangangailangan ng iba pang account. O, sa ilalim ng <strong>O mag-sign in</strong>, mag-sign in nang isang beses gamit ang isa sa mga account na ipinapakita ng pahina: <strong>Google</strong>, <strong>Apple</strong> o <strong>Facebook</strong>. Dadalhin ka ng pahina sa sariling sign-in ng kumpanyang iyon at ibabalik ka rito. Kung saan tumatanggap lamang ng mga sign-in ang komunidad, ang pahina ay nagpapakita lamang ng mga sign-in.</li>
+            <li>Pagkatapos ay ang parehong mga hakbang tulad ng lahat: isang larawan, humigit-kumulang kung nasaan ka, ang iyong 12 salita sa Ingles at isang maikling tour. Sinasabi ng bar sa itaas ang <strong>Mag-sign in</strong> (o <strong>Pangalan</strong>, kapag sumali ka gamit ang 12 salita), <strong>Larawan</strong>, <strong>Ang Area Mo</strong>, <strong>Backup</strong> at <strong>Paano gumagana</strong>. Sa <strong>Ang Area Mo</strong>, ang <strong>Gamitin ang aking lokasyon</strong> ay nagtatanong sa iyong browser nang isang beses at ini-round ang sagot sa humigit-kumulang 10 km bago ito ipadala; ang <strong>Mag-type ng bayan o lugar</strong> ay naghahanap ng lugar ayon sa pangalan; ang <strong>Laktawan muna</strong> ay walang ipinapadala. Hindi na tatanungin ang browser para sa iyong lokasyon muli sa dulo. Tingnan ang &quot;Pagsali sa BeanPool&quot;.</li>
+        </ul>
+        <p><strong>Pagsali gamit ang 12 salita.</strong> Walang Google, Apple o Facebook account na kailangan, at walang itinatago ang komunidad tungkol sa iyo maliban sa iyong pangalan at, para sa isang araw, isang scrambled na reference sa network kung saan ka sumali. Habang itinitipa mo ang iyong pangalan, gumagawa ang pahina ng kaunting gawain para sa komunidad sa background, upang walang makagawa ng mga account nang walang katapusan ang bilis. Hindi mo ito hinihintay: kung mag-tap ka bago ito matapos, sinasabi ng pahina ang <strong>Inise-set up ang iyong account…</strong> na may bar ng 8 hakbang. Kapag maraming tao ang sumasali, mas matagal ito, at sinasabi ng pahina kung humigit-kumulang gaano katagal sa browser na ito: mas mabilis ang pag-sign in noon. Ang <strong>← Pumili ng ibang paraan</strong> ay bumabalik sa dalawang paraan para makapasok, habang nagpapatuloy pa rin ang gawain. Ang iyong 12 salita sa Ingles ang magiging tanging paraan mo pabalik. Walang sinuman ang maaaring mag-reset sa mga ito, hindi kami at hindi ang komunidad: sinasabi ito ng <strong>Backup</strong>, at nag-aalok ng <strong>Magdagdag ng sign-in bilang pangalawang daan pabalik</strong>: pipiliin mo ang sign-in sa dulo ng maikling tour, kapag na-save na ang iyong larawan (tingnan ang &quot;Pagdaragdag ng sign-in sa ibang pagkakataon&quot; sa ibaba). Pareho itong nasa sa iyo.</p>
+        <p><strong>Pagsali gamit ang isang sign-in.</strong> Nagtatabi lamang ang komunidad ng isang scrambled na reference dito, hindi kailanman ang iyong email o ang iyong pangalan mula sa account na iyon. Ang isang sign-in account ay maaaring sumali nang isang beses.</p>
+        <p>Ang parehong sign-in ay itinatabi rin bilang isang paraan pabalik sa iyong account. Habang sinasabi ng pahina ang <strong>Ibinibilanggo ang iyong account nang ligtas…</strong>, nagla-lock ito ng kopya ng iyong account, kasama ang 12 salita nito sa Ingles, at ibinibigay ito ng pagsali sa komunidad. Mabubuksan ito ng sign-in account na iyon. Mabubuksan din ito ng mga taong nagpapatakbo ng server, dahil sinusuri ng kanilang server ang iyong sign-in, tulad ng sa isang sign-in account na naka-link sa app sa telepono: tingnan ang &quot;Pagbawi sa iyong account&quot;. Ipinapakita ng Mga Setting ang <strong>Sign-in recovery: connected</strong> at kung alin. Kung hindi magawa o maitabi ang kopya, makakasali ka pa rin, at sinasabi ng Mga Setting ang <strong>Pagbawi sa pamamagitan ng sign-in: hindi konektado</strong>: ang iyong 12 salita ang magiging tanging paraan mo pabalik.</p>
+        <p>Kung mas gusto mong hindi itabi ng komunidad ang kopyang iyon, hindi pa ito maalis ng web app. Kaya itong gawin ng app sa telepono, kung ang iyong account ay nasa iyong telepono rin: habang bukas ang pandaigdigang komunidad, pumunta sa <strong>Mga Setting</strong>, i-tap ang <strong>Proteksyon ng Account</strong>, pagkatapos ay <strong>Idiskonekta</strong> sa tabi ng sign-in. Alinmang paraan, panatilihing ligtas ang iyong 12 salita sa Ingles: ang mga ito ang paraan pabalik na sa iyo lamang.</p>
+        <p>Kung may iba nang may hawak ng pangalang pinili mo rito, makukuha mo ito na may idinagdag na numero. Maaari mo itong palitan sa Mga Setting.</p>
+        <p><strong>Gumagamit na ng BeanPool?</strong> Huwag gumawa ng pangalawang account. Pagkatapos ng <strong>Sumali</strong>, piliin ang <strong>Ginagamit ko ang BeanPool sa aking telepono</strong> upang mag-link mula sa app sa telepono, o <strong>Hawak ko ang aking 12 salita</strong>. Kung hindi pa sumali ang account na iyon sa pandaigdigang komunidad, iniaalok ng pahina ang parehong mga paraan para makapasok (ang iyong 12 salita, o isang sign-in nang isang beses), at sumasali ito bilang account na mayroon ka na. Kung sumali ka sa pandaigdigang komunidad dati gamit ang sign-in, piliin ang <strong>Sumali ako gamit ang sign-in dati</strong> (tingnan sa ibaba).</p>
+        <p>Kung isasara mo ang pahina sa kalagitnaan, buksan itong muli sa loob ng 10 minuto at magpapatuloy ito gamit ang parehong pangalan.</p>
+        <p><strong>Isang account bawat browser.</strong> Kung sumali ka sa dalawang tab nang sabay, sinasabi ng pangalawa ang <strong>May account na ang browser na ito</strong> at nag-aalok ng <strong>Bukas</strong> kasama ang pangalan ng account na iyon. Walang pumapalit dito. Kung nakalusot din ang pagsali ng pangalawang tab, itinatabi rin ang account na iyon sa browser na ito, at ipinapakita ng <strong>Ipakita</strong> (ang pangalan nito) <strong>12 salita</strong> ang mga salita nito: isulat ang mga ito kung nais mo itong panatilihin. Upang gamitin ito sa halip, mag-sign out sa Mga Setting (<strong>Alisin sa Device na Ito Lamang</strong>), pagkatapos ay ibalik ito gamit ang mga salitang iyon.</p>
+        <p><strong>Nauuna ang isang pagsali na naipadala na.</strong> Kung nagpadala ang browser na ito ng pagsali na maaaring nakalusot, nagtatanong ang pahina sa komunidad tungkol dito bago ang anupaman, kahit ang isang imbitasyon o pagbawi ng ibang account. Kung nakapasok ka na, magpapatuloy ka. Kung maaari pa itong lumusot, hinihiling sa iyo ng pahina na maghintay ng ilang minuto, pagkatapos ay <strong>Suriin muli</strong>. Nananatili ito kahit na huminto na ang komunidad sa pagtanggap ng mga bagong miyembro.</p>
+        <p>Kung may magkamali sa pahina pagkatapos maipadala ang iyong pagsali, sinasabi nito ito at nag-aalok ng <strong>I-reload ang pahina</strong>. Naitatabi ang iyong pagsali sa browser na ito, at sinusuri ng pag-reload kung nakapasok ka na.</p>
+        <p><strong>Maraming tao ang sumasali mula sa isang network:</strong> kapag maraming bagong account ang nagmumula sa isang koneksyon sa internet, ang pagsali ay humihingi ng kaunti pang gawain sa browser sa halip na tanggihan ang mga tao. Ang lahat sa parehong network ay magkakasamang binibilang, kaya sa isang kampus, opisina o meetup ay maaaring ibang tao ang sumasali, hindi ikaw. Lamang kapag lumampas sa isang napakalaking bilang ay sasabihin ng pahina na hindi muna sa ngayon, at kung gaano karaming minuto ang dapat hintayin. Kapag sinabi nito iyon tungkol sa mga account na may 12 salita, ang pagsali gamit ang sign-in ay patuloy pa ring gagana.</p>
+        <h2>Mga limitasyon ng bagong account</h2>
+        <p>Sa pandaigdigang komunidad ang isang bagong account ay may ilang pang-araw-araw na limitasyon para sa unang 3 araw nito, at hanggang sa manatiling nakapaskil ang 3 sa mga post nito: 3 post, 5 larawan, at 10 bagong tao na maaaring padalhan ng mensahe sa anumang 24 oras. Ang isang account na ginawa gamit ang 12 salita lamang ay may mas maliliit na limitasyon, para sa unang 7 araw nito at hanggang sa manatiling nakapaskil ang 3 sa mga post nito: 2 post, 4 na larawan at 3 bagong tao na maaaring padalhan ng mensahe. Ang pagdaragdag ng sign-in ay agad na naglilipat nito sa mga karaniwang limitasyon. Ang pagsagot sa isang taong sumulat sa iyo muna ay hindi kailanman nililimitahan. Tingnan ang &quot;Pag-ulat ng problema&quot; para sa dahilan kung bakit.</p>
+        <ul>
+            <li>Pagkatapos mong sumali, ang isang card na tinatawag na <strong>Bago ang iyong account</strong> ay nagpapakita kung ilan sa bawat isa ang natitira at kung kailan babalik ang higit pa. I-tap ang <strong>✕</strong> upang itabi ito. Nananatili ito sa <strong>Mga Setting</strong> hanggang sa matapos ang mga limitasyon.</li>
+            <li>Kung maabot mo ang isang limitasyon, sinasabi ng <strong>Bagong Post</strong> o ng chat kung alin at kailan ito luluwag, at ipinapakita ng <strong>Bagong Post</strong> ang parehong card.</li>
+            <li>Kung ipina-pause ng mga moderator ang iyong pag-post, sinasabi ito ng <strong>Bagong Post</strong> at ng chat, at ang isang card na tinatawag na <strong>Naka-pause ang pag-post</strong> ay nagsasabi kung hanggang kailan. Nananatili ito hanggang sa matapos ang pause.</li>
+            <li>Kung itago o alisin ng mga moderator ang isa sa iyong mga post, o i-pause ang iyong pag-post, habang sarado ang web app, ipinapakita ng web app ang alerto sa susunod na buksan mo ito, nang hanggang 60 araw. Bawat alerto ay nananatili hanggang sa i-tap mo ang <strong>Kumpirmahin</strong>, at pagkatapos ay hindi na ito babalik. Kung marami ang naghihintay, itinatabi ng <strong>Close all</strong> ang lahat ng ito. Kung ang iyong account ay nasa iyong telepono rin, maaaring magpakita ang web app ng alertong nakita mo na roon.</li>
+        </ul>
+        <p>Ang iyong sariling lokal na komunidad ay walang alinman sa mga limitasyong ito.</p>
+        <h2>Pagbawi sa iyong account gamit ang iyong sign-in</h2>
+        <p>Sa pandaigdigang komunidad, ang sign-in kung saan ka sumali ay nagbabalik ng iyong account sa isang browser: isa na nilinis ang na-save na data, o isang bago sa ibang computer. Makukuha mo ang parehong account, hindi kailanman ang pangalawa.</p>
+        <ul>
+            <li>I-tap ang <strong>May BeanPool ka na ba?</strong>, pagkatapos ay <strong>Gamitin ang aking sign-in</strong>. (Pagkatapos ng <strong>Sumali</strong>, ang <strong>Sumali ako gamit ang sign-in dati</strong> ay gumagawa ng parehong bagay.)</li>
+            <li>Ang isang browser na masyadong luma para humawak ng account sa BeanPool ay magsasabi nito rito sa halip na ialok ang mga ito, gaya ng ginagawa nito sa pwesto ng <strong>Sumali</strong>. Gumamit ng isang napapanahong Chrome, Firefox, Safari o Edge.</li>
+            <li>Itipa ang iyong pangalan dito. I-tap ang iyong account kapag lumabas ito.</li>
+            <li>Piliin ang sign-in kung saan ka sumali: <strong>Google</strong>, <strong>Apple</strong> o <strong>Facebook</strong>. Gaya ng noong sumali, dadalhin ka ng pahina sa sariling sign-in ng kumpanyang iyon at ibabalik ka rito.</li>
+            <li>Binubuksan ng pahina ang nakakandadong kopya ng iyong account sa browser, at sinusuri na ito talaga ang account na na-tap mo. Kung hindi, sinasabi nito ang <strong>That isn't</strong> (ang pangalan) at walang ise-save.</li>
+            <li>Nakapasok ka na, kasama ang iyong 12 salita sa Ingles kapag naitago ng kopya ang mga ito: ang isang account na sumali sa browser ay palaging mayroon ng mga ito. Kung hindi naitago ng kopya ang mga ito, walang kopya ang browser na ito, at sasabihin ito ng Mga Setting (tingnan ang &quot;Itago ang iyong 12 salita&quot; sa ibaba).</li>
+        </ul>
+        <p>Sinasabihan ang mga device ng iyong account na ibinabalik ito, kung sakaling hindi ikaw iyon.</p>
+        <p>Kung sumali ka gamit ang GitHub, hindi nito maibabalik ang iyong account: hindi na gumagamit ang BeanPool ng GitHub (tingnan ang &quot;Pagbawi sa iyong account&quot;). Gamitin ang iyong 12 salita sa Ingles sa halip.</p>
+        <p>Kung mag-sign in ka gamit ang isang account na hindi ang ginamit mo sa pagsali, sasabihin ito ng pahina at hahayaan kang pumili muli. Kung i-tap mo ang <strong>Sumali</strong> at mag-sign in gamit ang isang account na nakasali na, sinasabi ng pahina ang <strong>Narito ka na</strong> at nag-aalok ng <strong>Restore with</strong> (ang sign-in na iyon).</p>
+        <p>Nalalapat din dito ang <strong>Isang account bawat browser</strong>. Kung mayroon nang ibang account ang browser na ito, walang pumapalit dito: sinasabi ng pahina ang <strong>May account na ang browser na ito</strong> at nag-aalok na buksan ito. Upang dalhin ang sa iyo rito sa halip, mag-sign out muna sa account na iyon. Kung mayroon nang account mo ang browser na ito, sinasabi ng pahina na narito na ito.</p>
+        <h2>Pagdaragdag ng sign-in sa ibang pagkakataon</h2>
+        <p>Kung sumali ka sa pandaigdigang komunidad gamit ang 12 salita, ang mga ito ang iyong tanging paraan pabalik. Pagkatapos mong sumali, sinasabi ito ng isang card na tinatawag na <strong>Isang paraan pabalik</strong>, na may <strong>Tingnan ang aking 12 salita</strong> at <strong>Magdagdag ng sign-in</strong>. I-tap ang <strong>✕</strong> upang itabi ito: bumabalik ito nang isang beses pagkatapos na manatiling nakapaskil ang isa sa iyong mga post, at isang beses kapag natapos ang iyong unang linggo. Nananatili ito sa <strong>Mga Setting</strong> hanggang sa magdagdag ka ng sign-in.</p>
+        <ul>
+            <li>I-tap ang <strong>Magdagdag ng sign-in</strong>, pagkatapos ay <strong>Google</strong>, <strong>Apple</strong> o <strong>Facebook</strong>. Gaya ng noong sumali, dadalhin ka ng pahina sa sariling sign-in ng kumpanyang iyon at ibabalik ka rito.</li>
+            <li>Bubukas ang <strong>Mga Setting</strong> at sasabihin kung naidagdag ito. Mula noon ang sign-in na iyon ay nagbabalik din sa iyong account: nagtatabi ang komunidad ng isang nakakandadong kopya ng iyong account para dito, tulad ng kapag sumali ka gamit ang sign-in, at mabubuksan ng mga taong nagpapatakbo sa server nito ang kopyang iyon. Ang iyong mga limitasyon sa bagong account ay agad na magiging mga karaniwan.</li>
+            <li>Ang isang sign-in account na mayroon nang isa pang BeanPool account dito, o na kabilang sa isang account na inalis ng komunidad, ay hindi maaaring idagdag: sinasabi ito ng pahina, at walang magbabago.</li>
+        </ul>
+        <h2>Iba't ibang pangalan at lokasyon</h2>
+        <ul>
+            <li><strong>Pagsali gamit ang imbitasyon:</strong> sinasabi ng button ng unang hakbang ang <strong>Gumawa ng Identity at Sumali →</strong>. Kung may ibang may hawak na ng pangalang pinili mo rito, makukuha mo ito na may idinagdag na numero. Ipinapakita ng <strong>← Bumalik</strong> sa <strong>Larawan</strong> ang iyong pangalan lamang, na may <strong>Susunod →</strong>: palitan ito (hanggang 20 character) o panatilihin ito, sa parehong account. Kung mayroon nang ganoong bagong pangalan ang iba, sinasabi ito ng pahina at nagmumungkahi ng iba.</li>
+            <li><strong>Mga Tab:</strong> ang web app ay may <strong>Home</strong>, <strong>Merkado</strong>, <strong>Mapa</strong>, <strong>Komun</strong>, <strong>Usapan</strong>, <strong>Mga Tao</strong> at <strong>Talaan</strong>. Ang tinatawag ng app sa telepono na <strong>Usapan</strong> ay <strong>Usapan</strong> sa web, at may sariling tab ang <strong>Mga Tao</strong>.</li>
+            <li><strong>Mga Setting at ang iyong profile:</strong> ang maliliit na button sa kanang itaas: ang iyong profile, ang <strong>?</strong>, pagkatapos ay Mga Setting. Sa isang malapad na screen ang mga ito ay nasa ibaba ng menu sa kaliwa.</li>
+            <li><strong>Pag-post ng Alok o Kahilingan:</strong> gamitin ang <strong>Bagong Post</strong> sa pahina ng <strong>Mapa</strong>.</li>
+            <li><strong>Hitsura:</strong> tinatawag ang pagpipilian na <strong>Katulad ng device</strong> sa halip na &quot;Katulad ng telepono&quot;.</li>
+            <li><strong>Pag-block:</strong> sinasabi ng Mga Setting ang <strong>Pamahalaan ang mga Naka-block na Miyembro</strong>. Itinatabi ng iyong komunidad ang iyong mga block kasama ang iyong account, kaya bumabalik ang mga ito kapag nag-sign in ka sa anumang browser, at ang pag-sign out ay walang iniiwan tungkol sa mga ito sa computer. Makikita ng mga taong nagpapatakbo ng server ng iyong komunidad kung sino ang iyong na-block. Ang pag-block at pag-unblock ay nangangailangan ng koneksyon: kung wala nito, sinasabi ito ng web app at walang magbabago. Ang mga block na ginawa sa app sa telepono ay nananatili sa telepono at hindi lumalabas dito.</li>
+            <li><strong>Mga Chat:</strong> ang chat sa web ay may mga button na <strong>Iulat</strong> at <strong>I-block</strong> sa itaas.</li>
+            <li><strong>Iyong lugar:</strong> sa pandaigdigang komunidad ang Mga Setting ng web app ay mayroon ding <strong>Iyong lugar</strong>, at ang Merkado at Mapa nito ay nagsisimula mula rito. Tingnan ang &quot;Iyong lugar&quot;.</li>
+            <li><strong>Pandaigdigang komunidad:</strong> sa isang lokal na komunidad, may hanay ng <strong>Pandaigdigang komunidad</strong> ang Mga Setting sa ilalim ng <strong>BEANPOOL</strong>, kasama ang address nito at <strong>Ang pandaigdigang komunidad ay isa lamang sa marami. Ang sarili mong komunidad ay tumatakbo sa sarili nitong server at hindi ito kailanman kailangan.</strong> Binubuksan nito ang pandaigdigang komunidad na pinangalanan ng server ng iyong komunidad, sa isang bagong tab. Wala roon ang iyong account hanggang sa dalhin mo ito: sa tab na iyon, <strong>Sumali</strong>, pagkatapos ay <strong>Hawak ko ang aking 12 salita</strong>. Kung walang pinangalanan ang iyong komunidad, walang hanay.</li>
+        </ul>
+        <h2>Kung ano ang wala sa web app</h2>
+        <ul>
+            <li>Pagbawi sa iyong account gamit ang isang sign-in sa isang komunidad maliban sa pandaigdigan. Doon, ang iyong 12 salita sa Ingles ang nagbabalik nito, o ang pag-link mula sa app sa telepono kung ang iyong account ay nasa iyong telepono rin.</li>
+            <li>Ang lane ng <strong>Alamin</strong> ng Pulse.</li>
+            <li>Ang lock ng app sa telepono.</li>
+            <li>Pag-sign in sa Mga Setting ng iyong komunidad gamit ang sarili mong susi, para sa mga may-ari at admin. Binubuksan ng link na <strong>Manage</strong> ng web app ang Mga Setting, ngunit ang browser ay walang sariling pag-unlock. Sa computer, piliin ang <strong>Sign in with your phone</strong> sa Mga Setting at i-scan ang code gamit ang app sa telepono (<strong>Mga Setting</strong>, pagkatapos ay <strong>Pamahalaan ang komunidad na ito mula sa isang computer</strong>; sa mas lumang mga app: <strong>Sign in on a computer</strong>).</li>
+        </ul>
+        <h2>Paglalagay ng iyong web account sa telepono</h2>
+        <p>Kung sumali ka sa isang browser, dalhin ang parehong account sa app sa telepono. Huwag sumali muli sa telepono: gagawa iyon ng pangalawang account, at ang dalawang account ay hindi kailanman maaaring pagsamahin sa isa. Sinasabi ng <strong>Backup</strong>, sa tabi ng iyong 12 salita, at ng card ng <strong>Sign-in recovery</strong> sa Mga Setting kung paano:</p>
+        <ul>
+            <li>I-install ang BeanPool app at buksan ito.</li>
+            <li>I-tap ang <strong>Miyembro ka na ba? Ibalik ang account</strong>, pagkatapos ay <strong>Ibalik gamit ang 12 Salita</strong>.</li>
+            <li>Itipa ang iyong 12 salita sa Ingles, pagkatapos ay sa ilalim ng <strong>Aling komunidad?</strong> i-tap ang <strong>Pandaigdigang komunidad</strong>. Sa isang app na walang ganoong pagpipilian, itipa ang address ng pandaigdigang komunidad, global.beanpool.org. Para sa isa pang komunidad, itipa ang address ng komunidad na iyon: ipinapakita ito ng web app sa parehong pangungusap.</li>
+            <li>Kung sumali ka gamit ang sign-in, gumagana rin ang <strong>Recover with Social</strong>, gamit ang parehong sign-in na iyon. Tingnan ang &quot;Pagbawi sa iyong account&quot;.</li>
+        </ul>
+        <p>Sinasabi ng Screen 1 ng pagsali sa browser ang parehong bagay sa kabilang paraan: kung nasa BeanPool ka na, sa anumang telepono o computer, dalhin ang account na iyon sa halip na magsimula ng bago.</p>
+        <h2>Paggamit ng account sa telepono sa computer</h2>
+        <ul>
+            <li>Sa web app sa computer, piliin na mag-link gamit ang mobile app. Nagpapakita ito ng QR code.</li>
+            <li>Sa telepono, buksan ang <strong>Mga Setting</strong> at i-tap ang <strong>Mag-link ng device</strong> (sa mas lumang mga app: <strong>Use your account on another device</strong>).</li>
+            <li>Itapat ang camera ng telepono sa QR code, i-tap ang <strong>Kumpirmahin at I-link ang Device</strong> at ipasa ang pagsusuri sa lock screen ng iyong telepono.</li>
+            <li>Pagkatapos ay nagpapakita ang telepono ng <strong>apat na digit</strong>. Itipa ang mga ito sa computer at pindutin ang <strong>Kumpirmahin</strong>. Pupunta lamang ang iyong account sa computer pagkatapos niyon. Tatlong maling pagsubok at walang maipapadala: gumawa ng bagong code. Huwag kailanman basahin nang malakas ang mga digit o ipadala ang mga ito kaninuman.</li>
+            <li>Kung sinasabi ng telepono na masyadong luma ang app nito, i-update ang BeanPool app dito, pagkatapos ay mag-scan ng bagong code.</li>
+        </ul>
+        <h2>Pag-install nito</h2>
+        <p>Maaaring mag-alok ang web app ng <strong>I-install ang BeanPool</strong> upang magbukas ito mula sa iyong home screen tulad ng isang app. Kung hindi magawa iyon ng iyong browser, i-tap ang <strong>Paano?</strong> para sa mga hakbang.</p>
+        <h2>Itago ang iyong 12 salita</h2>
+        <p>Kung minsan ay naglilinis ang mga browser ng na-save na data, halimbawa ang Safari pagkatapos ng isang linggong walang pagbisita. Hanggang sa matingnan mo ang iyong 12 salita, nagpapakita ang Mga Setting ng web app ng babala na may <strong>Tingnan at I-save ang Recovery Phrase</strong>. Gawin ito, at isulat ang mga ito sa papel.</p>
+        <p>Ang isang browser na nagbalik ng iyong account gamit ang isang sign-in na ang kopya ay hindi nagtago ng iyong 12 salita ay walang hawak ng mga ito, kaya hindi ito nagpapakita ng ganoong babala. Doon, sinasabi ng <strong>Tingnan ang Parirala sa Pagbawi</strong> ang <strong>Hindi naka-save sa browser na ito</strong>, at nagbubukas ng pahina na nagsasabi kung ano ang nagbabalik sa iyong account sa halip: ang iyong 12 salita sa Ingles, kung mayroon kang nakasulat, o ang sign-in na ipinapakita ng Mga Setting bilang konektado. Kung wala ang alinman, ang app lamang sa telepono ang makakagawa nito, kung ang iyong account ay nasa iyong telepono rin. Sinasabi ng <strong>Alisin sa Device na Ito Lamang</strong> ang parehong bagay bago ka mag-sign out.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="home.html"><strong>Home</strong><span>Ano ang Home, aling card ang ipinapakita sa telepono at web app, paano magdagdag, maglipat o mag-alis ng mga ito, pagpili ng iyong hilig, at privacy kapag nag-sign out ka.</span></a></li>
+            <li><a href="the-bean.html"><strong>Gabay na ito</strong><span>Saan mahahanap ang gabay na ito, paano ito hahanapin, at paano ito nananatiling bago.</span></a></li>
+            <li><a href="your-12-words.html"><strong>Iyong 12 salita</strong><span>Ang 12 salita ang susi sa iyong account. Bakit mahalaga ang mga ito, saan mahahanap, paano panatilihing ligtas, at pagdaragdag ng sign-in bilang pangalawang paraan pabalik.</span></a></li>
+            <li><a href="joining.html"><strong>Pagsali sa BeanPool</strong><span>Dalawang paraan: isang komunidad, gamit ang imbitasyon ng miyembro, o ang pandaigdigang komunidad kapag bukas, gamit ang 12 lihim na salita o isang sign-in. Paghiling na sumali sa komunidad, at paano mag-imbita ng iba.</span></a></li>
+            <li><a href="../messages.html"><strong>Messages</strong><span>Start a chat, send photos, reply, react, edit, delete, mute, and what is private.</span></a></li>
+            <li><a href="../reporting.html"><strong>Reporting a problem</strong><span>Tell your community's moderators about a post, an event, a Pulse post, a project or an enterprise.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

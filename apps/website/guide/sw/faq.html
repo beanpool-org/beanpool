@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/sw by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="sw">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Maswali — BeanPool members' guide</title>
+    <meta name="description" content="Majibu mafupi kwa maswali ambayo wanachama huuliza mara nyingi.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#about">Kuhusu BeanPool</a></p>
+        <h1>Maswali</h1>
+        <p class="lede">Majibu mafupi kwa maswali ambayo wanachama huuliza mara nyingi.</p>
+        <h2>Nani anayeendesha jumuiya yangu?</h2>
+        <p>Jumuiya yako hujiendesha yenyewe. Seva yake hutunzwa na watu ambao jumuiya yako iliwachagua: wamiliki na wasimamizi wake. Biashara, machapisho na kura zako huwekwa kwenye seva hiyo. Mradi wa BeanPool huandika programu, na mtu yeyote anaweza kuitumia kuanzisha jumuiya.</p>
+        <h2>Je, kuna riba kwenye deni?</h2>
+        <p>Hapana. Kuwa chini ya sifuri hakugharimu chochote. Ni maharagwe unayoshikilia zaidi ya 200 pekee ndiyo yanayolipa ada ndogo ya mzunguko.</p>
+        <h2>Je, ninaweza kununua au kuuza maharagwe kwa pesa?</h2>
+        <p>Programu haina njia ya kununua au kuuza maharagwe kwa pesa. Maharagwe hupatikana kwa kusaidia watu.</p>
+        <h2>Kwa nini siwezi kutuma zawadi?</h2>
+        <p>Zawadi inahitaji mambo mawili. Lazima uwe umekamilisha biashara katika soko (maharagwe 1 au 2 ni madogo sana kuhesabiwa), na unaweza kutoa tu maharagwe uliyo nayo. Zawadi haiwezi kukupeleka chini ya sifuri kamwe.</p>
+        <h2>Kwa nini siwezi kutumia chini ya sifuri?</h2>
+        <p>Mambo mawili huamua jinsi unavyoweza kwenda chini ya sifuri. Uaminifu wako kutokana na kufanya biashara huweka kiwango cha juu zaidi unachoweza kufikia. Ofa zako zilizo amilifu huamua ni kiasi gani cha hilo unachoweza kutumia sasa hivi. Bila Ofa zilizo amilifu, huwezi kwenda chini ya sifuri kabisa. Watu wengi huanza kwa kuuza: chapisha Ofa, na mtu anapoikubali, unapata maharagwe na uaminifu wako wa kwanza.</p>
+        <h2>Beji yangu inasema Msimamizi. Kwa nini ninaweza kutumia kiasi kidogo sana?</h2>
+        <p>Beji yako huonyesha uaminifu wako. Unachoweza kutumia sasa hivi pia hutegemea una Ofa ngapi zilizo amilifu. Beji zenyewe hazifungui chochote.</p>
+        <h2>Je, ninaweza kubadilisha kura yangu?</h2>
+        <p>Kwenye Uamuzi au Kura ya maoni, ndiyo, hadi upigaji kura ufungwe. Kwenye kura ya walinzi, kura ya kikundi chenyewe, au kura ya mratibu mkuu mpya, hapana.</p>
+        <h2>Je, kuna mtu yeyote anayeweza kuona jinsi nilivyopiga kura?</h2>
+        <p>Kwenye Uamuzi, programu huonyesha tu jumla, na kura yako mwenyewe kwako. Kura yako huhifadhiwa kwenye seva ya jumuiya yako. Wamiliki na wasimamizi wanaoendesha seva wanaweza kuchukua nakala ya faili zake, na wanaweza kuitazama huko. Kura ya maoni haitaji majina kwa njia hiyo hiyo, isipokuwa mtu aliyeianzisha ameifanya kuwa <strong>kura ya wazi</strong>: wakati huo wanachama wanaweza kuona nani aliyechagua nini. Kura ya maoni husema ni ipi kabla ya wewe kupiga kura.</p>
+        <h2>Je, wanachama wengine wanaweza kuona salio langu?</h2>
+        <p>Hapana. Wanachama wengine hawaoni salio lako kamwe. Kwenye simu, katika jumuiya yenye Maharagwe, wanaona beji yako ya uaminifu na idadi ya biashara ulizofanya. Biashara huonyesha watu wake wawili pekee. Ikiwa jumuiya itapiga kura ya kukuondoa, wanachama wanaoweza kupiga kura humo huona salio lako na deni lolote, katika kura hiyo pekee. Wasimamizi wanaweza kuona mengi zaidi katika hali fulani, na utazamaji huo huwekwa kwenye kumbukumbu: tazama &quot;Wanachoweza kuona wasimamizi&quot;.</p>
+        <h2>Nimepoteza simu yangu. Je, akaunti yangu imepotea?</h2>
+        <p>Hapana, ikiwa ulihifadhi maneno yako 12 ya kurejesha akaunti (maneno ya Kiingereza). Sakinisha programu na urejeshe akaunti yako kwa maneno hayo 12. Ikiwa uliunganisha akaunti ya kuingia katika Ulinzi wa Akaunti, unaweza pia kutumia hiyo. Weka maneno yako 12 mahali salama na pa faragha. Mtu yeyote aliye nayo anaweza kutumia akaunti yako.</p>
+        <p>Umepoteza maneno yako 12 pia? Msimamizi wa jumuiya yako anaweza kuhamisha akaunti yako kwenye simu mpya, ana kwa ana: tazama &quot;Umepoteza simu yako na maneno yako 12&quot; katika &quot;Kurejesha akaunti yako&quot;.</p>
+        <h2>Je, ninahitaji akaunti ya Google, Apple au Facebook?</h2>
+        <p>Hapana. Jumuiya ya eneo hukuruhusu kuingia kwa mwaliko kutoka kwa mmoja wa wanachama wake. Jumuiya ya kimataifa humruhusu mtu yeyote kuingia kwa maneno 12 ya siri (ambayo ni maneno ya Kiingereza), au kwa kuingia ikiwa ungependelea. Ukijiunga kwa maneno 12 pekee, ndiyo njia yako pekee ya kurudi kwenye akaunti yako, na akaunti mpya iliyotengenezwa kwa njia hiyo huanza polepole zaidi kwa wiki yake ya kwanza. Unaweza kuongeza njia ya kuingia baadaye, kutoka kwenye simu au kivinjari chochote ambapo uko ndani ya akaunti yako, na si wakati akaunti yako imesimamishwa. Tazama &quot;Kujiunga na BeanPool&quot; na &quot;Maneno yako 12&quot;.</p>
+        <h2>Kwa nini hakuna Maharagwe kwenye jumuiya ya kimataifa?</h2>
+        <p>Maharagwe ni ahadi kati ya watu wanaoweza kupatikana tena. Mtu yeyote anaweza kujiunga na jumuiya ya kimataifa kwa maneno 12 (maneno ya Kiingereza), kwa hivyo hakuna mtu huko anayeweza kumdhamini mwingine bado. Maharagwe, mikataba, biashara na Maamuzi huishi katika jumuiya za eneo. Jumuiya ya kimataifa huyaonyesha kutoka kwa jumuiya ya mfano, Example Valley, ikiwa na alama ya <strong>🏘️ Jamii ya eneo</strong>. Tazama &quot;Maharagwe na jumuiya ya kimataifa&quot;.</p>
+        <h2>Ninaanzishaje jumuiya?</h2>
+        <p>Gusa <strong>Anzisha jumuiya</strong> kwenye programu. Jumuiya huendeshwa kwenye seva yake ndogo: kompyuta ya ziada nyumbani, au ya kukodi kwa dola chache kwa mwezi. Programu ni ya bure, na jumuiya haihitaji beanpool.org. Tazama &quot;Maharagwe na jumuiya ya kimataifa&quot;.</p>
+        <h2>Je, ninaweza kuwa mwanachama wa zaidi ya jumuiya moja?</h2>
+        <p>Ndiyo. Kwenye simu unaweza kuhifadhi jumuiya kadhaa na kubadilisha kati yake, ukitumia utambulisho uleule katika kila moja. Katika programu ya wavuti, kila jumuiya hufunguka kwenye anwani yake yenyewe. Kila jumuiya ina maharagwe, sheria na wanachama wake yenyewe.</p>
+        <h2>Je, ninaweza kujiunga na jumuiya nyingine ambayo mtu yeyote anaweza kujiunga nayo?</h2>
+        <p>Ndiyo, ukiwa na akaunti uliyo nayo. Baadhi ya jumuiya huruhusu mtu yeyote kujiunga, kama vile jumuiya ya kimataifa inavyofanya, na watu wao wenyewe huziendesha kwenye anwani zao wenyewe. Simu yako inapofikia jumuiya ambayo bado wewe si mwanachama wake, husema <strong>Bado wewe si mwanachama hapa</strong> na hutoa <strong>Jiunge na ‹jina lake› kwa akaunti hii</strong>. Unajiunga nayo kwa njia ileile kama jumuiya ya kimataifa: kwa maneno 12 (maneno ya Kiingereza) yaliyo tayari kwenye simu yako, au kwa kuingia ikiwa inakuomba kufanya hivyo. Iko chini ya jina la jumuiya hiyo yenyewe, na anwani yake inaonyeshwa, ili uweze kuona unajiunga wapi. Ufunguo wako na maneno yako 12 yanabaki yaleyale, na hakuna kinachobadilika katika jumuiya zako zingine. Kiungo hufungua tu skrini hiyo, na hakuna anayejiunga hadi utakapogusa. Ili kuionyesha, simu yako huiuliza jumuiya hiyo jina lake na kama inaruhusu watu kujiunga, kwa hivyo yeyote anayeendesha anwani hiyo anaweza kuona kwamba mtu amefungua kiungo (hakuna chochote kuhusu akaunti yako kinachotumwa).</p>
+        <h2>Ninasafiri. Nifanye nini?</h2>
+        <p>Washa Hali ya Likizo katika Mipangilio. Ofa zako hufichwa na hakuna mtu anayeweza kukutumia maombi mapya. Maliza au ghairi biashara zozote zilizo wazi kwanza, kwa sababu Hali ya Likizo haiwezi kuanza wakati biashara ikiwa wazi.</p>
+        <h2>Ninaondokaje?</h2>
+        <p>Unaweza kufuta akaunti yako katika Mipangilio. Kwanza maliza au ghairi biashara zozote zilizo wazi. Unapofuta akaunti yako, maharagwe yoyote unayoshikilia huenda kwenye Mali za Pamoja za jumuiya yako, na ikiwa uko chini ya sifuri, Mali za Pamoja huilipa. Hili haliwezi kutenduliwa, hata kwa maneno yako 12 (maneno ya Kiingereza). Hufuta akaunti yako katika jumuiya unayotumia pekee. Ikiwa jumuiya nyingine kwenye simu bado inayo akaunti yako, simu huweka ufunguo wako kwa ajili yake; ufunguo huondoka tu unapofuta kwenye jumuiya yako ya mwisho.</p>
+        <h2>Kitu hakiko sawa au kingeweza kuwa bora zaidi. Nimwambie nani?</h2>
+        <p>Kwa matatizo yanayohusu mtu au biashara, zungumza na wasimamizi wa jumuiya yako. Ili kuripoti tangazo, tukio au chapisho la Mwenendo, gusa bendera yake ya <strong>🚩 Ripoti</strong> (kwenye simu, kitufe cha tangazo kinasema <strong>Ripoti Tangazo</strong>). Katika programu ya wavuti, gumzo na mtu mmoja lina kitufe cha <strong>Ripoti</strong> pia. Wasimamizi wa jumuiya yako huarifiwa. Chagua <strong>Usalama wa mtoto</strong> ikiwa mtoto anaweza kuwa hatarini. Tazama &quot;Kuripoti tatizo&quot;. Kwa mawazo kuhusu programu yenyewe, tembelea beanpool.org.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="your-12-words.html"><strong>Maneno yako 12</strong><span>Maneno 12 ndio ufunguo wa akaunti yako. Umuhimu wake, mahali pa kuyapata, jinsi ya kuyaweka salama, na kuongeza njia ya kuingia kwa usalama.</span></a></li>
+            <li><a href="../recovery.html"><strong>Getting your account back</strong><span>Restore your account on a new phone, and protect it with a sign-in account.</span></a></li>
+            <li><a href="communities.html"><strong>Zaidi ya jumuiya moja</strong><span>Kuwa wa jumuiya kadhaa kwa akaunti moja, kubadili kati yao, kufuata jumuiya yako kwenye anwani mpya, na kuona kile jumuiya ya kimataifa inakuonyesha.</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>Maharagwe na jumuiya ya kimataifa</strong><span>Lengo la jumuiya ya kimataifa, jumuiya moja kati ya nyingi, na unachokiona hapo: alama ya 🏘️ Jamii ya eneo, jumuiya ya mfano ya Example Valley, kwa nini Maharagwe husubiri hapo, na jinsi ya kuanza au kupata jumuiya ya ndani.</span></a></li>
+            <li><a href="../holiday-mode.html"><strong>Going away</strong><span>Holiday Mode hides your Offers and pauses new requests while you are away.</span></a></li>
+            <li><a href="../leaving-or-deleting.html"><strong>Leaving or deleting your account</strong><span>Sign out of this phone, or delete your account for good, and what happens to your beans.</span></a></li>
+            <li><a href="getting-help.html"><strong>Kupata usaidizi</strong><span>Mahali pa kuangalia unapokwama, na nani wa kumwuliza.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

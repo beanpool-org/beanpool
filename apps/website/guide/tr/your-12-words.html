@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/tr by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>12 kelimeniz — BeanPool members' guide</title>
+    <meta name="description" content="12 kelime hesabınızın anahtarıdır. Neden önemli oldukları, nerede bulunacakları, nasıl güvende tutulacakları ve ikinci bir kurtarma yolu olarak giriş hesabı ekleme.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#getting-started">Başlarken</a></p>
+        <h1>12 kelimeniz</h1>
+        <p class="lede">12 kelime hesabınızın anahtarıdır. Neden önemli oldukları, nerede bulunacakları, nasıl güvende tutulacakları ve ikinci bir kurtarma yolu olarak giriş hesabı ekleme.</p>
+        <h2>Neden önemlidirler</h2>
+        <p>Hesabınız başkası tarafından tutulan bir parola değildir. Telefonunuzda tutulan bir anahtardır. <strong>12 kelimeniz</strong>, kelimeler olarak yazılmış bu anahtardır (bunlar İngilizce kelimelerdir).</p>
+        <ul>
+            <li>12 kelimeyle, hesabınızı yeni bir telefonda geri alabilirsiniz: adınız, fasulyeleriniz ve güveniniz.</li>
+            <li>Onlar olmadan, kaybolan veya kırılan bir telefon, kaybolan bir hesap anlamına gelebilir.</li>
+            <li>Anahtar, onu tutan telefonda kalır. Telefonunuzun yedeklerine kopyalanmaz; bu nedenle yeni bir telefon, hatta eskisinin yedeğinden geri yüklenen bir iPhone bile 12 kelimenize veya bağlantılı bir oturum açma hesabına ihtiyaç duyar (&quot;Hesabınızı geri alma&quot; bölümüne bakın).</li>
+            <li>12 kelimenize sahip olan herkes hesabınızı kullanabilir. Onları asla paylaşmayın, BeanPool uygulaması veya kendi topluluğunuzun BeanPool web uygulaması dışında hiçbir yere yazmayın ve asla bir mesajla göndermeyin. BeanPool'dan veya topluluğunuzdan hiç kimse bunları sizden asla istemez.</li>
+        </ul>
+        <h2>Onları bir yere yazın</h2>
+        <ul>
+            <li>12 kelimeyi kağıda sırayla yazın ve yazılışlarını kontrol edin (kelimeler İngilizce kelimelerdir).</li>
+            <li>Kağıdı telefonunuzdan uzakta, güvenli bir yerde saklayın.</li>
+            <li>Kelimelerin bir fotoğrafını veya ekran görüntüsünü başkasının bulması kolaydır. Kağıt daha güvenlidir.</li>
+            <li>Telefon uygulaması 12 kelimenizi gösterirken veya siz onları yazarken o ekranın ekran görüntülerini ve ekran kayıtlarını engeller: telefon ekran görüntüsünü reddeder veya resim boş çıkar. Başka bir telefonla çekilen ekran fotoğrafını ise hiçbir şey engelleyemez.</li>
+            <li><strong>Kelimeleri Kopyala</strong> (katılırken ve web uygulamasında <strong>Tüm Kelimeleri Kopyala</strong>), kelimeleri bir dakikalığına telefonunuzun panosuna koyar. Pano onları hâlâ tutuyorsa, uygulama ardından onları temizler. Önce uygulamadan ayrılırsanız, geri döndüğünüzde onları temizler. O zamandan beri kopyaladığınız başka bir şeye dokunulmaz. Bir klavyenin pano geçmişi veya diğer cihazlarınızla paylaşılan bir pano, uygulamanın temizleyemeyeceği bir kopyayı saklayabilir.</li>
+            <li>Web uygulamasında o ekranda kalırsanız kopya bir dakika sonra temizlenir. Bir iPhone veya iPad'de, Safari veya Firefox'ta, tarayıcı uygulamanın bunu temizlemesine yalnızca dokunduğunuzda veya bir tuşa bastığınızda izin verir, bu nedenle bir dakikanın ardından ilk dokunuşunuzda veya tuşa basışınızda temizlenir. Önce o ekrandan ayrılırsanız veya başka bir uygulamaya ya da sekmeye geçerseniz, uygulama başka bir şey kopyalayıp kopyalamadığınızı anlayamaz, bu nedenle panonuza dokunmaz: kelimelerin üzerine başka bir şey kopyalayın.</li>
+            <li>Telefonunuzun ekran kilidi yoksa elinde tutan herkes 12 kelimenizi açabilir ve uygulama onların altında bunu söyler. Telefonunuzun ayarlarında belirlenen PIN, desen, parola, parmak izi veya yüz kilidi onları daha güvende tutar.</li>
+        </ul>
+        <h2>Kurtarma kitiniz</h2>
+        <p>Kurtarma kiti yazdırılabilir tek bir sayfadır: sırasıyla 12 kelimeniz (İngilizce kelimelerdir), topluluğunuzun adı ve adresi, onu oluşturduğunuz tarih ve bir telefonda ile bir web tarayıcısında hesaba tekrar giriş yapma adımları. Kimin hesabı olduğunu söylemez. İsteğe bağlıdır: o olmadan da devam edebilirsiniz.</p>
+        <ul>
+            <li><strong>Telefonda</strong>: 12 kelimenizin yanında (katılırken Yedek adımında ve Ayarlar'da), yazdırmak için <strong>Kurtarma kitinizi yazdırın</strong>'a veya bir PDF oluşturup nereye gideceğini seçmek için <strong>PDF olarak kaydet</strong>'e dokunun. Kaydetmeden önce uygulama şu uyarıda bulunur: &quot;Bu dosyayı bulut yedeklemelerinden ve sohbetlerden uzak tutun. Buna sahip olan herkes sizin adınıza giriş yapabilir.&quot; Telefon daha sonra PDF'nin kendi kopyasını siler.</li>
+            <li><strong>Web uygulamasında</strong>: 12 kelimenizin yanında (katıldığınızda ve Ayarlar'da <strong>Kurtarma İfadesini Görüntüle</strong> altında), <strong>Kurtarma setinizi yazdırın veya kaydedin</strong> seçeneğine tıklayın. Uygulama şu uyarıda bulunur: &quot;Bu sayfayı veya dosyayı bulut yedeklemelerinden ve sohbetlerden uzak tutun. Buna sahip olan herkes sizin adınıza giriş yapabilir.&quot; Tarayıcınızın yazdırma penceresi için <strong>Devam et</strong> seçeneğine tıklayın. Kağıt yerine PDF saklamak için orada <strong>PDF olarak kaydet</strong> seçeneğini belirleyin.</li>
+            <li>Sayfayı kelimeleri sakladığınız gibi saklayın: ona sahip olan herkes sizin adınıza giriş yapabilir.</li>
+        </ul>
+        <h2>Onları tekrar nerede görebilirsiniz</h2>
+        <p>Ekranın üst kısmındaki kaydırıcı düğmesiyle <strong>Ayarlar</strong>'ı açın. Ardından şunlardan birini yapın:</p>
+        <ul>
+            <li><strong>Hesap ve Kimlik</strong> altında, <strong>Kurtarma İfadesini Görüntüle</strong> seçeneğine dokunun. <strong>CONFIRM</strong> yazın, <strong>Kurtarma İfadesini Göster</strong>'e dokunun ve telefonunuzun kilit ekranı kontrolünü geçin.</li>
+            <li>Veya <strong>Hesap Koruması</strong>'na, ardından <strong>12 Kurtarma Kelimemi Göster</strong>'e dokunun ve telefonunuzun kilit ekranı kontrolünü geçin. İşiniz bittiğinde <strong>Gizle</strong>'ye dokunun.</li>
+        </ul>
+        <p>Her iki durumda da o ekrandan ayrıldığınızda veya uygulamadan 15 saniye ya da daha uzun süre ayrıldığınızda kelimeler gizlenir ve telefon bir sonraki sefer tekrar sorar. İki dakikadan uzun süren bir kilit ekranı kontrolü hiçbir şey göstermez: tekrar dokunun.</p>
+        <p>Web uygulamasında, <strong>Hesap ve Kimlik</strong> altındaki <strong>Kurtarma İfadesini Görüntüle</strong> onları doğrudan gösterir.</p>
+        <p>Bir oturum açma hesabıyla geri yüklenen bir telefon, 12 kelimenizi yalnızca o oturum açma hesabı, güncel bir uygulamada bu kelimelere sahip bir telefondan bağlanmışsa geri alır. Aksi takdirde telefonun bunlara dair bir kopyası olmaz: bir oturum açma hesabından yeniden oluşturulamazlar. <strong>Kurtarma İfadesini Görüntüle</strong> hâlâ oradadır ve <strong>Bu telefonda henüz bir kopya yok</strong> der. O telefonda bağlantılı bir oturum açma hesabı geri dönme yolunuzdur, bu nedenle <strong>Hesap Koruması</strong> altında bir tanesini bağlı tutun.</p>
+        <h2>12 kelimenizi bu telefona geri koyun</h2>
+        <p>Bu telefonda 12 kelimenizin bir kopyası yoksa ve bunları bir yere yazdıysanız ekleyebilirsiniz:</p>
+        <ul>
+            <li><strong>Ayarlar</strong>'ı açın. <strong>Hesap ve Kimlik</strong> altında <strong>Kurtarma İfadesini Görüntüle</strong>'ye dokunun. (Veya <strong>Hesap Koruması</strong>'nda <strong>12 Kurtarma Kelimemi Göster</strong>'e dokunun.) Kopyası olmayan bir telefonda ikisinden biri <strong>12 kelimenizi bu telefona ekleyin</strong> ekranını açar.</li>
+            <li>12 kelimeyi sırayla yazın veya <strong>Yapıştır</strong>'a dokunun (kelimeler İngilizce kelimelerdir). Büyük harfler ve fazladan boşluklar fark etmez. Kurtarma kelimeleri listesinde (İngilizce kelime listesi) olmayan bir kelime siz yazarken işaretlenir.</li>
+            <li><strong>Bu kelimeleri ekle</strong>'ye dokunun.</li>
+        </ul>
+        <p>Telefonunuz, kelimelerin hesabınıza ait olduğunu kontrol eder; bu, sahipler için yapılan <strong>12 kelimenizi kontrol edin</strong> ile aynı kontroldür. Hiçbir yere gönderilmezler. Farklı bir hesaba aitlerse hiçbir şey değişmez ve uygulama bunu belirtir. Eklendikten sonra <strong>Kurtarma İfadesini Görüntüle</strong>, bu telefondaki her toplulukta onları gösterir.</p>
+        <h2>Küresel topluluğa 12 kelimeyle katıldıysanız</h2>
+        <p>Google, Apple veya Facebook hesabı olmadan, yalnızca 12 gizli kelimeyle küresel topluluğa katılabilirsiniz (&quot;BeanPool'a katılma&quot; bölümüne bakın). Bu size yeni bir hesap oluşturduysa 12 kelimeniz tek geri dönüş yolunuzdur (bu kelimeler İngilizce kelimelerdir). Hesabınızın telefonunuz dışında hiçbir yerde kopyası tutulmaz ve onları kimse sıfırlayamaz: ne BeanPool ne de topluluk. Onları ve telefonunuzu kaybederseniz hesap temelli olarak gider. (Zaten sahip olduğunuz hesapla katıldıysanız, başka bir toplulukta bağladığınız bir giriş onu orada yine de geri getirir.)</p>
+        <p>Uygulama <strong>Yedek</strong> adımında bunu söyler. Katıldıktan sonra telefonda ve web uygulamasında <strong>Ana Sayfa</strong>'daki bir kart bunu tekrar söyler: <strong>Hesabınızın tek bir geri dönüş yolu var: 12 kelimeniz. Onlara hâlâ sahip olduğunuzu kontrol edin veya bir oturum açma yöntemi ekleyin.</strong> Hiçbir şey yapmanıza asla engel olmaz. Telefonda:</p>
+        <ul>
+            <li><strong>✕</strong> kartı kapatır. İlk gönderinizden sonra bir kez ve bir hafta sonra bir kez tekrar gelir, ardından yalnızca <strong>Ayarlar</strong>'da, <strong>Hesap Koruması</strong> altında kalır.</li>
+            <li><strong>12 kelimemi göster</strong>, onları tekrar görebileceğiniz <strong>Hesap Koruması</strong>'nı açar.</li>
+            <li><strong>Hesap Koruması</strong>'nda, <strong>12 kelimem hâlâ duruyor</strong> kartı temelli olarak kapatır. <strong>Oturum açma yöntemi ekle</strong> orada kalır.</li>
+        </ul>
+        <p>Web uygulamasında kart <strong>Tek bir geri dönüş yolu</strong> başlığını taşır ve <strong>12 kelimemi gör</strong> ile <strong>Oturum açma yöntemi ekle</strong> seçeneklerini içerir. <strong>✕</strong> onu kapatır: gönderilerinizden biri yayında kaldıktan sonra bir kez ve ilk haftanız bittiğinde bir kez tekrar gelir. <strong>Ana Sayfa</strong> kartında <strong>12 kelimemi gör</strong>'e dokunmak onları gösterir ve kart artık orada tekrar görünmez. Bir oturum açma yöntemi ekleyene kadar <strong>Ayarlar</strong>'ın en üstünde kalır.</p>
+        <p>12 kelimeyle oluşturulan bir hesap ilk haftasında bir girişle oluşturulan hesaba göre daha yavaş başlar. Sınırları ve nedenleri için &quot;Sorun bildirme&quot; bölümüne bakın.</p>
+        <h3>Daha sonra bir oturum açma yöntemi ekleme</h3>
+        <p>Yalnızca katıldığınız telefondan değil, hesabınızda olduğunuz herhangi bir telefondan veya tarayıcıdan daha sonra bir oturum açma yöntemi ekleyebilirsiniz. Hesabınızı 12 kelimenizle geri yüklediğiniz bir telefonda, uygulamada küresel topluluğu açın: topluluk hesabınızın yalnızca 12 kelimesi olduğunu söyler ve kart ile <strong>Oturum açma yöntemi ekle</strong> görünür (biraz zaman alabilir). Hesabınız askıya alınmışken veya topluluk hesabınızı kapatmışsa ekleyemezsiniz (uygulama bunu belirtir ve hiçbir şey değişmez). İkinci bir geri dönüş yolu haline gelir ve 12 kelimelik sınırları hemen kaldırır.</p>
+        <p>BeanPool'un anahtar kasası hesabınızın bir kopyasını zaten tutuyorsa bu kopya da bir geri dönüş yoludur. Uygulama bu durumda tek geri dönüş yolu kartını göstermez. 12 kelimelik sınırları kaldırdığı için <strong>Ayarlar</strong>'daki <strong>Hesap Koruması</strong> altında sessizce <strong>Oturum açma yöntemi ekle</strong> yine de sunulur.</p>
+        <ul>
+            <li><strong>Oturum açma yöntemi ekle</strong>'ye dokunun: kartta veya <strong>Ayarlar</strong>'da <strong>Hesap Koruması</strong> altında. <strong>Yedek</strong> adımında düğmede <strong>Geri dönmek için ikinci bir yol olarak giriş ekleyin</strong> yazar.</li>
+            <li><strong>Google ile devam et</strong>, <strong>Facebook ile devam et</strong> veya bir iPhone'da <strong>Apple ile devam et</strong>'e dokunun ve bir kez giriş yapın. Uygulama önce telefonunuzun kilidini isteyebilir.</li>
+            <li><strong>Giriş eklendi</strong> çalıştığını belirtir. Hesabınız artık olağan yeni hesap sınırlarına sahiptir ve bu giriş, onunla katılan birinde olduğu gibi telefonunuzu kaybetmeniz durumunda onu geri getirir. Bunun için saklanan kopyayı kimlerin açabileceğini öğrenmek için &quot;Hesabınızı geri alma&quot; bölümüne bakın.</li>
+        </ul>
+        <p>Hesabınızın kopyası o anda tutulamıyorsa oturum açma yöntemi yine de eklenir ve sınırlarınız yine de kalkar, ancak 12 kelimeniz geri dönüş yolunuz olarak kalır. Uygulama bunu belirtir. Küresel toplulukta zaten başka bir BeanPool hesabına sahip olan veya topluluğun kaldırdığı bir hesaba ait olan bir oturum açma hesabı eklenemez ve hiçbir şey değişmez.</p>
+        <p><strong>Hesap Koruması</strong>'nda daha aşağıda <strong>Oturum Açma Kurtarma Sağlayıcıları</strong> altındaki <strong>İle koru</strong> da bir oturum açma yöntemini geri dönüş yolu olarak bağlar, ancak 12 kelimelik sınırları ve kartı olduğu gibi bırakır. İkisi için de <strong>Oturum açma yöntemi ekle</strong>'yi kullanın.</p>
+        <h2>İkinci bir geri dönüş yolu: bir oturum açma hesabı</h2>
+        <p>Telefon uygulamasında bir Google veya Facebook hesabı da bağlayabilirsiniz (ve bir iPhone'da Apple). Telefonunuzu kaybederseniz o hesap, kendisi için kilitli bir kopya tutan topluluğunuzun sunucusu aracılığıyla yeni bir telefonda hesabınızı geri yükleyebilir. O sunucuyu işleten kişiler bu kopyayı açabilir. &quot;Hesabınızı geri alma&quot; bölümüne bakın.</p>
+        <p>12 kelimenize sahip bir telefondan bağladığınız bir oturum açma hesabı onları da tutar, bu nedenle onunla geri yüklemek onları geri verir. Uygulamanın daha eski bir sürümünde bağladığınız bir hesap ise hesabınızı onlar olmadan geri getirir: <strong>Hesap Koruması</strong> altında yanındaki <strong>Yeniden bağla</strong>'ya dokunun ve onları dahil etmek için telefonunuzun kilit ekranı kontrolünü geçin. Kağıdı da saklayın.</p>
+        <h2>Bir web tarayıcısında</h2>
+        <p>Küresel toplulukta bir tarayıcıda katıldığınız bir oturum açma yöntemi ikinci bir geri dönüş yolu olarak tutulur: Ayarlar <strong>Girişle kurtarma: bağlı</strong> gösterir. Temizlenmiş veya yeni bir tarayıcıda <strong>Zaten BeanPool hesabınız var mı?</strong> seçeneğine, ardından <strong>Giriş yöntemimi kullan</strong>'a dokunun; hesabınızı 12 kelimesiyle birlikte geri getirir (&quot;BeanPool'u web tarayıcısında kullanma&quot; bölümüne bakın). Bunun yerine orada 12 kelimeyle katılırsanız bir oturum açma yöntemi ekleyene kadar tek geri dönüş yolunuz onlardır: katıldıktan sonra ve Ayarlar'da <strong>Tek bir geri dönüş yolu</strong> adlı bir kart <strong>12 kelimemi gör</strong> ve <strong>Oturum açma yöntemi ekle</strong> ile bunu söyler. Diğer topluluklarda web uygulamasının oturum açma kurtarması yoktur ve 12 kelimeniz geri dönüş yoludur. Tarayıcılar kayıtlı verileri de temizleyebilir, bu nedenle web uygulamasına güvenmeden önce kelimeleri bir yere yazın (kelimeler İngilizce kelimelerdir).</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="../recovery.html"><strong>Getting your account back</strong><span>Restore your account on a new phone, and protect it with a sign-in account.</span></a></li>
+            <li><a href="joining.html"><strong>BeanPool'a katılma</strong><span>Giriş için iki yol: bir üyenin davetiyle yerel topluluğa katılmak veya açık olduğunda 12 gizli kelime ya da tek bir girişle küresel topluluğa katılmak. Katılım isteme ve başkalarını davet etme.</span></a></li>
+            <li><a href="communities.html"><strong>Birden fazla topluluk</strong><span>Tek bir hesapla birden fazla topluluğa üye olma, aralarında geçiş yapma, topluluğunuzu yeni bir adrese taşıma ve küresel topluluğun size neler gösterdiği.</span></a></li>
+            <li><a href="faq.html"><strong>Sorular</strong><span>Üyelerin en çok sorduğu sorulara kısa ve net yanıtlar.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

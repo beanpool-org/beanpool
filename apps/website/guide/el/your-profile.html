@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/el by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="el">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Το προφίλ σου — BeanPool members' guide</title>
+    <meta name="description" content="Το όνομά σας, φωτογραφία, λίγα λόγια για εσάς και ποιος μπορεί να δει τα στοιχεία επικοινωνίας σας.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#getting-started">Ξεκινώντας</a></p>
+        <h1>Το προφίλ σου</h1>
+        <p class="lede">Το όνομά σας, φωτογραφία, λίγα λόγια για εσάς και ποιος μπορεί να δει τα στοιχεία επικοινωνίας σας.</p>
+        <h2>Αλλαγή ονόματος, φωτογραφίας ή βιογραφικού</h2>
+        <ul>
+            <li>Ανοίξτε τις <strong>Ρυθμίσεις</strong> με το κουμπί ολισθητών στο επάνω μέρος της οθόνης.</li>
+            <li>Στην κάρτα σας στην κορυφή, πατήστε <strong>Επεξεργασία</strong> ή πατήστε τη φωτογραφία σας.</li>
+            <li>Αλλάξτε ό,τι θέλετε:</li>
+            <li><strong>Διακριτικό</strong> είναι το όνομα που βλέπουν οι άνθρωποι.</li>
+            <li><strong>Βιογραφικό</strong> είναι λίγα λόγια για εσάς, έως 200 χαρακτήρες.</li>
+            <li>Πατήστε τη φωτογραφία για να την αλλάξετε.</li>
+            <li>Πατήστε <strong>Αποθήκευση προφίλ</strong>.</li>
+        </ul>
+        <p>Στην εφαρμογή ιστού, πατήστε <strong>Επεξεργασία προφίλ</strong>, αλλάξτε τη φωτογραφία με την <strong>Κάμερα</strong> ή τη <strong>Συλλογή</strong> και πατήστε <strong>Αποθήκευση αλλαγών προφίλ</strong>.</p>
+        <p>Μπορείτε επίσης να πατήσετε <strong>Επανάληψη ρύθμισης</strong> στις Ρυθμίσεις. Σας καθοδηγεί ξανά στο όνομα και τη φωτογραφία σας, περίπου πού βρίσκεστε (στην παγκόσμια κοινότητα, στην εφαρμογή τηλεφώνου) και στη σύντομη περιήγηση για το πώς λειτουργεί το BeanPool. Σε ένα πρόγραμμα περιήγησης ιστού, ορίστε την περιοχή σας στις <strong>Ρυθμίσεις</strong>, στην ενότητα <strong>Η περιοχή σου</strong>.</p>
+        <h2>Πριν δημοσιεύσετε</h2>
+        <p>Σε μια κοινότητα με Φασόλια χρειάζεστε ένα όνομα και μια φωτογραφία πριν μπορέσετε να δημοσιεύσετε ή να αποδεχτείτε μια συναλλαγή. Όπου δεν υπάρχουν Φασόλια, όπως στην παγκόσμια κοινότητα, ένα όνομα είναι αρκετό. Αν λείπει κάτι, η εφαρμογή αναφέρει <strong>Ολοκληρώστε πρώτα το προφίλ σας</strong>. Πατήστε <strong>Ρύθμιση προφίλ</strong> για να το προσθέσετε.</p>
+        <h2>Στοιχεία επικοινωνίας</h2>
+        <p>Στην ενότητα <strong>Στοιχεία επικοινωνίας</strong> μπορείτε να προσθέσετε έναν αριθμό τηλεφώνου, ένα email ή έναν αριθμό WhatsApp, έως 200 χαρακτήρες. Δεν είναι υποχρεωτικό.</p>
+        <p>Μόλις προσθέσετε ένα, επιλέξτε <strong>Ποιος μπορεί να το δει αυτό;</strong>:</p>
+        <ul>
+            <li><strong>Κρυφό:</strong> κανείς.</li>
+            <li><strong>Συνεργάτες ανταλλαγής:</strong> μέλη με τα οποία έχετε μια συμφωνία. Μετράει από τη στιγμή που ένας από εσάς πατήσει <strong>🤝 Αποδοχή Προσφοράς</strong> ή <strong>✋ Προσφορά για εκπλήρωση</strong> στην ανάρτηση του άλλου, ακόμα κι αν η συμφωνία αργότερα ακυρωθεί ή απορριφθεί. Η αποστολή φασολιών από μόνη της δεν αποτελεί συμφωνία.</li>
+            <li><strong>Φίλοι:</strong> άτομα που έχετε προσθέσει ως φίλους.</li>
+            <li><strong>Κοινότητα:</strong> κάθε μέλος της κοινότητάς σας.</li>
+        </ul>
+        <p>Ένα μέλος που βρίσκεται σε αναστολή δεν βλέπει κανένα από αυτά όσο διαρκεί η αναστολή. Ούτε οποιοσδήποτε δεν έχει γίνει μέλος της κοινότητάς σας, ακόμα και κάποιος στον οποίο ένα μέλος έχει στείλει μήνυμα ή φασόλια.</p>
+        <p>Σήμερα η εφαρμογή ιστού μπορεί να εμφανίζει τα στοιχεία επικοινωνίας σας στις αναρτήσεις σας. Η εφαρμογή τηλεφώνου δεν εμφανίζει τα στοιχεία επικοινωνίας άλλων μελών ακόμα.</p>
+        <h2>Τι βλέπουν οι άλλοι</h2>
+        <p>Πατήστε τη στρογγυλή εικόνα επάνω δεξιά στην οθόνη για να δείτε το δικό σας προφίλ. Τα άλλα μέλη βλέπουν σχεδόν το ίδιο:</p>
+        <ul>
+            <li>το όνομά σας, πότε γίνατε μέλος και το βιογραφικό σας,</li>
+            <li>αξιολογήσεις με αστέρια και κριτικές από ανθρώπους με τους οποίους συναλλαχθήκατε (κανείς άλλος δεν μπορεί να δει ποιος έγραψε μια κριτική),</li>
+            <li>τις αναρτήσεις σας.</li>
+        </ul>
+        <p>Στο τηλέφωνο, σε μια κοινότητα με Φασόλια, βλέπουν επίσης το σήμα εμπιστοσύνης σας, πόσες συναλλαγές έχετε κάνει, με πόσα άτομα και το ποσοστό που ολοκληρώσατε (<strong>Ολοκλήρωση</strong>). Η εφαρμογή ιστού δεν εμφανίζει αυτά στο προφίλ άλλου μέλους. Η παγκόσμια κοινότητα δεν έχει Φασόλια, επομένως δεν εμφανίζει τίποτα από αυτά.</p>
+        <h2>Το στυλ εργασίας σας</h2>
+        <p>Στο προφίλ σας υπάρχει ένα σύντομο, προαιρετικό κουμπί για κουίζ, <strong>⚡ Κάνε το κουίζ 60δ</strong>. Περιγράφει πώς προτιμάτε να εργάζεστε με άλλους. Στο προφίλ κάποιου άλλου δείχνει πόσο καλά ταιριάζουν τα στυλ σας. Δεν αλλάζει τίποτα άλλο.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="../privacy.html"><strong>Your privacy</strong><span>What others can see about you, and the settings that control it.</span></a></li>
+            <li><a href="../trust-badges.html"><strong>Trust badges</strong><span>Newcomer, Resident, Steward and Elder. What they mean, and why they unlock nothing.</span></a></li>
+            <li><a href="joining.html"><strong>Συμμετοχή στο BeanPool</strong><span>Δύο τρόποι εισόδου: μια κοινότητα, με πρόσκληση από μέλος, ή η παγκόσμια κοινότητα όταν είναι ανοιχτή, με 12 μυστικές λέξεις ή ένα login. Αίτημα εισόδου σε κοινότητα και πώς να προσκαλέσετε άλλον.</span></a></li>
+            <li><a href="../people.html"><strong>People and friends</strong><span>Find members of your community, add friends, and vouch for someone.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

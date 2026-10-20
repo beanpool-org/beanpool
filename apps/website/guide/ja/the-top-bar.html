@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ja by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>トップバー — BeanPool members' guide</title>
+    <meta name="description" content="豆のアイコン、確認が必要な項目を示す小さなアイコン、右上のボタンについて説明します。">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#getting-started">はじめに</a></p>
+        <h1>トップバー</h1>
+        <p class="lede">豆のアイコン、確認が必要な項目を示す小さなアイコン、右上のボタンについて説明します。</p>
+        <h2>構成要素</h2>
+        <p>スマートフォンでは、画面上部のバーはすべてのタブで共通です。左から右へ順に以下のものが並びます。</p>
+        <ul>
+            <li><strong>豆のアイコン:</strong> あなたのコミュニティと本ガイド。</li>
+            <li><strong>「要対応」アイコン:</strong> あなたへの対応待ちの用件があるときのみ表示されます。</li>
+            <li><strong>？アイコン、招待アイコン、設定、プロフィール写真。</strong></li>
+        </ul>
+        <p>Webブラウザでは、トップバーはよりシンプルです。左側に接続状態とページ名が表示され、右側にプロフィール、<strong>？</strong>、設定が並びます。豆シート、「要対応」アイコン、招待アイコンはありません（<strong>招待</strong>は<strong>仲間</strong>の中にあります）。タブは画面下部、またはワイド画面では左側に並びます。</p>
+        <h2>豆のアイコン</h2>
+        <p>左上の豆をタップすると、<strong>BeanPool</strong>シートが開きます。以下の内容が表示されます。</p>
+        <ul>
+            <li><strong>あなたのコミュニティ:</strong> 最上部にコミュニティ名が表示され、現在接続可能かどうかが示されます。</li>
+            <li><strong>あなたのコミュニティ一覧:</strong> タップして切り替えたり、<strong>コミュニティを追加</strong>をタップしたりできます。<strong>グローバルコミュニティ</strong>は常にその1つとして表示され、2行目に参加できるかどうかが示されます。</li>
+            <li><strong>ガイドを検索</strong>、続いて<strong>ガイド</strong>（BeanPoolの仕組み、ルール、よくある質問）、<strong>アプリの使い方</strong>（本ガイドの各セクション）、および<strong>BeanPoolプロジェクト</strong>（<strong>更新情報</strong>付き）。</li>
+            <li><strong>beanpool.org:</strong> 公式ウェブサイトへのリンク（友達に送信できる<strong>共有</strong>ボタン付き）。</li>
+        </ul>
+        <p>豆の上にある小さなドット（丸）は現在の状態を示します。</p>
+        <ul>
+            <li><strong>緑色:</strong> 接続されており、あなたはここのメンバーです。</li>
+            <li><strong>黄褐色:</strong> ゲストとして閲覧しています。</li>
+            <li><strong>赤色:</strong> コミュニティのサーバーに現在接続できないか、このスマートフォンがまだコミュニティに接続されていません。</li>
+        </ul>
+        <p>1回チェックが遅延しただけでドットが赤くなることはありません。複数回連続して確認に失敗した場合にのみ赤くなります。</p>
+        <h2>「要対応」アイコン</h2>
+        <p>豆と右側のボタンの間に、あなたへの用件があるときだけ小さなアイコンが表示されます。それぞれが特定の種類の用件を表しています。タップすると該当の場所に直接移動できます。</p>
+        <ul>
+            <li><strong>握手:</strong> あなたの対応待ちの取引があります。誰かがリクエストの承認を待っているか、進行中の取引がまだ完了していません。1件の場合はその取引が開きます。複数ある場合は<strong>自分の取引</strong>が開きます。</li>
+            <li><strong>投票箱:</strong> まだ投票していない投票があります。タップすると<strong>コモンズ</strong>の<strong>決定</strong>が開きます。最初の投票がグループ内の投票や事業体の運営者投票である場合は、代わりにそのグループや事業体が開きます。まだ投票権がない投票（取引を完了することが条件になっているものなど）はここには含まれません。</li>
+            <li><strong>吹き出し:</strong> 個人からの未読メッセージがあります。1人からの場合はそのチャットが開きます。複数人からの場合は<strong>トーク</strong>の<strong>メッセージ</strong>が開き、未読のものだけが表示されます。</li>
+            <li><strong>人の集まり:</strong> 参加グループ、事業体チャット、イベントチャットの新着メッセージです。ミュートしたチャットはここには反映されません。該当のチャットが開くか、複数ある場合は<strong>トーク</strong>の<strong>グループ</strong>が開きます。</li>
+            <li><strong>盾:</strong> コミュニティの運営に携わっている人のみに表示されます。確認待ちの通報や、裁定が必要な滞った取引など、対応待ちの管理業務がある間表示されます。タップするとスマートフォンの画面ロック解除が求められ、該当の業務画面でコミュニティの設定が開きます。コミュニティの設定でサインインコードを使用している場合は、それも求められます。</li>
+        </ul>
+        <p>アイコンは右側から順に並びます。最も重要なアイコンが？アイコンのすぐ横に配置され、他のアイコンが出現・消滅してもその位置を維持します。</p>
+        <h3>数字と色</h3>
+        <ul>
+            <li>アイコン上の小さな数字は、その種類の用件が複数あることを意味します（例：メッセージを送ってきた人が3人）。9件を超えると<strong>9+</strong>と表示されます。</li>
+            <li>より緊急度が高い場合、アイコンは<strong>黄褐色</strong>に変わります（あなたの対応待ちの取引、管理業務、または2日以内に締め切られる投票）。赤色に変わるものはありません。</li>
+        </ul>
+        <h3>画面が小さい場合</h3>
+        <p>すべてのアイコンを表示するスペースがない場合、最後の枠に<strong>•••</strong>が表示されます。タップすると<strong>要対応</strong>の全一覧が文字で表示されます。項目をタップするとその場所へ移動できます。</p>
+        <h3>アイコンがないのは順調な証拠</h3>
+        <p>対応すべき用件がないときは、アイコンはまったく表示されません。見落としているものはありません。アイコンはアプリ内を移動したときや、アプリに戻ってきたときに更新されます。</p>
+        <h2>「参加」または「接続」</h2>
+        <p>アイコンの代わりにボタンが表示されることがあります。</p>
+        <ul>
+            <li><strong>参加</strong>（黄褐色）：ゲストとして閲覧しています。タップすると<strong>招待</strong>が開きます。ローカルコミュニティではそこで招待を使って参加します。グローバルコミュニティでは、<strong>12個の単語またはサインインで参加</strong>（サインインのみ受け付けるコミュニティでは<strong>サインインで参加</strong>）をタップします。</li>
+            <li><strong>接続</strong>（赤色）：このスマートフォンがコミュニティに接続されていません。タップして<strong>設定</strong>を開き、コミュニティを追加できます。</li>
+        </ul>
+        <p>これらが表示されている間は、招待アイコンは非表示になります。</p>
+        <h2>右側のボタン</h2>
+        <ul>
+            <li><strong>？アイコン</strong>（丸の中に疑問符）：現在表示している画面のヘルプです。その画面の目的を説明する短いシートが開き、<strong>ガイドのページを読む</strong>、<strong>ガイドを検索</strong>、<strong>もう一度ツアーを見る</strong>が利用できます。メンバーとゲストの両方に向けて、すべてのタブに配置されています。Webアプリでは画面上部の写真と設定の間に配置され、ワイド画面ではサイドバー下部の設定の横に配置されます。</li>
+            <li><strong>招待アイコン</strong>（人とプラスのマーク）：<strong>招待</strong>を開き、誰かを招待したり別のコミュニティに参加したりできます。「BeanPoolへの参加」を参照してください。</li>
+            <li><strong>設定</strong>（スライダーマーク）：<strong>設定</strong>を開きます。もう一度タップすると元の画面に戻ります。</li>
+            <li><strong>プロフィール写真:</strong> 他の人から見える自分のプロフィールを開きます。</li>
+        </ul>
+        <h2>アップデート通知</h2>
+        <p>トップバーの下に緑色のバーが表示されることがあります。</p>
+        <ul>
+            <li><strong>アップデートが利用可能です:</strong> アプリの新しいバージョンが公開されています。<strong>アップグレード</strong>をタップして入手するか、×マークをタップして通知を閉じます。</li>
+            <li><strong>アプリのバージョンが古いため、このコミュニティに対応していません:</strong> アプリが正常に機能するためにアップデートが必要です。この通知は閉じることができません。<strong>アップグレード</strong>をタップしてください。</li>
+        </ul>
+        <h2>各タブ</h2>
+        <p>トップバーの下には各タブが並びます。<strong>ホーム</strong>、<strong>マーケット</strong>、<strong>地図</strong>、<strong>トーク</strong>、<strong>コモンズ</strong>、<strong>台帳</strong>です。各タブの名前はアイコンの上に表示されます。スマートフォンでは、豆を使用しないローカルコミュニティには<strong>コモンズ</strong>と<strong>台帳</strong>は表示されません。グローバルコミュニティでは、ローカルコミュニティのサンプルとともに両方が表示されます。「豆とグローバルコミュニティ」を参照してください。</p>
+        <p>縦に長いページでは、現在開いているタブをもう一度タップすると最上部にジャンプして戻ります。これは<strong>地図</strong>を除くすべてのタブで機能します。</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="home.html"><strong>ホーム</strong><span>ホームの概要、スマートフォンやWebアプリで表示されるカード、追加・移動・削除方法、興味の設定、サインアウト時のプライバシーについて説明します。</span></a></li>
+            <li><a href="the-bean.html"><strong>本ガイド</strong><span>本ガイドの確認場所、検索方法、最新の状態に保たれる仕組みについて説明します。</span></a></li>
+            <li><a href="communities.html"><strong>複数のコミュニティ</strong><span>1つのアカウントで複数のコミュニティに参加し、切り替えたり、コミュニティの移転先に追従したり、グローバルコミュニティの表示内容を確認する方法を説明します。</span></a></li>
+            <li><a href="../my-deals.html"><strong>My Deals</strong><span>One place for every trade you are in, every post you have up, and your past trades.</span></a></li>
+            <li><a href="../decisions.html"><strong>Voting on a Decision</strong><span>Find open Decisions, vote, change your vote, and see results.</span></a></li>
+            <li><a href="../messages.html"><strong>Messages</strong><span>Start a chat, send photos, reply, react, edit, delete, mute, and what is private.</span></a></li>
+            <li><a href="../notifications.html"><strong>Notifications</strong><span>Choose which alerts reach your phone, and when events remind you.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

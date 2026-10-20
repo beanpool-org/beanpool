@@ -9,11 +9,13 @@
  *
  *  1. The main server M. Rhea has: a listing up, with two photos and a pin, that Cy reports and the pricing guide takes
  *     its picture from; a listing Bo bought (a done deal); a listing she took down herself; a listing whose deal an admin
- *     ruled on; an event with a photo, a pin, a place name and a note for the people going, Bo going; a poll Bo voted in.
+ *     ruled on; an event with a photo, a pin, a place name and a note for the people going, Bo going; a poll Bo voted in;
+ *     a lendable Offer with a photo, a pin, terms and a replacement value in her words.
  *     Every one names words found nowhere else. Before she deletes, each route shows them (so the checks below can fail).
  *  2. The standby S copies M: it holds the words and the photos too.
  *  3. Rhea deletes her account (POST /api/member/purge). On M: every post of hers but the poll, whatever its status, keeps
- *     its row and id and loses its title, description, photos (rows, objects, a tombstone per slot) and place; the event's
+ *     its row and id and loses its title, description, photos (rows, objects, a tombstone per slot) and place, and the
+ *     lendable Offer its terms, replacement value and longest loan; the event's
  *     chat takes the neutral name, and Bo, going, still reads it until the 30-day scrub; the poll is closed and keeps its
  *     question and votes; the deals and ledger rows still name the posts. Search finds none of her words, the index is sound (the cancel and
  *     the wipe write each post twice in one millisecond: #878) and holds none of her words in its bytes. No route, read by
@@ -48,13 +50,14 @@ const WORDS = {
     downTitle: 'Tavirush bicycle', downText: 'Pellucine frame, needs a chain',
     ruledTitle: 'Wexmoorian jam', ruledText: 'Oxbalm plums, six jars',
     eventTitle: 'Oskaloo picnic', eventText: 'Fennimore lawn games', eventPlace: 'Glimmerhook Hall', eventNote: 'Doorcode Xanthrip',
+    lentTitle: 'Drumbellow ladder', lentText: 'Sprocklin rungs, folds flat', lentTerms: 'Collect from Vardengrove Lane, ring 0400 111 222', lentValue: '$120 Ombrequill',
 };
 /** The pins, each to four places (a listing's pin, about 11 metres): a JSON body carries them as written. */
-const PINS = { up: [-28.6432, 153.6198], sold: [-28.6543, 153.6287], down: [-28.6654, 153.6376], ruled: [-28.6765, 153.6465], event: [-28.6876, 153.6554] };
+const PINS = { up: [-28.6432, 153.6198], sold: [-28.6543, 153.6287], down: [-28.6654, 153.6376], ruled: [-28.6765, 153.6465], event: [-28.6876, 153.6554], lent: [-28.6987, 153.6643] };
 /** The poll's question stays after she deletes: a closed poll is the community's record. */
 const POLL_QUESTION = 'Quibblefen question: which day suits the market?';
 const CALLSIGN = 'Rheanwyn';
-const TITLE_WORDS = ['Quorvex', 'Brindlewick', 'Zelkovan', 'Marmalith', 'Tavirush', 'Pellucine', 'Wexmoorian', 'Oxbalm', 'Oskaloo', 'Fennimore', 'Glimmerhook', 'Xanthrip'];
+const TITLE_WORDS = ['Quorvex', 'Brindlewick', 'Zelkovan', 'Marmalith', 'Tavirush', 'Pellucine', 'Wexmoorian', 'Oxbalm', 'Oskaloo', 'Fennimore', 'Glimmerhook', 'Xanthrip', 'Drumbellow', 'Sprocklin', 'Vardengrove', 'Ombrequill'];
 const DELETED_POST_TITLE = 'Deleted post';
 
 // ── The node processes' commands ───────────────────────────────────────────────────────────
@@ -341,10 +344,15 @@ async function main(): Promise<void> {
             pollOptions: [{ id: 'sat', text: 'Saturday' }, { id: 'sun', text: 'Sunday' }], durationDays: 7,
         })).post;
         built('Bo votes in it', await S_(bo, `/api/marketplace/posts/${poll.id}/vote`, { optionId: 'sat' }));
+        const lent = built('Rhea lists a thing to lend', await S_(rhea, '/api/marketplace/posts', {
+            type: 'offer', category: 'tools', title: WORDS.lentTitle, description: WORDS.lentText, credits: 0, priceType: 'fixed', authorPublicKey: rhea.pk,
+            lat: PINS.lent[0], lng: PINS.lent[1], photos: [TINY_PNG],
+            lendable: true, lendMaxDays: 7, lendTerms: WORDS.lentTerms, replacementValue: WORDS.lentValue,
+        })).post;
         built('Cy reports the listing that is up', await S_(cy, '/api/reports', { reporterPubkey: cy.pk, targetPubkey: rhea.pk, targetPostId: up.id, reason: 'Testing the report view' }));
         built('the admin adds a pricing guide item', await A('/api/pricing-guide/admin/item', { category: 'food', emoji: '🏮', name: 'Lantern', priceBeans: 3 }));
         built('the pricing guide runs', await A('/api/pricing-guide/admin/aggregate'));
-        const wiped = [up.id, sold.id, down.id, ruled.id, event.id];
+        const wiped = [up.id, sold.id, down.id, ruled.id, event.id, lent.id];
         const guide0 = await api(m, 'GET', '/api/pricing-guide', { as: cy });
         require_(guide0.text.includes(`/api/marketplace/posts/${up.id}/photos/0`), 'M: the pricing guide takes its picture from Rhea\'s listing');
         await main.send('guest-view');
@@ -388,7 +396,8 @@ async function main(): Promise<void> {
         const showed = (route: string, what: string) => shownBefore.some((r) => r.route === route && r.leaked.includes(what));
         require_(showed('a guest: the board', 'Quorvex') && showed('Bo: a phone\'s full sync', 'Tavirush') && showed('Bo: a phone\'s full sync', 'pin down')
             && showed('Bo: chats', 'Oskaloo') && showed('Bo: the activity feed', 'Zelkovan') && showed('Cy: the pricing guide', `photo of ${up.id.slice(0, 8)}`)
-            && showed('admin: reports', 'Quorvex') && showed('the replication export', 'Xanthrip'),
+            && showed('admin: reports', 'Quorvex') && showed('the replication export', 'Xanthrip')
+            && showed('Bo: a phone\'s full sync', 'Vardengrove') && showed('a guest: the board', 'Ombrequill') && showed('the replication export', 'Ombrequill'),
             `before she deletes, the routes show her posts: ${shownBefore.length} of ${before.length} reads (${shownBefore.map((r) => `${r.route}: ${r.leaked.join('/')}`).join('; ')}; `
             + `none from ${before.filter((r) => r.leaked.length === 0).map((r) => `${r.route} ${r.status}`).join(', ')})`);
         // A photo is fetched by the URL a member's read hands out: where photos are keyed (privacy defaults: a local community
@@ -437,12 +446,15 @@ async function main(): Promise<void> {
             'none has a pin, a place name or a note for the people going');
         assert(rowsOf(m3).every((p: any) => p.photos === 0 && p.objects === 0),
             `none has a photo, in the database or the image store, nor a photo's small copy (${JSON.stringify(rowsOf(m3).map((p: any) => [p.photos, p.objects]))})`);
-        assert(rowsOf(m3).map((p: any) => p.photoTombstones).join() === '2,1,1,1,1',
+        assert(rowsOf(m3).map((p: any) => p.photoTombstones).join() === '2,1,1,1,1,1',
             `a tombstone for each photo slot, so a standby deletes them too (${rowsOf(m3).map((p: any) => p.photoTombstones).join()})`);
         const statuses = rowsOf(m3).map((p: any) => p.row.status);
-        assert(statuses[0] === 'cancelled' && statuses[2] === 'cancelled' && statuses[4] === 'cancelled'
+        assert(statuses[0] === 'cancelled' && statuses[2] === 'cancelled' && statuses[4] === 'cancelled' && statuses[5] === 'cancelled'
             && JSON.stringify([statuses[1], statuses[3]]) === JSON.stringify([m1[1].row.status, m1[3].row.status]) && statuses.every((st: string) => st === 'cancelled' || st === 'completed'),
-            `the one that was up and the event are cancelled, the two whose deals are done keep their status (${statuses.join(', ')})`);
+            `the two that were up and the event are cancelled, the two whose deals are done keep their status (${statuses.join(', ')})`);
+        const lentRow = m3[5].row;
+        assert(lentRow.lend_terms === null && lentRow.replacement_value === null && lentRow.lend_max_days === null,
+            `the lendable Offer keeps none of its terms, its replacement value or its longest loan (${JSON.stringify([lentRow.lend_terms, lentRow.replacement_value, lentRow.lend_max_days])})`);
         assert(m3[4].rsvps === 1 && m3[4].rsvpTombstones === 0 && m3[4].chat === DELETED_POST_TITLE,
             `the event: Bo's reply stays until the 30-day scrub, and its chat is called "${DELETED_POST_TITLE}" (${m3[4].rsvps}; ${m3[4].rsvpTombstones}; ${m3[4].chat})`);
         const chat = await api(m, 'GET', `/api/marketplace/posts/${event.id}/chat`, { as: bo });

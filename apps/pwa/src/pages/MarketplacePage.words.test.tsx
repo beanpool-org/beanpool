@@ -237,6 +237,50 @@ describe('the Market in the pseudo-locale', () => {
         allThroughT(10);
     });
 
+    it('a lendable Offer: asked for, never taken in one step (Free and priced), and the borrower waiting for a yes', async () => {
+        const lent = { ...offer, id: 'offer-lend', priceType: 'fixed', credits: 0, lendable: true, audienceScope: 'public', targetGroupId: undefined, targetGroupName: undefined };
+        const priced = { ...lent, id: 'offer-lend-fee', credits: 8 };
+        stubNode([lent, priced]);
+        const accept = vi.spyOn(api, 'acceptMarketplacePost').mockResolvedValue({} as any);
+        const ask = vi.spyOn(api, 'requestMarketplacePost').mockResolvedValue({} as any);
+        vi.spyOn(api, 'createConversationApi').mockResolvedValue({ conversation: { id: 'c-1' } } as any);
+        await showIn('xx');
+        let view = render(<MarketplacePage identity={identity} isMember={true} openPostId="offer-lend" onPostOpened={() => {}} />);
+        await screen.findByRole('heading', { name: /Bicycle Repair/ });
+        await settle();
+        expect(screen.queryByText(xx('🤝 Accept Offer'))).toBeNull();
+        fireEvent.click(screen.getByText(xx('📦 Ask to borrow')));
+        expect(await screen.findByText(xx('Ask to borrow this?'))).toBeInTheDocument();
+        expect(screen.getByText(xx('Free to borrow. Nothing is held: the lender says yes first.'))).toBeInTheDocument();
+        allThroughT(10);
+        fireEvent.click(screen.getByText(xx('Confirm')));
+        await waitFor(() => expect(ask).toHaveBeenCalledWith('offer-lend', ME, undefined));
+        expect(accept).not.toHaveBeenCalled();
+        view.unmount();
+
+        view = render(<MarketplacePage identity={identity} isMember={true} openPostId="offer-lend-fee" onPostOpened={() => {}} />);
+        await screen.findByRole('heading', { name: /Bicycle Repair/ });
+        await settle();
+        fireEvent.click(screen.getByText(xx('📦 Ask to borrow')));
+        await screen.findByText(xx('Ask to borrow this?'));
+        expect(document.body.textContent).toContain(xx('Nothing is held until the lender says yes. Then {total} B go into a Trust Wallet, and once it is back the lender receives {net} B (net of 1.5% transaction fee {owned} to fund the Commons Pool).').split('{total}')[0]);
+        allThroughT(10);
+        fireEvent.click(screen.getByText(xx('Confirm')));
+        await waitFor(() => expect(ask).toHaveBeenCalledWith('offer-lend-fee', ME, undefined));
+        expect(accept).not.toHaveBeenCalled();
+        view.unmount();
+
+        // Asked: the borrower's request waits for the lender's yes, and can be withdrawn.
+        render(<MarketplacePage identity={identity} isMember={true} openPostId="offer-lend" onPostOpened={() => {}}
+            transactions={[tx({ id: 'tx-ask', postId: 'offer-lend', credits: 0, status: 'requested' })]} />);
+        await screen.findByRole('heading', { name: /Bicycle Repair/ });
+        expect(await screen.findByText(xx('Asked to borrow'))).toBeInTheDocument();
+        expect(screen.getByText(xx('Nothing is held until the lender says yes.'))).toBeInTheDocument();
+        expect(screen.getByText(xx('Withdraw request'))).toBeInTheDocument();
+        expect(screen.queryByText(xx('📦 Ask to borrow'))).toBeNull();
+        allThroughT(10);
+    });
+
     it('my own offer: pause, edit (the type, the categories, the price units, the photos) and delete', async () => {
         const mine = { ...offer, id: 'mine-1', authorPublicKey: ME, authorCallsign: 'Mia', audienceScope: 'public', targetGroupId: undefined, targetGroupName: undefined };
         stubNode([mine]);

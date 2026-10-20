@@ -276,6 +276,39 @@ describe("a listing's page in the pseudo-locale: every word on it came through t
         expect(bypassing()).toEqual([]);
     });
 
+    it('a lendable Offer is asked for, never taken in one step (Free and priced); then the borrower waits for the yes', async () => {
+        const LENT = { ...OFFER, id: 'p-lent', credits: 0, lendable: 1, audience_scope: 'public', target_group_id: null, cash_also_needed: 0 };
+        await open(LENT);
+        expect(host.textContent).not.toContain(pseudoLocalise('🤝 Accept Offer'));
+        await press('📦 Ask to borrow');
+        expect(host.textContent).toContain(pseudoLocalise('Ask to borrow this?'));
+        expect(host.textContent).toContain(pseudoLocalise('Free to borrow. Nothing is held: the lender says yes first.'));
+        expect(bypassing(), 'the ask').toEqual([]);
+        await press('Confirm');
+        expect(net.calls).toContain('db.requestMarketplacePost');
+        expect(net.calls).not.toContain('db.acceptMarketplacePost');
+
+        act(() => root.unmount());
+        root = createRoot(host);
+        net.calls.length = 0;
+        await open({ ...LENT, id: 'p-lent-fee', credits: 8 });
+        await press('📦 Ask to borrow');
+        expect(host.textContent).toContain(pseudoLocalise('Nothing is held until the lender says yes. Then the fee goes into a temporary Trust Wallet, and once it is back the lender receives it net of 1.5% transaction fee {owned} to fund the Commons Pool.').split('{owned}')[0]);
+        expect(bypassing(), 'the priced ask').toEqual([]);
+        await press('Confirm');
+        expect(net.calls).toContain('db.requestMarketplacePost');
+        expect(net.calls).not.toContain('db.acceptMarketplacePost');
+
+        act(() => root.unmount());
+        root = createRoot(host);
+        const ASKED = [{ id: 'tx-ask', post_id: 'p-lent', status: 'requested', buyer_pubkey: ME.publicKey, seller_pubkey: KOFI.pubkey, seller_callsign: KOFI.callsign, credits: 0, hours: 3 }];
+        await open(LENT, 'xx', { all: (sql) => (sql.includes("status='requested'") ? ASKED : []) });
+        expect(host.textContent).toContain(pseudoLocalise('Asked to borrow'));
+        expect(host.textContent).toContain(pseudoLocalise('Nothing is held until the lender says yes.'));
+        expect(host.textContent).not.toContain(pseudoLocalise('Deal Established'));
+        expect(bypassing(), 'the ask waiting').toEqual([]);
+    });
+
     it("the member's own Need: its requests to approve or deny, the decline note, and its edit form", async () => {
         await open(NEED, 'xx', { all: (sql) => (sql.includes("status='requested'") ? REQUESTS : []) });
         expect(host.textContent).toContain('Mia');

@@ -1774,16 +1774,20 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         marginTop: '0.75rem',
                     }}>
                         {(() => {
-                            const myRequest = requests.find(r => r.sellerPublicKey === identity?.publicKey);
+                            // A lendable Offer is asked for, never taken in one step: the lender says yes first (the node refuses a
+                            // one-step accept).
+                            const isLoan = selectedPost.type === 'offer' && !!selectedPost.lendable;
+                            // The one asking: on a loan the borrower (the buyer), on a Need the helper (the seller).
+                            const myRequest = requests.find(r => (isLoan ? r.buyerPublicKey : r.sellerPublicKey) === identity?.publicKey);
                             if (myRequest) {
                                 return (
                                     <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl p-4 shadow-sm text-center">
                                         <span className="text-4xl block mb-2">⏳</span>
                                         <p className="font-bold text-amber-800 dark:text-amber-500 mb-1">
-                                            {t('Offer Pending Approval')}
+                                            {isLoan ? t('Asked to borrow') : t('Offer Pending Approval')}
                                         </p>
                                         <p className="text-xs text-nature-600 dark:text-nature-400 mb-4">
-                                            {t('The author is reviewing your offer to fulfill this need.')}
+                                            {isLoan ? t('Nothing is held until the lender says yes.') : t('The author is reviewing your offer to fulfill this need.')}
                                         </p>
                                         <button
                                             onClick={async () => {
@@ -1802,7 +1806,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             disabled={accepting}
                                             className="w-full py-2.5 rounded-lg border border-red-200 text-red-600 dark:text-red-300 font-bold hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors text-sm"
                                         >
-                                            {accepting ? t('Canceling...') : t('Cancel Offer')}
+                                            {accepting ? t('Canceling...') : isLoan ? t('Withdraw request') : t('Cancel Offer')}
                                         </button>
                                     </div>
                                 );
@@ -1817,7 +1821,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             return showAcceptConfirm ? (
                             <div className="bg-oat-50 dark:bg-nature-950 border border-nature-200 dark:border-nature-800 rounded-xl p-4 shadow-inner mt-2">
                                 <p className="font-bold text-nature-900 dark:text-white mb-2 text-center text-sm">
-                                    {selectedPost.type === 'offer' ? t('Accept this Offer?') : t('Offer to Fulfill this Need?')}
+                                    {isLoan ? t('Ask to borrow this?') : selectedPost.type === 'offer' ? t('Accept this Offer?') : t('Offer to Fulfill this Need?')}
                                 </p>
 
                                 {selectedPost.priceType !== 'fixed' && (
@@ -1844,11 +1848,22 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         if (selectedPost.priceType !== 'fixed' && !acceptHoursRead.ok && isAmbiguousAmount(acceptHoursRead.refusal)) return amountRefusalWords(acceptHoursRead.refusal);
                                         const hrs = acceptHoursValue || 0;
                                         const tot = selectedPost.priceType !== 'fixed' ? selectedPost.credits * hrs : selectedPost.credits;
-                                        if (tot === 0) return t('This is a free listing (0 B). No credits transferred.');
+                                        if (tot === 0) return isLoan ? t('Free to borrow. Nothing is held: the lender says yes first.') : t('This is a free listing (0 B). No credits transferred.');
 
                                         const duration = selectedPost.priceType !== 'fixed' ? estimateLength(selectedPost.priceType, hrs) : null;
                                         const owned = <span className="text-emerald-600 dark:text-emerald-400 font-bold">{t('(100% community owned)')}</span>;
 
+                                        if (isLoan) {
+                                            const net = Math.round(tot * 0.985 * 100) / 100;
+                                            return (
+                                                <span>
+                                                    <Sentence
+                                                        text={t('Nothing is held until the lender says yes. Then {total} B go into a Trust Wallet, and once it is back the lender receives {net} B (net of 1.5% transaction fee {owned} to fund the Commons Pool).', { total: tot, net: formatNumber(net, 2) })}
+                                                        parts={{ owned }}
+                                                    />
+                                                </span>
+                                            );
+                                        }
                                         if (selectedPost.type === 'offer') {
                                             const net = Math.round(tot * 0.985 * 100) / 100;
                                             return (
@@ -1909,7 +1924,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                     }
                                                     handleMessageAuthor();
                                                 } else {
-                                                    if (selectedPost.type === 'offer') {
+                                                    if (selectedPost.type === 'offer' && !isLoan) {
                                                         await acceptMarketplacePost(selectedPost.id, identity.publicKey, estimatedHours);
                                                     } else {
                                                         await requestMarketplacePost(selectedPost.id, identity.publicKey, estimatedHours);
@@ -2112,7 +2127,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         : selectedPost.type === 'offer' ? 'bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on' : 'bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on'
                                 }`}
                             >
-                                 {accepting ? t('Processing...') : (selectedPost.type === 'offer' ? t('🤝 Accept Offer') : t('✋ Offer to Fulfill'))}
+                                 {accepting ? t('Processing...') : (isLoan ? t('📦 Ask to borrow') : selectedPost.type === 'offer' ? t('🤝 Accept Offer') : t('✋ Offer to Fulfill'))}
                             </button>
                         );
                         })()}

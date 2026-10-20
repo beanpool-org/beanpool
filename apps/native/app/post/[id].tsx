@@ -80,24 +80,8 @@ function requestQuantityWords(unit: DealQuantityUnit | null, isLoan: boolean, n:
     return '';
 }
 
-/** The commitment sentence for an Offer: in the price's own unit, and "for {n} days" or "for {n} weeks" for a loan. */
-function committedOfferWords(unit: DealQuantityUnit | null, isLoan: boolean, hours: number, credits: number): string {
-    if (isLoan) {
-        if (unit === 'week') {
-            return tn(
-                hours,
-                'You have committed {credits} credits (for {n} week) to a Trust Wallet for this offer.',
-                'You have committed {credits} credits (for {n} weeks) to a Trust Wallet for this offer.',
-                { credits }
-            );
-        }
-        return tn(
-            hours,
-            'You have committed {credits} credits (for {n} day) to a Trust Wallet for this offer.',
-            'You have committed {credits} credits (for {n} days) to a Trust Wallet for this offer.',
-            { credits }
-        );
-    }
+/** The commitment sentence for an Offer, in the price's own unit. Never a loan's: nothing is held while a loan is asked for. */
+function committedOfferWords(unit: DealQuantityUnit | null, hours: number, credits: number): string {
     if (unit === 'day') {
         return tn(
             hours,
@@ -841,6 +825,8 @@ export default function PostDetailModal() {
         : (isOwnPost ? post.accepted_by_avatar : post.author_avatar);
 
     const isOffer = post.type === 'offer';
+    // A lendable Offer is asked for, never taken in one step: the lender says yes first (the node refuses a one-step accept).
+    const isLoan = isOffer && Boolean(post.lendable);
     const emoji = categoryEmoji(post.category);
     const cardAuthor = post.author_callsign || post.author_pubkey?.slice(0, 6) || t('Unknown');
     const priceLabel = isOffer ? t('ASKING PRICE') : t('WILLING TO PAY');
@@ -1534,11 +1520,13 @@ export default function PostDetailModal() {
                     <View style={styles.otherPostActions}>
                         {myRequest ? (
                             <View style={styles.confirmBox}>
-                                <Text style={[styles.confirmBoxTitle, { color: colors.brand.primary }]}>{t('Deal Established')}</Text>
+                                <Text style={[styles.confirmBoxTitle, { color: colors.brand.primary }]}>{isLoan ? t('Asked to borrow') : t('Deal Established')}</Text>
                                 <Text style={{ color: theme === 'dark' ? colors.text.secondary : palette.gray600, fontSize: 13, textAlign: 'center', marginBottom: 12 }}>
-                                    {isOffer ? (
+                                    {isLoan ? (
+                                        t('Nothing is held until the lender says yes.')
+                                    ) : isOffer ? (
                                         myRequest.hours
-                                            ? committedOfferWords(dealQuantityUnit(post.price_type, post.lendable), Boolean(post.lendable), myRequest.hours, myRequest.credits)
+                                            ? committedOfferWords(dealQuantityUnit(post.price_type), myRequest.hours, myRequest.credits)
                                             : t('You have committed {credits} credits to a Trust Wallet for this offer.', { credits: myRequest.credits })
                                     ) : (
                                         <Sentence
@@ -1555,7 +1543,7 @@ export default function PostDetailModal() {
                             </View>
                         ) : showAcceptConfirm ? (
                             <View style={styles.confirmBox}>
-                                <Text style={styles.confirmBoxTitle}>{isOffer ? t('Accept this Offer?') : t('Offer to Fulfill?')}</Text>
+                                <Text style={styles.confirmBoxTitle}>{isLoan ? t('Ask to borrow this?') : isOffer ? t('Accept this Offer?') : t('Offer to Fulfill?')}</Text>
                                 
                                 <View style={{ backgroundColor: colors.feedback.warning.bg, padding: 12, borderRadius: 8, borderColor: colors.feedback.warning.border, borderWidth: 1, marginBottom: 16 }}>
                                     <Text style={{ color: theme === 'dark' ? colors.feedback.warning.fg : palette.orange700, fontSize: 12, fontWeight: 'bold', marginBottom: 4 }}>{t('🔒 Trust Wallet Protocol')}</Text>
@@ -1563,6 +1551,10 @@ export default function PostDetailModal() {
                                         <Sentence
                                             text={!isOffer
                                                 ? t('This transaction is protected and held in trust. The payer has already committed the credits. Upon completion, you will receive the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.')
+                                                : isLoan
+                                                    ? (post.credits
+                                                        ? t('Nothing is held until the lender says yes. Then the fee goes into a temporary Trust Wallet, and once it is back the lender receives it net of 1.5% transaction fee {owned} to fund the Commons Pool.')
+                                                        : t('Free to borrow. Nothing is held: the lender says yes first.'))
                                                 : post.price_type === 'fixed'
                                                     ? t('By proceeding, you commit {credits} credits to a temporary Trust Wallet. Upon completion, the provider receives the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.', { credits: post.credits })
                                                     : t('By proceeding, you commit your authorized credits to a temporary Trust Wallet. Upon completion, the provider receives the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.')}
@@ -1590,13 +1582,15 @@ export default function PostDetailModal() {
                                         setAccepting(true);
                                         try {
                                             const estimatedHrs = hoursRead?.ok ? hoursRead.value : undefined;
-                                            if (isOffer) {
+                                            if (isOffer && !isLoan) {
                                                 await acceptMarketplacePost(post.id, identity.publicKey, estimatedHrs);
                                             } else {
                                                 await requestMarketplacePost(post.id, identity.publicKey, estimatedHrs);
-                                                // Optimistically add to local state
+                                                // Optimistically add to local state: on a loan the one asking is the buyer, on a Need the seller.
                                                 setRequests(prev => [...prev, {
-                                                    id: Crypto.randomUUID(), post_id: post.id, buyer_pubkey: post.author_pubkey, seller_pubkey: identity.publicKey,
+                                                    id: Crypto.randomUUID(), post_id: post.id,
+                                                    buyer_pubkey: isLoan ? identity.publicKey : post.author_pubkey,
+                                                    seller_pubkey: isLoan ? post.author_pubkey : identity.publicKey,
                                                     credits: post.price_type === 'fixed' ? post.credits : post.credits * (estimatedHrs ?? 0),
                                                     hours: post.price_type === 'fixed' ? null : estimatedHrs, status: 'requested'
                                                 }]);
@@ -1657,7 +1651,7 @@ export default function PostDetailModal() {
                                 }
                             }}>
                                 <Text style={styles.acceptBtnText}>
-                                    {accepting ? t('Processing...') : (post.status === 'pending' ? t('⏳ Pending Confirmation') : (isOffer ? t('🤝 Accept Offer') : t('✋ Offer to Fulfill')))}
+                                    {accepting ? t('Processing...') : (post.status === 'pending' ? t('⏳ Pending Confirmation') : (isLoan ? t('📦 Ask to borrow') : isOffer ? t('🤝 Accept Offer') : t('✋ Offer to Fulfill')))}
                                 </Text>
                             </Pressable>
                         )}

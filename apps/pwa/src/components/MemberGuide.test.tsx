@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -8,12 +8,16 @@ const api = vi.hoisted(() => ({
     getPulseFeed: vi.fn(),
 }));
 vi.mock('../lib/api', () => api);
+// Portuguese's titles file as its language chunk delivers it (lib/language.ts); filled below, as a drafting round would.
+const ptTitles = vi.hoisted(() => ({ sections: {}, pages: {} } as Record<string, any>));
+vi.mock('@beanpool/guide/content/pt/manifest.json', () => ({ default: ptTitles }));
 
 import { MemberGuide } from './MemberGuide';
 import { BeanPoolSettingsGroup } from '../pages/SettingsPage';
 import { getBundledGuide, resetGuideSessionForTests } from '../lib/guide';
+import { showLanguage } from '../lib/language';
 import {
-    validateGuide, manualSections, sectionPages, relatedPages, findGuidePage, FEEDBACK_LIVE, GUIDE_SLUGS,
+    validateGuide, manualSections, sectionPages, relatedPages, findGuidePage, FEEDBACK_LIVE, GUIDE_SLUGS, guideSourceHash, pseudoLocalise,
     type Guide, type GuidePage, type GuideSection,
 } from '@beanpool/core';
 
@@ -164,6 +168,83 @@ describe('MemberGuide (Settings → BeanPool → Help & how it works)', () => {
         expect(link.closest('a')).toHaveAttribute('href', 'https://www.youtube.com/watch?v=CCCCCCCCCCC');
         expect(document.querySelector('a[href*="evil.example"]')).toBeNull();
         expect(document.querySelector('a[href*="AAAAAAAAAAA"]')).toBeNull();
+    });
+});
+
+// The guide's titles in the member's language (slice S5a). The sample section and pages come from the published copy.
+describe("MemberGuide in the member's language: the guide's titles, the English body said once", () => {
+    const { section, page, related } = SAMPLE;
+    const entry = (english: string, text: string) => ({ text, sourceHash: guideSourceHash(english) });
+    beforeEach(() => {
+        for (const k of Object.keys(ptTitles)) delete ptTitles[k];
+        Object.assign(ptTitles, {
+            sections: { [section.id]: { title: entry(section.title, 'Secção traduzida'), summary: entry(section.summary, 'O resumo da secção.') } },
+            pages: {
+                [page.slug]: { title: entry(page.title, 'Página traduzida'), summary: entry(page.summary, 'O resumo da página.') },
+                // Drafted from English the page no longer says: the English shows.
+                [related.slug]: { title: entry(`${related.title} (an older title)`, 'Título antigo') },
+            },
+        });
+    });
+    afterEach(async () => { await act(async () => { await showLanguage('en'); }); });
+
+    it('the front page, a section and a page show the translations, the English where there are none or they are stale', async () => {
+        await act(async () => { await showLanguage('pt'); });
+        render(<MemberGuide onBack={() => {}} feedbackLive={false} />);
+        expect(screen.getByText('Secção traduzida')).toBeInTheDocument();
+        expect(screen.getByText('O resumo da secção.')).toBeInTheDocument();
+        for (const s of manualSections(getBundledGuide()).filter(x => x.id !== section.id)) expect(screen.getByText(s.title)).toBeInTheDocument();
+        fireEvent.click(screen.getByText('Secção traduzida'));
+        expect(screen.getByRole('heading', { level: 1, name: 'Secção traduzida' })).toBeInTheDocument();
+        fireEvent.click(screen.getByText('Página traduzida'));
+        expect(screen.getByRole('heading', { level: 1, name: 'Página traduzida' })).toBeInTheDocument();
+        expect(screen.getByText('O resumo da página.')).toBeInTheDocument();
+        // One line says the body is English (in Portuguese once the words round drafts it), and the body is marked English.
+        expect(screen.getAllByTestId('guide-english-note')).toHaveLength(1);
+        const body = document.querySelector('article [lang="en"]');
+        expect(body).not.toBeNull();
+        expect(body!.textContent!.length).toBeGreaterThan(0);
+        // The stale Related page reads its English title, and its page says nothing about English.
+        expect(screen.queryByText('Título antigo')).toBeNull();
+        fireEvent.click(screen.getByText(related.title));
+        expect(screen.getByRole('heading', { level: 1, name: related.title })).toBeInTheDocument();
+        expect(screen.queryByTestId('guide-english-note')).toBeNull();
+        expect(document.querySelector('article [lang="en"]')).toBeNull();
+    });
+
+    it('the search finds a page by its translated title and by its English one, and shows the translation', async () => {
+        await act(async () => { await showLanguage('pt'); });
+        render(<MemberGuide onBack={() => {}} feedbackLive={false} />);
+        // The search field's own words are Portuguese here.
+        fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'traduzida' } });
+        expect(screen.getByText('Página traduzida')).toBeInTheDocument();
+        fireEvent.change(screen.getByRole('searchbox'), { target: { value: page.title } });
+        expect(screen.getAllByText('Página traduzida').length).toBeGreaterThan(0);
+    });
+
+    it('a language switch is live: the open page goes from English to Portuguese and back', async () => {
+        render(<MemberGuide onBack={() => {}} feedbackLive={false} initialPage={page.slug} />);
+        expect(screen.getByRole('heading', { level: 1, name: page.title })).toBeInTheDocument();
+        expect(screen.queryByTestId('guide-english-note')).toBeNull();
+        await act(async () => { await showLanguage('pt'); });
+        expect(screen.getByRole('heading', { level: 1, name: 'Página traduzida' })).toBeInTheDocument();
+        expect(screen.getByTestId('guide-english-note')).toBeInTheDocument();
+        await act(async () => { await showLanguage('en'); });
+        expect(screen.getByRole('heading', { level: 1, name: page.title })).toBeInTheDocument();
+        expect(screen.queryByTestId('guide-english-note')).toBeNull();
+    });
+
+    it('in the pseudo-locale every guide title and summary is pseudo-localised, and the English line too', async () => {
+        await act(async () => { await showLanguage('xx'); });
+        render(<MemberGuide onBack={() => {}} feedbackLive={false} initialPage={page.slug} />);
+        expect(screen.getByRole('heading', { level: 1, name: pseudoLocalise(page.title) })).toBeInTheDocument();
+        expect(screen.getByText(pseudoLocalise(page.summary))).toBeInTheDocument();
+        expect(screen.getByTestId('guide-english-note')).toHaveTextContent(pseudoLocalise('This page is in English for now.'));
+        fireEvent.click(screen.getByRole('button', { name: pseudoLocalise('← Back') }));
+        for (const s of manualSections(getBundledGuide())) {
+            expect(screen.getByText(pseudoLocalise(s.title))).toBeInTheDocument();
+            expect(screen.getByText(pseudoLocalise(s.summary))).toBeInTheDocument();
+        }
     });
 });
 

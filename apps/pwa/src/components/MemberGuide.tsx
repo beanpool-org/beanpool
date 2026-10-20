@@ -5,14 +5,16 @@
  * Text is rendered as plain React text (bold is the only style): a copy fetched from beanpool.org can never inject
  * markup. Views: the sheet (with search), one section of the manual, one page. Back walks back through them.
  *
- * The screen's own words are in the member's language (the phone's app/beanpool.tsx keys); the guide's pages are the
- * guide's, in English until the guide carries other languages (design §4, slice S5).
+ * The screen's own words are in the member's language (the phone's app/beanpool.tsx keys); so are the guide's titles,
+ * summaries and help lines wherever its titles file for that language has them (useGuide; slice S5a), else English. The
+ * page bodies are English until slice S5b: a page whose title is translated says so in one line, and marks its body
+ * lang="en" for screen readers and the browser's translate offer.
  */
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
     FEEDBACK_LIVE, BEANPOOL_WEBSITE_URL, GUIDE_SLUGS,
-    beanPoolSheetEntries, findGuidePage, findGuideSection, findGuideVideo, manualSections, relatedPages,
+    beanPoolSheetEntries, findGuidePage, findGuideSection, findGuideVideo, guidePageBodyInEnglish, manualSections, relatedPages,
     searchGuide, sectionPages, splitBold, t, tn,
     type GuidePage,
 } from '@beanpool/core';
@@ -219,6 +221,7 @@ function GuidePageView({ slug, openPage, openSection }: { slug: string; openPage
     const section = findGuideSection(guide, page.section);
     const video = findGuideVideo(page, videos);
     const related = relatedPages(guide, page);
+    const bodyInEnglish = guidePageBodyInEnglish(page);
     return (
         <article className="text-nature-800 dark:text-nature-200 text-base leading-relaxed">
             {section && (
@@ -228,22 +231,25 @@ function GuidePageView({ slug, openPage, openSection }: { slug: string; openPage
             )}
             <h1 className="text-2xl font-extrabold text-nature-950 dark:text-white m-0">{page.title}</h1>
             <p className="text-nature-600 dark:text-nature-300 mt-2">{page.summary}</p>
+            {bodyInEnglish && <p data-testid="guide-english-note" className="text-sm text-nature-600 dark:text-nature-300 mt-1 mb-0">{t('This page is in English for now.')}</p>}
             {video && (
                 <a href={video.url} target="_blank" rel="noopener noreferrer" className="mt-3 flex items-center gap-2 min-h-[48px] px-4 py-2 rounded-2xl border border-nature-300 dark:border-nature-700 bg-white dark:bg-nature-900 font-semibold text-nature-900 dark:text-white no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
                     <span aria-hidden="true">▶️</span>
                     <span className="flex-1 min-w-0 break-words">{t('Watch: {title}', { title: video.title })}</span>
                 </a>
             )}
-            {page.blocks.map((b, i) => {
-                if (b.type === 'ul') return (
-                    <ul key={i} className="mt-2 mb-0 pl-5 list-disc space-y-1.5">
-                        {b.items.map((it, j) => <li key={j}><Rich text={it} /></li>)}
-                    </ul>
-                );
-                if (b.type === 'h2') return <h2 key={i} className="text-xl font-bold text-nature-950 dark:text-white mt-7 mb-1"><Rich text={b.text} /></h2>;
-                if (b.type === 'h3') return <h3 key={i} className="text-lg font-bold text-nature-950 dark:text-white mt-5 mb-1"><Rich text={b.text} /></h3>;
-                return <p key={i} className="mt-2 mb-0"><Rich text={b.text} /></p>;
-            })}
+            <div lang={bodyInEnglish ? 'en' : undefined}>
+                {page.blocks.map((b, i) => {
+                    if (b.type === 'ul') return (
+                        <ul key={i} className="mt-2 mb-0 pl-5 list-disc space-y-1.5">
+                            {b.items.map((it, j) => <li key={j}><Rich text={it} /></li>)}
+                        </ul>
+                    );
+                    if (b.type === 'h2') return <h2 key={i} className="text-xl font-bold text-nature-950 dark:text-white mt-7 mb-1"><Rich text={b.text} /></h2>;
+                    if (b.type === 'h3') return <h3 key={i} className="text-lg font-bold text-nature-950 dark:text-white mt-5 mb-1"><Rich text={b.text} /></h3>;
+                    return <p key={i} className="mt-2 mb-0"><Rich text={b.text} /></p>;
+                })}
+            </div>
             {related.length > 0 && (
                 <>
                     <h2 className={label + ' mt-8'}>{t('Related')}</h2>

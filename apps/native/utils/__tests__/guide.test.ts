@@ -6,8 +6,10 @@ import {
     searchGuide, relatedPages, manualSections, sectionPages, findGuideVideo, learnVideosFromFeed, youtubeWatchId, beanPoolSettingsEntries, beanPoolSheetEntries,
     GUIDE_CACHE_KEY, GUIDE_SLUGS, GUIDE_URL, type Guide,
 } from '../guide';
-import { FEEDBACK_LIVE } from '@beanpool/core';
-import { loadGuide, serializeGuide } from '../../../../packages/beanpool-guide/src/guide.mjs';
+import { FEEDBACK_LIVE, LANGS, guideInLanguage, guidePageBodyInEnglish, guideSourceHash, type GuideTitles } from '@beanpool/core';
+import { loadGuide, serializeGuide, GUIDE_LANGS } from '../../../../packages/beanpool-guide/src/guide.mjs';
+import { guideSourceHash as toolingHash, titleEntries, readGuideTitles, checkGuideTitles } from '../../../../packages/beanpool-guide/src/titles.mjs';
+import { guideTitlesFor } from '../guide-titles';
 
 const repo = path.resolve(__dirname, '../../../..');
 const read = (rel: string) => fs.readFileSync(path.join(repo, rel), 'utf8');
@@ -368,5 +370,76 @@ describe('Suggest a change follows FEEDBACK_LIVE, in Settings and in the sheet',
     it('today the rows follow the flag as it is set', () => {
         expect(beanPoolSettingsEntries(FEEDBACK_LIVE).includes('suggest')).toBe(FEEDBACK_LIVE);
         expect(beanPoolSheetEntries(FEEDBACK_LIVE).includes('suggest')).toBe(FEEDBACK_LIVE);
+    });
+});
+
+// The guide's titles in the member's language (slice S5a): packages/beanpool-guide/content/<lang>/manifest.json, bundled
+// by utils/guide-titles.ts and laid over the guide by useGuide. Pinned on the pages, like the rest of this file.
+describe("the guide's titles in the member's language", () => {
+    const entry = (english: string, text: string) => ({ text, sourceHash: guideSourceHash(english) });
+
+    it("the guide's languages are core's, but English, and each has a titles file the app bundles", () => {
+        expect([...GUIDE_LANGS].sort()).toEqual(LANGS.filter(l => l !== 'en').sort());
+        for (const lang of LANGS) {
+            const titles = guideTitlesFor(lang);
+            if (lang === 'en') { expect(titles).toBeNull(); continue; }
+            expect(titles, lang).toMatchObject({ sections: expect.any(Object), pages: expect.any(Object) });
+        }
+        expect(guideTitlesFor('xx')).toBeNull();
+        expect(checkGuideTitles(loadGuide(CONTENT), readGuideTitles(CONTENT)).problems).toEqual([]);
+    });
+
+    it("core hashes each English line exactly as the guide's tooling does", () => {
+        const lines = titleEntries(loadGuide(CONTENT));
+        expect(lines.length).toBeGreaterThan(100);
+        for (const l of lines) expect(guideSourceHash(l.english), l.key).toBe(toolingHash(l.english));
+    });
+
+    it("every language's file as bundled applies cleanly: each line in its language or English, never blank", () => {
+        for (const lang of LANGS) {
+            const shown = guideInLanguage(PAGES, lang, guideTitlesFor(lang));
+            expect(shown.guides.map(p => p.slug)).toEqual(PAGES.guides.map(p => p.slug));
+            for (const p of shown.guides) {
+                expect(p.title.trim(), `${lang} ${p.slug}`).not.toBe('');
+                expect(p.summary.trim(), `${lang} ${p.slug}`).not.toBe('');
+                expect(p.blocks).toBe(PAGES.guides.find(e => e.slug === p.slug)!.blocks);
+            }
+        }
+    });
+
+    it('a translated title shows with its English kept; a stale one shows the English; the body says it is English', () => {
+        const market = PAGES.sections.find(s => s.id === 'market')!;
+        const posting = findGuidePage(PAGES, 'posting')!;
+        const gifts = findGuidePage(PAGES, 'gifts')!;
+        const titles: GuideTitles = {
+            sections: { market: { title: entry(market.title, 'Mercado') } },
+            pages: {
+                posting: { title: entry(posting.title, 'Publicar uma Oferta ou um Pedido'), summary: entry(posting.summary, 'Como publicar.') },
+                gifts: { title: entry(`${gifts.title} (before)`, 'Presentes') },
+            },
+        };
+        const pt = guideInLanguage(PAGES, 'pt', titles);
+        expect(manualSections(pt).find(s => s.id === 'market')!.title).toBe('Mercado');
+        const shown = findGuidePage(pt, 'posting')!;
+        expect([shown.title, shown.summary]).toEqual(['Publicar uma Oferta ou um Pedido', 'Como publicar.']);
+        expect(shown.english).toEqual({ title: posting.title, summary: posting.summary });
+        expect(guidePageBodyInEnglish(shown)).toBe(true);
+        expect(findGuidePage(pt, 'gifts')!.title).toBe(gifts.title);
+        expect(guidePageBodyInEnglish(findGuidePage(pt, 'gifts')!)).toBe(false);
+        // The section's own list and the Related rows read the same translated pages.
+        expect(sectionPages(pt, pt.sections.find(s => s.id === 'market')!).find(p => p.slug === 'posting')!.title).toBe('Publicar uma Oferta ou um Pedido');
+        const relatedToPosting = PAGES.guides.find(p => p.related.includes('posting'))!;
+        expect(relatedPages(pt, findGuidePage(pt, relatedToPosting.slug)!).find(p => p.slug === 'posting')!.title).toBe('Publicar uma Oferta ou um Pedido');
+    });
+
+    it('search finds a page by its translated title and by its English one, and shows it in the member\'s language', () => {
+        const posting = findGuidePage(PAGES, 'posting')!;
+        const pt = guideInLanguage(PAGES, 'pt', { pages: { posting: { title: entry(posting.title, 'Anunciar no mercado') } } });
+        expect(searchGuide(pt, 'anunciar').map(r => r.page.slug)).toEqual(['posting']);
+        const byEnglish = searchGuide(pt, posting.title.split(' ')[0]);
+        expect(byEnglish.map(r => r.page.slug)).toContain('posting');
+        expect(byEnglish.find(r => r.page.slug === 'posting')!.page.title).toBe('Anunciar no mercado');
+        // The same search in English is unchanged.
+        expect(searchGuide(PAGES, posting.title.split(' ')[0]).map(r => r.page.slug)).toContain('posting');
     });
 });

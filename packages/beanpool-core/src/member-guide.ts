@@ -11,7 +11,15 @@
  * anything outside the small block model is refused whole.
  *
  * I/O (storage, fetch) is passed in, so this is testable anywhere and has no platform imports.
+ *
+ * The guide's titles and summaries in the member's language (slice S5a): each language's titles file
+ * (packages/beanpool-guide/content/<lang>/manifest.json, bundled by each app) is laid over the English with
+ * guideInLanguage, below. The page bodies stay English until slice S5b.
  */
+
+import { sha256 } from '@noble/hashes/sha2.js';
+import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
+import { PSEUDO_LANG, isLang, pseudoLocalise, type UiLang } from './words.js';
 
 /** Bump when the JSON shape changes in a way an older app could not read. An app refuses other schemas. */
 export const GUIDE_SCHEMA = 2;
@@ -44,6 +52,11 @@ export interface GuidePage<B = GuideBlock> {
     /** One or two sentences for the "?" sheet on the screen this page explains (help-map.ts), written for "you are here". */
     help?: string;
     blocks: B[];
+    /**
+     * Set by guideInLanguage: the English of each line it shows in the member's language instead, and only those. Search
+     * finds the page by these too, and a Learn video matches the English title.
+     */
+    english?: { title?: string; summary?: string; help?: string };
 }
 
 export type OperatorGuidePage = GuidePage<OperatorGuideBlock>;
@@ -54,6 +67,8 @@ export interface GuideSection {
     summary: string;
     /** The pages in this section, in reading order. */
     slugs: string[];
+    /** Set by guideInLanguage: the English of each line it shows in the member's language instead. */
+    english?: { title?: string; summary?: string };
 }
 
 export interface Guide<P = GuidePage> {
@@ -327,8 +342,9 @@ export function searchGuide<P extends GuidePage<OperatorGuideBlock> = GuidePage>
     if (terms.length === 0) return [];
     const results: Array<GuideSearchResult<P>> = [];
     for (const page of guide.guides) {
-        const title = words(page.title);
-        const summary = words(page.summary);
+        // A page shown in the member's language is found by its English too: a member may type either.
+        const title = [...words(page.title), ...(page.english?.title ? words(page.english.title) : [])];
+        const summary = [...words(page.summary), ...(page.english?.summary ? words(page.english.summary) : [])];
         const blocks = blockTexts(page).map(b => ({ ...b, words: words(b.text) }));
         let score = 0;
         let firstHit: { text: string; term: string } | null = null;
@@ -368,7 +384,8 @@ export function searchGuide<P extends GuidePage<OperatorGuideBlock> = GuidePage>
 //
 // A curated video matches a page when EITHER
 //   - the page names the video's YouTube id (`video:` in the page's front matter), or
-//   - the video's title is the page's title (ignoring case, spaces and punctuation).
+//   - the video's title is the page's title (ignoring case, spaces and punctuation): its English title, as BeanPool's
+//     videos are titled, when the page is shown in another language.
 
 export interface LearnVideo {
     title: string;
@@ -417,8 +434,113 @@ export function findGuideVideo(page: GuidePage, videos: readonly LearnVideo[]): 
         const byId = safe.find(x => x.id === page.video);
         if (byId) return byId.v;
     }
-    const key = titleKey(page.title);
+    const key = titleKey(page.english?.title ?? page.title);
     return safe.find(x => titleKey(x.v.title) === key)?.v ?? null;
+}
+
+// ─── The guide in the member's language (slice S5a) ──────────────────────────
+// English is the source. Each language has one titles file (packages/beanpool-guide/content/<lang>/manifest.json; its
+// shape and checks are in packages/beanpool-guide/src/titles.mjs) holding section titles and summaries and each page's
+// title, summary and help line, each entry with the hash of the English it was drafted from. A line shows in the
+// member's language only while that hash is the hash of the English the app is showing: when a newer guide (bundled or
+// from beanpool.org) says something else in English, the English shows until the next drafting round. Never a stale
+// translation, never a blank line. In the pseudo-locale every line is pseudo-localised, so the 320 dp checks measure it.
+
+/** One translated line: the words, and the hash of the English they were drafted from (guideSourceHash). */
+export interface GuideTitleEntry {
+    text: string;
+    sourceHash: string;
+}
+
+/** A language's titles file. Any entry may be missing: that line stays English. */
+export interface GuideTitles {
+    sections?: Record<string, { title?: GuideTitleEntry; summary?: GuideTitleEntry }>;
+    pages?: Record<string, { title?: GuideTitleEntry; summary?: GuideTitleEntry; help?: GuideTitleEntry }>;
+}
+
+/** The hex digits of sha256 a titles entry keeps (packages/beanpool-guide/src/titles.mjs keeps the same). */
+export const GUIDE_SOURCE_HASH_LENGTH = 16;
+const sourceHashes = new Map<string, string>();
+
+/** The hash of an English line, as a titles entry records it: the first 16 hex digits of the sha256 of its UTF-8. */
+export function guideSourceHash(english: string): string {
+    let hash = sourceHashes.get(english);
+    if (hash === undefined) {
+        hash = bytesToHex(sha256(utf8ToBytes(english))).slice(0, GUIDE_SOURCE_HASH_LENGTH);
+        if (sourceHashes.size >= 4000) sourceHashes.clear();
+        sourceHashes.set(english, hash);
+    }
+    return hash;
+}
+
+const ownObject = (o: unknown, key: string): Record<string, unknown> => {
+    if (!o || typeof o !== 'object' || !Object.prototype.hasOwnProperty.call(o, key)) return {};
+    const v = (o as Record<string, unknown>)[key];
+    return v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : {};
+};
+
+/** The translation of one line, or null: missing, not a line the apps take, or drafted from other English (stale). */
+function translatedLine(entry: unknown, english: string, max: number): string | null {
+    if (!entry || typeof entry !== 'object') return null;
+    const { text, sourceHash } = entry as Record<string, unknown>;
+    if (typeof text !== 'string' || typeof sourceHash !== 'string' || !text.trim() || text.length > max) return null;
+    return sourceHash === guideSourceHash(english) ? text : null;
+}
+
+/**
+ * The guide with its titles, summaries and help lines in `lang` wherever `titles` (that language's titles file) has a
+ * current translation, else English; in the pseudo-locale, every one pseudo-localised. English, or a tag BeanPool does
+ * not write, gives the guide itself. Each line shown in another language keeps its English in `english`. The bodies
+ * are the English ones (see guidePageBodyInEnglish). Never throws: a titles file it can't read leaves the English.
+ */
+export function guideInLanguage<P extends GuidePage<OperatorGuideBlock>>(guide: Guide<P>, lang: UiLang, titles?: unknown): Guide<P> {
+    const pseudo = lang === PSEUDO_LANG;
+    if (!pseudo && (!isLang(lang) || lang === 'en')) return guide;
+    try {
+        const line = (entry: unknown, english: string, max: number): string | null =>
+            pseudo ? pseudoLocalise(english) : translatedLine(entry, english, max);
+        const sectionTitles = ownObject(titles, 'sections');
+        const pageTitles = ownObject(titles, 'pages');
+        let changed = false;
+        const sections = guide.sections.map((s): GuideSection => {
+            const e = ownObject(sectionTitles, s.id);
+            const title = line(e.title, s.title, 80);
+            const summary = line(e.summary, s.summary, 300);
+            if (title === null && summary === null) return s;
+            changed = true;
+            return {
+                ...s, title: title ?? s.title, summary: summary ?? s.summary,
+                english: { ...(title !== null ? { title: s.title } : {}), ...(summary !== null ? { summary: s.summary } : {}) },
+            };
+        });
+        const guides = guide.guides.map((p): P => {
+            const e = ownObject(pageTitles, p.slug);
+            const title = line(e.title, p.title, 120);
+            const summary = line(e.summary, p.summary, 300);
+            const help = p.help !== undefined ? line(e.help, p.help, 160) : null;
+            if (title === null && summary === null && help === null) return p;
+            changed = true;
+            return {
+                ...p, title: title ?? p.title, summary: summary ?? p.summary, ...(help !== null ? { help } : {}),
+                english: {
+                    ...(title !== null ? { title: p.title } : {}),
+                    ...(summary !== null ? { summary: p.summary } : {}),
+                    ...(help !== null ? { help: p.help } : {}),
+                },
+            };
+        });
+        return changed ? { ...guide, sections, guides } : guide;
+    } catch {
+        return guide;
+    }
+}
+
+/**
+ * Whether a page's title or summary is in the member's language over its English body: the page then says so in one line
+ * at its top ("This page is in English for now."). Every body is English until slice S5b.
+ */
+export function guidePageBodyInEnglish(page: GuidePage<OperatorGuideBlock>): boolean {
+    return page.english?.title !== undefined || page.english?.summary !== undefined;
 }
 
 // ─── The "BeanPool" entry points ─────────────────────────────────────────────

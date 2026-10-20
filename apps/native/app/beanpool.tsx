@@ -191,7 +191,8 @@ export default function BeanPoolSheet() {
         >
             <MaterialCommunityIcons name={icon} size={24} color={colors.brand.primary} />
             <View style={styles.rowText}>
-                <Text style={styles.rowTitle} numberOfLines={2}>{title}</Text>
+                {/* Never cut: a guide title in a longer language takes another line (titles are capped: packages/beanpool-guide/src/titles.mjs). */}
+                <Text style={styles.rowTitle}>{title}</Text>
                 {!!sub && <Text style={styles.rowSub} numberOfLines={2}>{sub}</Text>}
             </View>
             <MaterialCommunityIcons name="chevron-right" size={22} color={colors.text.muted} style={styles.chevron} />

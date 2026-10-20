@@ -25,6 +25,13 @@ const VIDEO_RE = /^[A-Za-z0-9_-]{6,20}$/;
 /** The section that holds the four concept guides; every other section is the how-to manual. */
 export const ABOUT_SECTION = 'about';
 
+/**
+ * The languages the guide is written in besides English, as core's LANGS spells them (packages/beanpool-core/src/words.ts;
+ * apps/native/utils/__tests__/guide.test.ts keeps the two lists the same). Each has a folder, content/<lang>/, holding
+ * manifest.json: its section and page titles and summaries (src/titles.mjs). Those folders are not sections.
+ */
+export const GUIDE_LANGS = Object.freeze(['es', 'pt', 'hi', 'bn', 'fr', 'ar', 'id', 'ru', 'zh-Hans', 'zh-Hant', 'it', 'de', 'tr', 'sw', 'ml', 'ta', 'uk', 'ur', 'fa', 'vi', 'el', 'fil', 'ja', 'ko']);
+
 /** A page's title and summary at most, as the apps' validateGuide takes them. */
 const MAX_TITLE = 120;
 const MAX_SUMMARY = 300;
@@ -35,7 +42,7 @@ function fail(file, line, message) {
     throw new Error(`${file}${line ? `:${line}` : ''}: ${message}`);
 }
 
-function checkInline(file, line, text) {
+export function checkInline(file, line, text) {
     if ((text.match(/\*\*/g) || []).length % 2 !== 0) fail(file, line, 'unbalanced ** (bold)');
     if (/\[[^\]]*\]\([^)]*\)/.test(text)) fail(file, line, 'links are not supported; the app shows plain text');
     if (/<[a-zA-Z/!]/.test(text)) fail(file, line, 'HTML is not supported');
@@ -167,7 +174,12 @@ export function loadGuide(contentDir, { aboutSection = ABOUT_SECTION, allowImage
         throw new Error('manifest.json: remove "version". A version is set when the director publishes the text after merge, never by hand (packages/beanpool-guide/README.md)');
     }
     if (!Array.isArray(manifest.sections) || manifest.sections.length === 0) throw new Error('manifest.json: "sections" lists the sections');
-    const folders = fs.readdirSync(contentDir, { withFileTypes: true }).filter(d => d.isDirectory() && d.name !== 'images').map(d => d.name).sort();
+    for (const sec of manifest.sections) {
+        if (GUIDE_LANGS.includes(sec?.id)) throw new Error(`manifest.json: section id "${sec.id}" is a language's folder (content/${sec.id}/ holds that language's titles); pick another id`);
+    }
+    // A language's folder (content/<lang>/: its titles, src/titles.mjs) is not a section.
+    const folders = fs.readdirSync(contentDir, { withFileTypes: true })
+        .filter(d => d.isDirectory() && d.name !== 'images' && !GUIDE_LANGS.includes(d.name)).map(d => d.name).sort();
     const listedFolders = manifest.sections.map(s => s.id).sort();
     if (JSON.stringify(folders) !== JSON.stringify(listedFolders)) {
         throw new Error(`manifest.json "sections" (${listedFolders.join(', ')}) must match the folders in content/ (${folders.join(', ')})`);

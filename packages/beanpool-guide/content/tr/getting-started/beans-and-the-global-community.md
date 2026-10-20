@@ -51,13 +51,13 @@ Bununla birkaç şekilde karşılaşırsınız:
 
 ## Example Valley
 
-İşareti taşıyan ekranlar **Example Valley**'yi gösterir: yerel bir topluluğun ekranlarını üzerlerinde bir şeyler varken görebilmeniz için oluşturulmuş hayali bir topluluk.
+İşareti taşıyan ekranlar **Örnek Vadi**'yi gösterir: yerel bir topluluğun ekranlarını üzerlerinde bir şeyler varken görebilmeniz için oluşturulmuş hayali bir topluluk.
 
 - **Defter:** 85 Fasulyeye, −200'e kadar harcama alanına, bir güven rozetine ve ekmek, bir saatlik bahçe işi ve birkaç fide gibi yakın tarihli birkaç takasa sahip örnek bir üye.
 - **Ortak:** üyelerinin sorumlusu olduğu bir girişim olan Example Valley Bakery ve bir Karar: Ortak Alanın paylaşılan Fasulyelerinden ödenen bir kompost alanı.
 - Pazar'da **Takaslarım:** üç örnek anlaşma: biri sizi bekliyor, birinde Fasulyeler güvenle tutuluyor ve biri tamamlanmış.
 
-Example Valley'deki hiç kimsenin adı yoktur. "Bir komşu", "Ortak Alan" veya "Example Valley Bakery" görürsünüz. Bunların hiçbiri gerçek değildir ve hiçbiri sizin değildir.
+Example Valley'deki hiç kimsenin adı yoktur. "Bir komşu", "Ortak Alan" veya "Örnek Vadi Fırını" görürsünüz. Bunların hiçbiri gerçek değildir ve hiçbiri sizin değildir.
 
 Bu ekranlardaki **ⓘ** düğmeleri ve kılavuz sayfaları gerçektir: yerel bir toplulukta nasıl çalıştığını anlatırlar.
 

@@ -56,14 +56,19 @@ const SHELF_NAMES: Record<ToolShelf, WordKey> = {
 const lineText = (l: ToolLine | null | undefined) => (l ? t(l.key, l.values) : null);
 
 export function ToolsPage(props: ToolsPageProps) {
-    const { open, onClose } = props;
+    const { open, onOpen, onClose } = props;
+    // Back is the stack's (§1.5): a tool opened from the Tools screen goes back to it; one opened from anywhere else (a
+    // Home card, a link) closes the page, back to where the member was.
+    const [fromList, setFromList] = useState(false);
+    const openFromList = useCallback((next: OpenTool) => { setFromList(next.id !== null); onOpen(next); }, [onOpen]);
+    const backToList = useCallback(() => { setFromList(false); onOpen({ id: null, screen: 'main', key: null }); }, [onOpen]);
     return (
         <div className="page-overlay z-[110] overflow-y-auto" data-testid="tools-page">
             {/* z-[110]: above the mobile app header (App.tsx, zIndex 100), as the public profile; the page carries its
                 own Back. .page-overlay (index.css) is the fixed layer: full bleed on a phone, past the sidebar on md+. */}
             {open.id === null
-                ? <ToolsList {...props} />
-                : <ToolView key={open.id} {...props} id={open.id} onBack={onClose} />}
+                ? <ToolsList {...props} onOpen={openFromList} />
+                : <ToolView key={open.id} {...props} id={open.id} onBack={fromList ? backToList : onClose} />}
         </div>
     );
 }
@@ -205,6 +210,12 @@ function ToolView({ id, open, identity, onBack, onComposer, onGuide, onAddHomeCa
     const [stack, setStack] = useState<Step[]>(() => [{ screen: open.screen, params: open.key ? { key: open.key } : {} as Record<string, string> }]);
     const [panel, setPanel] = useState<Panel>('tool');
     const [pastDoors, setPastDoors] = useState(false);
+    // Remove my data leaves the document empty, so the doors are back, as on a first open.
+    const remove = useCallback(async () => {
+        const gone = await store.remove();
+        if (gone) setPastDoors(false);
+        return gone;
+    }, [store.remove]);
 
     const step = stack[stack.length - 1];
     const back = useCallback(() => {
@@ -249,7 +260,7 @@ function ToolView({ id, open, identity, onBack, onComposer, onGuide, onAddHomeCa
             <PageBar onBack={back} title={t(manifest.name)} icon={manifest.icon} line={lineText(row)}
                 end={<ToolMenu name={t(manifest.name)} onPick={(p) => setPanel(p)} />} />
             <div className="max-w-xl mx-auto px-4 py-4 min-w-0">
-                {panel === 'settings' && <ToolSettings manifest={manifest} onRemove={store.remove} />}
+                {panel === 'settings' && <ToolSettings manifest={manifest} onRemove={remove} />}
                 {panel === 'about' && <ToolAbout manifest={manifest} onGuide={onGuide} />}
                 {panel === 'tool' && !ready && (
                     <p className="m-0 text-sm text-nature-600 dark:text-nature-300 break-words" role="status">{t('Loading...')}</p>

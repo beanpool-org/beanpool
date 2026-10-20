@@ -17,7 +17,7 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import axe from 'axe-core';
-import type { ComponentType } from 'react';
+import { useState, type ComponentType } from 'react';
 import { TOOLS, TOOL_PERMISSIONS, type AnyToolScreenProps, type ToolApp, type ToolManifest } from '@beanpool/core';
 import { ToolsPage, type ToolsPageProps } from '../../pages/ToolsPage';
 import { TOOL_APPS } from '../index';
@@ -395,6 +395,47 @@ describe('the frame', () => {
         expect(await readToolRecord(OWNER, 'scaffold')).toBeNull();
         fireEvent.click(screen.getAllByTestId('tools-back')[0]);
         expect(await screen.findByTestId('tool-doors')).toBeInTheDocument();
+    });
+
+    // Review of #2274: Remove after "I already do this" left the doors away, over an empty document.
+    it('Remove my data after "I already do this" brings the doors back too', async () => {
+        draw({ manifest: scaffold.manifest, loader: scaffold.loader }, { id: 'scaffold', screen: 'main', key: null });
+        fireEvent.click(await screen.findByTestId('tool-door-already'));
+        expect(screen.queryByTestId('tool-doors')).toBeNull();
+        fireEvent.click(screen.getByTestId('tool-menu'));
+        fireEvent.click(screen.getByTestId('tool-menu-remove'));
+        fireEvent.click(screen.getByTestId('tool-remove'));
+        await act(async () => { fireEvent.click(screen.getByTestId('tool-remove-yes')); });
+        expect(await screen.findByText('Removed from this browser.')).toBeInTheDocument();
+        fireEvent.click(screen.getAllByTestId('tools-back')[0]);
+        expect(await screen.findByTestId('tool-doors')).toBeInTheDocument();
+    });
+
+    // Review of #2274: Back is the stack's (§1.5). A tool opened from the Tools screen went straight past it, closing the page.
+    it('Back from a tool opened on the Tools screen goes back to the Tools screen; from one opened anywhere else, closes the page', async () => {
+        await keep('scaffold', scaffold.fixtures.docs.small);
+        const onClose = vi.fn();
+        function Routed({ start }: { start: ToolsPageProps['open'] }) {
+            const [open, setOpen] = useState(start);
+            return <ToolsPage identity={identity} open={open} onOpen={setOpen} onClose={onClose} onComposer={vi.fn()} onGuide={vi.fn()}
+                onAddHomeCard={vi.fn()} tools={[scaffold.manifest]} apps={{ scaffold: scaffold.loader }} />;
+        }
+        const listed = render(<Routed start={{ id: null, screen: 'main', key: null }} />);
+        fireEvent.click(await screen.findByTestId('tools-row-scaffold'));
+        expect(await screen.findByText('Ladder')).toBeInTheDocument();
+        fireEvent.click(screen.getAllByTestId('tools-back')[0]);
+        expect(await screen.findByTestId('tools-shelf-stock')).toBeInTheDocument();
+        expect(onClose).not.toHaveBeenCalled();
+        // The Tools screen's own Back closes the page.
+        fireEvent.click(screen.getAllByTestId('tools-back')[0]);
+        expect(onClose).toHaveBeenCalledTimes(1);
+        listed.unmount();
+
+        render(<Routed start={{ id: 'scaffold', screen: 'main', key: null }} />);
+        expect(await screen.findByText('Ladder')).toBeInTheDocument();
+        fireEvent.click(screen.getAllByTestId('tools-back')[0]);
+        expect(onClose).toHaveBeenCalledTimes(2);
+        expect(screen.queryByTestId('tools-shelf-stock')).toBeNull();
     });
 
     it('the Tools screen lists the tool on its shelf with its state line, and opens it at main', async () => {

@@ -13,7 +13,7 @@ Toque em **Conversas** e depois em **Pessoas**. No app web, toque em **Pessoas**
 
 - **Amigos:** pessoas que você adicionou.
 - **Comunidade:** todos os membros. Busque pelo nome. No celular, ordene por **Mais recentes**, **Nome**, **Amigos**, **Confiáveis** ou **Ativos**. Na comunidade global são exibidos os membros mais próximos da sua região: digite pelo menos 2 letras de um nome para encontrar qualquer outra pessoa.
-- **Convites:** convide alguém novo. Veja "Entrando no BeanPool". Se você ainda não entrou, este botão exibe **Cadastrar-se**. Quando pessoas tiverem solicitado entrada na sua comunidade, ele exibe a quantidade e elas são listadas sob **Querem entrar**. No app web este botão é sempre **🎟️ Invites**, sem contagem e sem a lista de **Querem entrar**.
+- **Convites:** convide alguém novo. Veja "Entrando no BeanPool". Se você ainda não entrou, este botão exibe **Cadastrar-se**. Quando pessoas tiverem solicitado entrada na sua comunidade, ele exibe a quantidade e elas são listadas sob **Querem entrar**. No app web este botão é sempre **🎟️ Convites**, sem contagem e sem a lista de **Querem entrar**.
 
 Toque em uma pessoa para ver seu perfil: suas avaliações e publicações e, no celular em uma comunidade com feijões, seu selo de confiança e suas trocas. Veja "Seu perfil".
 

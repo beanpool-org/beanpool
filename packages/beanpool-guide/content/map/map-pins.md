@@ -18,7 +18,7 @@ A pin shows the post's category picture. Where many Offers and Needs are close t
 
 People and groups are not on the map. In the web app, an enterprise that has set a place shows as a square pin with its picture. Tap it to open the enterprise.
 
-Polls are not on the map either. The one exception is on the phone, in the global community, where a poll can show as a pin at its poster's area.
+Polls are not on the map either. The one exception is on the phone, in the global community, where a poll can show as a pin at its poster's area. It looks like an orange Need pin, and shows only under **All**.
 
 ## Tapping a pin
 
@@ -31,9 +31,9 @@ On the phone, at the top of the map:
 
 - **All**, **Offers**, **Needs** or **Events**. Tap **✕** to clear.
 - **All Categories** to show one category.
-- For events: **Today**, **This weekend** or **Next 7 days**. The map moves to fit them.
+- For events: **All**, **Today**, **This weekend** or **Next 7 days**. The map moves to fit them.
 
-In the web app the map has only the event date chips: **All events**, **Today**, **This weekend** and **Next 7 days**.
+In the web app the map has only the event date chips: **Today**, **This weekend**, **Next 7 days** and **All events**. They show only while your community has an event coming up.
 
 ## Buttons on the left
 

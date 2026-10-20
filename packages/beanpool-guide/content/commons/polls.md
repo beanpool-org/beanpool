@@ -24,7 +24,7 @@ While a poll is open it says nothing about this. If it did, someone checking the
 - Add **Context / Notes** if it helps. This is optional.
 - Write 2 to 4 **Options**. Tap **+ Add Option** for more.
 - Choose how long it runs: **3 Days**, **7 Days** or **14 Days**.
-- Choose whether it is an **Open vote**. Leave it off and the poll is anonymous. Tick it and members can see who chose what. You can change this until someone votes, and never after.
+- Choose whether it is an **Open vote** before you tap **Create**. Leave it off and the poll is anonymous. Tick it and members can see who chose what. You can't change it after the poll is posted.
 - Tap **Create**.
 
 In the web app the type is **🗳️ Poll**, the notes are **Background / Context**, the option button is **+ Add option** and the last button is **🗳️ Create Poll**. On the web Map, tap the round **+**.

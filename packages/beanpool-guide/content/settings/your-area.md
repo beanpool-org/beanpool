@@ -16,7 +16,7 @@ Your other communities don't ask for it. One whose server is set up to work the 
 
 ## Seeing yours
 
-- Open Settings: tap the sliders button at the top right of the screen.
+- Open Settings: tap the sliders button at the top right of the screen (on a wide computer screen, the gear in the left sidebar).
 - Under **App Settings**, tap **Your area**. On the phone it is just under **Location**.
 
 It says **About 10 km around** and the town you typed, or two numbers if you used your location, or **Not set**. The town's name is kept only on the phone or in the browser where you typed it, so elsewhere you see the two numbers. If the app can't reach the community, the row says **Couldn't check right now**.

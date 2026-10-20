@@ -34,9 +34,25 @@ At the bottom, **Report Enterprise** (**Report Project** on a project) if someth
 
 ## Backing an enterprise
 
-- **Pledge beans to a project:** on its page, under the funding box, enter an amount and tap **Pledge Beans**. You can make or change up to 20 pledges in any 24 hours, a keeper's backing included, and a pledge of beans is one of your payments too. Pledges are held in trust until the project reaches its goal, and then they all go to the enterprise. After that it takes no more pledges, and nor does an enterprise that is winding up or has closed: its page says so where the pledge box was, and your beans stay with you.
+- **Pledge beans to a project:** on its page, under the funding box, enter an amount and tap **Pledge Beans**. You can make or change up to 20 pledges in any 24 hours, a keeper's backing included, and a pledge of beans is one of your payments too. Pledges are held in trust until the project reaches its goal, and then they all go to the enterprise. After that it takes no more pledges, and nor does an enterprise that is winding up or has closed: its page says so where the pledge box was, and your beans stay with you. If a project is cancelled before it reaches its goal, every pledge goes back to the person who made it.
 - **Trade with it:** its Offers and Needs are in the Market like anyone's.
 - **Become a keeper:** see "Keepers".
+
+## If you keep it
+
+If you keep an enterprise, or help run a project, its page has **Operator controls**:
+
+- **Post Offer** and **Post Need:** post in its name.
+- **To Commons:** send some of its surplus to the Commons.
+- In the web app, **Set map pin** puts it on the map.
+
+Pausing and closing it are in the same panel in the web app. On the phone they are in a card of their own below it, **Season & lifecycle controls**, which shows only the buttons you can use:
+
+- **Pause for Season:** any keeper. Its listings pause so nobody can buy, and its credit line stays where it is, for up to 90 days. **Resume Enterprise** (**Resume Project**) ends the pause.
+- **Start Wind-Up:** the lead keeper, the only keeper or a community admin. A 7-day wait starts; nothing closes the enterprise by itself. Any keeper or a community admin can tap **Stop Wind-Up** during the wait.
+- **Finalise Wind-Up:** once the 7 days are up, the lead keeper, the only keeper or a community admin finishes closing it. See "Rules and how decisions work".
+
+Before a project reaches its goal, its leader can also cancel it, and every pledge goes back.
 
 ## Starting one
 

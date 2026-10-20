@@ -16,14 +16,14 @@ The phone and the web app show the same cards, with a few differences. This page
 
 A new member's Home starts nearly empty: one card, **Getting started**, between **Needs you** and **Your community** (on the global community, **Find your community** stays above it). It says "This is your Home. You choose what goes here. Before you start, take a one-minute look at the other tabs."
 
-- **Look around** starts a short tour. A bar at the bottom of the screen moves the app to each tab in turn and says what it is for, one or two sentences a step, with **Step 2 of 7** above. Tap **Next** to go on, or **Skip** to stop. The tab behind the bar works as usual: tap anything, or tap another tab and the tour follows you there.
+- **Look around** starts a short tour. A bar at the bottom of the screen moves the app to each tab in turn and says what it is for, one or two sentences a step, with a caption such as **Step 2 of 8** above (the number depends on the app and on your community's tabs). Tap **Next** to go on, or **Skip** to stop. The tab behind the bar works as usual: tap anything, or tap another tab and the tour follows you there.
 - The last step comes back to Home: **Add your first cards**. Tap a card to put it on Home, or **More cards** for the whole list. Tap **Done**. If you picked nothing, Home starts with the usual five (below).
 - **Skip**, on the card or the bar, ends the tour. If you have not put a card on Home yourself, it gives you the usual five. If you have (from **Add a card**, or a pick on the tour's last step), Home keeps the cards you chose.
 - The tour never starts by itself. If you close the app part way, the card says "Pick up the tour at step 3".
 - Done or Skip is kept on your account, so the card does not come back on your other phones or browsers. To see the tour again, tap **?** at the top and **Take the tour again**.
 - If you had set up your Home before the tour existed, nothing changes for you. **Getting started** is in **Add a card**, under **Getting started**, if you want it.
 
-When Home first shows your cards, a one-line tip appears under the first card. Tap **✕** to put it away.
+After you tap **Skip** on the tour, a one-line tip appears under the first card. Tap **✕** to put it away. After **Done** it does not show.
 
 - On the phone it says "This is your Home. Add a card at the bottom, or tap … on a card to move or remove it." It is shown once, and never again, whether or not you tap **✕**. Adding or removing a card also puts it away.
 - In the web app it says the same words. It comes back each time you open Home, until you tap **✕**.
@@ -46,10 +46,10 @@ While there are words in the Market's search, a button under it says **Save this
 
 ## The cards
 
-Home shows only the cards that have something to tell you, in this order from top to bottom unless you change it:
+Home shows only the cards that have something to tell you, in your own order. A card you add goes to the top, under **Needs you**. These are the cards you can have:
 
 - **Needs you:** only while something is waiting for you: a deal waiting on you, unread messages from people, new lines in your groups, a vote you have not cast yet (amber when it closes within two days), and, for owners, admins and moderators, the admin work waiting for them, such as reports to review. On the phone these are the same things the small icons at the top of the screen show. This card stays first and cannot be moved or hidden.
-- **Your way back in:** if you joined with 12 words and have no connected sign-in, this card reminds you to keep them safe or add a sign-in. Tap **✕** to put it away. It comes back once after your first post and once after a week, then lives only in **Settings**, under **Account Protection**. It does not show where BeanPool's key vault already holds a copy of your key.
+- **Your way back in:** if you joined with 12 words and have no connected sign-in, this card reminds you to keep them safe or add a sign-in. Tap **✕** to put it away. It comes back once after your first post and once after a week, then lives only in **Settings**: under **Account Protection** on the phone, and at the top of Settings, headed **One way back**, in the web app. It does not show where BeanPool's key vault already holds a copy of your key.
 - **Find your community:** on the global community only. It shows the communities nearest you and lets you ask to join them (see "Finding a community near you"). On the phone it has **Communities near you**, **Start a community** and **Tell me when one starts here**. In the web app, each community is a link to its own page. If it does not know where you are, tap **or type your town** and pick your town instead of sharing your location, on the phone and in the web app. The web app's card also has **Share my area**. Once you have picked a town, the web app's card says "Near" and the town, with **change**. If the web app's card already has a place, **Not here? Type your town** does the same. For your first 30 days on the global community it stays at the top, and it cannot be removed or moved. After that it is a card like any other.
 - **First steps:** a short checklist. On a local community: post your first Offer, add a profile photo, pick a few things you like, and, once you have posted an Offer, where invites are on, invite someone. Where only the admins invite, the phone shows that last line only to owners and admins. The web app shows it to every member, and a line not done keeps the card. On the phone the card goes when every line is done. In the web app it also stays for your first 14 days.
 - **First steps on the global community:** post something free or for swap, and, if a community within 250 km of you is listed, a suggestion to ask it to let you in (that line never keeps the card open). It can also say the limits on a new account, such as how many posts and new chats you can make a day at first. It stays for your first 14 days, and after that until the post is done and the limits are over.
@@ -67,8 +67,8 @@ Home shows only the cards that have something to tell you, in this order from to
 - **Sun and moon:** tonight's moon and today's sunrise and sunset, in one line, such as "🌔 Waxing gibbous, 72% · Sunrise 6:12 · Sunset 17:48". Your phone or browser works it out by itself: the card asks nothing of your community's server. It uses your community's place, rounded to about a kilometre, or your area where your community has no place (on the global community it is always your area). On the global community, the phone can also use where it last was, but only if you have already let the app use your location: it never asks. If you typed your town in **Find your community**, the phone uses that instead. To use your area even where your community has a place, tap **…** then **Settings…** and choose **Your area**. The times are on your own phone's or computer's clock, so when you travel you see them in your own time. The moon is drawn as it looks from that side of the equator. Where the sun doesn't rise or set today, it says so, such as "Sun up all day" or "No sunset today". If no place is known, the card doesn't show, and **Edit home** says "Nothing to show now: no place is known." A screen reader reads it in words, such as "Moon waxing gibbous, 72 percent lit. Sunrise 6:12 am. Sunset 5:48 pm."
 - **Your Beans:** your balance and credit line (room to spend). Not on the global community. There the phone shows an example card instead: what Beans do in a local community, and **See an example ledger**. It comes once the tour is done or skipped (while **Getting started** is up, the tour's Ledger step shows the example), and stays until you tap **Hide this card**, even after **First steps** has gone.
 - **From your community:** announcements and notices from your community's admins.
-- **Grow your community:** lets you invite new members after your first Offer, where invites are on. Not on the global community. On the phone, where only the admins invite, it shows only for an owner or admin.
-- **Your community:** member count and trades this month. It has **Add a card** and **Edit home**. This card stays at the bottom and cannot be moved or removed.
+- **Grow your community:** lets you invite new members after your first Offer, where invites are on. Not on the global community. On the phone, where only the admins invite, it shows only for an owner or admin. In the web app it does not show there at all.
+- **Your community:** the last card, titled with your community's name (**The worldwide community** on the global community). It shows the member count and trades this month; on the global community, the members and how many communities are listed. It has **Add a card** and **Edit home**. This card stays at the bottom and cannot be moved or removed.
 
 On the phone, when your community has moved to a new address, a card above all of these asks whether to use it: see "When your community moves to a new address" in "More than one community".
 
@@ -116,7 +116,7 @@ Tap categories you like (Food, Tools, Services, Garden and others) to star them:
 
 ## On the web lobby
 
-Before you join or sign in on the web, a visitor sees a simpler Home:
+On the global community's website, before you join or sign in, a visitor sees a simpler Home (a local community's website shows its welcome page instead):
 
 - A **Join** card at the top.
 - Only public cards: a card of communities near you, **Coming up**, **What people post** (listings with photos and categories but no member names or faces), and **Your community**.

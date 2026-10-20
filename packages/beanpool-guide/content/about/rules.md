@@ -27,6 +27,9 @@ About the Commons:
 - Give beans from the Commons to a project or an enterprise.
 - Give a hardship grant from the Commons to a member.
 - Pay off a project's or an enterprise's debt from the Commons.
+- Forgive a debt that a member who left owed to the Commons. No beans move. The record stays, marked forgiven. Where a community keeps a Names list, this is started from there.
+
+A grant can be for no more than the Commons holds now plus what came into it in the last 30 days. A bigger one is refused when you start it.
 
 ## Who can start a Decision
 
@@ -113,7 +116,7 @@ Your community's server has owners and admins. They look after it.
 - You can have one open Poll at a time. Your community can have 5 open Polls at once.
 - A Poll posted to a group can only be answered by that group's members and convenors. Observers can read it but not answer.
 - Answering a Poll also needs credit that is not frozen. You can change your answer until the Poll closes. The person who started it can close it early.
-- A Poll is anonymous: everyone sees only the totals. The person who starts it can make it an **open vote** instead, so members see who chose what. That choice is made when the Poll starts and cannot change once anyone has voted.
+- A Poll is anonymous: everyone sees only the totals. The person who starts it can make it an **open vote** instead, so members see who chose what. That choice is made when the Poll starts, and can't be changed after the Poll is posted.
 - On the global community, a closed anonymous Poll also says how many of its votes came from new or 12-word accounts, if any did. Every vote still counts.
 
 ## Enterprises and keepers
@@ -150,4 +153,4 @@ A group is run by its convenors, and one of them is its **lead convenor**. Whoev
 
 ## Vouching
 
-Only members chosen by an admin, or by a community Decision, can vouch for newcomers. A vouch gives the newcomer a small credit line to start with: 25, 50 or 100 beans. Trust badges never give this right.
+Only admins, and members chosen by an admin or by a community Decision, can vouch for newcomers. A vouch gives the newcomer a small credit line to start with: 25, 50 or 100 beans. Trust badges never give this right.

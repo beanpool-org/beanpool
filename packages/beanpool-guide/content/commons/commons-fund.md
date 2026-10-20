@@ -17,7 +17,7 @@ Beans come into it from:
 
 ## Seeing it
 
-Tap **Commons**. At the top, **Commons Pool** shows how many beans it holds. On the phone, tap the **ⓘ** beside the Commons title. In the web app, tap **Commons Pool ⓘ** on the **Ledger**. Either opens a panel with **How It Works**, **Circulation Fees** and **Voting**.
+Tap **Commons**. At the top, **Commons Pool** shows how many beans it holds. On the phone, tap the **ⓘ** beside the Commons title. In the web app, open the **Ledger**, tap **Wallet**, then **Commons Pool ⓘ**. Either opens a panel with **How It Works**, **Circulation Fees** and **Voting**.
 
 Enterprises, including those that run for the Commons, are listed in **Commons**, under **Groups**. Tap one to see its balance and every bean in and out. Every member sees the amounts; who paid or was paid, and the note, only its keepers and that member see.
 

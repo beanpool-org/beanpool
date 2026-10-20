@@ -19,9 +19,10 @@ In a web browser the top bar is simpler. It has the connection status on the lef
 
 Tap the bean at the top left to open the **BeanPool** sheet. It shows:
 
-- **Your community:** its name, and whether it can be reached right now.
+- **Your community:** its name at the top, and whether it can be reached right now.
 - **Your communities:** tap one to switch to it, or tap **Add a community**. The **Global community** is always one of them: its second line says whether you can join it.
-- **The guides:** this guide, with its search, and what is new.
+- **Search the guide**, then **Guides** (how BeanPool works, the rules, common questions), **How to use the app** (this guide, section by section) and **The BeanPool project**, with **What's new**.
+- **beanpool.org:** the public website, with **Share** to send it to a friend.
 
 The small dot on the bean tells you how things are:
 
@@ -60,7 +61,7 @@ When nothing needs you, there are no icons at all. You have not missed anything.
 
 Instead of the icons, you may see a button:
 
-- **Join** (amber): you are visiting as a guest. Tap it to open **Invites**. In a local community you join there with an invite. In the global community, tap **Join with a sign-in** (**Join with 12 words or a sign-in** where the community takes the 12 words).
+- **Join** (amber): you are visiting as a guest. Tap it to open **Invites**. In a local community you join there with an invite. In the global community, tap **Join with 12 words or a sign-in** (**Join with a sign-in** where a community takes sign-ins only).
 - **Connect** (red): this phone is not connected to a community. Tap it to open **Settings**, where you can add one.
 
 While one of these shows, the invite icon is hidden.

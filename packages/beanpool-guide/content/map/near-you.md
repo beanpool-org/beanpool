@@ -8,10 +8,10 @@ related: browsing-the-market, map-pins, pin-locations, events, your-area
 ## On the Market tab
 
 - Tap **Market**, then **Distance** in the second row of filters. It is not there while **Events** is chosen.
-- **Location & Radius** opens. To use where you are, tap the target button. Or tap the map, or drag the pin, to choose another centre.
+- **Location & Radius** opens (**Set Location & Radius** in the web app). To use where you are, tap the target button. Or tap the map, or drag the pin, to choose another centre.
 - Choose how far with **Search radius**: from 100 metres to 50 kilometres.
 - Tap **Apply**. The button then shows the distance, like **5km**.
-- To go back to everything, open it again and tap **Reset**.
+- To go back to everything, open it again and tap **Reset**. In the web app you can also tap the **✕** on **Distance**.
 
 On the phone, posts with no location are always shown. In the web app a **Distance** hides them, except polls. On the global community the web app also leaves them out while the list is near you (below).
 

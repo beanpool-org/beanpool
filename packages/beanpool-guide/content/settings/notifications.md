@@ -10,8 +10,8 @@ related: mute, messages, my-deals, events, holiday-mode, the-top-bar
 
 - Open **Settings**. Under **App Settings**, tap **Notification Preferences**.
 - Switch each kind on or off:
-- **Direct Messages:** when someone messages you.
-- **Marketplace Activity:** requests, approvals and refusals on your deals, and what happened to a post you reported or one of yours the admins removed.
+- **Direct Messages:** when someone messages you, writes in one of your groups or mentions you, or when a vote opens in a group or enterprise you are in.
+- **Marketplace Activity:** requests, approvals and refusals on your deals, and what happened to a post you reported or one of yours the admins removed. Also news about events you are going to, notices from your community's admins, and a community starting near a place you asked about.
 - **Held in Trust & System:** beans held, released or in question.
 
 In the web app the first is called **Chat Messages**, and the third is the one named after **Deals**. They set what reaches your phone.
@@ -56,7 +56,7 @@ This needs nothing but your community's server, so it still works if alerts don'
 
 ## Event reminders
 
-Under the switches, **Event reminders** sets how long before an event you are **Going** to or **Interested** in starts you are told. Tick **1 week**, **1 day**, **2 hours**, **1 hour** or **30 minutes** before — you can tick more than one — or tick **Off** for none at all.
+Under the switches, **Event reminders** sets how long before an event you are **Going** to or **Interested** in starts you are told. Tick **1 week before**, **1 day before**, **2 hours before**, **1 hour before** or **30 minutes before** — you can tick more than one — or tick **Off** for none at all.
 
 Everyone starts on **1 day** before. This is your usual choice; any one event can be set differently on the event itself. See "Events".
 

@@ -31,7 +31,7 @@ Your badge shows your trust. What you can spend right now also depends on how ma
 
 ## Can I change my vote?
 
-On a Decision or a Poll, yes, until the vote closes. On a keeper vote, a group's own vote, or a convenor vote, no.
+On a Decision or a Poll, yes, until the vote closes. On a keepers' vote, a group's own vote, or a vote for a new lead convenor, no.
 
 ## Can anyone see how I voted?
 
@@ -39,7 +39,7 @@ On a Decision, the app shows only the totals, and your own vote to you. Your vot
 
 ## Can other members see my balance?
 
-No. Only you can see your balance and your trades. A trade shows only its two people. If the community votes on removing you, the members who can vote in it see your balance and any debt, in that vote only. An admin who removes an account sees its balance while doing it, and that look is logged where the owner and admins can read it.
+No. Other members never see your balance. On the phone, in a community with Beans, they see your trust badge and how many trades you have done. A trade shows only its two people. If the community votes on removing you, the members who can vote in it see your balance and any debt, in that vote only. Admins can see more in some cases, and those looks are logged: see "What the admins can see".
 
 ## I lost my phone. Is my account gone?
 

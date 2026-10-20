@@ -30,7 +30,7 @@ What your trust does change is how deep your credit line can go. See "Your credi
 - **What builds your trust:** how much you have traded, with how many people, and your rating.
 - On posts and profiles, next to each member's name.
 
-On the phone, the Market's **Trust** filter can show only posts from members with a certain badge or higher, or only newcomers. In the web app, **🌱 New members** shows posts from members who have not traded yet.
+On the phone, the Market's **Trust** filter can show only posts from members with a certain badge or higher, only **Newcomers**, or only **Founding** members, who have not traded yet. In the web app, **🌱 New members** shows posts from members who have not traded yet.
 
 ## Admins and badges
 

@@ -20,7 +20,7 @@ related: decisions, rules, polls, enterprises
 - **Title:** one line, like "Grant 200 beans to the Tool Library".
 - **Description & Case:** explain why, in at least 10 characters. Say it plainly. People vote on what they read here.
 - From the list below that, choose exactly what should happen. For example, for a member: Remove Member, Suspend Member or Freeze Credit. For the Commons: Give Beans to a project or enterprise, Hardship Grant, or Pay off a project's or enterprise's debt.
-- Fill in who it is for, and how many beans if there are any. For a grant to a project or enterprise you type in its key, a long code: neither app has a list to pick it from. On the phone the same goes for paying off a debt or replacing a lead.
+- Fill in who it is for, and how many beans if there are any. For a grant to a project or enterprise you type in its key, a long code: neither app has a list to pick it from. To pay off a debt or replace a lead, tap the project or enterprise in the list, or type its key.
 - Tap **Submit Community Decision**.
 
 In the web app the buttons read **+ Propose Decision** (or **+ Propose** at the top of Commons, while **Decide** is open) and **Submit Decision**, and the box is **Description & Rationale**.
@@ -40,8 +40,8 @@ This keeps the queue free. If a grant passes when the Commons is short, it waits
 
 ## If the app says no
 
-- **Complete a Trade First:** you cannot propose yet.
-- **Limit Reached:** you already have an open Decision. Wait for it to close.
+- **Complete a Trade First** (on the phone): you cannot propose yet. In the web app the **+ Propose Decision** button is greyed out, and a line above it says why.
+- **Limit Reached** (on the phone): you already have an open Decision. Wait for it to close. In the web app the button is greyed out here too, with a line saying why.
 - **A community vote can't remove or suspend an owner or admin of this community's server:** the person you chose runs the server. An owner can take their role away first.
 - **This grant is bigger than the Commons could pay:** ask for no more than the amount it names, or wait for more beans to come in.
 - **Invalid Amount** (in the web app, "Please enter a valid positive grant amount in Beans"): fill in how many beans.

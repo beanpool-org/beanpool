@@ -16,7 +16,7 @@ In the web app, it is in the same place: **Settings**, then **Help & how it work
 
 ## What is in it
 
-- **Your community:** its name, and whether its server can be reached right now. On the phone, under it, **Your communities**: tap one to switch to it, or tap **Add a community**. The **Global community** is always one of the rows, with a second line that says whether you are a member, can join it, or why it can't be used right now. See "More than one community".
+- **Your community:** its name (its address in the web app), and whether its server can be reached right now. On the phone, under it, **Your communities**: tap one to switch to it, or tap **Add a community**. The **Global community** is always one of the rows, with a second line that says whether you are a member, can join it, or why it can't be used right now. See "More than one community".
 - **Guides:** how BeanPool works, the rules and how decisions are made, and common questions.
 - **How to use the app:** one short page for each task, grouped the way the app is: Getting started, Market, Map, Talk, Pulse, Commons, Ledger and Settings and safety.
 - **The BeanPool project:** what is new in this version, and a link to the website beanpool.org (on the phone, with a **Share** button to send it to a friend).
@@ -36,4 +36,4 @@ The same guide is on the website at beanpool.org/guide.
 
 ## Videos
 
-Some pages may show **Watch:** and the name of a video. That link only appears when BeanPool has made a video for that page and your community has it in the Pulse, under **Learn**. Videos members add to Learn never show on a guide page. Every page is complete without the video.
+Some pages may show **Watch:** and the name of a video. That link only appears when BeanPool has made a video for that page and your community has it in the Pulse, under **Learn** (**How it works** in the web app). Videos members add to Learn never show on a guide page. Every page is complete without the video.

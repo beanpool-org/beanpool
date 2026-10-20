@@ -33,7 +33,7 @@ You can always open a video on YouTube instead: tap the title, or **Open on YouT
 
 ## Something wrong with a post
 
-- **Someone else's post:** tap the flag, choose why (**Spam or scam**, **Offensive content**, **Misleading post**, **Child safety** or **Other**) and tap **Submit report**. The people who run your community's server look at it.
+- **Someone else's post:** tap the flag, choose why (**Spam or scam**, **Offensive content**, **Misleading post**, **Child safety** or **Other**) and tap **Submit report** (**Submit Report** in the web app). The people who run your community's server look at it.
 - **Your own post:** tap **Hide**, then **Hide from feed**. It comes off the Pulse for everyone. A hidden post can't be brought back. In the web app you can also tap **Delete**, then **Delete permanently**, to remove your post for good.
 
 You cannot hide someone else's post just for yourself.

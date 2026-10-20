@@ -30,7 +30,7 @@ Your phone can't tell these apart by itself. You can, with the key code.
 - Check it **in person, or on a phone or video call** where you know it's them. Don't check it by a message in BeanPool: if the key is wrong, so is whoever answers.
 - If every digit matches, tick **I checked with Ben: the key code in their Settings matches this one**, then tap **Continue with the new key**.
 
-From then on your messages go to the new key. The banner and the **key changed** tag in your Inbox go away, and your earlier messages still read.
+From then on your messages go to the new key. The banner and the **key changed** tag on the chat in **Talk** go away, and your earlier messages still read.
 
 The code isn't secret. It's safe to read out.
 

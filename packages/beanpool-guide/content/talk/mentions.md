@@ -12,6 +12,8 @@ In a group's chat, write **@** followed by the person's name as it shows in the 
 - Capital letters do not matter.
 - The name must be written in full, and not run on into other letters: "@Anabel" does not alert Ana.
 - Only people in the group can be mentioned.
+- A message can alert up to 20 people.
+- Adding a name by editing a message does not alert them.
 
 ## Where mentions work
 

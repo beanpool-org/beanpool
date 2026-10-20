@@ -52,7 +52,7 @@ If something goes wrong on the page after your join went out, it says so and off
 
 ## A new account's limits
 
-On the global community a new account has a few daily limits for its first 3 days, and until 3 of its posts have stayed up: 3 posts, 5 photos, and 10 new people to message in any 24 hours. An account made with 12 words alone has smaller ones for its first 7 days: 2 posts, 4 photos and 3 new people to message. Adding a sign-in moves it to the usual ones at once. Replying to someone who wrote to you first is never limited. See "Reporting a problem" for why.
+On the global community a new account has a few daily limits for its first 3 days, and until 3 of its posts have stayed up: 3 posts, 5 photos, and 10 new people to message in any 24 hours. An account made with 12 words alone has smaller ones, for its first 7 days and until 3 of its posts have stayed up: 2 posts, 4 photos and 3 new people to message. Adding a sign-in moves it to the usual ones at once. Replying to someone who wrote to you first is never limited. See "Reporting a problem" for why.
 
 - After you join, a card called **Your account is new** shows how many of each are left and when more come back. Tap **✕** to put it away. It stays in **Settings** until the limits are over.
 - If you reach a limit, **New Post** or the chat says which one and when it lets up, and **New Post** shows the same card.

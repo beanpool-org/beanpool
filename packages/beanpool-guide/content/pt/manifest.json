@@ -1,4 +1,754 @@
 {
-  "sections": {},
-  "pages": {}
+  "sections": {
+    "about": {
+      "title": {
+        "text": "Sobre o BeanPool",
+        "sourceHash": "2d9dd281fa519636"
+      },
+      "summary": {
+        "text": "Como o BeanPool funciona, as regras e a tomada de decisões, dúvidas frequentes e o que há de novo.",
+        "sourceHash": "003302493f5fd51a"
+      }
+    },
+    "getting-started": {
+      "title": {
+        "text": "Primeiros passos",
+        "sourceHash": "831d0f72d242b7d1"
+      },
+      "summary": {
+        "text": "Início, como entrar, encontrar uma comunidade próxima, os feijões e a comunidade global, limites, suas 12 palavras, perfil, barra superior, este guia, ajuda, várias comunidades e o app web.",
+        "sourceHash": "63d6211469096565"
+      }
+    },
+    "market": {
+      "title": {
+        "text": "Mercado",
+        "sourceHash": "5238d9bd03d543e6"
+      },
+      "summary": {
+        "text": "Encontrar e publicar Ofertas e Pedidos, e como um acordo funciona do início ao fim.",
+        "sourceHash": "6008ab9bf397a83a"
+      }
+    },
+    "map": {
+      "title": {
+        "text": "Mapa",
+        "sourceHash": "be176b0015c424b7"
+      },
+      "summary": {
+        "text": "O que são os marcadores, onde fica o seu e como encontrar coisas perto de você.",
+        "sourceHash": "b4e17982e037f558"
+      }
+    },
+    "talk": {
+      "title": {
+        "text": "Conversas",
+        "sourceHash": "449f5a775762cdc5"
+      },
+      "summary": {
+        "text": "Mensagens, grupos e chats, pessoas e amigos, conversas de eventos, silenciar, menções e chave alterada.",
+        "sourceHash": "e680a96492c72e47"
+      }
+    },
+    "pulse": {
+      "title": {
+        "text": "Pulso",
+        "sourceHash": "f7a403c6cdf31e72"
+      },
+      "summary": {
+        "text": "O que seus vizinhos compartilham, os vídeos do Aprender e como adicionar seus próprios canais.",
+        "sourceHash": "9ab06ad52ef86462"
+      }
+    },
+    "commons": {
+      "title": {
+        "text": "Bens comuns",
+        "sourceHash": "6aa9f1a43424d37b"
+      },
+      "summary": {
+        "text": "Decisões e votação, os feijões compartilhados, seus grupos, empreendimentos e custódios. As enquetes e eventos também ficam aqui; você os encontra no Mercado.",
+        "sourceHash": "bd9454f4374e35ae"
+      }
+    },
+    "ledger": {
+      "title": {
+        "text": "Registro",
+        "sourceHash": "ee69eb4afc76aae0"
+      },
+      "summary": {
+        "text": "Seu saldo, linha de crédito, presentes, emblemas de confiança, o limite por parceiro de trocas e a taxa de circulação.",
+        "sourceHash": "99d7457bf048947c"
+      }
+    },
+    "settings": {
+      "title": {
+        "text": "Configurações e segurança",
+        "sourceHash": "8ee717d56a807cd5"
+      },
+      "summary": {
+        "text": "Privacidade e o que administradores e assistentes de IA podem ver, sua região, bloqueio e denúncias, alertas, tema claro e escuro, Modo férias, sair, recuperar sua conta e conferir suas 12 palavras como proprietário.",
+        "sourceHash": "767b3834909fa76c"
+      }
+    }
+  },
+  "pages": {
+    "how-it-works": {
+      "title": {
+        "text": "Como o BeanPool funciona",
+        "sourceHash": "8ee2145ba2a47e77"
+      },
+      "summary": {
+        "text": "Feijões, trocas, ofertas e pedidos, e crédito, em palavras simples.",
+        "sourceHash": "921252df227ae544"
+      }
+    },
+    "rules": {
+      "title": {
+        "text": "Regras e decisões",
+        "sourceHash": "482819c153332e58"
+      },
+      "summary": {
+        "text": "Votação, quórum, voto secreto, quem pode votar, suspensão, remoção de membros, custódios, coordenadores e coordenadores principais.",
+        "sourceHash": "b111b31338cdd2a3"
+      }
+    },
+    "faq": {
+      "title": {
+        "text": "Perguntas",
+        "sourceHash": "9a72221a27476f3e"
+      },
+      "summary": {
+        "text": "Respostas curtas para as dúvidas mais comuns dos membros.",
+        "sourceHash": "8feb7069cb08f93d"
+      }
+    },
+    "whats-new": {
+      "title": {
+        "text": "Novidades",
+        "sourceHash": "135e912e89054ffa"
+      },
+      "summary": {
+        "text": "O que mudou no aplicativo, em palavras simples.",
+        "sourceHash": "e1f96938296c5950"
+      }
+    },
+    "home": {
+      "title": {
+        "text": "Início",
+        "sourceHash": "3a78695388b38b5c"
+      },
+      "summary": {
+        "text": "O que é o Início, quais cartões ele mostra no celular e na web, como adicionar, mover ou remover, escolher seus interesses e privacidade ao sair.",
+        "sourceHash": "a1c1ff42cd312dd2"
+      },
+      "help": {
+        "text": "Este é o seu Início: cartões sobre o que precisa de você e o que há por perto. Adicione um cartão abaixo ou toque em … para mover ou remover.",
+        "sourceHash": "3842000d41b06fa3"
+      }
+    },
+    "joining": {
+      "title": {
+        "text": "Entrar no BeanPool",
+        "sourceHash": "4a4fa8d50d056023"
+      },
+      "summary": {
+        "text": "Duas formas de entrar: uma comunidade com convite de membro, ou a comunidade global se estiver aberta, com 12 palavras secretas ou login. Pedir entrada e convidar outros.",
+        "sourceHash": "bfa09f20fea858c6"
+      },
+      "help": {
+        "text": "Entre em uma comunidade com convite de um membro ou na comunidade global com 12 palavras secretas ou um login.",
+        "sourceHash": "288300534966c3d2"
+      }
+    },
+    "finding-a-community": {
+      "title": {
+        "text": "Achar uma comunidade próxima",
+        "sourceHash": "dbb0b4170f999d18"
+      },
+      "summary": {
+        "text": "A partir da comunidade global, encontre uma comunidade perto de você e peça para entrar, receba aviso quando surgir uma ou crie a sua.",
+        "sourceHash": "d7fada0c8e749ecf"
+      }
+    },
+    "beans-and-the-global-community": {
+      "title": {
+        "text": "Feijões e comunidade global",
+        "sourceHash": "e44e1649e26e9122"
+      },
+      "summary": {
+        "text": "Para que serve a comunidade global, uma comunidade entre várias, e o que você vê lá: o marcador 🏘️ Comunidade local, a comunidade de exemplo Example Valley, a espera dos feijões e como criar ou achar uma comunidade local.",
+        "sourceHash": "f91dcd042d53fdfb"
+      }
+    },
+    "global-community-limits": {
+      "title": {
+        "text": "Limites da comunidade global",
+        "sourceHash": "79186984a4ee4919"
+      },
+      "summary": {
+        "text": "A comunidade global é gratuita, com alguns limites para manter o custo estável. Um anúncio é arquivado 90 dias após a última alteração. Tem até 5 fotos, o celular guarda os 500 mais próximos e você pode seguir 3 locais.",
+        "sourceHash": "feba3e6c852b6d3b"
+      }
+    },
+    "your-12-words": {
+      "title": {
+        "text": "Suas 12 palavras",
+        "sourceHash": "dd2264b1e132960b"
+      },
+      "summary": {
+        "text": "As 12 palavras são a chave da sua conta. Por que importam, onde encontrá-las, como mantê-las seguras e como adicionar um login como alternativa.",
+        "sourceHash": "7033308ae096c586"
+      }
+    },
+    "your-profile": {
+      "title": {
+        "text": "Seu perfil",
+        "sourceHash": "528d89ad72cba22e"
+      },
+      "summary": {
+        "text": "Seu nome, foto, algumas palavras sobre você e quem pode ver seus dados de contato.",
+        "sourceHash": "f405b4421669fcdb"
+      }
+    },
+    "the-top-bar": {
+      "title": {
+        "text": "Barra superior",
+        "sourceHash": "67f6e62947dde848"
+      },
+      "summary": {
+        "text": "O feijão, os pequenos ícones que avisam quando algo precisa de você e os botões no canto superior direito.",
+        "sourceHash": "19dc6a309244ae90"
+      }
+    },
+    "the-bean": {
+      "title": {
+        "text": "Este guia",
+        "sourceHash": "1d8917503dda7b5f"
+      },
+      "summary": {
+        "text": "Onde encontrar este guia, como pesquisar nele e como ele se mantém atualizado.",
+        "sourceHash": "7e694a121aa2314d"
+      }
+    },
+    "getting-help": {
+      "title": {
+        "text": "Obter ajuda",
+        "sourceHash": "418313b75b185ab8"
+      },
+      "summary": {
+        "text": "Onde procurar quando tiver dúvidas e a quem perguntar.",
+        "sourceHash": "8d12d16dc2217232"
+      }
+    },
+    "communities": {
+      "title": {
+        "text": "Mais de uma comunidade",
+        "sourceHash": "b753dd3e548b2230"
+      },
+      "summary": {
+        "text": "Participe de várias comunidades com uma só conta, alterne entre elas, acompanhe sua comunidade para um novo endereço e veja o que a comunidade global mostra.",
+        "sourceHash": "71e99c6bbffadcbe"
+      }
+    },
+    "web-app": {
+      "title": {
+        "text": "BeanPool no navegador",
+        "sourceHash": "1daaa01a91ba4b17"
+      },
+      "summary": {
+        "text": "O app web faz quase tudo o que o celular faz. Entrar na comunidade global pelo navegador, recuperar sua conta com seu login, usar a conta no celular e botões com nomes diferentes.",
+        "sourceHash": "8afd3ad2f9117fd5"
+      }
+    },
+    "browsing-the-market": {
+      "title": {
+        "text": "Explorar o Mercado",
+        "sourceHash": "ab1b6bf5f734c023"
+      },
+      "summary": {
+        "text": "Encontre Ofertas e Pedidos com busca, filtros e distância.",
+        "sourceHash": "e73e882abbebfa8d"
+      },
+      "help": {
+        "text": "Ofertas e Pedidos de pessoas perto de você. Busque, filtre por categoria ou distância, ou toque em + PUBLICAR para criar o seu.",
+        "sourceHash": "0bc8b01c4d9effb6"
+      }
+    },
+    "posting": {
+      "title": {
+        "text": "Publicar Oferta ou Pedido",
+        "sourceHash": "e218de31c1bbad00"
+      },
+      "summary": {
+        "text": "Publique algo que você pode fazer ou oferecer, ou algo que esteja procurando.",
+        "sourceHash": "9ffa9b1e66834bc0"
+      }
+    },
+    "my-deals": {
+      "title": {
+        "text": "Meus acordos",
+        "sourceHash": "bfad6bb30e1876c5"
+      },
+      "summary": {
+        "text": "Um só lugar para cada troca em andamento, cada anúncio ativo e suas trocas passadas.",
+        "sourceHash": "8772e2ee242712d3"
+      },
+      "help": {
+        "text": "Cada troca em andamento e cada anúncio ativo. Um acordo aguardando você fica no topo.",
+        "sourceHash": "3ec4be8c87368ed9"
+      }
+    },
+    "a-deal-step-by-step": {
+      "title": {
+        "text": "Um acordo passo a passo",
+        "sourceHash": "d2b29952cde1ab00"
+      },
+      "summary": {
+        "text": "Do contato inicial ao pagamento, para uma Oferta e um Pedido, e avaliação.",
+        "sourceHash": "88d4362d08a13bc5"
+      }
+    },
+    "when-a-deal-goes-wrong": {
+      "title": {
+        "text": "Se um acordo der errado",
+        "sourceHash": "190bfad1746f9e84"
+      },
+      "summary": {
+        "text": "Cancelar um acordo e o que acontece quando vocês não chegam a um consenso.",
+        "sourceHash": "a68c0d7af60988b4"
+      }
+    },
+    "map-pins": {
+      "title": {
+        "text": "O que o mapa mostra",
+        "sourceHash": "dbd1bae516674246"
+      },
+      "summary": {
+        "text": "Os marcadores no Mapa, o significado das cores e os botões ao redor.",
+        "sourceHash": "79dec90cc1871495"
+      },
+      "help": {
+        "text": "O que há por perto: verde para Ofertas, laranja para Pedidos, roxo para eventos. Toque em um marcador para vê-lo.",
+        "sourceHash": "0dae9edef568b7cd"
+      }
+    },
+    "pin-locations": {
+      "title": {
+        "text": "Localização do marcador",
+        "sourceHash": "271264e11ffa7eaf"
+      },
+      "summary": {
+        "text": "Quem vê onde estão seus anúncios e eventos, e como manter sua casa em privacidade.",
+        "sourceHash": "a6ef3083e3ca4bfc"
+      }
+    },
+    "near-you": {
+      "title": {
+        "text": "Encontrar coisas por perto",
+        "sourceHash": "21bac241e8aef2ca"
+      },
+      "summary": {
+        "text": "Mostrar apenas anúncios a uma certa distância de você ou de qualquer lugar que escolher.",
+        "sourceHash": "5158de7099e0e89b"
+      }
+    },
+    "messages": {
+      "title": {
+        "text": "Mensagens",
+        "sourceHash": "04d7b48339271ea6"
+      },
+      "summary": {
+        "text": "Iniciar uma conversa, enviar fotos, responder, reagir, editar, apagar, silenciar e o que é privado.",
+        "sourceHash": "d97a6ef5d498fdde"
+      },
+      "help": {
+        "text": "Suas conversas. Conversas individuais têm proteção de ponta a ponta. Toque para abrir ou inicie uma a partir de um anúncio ou amigos.",
+        "sourceHash": "bb7067d935067660"
+      }
+    },
+    "groups": {
+      "title": {
+        "text": "Grupos",
+        "sourceHash": "39bbb719fa2b9d22"
+      },
+      "summary": {
+        "text": "Seus grupos e chats, conversas, criar um grupo, convidar pessoas, entrar por convite e as votações internas do grupo.",
+        "sourceHash": "4fa880d88c4b646f"
+      },
+      "help": {
+        "text": "Seus grupos e chats. Crie um grupo, convide pessoas ou abra um para conversar e votar juntos.",
+        "sourceHash": "ae3496f349eba2b3"
+      }
+    },
+    "people": {
+      "title": {
+        "text": "Pessoas e amigos",
+        "sourceHash": "99d59d29a0f3c756"
+      },
+      "summary": {
+        "text": "Encontre membros da sua comunidade, adicione amigos e apoie alguém.",
+        "sourceHash": "4be4971d826d83fe"
+      },
+      "help": {
+        "text": "Os membros da sua comunidade e seus amigos. Toque em alguém para ver o perfil ou em 💬 junto a um amigo para conversar.",
+        "sourceHash": "d90b46866bc2bb6f"
+      }
+    },
+    "event-chat": {
+      "title": {
+        "text": "Chat do evento",
+        "sourceHash": "9c298662a4d6fc3e"
+      },
+      "summary": {
+        "text": "Converse com o anfitrião e todos que vão ao evento.",
+        "sourceHash": "ae8ca7988e16e019"
+      }
+    },
+    "mute": {
+      "title": {
+        "text": "Silenciar conversa",
+        "sourceHash": "8a491f4109c925c7"
+      },
+      "summary": {
+        "text": "Silencie uma conversa — individual, de grupo ou de empreendimento — por 8 horas, uma semana ou para sempre.",
+        "sourceHash": "ce143abea39ce423"
+      }
+    },
+    "mentions": {
+      "title": {
+        "text": "Menções (@nome)",
+        "sourceHash": "2e133ecc601b188f"
+      },
+      "summary": {
+        "text": "Chame a atenção de alguém em um chat em grupo escrevendo @ e o nome da pessoa.",
+        "sourceHash": "265d8fd594c5af23"
+      }
+    },
+    "key-changed": {
+      "title": {
+        "text": "Se a chave do chat mudou",
+        "sourceHash": "79c7dc48aa148094"
+      },
+      "summary": {
+        "text": "Por que uma conversa para de enviar, como checar o código de chave com a pessoa e quando continuar.",
+        "sourceHash": "c7a3e58ca019f963"
+      }
+    },
+    "the-pulse": {
+      "title": {
+        "text": "O Pulso",
+        "sourceHash": "a974f2e05f105a24"
+      },
+      "summary": {
+        "text": "O que seus vizinhos criam e compartilham em outros lugares, em um só feed.",
+        "sourceHash": "999659aebbfe69d2"
+      },
+      "help": {
+        "text": "Links criados ou compartilhados por vizinhos em outros lugares, em um só feed. Toque em um para abrir.",
+        "sourceHash": "1d19387da6116082"
+      }
+    },
+    "learn": {
+      "title": {
+        "text": "A seção Aprender",
+        "sourceHash": "498e66e5947ca0c3"
+      },
+      "summary": {
+        "text": "Vídeos curtos sobre o BeanPool e as páginas do guia que os acompanham.",
+        "sourceHash": "4d2fdf4c850fe47f"
+      }
+    },
+    "your-channels": {
+      "title": {
+        "text": "Compartilhar canais",
+        "sourceHash": "e47ac70a91b21162"
+      },
+      "summary": {
+        "text": "Coloque seus canais do YouTube, blog, Instagram e outros no Pulso.",
+        "sourceHash": "bc9819c938b91f04"
+      }
+    },
+    "decisions": {
+      "title": {
+        "text": "Votar em uma Decisão",
+        "sourceHash": "67b17269f83d1030"
+      },
+      "summary": {
+        "text": "Encontre Decisões abertas, vote, altere seu voto e veja os resultados.",
+        "sourceHash": "fc4b9c95d8478a91"
+      }
+    },
+    "proposing-a-decision": {
+      "title": {
+        "text": "Propor uma Decisão",
+        "sourceHash": "3a20703895de04dc"
+      },
+      "summary": {
+        "text": "Peça à comunidade para decidir algo de forma vinculativa.",
+        "sourceHash": "69756653393ec8b4"
+      }
+    },
+    "polls": {
+      "title": {
+        "text": "Enquetes",
+        "sourceHash": "996729458535904a"
+      },
+      "summary": {
+        "text": "Faça uma pergunta rápida à comunidade. Enquetes mostram opiniões; não mudam nada sozinhas.",
+        "sourceHash": "d7fadda691d8879b"
+      },
+      "help": {
+        "text": "Uma enquete faz uma pergunta rápida à comunidade. Mostra o que as pessoas pensam; não altera nada sozinha.",
+        "sourceHash": "99dfd4781ce0785d"
+      }
+    },
+    "events": {
+      "title": {
+        "text": "Eventos",
+        "sourceHash": "8d14f6e72de8f18a"
+      },
+      "summary": {
+        "text": "Crie um evento, presencial ou online, único ou recorrente; confirme presença, receba lembretes, compartilhe e gerencie como anfitrião.",
+        "sourceHash": "29e8adc52f9b6df9"
+      }
+    },
+    "enterprises": {
+      "title": {
+        "text": "Projetos e empreendimentos",
+        "sourceHash": "e1ccbac49d2ba550"
+      },
+      "summary": {
+        "text": "Iniciativas conjuntas com feijões próprios: encontre uma, apoie ou crie a sua.",
+        "sourceHash": "8302886bb796749e"
+      }
+    },
+    "keepers": {
+      "title": {
+        "text": "Custódios",
+        "sourceHash": "ffc8948f6b16666e"
+      },
+      "summary": {
+        "text": "As pessoas que administram um empreendimento e respondem por ele. Como entrar, contestar e sair.",
+        "sourceHash": "cbe734a215f75289"
+      }
+    },
+    "commons-fund": {
+      "title": {
+        "text": "Bens comuns",
+        "sourceHash": "b1b09e953a4dd7c0"
+      },
+      "summary": {
+        "text": "Os feijões compartilhados da sua comunidade: de onde vêm e como são usados.",
+        "sourceHash": "aaf9158560e5d6aa"
+      }
+    },
+    "your-balance": {
+      "title": {
+        "text": "Seu saldo e histórico",
+        "sourceHash": "fb3a96eb2bfcd2a8"
+      },
+      "summary": {
+        "text": "Quantos feijões você tem, o que está retido e cada troca e presente.",
+        "sourceHash": "61df521108b36035"
+      },
+      "help": {
+        "text": "Seus Feijões: o que você tem, o que está retido em acordos e cada troca ou presente. Todo mundo começa do zero.",
+        "sourceHash": "a40a5f9fef426c85"
+      }
+    },
+    "credit-line": {
+      "title": {
+        "text": "Sua linha de crédito",
+        "sourceHash": "dd11b44ecc1037c9"
+      },
+      "summary": {
+        "text": "Até quanto você pode ficar abaixo de zero e como esse valor aumenta.",
+        "sourceHash": "18b609abc63667e7"
+      }
+    },
+    "gifts": {
+      "title": {
+        "text": "Enviar um presente",
+        "sourceHash": "5440f4f6ef954605"
+      },
+      "summary": {
+        "text": "Envie feijões para alguém, sem nenhuma troca envolvida.",
+        "sourceHash": "7eaddf0c6cd54a04"
+      }
+    },
+    "trust-badges": {
+      "title": {
+        "text": "Emblemas",
+        "sourceHash": "a1d8765277383923"
+      },
+      "summary": {
+        "text": "Recém-chegado, Morador, Guardião e Ancião. O que significam e por que não desbloqueiam nada.",
+        "sourceHash": "90926482e87ba9fa"
+      }
+    },
+    "trading-partner-limit": {
+      "title": {
+        "text": "Limite de 500 feijões",
+        "sourceHash": "c40110de7df3670c"
+      },
+      "summary": {
+        "text": "Por que negociar com várias pessoas constrói mais confiança do que negociar muito com apenas uma.",
+        "sourceHash": "ce231d025501d5bc"
+      }
+    },
+    "circulation-fee": {
+      "title": {
+        "text": "Taxa de circulação",
+        "sourceHash": "e237d280aa62b186"
+      },
+      "summary": {
+        "text": "Pequena taxa mensal sobre saldos altos, para que os feijões continuem circulando. Os primeiros 200 são isentos.",
+        "sourceHash": "c9efbe6aa5cb9873"
+      }
+    },
+    "privacy": {
+      "title": {
+        "text": "Sua privacidade",
+        "sourceHash": "d2a7115d0455956b"
+      },
+      "summary": {
+        "text": "O que os outros podem ver sobre você e as configurações que controlam isso.",
+        "sourceHash": "e4a23a87e82cf7a6"
+      },
+      "help": {
+        "text": "O que outros membros podem ver sobre você e as opções que controlam isso.",
+        "sourceHash": "0a1a1831174d443b"
+      }
+    },
+    "your-area": {
+      "title": {
+        "text": "Sua região",
+        "sourceHash": "b0adfdbb4ce55184"
+      },
+      "summary": {
+        "text": "O local aproximado que a comunidade global usa para mostrar anúncios perto de você e como alterar ou limpar.",
+        "sourceHash": "de4a8af84def7d30"
+      },
+      "help": {
+        "text": "O local aproximado para mostrar anúncios perto de você. Altere ou limpe aqui; nunca é seu endereço exato.",
+        "sourceHash": "f3099801c4d773a5"
+      }
+    },
+    "what-the-admins-can-see": {
+      "title": {
+        "text": "O que administradores veem",
+        "sourceHash": "261de35d8123a845"
+      },
+      "summary": {
+        "text": "Em comunidades onde administradores mantêm lista de nomes: o que ela tem sobre você, quem lê, o que o servidor guarda e o que significa estar confirmado.",
+        "sourceHash": "5960a4392bb32b4b"
+      }
+    },
+    "admins-ai-assistants": {
+      "title": {
+        "text": "Assistente de IA de admin",
+        "sourceHash": "9180d368e5d11c1e"
+      },
+      "summary": {
+        "text": "O que o assistente de IA de um proprietário ou administrador pode ler sobre você, o que nunca vê e quem recebe.",
+        "sourceHash": "d693c47b7b2cbfef"
+      }
+    },
+    "blocking": {
+      "title": {
+        "text": "Bloquear alguém",
+        "sourceHash": "f2ddac8bd6e31ad5"
+      },
+      "summary": {
+        "text": "Oculte as publicações e mensagens de alguém e desfaça isso quando quiser.",
+        "sourceHash": "9e63d5d87e52a1b9"
+      },
+      "help": {
+        "text": "Pessoas que você bloqueou. As publicações e mensagens delas ficam ocultas para você; desbloqueie alguém aqui.",
+        "sourceHash": "baecf7f0bec3735c"
+      }
+    },
+    "reporting": {
+      "title": {
+        "text": "Denunciar problema",
+        "sourceHash": "59274c49ac87bb2f"
+      },
+      "summary": {
+        "text": "Avise os moderadores da sua comunidade sobre uma publicação, evento, post no Pulso, projeto ou empreendimento.",
+        "sourceHash": "4b773ef8eef237fa"
+      }
+    },
+    "notifications": {
+      "title": {
+        "text": "Notificações",
+        "sourceHash": "788011833a5a0f22"
+      },
+      "summary": {
+        "text": "Escolha quais alertas chegam ao seu celular e quando os eventos enviam lembretes.",
+        "sourceHash": "70c8aa586befc843"
+      },
+      "help": {
+        "text": "Escolha quais alertas chegam até você e quando os eventos enviam lembretes.",
+        "sourceHash": "7f7ecf01321aba59"
+      }
+    },
+    "appearance": {
+      "title": {
+        "text": "Claro e escuro",
+        "sourceHash": "596443341c105af1"
+      },
+      "summary": {
+        "text": "O aplicativo no celular inicia claro e na web inicia escuro. Altere ou siga as configurações do dispositivo.",
+        "sourceHash": "31cf0aeff28a2052"
+      },
+      "help": {
+        "text": "Deixe o aplicativo claro ou escuro, ou acompanhe o tema do seu celular.",
+        "sourceHash": "1ef643d6832c782a"
+      }
+    },
+    "holiday-mode": {
+      "title": {
+        "text": "Ausentar-se",
+        "sourceHash": "03098a2ccb21c3c2"
+      },
+      "summary": {
+        "text": "O Modo férias oculta suas Ofertas e pausa novos pedidos enquanto você estiver fora.",
+        "sourceHash": "53d1ceef93b0a7a1"
+      }
+    },
+    "leaving-or-deleting": {
+      "title": {
+        "text": "Sair ou excluir sua conta",
+        "sourceHash": "6128699c3d7f036a"
+      },
+      "summary": {
+        "text": "Saia deste celular ou exclua sua conta em definitivo, e veja o que acontece com seus feijões.",
+        "sourceHash": "d28cb71428dd6615"
+      }
+    },
+    "recovery": {
+      "title": {
+        "text": "Recuperar sua conta",
+        "sourceHash": "7a6a763f943871ce"
+      },
+      "summary": {
+        "text": "Restaure sua conta em um celular novo e proteja-a vinculando um login.",
+        "sourceHash": "5235d9f9073b2e63"
+      },
+      "help": {
+        "text": "Como recuperar sua conta em um celular novo: suas 12 palavras ou um login vinculado.",
+        "sourceHash": "05fba497e5466e59"
+      }
+    },
+    "check-your-12-words": {
+      "title": {
+        "text": "Suas 12 palavras e chaves (donos)",
+        "sourceHash": "0a24c7fe8ed3b0a4"
+      },
+      "summary": {
+        "text": "Para proprietários de comunidades. Como checar suas 12 palavras, assumir ou restaurar o servidor pelo celular e verificação automática pelo aparelho.",
+        "sourceHash": "c3a1b3cdc4e7d8df"
+      }
+    }
+  }
 }

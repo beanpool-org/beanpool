@@ -44,26 +44,26 @@ Unakutana nayo katika miundo michache:
 
 - lebo ndogo kwenye skrini au kadi;
 - kisanduku juu ya skrini ya mfano;
-- kitufe kinachobaki mahali pake, kama vile **Ombi · Maharagwe yameshikiliwa kwa usalama 🏘️** kwenye tangazo;
-- mstari mmoja ambapo jumuiya ya eneo ni tofauti, kama vile "🏘️ Katika jumuiya ya eneo hii ni bei kwa maharagwe ›".
+- kitufe kinachobaki mahali pake, kama vile **Request · Beans held safely 🏘️** kwenye tangazo;
+- mstari mmoja ambapo jumuiya ya eneo ni tofauti, kama vile "🏘️ In a local community this is a price in Beans ›".
 
-Gusa yoyote kati ya hizo ili kufungua **Kwa nini hii ipo katika jumuiya ya eneo**. Inaeleza kwa nini kwa sentensi moja au mbili, kisha inatoa **Anzisha jumuiya** na, pale inapowezekana, **Jumuiya zilizo karibu nawe** na **Jinsi inavyofanya kazi**.
+Gusa yoyote kati ya hizo ili kufungua **Why this lives in a local community**. Inaeleza kwa nini kwa sentensi moja au mbili, kisha inatoa **Anzisha jumuiya** na, pale inapowezekana, **Jumuiya zilizo karibu nawe** na **Jinsi Inavyofanya Kazi**.
 
 ## Example Valley
 
-Skrini zilizo na alama hiyo huonyesha **Bonde la Mfano**: jumuiya ya kubuni, ili uweze kuona skrini za jumuiya ya eneo zikiwa na kitu juu yake.
+Skrini zilizo na alama hiyo huonyesha **Example Valley**: jumuiya ya kubuni, ili uweze kuona skrini za jumuiya ya eneo zikiwa na kitu juu yake.
 
 - **Leja:** mfano wa mwanachama mwenye Maharagwe 85, nafasi ya kutumia hadi −200, beji ya uaminifu, na biashara chache za hivi karibuni, kama vile mkate, saa moja ya kutunza bustani na miche kadhaa.
-- **Pamoja:** Example Valley Bakery, biashara ambayo wanachama wake huisimamia, na Uamuzi mmoja: eneo la mboji, lililolipwa kutoka kwa Maharagwe ya pamoja ya Mali za Pamoja.
+- **Mali za Pamoja:** Example Valley Bakery, biashara ambayo wanachama wake huisimamia, na Uamuzi mmoja: eneo la mboji, lililolipwa kutoka kwa Maharagwe ya pamoja ya Mali za Pamoja.
 - **Biashara Zangu,** katika Soko: mifano mitatu ya makubaliano: moja linalokungoja, moja lenye Maharagwe yaliyowekwa salama, na moja lililokamilika.
 
-Hakuna mtu katika Example Valley mwenye jina. Unaona "jirani", "Mali za Pamoja" au "Duka la Mikate la Bonde la Mfano". Hakuna kitu halisi, na hakuna chako.
+Hakuna mtu katika Example Valley mwenye jina. Unaona "jirani", "Mali za Pamoja" au "Example Valley Bakery". Hakuna kitu halisi, na hakuna chako.
 
 Vitufe vya **ⓘ** na kurasa za mwongozo kwenye skrini hizi ndizo halisi: zinasema jinsi inavyofanya kazi katika jumuiya ya eneo.
 
-Kitufe ambacho kingetuma Maharagwe, kingefanya biashara, kupiga kura, kuahidi au kualika hufungua **Kwa nini hii ipo katika jumuiya ya eneo** badala yake. Hakitumi chochote na hakibadilishi chochote.
+Kitufe ambacho kingetuma Maharagwe, kingefanya biashara, kupiga kura, kuahidi au kualika hufungua **Why this lives in a local community** badala yake. Hakitumi chochote na hakibadilishi chochote.
 
-Kisanduku kilicho juu ya skrini ya mfano kina **✕**. Kiguse na kisanduku kinajikunja kuwa mstari mmoja, "🏘️ Mfano · Kwa nini? ›". Simu au kivinjari chako hukumbuka hilo, kwa ajili ya jumuiya hii. Kwenye simu, gusa mstari huo ili kufungua kisanduku tena. Kwenye programu ya wavuti, gusa mstari huo ili kuona sababu, au **▾** ili kufungua kisanduku tena.
+Kisanduku kilicho juu ya skrini ya mfano kina **✕**. Kiguse na kisanduku kinajikunja kuwa mstari mmoja, "🏘️ An example · Why? ›". Simu au kivinjari chako hukumbuka hilo, kwa ajili ya jumuiya hii. Kwenye simu, gusa mstari huo ili kufungua kisanduku tena. Kwenye programu ya wavuti, gusa mstari huo ili kuona sababu, au **▾** ili kufungua kisanduku tena.
 
 Kwenye kivinjari cha wavuti unaweza kuona mfano wa Leja kabla ya kujiunga: ni kichupo kando ya Nyumbani, Soko na Ramani.
 
@@ -85,15 +85,15 @@ Ikiwa jumuiya ya kimataifa itaweza siku moja kuthibitisha nani ni nani, baadhi y
 
 Jumuiya ya eneo huendeshwa kwenye seva yake ndogo yenyewe, ikitunzwa na mtu wa eneo hilo. Mtu huyo anaweza kuwa wewe.
 
-- **Gharama yake:** kompyuta ya ziada inayobaki ikiwa imewashwa nyumbani, au seva ndogo ya kukodi kwa dola chache kwa mwezi. Programu ni ya bure.
+- **Gharama zake:** kompyuta ya ziada inayobaki ikiwa imewashwa nyumbani, au seva ndogo ya kukodi kwa dola chache kwa mwezi. Programu ni ya bure.
 - **Nani anayeiendesha:** wewe mwenyewe, kwenye mashine yako mwenyewe au ile unayokodi. Haihitaji beanpool.org: inaweza kuwa na anwani yake yenyewe ya wavuti.
-- **Unachowajibika nacho:** ripoti kutoka kwa wanachama wako huja kwako. Data ya jumuiya ni yako kuweka nakala rudufu, ukiwa na msimbo wa kurejesha. Weka wamiliki wawili, na uweke seva ikiwa imewashwa na kusasishwa.
-- **Kile ambacho huoni kamwe:** mazungumzo ya faragha ya wanachama wako na mtu mmoja. Yamefungwa ili seva isiweze kuyasoma.
+- **Unachochukua:** ripoti kutoka kwa wanachama wako huja kwako. Data ya jumuiya ni yako kuweka nakala rudufu, ukiwa na msimbo wa kurejesha. Weka wamiliki wawili, na uweke seva ikiwa imewashwa na kusasishwa.
+- **Usichokiona kamwe:** mazungumzo ya faragha ya wanachama wako na mtu mmoja. Yamefungwa ili seva isiweze kuyasoma.
 - **Muda gani:** takriban nusu saa, kwa mtu anayeweza kufuata maelekezo ya mapishi.
 
-Ili kuanza, gusa **Anzisha jumuiya** katika karatasi yoyote ya **Kwa nini hii ipo katika jumuiya ya eneo**, au, kwenye simu, kwenye kadi ya Nyumbani ya **Tafuta jumuiya yako**. Inaonyesha njia tatu za kuendesha moja: kompyuta ya ziada nyumbani, seva ndogo ya kukodi, au kuomba msaada kwenye jumuiya ya kimataifa. **Nakili maelezo ya jumuiya yangu** hunakili jina la jumuiya yako, eneo na jinsi watu wanavyoweza kukufikia, ili kubandika kwenye mipangilio ya seva yako mpya.
+Ili kuanza, gusa **Anzisha jumuiya** katika karatasi yoyote ya **Why this lives in a local community**, au, kwenye simu, kwenye kadi ya Nyumbani ya **Find your community**. Inaonyesha njia tatu za kuendesha moja: kompyuta ya ziada nyumbani, seva ndogo ya kukodi, au kuomba msaada kwenye jumuiya ya kimataifa. **Nakili maelezo ya jumuiya yangu** hunakili jina la jumuiya yako, eneo na jinsi watu wanavyoweza kukufikia, ili kubandika kwenye mipangilio ya seva yako mpya.
 
-Hatua zipo katika "Mpangilio wa mara ya kwanza", katika mwongozo wa watu wanaoendesha jumuiya, kwenye beanpool.org. Seva yako inapokuwa tayari, unaidai kwa kutumia simu yako: elekeza kamera ya simu kwenye msimbo wa QR ambao seva yako huonyesha, au katika BeanPool gusa **Sanidi seva mpya ya jumuiya** (katika **Tafuta jumuiya** au **Anzisha jumuiya**), kisha **Changanua msimbo**. Mipangilio basi inakusaidia kuipa jumuiya yako jina, kuongeza mmiliki wa pili na kutengeneza mialiko yako ya kwanza. Weka eneo la jumuiya yako katika Mipangilio pia, ili watu walio karibu nawe waweze kuipata.
+Hatua zipo katika "Mpangilio wa mara ya kwanza", katika mwongozo wa watu wanaoendesha jumuiya, kwenye beanpool.org. Seva yako inapokuwa tayari, unaidai kwa kutumia simu yako: elekeza kamera ya simu kwenye msimbo wa QR ambao seva yako huonyesha, au katika BeanPool gusa **Sanidi seva mpya ya jumuiya** (katika **Find a community** au **Anzisha jumuiya**), kisha **Changanua msimbo**. Mipangilio basi inakusaidia kuipa jumuiya yako jina, kuongeza mmiliki wa pili na kutengeneza mialiko yako ya kwanza. Weka eneo la jumuiya yako katika Mipangilio pia, ili watu walio karibu nawe waweze kuipata.
 
 ## Jiunge na iliyo karibu nawe
 
@@ -103,7 +103,7 @@ Kwenye simu:
 - Gusa **Omba kujiunga**: mwanachama wa huko anaweza kukuwezesha kuingia. Mahali ambapo jumuiya inaruhusu wasimamizi wake pekee kualika, mmiliki au msimamizi hufanya hivyo.
 - Hakuna kitu karibu nawe bado? **Niambie pindi moja inapoanza hapa** hukuambia pindi moja inapoanza.
 
-Kwenye programu ya wavuti, kadi ya Nyumbani ya **Tafuta jumuiya yako** inaunganisha kila jumuiya iliyo karibu nawe kwenye ukurasa wake yenyewe.
+Kwenye programu ya wavuti, kadi ya Nyumbani ya **Find your community** inaunganisha kila jumuiya iliyo karibu nawe kwenye ukurasa wake yenyewe.
 
 Akaunti yako inakuja nawe, ikiwa na maneno 12 yaleyale, na unabaki kuwa mwanachama wa jumuiya ya kimataifa. Tazama "Kupata jumuiya iliyo karibu nawe".
 

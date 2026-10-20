@@ -15,9 +15,9 @@ source-hash: c2f55bbef94860d8
 
 ## Muulize mtu
 
-- **Kuhusu biashara:** mtumie ujumbe mtu mwingine kwanza. Matatizo mengi ni kutoelewana tu. Kwenye chapisho, gusa **Tuma ujumbe**.
+- **Kuhusu biashara:** mtumie ujumbe mtu mwingine kwanza. Matatizo mengi ni kutoelewana tu. Kwenye chapisho, gusa **Ujumbe**.
 - **Kuhusu mtu au biashara iliyoharibika:** zungumza na wasimamizi wa jumuiya yako. Wanatunza seva yake, na wanaweza kuingilia kati kwenye biashara iliyokwama.
-- **Bado hakuna jumuiya:** jiunge na jumuiya ya kimataifa na uulize huko: watu kutoka kila mahali, na njia ya kupata jumuiya iliyo karibu nawe. Kwenye simu, beanpool.org/global hufungua programu ya BeanPool moja kwa moja kwenye njia yake ya kuingia, au duka lako la programu kwanza ikiwa huna programu hiyo. Tazama "Kujiunga na BeanPool".
+- **Bado huna jumuiya:** jiunge na jumuiya ya kimataifa na uulize huko: watu kutoka kila mahali, na njia ya kupata jumuiya iliyo karibu nawe. Kwenye simu, beanpool.org/global hufungua programu ya BeanPool moja kwa moja kwenye njia yake ya kuingia, au duka lako la programu kwanza ikiwa huna programu hiyo. Tazama "Kujiunga na BeanPool".
 - **Kuhusu programu yenyewe:** tembelea beanpool.org. Unaweza kuifungua kutoka **Mipangilio**, chini ya **BeanPool**.
 - **Kujiendeshea jumuiya mwenyewe:** wamiliki na wasimamizi wanaoendesha seva ya jumuiya wana mwongozo wao wenyewe, katika Mipangilio ya seva hiyo: ingia na ubonyeze **Mwongozo: kuendesha jumuiya yako** katika upau wa kando.
 - **Kuingia kwenye Mipangilio:** wamiliki na wasimamizi huona **Msimamizi wa jumuiya** katika **Mipangilio** ya programu ya simu. **Simamia** na jina la jumuiya yako hufungua Mipangilio yake kwenye simu. Msimamizi wa maudhui huona **Usimamizi wa jumuiya**, ikiwa na **Simamia maudhui** na jina la jumuiya, ambayo hufungua ripoti. Kwenye kompyuta, fungua Mipangilio kwenye kivinjari cha wavuti na uchague **Ingia ukitumia simu yako**, kisha kwenye programu gusa **Dhibiti jumuiya hii kutoka kwenye kompyuta** (msimamizi wa maudhui huona **Simamia jumuiya hii kutoka kwenye kompyuta**; programu za zamani: **Ingia kwenye kompyuta**) na uchanganue msimbo. Hakikisha msimbo wa herufi 6 kwenye simu unalingana na ule ulio kwenye kompyuta kabla ya kugusa **Ingia**. Ikiwa simu itaonyesha tarakimu mbili, ziandike kwenye kompyuta ndani ya sekunde 30.

@@ -253,6 +253,23 @@ test('scanWebsitePages returns skipped when S6 is not implemented', async () => 
     }
 });
 
+test('scanWebsitePages catches async errors from hook gracefully', async () => {
+    const tmp = makeTempDir();
+    try {
+        const hookDir = path.join(tmp, 'apps/website/scripts');
+        fs.mkdirSync(hookDir, { recursive: true });
+        fs.writeFileSync(
+            path.join(hookDir, 'pages.mjs'),
+            'export async function checkWebsitePages() { throw new Error("async boom"); }\n',
+        );
+        const res = await scanWebsitePages(tmp, ['es']);
+        assert.equal(res.implemented, false);
+        assert.equal(res.missing, 0);
+    } finally {
+        fs.rmSync(tmp, { recursive: true, force: true });
+    }
+});
+
 test('writeBriefs creates deterministic, self-contained brief files with style rules, exact keys, and capped by --max-keys', async () => {
     const tmp = makeTempDir();
     try {

@@ -48,7 +48,7 @@ export async function scanWebsitePages(root = ROOT, _langs = null) {
         try {
             const hook = await import(hookFile);
             if (typeof hook.checkWebsitePages === 'function') {
-                return hook.checkWebsitePages(root, _langs);
+                return await hook.checkWebsitePages(root, _langs);
             }
         } catch {
             // fall through to skipped

@@ -190,6 +190,24 @@ test('main.js WORDS dictionary translates strings by document.documentElement.la
     assert.equal(wordFnEn('noneNear'), 'No community near you yet.');
     assert.equal(wordFnEn('members', 5), '5 members');
     assert.equal(wordFnEn('radius', 10), '10km radius');
+
+    // Verify all 25 languages exist in WORDS and have every key
+    const wordsTable = domEn.window.WORDS;
+    const REQUIRED_KEYS = [
+        'noneNear', 'notLoaded', 'members', 'radius', 'visit',
+        'subscribing', 'alreadySubscribed', 'checkInbox', 'somethingWrong',
+        'subscribe', 'readIn'
+    ];
+    for (const lang of LANGS) {
+        assert.ok(wordsTable[lang], `WORDS must contain language ${lang}`);
+        for (const key of REQUIRED_KEYS) {
+            assert.ok(wordsTable[lang][key] !== undefined, `WORDS[${lang}] missing key ${key}`);
+        }
+        assert.equal(typeof wordsTable[lang].members, 'function', `WORDS[${lang}].members must be a function`);
+        assert.equal(typeof wordsTable[lang].radius, 'function', `WORDS[${lang}].radius must be a function`);
+        assert.equal(typeof wordsTable[lang].visit, 'function', `WORDS[${lang}].visit must be a function`);
+        assert.equal(typeof wordsTable[lang].readIn, 'function', `WORDS[${lang}].readIn must be a function`);
+    }
 });
 
 test('main.js on English page presents "Read this in <language>" banner when navigator.language matches without choice cookie', () => {

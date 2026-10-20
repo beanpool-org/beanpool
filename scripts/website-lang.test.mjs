@@ -39,7 +39,8 @@ import {
     buildHreflangTags,
     buildFooterLanguagesRow,
     draftLanguage,
-    extractSourceHash
+    extractSourceHash,
+    buildAll
 } from './website-build.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -149,6 +150,33 @@ test('translated pages link to guide page in their language when it exists, else
             'checkWebsite fails when translated page links to English guide page that exists in language');
     } finally {
         fs.writeFileSync(origEsFile, originalContent, 'utf8');
+    }
+});
+
+test('a publish that adds a language guide page leaves website-build.mjs --check green after website rebuild', () => {
+    const fakeGuidePage = path.join(WEBSITE_DIR, 'guide', 'es', 'index.html');
+    assert.ok(!fs.existsSync(fakeGuidePage), 'guide/es/index.html does not exist initially');
+
+    try {
+        // 1. Simulate guide publish writing a new localized guide page
+        fs.writeFileSync(fakeGuidePage, '<html><body>Guía</body></html>', 'utf8');
+
+        // 2. Without website rebuild, checkWebsite() catches the violation
+        const errorsBefore = checkWebsite();
+        assert.ok(
+            errorsBefore.some(e => e.includes('links to English guide page "index.html" although guide/es/index.html exists')),
+            'checkWebsite catches stale English link before website rebuild'
+        );
+
+        // 3. Simulate the website build step run by publish.mjs
+        buildAll();
+
+        // 4. website check is green
+        const errorsAfter = checkWebsite();
+        assert.deepEqual(errorsAfter, [], 'checkWebsite is green after rebuild');
+    } finally {
+        if (fs.existsSync(fakeGuidePage)) fs.rmSync(fakeGuidePage);
+        buildAll(); // restore original files
     }
 });
 

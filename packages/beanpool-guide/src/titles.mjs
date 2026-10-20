@@ -51,8 +51,8 @@ export const TITLE_FIELDS = Object.freeze({
 });
 
 // East Asian wide characters (Han, kana, Hangul, full-width forms): about twice a Latin letter's width on screen.
-const WIDE = /[ᄀ-ᅟ⺀-〾ぁ-㏿㐀-䶿一-鿿ꀀ-꓏가-힣豈-﫿︰-﹏＀-｠￠-￦\u{20000}-\u{3FFFD}]/u;
-const ZERO_WIDTH = /[\p{M}​-‍️]/u;
+const WIDE = /[\u1100-\u115F\u2E80-\u303E\u3041-\u33FF\u3400-\u4DBF\u4E00-\u9FFF\uA000-\uA4CF\uAC00-\uD7A3\uF900-\uFAFF\uFE30-\uFE4F\uFF00-\uFF60\uFFE0-\uFFE6\u{20000}-\u{3FFFD}]/u;
+const ZERO_WIDTH = /[\p{M}\u200B-\u200D\uFE0F]/u;
 
 /** How wide a line reads, in columns: a wide character counts two, a combining mark or a zero-width space none. */
 export function displayColumns(text) {

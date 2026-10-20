@@ -2,6 +2,8 @@
  * Web sweep W3's screens at 320 px with 1.3× text, in a real browser (words slice S3; director amendment 1 item 7):
  * Settings and every screen it opens, a member's profile (another's and your own), the profile editor and wizard, the
  * how-it-works cards, the working style quiz, Add a card, a card's settings, Edit home, a card's "…", the tour bar, the
+ * members' guide (its front page, a section and a page, whose titles and summaries the pseudo-locale pads too: slice S5a),
+ * the
  * install prompt, the new-account card, Start a community, Suggest a change, the radius picker, the guest lobby, and the
  * app shell's header and tabs. Each is drawn by the app's own components and stylesheet (e2e/words-w3-screens: Vite's
  * dev server) in the pseudo-locale `xx` (every sentence accented and padded ~35 %, the stand-in for a longer
@@ -36,6 +38,22 @@ const REAL_LANGS = only('WORDS_W3_LANGS') ?? ['es', 'pt', 'hi', 'bn', 'fr', 'ar'
 const VIEW = { viewport: { width: 320, height: 640 }, textScale: 1.3 };
 const { pseudoLocalise } = await import(pathToFileURL(path.join(CORE_DIST, 'words.js')).href);
 const wordIn = (lang, english) => (lang === 'xx' ? pseudoLocalise(english) : english);
+/**
+ * The members' guide the app bundles (the published copy): its longest-titled page and that page's section, taken from
+ * the copy rather than named, so a publish never breaks this check.
+ */
+const GUIDE = JSON.parse(fs.readFileSync(path.resolve(PWA_DIR, '../../packages/beanpool-guide/generated/guide.json'), 'utf8'));
+const GUIDE_PAGE = GUIDE.guides.reduce((a, b) => (b.title.length > a.title.length ? b : a));
+const GUIDE_SECTION = GUIDE.sections.find((s) => s.id === GUIDE_PAGE.section);
+/** A guide row's button by its title (Playwright drops the zero-width spaces the pseudo-locale puts in a long pad). */
+const guideRow = (page, lang, title) => page.getByRole('button', {
+    name: new RegExp(`^${wordIn(lang, title).replace(/\u200B/g, '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`),
+}).first();
+const guideHeading = (page, lang, title) => page.getByRole('heading', { level: 1, name: wordIn(lang, title).replace(/\u200B/g, '') });
+const openGuideSection = async (page, lang) => {
+    await guideRow(page, lang, GUIDE_SECTION.title).click();
+    await guideHeading(page, lang, GUIDE_SECTION.title).waitFor();
+};
 
 const ME = 'me-pk-0000000000000000000000000000';
 const PEER = 'peer-pk-000000000000000000000000000';
@@ -87,6 +105,13 @@ const SCREENS = [
     { name: 'settings-advanced', ready: 'h3' },
     { name: 'settings-suggest', ready: 'form' },
     { name: 'settings-guide', ready: 'input[type="search"]' },
+    { name: 'settings-guide-section', screen: 'settings-guide', ready: 'input[type="search"]', act: openGuideSection },
+    { name: 'settings-guide-page', screen: 'settings-guide', ready: 'input[type="search"]', act: async (page, lang) => {
+        await openGuideSection(page, lang);
+        await guideRow(page, lang, GUIDE_PAGE.title).click();
+        await guideHeading(page, lang, GUIDE_PAGE.title).waitFor();
+        if (lang !== 'en') await page.locator('[data-testid="guide-english-note"]').waitFor();
+    } },
     { name: 'profile-peer', ready: 'text=Fixes bikes on Sundays' },
     { name: 'profile-self', ready: 'text=Bakes on Fridays' },
     { name: 'profile-edit', ready: '#profile-bio' },

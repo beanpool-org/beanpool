@@ -7,9 +7,9 @@
  * default (`language` in /api/community/info), else English. Settings → Language and the switch on the first screen
  * change it, live: core's `t()` reads the new words and the app's root re-renders (useLanguage).
  *
- * Each language is ONE chunk of the build, fetched only when chosen: this app's words, core's words and core's date
- * words for that language (vite.config.ts puts the three in `words-<lang>`; the first chunk carries English alone,
- * #1941 review N-f). A chunk that can't be fetched (offline before the first visit in that language) leaves the
+ * Each language is ONE chunk of the build, fetched only when chosen: this app's words, core's words, core's date
+ * words and the members' guide's titles for that language (vite.config.ts puts the four in `words-<lang>`; the first
+ * chunk carries English alone, #1941 review N-f; the titles: lib/guide-titles.ts). A chunk that can't be fetched (offline before the first visit in that language) leaves the
  * language as it was: never a blank screen, never a throw (onboarding-no-hard-gates).
  *
  * `<html lang>` follows the choice, so the browser's own translate offer and screen readers know the UI's language;
@@ -23,6 +23,7 @@ import {
     LANGS, LANGUAGE_HEADER, PSEUDO_LANG, addDateWords, currentLanguage, isLang, normaliseLang, setLanguage,
     type Catalog, type DateWords, type Lang, type UiLang,
 } from '@beanpool/core';
+import { addGuideTitles } from './guide-titles';
 
 export const LANGUAGE_STORAGE_KEY = 'beanpool-language';
 
@@ -37,37 +38,37 @@ export const LANGUAGE_NAMES: Readonly<Record<Lang, string>> = Object.freeze({
 /** Where a member says a translation reads wrong, until "Suggest a change" is live (feedback.ts FEEDBACK_LIVE). */
 export const WORDS_FEEDBACK_URL = 'https://github.com/beanpool-org/beanpool/issues/new?title=Words%3A%20';
 
-type Loaded = [{ default: Catalog }, { default: Catalog }, { dateWords: DateWords }];
+type Loaded = [{ default: Catalog }, { default: Catalog }, { dateWords: DateWords }, { default: unknown }];
 
 /**
- * One function per language, each naming its three files literally, so the build can split them out (a bare
- * specifier with a variable in it can't be): this app's words, core's words, core's dates.
+ * One function per language, each naming its four files literally, so the build can split them out (a bare
+ * specifier with a variable in it can't be): this app's words, core's words, core's dates, the guide's titles.
  */
 const LOADERS: Readonly<Record<Exclude<Lang, 'en'>, () => Promise<Loaded>>> = {
-    es: () => Promise.all([import('../../words/es.json'), import('@beanpool/core/words/es.json'), import('@beanpool/core/words-dates/es')]),
-    pt: () => Promise.all([import('../../words/pt.json'), import('@beanpool/core/words/pt.json'), import('@beanpool/core/words-dates/pt')]),
-    hi: () => Promise.all([import('../../words/hi.json'), import('@beanpool/core/words/hi.json'), import('@beanpool/core/words-dates/hi')]),
-    bn: () => Promise.all([import('../../words/bn.json'), import('@beanpool/core/words/bn.json'), import('@beanpool/core/words-dates/bn')]),
-    fr: () => Promise.all([import('../../words/fr.json'), import('@beanpool/core/words/fr.json'), import('@beanpool/core/words-dates/fr')]),
-    ar: () => Promise.all([import('../../words/ar.json'), import('@beanpool/core/words/ar.json'), import('@beanpool/core/words-dates/ar')]),
-    id: () => Promise.all([import('../../words/id.json'), import('@beanpool/core/words/id.json'), import('@beanpool/core/words-dates/id')]),
-    ru: () => Promise.all([import('../../words/ru.json'), import('@beanpool/core/words/ru.json'), import('@beanpool/core/words-dates/ru')]),
-    'zh-Hans': () => Promise.all([import('../../words/zh-Hans.json'), import('@beanpool/core/words/zh-Hans.json'), import('@beanpool/core/words-dates/zh-Hans')]),
-    'zh-Hant': () => Promise.all([import('../../words/zh-Hant.json'), import('@beanpool/core/words/zh-Hant.json'), import('@beanpool/core/words-dates/zh-Hant')]),
-    it: () => Promise.all([import('../../words/it.json'), import('@beanpool/core/words/it.json'), import('@beanpool/core/words-dates/it')]),
-    de: () => Promise.all([import('../../words/de.json'), import('@beanpool/core/words/de.json'), import('@beanpool/core/words-dates/de')]),
-    tr: () => Promise.all([import('../../words/tr.json'), import('@beanpool/core/words/tr.json'), import('@beanpool/core/words-dates/tr')]),
-    sw: () => Promise.all([import('../../words/sw.json'), import('@beanpool/core/words/sw.json'), import('@beanpool/core/words-dates/sw')]),
-    ml: () => Promise.all([import('../../words/ml.json'), import('@beanpool/core/words/ml.json'), import('@beanpool/core/words-dates/ml')]),
-    ta: () => Promise.all([import('../../words/ta.json'), import('@beanpool/core/words/ta.json'), import('@beanpool/core/words-dates/ta')]),
-    uk: () => Promise.all([import('../../words/uk.json'), import('@beanpool/core/words/uk.json'), import('@beanpool/core/words-dates/uk')]),
-    ur: () => Promise.all([import('../../words/ur.json'), import('@beanpool/core/words/ur.json'), import('@beanpool/core/words-dates/ur')]),
-    fa: () => Promise.all([import('../../words/fa.json'), import('@beanpool/core/words/fa.json'), import('@beanpool/core/words-dates/fa')]),
-    vi: () => Promise.all([import('../../words/vi.json'), import('@beanpool/core/words/vi.json'), import('@beanpool/core/words-dates/vi')]),
-    el: () => Promise.all([import('../../words/el.json'), import('@beanpool/core/words/el.json'), import('@beanpool/core/words-dates/el')]),
-    fil: () => Promise.all([import('../../words/fil.json'), import('@beanpool/core/words/fil.json'), import('@beanpool/core/words-dates/fil')]),
-    ja: () => Promise.all([import('../../words/ja.json'), import('@beanpool/core/words/ja.json'), import('@beanpool/core/words-dates/ja')]),
-    ko: () => Promise.all([import('../../words/ko.json'), import('@beanpool/core/words/ko.json'), import('@beanpool/core/words-dates/ko')]),
+    es: () => Promise.all([import('../../words/es.json'), import('@beanpool/core/words/es.json'), import('@beanpool/core/words-dates/es'), import('@beanpool/guide/content/es/manifest.json')]),
+    pt: () => Promise.all([import('../../words/pt.json'), import('@beanpool/core/words/pt.json'), import('@beanpool/core/words-dates/pt'), import('@beanpool/guide/content/pt/manifest.json')]),
+    hi: () => Promise.all([import('../../words/hi.json'), import('@beanpool/core/words/hi.json'), import('@beanpool/core/words-dates/hi'), import('@beanpool/guide/content/hi/manifest.json')]),
+    bn: () => Promise.all([import('../../words/bn.json'), import('@beanpool/core/words/bn.json'), import('@beanpool/core/words-dates/bn'), import('@beanpool/guide/content/bn/manifest.json')]),
+    fr: () => Promise.all([import('../../words/fr.json'), import('@beanpool/core/words/fr.json'), import('@beanpool/core/words-dates/fr'), import('@beanpool/guide/content/fr/manifest.json')]),
+    ar: () => Promise.all([import('../../words/ar.json'), import('@beanpool/core/words/ar.json'), import('@beanpool/core/words-dates/ar'), import('@beanpool/guide/content/ar/manifest.json')]),
+    id: () => Promise.all([import('../../words/id.json'), import('@beanpool/core/words/id.json'), import('@beanpool/core/words-dates/id'), import('@beanpool/guide/content/id/manifest.json')]),
+    ru: () => Promise.all([import('../../words/ru.json'), import('@beanpool/core/words/ru.json'), import('@beanpool/core/words-dates/ru'), import('@beanpool/guide/content/ru/manifest.json')]),
+    'zh-Hans': () => Promise.all([import('../../words/zh-Hans.json'), import('@beanpool/core/words/zh-Hans.json'), import('@beanpool/core/words-dates/zh-Hans'), import('@beanpool/guide/content/zh-Hans/manifest.json')]),
+    'zh-Hant': () => Promise.all([import('../../words/zh-Hant.json'), import('@beanpool/core/words/zh-Hant.json'), import('@beanpool/core/words-dates/zh-Hant'), import('@beanpool/guide/content/zh-Hant/manifest.json')]),
+    it: () => Promise.all([import('../../words/it.json'), import('@beanpool/core/words/it.json'), import('@beanpool/core/words-dates/it'), import('@beanpool/guide/content/it/manifest.json')]),
+    de: () => Promise.all([import('../../words/de.json'), import('@beanpool/core/words/de.json'), import('@beanpool/core/words-dates/de'), import('@beanpool/guide/content/de/manifest.json')]),
+    tr: () => Promise.all([import('../../words/tr.json'), import('@beanpool/core/words/tr.json'), import('@beanpool/core/words-dates/tr'), import('@beanpool/guide/content/tr/manifest.json')]),
+    sw: () => Promise.all([import('../../words/sw.json'), import('@beanpool/core/words/sw.json'), import('@beanpool/core/words-dates/sw'), import('@beanpool/guide/content/sw/manifest.json')]),
+    ml: () => Promise.all([import('../../words/ml.json'), import('@beanpool/core/words/ml.json'), import('@beanpool/core/words-dates/ml'), import('@beanpool/guide/content/ml/manifest.json')]),
+    ta: () => Promise.all([import('../../words/ta.json'), import('@beanpool/core/words/ta.json'), import('@beanpool/core/words-dates/ta'), import('@beanpool/guide/content/ta/manifest.json')]),
+    uk: () => Promise.all([import('../../words/uk.json'), import('@beanpool/core/words/uk.json'), import('@beanpool/core/words-dates/uk'), import('@beanpool/guide/content/uk/manifest.json')]),
+    ur: () => Promise.all([import('../../words/ur.json'), import('@beanpool/core/words/ur.json'), import('@beanpool/core/words-dates/ur'), import('@beanpool/guide/content/ur/manifest.json')]),
+    fa: () => Promise.all([import('../../words/fa.json'), import('@beanpool/core/words/fa.json'), import('@beanpool/core/words-dates/fa'), import('@beanpool/guide/content/fa/manifest.json')]),
+    vi: () => Promise.all([import('../../words/vi.json'), import('@beanpool/core/words/vi.json'), import('@beanpool/core/words-dates/vi'), import('@beanpool/guide/content/vi/manifest.json')]),
+    el: () => Promise.all([import('../../words/el.json'), import('@beanpool/core/words/el.json'), import('@beanpool/core/words-dates/el'), import('@beanpool/guide/content/el/manifest.json')]),
+    fil: () => Promise.all([import('../../words/fil.json'), import('@beanpool/core/words/fil.json'), import('@beanpool/core/words-dates/fil'), import('@beanpool/guide/content/fil/manifest.json')]),
+    ja: () => Promise.all([import('../../words/ja.json'), import('@beanpool/core/words/ja.json'), import('@beanpool/core/words-dates/ja'), import('@beanpool/guide/content/ja/manifest.json')]),
+    ko: () => Promise.all([import('../../words/ko.json'), import('@beanpool/core/words/ko.json'), import('@beanpool/core/words-dates/ko'), import('@beanpool/guide/content/ko/manifest.json')]),
 };
 
 // ── Which language ──────────────────────────────────────────────────────────────────────────────────────────────
@@ -163,9 +164,10 @@ export async function showLanguage(lang: UiLang): Promise<boolean> {
             if (mine !== latest) return false;
             setLanguage(isLang(lang) || lang === PSEUDO_LANG ? lang : 'en');
         } else {
-            const [app, core, dates] = await LOADERS[lang]();
+            const [app, core, dates, guideTitles] = await LOADERS[lang]();
             if (mine !== latest) return false;
             addDateWords(lang, dates.dateWords);
+            addGuideTitles(lang, guideTitles.default);
             setLanguage(lang, [app.default, core.default]);
         }
     } catch (e) {

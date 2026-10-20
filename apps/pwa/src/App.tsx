@@ -43,7 +43,7 @@ import { helpSheetFor, t, tourStepForTab, tourSteps, webHelpKey, word, type Home
 import { TourBar } from './components/TourBar';
 import { HelpDialog } from './components/HelpDialog';
 import { OPEN_HELP_EVENT, askTourAgain, endTour, moveTour, useTour } from './lib/tour-store';
-import { getBundledGuide } from './lib/guide';
+import { getBundledGuide, inShownLanguage } from './lib/guide';
 import { InstallPrompt } from './components/InstallPrompt';
 import { PublicProfilePage } from './pages/PublicProfilePage';
 import { TreasuryDetailPage } from './pages/TreasuryDetailPage';
@@ -203,7 +203,7 @@ export function App() {
         window.addEventListener(OPEN_HELP_EVENT, open);
         return () => window.removeEventListener(OPEN_HELP_EVENT, open);
     }, []);
-    const helpWords = helpSheetFor(getBundledGuide(), webHelpKey({ tab: activeTab, settings: showSettings }));
+    const helpWords = helpSheetFor(inShownLanguage(getBundledGuide()), webHelpKey({ tab: activeTab, settings: showSettings }));
     const [openConversationId, setOpenConversationId] = useState<string | null>(null);
     const [openMarketPostId, setOpenMarketPostId] = useState<string | null>(null);
     // Whether the Market says so when that post can't be opened: yes for a member's own tap (navigateToTab), no for a link

@@ -43,11 +43,13 @@ function wordsDatesPerLanguage(): Plugin {
 }
 
 /**
- * One chunk per language, `words-<lang>`: this app's words/<lang>.json, core's words/<lang>.json and core's
- * words-dates/<lang>.js, fetched together when that language is chosen and never otherwise (lib/language.ts).
+ * One chunk per language, `words-<lang>`: this app's words/<lang>.json, core's words/<lang>.json, core's
+ * words-dates/<lang>.js and the members' guide's titles (packages/beanpool-guide/content/<lang>/manifest.json), fetched
+ * together when that language is chosen and never otherwise (lib/language.ts).
  */
 function wordsChunk(id: string): string | undefined {
-    const m = /(?:apps[\\/]pwa[\\/]words|beanpool-core[\\/]words|beanpool-core[\\/](?:dist|src)[\\/]words-dates)[\\/]([A-Za-z]{2,3}(?:-[A-Za-z]{4})?)\.(?:json|js|ts)$/.exec(id);
+    const m = /(?:apps[\\/]pwa[\\/]words|beanpool-core[\\/]words|beanpool-core[\\/](?:dist|src)[\\/]words-dates)[\\/]([A-Za-z]{2,3}(?:-[A-Za-z]{4})?)\.(?:json|js|ts)$/.exec(id)
+        ?? /beanpool-guide[\\/]content[\\/]([A-Za-z]{2,3}(?:-[A-Za-z]{4})?)[\\/]manifest\.json$/.exec(id);
     return m ? `words-${m[1]}` : undefined;
 }
 

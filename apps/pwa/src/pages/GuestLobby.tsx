@@ -40,7 +40,7 @@ import { helpSheetFor, t, webHelpKey, word, type WordKey } from '@beanpool/core'
 import { HelpDialog } from '../components/HelpDialog';
 import { LobbyHeader, LobbyHelpButton, LobbyJoin } from '../components/LobbyHeader';
 import { MemberGuide } from '../components/MemberGuide';
-import { getBundledGuide } from '../lib/guide';
+import { getBundledGuide, inShownLanguage } from '../lib/guide';
 
 type LobbyTab = 'home' | 'marketplace' | 'map' | 'ledger';
 
@@ -69,7 +69,7 @@ export function GuestLobby({ info, onComplete, linkedPostId = null, onLinkedPost
     // The "?" (DESIGN-getting-started-fable.md §4–§5): help for the lobby's tab; its guide opens over the lobby.
     const [helpOpen, setHelpOpen] = useState(false);
     const [guideAt, setGuideAt] = useState<string | null | undefined>(undefined);
-    const helpWords = helpSheetFor(getBundledGuide(), webHelpKey({ tab, lobby: true }));
+    const helpWords = helpSheetFor(inShownLanguage(getBundledGuide()), webHelpKey({ tab, lobby: true }));
     const helpButton = (className: string) => <LobbyHelpButton onClick={() => setHelpOpen(true)} className={className} />;
     const [marketClickCount, setMarketClickCount] = useState(0);
     const [openPostId, setOpenPostId] = useState<string | null>(null);

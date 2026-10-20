@@ -182,9 +182,9 @@ function bypassing(extra: readonly string[] = []): string[] {
 
 // ── 320 dp with text at 1.3× ───────────────────────────────────────────────────────────────────────────────────────
 const SCALE = 1.3;
-const glyphEm = (c: string) => (/\p{M}/u.test(c) || /[️​‌‍]/.test(c) ? 0 : /\p{Extended_Pictographic}/u.test(c) ? 1.25 : 0.62);
+const glyphEm = (c: string) => (/\p{M}/u.test(c) || /[\uFE0F\u200B\u200C\u200D]/.test(c) ? 0 : /\p{Extended_Pictographic}/u.test(c) ? 1.25 : 0.62);
 const widthOf = (text: string, px: number) => Array.from(text).reduce((w, c) => w + glyphEm(c) * px, 0);
-const widestWord = (text: string) => text.split(/[\s​~]+/).reduce((a, b) => (widthOf(b, 1) > widthOf(a, 1) ? b : a), '');
+const widestWord = (text: string) => text.split(/[\s\u200B~]+/).reduce((a, b) => (widthOf(b, 1) > widthOf(a, 1) ? b : a), '');
 const fontOf = (el: Element): number => { for (let e: Element | null = el; e; e = e.parentElement) { const f = e.getAttribute('data-font'); if (f) return Number(f); } return 14; };
 /**
  * The text column of each kind of row at 320 dp (as beanpool-global-row-render.test.ts measures the sheet's from the styles):

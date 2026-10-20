@@ -327,6 +327,26 @@ describe('the Market in the pseudo-locale', () => {
         expect(screen.getByText(xx('for {n} days').replace('{n}', '3'))).toBeInTheDocument();
         allThroughT(10);
         v3.unmount();
+
+        // Weekly lendable loan as weeks: "for {n} weeks"
+        const weeklyLoanOffer = { ...offer, id: 'offer-loan-wk', authorPublicKey: ME, authorCallsign: 'Mia', priceType: 'weekly', lendable: true };
+        stubNode([weeklyLoanOffer]);
+        const weeklyLoanBid = tx({ id: 'bid-loan-wk', postId: 'offer-loan-wk', status: 'requested', buyerPublicKey: 'bob-pk', buyerCallsign: 'Bob', sellerPublicKey: ME, hours: 2 });
+        const v4 = render(<MarketplacePage identity={identity} isMember={true} openPostId="offer-loan-wk" onPostOpened={() => {}} transactions={[weeklyLoanBid]} />);
+        await screen.findByText(xx('✋ Fulfillment Requests ({n})').replace('{n}', '1'));
+        expect(screen.getByText(xx('for {n} weeks').replace('{n}', '2'))).toBeInTheDocument();
+        allThroughT(10);
+        v4.unmount();
+
+        // Fixed non-loan: no quantity unit line (empty string)
+        const fixedNeed = { ...need, id: 'need-fixed', authorPublicKey: ME, authorCallsign: 'Mia', priceType: 'fixed' };
+        stubNode([fixedNeed]);
+        const fixedBid = tx({ id: 'bid-fixed', postId: 'need-fixed', status: 'requested', buyerPublicKey: ME, sellerPublicKey: 'bob-pk', sellerCallsign: 'Bob', hours: 2 });
+        const v5 = render(<MarketplacePage identity={identity} isMember={true} openPostId="need-fixed" onPostOpened={() => {}} transactions={[fixedBid]} />);
+        await screen.findByText(xx('✋ Fulfillment Requests ({n})').replace('{n}', '1'));
+        expect(screen.queryByText(/hours estimated/)).not.toBeInTheDocument();
+        allThroughT(10);
+        v5.unmount();
     });
 
     it('a finished trade to rate on the listing, and the rating card a release opens', async () => {

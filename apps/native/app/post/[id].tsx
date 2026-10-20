@@ -67,18 +67,30 @@ function explainTradeError(e: any): { title: string; message: string } {
     return { title: t('Error'), message: raw.replace(/^[A-Z_]+:\s*/, '') };
 }
 
-/** A request's estimated length, in the listing price's own unit ("for {n} days" for a loan). */
+/** A request's estimated length, in the listing price's own unit ("for {n} days" or "for {n} weeks" for a loan). */
 function requestQuantityWords(unit: DealQuantityUnit | null, isLoan: boolean, n: number): string {
-    if (isLoan) return tn(n, 'for {n} day', 'for {n} days');
+    if (isLoan) {
+        if (unit === 'week') return tn(n, 'for {n} week', 'for {n} weeks');
+        return tn(n, 'for {n} day', 'for {n} days');
+    }
     if (unit === 'day') return tn(n, '{n} day', '{n} days');
     if (unit === 'week') return tn(n, '{n} week', '{n} weeks');
     if (unit === 'month') return tn(n, '{n} month', '{n} months');
-    return tn(n, '{n} hours estimated', '{n} hours estimated');
+    if (unit === 'hour') return tn(n, '{n} hours estimated', '{n} hours estimated');
+    return '';
 }
 
-/** The commitment sentence for an Offer: in the price's own unit, and "for {n} days" for a loan. */
+/** The commitment sentence for an Offer: in the price's own unit, and "for {n} days" or "for {n} weeks" for a loan. */
 function committedOfferWords(unit: DealQuantityUnit | null, isLoan: boolean, hours: number, credits: number): string {
     if (isLoan) {
+        if (unit === 'week') {
+            return tn(
+                hours,
+                'You have committed {credits} credits (for {n} week) to a Trust Wallet for this offer.',
+                'You have committed {credits} credits (for {n} weeks) to a Trust Wallet for this offer.',
+                { credits }
+            );
+        }
         return tn(
             hours,
             'You have committed {credits} credits (for {n} day) to a Trust Wallet for this offer.',
@@ -110,7 +122,10 @@ function committedOfferWords(unit: DealQuantityUnit | null, isLoan: boolean, hou
             { credits }
         );
     }
-    return t('You have committed {credits} credits ({hours} hours) to a Trust Wallet for this offer.', { credits, hours });
+    if (unit === 'hour') {
+        return t('You have committed {credits} credits ({hours} hours) to a Trust Wallet for this offer.', { credits, hours });
+    }
+    return t('You have committed {credits} credits to a Trust Wallet for this offer.', { credits });
 }
 
 /** The commitment sentence for a Need: in the price's own unit (a Need is never a loan). */

@@ -312,6 +312,23 @@ describe("a listing's page in the pseudo-locale: every word on it came through t
         expect(host.textContent).toContain(pseudoLocalise('for {n} days').replace('{n}', '3'));
         expect(bypassing(), 'loan requests').toEqual([]);
 
+        // Weekly lendable loan as weeks
+        act(() => root.unmount());
+        root = createRoot(host);
+        const WEEKLY_LENDABLE_OFFER = { ...OFFER, id: 'p-loan-wk', author_pubkey: ME.publicKey, author_callsign: ME.callsign, price_type: 'weekly', lendable: 1 };
+        const WEEKLY_LOAN_REQUESTS = [{ id: 'tx-loan-wk', post_id: 'p-loan-wk', status: 'requested', buyer_pubkey: KOFI.pubkey, buyer_callsign: KOFI.callsign, credits: 0, hours: 2 }];
+        await open(WEEKLY_LENDABLE_OFFER, 'xx', { all: (sql) => (sql.includes("status='requested'") ? WEEKLY_LOAN_REQUESTS : []) });
+        expect(host.textContent).toContain(pseudoLocalise('for {n} weeks').replace('{n}', '2'));
+        expect(bypassing(), 'weekly loan requests').toEqual([]);
+
+        // Fixed non-loan: no quantity unit line
+        act(() => root.unmount());
+        root = createRoot(host);
+        const FIXED_NEED = { ...NEED, id: 'p-fixed-need', price_type: 'fixed' };
+        await open(FIXED_NEED, 'xx', { all: (sql) => (sql.includes("status='requested'") ? REQUESTS : []) });
+        expect(host.textContent).not.toContain('estimated');
+        expect(bypassing(), 'fixed non-loan requests').toEqual([]);
+
         // In English: words read as expected
         act(() => root.unmount());
         root = createRoot(host);
@@ -327,6 +344,11 @@ describe("a listing's page in the pseudo-locale: every word on it came through t
         root = createRoot(host);
         await open(LENDABLE_OFFER, 'en', { all: (sql) => (sql.includes("status='requested'") ? LOAN_REQUESTS : []) });
         expect(host.textContent).toContain('for 3 days');
+
+        act(() => root.unmount());
+        root = createRoot(host);
+        await open(WEEKLY_LENDABLE_OFFER, 'en', { all: (sql) => (sql.includes("status='requested'") ? WEEKLY_LOAN_REQUESTS : []) });
+        expect(host.textContent).toContain('for 2 weeks');
     });
 
     it('a deal held in trust: the one who pays, releasing the credits by the hour', async () => {

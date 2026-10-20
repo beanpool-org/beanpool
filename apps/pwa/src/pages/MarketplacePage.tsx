@@ -213,13 +213,17 @@ function estimateLength(priceType: string | undefined, n: number): string | null
     return null;
 }
 
-/** A request's estimated length, in the listing price's own unit ("for {n} days" for a loan). */
+/** A request's estimated length, in the listing price's own unit ("for {n} days" or "for {n} weeks" for a loan). */
 function requestQuantityWords(unit: DealQuantityUnit | null, isLoan: boolean, n: number): string {
-    if (isLoan) return tn(n, 'for {n} day', 'for {n} days');
+    if (isLoan) {
+        if (unit === 'week') return tn(n, 'for {n} week', 'for {n} weeks');
+        return tn(n, 'for {n} day', 'for {n} days');
+    }
     if (unit === 'day') return tn(n, '{n} day', '{n} days');
     if (unit === 'week') return tn(n, '{n} week', '{n} weeks');
     if (unit === 'month') return tn(n, '{n} month', '{n} months');
-    return tn(n, '{n} hours estimated', '{n} hours estimated');
+    if (unit === 'hour') return tn(n, '{n} hours estimated', '{n} hours estimated');
+    return '';
 }
 
 /** Why the profile gate stops an accept: the whole sentence for what is missing (lib/profile-status describeMissing). */

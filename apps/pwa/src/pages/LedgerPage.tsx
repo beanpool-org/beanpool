@@ -8,9 +8,13 @@
  * the same screen drawn from Example Valley (ShowcasePreviews sampleLedger), as the phone's Ledger is: the strip and
  * "Example Valley · an example member" on top, and every press that would move Beans or export opens the marker's
  * sheet. It then asks the node nothing about the reader's own ledger: no balance, no transactions, no members.
+ *
+ * Its words are in the member's language (words S3, web sweep W2), with the phone's Ledger keys where the English is the
+ * same (S3i): the level names and their blurbs and perks are word() keys, put through t() where they are shown; counts
+ * through tn(); amounts in the language's digits and decimal mark (formatNumber). Members' names and notes are theirs.
  */
 
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { Fragment, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { type BeanPoolIdentity } from '../lib/identity';
 import {
     getBalance, getTransactions, sendTransfer, request,
@@ -25,10 +29,10 @@ import { withJitter } from '../lib/jitter';
 import { onSyncActivity } from '../lib/sync';
 import { getBlockedUsers, onBlocklistUpdated } from '../lib/blocklist';
 import { useMembersOnDemand, useMemberSearch, getMembersWhole, MEMBERS_SEARCH_MIN_CHARS } from '../lib/members-on-demand';
-import { creditLineCard, knownFrozenPartNote, frozenDebitLine, KNOWN_FROZEN_TITLE, KNOWN_FROZEN_BODY } from '../lib/credit-line-card';
+import { creditLineCard, knownFrozenPartNote, frozenDebitLine, KNOWN_FROZEN } from '../lib/credit-line-card';
 import { LocalCommunityAction, LocalCommunityStrip, type LocalCommunityWays } from '../components/LocalCommunityMark';
 import { SampleHeader, sampleLedger, type LedgerRowView } from '../components/ShowcasePreviews';
-import { t, isWholeCents, monthlyCirculation, CIRCULATION_FREE_BEANS, formatNumber, amountRefusalWords, ANY_DECIMALS, isAmbiguousAmount, parseAmount } from '@beanpool/core';
+import { t, tn, word, splitBold, isWholeCents, monthlyCirculation, CIRCULATION_FREE_BEANS, formatDate, formatNumber, amountRefusalWords, ANY_DECIMALS, isAmbiguousAmount, parseAmount, type WordKey } from '@beanpool/core';
 import { useReadsOwn, resetReaderFeaturesOnce } from '../lib/features';
 import { resetCommunityInfoOnce } from '../lib/visitor-lobby-gate';
 
@@ -51,27 +55,39 @@ interface Props extends LocalCommunityWays {
 
 // Tiers are recognition milestones; where each starts comes from @beanpool/core TIER_LEVELS.
 // `min` = the credit backing the floor (vouch + earned + granted); `floor` = the floor on ENTERING
-// the tier (floors slide continuously between them). Only presentation lives here.
+// the tier (floors slide continuously between them). Only presentation lives here. The names, blurbs and perks are
+// word() keys (the phone's, apps/native/utils/trust-tier.ts and app/(tabs)/ledger.tsx), put through t() where shown.
 // The invite perk: not shown in preview, where inviting is off (global) and its Invites screen says so.
-const INVITE_PERK = 'Invite others to join';
-const TIER_LOOK: Record<TierName, { color: string; bg: string; border: string; blurb: string; perks: string[] }> = {
+const INVITE_PERK = word('Invite others to join');
+const TIER_WORDS: Readonly<Record<TierName, WordKey>> = {
+    Newcomer: word('Newcomer', 'trust tier'),
+    Resident: word('Resident', 'trust tier'),
+    Steward: word('Steward', 'trust tier'),
+    Elder: word('Elder', 'trust tier'),
+};
+const TIER_LOOK: Record<TierName, { color: string; bg: string; border: string; blurb: WordKey; perks: { words: WordKey }[] }> = {
     Newcomer: { color: 'var(--tier-newcomer)', bg: 'var(--tier-newcomer-bg)', border: 'var(--tier-newcomer-border)',
-      blurb: "Welcome. From day one you can browse, trade, receive credits and invite others — your first completed trade (or a community vouch) opens your credit line.",
-      perks: ['Browse & trade the marketplace', 'Receive credits', INVITE_PERK, 'Send credits after first trade (needs positive balance)'] },
+      blurb: word("Welcome. From day one you can browse, trade, receive credits and invite others — your first completed trade (or a community vouch) opens your credit line."),
+      perks: [{ words: word('Browse & trade the marketplace') }, { words: word('Receive credits') }, { words: INVITE_PERK }, { words: word('Send credits after first trade (needs positive balance)') }] },
     Resident: { color: 'var(--tier-resident)', bg: 'var(--tier-resident-bg)', border: 'var(--tier-resident-border)',
-      blurb: "You've traded real value with the community. Your credit line deepens with every trade — the more value you exchange, the deeper it grows.",
-      perks: ['Credit floor deepens with the value you trade', INVITE_PERK] },
+      blurb: word("You've traded real value with the community. Your credit line deepens with every trade — the more value you exchange, the deeper it grows."),
+      perks: [{ words: word('Credit floor deepens with the value you trade') }, { words: INVITE_PERK }] },
     Steward:  { color: 'var(--tier-steward)', bg: 'var(--tier-steward-bg)', border: 'var(--tier-steward-border)',
-      blurb: "A trusted trader with a broad circle of partners. The community recognises you, and your credit line runs deeper still.",
-      perks: ['Credit floor continues deepening', 'Trusted-trader recognition'] },
+      blurb: word("A trusted trader with a broad circle of partners. The community recognises you, and your credit line runs deeper still."),
+      perks: [{ words: word('Credit floor continues deepening') }, { words: word('Trusted-trader recognition') }] },
     Elder:    { color: 'var(--tier-elder)', bg: 'var(--tier-elder-bg)', border: 'var(--tier-elder-border)',
-      blurb: "A pillar of the commons — the deepest possible credit line and the community's highest recognition.",
-      perks: ['Credit floor can reach -2000 (the maximum)', 'Recognised as a community Elder'] },
+      blurb: word("A pillar of the commons — the deepest possible credit line and the community's highest recognition."),
+      perks: [{ words: word('Credit floor can reach -2000 (the maximum)') }, { words: word('Recognised as a community Elder') }] },
 };
 const { CREDIT_MAX_EARNED, TRUST_CURVE_K, CREDIT_BASE_FLOOR } = PROTOCOL_CONSTANTS;
-const TIERS = TIER_LEVELS.map(t => ({
-    name: t.name, emoji: t.emoji, ...TIER_LOOK[t.name], min: t.minCredit, floor: CREDIT_BASE_FLOOR - t.minCredit,
+const TIERS = TIER_LEVELS.map(lvl => ({
+    name: lvl.name, emoji: lvl.emoji, ...TIER_LOOK[lvl.name], min: lvl.minCredit, floor: CREDIT_BASE_FLOOR - lvl.minCredit,
 }));
+
+/** A translated sentence with **bold** parts, each drawn as `bold` draws it (the phone's richWords). */
+function BoldIn({ text, bold }: { text: string; bold: (words: string) => React.ReactNode }) {
+    return <>{splitBold(text).map((s, i) => <Fragment key={i}>{s.bold ? bold(s.text) : s.text}</Fragment>)}</>;
+}
 
 // Trust curve (from @beanpool/core): earned trust is a saturating function of qualified,
 // diversity-capped trade VALUE. Floors slide continuously; gifts build no trust.
@@ -170,7 +186,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                         className="text-emerald-600 dark:text-emerald-400 font-bold hover:underline"
                         style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', verticalAlign: 'baseline', font: 'inherit' }}
                     >
-                        View Offer
+                        {t('View Offer')}
                     </button>
                     {parts[1]}
                 </span>
@@ -220,7 +236,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                 // stamped the refresh as successful, and started the cooldown — so the stale
                 // number could stand until the 300s backstop with no error shown.
                 if (!bal) {
-                    throw new Error('Failed to load balance');
+                    throw new Error(t('Failed to load balance'));
                 }
                 if (!isMountedRef.current) return;
                 setBalanceInfo(bal);
@@ -232,7 +248,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                 // until the 300s backstop, which is exactly the window this stage widened.
                 lastRefreshTimeRef.current = Date.now();
             } catch (e: any) {
-                if (viewerIsMemberRef.current) setError(e.message || 'Failed to load');
+                if (viewerIsMemberRef.current) setError(e.message || t('Failed to load'));
                 throw e;
             } finally {
                 setLoading(false);
@@ -326,7 +342,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
         // Sends are positive-balance only — you can only send beans you actually hold. Your credit
         // line (overdraft) is for trading, not for gifting yourself into debt.
         if (amount > balance) {
-            setError(`You can only send beans you hold — your balance is ${balance.toFixed(2)}B.`);
+            setError(t('You can only send beans you hold — your balance is {balance}B.', { balance: formatNumber(balance, 2) }));
             return;
         }
         setSending(true);
@@ -339,7 +355,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
             setSendMemo('');
             await refresh();
         } catch (e: any) {
-            setError(e.message || 'Transfer failed');
+            setError(e.message || t('Transfer failed'));
         } finally {
             setSending(false);
         }
@@ -391,11 +407,13 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
     // The Wallet's rows: the member's own, or Example Valley's in preview (who it was with, and when, under each).
     const rows: LedgerRowView[] = sample ? sample.rows : txns.map(tx => {
         const isSent = tx.from === myKey;
+        const at = new Date(tx.timestamp);
         return {
             id: tx.id,
             sent: isSent,
             note: ledgerLineNote({ incoming: !isSent, counterparty: tx.from, memo: tx.memo }, blockedSet),
-            when: new Date(tx.timestamp).toLocaleString(),
+            // "1 Oct 2026, 9:00": core's date and time in the member's language, never the browser's own locale.
+            when: Number.isFinite(at.getTime()) ? t('{date}, {time}', { date: formatDate(at, 'day-month-year'), time: formatDate(at, 'time') }) : '',
             amount: tx.amount,
         };
     });
@@ -408,12 +426,12 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
         ? (pickerSearch.found ?? []).filter(m => m.publicKey !== myKey)
         : filteredMembers;
     // Said only once it is so: never "nobody" for a search that failed or hasn't answered yet.
-    const pickerNote = membersOnDemand === false ? (filteredMembers.length === 0 ? 'No members found' : null)
+    const pickerNote = membersOnDemand === false ? (filteredMembers.length === 0 ? t('No members found') : null)
         : membersOnDemand === null ? null
-        : memberSearch.trim().length < MEMBERS_SEARCH_MIN_CHARS ? `Type at least ${MEMBERS_SEARCH_MIN_CHARS} letters of a name.`
-        : pickerSearch.state === 'searching' ? 'Searching…'
-        : pickerSearch.state === 'failed' ? (pickerSearch.refusal ?? "Couldn't search just now. Check your connection and try again.")
-        : pickerSearch.found && pickable.length === 0 ? 'Nobody here has a name starting with that.'
+        : memberSearch.trim().length < MEMBERS_SEARCH_MIN_CHARS ? tn(MEMBERS_SEARCH_MIN_CHARS, 'Type at least {n} letter of a name.', 'Type at least {n} letters of a name.')
+        : pickerSearch.state === 'searching' ? t('Searching…')
+        : pickerSearch.state === 'failed' ? (pickerSearch.refusal ?? t("Couldn't search just now. Check your connection and try again."))
+        : pickerSearch.found && pickable.length === 0 ? t('Nobody here has a name starting with that.')
         : null;
 
     if (waitingForMode) {
@@ -446,22 +464,22 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
             <div className="flex flex-col md:flex-row gap-4 items-center justify-between p-6 bg-white dark:bg-nature-900 rounded-2xl border border-nature-200 dark:border-nature-800 shadow-sm mb-4">
                 <div className="flex items-center gap-3">
                     <div className="w-14 h-14 shrink-0 rounded-full border-2 border-emerald-500 overflow-hidden bg-oat-50 dark:bg-nature-800 shadow-inner flex items-center justify-center">
-                        <img src="/assets/logo-192x192.png" className="w-[70%] h-[70%] object-contain" alt="Identity" />
+                        <img src="/assets/logo-192x192.png" className="w-[70%] h-[70%] object-contain" alt={t('Identity')} />
                     </div>
                     <div className="min-w-0">
                         <h2 className="text-lg font-bold text-nature-950 dark:text-white leading-tight">{sample ? sample.member : identity?.callsign}</h2>
                         <div className="mt-1 flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-nature-100 dark:bg-nature-800 text-nature-600 dark:text-nature-300 border border-nature-200 dark:border-nature-700 w-fit">
                             <span>{tier.emoji}</span>
-                            <span>{tier.name}</span>
+                            <span>{t(TIER_WORDS[tier.name])}</span>
                         </div>
                     </div>
                 </div>
 
                 <div className="text-right flex flex-col items-center md:items-end">
                     <span className={`text-2xl font-black font-mono ${balance >= 0 ? 'text-emerald-500' : 'text-red-500 dark:text-red-400'}`} data-testid="ledger-balance">
-                        {balance >= 0 ? '+' : ''}{balance.toFixed(1)}B
+                        {t('{amount}B', { amount: `${balance >= 0 ? '+' : ''}${formatNumber(balance, 1)}` })}
                     </span>
-                    <span className="text-[10px] font-bold text-nature-400 uppercase tracking-wider">Beans</span>
+                    <span className="text-[10px] font-bold text-nature-400 uppercase tracking-wider">{t('Beans')}</span>
                 </div>
             </div>
 
@@ -472,8 +490,8 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                     <div className="flex items-start gap-3 bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-800 rounded-xl p-3">
                         <span className="text-xl leading-none" aria-hidden="true">❄️</span>
                         <div>
-                            <h2 className="text-sm font-extrabold text-sky-800 dark:text-sky-200">{KNOWN_FROZEN_TITLE}</h2>
-                            <div className="text-xs text-nature-600 dark:text-nature-300 leading-relaxed mt-0.5">{KNOWN_FROZEN_BODY}</div>
+                            <h2 className="text-sm font-extrabold text-sky-800 dark:text-sky-200">{t(KNOWN_FROZEN.title)}</h2>
+                            <div className="text-xs text-nature-600 dark:text-nature-300 leading-relaxed mt-0.5">{t(KNOWN_FROZEN.body)}</div>
                             {frozenDebitLine(balanceInfo?.balance) && (
                                 <p className="text-xs font-bold text-nature-800 dark:text-nature-100 leading-relaxed mt-1.5" data-testid="ledger-frozen-debit">{frozenDebitLine(balanceInfo?.balance)}</p>
                             )}
@@ -485,9 +503,9 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                     <div className="flex items-start gap-3 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-xl p-3">
                         <span className="text-xl leading-none">🌱</span>
                         <div>
-                            <div className="text-sm font-extrabold text-emerald-700 dark:text-emerald-300">No credit line yet</div>
+                            <div className="text-sm font-extrabold text-emerald-700 dark:text-emerald-300">{t('No credit line yet')}</div>
                             <div className="text-xs text-nature-600 dark:text-nature-300 leading-relaxed mt-0.5">
-                                You can trade right now with the beans you hold. Complete your first trade and your credit line opens automatically — the more value you trade, the deeper it grows. (A community voucher can also give you a starter line.)
+                                {t('You can trade right now with the beans you hold. Complete your first trade and your credit line opens automatically — the more value you trade, the deeper it grows. (A community voucher can also give you a starter line.)')}
                             </div>
                         </div>
                     </div>
@@ -503,7 +521,10 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                     {frozen && (
                         <div className="mt-2 flex items-start gap-1.5 text-[11px] leading-relaxed text-amber-600 dark:text-amber-400">
                             <span>⚠️</span>
-                            <span>Spending paused — your balance is below what your {liveOffers} active offer{liveOffers === 1 ? '' : 's'} unlock (−{Math.abs(usableFloor)}). Post an Offer or trade back up to lift it. You can still receive and sell.</span>
+                            <span>{tn(liveOffers,
+                                'Spending paused — your balance is below what your {n} active offer unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.',
+                                'Spending paused — your balance is below what your {n} active offers unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.',
+                                { limit: Math.abs(usableFloor) })}</span>
                         </div>
                     )}
                 </div>
@@ -522,7 +543,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                     }`}
                     onClick={() => setActiveTab('trust')}
                 >
-                    🛡️ Levels
+                    {t('🛡️ Levels')}
                 </button>
                 <button
                     className={`flex-1 py-3 text-center border-b-2 font-bold text-sm bg-transparent cursor-pointer transition-all flex items-center justify-center gap-1.5 ${
@@ -532,7 +553,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                     }`}
                     onClick={() => setActiveTab('financials')}
                 >
-                    💸 Wallet
+                    {t('💸 Wallet')}
                 </button>
             </div>
 
@@ -555,13 +576,13 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                                 </svg>
                             </div>
                             <div className="flex-1 min-w-0">
-                                <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: tier.color }}>YOUR TRUST LEVEL</span>
-                                <div className="text-2xl font-black leading-tight mt-0.5" style={{ color: tier.color }}>{tier.name}</div>
-                                <div className="text-xs font-semibold text-nature-500 dark:text-nature-300 mt-1">Level {tierIdx + 1} of {TIERS.length} · {ec} trust</div>
+                                <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: tier.color }}>{t('YOUR TRUST LEVEL')}</span>
+                                <div className="text-xl sm:text-2xl font-black leading-tight mt-0.5 break-words" style={{ color: tier.color }}>{t(TIER_WORDS[tier.name])}</div>
+                                <div className="text-xs font-semibold text-nature-500 dark:text-nature-300 mt-1">{tn(ec, 'Level {level} of {levels} · {n} trust', 'Level {level} of {levels} · {n} trust', { level: tierIdx + 1, levels: TIERS.length })}</div>
                                 <div className="text-xs font-semibold mt-2 text-nature-700 dark:text-nature-300">
                                     {nextTier
-                                        ? <><span className="font-black" style={{ color: tier.color }}>{creditsToNext}</span> more trust to {nextTier.emoji} {nextTier.name}</>
-                                        : <span className="text-amber-500 font-black">✨ Highest level reached</span>
+                                        ? <BoldIn text={tn(creditsToNext, '**{n}** more trust to {emoji} {tier}', '**{n}** more trust to {emoji} {tier}', { emoji: nextTier.emoji, tier: t(TIER_WORDS[nextTier.name]) })} bold={(n) => <span className="font-black" style={{ color: tier.color }}>{n}</span>} />
+                                        : <span className="text-amber-500 font-black">{t('✨ Highest level reached')}</span>
                                     }
                                 </div>
                             </div>
@@ -576,12 +597,12 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                                 style={{ font: 'inherit' }}
                             >
                                 <span>{canSend ? '💸' : '🔒'}</span>
-                                <span>{canSend ? t('Send Beans') : earned <= 0 ? 'Send (needs 1st trade)' : 'Send (needs +ve balance)'}</span>
+                                <span>{canSend ? t('Send Beans') : earned <= 0 ? t('Send (needs 1st trade)') : t('Send (needs +ve balance)')}</span>
                             </button>}
                             {/* Not in preview: inviting is off on a node that previews Beans (global), and its Invites tab says so. */}
                             {!preview && <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-extrabold bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400">
                                 <span>✓</span>
-                                <span>Invite Members</span>
+                                <span>{t('Invite Members')}</span>
                             </div>}
                         </div>
                     </div>
@@ -590,30 +611,31 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                     {/* Levels are merit badges (#1838): one not reached yet keeps its own colours and a dashed edge, something
                         to grow into. Never a lock, never faded or greyed as if it were out of bounds. */}
                     <div>
-                        <span className="text-[10px] font-bold text-nature-400 uppercase tracking-widest block mb-3">ALL LEVELS</span>
-                        <div className="grid grid-cols-4 gap-2" data-testid="levels-shelf">
-                            {TIERS.map((t, i) => {
+                        <span className="text-[10px] font-bold text-nature-400 uppercase tracking-widest block mb-3">{t('ALL LEVELS')}</span>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2" data-testid="levels-shelf">
+                            {TIERS.map((lvl, i) => {
                                 const reached = tierIdx >= i;
                                 const isSel = selLevel === i;
                                 return (
                                     <button
-                                        key={t.name}
+                                        key={lvl.name}
                                         type="button"
                                         aria-pressed={isSel}
-                                        aria-label={`View ${t.name} level details`}
+                                        aria-label={t('View {tier} level details', { tier: t(TIER_WORDS[lvl.name]) })}
                                         onClick={() => setSelectedLevel(i)}
-                                        className="flex flex-col items-center py-3 px-1 rounded-xl border-2 transition-all cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-1"
+                                        className="min-w-0 flex flex-col items-center py-3 px-1 rounded-xl border-2 transition-all cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-1"
                                         style={{
-                                            background: isSel ? t.bg : 'var(--tier-card)',
-                                            borderColor: isSel ? t.color : 'var(--tier-card-border)',
+                                            background: isSel ? lvl.bg : 'var(--tier-card)',
+                                            borderColor: isSel ? lvl.color : 'var(--tier-card-border)',
                                             borderStyle: reached || isSel ? 'solid' : 'dashed',
                                             fontFamily: 'inherit',
                                         }}
                                     >
-                                        <span className="text-3xl leading-none">{t.emoji}</span>
-                                        <span className="text-[11px] font-black mt-2 leading-tight" style={{ color: t.color }}>{t.name}</span>
+                                        <span className="text-3xl leading-none">{lvl.emoji}</span>
+                                        {/* A quarter of a 320 px screen: a longer language's tier name breaks inside its tile. */}
+                                        <span className="w-full text-center text-[11px] font-black mt-2 leading-tight [overflow-wrap:anywhere]" style={{ color: lvl.color }}>{t(TIER_WORDS[lvl.name])}</span>
                                         <span className="text-[9px] font-semibold text-nature-400 mt-1 leading-none">
-                                            {tierIdx === i ? "You're here" : reached ? 'Reached' : `${t.min} trust`}
+                                            {tierIdx === i ? t("You're here") : reached ? t('Reached') : tn(lvl.min, '{n} trust', '{n} trust')}
                                         </span>
                                     </button>
                                 );
@@ -628,43 +650,43 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                         <div className="flex flex-wrap items-center gap-3 mb-4" data-testid="level-detail-heading">
                             <span className="text-3xl leading-none">{sel.emoji}</span>
                             <div className="flex-1 min-w-[7rem]">
-                                <div className="text-xl font-black" style={{ color: sel.color }}>{sel.name}</div>
-                                <div className="text-xs text-nature-400 font-semibold">Level {selLevel + 1} of {TIERS.length}</div>
+                                <div className="text-xl font-black" style={{ color: sel.color }}>{t(TIER_WORDS[sel.name])}</div>
+                                <div className="text-xs text-nature-400 font-semibold">{t('Level {level} of {levels}', { level: selLevel + 1, levels: TIERS.length })}</div>
                             </div>
                             <span className="text-xs font-bold px-3 py-1.5 rounded-xl border whitespace-nowrap" style={{ borderColor: sel.border, borderStyle: selReached ? 'solid' : 'dashed', backgroundColor: sel.bg, color: sel.color }}>
-                                {selCurrent ? "You're here" : selReached ? 'Reached ✓' : selLevel === tierIdx + 1 ? 'Next level' : 'Up ahead'}
+                                {selCurrent ? t("You're here") : selReached ? t('Reached ✓') : selLevel === tierIdx + 1 ? t('Next level') : t('Up ahead')}
                             </span>
                         </div>
 
-                        <p className="text-[13px] text-nature-700 dark:text-nature-300 leading-relaxed mb-4">{sel.blurb}</p>
+                        <p className="text-[13px] text-nature-700 dark:text-nature-300 leading-relaxed mb-4">{t(sel.blurb)}</p>
 
                         {/* Credit floor — show YOUR actual floor when viewing your own tier */}
                         <div className="flex items-start gap-3 bg-nature-50 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 rounded-xl p-3 mb-4">
                             <span className="mt-0.5">⚖️</span>
                             <div className="flex-1">
                                 <div className="text-[13px] text-nature-600 dark:text-nature-300 font-semibold">
-                                    {selCurrent ? 'Your current floor' : selReached ? 'Floor from this tier' : 'Floor starts at'}
+                                    {selCurrent ? t('Your current floor') : selReached ? t('Floor from this tier') : t('Floor starts at')}
                                 </div>
                                 {selCurrent && (
-                                    <div className="text-[10px] text-nature-400 dark:text-nature-300 mt-0.5">Grows deeper as you trade more</div>
+                                    <div className="text-[10px] text-nature-400 dark:text-nature-300 mt-0.5">{t('Grows deeper as you trade more')}</div>
                                 )}
                             </div>
                             <span className="text-xl font-black font-mono" style={{ color: sel.color }}>
-                                {selCurrent ? floor : sel.floor}
+                                {formatNumber(selCurrent ? floor : sel.floor)}
                             </span>
                         </div>
 
                         <div className="flex flex-col gap-2">
-                            {sel.perks.filter(p => !(preview && p === INVITE_PERK)).map(p => (
-                                <div key={p} className="flex items-start gap-2 text-[13px]">
+                            {sel.perks.filter(p => !(preview && p.words === INVITE_PERK)).map(p => (
+                                <div key={p.words} className="flex items-start gap-2 text-[13px]">
                                     <span className="mt-0.5 shrink-0" style={{ color: selReached ? '#10b981' : sel.color }}>{selReached ? '✓' : '○'}</span>
-                                    <span className="text-nature-700 dark:text-nature-300">{p}</span>
+                                    <span className="text-nature-700 dark:text-nature-300">{t(p.words)}</span>
                                 </div>
                             ))}
                         </div>
 
                         {!selReached && selNeeded > 0 && (
-                            <p className="text-[11px] text-nature-400 italic mt-4">Reach {sel.min} trust ({selNeeded} to go) from the real value you trade.</p>
+                            <p className="text-[11px] text-nature-400 italic mt-4">{t('Reach {min} trust ({left} to go) from the real value you trade.', { min: sel.min, left: selNeeded })}</p>
                         )}
                         <p className="text-[11px] text-nature-400 italic mt-2">{preview
                             ? t("Levels are merit badges — they don't gate any action. Direct sends require a positive balance and one completed trade. Higher levels mean a deeper credit line and community recognition.")
@@ -674,21 +696,20 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                     {/* How to reach next tier */}
                     {nextTier && (
                         <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-5 shadow-sm">
-                            <h3 className="font-extrabold text-[15px] text-nature-950 dark:text-white mb-2">🚀 Reach {nextTier.emoji} {nextTier.name}</h3>
-                            <p className="text-sm font-black text-indigo-650 dark:text-indigo-300 mb-2">{creditsToNext} trust to go</p>
+                            <h3 className="font-extrabold text-[15px] text-nature-950 dark:text-white mb-2">{t('🚀 Reach {emoji} {tier}', { emoji: nextTier.emoji, tier: t(TIER_WORDS[nextTier.name]) })}</h3>
+                            <p className="text-sm font-black text-indigo-650 dark:text-indigo-300 mb-2">{tn(creditsToNext, '{n} trust to go', '{n} trust to go')}</p>
                             <p className="text-xs text-nature-500 dark:text-nature-400 leading-relaxed mb-4">
-                                Trust grows with the real value you trade. Trading with someone NEW counts fastest —
-                                value with any one partner is capped, so a wide circle beats repeat trades with the same person.
+                                {t('Trust grows with the real value you trade. Trading with someone NEW counts fastest — value with any one partner is capped, so a wide circle beats repeat trades with the same person.')}
                             </p>
                             <div className="grid grid-cols-2 gap-3 text-center">
                                 <div className="p-3 bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/40 rounded-xl relative">
-                                    <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400">{Number.isFinite(valueToNext) ? `~${valueToNext}` : '—'}</div>
-                                    <div className="text-[9px] font-bold text-nature-400 uppercase mt-1">beans of value to trade</div>
-                                    <span className="absolute -top-2 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded bg-bp-commit-fill text-bp-commit-on font-black text-[8px] uppercase tracking-wider">the lever</span>
+                                    <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400">{Number.isFinite(valueToNext) ? `~${formatNumber(valueToNext)}` : '—'}</div>
+                                    <div className="text-[9px] font-bold text-nature-400 uppercase mt-1">{t('beans of value to trade')}</div>
+                                    <span className="absolute -top-2 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded bg-bp-commit-fill text-bp-commit-on font-black text-[8px] uppercase tracking-wider">{t('the lever')}</span>
                                 </div>
                                 <div className="p-3 bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/40 rounded-xl">
-                                    <div className="text-2xl font-black text-indigo-600 dark:text-indigo-400">{partnersToNext || '—'}</div>
-                                    <div className="text-[9px] font-bold text-nature-400 uppercase mt-1">new partners (roughly)</div>
+                                    <div className="text-2xl font-black text-indigo-600 dark:text-indigo-400">{partnersToNext ? formatNumber(partnersToNext) : '—'}</div>
+                                    <div className="text-[9px] font-bold text-nature-400 uppercase mt-1">{t('new partners (roughly)')}</div>
                                 </div>
                             </div>
                         </div>
@@ -696,12 +717,12 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
 
                     {/* What builds trust: value traded, a diverse circle of partners, and reputation */}
                     <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-4 sm:p-5 shadow-sm">
-                        <span className="text-[10px] font-bold text-nature-400 uppercase tracking-widest block mb-4">WHAT BUILDS YOUR TRUST</span>
+                        <span className="text-[10px] font-bold text-nature-400 uppercase tracking-widest block mb-4">{t('WHAT BUILDS YOUR TRUST')}</span>
                         <div className="grid grid-cols-3 gap-1.5 sm:gap-3" data-testid="trust-builders">
                             {[
-                                { icon: '💰', label: 'VALUE TRADED', big: `${qualifiedValue}`, foot: `+${earned} trust`, pct: Math.min(1, qualifiedValue / valueForEarned(ELDER_MIN)), color: '#10b981' },
-                                { icon: '👥', label: 'PARTNERS', big: `${uniquePartners}`, foot: 'diverse = faster', pct: Math.min(1, uniquePartners / 20), color: '#3b82f6' },
-                                { icon: '⭐', label: 'RATING', big: reviewCount > 0 ? avgRating.toFixed(1) : '—', foot: reviewCount > 0 ? `${reviewCount} review${reviewCount === 1 ? '' : 's'}` : 'no reviews yet', pct: reviewCount > 0 ? avgRating / 5 : 1, color: '#f97316' },
+                                { icon: '💰', label: t('VALUE TRADED'), big: formatNumber(qualifiedValue), foot: tn(earned, '+{n} trust', '+{n} trust'), pct: Math.min(1, qualifiedValue / valueForEarned(ELDER_MIN)), color: '#10b981' },
+                                { icon: '👥', label: t('PARTNERS'), big: formatNumber(uniquePartners), foot: t('diverse = faster'), pct: Math.min(1, uniquePartners / 20), color: '#3b82f6' },
+                                { icon: '⭐', label: t('RATING'), big: reviewCount > 0 ? formatNumber(avgRating, 1) : '—', foot: reviewCount > 0 ? tn(reviewCount, '{n} review', '{n} reviews') : t('no reviews yet'), pct: reviewCount > 0 ? avgRating / 5 : 1, color: '#f97316' },
                             ].map(a => (
                                 <div key={a.label} className="min-w-0 px-1.5 py-2 sm:p-3 border border-nature-200 dark:border-nature-800 rounded-xl flex flex-col justify-between">
                                     <div>
@@ -721,7 +742,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                     </div>
 
                     <span className="text-[10px] font-medium text-nature-400 dark:text-nature-400 text-center italic block">
-                        💡 Trust is a saturating curve over the real value you trade — diverse trades climb fastest, and it levels off near the top so no one runs away. Gifts don't build trust.
+                        {t("💡 Trust is a saturating curve over the real value you trade — diverse trades climb fastest, and it levels off near the top so no one runs away. Gifts don't build trust.")}
                     </span>
                 </div>
             ) : (
@@ -730,13 +751,13 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                         other: at 320 px with 1.3x text the pair pushed Commons Pool past the right edge. */}
                     <div className="flex flex-wrap gap-3" data-testid="ledger-wallet-tiles">
                         <div className="flex-1 basis-[9rem] min-w-0 bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-4 sm:p-5 text-center shadow-sm">
-                            <p className="text-nature-500 dark:text-nature-400 text-sm font-semibold mb-2">Overdraft Floor</p>
+                            <p className="text-nature-500 dark:text-nature-400 text-sm font-semibold mb-2">{t('Overdraft Floor')}</p>
                             <p className="text-2xl font-black font-mono text-nature-950 dark:text-white flex flex-wrap items-center justify-center gap-1 [overflow-wrap:anywhere]">
-                                {floor}
-                                <img src="/assets/bean.png" className="w-[18px] h-[18px]" alt="B" />
+                                {formatNumber(floor)}
+                                <img src="/assets/bean.png" className="w-[18px] h-[18px]" alt={t('B', undefined, 'the Beans sign')} />
                             </p>
                             <p className="text-nature-400 text-[10px] mt-1 font-semibold">
-                                ≈ {hoursEquivalent.toFixed(1)} hrs capacity
+                                {t('≈ {hours} hrs capacity', { hours: formatNumber(hoursEquivalent, 1) })}
                             </p>
                         </div>
 
@@ -745,14 +766,14 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                             className="flex-1 basis-[9rem] min-w-0 bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-4 sm:p-5 text-center shadow-sm hover:bg-nature-50 dark:hover:bg-nature-800 hover:border-nature-300 dark:hover:border-nature-700 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-amber-500/30"
                         >
                             <p className="text-nature-500 dark:text-nature-300 text-sm font-semibold mb-2 flex items-center justify-center gap-1">
-                                Commons Pool <span className="text-xs text-nature-400 dark:text-nature-300">ⓘ</span>
+                                {t('Commons Pool')} <span className="text-xs text-nature-400 dark:text-nature-300">ⓘ</span>
                             </p>
                             <p className="text-2xl font-black font-mono text-amber-500 flex flex-wrap items-center justify-center gap-1 [overflow-wrap:anywhere]">
-                                {(balanceInfo?.commonsBalance ?? 0).toFixed(1)}
-                                <img src="/assets/bean.png" className="w-[18px] h-[18px]" alt="B" />
+                                {formatNumber(balanceInfo?.commonsBalance ?? 0, 1)}
+                                <img src="/assets/bean.png" className="w-[18px] h-[18px]" alt={t('B', undefined, 'the Beans sign')} />
                             </p>
                             <p className="text-nature-500 dark:text-nature-300 text-[10px] mt-1 font-semibold">
-                                🌱 View Solvency & Tax
+                                {t('🌱 View Solvency & Tax')}
                             </p>
                         </button>
                     </div>
@@ -769,8 +790,8 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                             <div className="bg-nature-50 dark:bg-nature-900/50 border border-nature-200 dark:border-nature-800 rounded-xl p-3 mb-4 text-center">
                                 <p className="text-xs text-nature-500 dark:text-nature-400 font-medium">
                                     {earned <= 0
-                                        ? '🔒 Direct sends unlock after your first completed trade on the Marketplace, and require a positive balance.'
-                                        : '🔒 You can only send beans you currently hold — direct sends require a positive balance.'}
+                                        ? t('🔒 Direct sends unlock after your first completed trade on the Marketplace, and require a positive balance.')
+                                        : t('🔒 You can only send beans you currently hold — direct sends require a positive balance.')}
                                 </p>
                             </div>
                         )}
@@ -783,8 +804,8 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                             }`}
                         >
                             {!canSend
-                                ? (earned <= 0 ? '🔒 Send Beans (needs 1 completed trade)' : '🔒 Send Beans (needs positive balance)')
-                                : showSend ? '✕ Cancel' : <><span>💸</span> <span>{t('Send Beans')}</span></>}
+                                ? (earned <= 0 ? t('🔒 Send Beans (needs 1 completed trade)') : t('🔒 Send Beans (needs positive balance)'))
+                                : showSend ? t('✕ Cancel') : <><span>💸</span> <span>{t('Send Beans')}</span></>}
                         </button>
 
                         {/* Send Form */}
@@ -795,7 +816,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                                         onClick={() => setShowMemberPicker(!showMemberPicker)}
                                         className="w-full p-3.5 rounded-xl border border-nature-200 dark:border-nature-800 bg-white dark:bg-nature-950 text-nature-900 dark:text-white text-[15px] font-medium text-left flex justify-between items-center shadow-sm cursor-pointer"
                                     >
-                                        <span>{selectedMember?.callsign || 'Select recipient...'}</span>
+                                        <span>{selectedMember?.callsign || t('Select recipient...')}</span>
                                         <span className="text-nature-400 text-xs">▼</span>
                                     </button>
 
@@ -803,7 +824,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                                         <div className="absolute left-0 right-0 mt-1 bg-white dark:bg-nature-950 border border-nature-200 dark:border-nature-700 rounded-xl shadow-xl z-20 max-h-56 overflow-y-auto">
                                             <input
                                                 type="text"
-                                                placeholder="Search members..."
+                                                placeholder={t('Search members...')}
                                                 value={memberSearch}
                                                 onChange={(e) => setMemberSearch(e.target.value)}
                                                 className="w-full p-3 border-b border-nature-100 dark:border-nature-700 bg-transparent text-sm focus:outline-none text-nature-900 dark:text-white"
@@ -831,14 +852,14 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                                 <input
                                     type="text"
                                     inputMode="decimal"
-                                    placeholder="Amount (B)"
+                                    placeholder={t('Amount (B)')}
                                     value={sendAmount}
                                     onChange={(e) => setSendAmount(e.target.value)}
                                     className="w-full p-3.5 rounded-xl border border-nature-200 dark:border-nature-800 bg-white dark:bg-nature-950 text-nature-900 dark:text-white text-[15px] font-medium mb-3 focus:ring-2 focus:ring-[#d97757] outline-none shadow-sm transition-all"
                                 />
                                 <input
                                     type="text"
-                                    placeholder="Memo (optional)"
+                                    placeholder={t('Memo (optional)')}
                                     value={sendMemo}
                                     onChange={(e) => setSendMemo(e.target.value)}
                                     className="w-full p-3.5 rounded-xl border border-nature-200 dark:border-nature-800 bg-white dark:bg-nature-950 text-nature-900 dark:text-white text-[15px] font-medium mb-4 focus:ring-2 focus:ring-[#d97757] outline-none shadow-sm transition-all"
@@ -850,8 +871,8 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                                         return (
                                             <div className="bg-nature-100 dark:bg-nature-900 rounded-xl p-3 mb-4 text-xs space-y-1.5 border border-nature-200 dark:border-nature-800">
                                                 <div className="flex justify-between items-center text-nature-700 dark:text-nature-300">
-                                                    <span>Recipient receives:</span>
-                                                    <span className="font-mono font-bold text-nature-950 dark:text-white">{formatNumber(parsedAmount, 2)} B</span>
+                                                    <span>{t('Recipient receives:')}</span>
+                                                    <span className="font-mono font-bold text-nature-950 dark:text-white">{t('{amount} B', { amount: formatNumber(parsedAmount, 2) })}</span>
                                                 </div>
                                             </div>
                                         );
@@ -867,7 +888,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                                             : 'bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on cursor-pointer'
                                     }`}
                                 >
-                                    {sending ? 'Sending...' : 'Confirm Transfer'}
+                                    {sending ? t('Sending...') : t('Confirm Transfer')}
                                 </button>
                             </div>
                         )}
@@ -881,7 +902,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                         const monthly = monthlyCirculation(balance);
                         const showAmber = balance > 1000;
                         // Two decimals; a sliver over the line shows as <0.01 rather than a zero that reads broken.
-                        const twoDp = (n: number) => (n < 0.005 ? '<0.01' : n.toFixed(2));
+                        const twoDp = (n: number) => (n < 0.005 ? `<${formatNumber(0.01, 2)}` : formatNumber(n, 2));
 
                         return (
                             <div className={`rounded-2xl p-4 shadow-sm border border-nature-200 dark:border-nature-800 ${showAmber ? 'bg-bp-chip-warn-tint text-bp-chip-warn-ink' : 'bg-bp-chip-ok-tint text-bp-chip-ok-ink'}`} data-testid="ledger-circulation">
@@ -890,7 +911,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                                     {monthly > 0 && (
                                         <span className="text-[13px] font-bold font-mono flex items-center" data-testid="ledger-circulation-amount">
                                             −{twoDp(monthly)}
-                                            <img src="/assets/bean.png" className="w-[14px] h-[14px] ml-0.5" alt="B" />
+                                            <img src="/assets/bean.png" className="w-[14px] h-[14px] ml-0.5" alt={t('B', undefined, 'the Beans sign')} />
                                         </span>
                                     )}
                                 </div>
@@ -905,7 +926,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
 
                     {/* Transaction history */}
                     <div className={preview ? 'flex flex-wrap justify-between items-center gap-2 mb-1 px-1' : 'flex justify-between items-center mb-1 px-1'}>
-                        <h3 className="text-lg font-bold text-nature-950 dark:text-white">Recent Transactions</h3>
+                        <h3 className="text-lg font-bold text-nature-950 dark:text-white">{t('Recent Transactions')}</h3>
                         {preview ? <LocalCommunityAction feature="beans" label={t('Export mine')} className="text-[11px]" {...ways} /> : <button
                             onClick={async () => {
                                 try {
@@ -932,18 +953,18 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                                     }, 500);
                                 } catch (e) {
                                     console.error('Export failed', e);
-                                    alert(`Export failed${e instanceof Error && e.message ? `: ${e.message}` : ''}`);
+                                    alert(e instanceof Error && e.message ? t('Export failed: {reason}', { reason: e.message }) : t('Export failed'));
                                 }
                             }}
                             className="flex items-center gap-1.5 px-3 py-1.5 bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 rounded-lg text-[11px] font-bold hover:bg-nature-200 dark:hover:bg-nature-700 dark:hover:text-nature-200 transition-colors border border-nature-200 dark:border-nature-700 shadow-sm cursor-pointer"
                         >
-                            ⬇️ Export mine
+                            {t('⬇️ Export mine')}
                         </button>}
                     </div>
 
                     {rows.length === 0 ? (
                         <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-8 text-center text-nature-500 dark:text-nature-400 text-[14px] shadow-sm font-medium">
-                            No transactions yet. Start trading on the Marketplace!
+                            {t('No transactions yet. Start trading on the Marketplace!')}
                         </div>
                     ) : (
                         <div className="flex flex-col gap-2.5">
@@ -952,11 +973,11 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                                     <div key={id} className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-xl p-4 flex justify-between items-center shadow-sm transition-transform hover:-translate-y-0.5">
                                         <div>
                                             <p className={`text-[14px] font-bold ${isSent ? 'text-nature-900 dark:text-white' : 'text-emerald-700 dark:text-emerald-400'}`}>
-                                                {isSent ? '↑ Sent' : '↓ Received'}
+                                                {isSent ? t('↑ Sent') : t('↓ Received')}
                                             </p>
                                             {note === BLOCKED_BEANS_NOTE ? (
                                                 <p className="text-[13px] italic text-nature-500 dark:text-nature-400 mt-1 leading-snug">
-                                                    {BLOCKED_BEANS_NOTE}
+                                                    {t('Beans from a member you blocked')}
                                                 </p>
                                             ) : note && (
                                                 <p className="text-[13px] text-nature-700 dark:text-nature-400 mt-1 leading-snug">
@@ -968,8 +989,8 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                                             </p>
                                         </div>
                                         <p style={{ whiteSpace: 'nowrap' }} className={`text-lg font-bold font-mono ${isSent ? 'text-red-500 dark:text-red-300' : 'text-emerald-500 dark:text-emerald-400'} flex items-center`}>
-                                            {isSent ? '−' : '+'}{amount.toFixed(1)}
-                                            <img src="/assets/bean.png" className="w-4 h-4 ml-1" alt="B" />
+                                            {isSent ? '−' : '+'}{formatNumber(amount, 1)}
+                                            <img src="/assets/bean.png" className="w-4 h-4 ml-1" alt={t('B', undefined, 'the Beans sign')} />
                                         </p>
                                     </div>
                                 );

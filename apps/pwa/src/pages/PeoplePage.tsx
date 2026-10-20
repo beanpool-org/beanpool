@@ -17,9 +17,10 @@ import {
     useMembersOnDemand, useMemberSearch, membersNear, dayBudgetWords, getMembersWhole, isMembersOnDemandRefusal,
     MEMBERS_SEARCH_LIMIT, MEMBERS_SEARCH_MIN_CHARS,
 } from '../lib/members-on-demand';
-import { t } from '@beanpool/core';
+import { t, tn, word, type WordKey } from '@beanpool/core';
 import { readMyArea } from '../lib/member-area';
 import { type LocalCommunityWays } from '../components/LocalCommunityMark';
+import { Sentence } from '../components/Sentence';
 
 interface Props extends LocalCommunityWays {
     identity: BeanPoolIdentity;
@@ -34,25 +35,31 @@ type SubView = 'friends' | 'community' | 'invites';
 const SUB_VIEWS: SubView[] = ['friends', 'community', 'invites'];
 const tabId = (v: SubView) => `people-tab-${v}`;
 const panelId = (v: SubView) => `people-panel-${v}`;
+/** The three panes' names on the sub-nav (the phone's): word() keys, shown through t(). */
+const PANE_WORDS: Readonly<Record<SubView, WordKey>> = {
+    friends: word('👫 Friends'),
+    community: word('🏘️ Community'),
+    invites: word('🎟️ Invites'),
+};
 
-/** Convert a date to a relative "Xd ago" / "Xw ago" string */
+/** Convert a date to a relative "Xd ago" / "Xw ago" string, in the member's language (the phone's short forms). */
 function relativeDate(dateStr: string): string {
     const now = Date.now();
     const then = new Date(dateStr).getTime();
     const diffMs = now - then;
     const diffMin = Math.floor(diffMs / 60000);
-    if (diffMin < 1) return 'just now';
-    if (diffMin < 60) return `${diffMin}m ago`;
+    if (diffMin < 1) return t('just now');
+    if (diffMin < 60) return t('{n}m ago', { n: diffMin });
     const diffHr = Math.floor(diffMin / 60);
-    if (diffHr < 24) return `${diffHr}h ago`;
+    if (diffHr < 24) return t('{n}h ago', { n: diffHr });
     const diffDays = Math.floor(diffHr / 24);
-    if (diffDays < 7) return `${diffDays}d ago`;
+    if (diffDays < 7) return t('{n}d ago', { n: diffDays });
     const diffWeeks = Math.floor(diffDays / 7);
-    if (diffWeeks < 5) return `${diffWeeks}w ago`;
+    if (diffWeeks < 5) return t('{n}w ago', { n: diffWeeks });
     const diffMonths = Math.floor(diffDays / 30);
-    if (diffMonths < 12) return `${diffMonths}mo ago`;
+    if (diffMonths < 12) return t('{n}mo ago', { n: diffMonths });
     const diffYears = Math.floor(diffDays / 365);
-    return `${diffYears}y ago`;
+    return t('{n}y ago', { n: diffYears });
 }
 
 /** Avatar circle with image or initials fallback */
@@ -199,7 +206,7 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
             setAddedYou(a => a.filter(x => x.publicKey !== pubkey));
             await loadFriends();
         } catch (e) {
-            setAddRefusal(e instanceof Error && e.message ? e.message : 'Your community did not add them.');
+            setAddRefusal(e instanceof Error && e.message ? e.message : t('Your community did not add them.'));
         }
     }
 
@@ -244,7 +251,7 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
         <div key={m.publicKey} data-testid="people-row" className="p-2 px-3 flex items-center justify-between gap-2 min-w-0">
             <button
                 type="button"
-                aria-label={`View ${m.callsign}'s profile`}
+                aria-label={t("View {name}'s profile", { name: m.callsign })}
                 className="flex items-center gap-3 min-w-0 min-h-[44px] bg-transparent border-none p-0 cursor-pointer text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-lg"
                 onClick={() => onOpenProfile && onOpenProfile(m.publicKey)}
             >
@@ -253,23 +260,23 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                     <span className="block font-bold text-[14px] text-nature-900 dark:text-white break-words">{m.callsign}</span>
                     <span className="block text-[11px] text-nature-500 dark:text-nature-400 font-medium mt-0.5">
                         {distance && typeof m.distanceKm === 'number'
-                            ? (m.distanceKm < 1 ? 'Under 1 km away' : `About ${m.distanceKm} km away`)
-                            : `Joined ${relativeDate(m.joinedAt)}`}
+                            ? (m.distanceKm < 1 ? t('Under 1 km away') : t('About {km} km away', { km: m.distanceKm }))
+                            : t('Joined {when}', { when: relativeDate(m.joinedAt) })}
                     </span>
                 </span>
             </button>
             {friendPubkeys.has(m.publicKey) ? (
                 <span className="shrink-0 text-xs font-bold text-bp-chip-ok-ink bg-bp-chip-ok-tint px-2.5 py-1 rounded-lg border border-transparent">
-                    ✓ Friend
+                    {t('✓ Friend')}
                 </span>
             ) : (
                 <button
                     type="button"
                     onClick={() => handleAddFriend(m.publicKey)}
-                    aria-label={`Add ${m.callsign} as friend`}
+                    aria-label={t('Add {name} as friend', { name: m.callsign })}
                     className="shrink-0 min-h-[44px] min-w-[44px] bg-bp-commit-fill hover:bg-bp-commit-hover border-none text-bp-commit-on rounded-lg px-3 text-xs font-bold cursor-pointer shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                 >
-                    + Add
+                    {t('+ Add')}
                 </button>
             )}
         </div>
@@ -289,7 +296,7 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
     return (
         <div className="p-4 md:p-6 max-w-4xl mx-auto w-full">
             {/* Sub-nav pills */}
-            <div className="flex gap-1 mb-5 bg-oat-100 dark:bg-nature-900 rounded-xl p-1 shadow-inner border border-nature-200 dark:border-nature-800" role="tablist" aria-label="People navigation">
+            <div className="flex gap-1 mb-5 bg-oat-100 dark:bg-nature-900 rounded-xl p-1 shadow-inner border border-nature-200 dark:border-nature-800" role="tablist" aria-label={t('People navigation')}>
                 {SUB_VIEWS.map(v => (
                     <button
                         key={v}
@@ -302,15 +309,15 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                         tabIndex={view === v ? 0 : -1}
                         onClick={() => setView(v)}
                         onKeyDown={onTabKeyDown}
-                        className={`flex-1 min-h-[48px] py-2 px-1 border-none rounded-lg text-xs font-bold cursor-pointer transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
+                        // min-w-0 and break-words: a longer language's pane name wraps in its tab, never off a 320 px screen.
+                        // flex-auto, not equal thirds: each tab starts from its own words, so English's "Community" stays whole.
+                        className={`flex-auto min-w-0 break-words leading-tight min-h-[48px] py-2 px-1 border-none rounded-lg text-xs font-bold cursor-pointer transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
                             view === v 
                                 ? 'bg-white dark:bg-nature-800 text-rainbow shadow-sm border border-nature-200/50 dark:border-nature-700/50 scale-95 drop-shadow-sm' 
                                 : 'bg-transparent text-nature-500 dark:text-nature-400 hover:text-nature-700 dark:hover:text-oat-50 hover:bg-oat-200 dark:hover:bg-nature-800'
                         }`}
                     >
-                        {v === 'friends' && '👫 Friends'}
-                        {v === 'community' && '🏘️ Community'}
-                        {v === 'invites' && '🎟️ Invites'}
+                        {t(PANE_WORDS[v])}
                     </button>
                 ))}
             </div>
@@ -327,41 +334,41 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
             {view === 'friends' && (
                 <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
                     {addedYou.filter(a => !blockedSet.has(a.publicKey)).length > 0 && (
-                        <ul data-testid="added-you" aria-label="People who added you" className="mb-4 list-none p-0 m-0 bg-bg-card rounded-2xl border border-border-primary shadow-sm divide-y divide-border-primary overflow-hidden">
+                        <ul data-testid="added-you" aria-label={t('People who added you')} className="mb-4 list-none p-0 m-0 bg-bg-card rounded-2xl border border-border-primary shadow-sm divide-y divide-border-primary overflow-hidden">
                             {addedYou.filter(a => !blockedSet.has(a.publicKey)).map(a => (
                                 <li key={a.publicKey} className="p-2 px-3 flex items-center justify-between gap-2 min-w-0">
                                     <button
                                         type="button"
                                         onClick={() => onOpenProfile?.(a.publicKey)}
-                                        aria-label={`${a.callsign} added you. Open their profile`}
+                                        aria-label={t('{name} added you. Open their profile', { name: a.callsign })}
                                         className="flex items-center gap-3 min-w-0 min-h-[44px] bg-transparent border-none p-0 cursor-pointer text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded-lg"
                                     >
                                         <Avatar callsign={a.callsign} avatarUrl={a.avatarUrl} size={32} />
                                         <span className="min-w-0 text-[14px] text-text-primary break-words">
-                                            <strong className="font-bold">{a.callsign}</strong> added you
+                                            <Sentence text={t('{name} added you')} parts={{ name: <strong className="font-bold">{a.callsign}</strong> }} />
                                         </span>
                                     </button>
                                     <button
                                         type="button"
                                         onClick={() => handleAddFriend(a.publicKey)}
-                                        aria-label={`Add ${a.callsign} back`}
+                                        aria-label={t('Add {name} back', { name: a.callsign })}
                                         className="shrink-0 min-h-[44px] min-w-[44px] px-3 rounded-lg border border-accent bg-transparent text-text-primary text-xs font-bold cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                                     >
-                                        Add back
+                                        {t('Add back')}
                                     </button>
                                 </li>
                             ))}
                             {addedYouMore > 0 && (
-                                <li className="p-2 px-3 text-[12px] text-text-muted">and {addedYouMore} more</li>
+                                <li className="p-2 px-3 text-[12px] text-text-muted">{tn(addedYouMore, 'and {n} more', 'and {n} more')}</li>
                             )}
                         </ul>
                     )}
                     {visibleFriends.length === 0 ? (
                         <div className="text-center p-10 text-nature-500 dark:text-nature-400 bg-white dark:bg-nature-900 rounded-2xl border border-nature-200 dark:border-nature-800 shadow-sm mt-4">
                             <p className="text-4xl mb-3">👫</p>
-                            <p className="text-[15px] font-semibold text-nature-800 dark:text-white">No friends yet</p>
+                            <p className="text-[15px] font-semibold text-nature-800 dark:text-white">{t('No friends yet')}</p>
                             <p className="text-xs mt-2 text-nature-500 dark:text-nature-400 leading-relaxed">
-                                Go to <strong className="text-nature-700 dark:text-oat-50">Community</strong> to browse members and add friends.
+                                <Sentence text={t('Go to {community} to browse members and add friends.')} parts={{ community: <strong className="text-nature-700 dark:text-oat-50">{t('Community')}</strong> }} />
                             </p>
                         </div>
                     ) : (
@@ -371,7 +378,7 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                                     <div className="flex items-center gap-3">
                                         <button 
                                             type="button"
-                                            aria-label={`View ${f.callsign}'s profile`}
+                                            aria-label={t("View {name}'s profile", { name: f.callsign })}
                                             className="bg-transparent border-none p-0 cursor-pointer text-left hover:opacity-80 transition-opacity focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-full"
                                             onClick={() => onOpenProfile && onOpenProfile(f.publicKey)}
                                         >
@@ -390,7 +397,7 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                                                 {f.callsign}
                                             </button>
                                             <div className="text-[11px] text-nature-400 dark:text-nature-300 font-medium mt-0.5">
-                                                Added {relativeDate(f.addedAt)}
+                                                {t('Added {when}', { when: relativeDate(f.addedAt) })}
                                             </div>
                                         </div>
                                     </div>
@@ -400,8 +407,8 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                                                 type="button"
                                                 onClick={() => handleMessage(f.publicKey)}
                                                 className="bg-bp-commit-fill hover:bg-bp-commit-hover border-none text-bp-commit-on rounded-lg px-2.5 py-1 text-xs font-bold cursor-pointer shadow-sm transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
-                                                title={`Message ${f.callsign}`}
-                                                aria-label={`Message ${f.callsign}`}
+                                                title={t('Message {name}', { name: f.callsign })}
+                                                aria-label={t('Message {name}', { name: f.callsign })}
                                             >
                                                 💬
                                             </button>
@@ -409,10 +416,10 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                                         <button
                                             type="button"
                                             onClick={() => handleRemoveFriend(f.publicKey)}
-                                            aria-label={`Remove ${f.callsign} from friends`}
+                                            aria-label={t('Remove {name} from friends', { name: f.callsign })}
                                             className="bg-transparent border-none text-red-500 dark:text-red-300 text-xs font-semibold cursor-pointer px-2.5 py-1 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
                                         >
-                                            Remove
+                                            {t('Remove')}
                                         </button>
                                     </div>
                                 </div>
@@ -429,28 +436,30 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
             {view === 'community' && onDemand === true && (
                 <div className="animate-in fade-in slide-in-from-bottom-2 duration-300" data-testid="people-on-demand">
                     <p className="text-[13px] font-medium text-nature-600 dark:text-nature-300 mb-4 bg-oat-50 dark:bg-nature-900 p-3 rounded-xl border border-nature-200 dark:border-nature-800 shadow-sm">
-                        Find someone by name, or see who's near you. Tap <strong className="text-emerald-700 dark:text-emerald-300 font-bold">+ Add</strong> to add someone as a friend.
+                        <Sentence text={t("Find someone by name, or see who's near you. Tap {add} to add someone as a friend.")} parts={{ add: <strong className="text-emerald-700 dark:text-emerald-300 font-bold">{t('+ Add')}</strong> }} />
                     </p>
 
                     {/* Search: the node answers, from 2 characters */}
                     <div className="mb-4">
-                        <label htmlFor="people-search" className="sr-only">Search members by name</label>
+                        <label htmlFor="people-search" className="sr-only">{t('Search members by name')}</label>
                         <input
                             id="people-search"
                             type="search"
-                            placeholder="🔍 Search by name..."
+                            placeholder={t('🔍 Search by name...')}
                             value={searchQuery}
                             onChange={e => setSearchQuery(e.target.value)}
                             className="w-full min-h-[44px] p-3 rounded-xl border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-900 text-nature-900 dark:text-white text-[14px] font-medium focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none shadow-sm placeholder:text-nature-500 dark:placeholder:text-nature-400"
                         />
                         <div className="text-xs text-nature-600 dark:text-nature-300 mt-1.5 font-medium" aria-live="polite" data-testid="people-search-status">
                             {searchQuery.trim() && searchQuery.trim().length < MEMBERS_SEARCH_MIN_CHARS
-                                ? `Type at least ${MEMBERS_SEARCH_MIN_CHARS} letters of a name.`
-                                : searchState === 'searching' ? 'Searching…'
-                                : searchState === 'failed' ? (searchRefusal ?? "Couldn't search just now. Check your connection and try again.")
+                                ? tn(MEMBERS_SEARCH_MIN_CHARS, 'Type at least {n} letter of a name.', 'Type at least {n} letters of a name.')
+                                : searchState === 'searching' ? t('Searching…')
+                                : searchState === 'failed' ? (searchRefusal ?? t("Couldn't search just now. Check your connection and try again."))
                                 : visibleFound ? (visibleFound.length === 0
-                                    ? 'Nobody here has a name starting with that.'
-                                    : `${visibleFound.length} member${visibleFound.length !== 1 ? 's' : ''} found${(found?.length ?? 0) >= MEMBERS_SEARCH_LIMIT ? ` (the first ${MEMBERS_SEARCH_LIMIT}: type more of the name to narrow it)` : ''}`)
+                                    ? t('Nobody here has a name starting with that.')
+                                    : (found?.length ?? 0) >= MEMBERS_SEARCH_LIMIT
+                                        ? tn(visibleFound.length, '{n} member found (the first {limit}: type more of the name to narrow it)', '{n} members found (the first {limit}: type more of the name to narrow it)', { limit: MEMBERS_SEARCH_LIMIT })
+                                        : tn(visibleFound.length, '{n} member found', '{n} members found'))
                                 : null}
                         </div>
                     </div>
@@ -461,24 +470,24 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                     )}
 
                     {/* Near you: the 50 nearest the member's area, never everyone */}
-                    <h3 className="text-[13px] font-bold text-nature-800 dark:text-oat-50 mb-2 px-1">Near you</h3>
+                    <h3 className="text-[13px] font-bold text-nature-800 dark:text-oat-50 mb-2 px-1">{t('Near you')}</h3>
                     {nearState === 'loading' ? (
-                        <p className={`${lineText} p-4 text-center animate-pulse`}>Finding who's near you…</p>
+                        <p className={`${lineText} p-4 text-center animate-pulse`}>{t("Finding who's near you…")}</p>
                     ) : nearState === 'none' ? (
-                        <p className={lineText} data-testid="people-no-area">Set your area to see who's near you (Settings → Your area). Search works without it.</p>
+                        <p className={lineText} data-testid="people-no-area">{t("Set your area to see who's near you (Settings → Your area). Search works without it.")}</p>
                     ) : nearState === 'failed' ? (
                         <p className={`${lineText} flex flex-wrap items-center gap-x-2`} data-testid="people-near-failed">
                             {/* A spent day says so in the node's words, which say when it lets up: no Try again for it. */}
                             {nearRefusal ? <span>{nearRefusal}</span> : <>
-                                <span>Couldn't check who's near you just now.</span>
-                                <button type="button" onClick={() => setNearTry(n => n + 1)} className={linkButton}>Try again</button>
+                                <span>{t("Couldn't check who's near you just now.")}</span>
+                                <button type="button" onClick={() => setNearTry(n => n + 1)} className={linkButton}>{t('Try again')}</button>
                             </>}
                         </p>
                     ) : visibleNear.length === 0 ? (
-                        <p className={lineText}>Nobody else is here yet. Search by name, or invite someone.</p>
+                        <p className={lineText}>{t('Nobody else is here yet. Search by name, or invite someone.')}</p>
                     ) : (
                         <>
-                            <p className={`${lineText} mb-2`}>The {visibleNear.length} closest member{visibleNear.length !== 1 ? 's' : ''} to your area.</p>
+                            <p className={`${lineText} mb-2`}>{tn(visibleNear.length, 'The {n} closest member to your area.', 'The {n} closest members to your area.')}</p>
                             <div className={listBox} data-testid="people-near">
                                 {visibleNear.map(m => personRow(m, true))}
                             </div>
@@ -489,27 +498,27 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
             {view === 'community' && onDemand !== true && (
                 <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
                     <p className="text-[13px] font-medium text-nature-500 dark:text-nature-400 mb-4 bg-oat-50 dark:bg-nature-900 p-3 rounded-xl border border-nature-200 dark:border-nature-800 shadow-sm">
-                        All members on this node. Tap <strong className="text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-50 dark:bg-emerald-900/40 px-1.5 py-0.5 rounded shadow-sm border border-emerald-100 dark:border-emerald-800">+ Add</strong> to add someone as a friend.
+                        <Sentence text={t('All members on this node. Tap {add} to add someone as a friend.')} parts={{ add: <strong className="text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-50 dark:bg-emerald-900/40 px-1.5 py-0.5 rounded shadow-sm border border-emerald-100 dark:border-emerald-800">{t('+ Add')}</strong> }} />
                     </p>
 
                     {/* Search */}
                     <div className="mb-4">
                         <input
                             type="text"
-                            placeholder="🔍 Search members..."
+                            placeholder={t('🔍 Search members...')}
                             value={searchQuery}
                             onChange={e => setSearchQuery(e.target.value)}
                             className="w-full p-3 rounded-xl border border-nature-200 dark:border-nature-500 bg-white dark:bg-nature-900 text-nature-900 dark:text-white text-[14px] font-medium focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none shadow-sm transition-all placeholder:text-nature-400"
                         />
                         {searchQuery && (
                             <div className="text-xs text-nature-400 mt-1.5 font-medium">
-                                {filteredMembers.length} member{filteredMembers.length !== 1 ? 's' : ''} found
+                                {tn(filteredMembers.length, '{n} member found', '{n} members found')}
                             </div>
                         )}
                     </div>
 
                     {loading || onDemand === null ? (
-                        <p className="text-center text-nature-500 p-8 font-medium animate-pulse">Loading community...</p>
+                        <p className="text-center text-nature-500 p-8 font-medium animate-pulse">{t('Loading community...')}</p>
                     ) : membersFailed && members.length === 0 ? (
                         <p className={`${lineText} flex flex-wrap items-center gap-x-2`} data-testid="people-members-failed">
                             <span>{t("Couldn't load this community's members just now.")}</span>
@@ -522,7 +531,7 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                                         <div className="flex items-center gap-3">
                                             <button 
                                                 type="button"
-                                                aria-label={`View ${m.callsign}'s profile`}
+                                                aria-label={t("View {name}'s profile", { name: m.callsign })}
                                                 className="bg-transparent border-none p-0 cursor-pointer text-left hover:opacity-80 transition-opacity focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-full"
                                                 onClick={() => onOpenProfile && onOpenProfile(m.publicKey)}
                                             >
@@ -537,22 +546,22 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                                                     {m.callsign}
                                                 </button>
                                                 <div className="text-[11px] text-nature-400 dark:text-nature-300 font-medium mt-0.5">
-                                                    Joined {relativeDate(m.joinedAt)}
+                                                    {t('Joined {when}', { when: relativeDate(m.joinedAt) })}
                                                 </div>
                                             </div>
                                         </div>
                                         {friendPubkeys.has(m.publicKey) ? (
                                             <span className="text-xs font-bold text-bp-chip-ok-ink bg-bp-chip-ok-tint px-2.5 py-1 rounded-lg border border-transparent shadow-sm">
-                                                ✓ Friend
+                                                {t('✓ Friend')}
                                             </span>
                                         ) : (
                                             <button
                                                 type="button"
                                                 onClick={() => handleAddFriend(m.publicKey)}
-                                                aria-label={`Add ${m.callsign} as friend`}
+                                                aria-label={t('Add {name} as friend', { name: m.callsign })}
                                                 className="bg-bp-commit-fill hover:bg-bp-commit-hover border-none text-bp-commit-on rounded-lg px-3.5 py-1.5 text-xs font-bold cursor-pointer shadow-sm transition-all hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                                             >
-                                                + Add
+                                                {t('+ Add')}
                                             </button>
                                         )}
                                     </div>

@@ -5,7 +5,8 @@ import {
     type DecisionEffect,
 } from '../lib/api';
 import { type BeanPoolIdentity } from '../lib/identity';
-import { keeperWords, amountRefusalWords, ANY_DECIMALS, isAmbiguousAmount, parseAmount } from '@beanpool/core';
+import { keeperWords, amountRefusalWords, ANY_DECIMALS, isAmbiguousAmount, parseAmount, t, tn, word, type WordKey } from '@beanpool/core';
+import { Sentence } from './Sentence';
 
 interface Props {
     isOpen: boolean;
@@ -17,29 +18,53 @@ interface Props {
     treasuries?: Array<{ publicKey: string; name: string; balance?: number; lifecycle?: string | null }>;
 }
 
-const TOUCH_OPTIONS: Array<{ id: DecisionTouch; label: string; icon: string }> = [
-    { id: 'member', label: 'Member', icon: '👤' },
-    { id: 'pool', label: 'Commons Pool', icon: '🏛️' },
+/** What a Decision can touch and do: word() keys (the phone's), shown through t(). */
+const TOUCH_OPTIONS: Array<{ id: DecisionTouch; label: WordKey; icon: string }> = [
+    { id: 'member', label: word('Member', 'what a Decision touches'), icon: '👤' },
+    { id: 'pool', label: word('Commons Pool'), icon: '🏛️' },
 ];
 
-const EFFECTS_BY_TOUCH: Record<DecisionTouch, Array<{ id: DecisionEffect; label: string; desc: string }>> = {
+const EFFECTS_BY_TOUCH: Record<DecisionTouch, Array<{ id: DecisionEffect; label: WordKey; desc: WordKey }>> = {
     member: [
-        { id: 'remove_member', label: 'Remove Member', desc: 'Expulsion from this node (66% supermajority, 25% quorum, 7-day grace window)' },
-        { id: 'suspend_member', label: 'Suspend Member', desc: 'Temporary freeze of trading and messaging' },
-        { id: 'unsuspend_member', label: 'Unsuspend Member', desc: 'Restore member to active standing (simple majority)' },
-        { id: 'reinstate_member', label: 'Reinstate Member', desc: 'Cancel pending removal and restore account (simple majority)' },
-        { id: 'freeze_credit', label: 'Freeze Credit', desc: 'Lock credit floor to zero' },
-        { id: 'unfreeze_credit', label: 'Unfreeze Credit', desc: 'Restore credit floor (simple majority)' },
-        { id: 'grant_voucher', label: 'Grant Voucher', desc: 'Authorise member to vouch for newcomers' },
-        { id: 'revoke_voucher', label: 'Revoke Voucher', desc: 'Remove vouching privileges' },
-        { id: 'remove_lead_keeper', label: 'Remove a lead keeper or project leader', desc: "Replace an enterprise's lead keeper or a project's leader" },
+        { id: 'remove_member', label: word('Remove Member'), desc: word('Expulsion from this node (66% supermajority, 25% quorum, 7-day grace window)') },
+        { id: 'suspend_member', label: word('Suspend Member'), desc: word('Temporary freeze of trading and messaging') },
+        { id: 'unsuspend_member', label: word('Unsuspend Member'), desc: word('Restore member to active standing (simple majority)') },
+        { id: 'reinstate_member', label: word('Reinstate Member'), desc: word('Cancel pending removal and restore account (simple majority)') },
+        { id: 'freeze_credit', label: word('Freeze Credit'), desc: word('Lock credit floor to zero') },
+        { id: 'unfreeze_credit', label: word('Unfreeze Credit'), desc: word('Restore credit floor (simple majority)') },
+        { id: 'grant_voucher', label: word('Grant Voucher'), desc: word('Authorise member to vouch for newcomers') },
+        { id: 'revoke_voucher', label: word('Revoke Voucher'), desc: word('Remove vouching privileges') },
+        { id: 'remove_lead_keeper', label: word('Remove a lead keeper or project leader'), desc: word("Replace an enterprise's lead keeper or a project's leader") },
     ],
     pool: [
-        { id: 'grant_enterprise', label: 'Give Beans to a project or enterprise', desc: "Pay Beans from the Commons pool straight into a project's or enterprise's account" },
-        { id: 'grant_hardship', label: 'Hardship Grant', desc: 'Direct emergency support grant from Commons pool to a member' },
-        { id: 'write_off_deficit', label: "Pay off a project's or enterprise's debt", desc: "The Commons pool takes on the debt of a project or enterprise that can't pay it" },
+        { id: 'grant_enterprise', label: word('Give Beans to a project or enterprise'), desc: word("Pay Beans from the Commons pool straight into a project's or enterprise's account") },
+        { id: 'grant_hardship', label: word('Hardship Grant'), desc: word('Direct emergency support grant from Commons pool to a member') },
+        { id: 'write_off_deficit', label: word("Pay off a project's or enterprise's debt"), desc: word("The Commons pool takes on the debt of a project or enterprise that can't pay it") },
     ],
 };
+
+/**
+ * The removal of a lead: a project's leader, an enterprise's lead keeper, or (none picked yet) both words. Whole
+ * sentences for each, never the word glued in (the phone's keys).
+ */
+function leadWords(lead: 'leader' | 'lead keeper' | 'either') {
+    if (lead === 'leader') {
+        return {
+            enter: t("Please enter the leader's callsign or public key."),
+            label: t('The leader to remove: callsign or public key'), placeholder: t("Enter the leader's callsign or pubkey..."),
+        };
+    }
+    if (lead === 'lead keeper') {
+        return {
+            enter: t("Please enter the lead keeper's callsign or public key."),
+            label: t('The lead keeper to remove: callsign or public key'), placeholder: t("Enter the lead keeper's callsign or pubkey..."),
+        };
+    }
+    return {
+        enter: t("Please enter the lead keeper or leader's callsign or public key."),
+        label: t('The lead keeper or leader to remove: callsign or public key'), placeholder: t("Enter the lead keeper or leader's callsign or pubkey..."),
+    };
+}
 
 export function ProposeDecisionModal({
     isOpen,
@@ -95,16 +120,23 @@ export function ProposeDecisionModal({
         return membersByKeyMap.get(subject) || membersByKeyMap.get(subject.toLowerCase()) || null;
     }, [membersByKeyMap, subject]);
 
+    // What the node records as the member's name stays as it always was; only the line shown is in the member's language.
     const targetName = selectedMember?.callsign || subject || 'Member';
+    const shownName = selectedMember?.callsign || subject || t('Member');
     // The one removed is a project's leader or an enterprise's lead keeper (§3.1); until one is picked, both words.
-    const pickedGroup = treasuries.find(t => t.publicKey === enterprisePubkey.trim());
-    const leadWord = pickedGroup ? keeperWords(pickedGroup.lifecycle).lead : 'lead keeper or leader';
+    const pickedGroup = treasuries.find(tr => tr.publicKey === enterprisePubkey.trim());
+    const lead = leadWords(pickedGroup ? (keeperWords(pickedGroup.lifecycle).lead === 'leader' ? 'leader' : 'lead keeper') : 'either');
     const poolAmount = Math.round(commonsBalance || 0);
 
     // §3.8, with balances private (Marty, 2026-09-28): the proposer does not see the member's balance. The community
-    // records it, and any debt, when the vote opens, and shows them to everyone who can vote in it.
-    const debtWriteOffLine = `Balances are private: you can't see ${targetName}'s. When this vote opens, the community records their balance and any debt, `
-        + `and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds ${poolAmount} beans now.`;
+    // records it, and any debt, when the vote opens, and shows them to everyone who can vote in it. English writes
+    // "beans" for one and many, as it always has.
+    const debtWriteOffLine = tn(
+        poolAmount,
+        "Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.",
+        "Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.",
+        { name: shownName },
+    );
 
     if (!isOpen) return null;
 
@@ -112,18 +144,18 @@ export function ProposeDecisionModal({
         e.preventDefault();
         if (!identity) return;
         if (!title.trim()) {
-            setError('Please enter a clear title for this decision.');
+            setError(t('Please enter a clear title for this decision.'));
             return;
         }
         if (!description.trim()) {
-            setError('Please provide a description and rationale.');
+            setError(t('Please provide a description and rationale.'));
             return;
         }
 
         const targetPubkey = selectedMember?.publicKey || (subject.trim().length === 64 ? subject.trim() : null);
 
         if (touches === 'member' && !targetPubkey) {
-            setError('Please enter a valid member callsign or 64-character public key.');
+            setError(t('Please enter a valid member callsign or 64-character public key.'));
             return;
         }
 
@@ -138,23 +170,23 @@ export function ProposeDecisionModal({
             }
             const amount = read.ok ? read.value : NaN;
             if (!amount || amount <= 0) {
-                setError('Please enter a valid positive grant amount in Beans.');
+                setError(t('Please enter a valid positive grant amount in Beans.'));
                 return;
             }
             params = { amount };
         } else if (effect === 'remove_lead_keeper') {
             if (!enterprisePubkey.trim()) {
-                setError('Please pick the project or enterprise, or enter its public key.');
+                setError(t('Please pick the project or enterprise, or enter its public key.'));
                 return;
             }
             if (!targetPubkey) {
-                setError(`Please enter the ${leadWord}'s callsign or public key.`);
+                setError(lead.enter);
                 return;
             }
             params = { enterprisePubkey: enterprisePubkey.trim(), leadPubkey: targetPubkey };
         } else if (effect === 'write_off_deficit') {
             if (!enterprisePubkey.trim()) {
-                setError('Please pick the project or enterprise, or enter its public key.');
+                setError(t('Please pick the project or enterprise, or enter its public key.'));
                 return;
             }
         } else if (effect === 'remove_member') {
@@ -188,10 +220,10 @@ export function ProposeDecisionModal({
                 onCreated();
                 onClose();
             } else {
-                setError((res as any).error || 'Failed to propose decision');
+                setError((res as any).error || t('Failed to propose decision'));
             }
         } catch (err: any) {
-            setError(err.message || 'Failed to propose decision');
+            setError(err.message || t('Failed to propose decision'));
         } finally {
             setSubmitting(false);
         }
@@ -212,13 +244,13 @@ export function ProposeDecisionModal({
                 {/* Header */}
                 <div className="flex items-center justify-between border-b border-nature-800 pb-3">
                     <h2 id="propose-modal-title" className="text-lg font-bold flex items-center gap-2">
-                        <span aria-hidden="true">🌱</span> Propose a Community Decision
+                        <span aria-hidden="true">🌱</span> {t('Propose a Community Decision')}
                     </h2>
                     <button
                         type="button"
                         onClick={onClose}
                         className="text-nature-400 hover:text-white p-1 text-lg rounded-lg transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
-                        aria-label="Close modal"
+                        aria-label={t('Close modal')}
                     >
                         ✕
                     </button>
@@ -234,7 +266,7 @@ export function ProposeDecisionModal({
                     {/* What it touches */}
                     <div>
                         <label className="block text-xs font-bold uppercase tracking-wider text-nature-400 mb-2">
-                            What does this decision touch? (§3.6)
+                            {t('What does this decision touch? (§3.6)')}
                         </label>
                         <div className="grid grid-cols-2 gap-2">
                             {TOUCH_OPTIONS.map(opt => (
@@ -250,7 +282,7 @@ export function ProposeDecisionModal({
                                     }`}
                                 >
                                     <span aria-hidden="true">{opt.icon}</span>
-                                    <span>{opt.label}</span>
+                                    <span>{t(opt.label)}</span>
                                 </button>
                             ))}
                         </div>
@@ -259,13 +291,13 @@ export function ProposeDecisionModal({
                     {/* Title */}
                     <div>
                         <label className="block text-xs font-bold uppercase tracking-wider text-nature-400 mb-1">
-                            Title
+                            {t('Title')}
                         </label>
                         <input
                             type="text"
                             value={title}
                             onChange={(e) => setTitle(e.target.value)}
-                            placeholder="e.g. Grant 200 beans to the Tool Library"
+                            placeholder={t('e.g. Grant 200 beans to the Tool Library')}
                             className="w-full bg-nature-800/80 border border-nature-700 rounded-xl px-3 py-2 text-sm text-white placeholder-nature-500 focus:outline-none focus:border-emerald-500"
                             required
                         />
@@ -274,12 +306,12 @@ export function ProposeDecisionModal({
                     {/* Description */}
                     <div>
                         <label className="block text-xs font-bold uppercase tracking-wider text-nature-400 mb-1">
-                            Description & Rationale
+                            {t('Description & Rationale')}
                         </label>
                         <textarea
                             value={description}
                             onChange={(e) => setDescription(e.target.value)}
-                            placeholder="Explain why this decision is needed, the plan, and who will oversee it."
+                            placeholder={t('Explain why this decision is needed, the plan, and who will oversee it.')}
                             rows={3}
                             className="w-full bg-nature-800/80 border border-nature-700 rounded-xl px-3 py-2 text-sm text-white placeholder-nature-500 focus:outline-none focus:border-emerald-500"
                             required
@@ -289,9 +321,9 @@ export function ProposeDecisionModal({
                     {/* Effect Selection */}
                     <div>
                         <label className="block text-xs font-bold uppercase tracking-wider text-nature-400 mb-2">
-                            Specific Action / Effect
+                            {t('Specific Action / Effect')}
                         </label>
-                        <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1" role="radiogroup" aria-label="Specific Action or Effect">
+                        <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1" role="radiogroup" aria-label={t('Specific Action or Effect')}>
                             {EFFECTS_BY_TOUCH[touches].map(eff => (
                                 <button
                                     type="button"
@@ -307,10 +339,10 @@ export function ProposeDecisionModal({
                                     } ${submitting ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                                 >
                                     <div className={`text-sm font-semibold ${effect === eff.id ? 'text-emerald-300' : 'text-white'}`}>
-                                        {eff.label}
+                                        {t(eff.label)}
                                     </div>
                                     <div className="text-xs text-nature-400 leading-tight mt-0.5">
-                                        {eff.desc}
+                                        {t(eff.desc)}
                                     </div>
                                 </button>
                             ))}
@@ -321,22 +353,22 @@ export function ProposeDecisionModal({
                     {(effect === 'remove_lead_keeper' || effect === 'write_off_deficit') && (
                         <div>
                             <label className="block text-xs font-bold uppercase tracking-wider text-nature-400 mb-1">
-                                Project or enterprise
+                                {t('Project or enterprise')}
                             </label>
                             {treasuries.length > 0 && (
                                 <div className="flex flex-wrap gap-1.5 mb-2">
-                                    {treasuries.map(t => (
+                                    {treasuries.map(tr => (
                                         <button
-                                            key={t.publicKey}
+                                            key={tr.publicKey}
                                             type="button"
-                                            onClick={() => setEnterprisePubkey(t.publicKey)}
+                                            onClick={() => setEnterprisePubkey(tr.publicKey)}
                                             className={`px-2.5 py-1 rounded-lg border text-xs font-semibold transition-all ${
-                                                enterprisePubkey === t.publicKey
+                                                enterprisePubkey === tr.publicKey
                                                     ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300'
                                                     : 'bg-nature-800/60 border-nature-700 text-nature-300 hover:border-nature-600'
                                             }`}
                                         >
-                                            {t.name}
+                                            {tr.name}
                                         </button>
                                     ))}
                                 </div>
@@ -345,7 +377,7 @@ export function ProposeDecisionModal({
                                 type="text"
                                 value={enterprisePubkey}
                                 onChange={(e) => setEnterprisePubkey(e.target.value)}
-                                placeholder="Or enter its public key..."
+                                placeholder={t('Or enter its public key...')}
                                 className="w-full bg-nature-800/80 border border-nature-700 rounded-xl px-3 py-2 text-sm text-white placeholder-nature-500 focus:outline-none focus:border-emerald-500"
                                 required
                             />
@@ -356,13 +388,13 @@ export function ProposeDecisionModal({
                     {touches === 'member' && (
                         <div>
                             <label className="block text-xs font-bold uppercase tracking-wider text-nature-400 mb-1">
-                                {effect === 'remove_lead_keeper' ? `The ${leadWord} to remove: callsign or public key` : 'Target Member Callsign or Public Key'}
+                                {effect === 'remove_lead_keeper' ? lead.label : t('Target Member Callsign or Public Key')}
                             </label>
                             <input
                                 type="text"
                                 value={subject}
                                 onChange={(e) => setSubject(e.target.value)}
-                                placeholder={effect === 'remove_lead_keeper' ? `Enter the ${leadWord}'s callsign or pubkey...` : 'Enter member callsign or pubkey...'}
+                                placeholder={effect === 'remove_lead_keeper' ? lead.placeholder : t('Enter member callsign or pubkey...')}
                                 className="w-full bg-nature-800/80 border border-nature-700 rounded-xl px-3 py-2 text-sm text-white placeholder-nature-500 focus:outline-none focus:border-emerald-500"
                             />
                         </div>
@@ -371,24 +403,24 @@ export function ProposeDecisionModal({
                     {effect === 'grant_enterprise' && (
                         <div>
                             <label className="block text-xs font-bold uppercase tracking-wider text-nature-400 mb-1">
-                                Project or enterprise public key
+                                {t('Project or enterprise public key')}
                             </label>
                             <input
                                 type="text"
                                 value={subject}
                                 onChange={(e) => setSubject(e.target.value)}
-                                placeholder="Enter its public key..."
+                                placeholder={t('Enter its public key...')}
                                 className="w-full bg-nature-800/80 border border-nature-700 rounded-xl px-3 py-2 text-sm text-white placeholder-nature-500 focus:outline-none focus:border-emerald-500"
                             />
                             <label className="block text-xs font-bold uppercase tracking-wider text-nature-400 mt-2 mb-1">
-                                Grant Amount (Beans)
+                                {t('Grant Amount (Beans)')}
                             </label>
                             <input
                                 type="text"
                                 inputMode="decimal"
                                 value={grantAmount}
                                 onChange={(e) => setGrantAmount(e.target.value)}
-                                placeholder="e.g. 250"
+                                placeholder={t('e.g. {amount}', { amount: 250 })}
                                 className="w-full bg-nature-800/80 border border-nature-700 rounded-xl px-3 py-2 text-sm text-white placeholder-nature-500 focus:outline-none focus:border-emerald-500"
                             />
                         </div>
@@ -397,24 +429,24 @@ export function ProposeDecisionModal({
                     {effect === 'grant_hardship' && (
                         <div>
                             <label className="block text-xs font-bold uppercase tracking-wider text-nature-400 mb-1">
-                                Recipient Member Public Key
+                                {t('Recipient Member Public Key')}
                             </label>
                             <input
                                 type="text"
                                 value={subject}
                                 onChange={(e) => setSubject(e.target.value)}
-                                placeholder="Enter recipient pubkey..."
+                                placeholder={t('Enter recipient pubkey...')}
                                 className="w-full bg-nature-800/80 border border-nature-700 rounded-xl px-3 py-2 text-sm text-white placeholder-nature-500 focus:outline-none focus:border-emerald-500"
                             />
                             <label className="block text-xs font-bold uppercase tracking-wider text-nature-400 mt-2 mb-1">
-                                Hardship Amount (Beans)
+                                {t('Hardship Amount (Beans)')}
                             </label>
                             <input
                                 type="text"
                                 inputMode="decimal"
                                 value={grantAmount}
                                 onChange={(e) => setGrantAmount(e.target.value)}
-                                placeholder="e.g. 100"
+                                placeholder={t('e.g. {amount}', { amount: 100 })}
                                 className="w-full bg-nature-800/80 border border-nature-700 rounded-xl px-3 py-2 text-sm text-white placeholder-nature-500 focus:outline-none focus:border-emerald-500"
                             />
                         </div>
@@ -427,7 +459,7 @@ export function ProposeDecisionModal({
                             data-testid="removal-debt-write-off-box"
                         >
                             <div className="text-xs font-bold text-red-400 uppercase tracking-wider mb-1">
-                                Mandatory Debt Disclosure (§3.8)
+                                {t('Mandatory Debt Disclosure (§3.8)')}
                             </div>
                             <div className="text-sm font-semibold text-red-200" data-testid="removal-debt-write-off-line">
                                 {debtWriteOffLine}
@@ -439,7 +471,10 @@ export function ProposeDecisionModal({
                     <div className="bg-nature-800/40 border border-nature-700/60 rounded-xl p-3 flex items-start gap-2 text-xs text-nature-300">
                         <span className="text-emerald-400 text-sm" aria-hidden="true">🛡️</span>
                         <div>
-                            <span className="font-bold text-white">No bond required.</span> Open to members with a completed trade or earned standing, and to node admins. Open for 7 days, executing automatically on pass.
+                            <Sentence
+                                text={t('{bond} Open to members with a completed trade or earned standing, and to node admins. Open for 7 days, executing automatically on pass.')}
+                                parts={{ bond: <span className="font-bold text-white">{t('No bond required.')}</span> }}
+                            />
                         </div>
                     </div>
 
@@ -450,14 +485,14 @@ export function ProposeDecisionModal({
                             onClick={onClose}
                             className="flex-1 min-h-[44px] py-2.5 px-4 rounded-xl border border-nature-700 text-nature-300 hover:bg-nature-800 font-semibold text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                         >
-                            Cancel
+                            {t('Cancel')}
                         </button>
                         <button
                             type="submit"
                             disabled={submitting}
                             className="flex-1 min-h-[44px] py-2.5 px-4 rounded-xl bg-bp-sage-fill hover:bg-bp-sage-hover text-bp-sage-on font-bold text-sm shadow-md transition-all active:scale-95 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                         >
-                            {submitting ? 'Submitting...' : 'Submit Decision'}
+                            {submitting ? t('Submitting...') : t('Submit Decision')}
                         </button>
                     </div>
                 </form>

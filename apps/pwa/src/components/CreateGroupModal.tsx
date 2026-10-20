@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { t, word, type WordKey } from '@beanpool/core';
 import { createGroup, type Group, type GroupCategory, type JoinPolicy } from '../lib/api';
 
 interface Props {
@@ -9,17 +10,18 @@ interface Props {
     onStartWithBeans?: (lifecycle: 'bounded' | 'ongoing') => void;
 }
 
-const CATEGORIES: Array<{ key: GroupCategory; label: string; icon: string; desc: string }> = [
-    { key: 'working_group', label: 'Working Group', icon: '🤝', desc: 'Practical focus group coordinating tasks' },
-    { key: 'guild', label: 'Guild', icon: '🛡️', desc: 'Skill sharing and craft practitioners' },
-    { key: 'social', label: 'Social Circle', icon: '☕', desc: 'Community chats and shared interests' },
-    { key: 'general', label: 'General', icon: '💬', desc: 'Open discussion space' },
+// Labels and descriptions are word() keys (the phone's where it says the same), shown through t() where drawn.
+const CATEGORIES: Array<{ key: GroupCategory; label: WordKey; icon: string; desc: WordKey }> = [
+    { key: 'working_group', label: word('Working Group'), icon: '🤝', desc: word('Practical focus group coordinating tasks') },
+    { key: 'guild', label: word('Guild'), icon: '🛡️', desc: word('Skill sharing and craft practitioners') },
+    { key: 'social', label: word('Social Circle'), icon: '☕', desc: word('Community chats and shared interests') },
+    { key: 'general', label: word('General'), icon: '💬', desc: word('Open discussion space') },
 ];
 
-const JOIN_POLICIES: Array<{ key: JoinPolicy; label: string; icon: string; desc: string }> = [
-    { key: 'open', label: 'Open', icon: '🚪', desc: 'Anyone can join immediately' },
-    { key: 'request_to_join', label: 'Request to Join', icon: '⏳', desc: 'Convenor approval required to join' },
-    { key: 'invite_only', label: 'Invite Only', icon: '🔒', desc: 'Convenor must invite new members' },
+const JOIN_POLICIES: Array<{ key: JoinPolicy; label: WordKey; icon: string; desc: WordKey }> = [
+    { key: 'open', label: word('Open', 'join policy'), icon: '🚪', desc: word('Anyone can join immediately') },
+    { key: 'request_to_join', label: word('Request to Join', 'join policy'), icon: '⏳', desc: word('Convenor approval required to join') },
+    { key: 'invite_only', label: word('Invite Only', 'join policy'), icon: '🔒', desc: word('Convenor must invite new members') },
 ];
 
 export function CreateGroupModal({ isOpen, onClose, onCreated, onStartWithBeans }: Props) {
@@ -44,7 +46,7 @@ export function CreateGroupModal({ isOpen, onClose, onCreated, onStartWithBeans 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!name.trim() || name.trim().length < 2) {
-            setError('Group name must be at least 2 characters long.');
+            setError(t('Group name must be at least 2 characters long.'));
             return;
         }
 
@@ -62,7 +64,7 @@ export function CreateGroupModal({ isOpen, onClose, onCreated, onStartWithBeans 
             setDescription('');
             onClose();
         } catch (err: any) {
-            setError(err.message || 'Failed to create group');
+            setError(err.message || t('Failed to create group'));
         } finally {
             setSubmitting(false);
         }
@@ -84,13 +86,13 @@ export function CreateGroupModal({ isOpen, onClose, onCreated, onStartWithBeans 
                 {/* Header */}
                 <div className="sticky top-0 bg-nature-100/90 dark:bg-[#0d0d0d]/90 backdrop-blur-md p-4 border-b border-nature-200 dark:border-nature-800 flex items-center justify-between z-10">
                     <h2 id="create-group-title" className="text-lg font-black text-nature-950 dark:text-white flex items-center gap-1.5">
-                        <span aria-hidden="true">👥</span> Create a Group
+                        <span aria-hidden="true">👥</span> {t('Create a Group')}
                     </h2>
                     <button
                         type="button"
                         onClick={onClose}
                         className="min-w-[44px] min-h-[44px] w-11 h-11 flex items-center justify-center p-1 rounded-lg text-nature-500 hover:text-nature-900 dark:hover:text-white hover:bg-nature-200 dark:hover:bg-nature-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
-                        aria-label="Close"
+                        aria-label={t('Close')}
                     >
                         ✕
                     </button>
@@ -99,7 +101,7 @@ export function CreateGroupModal({ isOpen, onClose, onCreated, onStartWithBeans 
                 <form onSubmit={handleSubmit} className="p-4 space-y-4">
                     {/* Plain Language Framing Banner */}
                     <div className="p-3 bg-nature-200/60 dark:bg-nature-900/60 border border-nature-300 dark:border-nature-800 rounded-xl text-xs text-nature-700 dark:text-nature-300 leading-relaxed">
-                        <span aria-hidden="true">ℹ️</span> <strong>A group is a place to talk to some people rather than everyone.</strong> It does not hold beans and does not confer trust or voting standing.
+                        <span aria-hidden="true">ℹ️</span> <strong>{t('A group is a place to talk to some people rather than everyone.')}</strong> {t('It does not hold beans and does not confer trust or voting standing.')}
                     </div>
 
                     {error && (
@@ -110,13 +112,13 @@ export function CreateGroupModal({ isOpen, onClose, onCreated, onStartWithBeans 
 
                     <div>
                         <label className="block text-xs font-bold uppercase tracking-wider text-nature-600 dark:text-nature-400 mb-1">
-                            Group Name *
+                            {t('Group Name *')}
                         </label>
                         <input
                             type="text"
                             value={name}
                             onChange={(e) => setName(e.target.value)}
-                            placeholder="e.g. Bindarrabi Garden Crew, Solar Guild"
+                            placeholder={t('e.g. Bindarrabi Garden Crew, Solar Guild')}
                             maxLength={60}
                             required
                             className="w-full px-3 py-2 bg-white dark:bg-nature-950 border border-nature-300 dark:border-nature-600 rounded-xl text-nature-900 dark:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
@@ -125,12 +127,12 @@ export function CreateGroupModal({ isOpen, onClose, onCreated, onStartWithBeans 
 
                     <div>
                         <label className="block text-xs font-bold uppercase tracking-wider text-nature-600 dark:text-nature-400 mb-1">
-                            Purpose / Description
+                            {t('Purpose / Description')}
                         </label>
                         <textarea
                             value={description}
                             onChange={(e) => setDescription(e.target.value)}
-                            placeholder="What does this group discuss or coordinate?"
+                            placeholder={t('What does this group discuss or coordinate?')}
                             rows={3}
                             maxLength={300}
                             className="w-full px-3 py-2 bg-white dark:bg-nature-950 border border-nature-300 dark:border-nature-600 rounded-xl text-nature-900 dark:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 text-sm"
@@ -139,7 +141,7 @@ export function CreateGroupModal({ isOpen, onClose, onCreated, onStartWithBeans 
 
                     <div>
                         <label className="block text-xs font-bold uppercase tracking-wider text-nature-600 dark:text-nature-400 mb-2">
-                            Category
+                            {t('Category')}
                         </label>
                         <div className="space-y-2">
                             {CATEGORIES.map((cat) => {
@@ -158,8 +160,8 @@ export function CreateGroupModal({ isOpen, onClose, onCreated, onStartWithBeans 
                                     >
                                         <span className="text-2xl" aria-hidden="true">{cat.icon}</span>
                                         <div className="flex-1 min-w-0">
-                                            <div className="text-sm font-bold text-nature-900 dark:text-white">{cat.label}</div>
-                                            <div className="text-xs text-nature-500 dark:text-nature-400">{cat.desc}</div>
+                                            <div className="text-sm font-bold text-nature-900 dark:text-white">{t(cat.label)}</div>
+                                            <div className="text-xs text-nature-500 dark:text-nature-400">{t(cat.desc)}</div>
                                         </div>
                                         {active && <span className="text-emerald-600 font-bold">✓</span>}
                                     </button>
@@ -168,10 +170,10 @@ export function CreateGroupModal({ isOpen, onClose, onCreated, onStartWithBeans 
                         </div>
                         {onStartWithBeans && (
                             <div className="mt-3 space-y-2" data-testid="create-group-with-beans">
-                                <p className="text-xs text-nature-600 dark:text-nature-400">With Beans involved?</p>
+                                <p className="text-xs text-nature-600 dark:text-nature-400">{t('With Beans involved?')}</p>
                                 <div className="flex flex-wrap gap-2">
-                                    <button type="button" onClick={() => onStartWithBeans('bounded')} className="min-h-[44px] px-3 py-2 rounded-xl border border-nature-300 dark:border-nature-700 text-sm font-bold text-nature-900 dark:text-white hover:border-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">🌱 Start a project</button>
-                                    <button type="button" onClick={() => onStartWithBeans('ongoing')} className="min-h-[44px] px-3 py-2 rounded-xl border border-nature-300 dark:border-nature-700 text-sm font-bold text-nature-900 dark:text-white hover:border-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">🏛️ Start an enterprise</button>
+                                    <button type="button" onClick={() => onStartWithBeans('bounded')} className="min-h-[44px] px-3 py-2 rounded-xl border border-nature-300 dark:border-nature-700 text-sm font-bold text-nature-900 dark:text-white hover:border-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">{t('🌱 Start a project')}</button>
+                                    <button type="button" onClick={() => onStartWithBeans('ongoing')} className="min-h-[44px] px-3 py-2 rounded-xl border border-nature-300 dark:border-nature-700 text-sm font-bold text-nature-900 dark:text-white hover:border-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">{t('🏛️ Start an enterprise')}</button>
                                 </div>
                             </div>
                         )}
@@ -179,7 +181,7 @@ export function CreateGroupModal({ isOpen, onClose, onCreated, onStartWithBeans 
 
                     <div>
                         <label className="block text-xs font-bold uppercase tracking-wider text-nature-600 dark:text-nature-400 mb-2">
-                            Join Policy
+                            {t('Join Policy')}
                         </label>
                         <div className="space-y-2">
                             {JOIN_POLICIES.map((pol) => {
@@ -198,8 +200,8 @@ export function CreateGroupModal({ isOpen, onClose, onCreated, onStartWithBeans 
                                     >
                                         <span className="text-2xl" aria-hidden="true">{pol.icon}</span>
                                         <div className="flex-1 min-w-0">
-                                            <div className="text-sm font-bold text-nature-900 dark:text-white">{pol.label}</div>
-                                            <div className="text-xs text-nature-500 dark:text-nature-400">{pol.desc}</div>
+                                            <div className="text-sm font-bold text-nature-900 dark:text-white">{t(pol.label)}</div>
+                                            <div className="text-xs text-nature-500 dark:text-nature-400">{t(pol.desc)}</div>
                                         </div>
                                         {active && <span className="text-emerald-600 font-bold">✓</span>}
                                     </button>
@@ -213,7 +215,7 @@ export function CreateGroupModal({ isOpen, onClose, onCreated, onStartWithBeans 
                         disabled={submitting || !name.trim()}
                         className="w-full py-3 px-4 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover disabled:opacity-50 text-bp-commit-on font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
                     >
-                        {submitting ? 'Creating...' : 'Create Group (You become Convenor)'}
+                        {submitting ? t('Creating...') : t('Create Group (You become Convenor)')}
                     </button>
                 </form>
             </div>

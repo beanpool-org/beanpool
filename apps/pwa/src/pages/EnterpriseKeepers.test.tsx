@@ -607,26 +607,32 @@ describe('Enterprise map pin (keeper control)', () => {
         // Reference: apps/manager/src/components/modules/EnterpriseLocationPicker.tsx. Change both or neither.
         const manager = readFileSync(resolve(__dirname, '../../../manager/src/components/modules/EnterpriseLocationPicker.tsx'), 'utf8');
         const web = readFileSync(resolve(__dirname, '../components/EnterpriseLocationPicker.tsx'), 'utf8');
-        const copy = [
-            '<span>Enterprise Map Location</span>',
-            'Anyone who opens this node&apos;s map will see this spot.',
-            'The flock, shed, or garden is often at someone’s house. Use <strong>Approximate</strong> to round the location to roughly 100&nbsp;m.',
-            'Approximate (~100m)',
+        // The web picker's words go through t() (words sweep W2) and the settings app stays English (design amendment 5,
+        // M8): each pair is the SAME English, as the settings app writes it and as the web hands it to t(). An entry
+        // that is one string is written the same in both.
+        const copy: Array<string | [settings: string, web: string]> = [
+            ['<span>Enterprise Map Location</span>', "<span>{t('Enterprise Map Location')}</span>"],
+            ['Anyone who opens this node&apos;s map will see this spot.', `{t("Anyone who opens this node's map will see this spot.")}`],
+            ['The flock, shed, or garden is often at someone’s house. Use <strong>Approximate</strong> to round the location to roughly 100&nbsp;m.',
+                "<BoldWords text={t('The flock, shed, or garden is often at someone’s house. Use **Approximate** to round the location to roughly 100\\u00A0m.')} />"],
+            ['Approximate (~100m)', "{t('Approximate (~100m)')}"],
             "'Please pick a spot on the map or enter coordinates'",
             "'Latitude must be between -90 and 90, longitude between -180 and 180'",
             "'Failed to save location'",
             "'Failed to clear location'",
-            "{clearing ? 'Clearing...' : 'Clear Location'}",
-            "{saving ? 'Saving...' : 'Save Location'}",
+            ["{clearing ? 'Clearing...' : 'Clear Location'}", "{clearing ? t('Clearing...') : t('Clear Location')}"],
+            ["{saving ? 'Saving...' : 'Save Location'}", "{saving ? t('Saving...') : t('Save Location')}"],
             'const approx = approximateLocation(lat, lng);',
         ];
-        for (const text of copy) {
-            expect(manager, `settings picker has: ${text}`).toContain(text);
-            expect(web, `web picker has: ${text}`).toContain(text);
+        for (const entry of copy) {
+            const [settingsText, webText] = typeof entry === 'string' ? [entry, entry] : entry;
+            expect(manager, `settings picker has: ${settingsText}`).toContain(settingsText);
+            expect(web, `web picker has: ${webText}`).toContain(webText);
         }
         // The Approximate button lives INSIDE the warning box in both.
         const insideWarning = /data-testid="enterprise-location-visibility"[\s\S]*?Anyone who opens this node&apos;s map will see this spot\.[\s\S]*?Approximate \(~100m\)\s*<\/button>\s*<\/div>/;
+        const insideWarningWeb = /data-testid="enterprise-location-visibility"[\s\S]*?\{t\("Anyone who opens this node's map will see this spot\."\)\}[\s\S]*?\{t\('Approximate \(~100m\)'\)\}\s*<\/button>\s*<\/div>/;
         expect(manager).toMatch(insideWarning);
-        expect(web).toMatch(insideWarning);
+        expect(web).toMatch(insideWarningWeb);
     });
 });

@@ -4,13 +4,16 @@
  * PORTED from the settings app. The REFERENCE is apps/manager/src/components/modules/EnterpriseLocationPicker.tsx:
  * copy and behaviour here must stay identical to it (EnterpriseKeepers.test.tsx checks the visible copy of both).
  * What differs on purpose: this one saves through the keeper route signed by the member's own identity rather
- * than the admin route, and its classes follow the web app's light/dark theme.
+ * than the admin route, its classes follow the web app's light/dark theme, and its words go through t() in the
+ * member's language (the settings app stays English, design amendment 5 M8): the English is the settings app's.
  */
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { t } from '@beanpool/core';
 import { approximateLocation } from '../lib/geo';
 import { setEnterpriseLocation, clearEnterpriseLocation } from '../lib/api';
+import { BoldWords } from './BoldWords';
 
 interface EnterpriseLocationPickerProps {
     treasury: { publicKey: string; lat?: number | null; lng?: number | null };
@@ -57,8 +60,11 @@ export const EnterpriseLocationPicker: React.FC<EnterpriseLocationPickerProps> =
         try {
             const map = L.map(mapContainerRef.current, {
                 scrollWheelZoom: false,
+                zoomControl: false,
             }).setView(initialCenter, initialZoom);
             mapInstanceRef.current = map;
+            // Leaflet's own zoom buttons, where they always were, with their titles in the member's language.
+            L.control.zoom({ zoomInTitle: t('Zoom in'), zoomOutTitle: t('Zoom out') }).addTo(map);
 
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
@@ -135,11 +141,11 @@ export const EnterpriseLocationPicker: React.FC<EnterpriseLocationPickerProps> =
 
     const handleSave = async () => {
         if (lat == null || lng == null || isNaN(lat) || isNaN(lng)) {
-            setError('Please pick a spot on the map or enter coordinates');
+            setError(t('Please pick a spot on the map or enter coordinates'));
             return;
         }
         if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
-            setError('Latitude must be between -90 and 90, longitude between -180 and 180');
+            setError(t('Latitude must be between -90 and 90, longitude between -180 and 180'));
             return;
         }
 
@@ -150,7 +156,7 @@ export const EnterpriseLocationPicker: React.FC<EnterpriseLocationPickerProps> =
             onLocationSaved(res.lat, res.lng);
             onClose();
         } catch (err: any) {
-            setError(err?.message || 'Failed to save location');
+            setError(err?.message || t('Failed to save location'));
         } finally {
             setSaving(false);
         }
@@ -168,7 +174,7 @@ export const EnterpriseLocationPicker: React.FC<EnterpriseLocationPickerProps> =
             onLocationSaved(null, null);
             onClose();
         } catch (err: any) {
-            setError(err?.message || 'Failed to clear location');
+            setError(err?.message || t('Failed to clear location'));
         } finally {
             setClearing(false);
         }
@@ -179,13 +185,13 @@ export const EnterpriseLocationPicker: React.FC<EnterpriseLocationPickerProps> =
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5 text-xs font-bold text-nature-900 dark:text-white">
                     <span>📍</span>
-                    <span>Enterprise Map Location</span>
+                    <span>{t('Enterprise Map Location')}</span>
                 </div>
                 <button
                     type="button"
                     onClick={onClose}
                     className="min-h-[44px] min-w-[44px] text-xs text-nature-500 dark:text-nature-400 hover:text-nature-900 dark:hover:text-white transition-colors"
-                    aria-label="Close location picker"
+                    aria-label={t('Close location picker')}
                 >
                     ✕
                 </button>
@@ -199,10 +205,10 @@ export const EnterpriseLocationPicker: React.FC<EnterpriseLocationPickerProps> =
                 className="p-2.5 rounded-lg bg-terra-50 dark:bg-terra-950/40 border border-terra-200 dark:border-terra-800/60 text-xs text-terra-800 dark:text-terra-200 space-y-1.5"
             >
                 <p className="font-semibold text-terra-900 dark:text-terra-100 m-0">
-                    Anyone who opens this node&apos;s map will see this spot.
+                    {t("Anyone who opens this node's map will see this spot.")}
                 </p>
                 <p className="text-[11px] text-nature-700 dark:text-nature-300 m-0">
-                    The flock, shed, or garden is often at someone’s house. Use <strong>Approximate</strong> to round the location to roughly 100&nbsp;m.
+                    <BoldWords text={t('The flock, shed, or garden is often at someone’s house. Use **Approximate** to round the location to roughly 100\u00A0m.')} />
                 </p>
                 <button
                     type="button"
@@ -210,7 +216,7 @@ export const EnterpriseLocationPicker: React.FC<EnterpriseLocationPickerProps> =
                     disabled={lat == null || lng == null}
                     className="min-h-[44px] px-3 py-1 rounded-md bg-terra-100 dark:bg-terra-900/40 hover:bg-terra-200 dark:hover:bg-terra-900/70 disabled:opacity-40 disabled:pointer-events-none text-xs font-semibold text-terra-700 dark:text-terra-300 border border-terra-300 dark:border-terra-700/60 transition-colors"
                 >
-                    Approximate (~100m)
+                    {t('Approximate (~100m)')}
                 </button>
             </div>
 
@@ -225,11 +231,12 @@ export const EnterpriseLocationPicker: React.FC<EnterpriseLocationPickerProps> =
             <div className="space-y-2">
                 <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
                     <div className="flex flex-wrap items-center gap-2 font-mono text-[11px] text-nature-600 dark:text-nature-300">
-                        <span>Lat: {lat != null ? lat.toFixed(isApproximate ? 3 : 5) : '—'}</span>
-                        <span>Lng: {lng != null ? lng.toFixed(isApproximate ? 3 : 5) : '—'}</span>
+                        {/* Coordinates as the boxes below take them (a point, never the language's decimal comma). */}
+                        <span>{t('Lat: {value}', { value: lat != null ? lat.toFixed(isApproximate ? 3 : 5) : '—' })}</span>
+                        <span>{t('Lng: {value}', { value: lng != null ? lng.toFixed(isApproximate ? 3 : 5) : '—' })}</span>
                         {isApproximate && (
                             <span className="px-1.5 py-0.5 rounded bg-bp-chip-warn-tint text-bp-chip-warn-ink text-[10px] font-sans font-semibold border border-bp-chip-warn-ink">
-                                ~100m
+                                {t('~100m')}
                             </span>
                         )}
                     </div>
@@ -239,7 +246,7 @@ export const EnterpriseLocationPicker: React.FC<EnterpriseLocationPickerProps> =
                 <div className="grid grid-cols-2 gap-2 text-xs">
                     <div className="min-w-0">
                         <label className="block text-[10px] uppercase font-bold text-nature-500 dark:text-nature-400 mb-0.5" htmlFor={`lat-input-${treasury.publicKey}`}>
-                            Latitude
+                            {t('Latitude')}
                         </label>
                         <input
                             id={`lat-input-${treasury.publicKey}`}
@@ -263,7 +270,7 @@ export const EnterpriseLocationPicker: React.FC<EnterpriseLocationPickerProps> =
                     </div>
                     <div className="min-w-0">
                         <label className="block text-[10px] uppercase font-bold text-nature-500 dark:text-nature-400 mb-0.5" htmlFor={`lng-input-${treasury.publicKey}`}>
-                            Longitude
+                            {t('Longitude')}
                         </label>
                         <input
                             id={`lng-input-${treasury.publicKey}`}
@@ -304,17 +311,18 @@ export const EnterpriseLocationPicker: React.FC<EnterpriseLocationPickerProps> =
                             disabled={clearing || saving}
                             className="min-h-[44px] px-3 py-1.5 rounded-lg bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-xs font-semibold text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800/60 transition-colors disabled:opacity-50"
                         >
-                            {clearing ? 'Clearing...' : 'Clear Location'}
+                            {clearing ? t('Clearing...') : t('Clear Location')}
                         </button>
                     )}
                 </div>
-                <div className="flex items-center gap-2">
+                {/* Wraps too: Cancel and Save in a longer language are wider than a 320dp screen side by side. */}
+                <div className="flex flex-wrap items-center justify-end gap-2">
                     <button
                         type="button"
                         onClick={onClose}
                         className="min-h-[44px] px-3 py-1.5 rounded-lg bg-nature-100 dark:bg-nature-900 hover:bg-nature-200 dark:hover:bg-nature-800 text-xs font-semibold text-nature-700 dark:text-nature-300 transition-colors"
                     >
-                        Cancel
+                        {t('Cancel')}
                     </button>
                     <button
                         type="button"
@@ -322,7 +330,7 @@ export const EnterpriseLocationPicker: React.FC<EnterpriseLocationPickerProps> =
                         disabled={saving || clearing || lat == null || lng == null}
                         className="min-h-[44px] px-3.5 py-1.5 rounded-lg bg-bp-cta-fill hover:bg-bp-cta-hover disabled:opacity-50 disabled:pointer-events-none text-xs font-bold text-bp-cta-on shadow transition-all"
                     >
-                        {saving ? 'Saving...' : 'Save Location'}
+                        {saving ? t('Saving...') : t('Save Location')}
                     </button>
                 </div>
             </div>

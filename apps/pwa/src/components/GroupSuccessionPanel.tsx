@@ -18,6 +18,8 @@ import {
     type GroupMember, type GroupSuccessionData,
 } from '../lib/api';
 import { buildSuccessionView, voteConfirmText } from '../lib/group-succession';
+import { t } from '@beanpool/core';
+import { Sentence } from './Sentence';
 
 interface Props {
     groupId: string;
@@ -63,7 +65,7 @@ export function GroupSuccessionPanel({ groupId, members, myPubkey, onLeadChanged
             if (res?.executed && onLeadChanged) onLeadChanged();
         } catch (err: any) {
             // The server's own words. It knows who may stand and who may propose; this does not.
-            setError(err?.message || 'Could not propose a new lead.');
+            setError(err?.message || t('Could not propose a new lead.'));
         } finally {
             setBusy(false);
         }
@@ -80,7 +82,7 @@ export function GroupSuccessionPanel({ groupId, members, myPubkey, onLeadChanged
             await load();
             if (res?.executed && onLeadChanged) onLeadChanged();
         } catch (err: any) {
-            setError(err?.message || 'Could not record your vote.');
+            setError(err?.message || t('Could not record your vote.'));
         } finally {
             setBusy(false);
         }
@@ -95,7 +97,7 @@ export function GroupSuccessionPanel({ groupId, members, myPubkey, onLeadChanged
         return (
             <section aria-labelledby="group-lead-vote-heading" className="border border-nature-200 dark:border-nature-800 rounded-2xl p-4 space-y-2">
                 <h3 id="group-lead-vote-heading" className="text-xs font-bold uppercase tracking-wider text-nature-600 dark:text-nature-400">
-                    Lead convenor
+                    {t('Lead convenor', undefined, 'group role')}
                 </h3>
                 <p className="text-xs text-nature-700 dark:text-nature-300 leading-relaxed">{view.outcomeLine}</p>
             </section>
@@ -111,7 +113,7 @@ export function GroupSuccessionPanel({ groupId, members, myPubkey, onLeadChanged
             className="bg-amber-50/60 dark:bg-amber-950/30 border-2 border-amber-500/50 rounded-2xl p-4 space-y-3 shadow-sm"
         >
             <h3 id="group-lead-vote-heading" className="text-xs font-black uppercase tracking-wider text-amber-800 dark:text-amber-300">
-                <span aria-hidden="true">⚠️ </span>Choosing a new lead convenor
+                <span aria-hidden="true">⚠️ </span>{t('Choosing a new lead convenor')}
             </h3>
 
             {view.silenceLine && (
@@ -131,7 +133,7 @@ export function GroupSuccessionPanel({ groupId, members, myPubkey, onLeadChanged
             {open ? (
                 <div className="bg-white dark:bg-nature-900 border border-amber-300 dark:border-amber-800 rounded-xl p-3 space-y-2">
                     <div className="text-xs font-bold text-nature-900 dark:text-white">
-                        Proposed as the new lead: <span className="text-emerald-700 dark:text-emerald-400 font-extrabold">{candidateName}</span>
+                        <Sentence text={t('Proposed as the new lead: {name}')} parts={{ name: <span className="text-emerald-700 dark:text-emerald-400 font-extrabold">{candidateName}</span> }} />
                     </div>
                     {view.closingLine && (
                         <div className="text-xs text-nature-600 dark:text-nature-400">
@@ -142,13 +144,13 @@ export function GroupSuccessionPanel({ groupId, members, myPubkey, onLeadChanged
                         sends it: there is no voter list here to leak. */}
                     <div className="text-xs text-nature-600 dark:text-nature-400">{view.tallyLine}</div>
                     <div className="text-[11px] text-nature-500 dark:text-nature-400 leading-relaxed">
-                        It passes if more than half of those who answer say yes. Votes are secret, and nobody sees who voted which way.
+                        {t('It passes if more than half of those who answer say yes. Votes are secret, and nobody sees who voted which way.')}
                     </div>
 
                     {view.myVote ? (
                         <div className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 px-3 py-2 rounded-lg border border-emerald-200 dark:border-emerald-800">
                             <span aria-hidden="true">✓</span>
-                            <span>You voted {view.myVote}. Votes can't be changed.</span>
+                            <span>{view.myVote === 'no' ? t("You voted no. Votes can't be changed.") : t("You voted yes. Votes can't be changed.")}</span>
                         </div>
                     ) : view.canVote ? (
                         // flex-wrap so the pair stacks rather than overflowing at 320px with 1.3× text.
@@ -157,19 +159,19 @@ export function GroupSuccessionPanel({ groupId, members, myPubkey, onLeadChanged
                                 type="button"
                                 disabled={busy}
                                 onClick={() => handleVote('yes')}
-                                aria-label={`Vote yes to make ${candidateName} the lead convenor`}
+                                aria-label={t('Vote yes to make {name} the lead convenor', { name: candidateName })}
                                 className="flex-1 min-w-[7rem] py-2.5 px-4 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-bold text-xs shadow-sm transition-all disabled:opacity-50 min-h-[48px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
                             >
-                                {busy ? 'Voting…' : 'Yes'}
+                                {busy ? t('Voting…') : t('Yes')}
                             </button>
                             <button
                                 type="button"
                                 disabled={busy}
                                 onClick={() => handleVote('no')}
-                                aria-label={`Vote no to making ${candidateName} the lead convenor`}
+                                aria-label={t('Vote no to making {name} the lead convenor', { name: candidateName })}
                                 className="flex-1 min-w-[7rem] py-2.5 px-4 rounded-xl border border-nature-300 dark:border-nature-700 text-nature-800 dark:text-nature-200 font-bold text-xs transition-all disabled:opacity-50 min-h-[48px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2"
                             >
-                                No
+                                {t('No')}
                             </button>
                         </div>
                     ) : null}
@@ -177,7 +179,7 @@ export function GroupSuccessionPanel({ groupId, members, myPubkey, onLeadChanged
             ) : view.canPropose ? (
                 <form onSubmit={handlePropose} className="bg-white dark:bg-nature-900 border border-amber-300 dark:border-amber-800 rounded-xl p-3 space-y-2">
                     <label htmlFor="group-lead-candidate" className="block text-xs font-bold text-nature-800 dark:text-nature-200">
-                        Propose a new lead
+                        {t('Propose a new lead')}
                     </label>
                     <div className="flex flex-col sm:flex-row gap-2">
                         <select
@@ -186,10 +188,12 @@ export function GroupSuccessionPanel({ groupId, members, myPubkey, onLeadChanged
                             onChange={(e) => setCandidate(e.target.value)}
                             className="flex-1 bg-nature-50 dark:bg-nature-800 border border-nature-300 dark:border-nature-700 rounded-xl px-3 py-2 text-xs font-semibold text-nature-900 dark:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 min-h-[44px]"
                         >
-                            <option value="">Choose someone…</option>
+                            <option value="">{t('Choose someone…')}</option>
                             {view.candidates.map((m) => (
                                 <option key={m.memberPubkey} value={m.memberPubkey}>
-                                    {(m.callsign || m.memberPubkey.slice(0, 10)) + (m.memberPubkey === myPubkey ? ' (yourself)' : '')}
+                                    {m.memberPubkey === myPubkey
+                                        ? t('{name} (yourself)', { name: m.callsign || m.memberPubkey.slice(0, 10) })
+                                        : (m.callsign || m.memberPubkey.slice(0, 10))}
                                 </option>
                             ))}
                         </select>
@@ -198,11 +202,11 @@ export function GroupSuccessionPanel({ groupId, members, myPubkey, onLeadChanged
                             disabled={busy || !candidate}
                             className="py-2 px-4 rounded-xl bg-bp-gold-fill hover:bg-bp-gold-hover text-bp-gold-on font-bold text-xs shadow-sm transition-all disabled:opacity-50 shrink-0 min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2"
                         >
-                            {busy ? 'Proposing…' : 'Propose'}
+                            {busy ? t('Proposing…') : t('Propose')}
                         </button>
                     </div>
                     <p className="text-[11px] text-nature-500 dark:text-nature-400 leading-relaxed">
-                        Proposing counts as your yes. The vote runs for 14 days, and closes at once if the lead comes back.
+                        {t('Proposing counts as your yes. The vote runs for 14 days, and closes at once if the lead comes back.')}
                     </p>
                 </form>
             ) : null}

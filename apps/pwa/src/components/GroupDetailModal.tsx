@@ -14,14 +14,39 @@ import {
     type GroupRole,
     type JoinPolicy
 } from '../lib/api';
-import { MAKE_OBSERVER_MEMBER_FIRST, GROUP_CLOSED_NOTE, type GroupPerson } from '@beanpool/core';
+import { GROUP_CLOSED_NOTE, type GroupPerson } from '@beanpool/core';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { buildRosterView } from '../lib/group-roster';
 import { GroupSuccessionPanel } from './GroupSuccessionPanel';
 import { GroupDecisions } from './EnterpriseDecisions';
 import { InvitePeopleSheet } from './InvitePeopleSheet';
 import { alreadyInGroup, canInviteToGroup } from '../lib/group-invite';
-import { t } from '@beanpool/core';
+import { t, tn, word, type WordKey } from '@beanpool/core';
+import { Sentence } from './Sentence';
+
+/** Sentences marked in core, translated here where they are shown. */
+const LINES = { closed: GROUP_CLOSED_NOTE };
+
+/**
+ * The info pills say the group's category and join rule in the lower-case words they always have (the phone's keys);
+ * a code this app does not know yet is shown as it came. Marked here, translated where drawn.
+ */
+const CATEGORY_PILL: Readonly<Record<string, WordKey>> = {
+    social: word('social', 'group category'), general: word('general', 'group category'), working_group: word('working group', 'group category'),
+    project: word('project', 'group category'), guild: word('guild', 'group category'),
+};
+const POLICY_WORDS: Readonly<Record<string, WordKey>> = {
+    open: word('open', 'join policy'), request_to_join: word('request to join', 'join policy'), invite_only: word('invite only', 'join policy'),
+};
+/** A roster row's role badge, as the web has always written it (capitals are the stylesheet's). */
+const ROLE_BADGE: Readonly<Record<string, WordKey>> = {
+    convenor: word('convenor', 'group role badge'), member: word('member', 'group role badge'), observer: word('observer', 'group role badge'),
+};
+
+const own = (table: Readonly<Record<string, WordKey>>, code: string) => Object.prototype.hasOwnProperty.call(table, code);
+const categoryPill = (code: string) => (own(CATEGORY_PILL, code) ? t(CATEGORY_PILL[code]) : code.replace(/_/g, ' '));
+const policyWords = (code: string) => (own(POLICY_WORDS, code) ? t(POLICY_WORDS[code]) : code.replace(/_/g, ' '));
+const roleBadge = (code: string) => (own(ROLE_BADGE, code) ? t(ROLE_BADGE[code]) : code);
 
 interface Props {
     group: Group | null;
@@ -144,16 +169,16 @@ export function GroupDetailModal({
             await loadDetails();
             if (onMembershipChanged) onMembershipChanged();
         } catch (err: any) {
-            setError(err.message || 'Failed to join group');
+            setError(err.message || t('Failed to join group'));
         } finally {
             setActionLoading(false);
         }
     };
 
     const handleHandOverLead = async (targetPubkey: string, callsign?: string) => {
-        const who = callsign || 'this member';
-        if (!window.confirm(
-            `Make ${who} the lead convenor of ${groupData.name}? They can remove and demote convenors, and you cannot take the lead back.`
+        if (!window.confirm(callsign
+            ? t('Make {name} the lead convenor of {group}? They can remove and demote convenors, and you cannot take the lead back.', { name: callsign, group: groupData.name })
+            : t('Make this member the lead convenor of {group}? They can remove and demote convenors, and you cannot take the lead back.', { group: groupData.name })
         )) return;
         setActionLoading(true);
         setError(null);
@@ -162,7 +187,7 @@ export function GroupDetailModal({
             await loadDetails();
             if (onMembershipChanged) onMembershipChanged();
         } catch (err: any) {
-            setError(err.message || 'Failed to hand the lead over');
+            setError(err.message || t('Failed to hand the lead over'));
         } finally {
             setActionLoading(false);
         }
@@ -174,12 +199,13 @@ export function GroupDetailModal({
         if (roster.leaveNeedsHandOver) {
             // An observer cannot take the lead, so "hand it over first" is a dead end while they are the only
             // other active people. Name the role change that opens the way instead.
+            // The first is core's MAKE_OBSERVER_MEMBER_FIRST after the line that says whose lead it is: one sentence (the phone's).
             setError(roster.handOverBlockedByObservers
-                ? `You are the lead convenor of ${groupData.name}. ${MAKE_OBSERVER_MEMBER_FIRST}`
-                : `You are the lead convenor of ${groupData.name}. Hand the lead to someone else first, then you can leave.`);
+                ? t('You are the lead convenor of {group}. Make one of the observers a member first, then hand the lead to them.', { group: groupData.name })
+                : t('You are the lead convenor of {group}. Hand the lead to someone else first, then you can leave.', { group: groupData.name }));
             return;
         }
-        if (!window.confirm(`Are you sure you want to leave ${groupData.name}?`)) return;
+        if (!window.confirm(t('Are you sure you want to leave {group}?', { group: groupData.name }))) return;
         setActionLoading(true);
         setError(null);
         try {
@@ -187,7 +213,7 @@ export function GroupDetailModal({
             await loadDetails();
             if (onMembershipChanged) onMembershipChanged();
         } catch (err: any) {
-            setError(err.message || 'Failed to leave group');
+            setError(err.message || t('Failed to leave group'));
         } finally {
             setActionLoading(false);
         }
@@ -201,14 +227,16 @@ export function GroupDetailModal({
             await loadDetails();
             if (onMembershipChanged) onMembershipChanged();
         } catch (err: any) {
-            setError(err.message || 'Failed to approve member');
+            setError(err.message || t('Failed to approve member'));
         } finally {
             setActionLoading(false);
         }
     };
 
     const handleRemoveMember = async (memberPubkey: string, callsign?: string) => {
-        if (!window.confirm(`Remove ${callsign || 'this member'} from ${groupData.name}?`)) return;
+        if (!window.confirm(callsign
+            ? t('Remove {name} from {group}?', { name: callsign, group: groupData.name })
+            : t('Remove this member from {group}?', { group: groupData.name }))) return;
         setActionLoading(true);
         setError(null);
         try {
@@ -216,7 +244,7 @@ export function GroupDetailModal({
             await loadDetails();
             if (onMembershipChanged) onMembershipChanged();
         } catch (err: any) {
-            setError(err.message || 'Failed to remove member');
+            setError(err.message || t('Failed to remove member'));
         } finally {
             setActionLoading(false);
         }
@@ -230,7 +258,7 @@ export function GroupDetailModal({
             await loadDetails();
             if (onMembershipChanged) onMembershipChanged();
         } catch (err: any) {
-            setError(err.message || 'Failed to change member role');
+            setError(err.message || t('Failed to change member role'));
         } finally {
             setActionLoading(false);
         }
@@ -244,7 +272,7 @@ export function GroupDetailModal({
             await loadDetails();
             if (onMembershipChanged) onMembershipChanged();
         } catch (err: any) {
-            setError(err.message || 'Failed to update policy');
+            setError(err.message || t('Failed to update policy'));
         } finally {
             setActionLoading(false);
         }
@@ -275,7 +303,7 @@ export function GroupDetailModal({
                         type="button"
                         onClick={onClose}
                         className="p-1 rounded-lg text-nature-500 hover:text-nature-900 dark:hover:text-white hover:bg-nature-200 dark:hover:bg-nature-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
-                        aria-label="Close"
+                        aria-label={t('Close')}
                     >
                         ✕
                     </button>
@@ -285,19 +313,19 @@ export function GroupDetailModal({
                     {/* Tags */}
                     <div className="flex flex-wrap gap-2">
                         <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-nature-200 dark:bg-nature-800 text-nature-700 dark:text-nature-300">
-                            <span aria-hidden="true">🏷️ </span>{groupData.category.replace(/_/g, ' ')}
+                            <span aria-hidden="true">🏷️ </span>{categoryPill(groupData.category)}
                         </span>
                         <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-nature-200 dark:bg-nature-800 text-nature-700 dark:text-nature-300">
-                            <span aria-hidden="true">🚪 </span>{groupData.joinPolicy.replace(/_/g, ' ')}
+                            <span aria-hidden="true">🚪 </span>{policyWords(groupData.joinPolicy)}
                         </span>
                         {closed && (
                             <span className="px-2.5 py-1 rounded-full text-xs font-black bg-nature-200 dark:bg-nature-800 text-nature-900 dark:text-nature-100" data-testid="group-closed-pill">
-                                <span aria-hidden="true">🔒 </span>Closed
+                                <span aria-hidden="true">🔒 </span>{t('Closed', undefined, 'a group')}
                             </span>
                         )}
                         {isConvenor && (
                             <span className="px-2.5 py-1 rounded-full text-xs font-black bg-bp-chip-ok-tint text-bp-chip-ok-ink border border-transparent">
-                                <span aria-hidden="true">🛡️ </span>{roster.viewerIsLead ? 'Lead convenor' : 'Convenor'}
+                                <span aria-hidden="true">🛡️ </span>{roster.viewerIsLead ? t('Lead convenor', undefined, 'group role') : t('Convenor', undefined, 'group role')}
                             </span>
                         )}
                     </div>
@@ -305,14 +333,18 @@ export function GroupDetailModal({
                     {/* Group info names the lead convenor. Never "owner" — that is the owner of a node. */}
                     {roster.leadCallsign && (
                         <p className="text-xs text-nature-600 dark:text-nature-400 leading-relaxed">
-                            Lead convenor: <strong className="text-nature-900 dark:text-white">{roster.leadCallsign}</strong>
-                            {roster.viewerIsLead ? ' (you)' : ''}. Only the lead can remove or demote a convenor, and nobody can remove the lead.
+                            <Sentence
+                                text={roster.viewerIsLead
+                                    ? t('Lead convenor: {name} (you). Only the lead can remove or demote a convenor, and nobody can remove the lead.')
+                                    : t('Lead convenor: {name}. Only the lead can remove or demote a convenor, and nobody can remove the lead.')}
+                                parts={{ name: <strong className="text-nature-900 dark:text-white">{roster.leadCallsign}</strong> }}
+                            />
                         </p>
                     )}
 
                     {/* Framing statement */}
                     <div className="p-3 bg-nature-200/60 dark:bg-nature-900/60 border border-nature-300 dark:border-nature-800 rounded-xl text-xs text-nature-700 dark:text-nature-300 leading-relaxed">
-                        <span aria-hidden="true">ℹ️ </span><strong>A group is a place to talk to some people rather than everyone.</strong> It does not hold beans and does not confer trust.
+                        <span aria-hidden="true">ℹ️ </span><strong>{t('A group is a place to talk to some people rather than everyone.')}</strong> {t('It does not hold beans and does not confer trust.')}
                     </div>
 
                     {error && (
@@ -329,7 +361,7 @@ export function GroupDetailModal({
 
                     {closed && (
                         <p className="m-0 p-3 rounded-xl border border-nature-300 dark:border-nature-700 text-sm text-nature-800 dark:text-nature-200 break-words" data-testid="group-closed-note">
-                            <span aria-hidden="true">🔒 </span>{GROUP_CLOSED_NOTE}
+                            <span aria-hidden="true">🔒 </span>{t(LINES.closed)}
                         </p>
                     )}
 
@@ -354,13 +386,13 @@ export function GroupDetailModal({
                     {isConvenor && !closed && (
                         <div className="p-4 bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/60 rounded-2xl space-y-3">
                             <h3 className="text-xs font-black uppercase tracking-wider text-emerald-800 dark:text-emerald-400">
-                                <span aria-hidden="true">🛡️ </span>Convenor Tools
+                                <span aria-hidden="true">🛡️ </span>{t('Convenor Tools')}
                             </h3>
 
                             {/* Set Join Policy */}
                             <div className="flex items-center justify-between text-xs">
                                 <span className="text-nature-600 dark:text-nature-400">
-                                    Join Policy: <strong className="text-nature-900 dark:text-white capitalize">{groupData.joinPolicy.replace(/_/g, ' ')}</strong>
+                                    <Sentence text={t('Join Policy: {policy}')} parts={{ policy: <strong className="text-nature-900 dark:text-white capitalize">{policyWords(groupData.joinPolicy)}</strong> }} />
                                 </span>
                                 <select
                                     value={groupData.joinPolicy}
@@ -368,9 +400,9 @@ export function GroupDetailModal({
                                     disabled={actionLoading}
                                     className="px-2 py-1 bg-white dark:bg-nature-900 border border-nature-300 dark:border-nature-700 rounded-lg text-xs font-bold text-nature-900 dark:text-white"
                                 >
-                                    <option value="open">Open (immediate)</option>
-                                    <option value="request_to_join">Request to Join (approval needed)</option>
-                                    <option value="invite_only">Invite Only</option>
+                                    <option value="open">{t('Open (immediate)')}</option>
+                                    <option value="request_to_join">{t('Request to Join (approval needed)')}</option>
+                                    <option value="invite_only">{t('Invite Only')}</option>
                                 </select>
                             </div>
 
@@ -378,18 +410,20 @@ export function GroupDetailModal({
                             {pendingMembers.length > 0 && (
                                 <div className="space-y-2 pt-2 border-t border-emerald-200 dark:border-emerald-800/40">
                                     <div className="text-xs font-bold text-nature-700 dark:text-nature-300">
-                                        Pending Join Requests ({pendingMembers.length})
+                                        {t('Pending Join Requests ({n})', { n: pendingMembers.length })}
                                     </div>
                                     <div className="space-y-1.5">
                                         {pendingMembers.map((p) => {
                                             const resolvedAvatar = resolveAvatarUrl(p.avatarUrl);
                                             return (
-                                                <div key={p.memberPubkey} className="flex items-center justify-between p-2 bg-white dark:bg-nature-900 rounded-xl border border-nature-200 dark:border-nature-800">
-                                                    <div className="flex items-center gap-2 min-w-0">
+                                                // The name keeps close to half the row (at 320 px it was cut even in English); Approve and
+                                                // Decline in a longer language drop below it rather than squeezing it away.
+                                                <div key={p.memberPubkey} className="flex flex-wrap items-center justify-between gap-2 p-2 bg-white dark:bg-nature-900 rounded-xl border border-nature-200 dark:border-nature-800">
+                                                    <div className="flex items-center gap-2 min-w-0 flex-1 basis-[45%]">
                                                         {resolvedAvatar ? (
-                                                            <img src={resolvedAvatar} alt="" className="w-6 h-6 rounded-full object-cover" />
+                                                            <img src={resolvedAvatar} alt="" className="w-6 h-6 shrink-0 rounded-full object-cover" />
                                                         ) : (
-                                                            <div className="w-6 h-6 rounded-full bg-nature-200 dark:bg-nature-700 flex items-center justify-center text-[10px] font-bold">
+                                                            <div className="w-6 h-6 shrink-0 rounded-full bg-nature-200 dark:bg-nature-700 flex items-center justify-center text-[10px] font-bold">
                                                                 {(p.callsign || '?').charAt(0).toUpperCase()}
                                                             </div>
                                                         )}
@@ -397,22 +431,22 @@ export function GroupDetailModal({
                                                             {p.callsign || p.memberPubkey.slice(0, 10)}
                                                         </span>
                                                     </div>
-                                                    <div className="flex items-center gap-1">
+                                                    <div className="flex items-center gap-1 ml-auto">
                                                         <button
                                                             onClick={() => handleApprove(p.memberPubkey)}
                                                             disabled={actionLoading}
-                                                            aria-label={`Approve join request from ${p.callsign || p.memberPubkey.slice(0, 10)}`}
+                                                            aria-label={t('Approve join request from {name}', { name: p.callsign || p.memberPubkey.slice(0, 10) })}
                                                             className="px-2 py-1 rounded bg-bp-commit-fill hover:bg-bp-commit-hover disabled:opacity-50 disabled:cursor-not-allowed text-bp-commit-on text-[11px] font-bold transition-colors"
                                                         >
-                                                            Approve
+                                                            {t('Approve')}
                                                         </button>
                                                         <button
                                                             onClick={() => handleRemoveMember(p.memberPubkey, p.callsign)}
                                                             disabled={actionLoading}
-                                                            aria-label={`Decline join request from ${p.callsign || p.memberPubkey.slice(0, 10)}`}
+                                                            aria-label={t('Decline join request from {name}', { name: p.callsign || p.memberPubkey.slice(0, 10) })}
                                                             className="px-2 py-1 rounded border border-red-300 dark:border-red-800 text-red-600 dark:text-red-300 text-[11px] font-bold hover:bg-red-50 dark:hover:bg-red-950/30 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                                                         >
-                                                            Decline
+                                                            {t('Decline')}
                                                         </button>
                                                     </div>
                                                 </div>
@@ -444,10 +478,10 @@ export function GroupDetailModal({
                     <div>
                         <h3 className="text-xs font-bold uppercase tracking-wider text-nature-600 dark:text-nature-400 mb-2">
                             {rosterRefused
-                                ? (typeof groupData.memberCount === 'number' ? `${groupData.memberCount} ${groupData.memberCount === 1 ? 'member' : 'members'}` : 'Members')
-                                : `Roster (${roster.rows.length || groupData.memberCount || 0})`}
+                                ? (typeof groupData.memberCount === 'number' ? tn(groupData.memberCount, '{n} member', '{n} members') : t('Members'))
+                                : t('Roster ({n})', { n: roster.rows.length || groupData.memberCount || 0 })}
                         </h3>
-                        {rosterRefused && <p className="text-sm text-nature-600 dark:text-nature-300">Join the group to see who is here</p>}
+                        {rosterRefused && <p className="text-sm text-nature-600 dark:text-nature-300">{t('Join the group to see who is here')}</p>}
                         {canInvite && !rosterRefused && (
                             <button
                                 type="button"
@@ -460,7 +494,7 @@ export function GroupDetailModal({
                         )}
 
                         {loading ? (
-                            <div className="py-4 text-center text-xs text-nature-500">Loading members...</div>
+                            <div className="py-4 text-center text-xs text-nature-500">{t('Loading members...')}</div>
                         ) : rosterRefused ? null : (
                             <div className="divide-y divide-nature-200 dark:divide-nature-800/80 border border-nature-200 dark:border-nature-800 rounded-xl overflow-hidden">
                                 {roster.rows.map((row) => {
@@ -481,7 +515,7 @@ export function GroupDetailModal({
                                                 )}
                                                 <div className="min-w-0">
                                                     <div className="text-sm font-bold text-nature-900 dark:text-white truncate">
-                                                        {m.callsign || m.memberPubkey.slice(0, 10)} {row.isYou && <span className="text-xs text-nature-400">(You)</span>}
+                                                        {m.callsign || m.memberPubkey.slice(0, 10)} {row.isYou && <span className="text-xs text-nature-400">{t('(You)', undefined, 'roster: the viewer')}</span>}
                                                     </div>
                                                     <div className="text-[11px] text-nature-500 dark:text-nature-400">
                                                         {row.roleLabel}
@@ -495,7 +529,7 @@ export function GroupDetailModal({
                                                         ? 'bg-bp-chip-ok-tint text-bp-chip-ok-ink border border-bp-chip-ok-ink'
                                                         : 'bg-nature-100 dark:bg-nature-800 text-nature-600 dark:text-nature-300'
                                                 }`}>
-                                                    {row.isLead ? 'Lead' : m.role}
+                                                    {row.isLead ? t('Lead', undefined, 'group role badge') : roleBadge(m.role)}
                                                 </span>
 
                                                 {/* The Role select and ✕ only where the viewer may actually act: never
@@ -508,11 +542,11 @@ export function GroupDetailModal({
                                                                 type="button"
                                                                 onClick={() => handleHandOverLead(m.memberPubkey, m.callsign)}
                                                                 disabled={actionLoading}
-                                                                aria-label={`Make ${m.callsign || m.memberPubkey.slice(0, 10)} the lead convenor`}
-                                                                title="Make lead convenor"
+                                                                aria-label={t('Make {name} the lead convenor', { name: m.callsign || m.memberPubkey.slice(0, 10) })}
+                                                                title={t('Make lead convenor')}
                                                                 className="px-1.5 py-0.5 rounded border border-nature-300 dark:border-nature-700 text-[10px] font-bold text-nature-700 dark:text-nature-300 hover:bg-nature-100 dark:hover:bg-nature-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                                                             >
-                                                                Make lead
+                                                                {t('Make lead')}
                                                             </button>
                                                         )}
                                                         {row.canChangeRole && (
@@ -520,12 +554,12 @@ export function GroupDetailModal({
                                                                 value={m.role}
                                                                 onChange={(e) => handleChangeRole(m.memberPubkey, e.target.value as GroupRole)}
                                                                 disabled={actionLoading}
-                                                                aria-label={`Role for ${m.callsign || m.memberPubkey.slice(0, 10)}`}
+                                                                aria-label={t('Role for {name}', { name: m.callsign || m.memberPubkey.slice(0, 10) })}
                                                                 className="px-1.5 py-0.5 bg-nature-100 dark:bg-nature-900 border border-nature-300 dark:border-nature-700 rounded text-[10px] font-bold text-nature-700 dark:text-nature-300"
                                                             >
-                                                                <option value="convenor">Convenor</option>
-                                                                <option value="member">Member</option>
-                                                                <option value="observer">Observer</option>
+                                                                <option value="convenor">{t('Convenor', undefined, 'group role')}</option>
+                                                                <option value="member">{t('Member', undefined, 'group role')}</option>
+                                                                <option value="observer">{t('Observer', undefined, 'group role')}</option>
                                                             </select>
                                                         )}
                                                         {row.canRemove && (
@@ -533,9 +567,9 @@ export function GroupDetailModal({
                                                                 type="button"
                                                                 onClick={() => handleRemoveMember(m.memberPubkey, m.callsign)}
                                                                 disabled={actionLoading}
-                                                                aria-label={`Remove ${m.callsign || m.memberPubkey.slice(0, 10)} from group`}
+                                                                aria-label={t('Remove {name} from group', { name: m.callsign || m.memberPubkey.slice(0, 10) })}
                                                                 className="p-1 rounded text-red-500 dark:text-red-400 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/40 dark:hover:text-red-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                                                                title="Remove member"
+                                                                title={t('Remove member')}
                                                             >
                                                                 ✕
                                                             </button>
@@ -561,7 +595,7 @@ export function GroupDetailModal({
                                 }}
                                 className="w-full py-3 px-4 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                             >
-                                <span aria-hidden="true">✏️ </span>Post to {groupData.name}
+                                <span aria-hidden="true">✏️ </span>{t('Post to {name}', { name: groupData.name })}
                             </button>
                         )}
 
@@ -572,15 +606,15 @@ export function GroupDetailModal({
                                 disabled={actionLoading}
                                 className="w-full py-2.5 px-4 rounded-xl border border-red-300 dark:border-red-800 text-red-600 dark:text-red-400 font-bold text-sm hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
                             >
-                                Leave Group
+                                {t('Leave Group')}
                             </button>
                         ) : closed ? (
                             <div className="w-full py-2.5 px-4 rounded-xl bg-nature-200 dark:bg-nature-800 text-nature-700 dark:text-nature-300 font-bold text-sm text-center">
-                                Closed
+                                {t('Closed', undefined, 'a group')}
                             </div>
                         ) : isPending ? (
                             <div className="w-full py-2.5 px-4 rounded-xl bg-nature-200 dark:bg-nature-800 text-nature-500 dark:text-nature-300 font-bold text-sm text-center">
-                                Request Pending Approval
+                                {t('Request Pending Approval')}
                             </div>
                         ) : isInvited ? (
                             <button
@@ -594,7 +628,7 @@ export function GroupDetailModal({
                             </button>
                         ) : groupData.joinPolicy === 'invite_only' ? (
                             <div className="w-full py-2.5 px-4 rounded-xl bg-nature-200 dark:bg-nature-800 text-nature-500 dark:text-nature-300 font-bold text-sm text-center">
-                                Invite Only
+                                {t('Invite Only')}
                             </div>
                         ) : (
                             <button
@@ -603,7 +637,7 @@ export function GroupDetailModal({
                                 disabled={actionLoading}
                                 className="w-full py-3 px-4 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                             >
-                                {groupData.joinPolicy === 'request_to_join' ? 'Request to Join' : 'Join Group'}
+                                {groupData.joinPolicy === 'request_to_join' ? t('Request to Join') : t('Join Group')}
                             </button>
                         )}
                     </div>

@@ -1,4 +1,754 @@
 {
-  "sections": {},
-  "pages": {}
+  "sections": {
+    "about": {
+      "title": {
+        "text": "Tentang BeanPool",
+        "sourceHash": "2d9dd281fa519636"
+      },
+      "summary": {
+        "text": "Cara kerja BeanPool, aturan dan pengambilan keputusan, pertanyaan umum, dan apa yang baru.",
+        "sourceHash": "003302493f5fd51a"
+      }
+    },
+    "getting-started": {
+      "title": {
+        "text": "Memulai",
+        "sourceHash": "831d0f72d242b7d1"
+      },
+      "summary": {
+        "text": "Beranda, bergabung, mencari komunitas di dekatmu, Kacang dan komunitas global, batasannya, 12 katamu, profilmu, bilah atas, panduan ini, bantuan, menggunakan lebih dari satu komunitas, dan web app.",
+        "sourceHash": "63d6211469096565"
+      }
+    },
+    "market": {
+      "title": {
+        "text": "Pasar",
+        "sourceHash": "5238d9bd03d543e6"
+      },
+      "summary": {
+        "text": "Mencari dan memasang Penawaran dan Permintaan, serta cara kerja transaksi dari awal hingga selesai.",
+        "sourceHash": "6008ab9bf397a83a"
+      }
+    },
+    "map": {
+      "title": {
+        "text": "Peta",
+        "sourceHash": "be176b0015c424b7"
+      },
+      "summary": {
+        "text": "Arti pin, di mana posisimu berada, dan menemukan berbagai hal di dekatmu.",
+        "sourceHash": "b4e17982e037f558"
+      }
+    },
+    "talk": {
+      "title": {
+        "text": "Obrolan",
+        "sourceHash": "449f5a775762cdc5"
+      },
+      "summary": {
+        "text": "Pesan, grup dan obrolannya, orang dan teman, obrolan acara, membisukan, sebutan, dan kunci yang berubah.",
+        "sourceHash": "e680a96492c72e47"
+      }
+    },
+    "pulse": {
+      "title": {
+        "text": "Kabar",
+        "sourceHash": "f7a403c6cdf31e72"
+      },
+      "summary": {
+        "text": "Apa yang dibagikan tetangga, video Belajar, dan menambahkan saluranmu sendiri.",
+        "sourceHash": "9ab06ad52ef86462"
+      }
+    },
+    "commons": {
+      "title": {
+        "text": "Sarana Bersama",
+        "sourceHash": "6aa9f1a43424d37b"
+      },
+      "summary": {
+        "text": "Keputusan dan pemungutan suara, kacang bersama, grupmu, usaha dan pengurus. Jajak pendapat dan acara juga ada di sini; kamu menemukannya di Pasar.",
+        "sourceHash": "bd9454f4374e35ae"
+      }
+    },
+    "ledger": {
+      "title": {
+        "text": "Buku kas",
+        "sourceHash": "ee69eb4afc76aae0"
+      },
+      "summary": {
+        "text": "Saldomu, batas kreditmu, hadiah, lencana, batas per mitra dagang, dan biaya peredaran.",
+        "sourceHash": "99d7457bf048947c"
+      }
+    },
+    "settings": {
+      "title": {
+        "text": "Pengaturan dan keamanan",
+        "sourceHash": "8ee717d56a807cd5"
+      },
+      "summary": {
+        "text": "Privasi dan apa yang bisa dilihat admin serta asisten AI mereka, wilayahmu, memblokir dan melapor, pemberitahuan, terang dan gelap, Mode Liburan saat bepergian, keluar, memulihkan akun, dan memeriksa 12 katamu sebagai pemilik.",
+        "sourceHash": "767b3834909fa76c"
+      }
+    }
+  },
+  "pages": {
+    "how-it-works": {
+      "title": {
+        "text": "Cara kerja BeanPool",
+        "sourceHash": "8ee2145ba2a47e77"
+      },
+      "summary": {
+        "text": "Kacang, perdagangan, penawaran dan permintaan, serta kredit, secara sederhana.",
+        "sourceHash": "921252df227ae544"
+      }
+    },
+    "rules": {
+      "title": {
+        "text": "Aturan dan cara kerja keputusan",
+        "sourceHash": "482819c153332e58"
+      },
+      "summary": {
+        "text": "Pemungutan suara, partisipasi, suara rahasia, siapa yang berhak memilih, penangguhan, mengeluarkan anggota, pengurus, serta koordinator dan koordinator utama.",
+        "sourceHash": "b111b31338cdd2a3"
+      }
+    },
+    "faq": {
+      "title": {
+        "text": "Pertanyaan",
+        "sourceHash": "9a72221a27476f3e"
+      },
+      "summary": {
+        "text": "Jawaban singkat untuk pertanyaan yang paling sering diajukan anggota.",
+        "sourceHash": "8feb7069cb08f93d"
+      }
+    },
+    "whats-new": {
+      "title": {
+        "text": "Yang baru",
+        "sourceHash": "135e912e89054ffa"
+      },
+      "summary": {
+        "text": "Apa yang berubah di aplikasi, dengan kata-kata sederhana.",
+        "sourceHash": "e1f96938296c5950"
+      }
+    },
+    "home": {
+      "title": {
+        "text": "Beranda",
+        "sourceHash": "3a78695388b38b5c"
+      },
+      "summary": {
+        "text": "Apa itu Beranda, kartu apa saja yang muncul di ponsel dan web app, cara menambah, memindah, atau menghapusnya, memilih minatmu, dan privasi saat keluar.",
+        "sourceHash": "a1c1ff42cd312dd2"
+      },
+      "help": {
+        "text": "Ini Beranda: kartu tentang kebutuhanmu dan acara terdekat. Tambah kartu di bawah, atau ketuk … untuk memindah atau menghapusnya.",
+        "sourceHash": "3842000d41b06fa3"
+      }
+    },
+    "joining": {
+      "title": {
+        "text": "Bergabung ke BeanPool",
+        "sourceHash": "4a4fa8d50d056023"
+      },
+      "summary": {
+        "text": "Dua cara masuk: komunitas dengan undangan anggota, atau komunitas global saat terbuka dengan 12 kata rahasia atau satu akun masuk. Meminta bergabung ke komunitas, dan mengundang orang lain.",
+        "sourceHash": "bfa09f20fea858c6"
+      },
+      "help": {
+        "text": "Gabung ke komunitas dengan undangan anggota, atau komunitas global dengan 12 kata rahasia atau akun masuk.",
+        "sourceHash": "288300534966c3d2"
+      }
+    },
+    "finding-a-community": {
+      "title": {
+        "text": "Menemukan komunitas di dekatmu",
+        "sourceHash": "dbb0b4170f999d18"
+      },
+      "summary": {
+        "text": "Dari komunitas global, temukan komunitas di dekatmu dan minta bergabung, dapatkan kabar saat ada yang baru dibuka, atau buat sendiri.",
+        "sourceHash": "d7fada0c8e749ecf"
+      }
+    },
+    "beans-and-the-global-community": {
+      "title": {
+        "text": "Kacang dan komunitas global",
+        "sourceHash": "e44e1649e26e9122"
+      },
+      "summary": {
+        "text": "Untuk apa komunitas global, satu komunitas di antara banyak komunitas, dan apa yang kamu lihat: penanda 🏘️ Komunitas, contoh komunitas Example Valley, mengapa Kacang menunggu di sana, dan cara mencari atau memulai komunitas lokal.",
+        "sourceHash": "f91dcd042d53fdfb"
+      }
+    },
+    "global-community-limits": {
+      "title": {
+        "text": "Batasan komunitas global",
+        "sourceHash": "79186984a4ee4919"
+      },
+      "summary": {
+        "text": "Komunitas global gratis dengan beberapa batasan agar biaya tetap hemat. Kiriman diarsipkan 90 hari setelah perubahan terakhir. Maksimal 5 foto, ponsel menyimpan 500 kiriman terdekat, dan kamu bisa memantau 3 tempat.",
+        "sourceHash": "feba3e6c852b6d3b"
+      }
+    },
+    "your-12-words": {
+      "title": {
+        "text": "12 katamu",
+        "sourceHash": "dd2264b1e132960b"
+      },
+      "summary": {
+        "text": "12 kata adalah kunci akunmu. Mengapa penting, di mana menemukannya, cara menyimpannya dengan aman, dan menambahkan akun masuk sebagai cadangan.",
+        "sourceHash": "7033308ae096c586"
+      }
+    },
+    "your-profile": {
+      "title": {
+        "text": "Profilmu",
+        "sourceHash": "528d89ad72cba22e"
+      },
+      "summary": {
+        "text": "Nama, foto, beberapa patah kata tentangmu, dan siapa yang bisa melihat rincian kontakmu.",
+        "sourceHash": "f405b4421669fcdb"
+      }
+    },
+    "the-top-bar": {
+      "title": {
+        "text": "Bilah atas",
+        "sourceHash": "67f6e62947dde848"
+      },
+      "summary": {
+        "text": "Ikon kacang, ikon kecil saat ada hal penting, dan tombol di kanan atas.",
+        "sourceHash": "19dc6a309244ae90"
+      }
+    },
+    "the-bean": {
+      "title": {
+        "text": "Panduan ini",
+        "sourceHash": "1d8917503dda7b5f"
+      },
+      "summary": {
+        "text": "Di mana menemukan panduan ini, cara mencarinya, dan bagaimana panduan selalu diperbarui.",
+        "sourceHash": "7e694a121aa2314d"
+      }
+    },
+    "getting-help": {
+      "title": {
+        "text": "Mendapat bantuan",
+        "sourceHash": "418313b75b185ab8"
+      },
+      "summary": {
+        "text": "Ke mana mencari petunjuk saat bingung, dan siapa yang harus ditanya.",
+        "sourceHash": "8d12d16dc2217232"
+      }
+    },
+    "communities": {
+      "title": {
+        "text": "Lebih dari satu komunitas",
+        "sourceHash": "b753dd3e548b2230"
+      },
+      "summary": {
+        "text": "Bergabung di beberapa komunitas dengan satu akun, berpindah antar komunitas, mengikuti komunitas saat pindah alamat, dan melihat apa yang ditampilkan komunitas global.",
+        "sourceHash": "71e99c6bbffadcbe"
+      }
+    },
+    "web-app": {
+      "title": {
+        "text": "BeanPool di browser web",
+        "sourceHash": "1daaa01a91ba4b17"
+      },
+      "summary": {
+        "text": "Web app menyediakan sebagian besar fungsi aplikasi ponsel. Bergabung ke komunitas global di browser, memulihkan akun dengan akun masuk, membuka akun di ponsel, dan letak tombol yang berbeda nama.",
+        "sourceHash": "8afd3ad2f9117fd5"
+      }
+    },
+    "browsing-the-market": {
+      "title": {
+        "text": "Menjelajahi pasar",
+        "sourceHash": "ab1b6bf5f734c023"
+      },
+      "summary": {
+        "text": "Cari Penawaran dan Permintaan dengan pencarian, filter, dan jarak.",
+        "sourceHash": "e73e882abbebfa8d"
+      },
+      "help": {
+        "text": "Penawaran dan Permintaan dari orang di dekatmu. Cari, filter menurut kategori atau jarak, atau ketuk + TAMBAH POSTINGAN untuk pasang sendiri.",
+        "sourceHash": "0bc8b01c4d9effb6"
+      }
+    },
+    "posting": {
+      "title": {
+        "text": "Memasang Penawaran atau Permintaan",
+        "sourceHash": "e218de31c1bbad00"
+      },
+      "summary": {
+        "text": "Tawarkan keahlian atau barang yang bisa kamu berikan, atau tulis hal yang kamu butuhkan.",
+        "sourceHash": "9ffa9b1e66834bc0"
+      }
+    },
+    "my-deals": {
+      "title": {
+        "text": "Kesepakatanku",
+        "sourceHash": "bfad6bb30e1876c5"
+      },
+      "summary": {
+        "text": "Satu tempat untuk setiap transaksi yang sedang berlangsung, semua kirimanmu, dan riwayat transaksimu.",
+        "sourceHash": "8772e2ee242712d3"
+      },
+      "help": {
+        "text": "Semua transaksi aktif dan kirimanmu. Kesepakatan yang menunggumu berada di paling atas.",
+        "sourceHash": "3ec4be8c87368ed9"
+      }
+    },
+    "a-deal-step-by-step": {
+      "title": {
+        "text": "Tahapan kesepakatan",
+        "sourceHash": "d2b29952cde1ab00"
+      },
+      "summary": {
+        "text": "Dari permintaan hingga pembayaran, untuk Penawaran maupun Permintaan, serta memberikan ulasan.",
+        "sourceHash": "88d4362d08a13bc5"
+      }
+    },
+    "when-a-deal-goes-wrong": {
+      "title": {
+        "text": "Jika kesepakatan bermasalah",
+        "sourceHash": "190bfad1746f9e84"
+      },
+      "summary": {
+        "text": "Membatalkan kesepakatan, dan apa yang terjadi jika tidak ada kata sepakat.",
+        "sourceHash": "a68c0d7af60988b4"
+      }
+    },
+    "map-pins": {
+      "title": {
+        "text": "Yang ditampilkan peta",
+        "sourceHash": "dbd1bae516674246"
+      },
+      "summary": {
+        "text": "Pin di Peta, arti warnanya, dan tombol-tombol di sekitarnya.",
+        "sourceHash": "79dec90cc1871495"
+      },
+      "help": {
+        "text": "Di dekatmu: pin hijau adalah Penawaran, oranye adalah Permintaan, ungu adalah acara. Ketuk pin untuk melihatnya.",
+        "sourceHash": "0dae9edef568b7cd"
+      }
+    },
+    "pin-locations": {
+      "title": {
+        "text": "Lokasi pin kamu",
+        "sourceHash": "271264e11ffa7eaf"
+      },
+      "summary": {
+        "text": "Siapa yang melihat lokasi kiriman dan acaramu, serta cara menjaga privasi tempat tinggalmu.",
+        "sourceHash": "a6ef3083e3ca4bfc"
+      }
+    },
+    "near-you": {
+      "title": {
+        "text": "Menemukan hal di dekatmu",
+        "sourceHash": "21bac241e8aef2ca"
+      },
+      "summary": {
+        "text": "Tampilkan hanya kiriman dalam jarak tertentu darimu, atau dari tempat mana pun yang kamu pilih.",
+        "sourceHash": "5158de7099e0e89b"
+      }
+    },
+    "messages": {
+      "title": {
+        "text": "Pesan",
+        "sourceHash": "04d7b48339271ea6"
+      },
+      "summary": {
+        "text": "Mulai obrolan, kirim foto, balas, beri reaksi, edit, hapus, bisukan, dan apa saja yang bersifat pribadi.",
+        "sourceHash": "d97a6ef5d498fdde"
+      },
+      "help": {
+        "text": "Obrolanmu. Obrolan pribadi terenkripsi penuh. Ketuk obrolan untuk membukanya.",
+        "sourceHash": "bb7067d935067660"
+      }
+    },
+    "groups": {
+      "title": {
+        "text": "Grup",
+        "sourceHash": "39bbb719fa2b9d22"
+      },
+      "summary": {
+        "text": "Grupmu dan obrolannya, berbicara di dalamnya, membuat grup, mengundang orang, bergabung dengan undangan, dan pemungutan suara internal grup.",
+        "sourceHash": "4fa880d88c4b646f"
+      },
+      "help": {
+        "text": "Grup dan obrolanmu. Buat grup, undang orang, atau buka untuk berbincang dan memilih bersama.",
+        "sourceHash": "ae3496f349eba2b3"
+      }
+    },
+    "people": {
+      "title": {
+        "text": "Orang dan teman",
+        "sourceHash": "99d59d29a0f3c756"
+      },
+      "summary": {
+        "text": "Mencari anggota komunitas, profil dan lencana mereka, serta menandai teman agar kamu tahu jika ada yang keluar.",
+        "sourceHash": "4be4971d826d83fe"
+      },
+      "help": {
+        "text": "Anggota komunitasmu. Ketuk seseorang untuk melihat profil, Penawaran, Permintaan, dan lencana.",
+        "sourceHash": "d90b46866bc2bb6f"
+      }
+    },
+    "event-chat": {
+      "title": {
+        "text": "Obrolan acara",
+        "sourceHash": "9c298662a4d6fc3e"
+      },
+      "summary": {
+        "text": "Mengobrol dengan tuan rumah dan semua orang yang menghadiri acara.",
+        "sourceHash": "ae8ca7988e16e019"
+      }
+    },
+    "mute": {
+      "title": {
+        "text": "Bisukan obrolan",
+        "sourceHash": "8a491f4109c925c7"
+      },
+      "summary": {
+        "text": "Bisukan obrolan — perorangan, grup, atau usaha — selama 8 jam, seminggu, atau selamanya.",
+        "sourceHash": "ce143abea39ce423"
+      }
+    },
+    "mentions": {
+      "title": {
+        "text": "Sebutan",
+        "sourceHash": "2e133ecc601b188f"
+      },
+      "summary": {
+        "text": "Ketik @ untuk menyebut seseorang di obrolan, dan lihat di mana kamu disebut.",
+        "sourceHash": "265d8fd594c5af23"
+      }
+    },
+    "key-changed": {
+      "title": {
+        "text": "Saat kunci atau nama berubah",
+        "sourceHash": "79c7dc48aa148094"
+      },
+      "summary": {
+        "text": "Mengapa obrolan berhenti mengirim pesan, cara memeriksa kode kunci dengan orang tersebut, dan kapan harus melanjutkan.",
+        "sourceHash": "c7a3e58ca019f963"
+      }
+    },
+    "the-pulse": {
+      "title": {
+        "text": "The Pulse",
+        "sourceHash": "a974f2e05f105a24"
+      },
+      "summary": {
+        "text": "Apa yang dibuat dan dibagikan tetangga di platform lain, dalam satu umpan kabar.",
+        "sourceHash": "999659aebbfe69d2"
+      },
+      "help": {
+        "text": "Tautan yang dibuat atau dibagikan tetangga di platform lain. Ketuk tautan untuk membukanya.",
+        "sourceHash": "1d19387da6116082"
+      }
+    },
+    "learn": {
+      "title": {
+        "text": "Ruang Belajar",
+        "sourceHash": "498e66e5947ca0c3"
+      },
+      "summary": {
+        "text": "Video pendek tentang BeanPool, dan halaman panduan yang sesuai.",
+        "sourceHash": "4d2fdf4c850fe47f"
+      }
+    },
+    "your-channels": {
+      "title": {
+        "text": "Membagikan saluranmu",
+        "sourceHash": "e47ac70a91b21162"
+      },
+      "summary": {
+        "text": "Tampilkan YouTube, blog, Instagram, dan saluran lainnya di Kabar.",
+        "sourceHash": "bc9819c938b91f04"
+      }
+    },
+    "decisions": {
+      "title": {
+        "text": "Memilih dalam Keputusan",
+        "sourceHash": "67b17269f83d1030"
+      },
+      "summary": {
+        "text": "Temukan Keputusan yang terbuka, berikan suara, ubah pilihanmu, dan lihat hasilnya.",
+        "sourceHash": "fc4b9c95d8478a91"
+      }
+    },
+    "proposing-a-decision": {
+      "title": {
+        "text": "Mengajukan Keputusan",
+        "sourceHash": "3a20703895de04dc"
+      },
+      "summary": {
+        "text": "Minta komunitas mengambil keputusan yang mengikat.",
+        "sourceHash": "69756653393ec8b4"
+      }
+    },
+    "polls": {
+      "title": {
+        "text": "Jajak pendapat",
+        "sourceHash": "996729458535904a"
+      },
+      "summary": {
+        "text": "Ajukan pertanyaan cepat ke komunitas. Jajak pendapat melihat opini; tidak mengubah aturan apa pun secara langsung.",
+        "sourceHash": "d7fadda691d8879b"
+      },
+      "help": {
+        "text": "Jajak pendapat menanyakan hal cepat ke komunitas. Ini melihat opini dan tidak mengubah aturan apa pun.",
+        "sourceHash": "99dfd4781ce0785d"
+      }
+    },
+    "events": {
+      "title": {
+        "text": "Acara",
+        "sourceHash": "8d14f6e72de8f18a"
+      },
+      "summary": {
+        "text": "Buat acara, langsung di lokasi atau online, sekali atau berulang; konfirmasi kehadiran, pasang pengingat, bagikan, dan kelola sebagai tuan rumah.",
+        "sourceHash": "29e8adc52f9b6df9"
+      }
+    },
+    "enterprises": {
+      "title": {
+        "text": "Proyek dan usaha",
+        "sourceHash": "e1ccbac49d2ba550"
+      },
+      "summary": {
+        "text": "Inisiatif bersama dengan kacang mandiri: cari, dukung, atau mulai sendiri.",
+        "sourceHash": "8302886bb796749e"
+      }
+    },
+    "keepers": {
+      "title": {
+        "text": "Pengurus",
+        "sourceHash": "ffc8948f6b16666e"
+      },
+      "summary": {
+        "text": "Orang-orang yang menjalankan dan bertanggung jawab atas usaha. Cara bergabung, mengajukan keberatan, dan mengundurkan diri.",
+        "sourceHash": "cbe734a215f75289"
+      }
+    },
+    "commons-fund": {
+      "title": {
+        "text": "Sarana Bersama",
+        "sourceHash": "b1b09e953a4dd7c0"
+      },
+      "summary": {
+        "text": "Kacang bersama milik komunitasmu: dari mana asalnya, dan bagaimana penggunaannya.",
+        "sourceHash": "aaf9158560e5d6aa"
+      }
+    },
+    "your-balance": {
+      "title": {
+        "text": "Saldo dan riwayatmu",
+        "sourceHash": "fb3a96eb2bfcd2a8"
+      },
+      "summary": {
+        "text": "Berapa banyak kacang milikmu, apa yang ditahan, dan setiap transaksi serta hadiah.",
+        "sourceHash": "61df521108b36035"
+      },
+      "help": {
+        "text": "Kacangmu: saldo milikmu, yang ditahan dalam transaksi, serta setiap pertukaran dan hadiah. Semua mulai dari nol.",
+        "sourceHash": "a40a5f9fef426c85"
+      }
+    },
+    "credit-line": {
+      "title": {
+        "text": "Batas kreditmu",
+        "sourceHash": "dd11b44ecc1037c9"
+      },
+      "summary": {
+        "text": "Seberapa jauh saldomu bisa di bawah nol, dan bagaimana batas ini bertambah.",
+        "sourceHash": "18b609abc63667e7"
+      }
+    },
+    "gifts": {
+      "title": {
+        "text": "Mengirim hadiah",
+        "sourceHash": "5440f4f6ef954605"
+      },
+      "summary": {
+        "text": "Kirim kacang ke seseorang tanpa pertukaran barang atau jasa.",
+        "sourceHash": "7eaddf0c6cd54a04"
+      }
+    },
+    "trust-badges": {
+      "title": {
+        "text": "Lencana percaya",
+        "sourceHash": "a1d8765277383923"
+      },
+      "summary": {
+        "text": "Pendatang Baru, Warga, Pengelola, dan Tetua. Artinya, dan mengapa lencana tidak membuka hak istimewa.",
+        "sourceHash": "90926482e87ba9fa"
+      }
+    },
+    "trading-partner-limit": {
+      "title": {
+        "text": "Batas mitra 500 kacang",
+        "sourceHash": "c40110de7df3670c"
+      },
+      "summary": {
+        "text": "Mengapa bertransaksi dengan banyak orang membangun kepercayaan lebih besar daripada bertransaksi banyak hanya dengan satu orang.",
+        "sourceHash": "ce231d025501d5bc"
+      }
+    },
+    "circulation-fee": {
+      "title": {
+        "text": "Biaya peredaran",
+        "sourceHash": "e237d280aa62b186"
+      },
+      "summary": {
+        "text": "Biaya bulanan kecil untuk saldo besar agar kacang tetap berputar. 200 kacang pertama bebas biaya.",
+        "sourceHash": "c9efbe6aa5cb9873"
+      }
+    },
+    "privacy": {
+      "title": {
+        "text": "Privasimu",
+        "sourceHash": "d2a7115d0455956b"
+      },
+      "summary": {
+        "text": "Apa yang bisa dilihat orang lain tentangmu, dan pengaturan yang mengaturnya.",
+        "sourceHash": "e4a23a87e82cf7a6"
+      },
+      "help": {
+        "text": "Apa yang bisa dilihat anggota lain tentangmu, dan tombol sakelar yang mengaturnya.",
+        "sourceHash": "0a1a1831174d443b"
+      }
+    },
+    "your-area": {
+      "title": {
+        "text": "Wilayahmu",
+        "sourceHash": "b0adfdbb4ce55184"
+      },
+      "summary": {
+        "text": "Perkiraan wilayah yang digunakan komunitas global untuk menampilkan kiriman terdekat, dan cara mengubah atau menghapusnya.",
+        "sourceHash": "de4a8af84def7d30"
+      },
+      "help": {
+        "text": "Perkiraan lokasi untuk menampilkan kiriman di dekatmu. Ubah atau hapus di sini; bukan alamat tepatmu.",
+        "sourceHash": "f3099801c4d773a5"
+      }
+    },
+    "what-the-admins-can-see": {
+      "title": {
+        "text": "Yang bisa dilihat admin",
+        "sourceHash": "261de35d8123a845"
+      },
+      "summary": {
+        "text": "Dalam komunitas yang adminnya menyimpan daftar nama: apa yang tercatat tentangmu, siapa yang bisa membacanya, apa yang disimpan server, dan arti status terkonfirmasi.",
+        "sourceHash": "5960a4392bb32b4b"
+      }
+    },
+    "admins-ai-assistants": {
+      "title": {
+        "text": "Saat admin memakai asisten AI",
+        "sourceHash": "9180d368e5d11c1e"
+      },
+      "summary": {
+        "text": "Apa yang bisa dibaca asisten AI milik admin atau pemilik tentangmu, apa yang tidak pernah dilihatnya, dan siapa yang menerimanya.",
+        "sourceHash": "d693c47b7b2cbfef"
+      }
+    },
+    "blocking": {
+      "title": {
+        "text": "Memblokir seseorang",
+        "sourceHash": "f2ddac8bd6e31ad5"
+      },
+      "summary": {
+        "text": "Sembunyikan kiriman dan pesan seseorang darimu, dan batalkan pemblokiran nanti jika diinginkan.",
+        "sourceHash": "9e63d5d87e52a1b9"
+      },
+      "help": {
+        "text": "Orang yang telah kamu blokir. Kiriman dan pesan mereka disembunyikan; buka blokir di sini.",
+        "sourceHash": "baecf7f0bec3735c"
+      }
+    },
+    "reporting": {
+      "title": {
+        "text": "Melaporkan masalah",
+        "sourceHash": "59274c49ac87bb2f"
+      },
+      "summary": {
+        "text": "Beri tahu moderator komunitas tentang kiriman, acara, kiriman Kabar, proyek, atau usaha.",
+        "sourceHash": "4b773ef8eef237fa"
+      }
+    },
+    "notifications": {
+      "title": {
+        "text": "Notifikasi",
+        "sourceHash": "788011833a5a0f22"
+      },
+      "summary": {
+        "text": "Pilih pemberitahuan apa saja yang masuk ke ponselmu, dan kapan acara mengingatkanmu.",
+        "sourceHash": "70c8aa586befc843"
+      },
+      "help": {
+        "text": "Pilih pemberitahuan yang kamu terima, dan kapan acara mengingatkanmu.",
+        "sourceHash": "7f7ecf01321aba59"
+      }
+    },
+    "appearance": {
+      "title": {
+        "text": "Terang dan gelap",
+        "sourceHash": "596443341c105af1"
+      },
+      "summary": {
+        "text": "Aplikasi ponsel dimulai dengan tema terang dan web app dengan tema gelap. Ubah sesukamu atau ikuti perangkatmu.",
+        "sourceHash": "31cf0aeff28a2052"
+      },
+      "help": {
+        "text": "Atur tampilan aplikasi menjadi terang atau gelap, atau ikuti pengaturan ponselmu.",
+        "sourceHash": "1ef643d6832c782a"
+      }
+    },
+    "holiday-mode": {
+      "title": {
+        "text": "Bepergian",
+        "sourceHash": "03098a2ccb21c3c2"
+      },
+      "summary": {
+        "text": "Mode Liburan menyembunyikan Penawaranmu dan menjeda permintaan baru saat kamu sedang bepergian.",
+        "sourceHash": "53d1ceef93b0a7a1"
+      }
+    },
+    "leaving-or-deleting": {
+      "title": {
+        "text": "Keluar atau menghapus akun",
+        "sourceHash": "6128699c3d7f036a"
+      },
+      "summary": {
+        "text": "Keluar dari ponsel ini, atau hapus akunmu secara permanen, dan apa yang terjadi pada kacangmu.",
+        "sourceHash": "d28cb71428dd6615"
+      }
+    },
+    "recovery": {
+      "title": {
+        "text": "Memulihkan akunmu",
+        "sourceHash": "7a6a763f943871ce"
+      },
+      "summary": {
+        "text": "Pulihkan akunmu di ponsel baru, dan lindungi dengan akun masuk yang terhubung.",
+        "sourceHash": "5235d9f9073b2e63"
+      },
+      "help": {
+        "text": "Cara mengembalikan akunmu di ponsel baru: 12 katamu, atau akun masuk yang terhubung.",
+        "sourceHash": "05fba497e5466e59"
+      }
+    },
+    "check-your-12-words": {
+      "title": {
+        "text": "12 katamu dan kunci server (pemilik)",
+        "sourceHash": "0a24c7fe8ed3b0a4"
+      },
+      "summary": {
+        "text": "Untuk pemilik komunitas. Memeriksa 12 katamu, mengambil alih atau memulihkan server dengan ponselmu, dan pemeriksaan otomatis oleh ponsel.",
+        "sourceHash": "c3a1b3cdc4e7d8df"
+      }
+    }
+  }
 }

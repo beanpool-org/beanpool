@@ -1,4 +1,754 @@
 {
-  "sections": {},
-  "pages": {}
+  "sections": {
+    "about": {
+      "title": {
+        "text": "Info su BeanPool",
+        "sourceHash": "2d9dd281fa519636"
+      },
+      "summary": {
+        "text": "Come funziona BeanPool, le regole e come si prendono le decisioni, le domande frequenti e le novità.",
+        "sourceHash": "003302493f5fd51a"
+      }
+    },
+    "getting-started": {
+      "title": {
+        "text": "Per iniziare",
+        "sourceHash": "831d0f72d242b7d1"
+      },
+      "summary": {
+        "text": "Home, iscriversi, trovare una comunità vicina, i fagioli e la comunità globale, i suoi limiti, le tue 12 parole, il tuo profilo, la barra in alto, questa guida, ricevere aiuto, usare più di una comunità e l'app web.",
+        "sourceHash": "63d6211469096565"
+      }
+    },
+    "market": {
+      "title": {
+        "text": "Mercato",
+        "sourceHash": "5238d9bd03d543e6"
+      },
+      "summary": {
+        "text": "Trovare e pubblicare Offerte e Richieste, e come funziona un accordo dall'inizio alla fine.",
+        "sourceHash": "6008ab9bf397a83a"
+      }
+    },
+    "map": {
+      "title": {
+        "text": "Mappa",
+        "sourceHash": "be176b0015c424b7"
+      },
+      "summary": {
+        "text": "Cosa sono i pin, dove va il tuo e come trovare ciò che è vicino a te.",
+        "sourceHash": "b4e17982e037f558"
+      }
+    },
+    "talk": {
+      "title": {
+        "text": "Chat",
+        "sourceHash": "449f5a775762cdc5"
+      },
+      "summary": {
+        "text": "Messaggi, gruppi e relative chat, persone e amici, chat di eventi, silenziare, menzioni e chiavi cambiate.",
+        "sourceHash": "e680a96492c72e47"
+      }
+    },
+    "pulse": {
+      "title": {
+        "text": "Polso",
+        "sourceHash": "f7a403c6cdf31e72"
+      },
+      "summary": {
+        "text": "Cosa condividono i tuoi vicini, i video Impara e come aggiungere i tuoi canali.",
+        "sourceHash": "9ab06ad52ef86462"
+      }
+    },
+    "commons": {
+      "title": {
+        "text": "Beni comuni",
+        "sourceHash": "6aa9f1a43424d37b"
+      },
+      "summary": {
+        "text": "Decisioni e votazioni, i fagioli condivisi, i tuoi gruppi, imprese e custodi. Qui trovi anche sondaggi ed eventi, visibili nel Mercato.",
+        "sourceHash": "bd9454f4374e35ae"
+      }
+    },
+    "ledger": {
+      "title": {
+        "text": "Mastro",
+        "sourceHash": "ee69eb4afc76aae0"
+      },
+      "summary": {
+        "text": "Il tuo saldo, la linea di credito, doni, badge di fiducia, il limite per partner commerciale e la tassa di circolazione.",
+        "sourceHash": "99d7457bf048947c"
+      }
+    },
+    "settings": {
+      "title": {
+        "text": "Impostazioni e sicurezza",
+        "sourceHash": "8ee717d56a807cd5"
+      },
+      "summary": {
+        "text": "Privacy e cosa vedono gli admin e i loro assistenti IA, la tua zona, bloccare e segnalare, avvisi, chiaro e scuro, Modalità vacanza per quando sei via, abbandono, recupero account e verifica delle 12 parole come proprietario.",
+        "sourceHash": "767b3834909fa76c"
+      }
+    }
+  },
+  "pages": {
+    "how-it-works": {
+      "title": {
+        "text": "Come funziona BeanPool",
+        "sourceHash": "8ee2145ba2a47e77"
+      },
+      "summary": {
+        "text": "Fagioli, scambi, offerte e richieste, e credito, in parole semplici.",
+        "sourceHash": "921252df227ae544"
+      }
+    },
+    "rules": {
+      "title": {
+        "text": "Regole e decisioni",
+        "sourceHash": "482819c153332e58"
+      },
+      "summary": {
+        "text": "Votazioni, quorum, voto segreto, chi può votare, sospensione, rimozione di un membro, custodi, coordinatori e coordinatori principali.",
+        "sourceHash": "b111b31338cdd2a3"
+      }
+    },
+    "faq": {
+      "title": {
+        "text": "Domande",
+        "sourceHash": "9a72221a27476f3e"
+      },
+      "summary": {
+        "text": "Brevi risposte alle domande più frequenti dei membri.",
+        "sourceHash": "8feb7069cb08f93d"
+      }
+    },
+    "whats-new": {
+      "title": {
+        "text": "Novità",
+        "sourceHash": "135e912e89054ffa"
+      },
+      "summary": {
+        "text": "Cosa è cambiato nell'app, spiegato in parole semplici.",
+        "sourceHash": "e1f96938296c5950"
+      }
+    },
+    "home": {
+      "title": {
+        "text": "Home",
+        "sourceHash": "3a78695388b38b5c"
+      },
+      "summary": {
+        "text": "Cos'è la Home, quali schede mostra su telefono e app web, come aggiungerle, spostarle o rimuoverle, scegliere i tuoi interessi e la privacy quando esci.",
+        "sourceHash": "a1c1ff42cd312dd2"
+      },
+      "help": {
+        "text": "Questa è la tua Home: schede su ciò di cui hai bisogno e ciò che c'è nei dintorni. Aggiungi schede in basso o tocca … per spostarle o rimuoverle.",
+        "sourceHash": "3842000d41b06fa3"
+      }
+    },
+    "joining": {
+      "title": {
+        "text": "Entrare in BeanPool",
+        "sourceHash": "4a4fa8d50d056023"
+      },
+      "summary": {
+        "text": "Due modi per entrare: una comunità, con l'invito di un membro, o la comunità globale se aperta, con 12 parole segrete o un accesso. Chiedere di entrare e invitare altri.",
+        "sourceHash": "bfa09f20fea858c6"
+      },
+      "help": {
+        "text": "Unisciti a una comunità con l'invito di un membro o alla comunità globale con 12 parole segrete o un account collegato.",
+        "sourceHash": "288300534966c3d2"
+      }
+    },
+    "finding-a-community": {
+      "title": {
+        "text": "Trovare una comunità vicina",
+        "sourceHash": "dbb0b4170f999d18"
+      },
+      "summary": {
+        "text": "Dalla comunità globale, trova una comunità vicina e chiedi di entrare, ricevi una notifica quando ne apre una, oppure creane una tu.",
+        "sourceHash": "d7fada0c8e749ecf"
+      }
+    },
+    "beans-and-the-global-community": {
+      "title": {
+        "text": "Fagioli e comunità globale",
+        "sourceHash": "e44e1649e26e9122"
+      },
+      "summary": {
+        "text": "A cosa serve la comunità globale, una comunità tra tante, e cosa vi trovi: il contrassegno 🏘️ Comunità, la comunità d'esempio Example Valley, perché i fagioli attendono lì e come trovare o avviare una comunità locale.",
+        "sourceHash": "f91dcd042d53fdfb"
+      }
+    },
+    "global-community-limits": {
+      "title": {
+        "text": "Limiti della comunità globale",
+        "sourceHash": "79186984a4ee4919"
+      },
+      "summary": {
+        "text": "La comunità globale è gratuita, con pochi limiti per contenerne i costi. Gli annunci vengono archiviati 90 giorni dopo l'ultima modifica. Fino a 5 foto per annuncio, il telefono conserva i 500 annunci più vicini e puoi seguire 3 luoghi.",
+        "sourceHash": "feba3e6c852b6d3b"
+      }
+    },
+    "your-12-words": {
+      "title": {
+        "text": "Le tue 12 parole",
+        "sourceHash": "dd2264b1e132960b"
+      },
+      "summary": {
+        "text": "Le 12 parole sono la chiave del tuo account. Perché sono importanti, dove trovarle, come custodirle e come aggiungere un accesso come metodo secondario.",
+        "sourceHash": "7033308ae096c586"
+      }
+    },
+    "your-profile": {
+      "title": {
+        "text": "Il tuo profilo",
+        "sourceHash": "528d89ad72cba22e"
+      },
+      "summary": {
+        "text": "Il tuo nome, la foto, qualche parola su di te e chi può vedere i tuoi dettagli di contatto.",
+        "sourceHash": "f405b4421669fcdb"
+      }
+    },
+    "the-top-bar": {
+      "title": {
+        "text": "Barra in alto",
+        "sourceHash": "67f6e62947dde848"
+      },
+      "summary": {
+        "text": "Il fagiolo, le piccole icone che segnalano quando qualcosa richiede attenzione e i pulsanti in alto a destra.",
+        "sourceHash": "19dc6a309244ae90"
+      }
+    },
+    "the-bean": {
+      "title": {
+        "text": "Questa guida",
+        "sourceHash": "1d8917503dda7b5f"
+      },
+      "summary": {
+        "text": "Dove trovare questa guida, come effettuare ricerche al suo interno e come resta sempre aggiornata.",
+        "sourceHash": "7e694a121aa2314d"
+      }
+    },
+    "getting-help": {
+      "title": {
+        "text": "Chiedere aiuto",
+        "sourceHash": "418313b75b185ab8"
+      },
+      "summary": {
+        "text": "Dove guardare quando hai un dubbio e a chi rivolgerti.",
+        "sourceHash": "8d12d16dc2217232"
+      }
+    },
+    "communities": {
+      "title": {
+        "text": "Più di una comunità",
+        "sourceHash": "b753dd3e548b2230"
+      },
+      "summary": {
+        "text": "Fai parte di diverse comunità con un solo account, passa da una all'altra, segui la tua comunità a un nuovo indirizzo e scopri cosa mostra la comunità globale.",
+        "sourceHash": "71e99c6bbffadcbe"
+      }
+    },
+    "web-app": {
+      "title": {
+        "text": "Usare BeanPool nel browser web",
+        "sourceHash": "1daaa01a91ba4b17"
+      },
+      "summary": {
+        "text": "L'app web fa quasi tutto ciò che fa l'app per telefono. Accedere alla comunità globale da browser, recuperare l'account con il login, sincronizzarlo sul telefono e dove i pulsanti hanno nomi diversi.",
+        "sourceHash": "8afd3ad2f9117fd5"
+      }
+    },
+    "browsing-the-market": {
+      "title": {
+        "text": "Esplorare il mercato",
+        "sourceHash": "ab1b6bf5f734c023"
+      },
+      "summary": {
+        "text": "Trova Offerte e Richieste tramite ricerca, filtri e distanza.",
+        "sourceHash": "e73e882abbebfa8d"
+      },
+      "help": {
+        "text": "Offerte e Richieste dalle persone vicine. Cerca, filtra per categoria o distanza, oppure tocca + PUBBLICA per inserire il tuo annuncio.",
+        "sourceHash": "0bc8b01c4d9effb6"
+      }
+    },
+    "posting": {
+      "title": {
+        "text": "Pubblicare un'offerta o richiesta",
+        "sourceHash": "e218de31c1bbad00"
+      },
+      "summary": {
+        "text": "Pubblica qualcosa che sai fare o che puoi offrire, oppure qualcosa di cui hai bisogno.",
+        "sourceHash": "9ffa9b1e66834bc0"
+      }
+    },
+    "my-deals": {
+      "title": {
+        "text": "I miei accordi",
+        "sourceHash": "bfad6bb30e1876c5"
+      },
+      "summary": {
+        "text": "Un unico posto per ogni scambio in corso, ogni tuo annuncio e le transazioni passate.",
+        "sourceHash": "8772e2ee242712d3"
+      },
+      "help": {
+        "text": "Tutti i tuoi accordi in corso e i tuoi annunci. Gli accordi che richiedono una tua azione sono in alto.",
+        "sourceHash": "3ec4be8c87368ed9"
+      }
+    },
+    "a-deal-step-by-step": {
+      "title": {
+        "text": "Accordo passo dopo passo",
+        "sourceHash": "d2b29952cde1ab00"
+      },
+      "summary": {
+        "text": "Dalla richiesta al pagamento, sia per un'Offerta che per una Richiesta, fino alla recensione.",
+        "sourceHash": "88d4362d08a13bc5"
+      }
+    },
+    "when-a-deal-goes-wrong": {
+      "title": {
+        "text": "Se un accordo va storto",
+        "sourceHash": "190bfad1746f9e84"
+      },
+      "summary": {
+        "text": "Annullare un accordo e cosa succede quando non si riesce a trovare un'intesa.",
+        "sourceHash": "a68c0d7af60988b4"
+      }
+    },
+    "map-pins": {
+      "title": {
+        "text": "Cosa mostra la mappa",
+        "sourceHash": "dbd1bae516674246"
+      },
+      "summary": {
+        "text": "I pin sulla Mappa, il significato dei colori e i pulsanti intorno ad essi.",
+        "sourceHash": "79dec90cc1871495"
+      },
+      "help": {
+        "text": "Vicino a te: i pin verdi sono Offerte, arancioni sono Richieste, viola sono eventi. Tocca un pin per vederlo.",
+        "sourceHash": "0dae9edef568b7cd"
+      }
+    },
+    "pin-locations": {
+      "title": {
+        "text": "Dove va il tuo pin",
+        "sourceHash": "271264e11ffa7eaf"
+      },
+      "summary": {
+        "text": "Chi può vedere la posizione dei tuoi annunci ed eventi e come proteggere la privacy della tua abitazione.",
+        "sourceHash": "a6ef3083e3ca4bfc"
+      }
+    },
+    "near-you": {
+      "title": {
+        "text": "Trovare cose vicino a te",
+        "sourceHash": "21bac241e8aef2ca"
+      },
+      "summary": {
+        "text": "Mostra solo gli annunci entro una certa distanza da te o da qualsiasi punto tu scelga.",
+        "sourceHash": "5158de7099e0e89b"
+      }
+    },
+    "messages": {
+      "title": {
+        "text": "Messaggi",
+        "sourceHash": "04d7b48339271ea6"
+      },
+      "summary": {
+        "text": "Avvia una chat, invia foto, rispondi, invia reazioni, modifica, elimina, silenzia e gestisci la privacy.",
+        "sourceHash": "d97a6ef5d498fdde"
+      },
+      "help": {
+        "text": "Le tue chat. Le chat individuali sono protette da crittografia end-to-end. Tocca una chat per aprirla.",
+        "sourceHash": "bb7067d935067660"
+      }
+    },
+    "groups": {
+      "title": {
+        "text": "Gruppi",
+        "sourceHash": "39bbb719fa2b9d22"
+      },
+      "summary": {
+        "text": "I tuoi gruppi e le loro chat, conversare, creare un gruppo, invitare persone, entrare su invito e le votazioni interne del gruppo.",
+        "sourceHash": "4fa880d88c4b646f"
+      },
+      "help": {
+        "text": "I tuoi gruppi e le chat. Crea un gruppo, invita persone o aprine uno per parlare e votare insieme.",
+        "sourceHash": "ae3496f349eba2b3"
+      }
+    },
+    "people": {
+      "title": {
+        "text": "Persone e amici",
+        "sourceHash": "99d59d29a0f3c756"
+      },
+      "summary": {
+        "text": "Trovare membri della comunità, i loro profili e badge di fiducia, e contrassegnare gli amici per accorgersi se qualcuno esce.",
+        "sourceHash": "4be4971d826d83fe"
+      },
+      "help": {
+        "text": "Membri della tua comunità. Tocca una persona per visualizzarne il profilo, Offerte, Richieste e badge.",
+        "sourceHash": "d90b46866bc2bb6f"
+      }
+    },
+    "event-chat": {
+      "title": {
+        "text": "Chat di eventi",
+        "sourceHash": "9c298662a4d6fc3e"
+      },
+      "summary": {
+        "text": "Parla con gli organizzatori e con tutti i partecipanti all'evento.",
+        "sourceHash": "ae8ca7988e16e019"
+      }
+    },
+    "mute": {
+      "title": {
+        "text": "Silenziare chat",
+        "sourceHash": "8a491f4109c925c7"
+      },
+      "summary": {
+        "text": "Silenzia una chat — di una persona, di un gruppo o di un'impresa — per 8 ore, una settimana o per sempre.",
+        "sourceHash": "ce143abea39ce423"
+      }
+    },
+    "mentions": {
+      "title": {
+        "text": "Menzioni",
+        "sourceHash": "2e133ecc601b188f"
+      },
+      "summary": {
+        "text": "Digita @ per menzionare qualcuno in chat e controlla dove sei stato menzionato.",
+        "sourceHash": "265d8fd594c5af23"
+      }
+    },
+    "key-changed": {
+      "title": {
+        "text": "Quando cambia una chiave o un nome",
+        "sourceHash": "79c7dc48aa148094"
+      },
+      "summary": {
+        "text": "Perché una chat smette di inviare, come verificare il codice con l'altra persona e quando proseguire.",
+        "sourceHash": "c7a3e58ca019f963"
+      }
+    },
+    "the-pulse": {
+      "title": {
+        "text": "The Pulse",
+        "sourceHash": "a974f2e05f105a24"
+      },
+      "summary": {
+        "text": "Cosa creano e condividono altrove i tuoi vicini, raccolto in un unico feed.",
+        "sourceHash": "999659aebbfe69d2"
+      },
+      "help": {
+        "text": "Link condivisi o creati dai tuoi vicini altrove, in un solo feed. Tocca per aprirli.",
+        "sourceHash": "1d19387da6116082"
+      }
+    },
+    "learn": {
+      "title": {
+        "text": "Spazio Impara",
+        "sourceHash": "498e66e5947ca0c3"
+      },
+      "summary": {
+        "text": "Brevi video su BeanPool e le relative pagine della guida a cui fanno riferimento.",
+        "sourceHash": "4d2fdf4c850fe47f"
+      }
+    },
+    "your-channels": {
+      "title": {
+        "text": "Condividere i tuoi canali",
+        "sourceHash": "e47ac70a91b21162"
+      },
+      "summary": {
+        "text": "Porta i tuoi canali YouTube, blog, Instagram e altro all'interno di Polso.",
+        "sourceHash": "bc9819c938b91f04"
+      }
+    },
+    "decisions": {
+      "title": {
+        "text": "Votare una Decisione",
+        "sourceHash": "67b17269f83d1030"
+      },
+      "summary": {
+        "text": "Trova le Decisioni aperte, vota, modifica il tuo voto e guarda i risultati.",
+        "sourceHash": "fc4b9c95d8478a91"
+      }
+    },
+    "proposing-a-decision": {
+      "title": {
+        "text": "Proporre una Decisione",
+        "sourceHash": "3a20703895de04dc"
+      },
+      "summary": {
+        "text": "Chiedi alla comunità di prendere una decisione vincolante.",
+        "sourceHash": "69756653393ec8b4"
+      }
+    },
+    "polls": {
+      "title": {
+        "text": "Sondaggi",
+        "sourceHash": "996729458535904a"
+      },
+      "summary": {
+        "text": "Fai una domanda veloce alla comunità. I sondaggi rilevano le opinioni; non cambiano nulla di per sé.",
+        "sourceHash": "d7fadda691d8879b"
+      },
+      "help": {
+        "text": "Un sondaggio pone una domanda rapida alla comunità. Mostra le opinioni; non cambia nulla da solo.",
+        "sourceHash": "99dfd4781ce0785d"
+      }
+    },
+    "events": {
+      "title": {
+        "text": "Eventi",
+        "sourceHash": "8d14f6e72de8f18a"
+      },
+      "summary": {
+        "text": "Crea un evento, di persona o online, singolo o ricorrente; conferma la partecipazione, ricevi promemoria, condividilo e gestiscilo come organizzatore.",
+        "sourceHash": "29e8adc52f9b6df9"
+      }
+    },
+    "enterprises": {
+      "title": {
+        "text": "Progetti e imprese",
+        "sourceHash": "e1ccbac49d2ba550"
+      },
+      "summary": {
+        "text": "Iniziative condivise con i propri fagioli: cercane una, sostienila o avviane una nuova.",
+        "sourceHash": "8302886bb796749e"
+      }
+    },
+    "keepers": {
+      "title": {
+        "text": "Custodi",
+        "sourceHash": "ffc8948f6b16666e"
+      },
+      "summary": {
+        "text": "Le persone che gestiscono un'impresa e ne rispondono. Come unirsi, opporsi e dimettersi.",
+        "sourceHash": "cbe734a215f75289"
+      }
+    },
+    "commons-fund": {
+      "title": {
+        "text": "I Beni comuni",
+        "sourceHash": "b1b09e953a4dd7c0"
+      },
+      "summary": {
+        "text": "I fagioli condivisi della tua comunità: da dove arrivano e come vengono spesi.",
+        "sourceHash": "aaf9158560e5d6aa"
+      }
+    },
+    "your-balance": {
+      "title": {
+        "text": "Saldo e cronologia",
+        "sourceHash": "fb3a96eb2bfcd2a8"
+      },
+      "summary": {
+        "text": "Quanti fagioli hai, quanto è bloccato e ogni scambio e regalo effettuato.",
+        "sourceHash": "61df521108b36035"
+      },
+      "help": {
+        "text": "I tuoi Fagioli: saldo disponibile, importi bloccati in accordi, scambi e doni. Tutti partono da zero.",
+        "sourceHash": "a40a5f9fef426c85"
+      }
+    },
+    "credit-line": {
+      "title": {
+        "text": "Linea di credito",
+        "sourceHash": "dd11b44ecc1037c9"
+      },
+      "summary": {
+        "text": "Quanto puoi andare sotto zero e come aumenta questa disponibilità.",
+        "sourceHash": "18b609abc63667e7"
+      }
+    },
+    "gifts": {
+      "title": {
+        "text": "Inviare un dono",
+        "sourceHash": "5440f4f6ef954605"
+      },
+      "summary": {
+        "text": "Invia fagioli a qualcuno, senza alcuno scambio.",
+        "sourceHash": "7eaddf0c6cd54a04"
+      }
+    },
+    "trust-badges": {
+      "title": {
+        "text": "Badge di fiducia",
+        "sourceHash": "a1d8765277383923"
+      },
+      "summary": {
+        "text": "Nuovo arrivato, Residente, Custode e Saggio. Cosa significano e perché non sbloccano privilegi.",
+        "sourceHash": "90926482e87ba9fa"
+      }
+    },
+    "trading-partner-limit": {
+      "title": {
+        "text": "Limite di 500 fagioli per partner",
+        "sourceHash": "c40110de7df3670c"
+      },
+      "summary": {
+        "text": "Perché scambiare con molte persone crea più fiducia rispetto a fare molti scambi con una sola.",
+        "sourceHash": "ce231d025501d5bc"
+      }
+    },
+    "circulation-fee": {
+      "title": {
+        "text": "Tassa di circolazione",
+        "sourceHash": "e237d280aa62b186"
+      },
+      "summary": {
+        "text": "Una piccola quota mensile sui saldi elevati per far circolare i fagioli. I primi 200 sono esenti.",
+        "sourceHash": "c9efbe6aa5cb9873"
+      }
+    },
+    "privacy": {
+      "title": {
+        "text": "La tua privacy",
+        "sourceHash": "d2a7115d0455956b"
+      },
+      "summary": {
+        "text": "Cosa possono vedere gli altri su di te e le impostazioni per controllarlo.",
+        "sourceHash": "e4a23a87e82cf7a6"
+      },
+      "help": {
+        "text": "Cosa possono vedere gli altri membri su di te e gli interruttori per gestirlo.",
+        "sourceHash": "0a1a1831174d443b"
+      }
+    },
+    "your-area": {
+      "title": {
+        "text": "La tua zona",
+        "sourceHash": "b0adfdbb4ce55184"
+      },
+      "summary": {
+        "text": "L'area approssimativa che la comunità globale usa per mostrarti annunci vicini, e come cambiarla o rimuoverla.",
+        "sourceHash": "de4a8af84def7d30"
+      },
+      "help": {
+        "text": "L'area approssimativa usata per mostrarti annunci vicini. Modificala o cancellala qui; non è mai il tuo indirizzo esatto.",
+        "sourceHash": "f3099801c4d773a5"
+      }
+    },
+    "what-the-admins-can-see": {
+      "title": {
+        "text": "Cosa possono vedere gli admin",
+        "sourceHash": "261de35d8123a845"
+      },
+      "summary": {
+        "text": "In una comunità i cui admin tengono una lista nomi: cosa contiene su di te, chi può leggerla, cosa conserva il server e cosa significa essere confermati.",
+        "sourceHash": "5960a4392bb32b4b"
+      }
+    },
+    "admins-ai-assistants": {
+      "title": {
+        "text": "Quando un admin usa l'assistente IA",
+        "sourceHash": "9180d368e5d11c1e"
+      },
+      "summary": {
+        "text": "Cosa può leggere su di te l'assistente IA di un proprietario o admin, cosa non vede mai e chi lo riceve.",
+        "sourceHash": "d693c47b7b2cbfef"
+      }
+    },
+    "blocking": {
+      "title": {
+        "text": "Bloccare qualcuno",
+        "sourceHash": "f2ddac8bd6e31ad5"
+      },
+      "summary": {
+        "text": "Nascondi i post e i messaggi di qualcuno e ripristinali in seguito se lo desideri.",
+        "sourceHash": "9e63d5d87e52a1b9"
+      },
+      "help": {
+        "text": "Persone che hai bloccato. I loro post e messaggi sono nascosti; sblocca qualcuno qui.",
+        "sourceHash": "baecf7f0bec3735c"
+      }
+    },
+    "reporting": {
+      "title": {
+        "text": "Segnalare un problema",
+        "sourceHash": "59274c49ac87bb2f"
+      },
+      "summary": {
+        "text": "Segnala ai moderatori della comunità un post, un evento, un post su Polso, un progetto o un'impresa.",
+        "sourceHash": "4b773ef8eef237fa"
+      }
+    },
+    "notifications": {
+      "title": {
+        "text": "Notifiche",
+        "sourceHash": "788011833a5a0f22"
+      },
+      "summary": {
+        "text": "Scegli quali avvisi ricevere sul telefono e quando ricevere promemoria per gli eventi.",
+        "sourceHash": "70c8aa586befc843"
+      },
+      "help": {
+        "text": "Scegli quali avvisi ricevere e quando ricevere i promemoria per gli eventi.",
+        "sourceHash": "7f7ecf01321aba59"
+      }
+    },
+    "appearance": {
+      "title": {
+        "text": "Chiaro e scuro",
+        "sourceHash": "596443341c105af1"
+      },
+      "summary": {
+        "text": "L'app per telefono si avvia in tema chiaro, l'app web in tema scuro. Modifica l'aspetto o segui il dispositivo.",
+        "sourceHash": "31cf0aeff28a2052"
+      },
+      "help": {
+        "text": "Imposta l'app su tema chiaro o scuro, oppure segui il tuo telefono.",
+        "sourceHash": "1ef643d6832c782a"
+      }
+    },
+    "holiday-mode": {
+      "title": {
+        "text": "Assenza",
+        "sourceHash": "03098a2ccb21c3c2"
+      },
+      "summary": {
+        "text": "La Modalità vacanza nasconde le tue Offerte e mette in pausa le nuove richieste mentre sei via.",
+        "sourceHash": "53d1ceef93b0a7a1"
+      }
+    },
+    "leaving-or-deleting": {
+      "title": {
+        "text": "Lasciare o eliminare l'account",
+        "sourceHash": "6128699c3d7f036a"
+      },
+      "summary": {
+        "text": "Disconnettiti da questo telefono o elimina definitivamente il tuo account, e cosa succede ai tuoi fagioli.",
+        "sourceHash": "d28cb71428dd6615"
+      }
+    },
+    "recovery": {
+      "title": {
+        "text": "Recuperare il tuo account",
+        "sourceHash": "7a6a763f943871ce"
+      },
+      "summary": {
+        "text": "Ripristina il tuo account su un nuovo telefono e proteggilo con un metodo di accesso collegato.",
+        "sourceHash": "5235d9f9073b2e63"
+      },
+      "help": {
+        "text": "Come recuperare l'account su un nuovo telefono: le 12 parole o un account di accesso collegato.",
+        "sourceHash": "05fba497e5466e59"
+      }
+    },
+    "check-your-12-words": {
+      "title": {
+        "text": "Le 12 parole e le chiavi del server (proprietari)",
+        "sourceHash": "0a24c7fe8ed3b0a4"
+      },
+      "summary": {
+        "text": "Per i proprietari della comunità. Verificare le 12 parole, prendere il controllo o ripristinare il server dal telefono e la verifica automatica del telefono.",
+        "sourceHash": "c3a1b3cdc4e7d8df"
+      }
+    }
+  }
 }

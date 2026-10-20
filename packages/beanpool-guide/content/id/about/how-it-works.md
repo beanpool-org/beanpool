@@ -66,7 +66,7 @@ Kepercayaan menentukan seberapa dalam kamu **bisa** mencapai saldo negatif. Pena
 
 Jika kamu menurunkan Penawaran saat kamu berada di bawah nol, kamu mungkin berutang lebih banyak daripada yang sekarang ditanggung oleh Penawaranmu. Maka kamu tidak dapat berbelanja lebih banyak sampai kamu kembali berada dalam batasmu. Kamu tetap bisa memperoleh kacang, dan tidak ada yang diambil darimu.
 
-Beberapa komunitas mengonfirmasi identitas anggotanya. Di sana, anggota yang terkonfirmasi mendapatkan batas kredit secara langsung: 1.000 kacang, kecuali komunitas memilih jumlah lain. Satu Penawaran aktif membuka seluruh batas tersebut. Batas terdalam di sana bisa mencapai 5.000. Lihat "Credit line".
+Beberapa komunitas mengonfirmasi identitas anggotanya. Di sana, anggota yang terkonfirmasi mendapatkan batas kredit secara langsung: 1.000 kacang, kecuali komunitas memilih jumlah lain. Satu Penawaran aktif membuka seluruh batas tersebut. Batas terdalam di sana bisa mencapai 5.000. Lihat "Batas kredit".
 
 ## Lencana kepercayaan
 

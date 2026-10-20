@@ -22,7 +22,7 @@ Ketuk ikon kacang di kiri atas untuk membuka lembar **BEANPOOL**. Lembar ini men
 
 - **Komunitas Anda:** namanya di bagian atas, dan apakah servernya dapat dijangkau saat ini.
 - **KOMUNITASMU:** ketuk salah satu untuk beralih ke sana, atau ketuk **Tambah komunitas**. **Komunitas global** selalu menjadi salah satunya: baris keduanya menyatakan apakah kamu dapat bergabung dengannya.
-- **Cari di panduan**, lalu **Guides** (cara kerja BeanPool, aturan, pertanyaan umum), **How to use the app** (panduan ini, bagian demi bagian), dan **The BeanPool project**, dengan **What's new**.
+- **Cari di panduan**, lalu **Panduan** (cara kerja BeanPool, aturan, pertanyaan umum), **Cara menggunakan aplikasi** (panduan ini, bagian demi bagian), dan **Proyek BeanPool**, dengan **What's new**.
 - **beanpool.org:** situs web publik, dengan **Bagikan** untuk mengirimkannya ke teman.
 
 Titik kecil pada ikon kacang memberi tahumu bagaimana keadaannya:

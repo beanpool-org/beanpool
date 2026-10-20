@@ -16,6 +16,7 @@ import { MemberGuide } from './MemberGuide';
 import { BeanPoolSettingsGroup } from '../pages/SettingsPage';
 import { getBundledGuide, resetGuideSessionForTests } from '../lib/guide';
 import { showLanguage } from '../lib/language';
+import { addGuideTitles } from '../lib/guide-titles';
 import {
     validateGuide, manualSections, sectionPages, relatedPages, findGuidePage, FEEDBACK_LIVE, GUIDE_SLUGS, guideBodyHash, guideCacheKey, guideSourceHash, pseudoLocalise, setLanguage,
     type Guide, type GuidePage, type GuideSection,

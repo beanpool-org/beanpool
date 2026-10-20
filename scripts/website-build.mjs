@@ -152,11 +152,19 @@ export function extractSourceHash(content) {
     return match ? match[1] : null;
 }
 
-/** Builds the 26 alternate hreflang tags for a given page. */
+/** Builds hreflang alternate tags for a given page. For untranslated legal pages, only en and x-default are emitted. */
 export function buildHreflangTags(page) {
-    const lines = [];
     const isStatus = page === 'status.html';
+    const isLegal = LEGAL_PAGES.includes(page);
 
+    if (isLegal) {
+        return [
+            `    <link rel="alternate" hreflang="en" href="https://beanpool.org/${page}">`,
+            `    <link rel="alternate" hreflang="x-default" href="https://beanpool.org/${page}">`
+        ].join('\n');
+    }
+
+    const lines = [];
     for (const lang of LANGS) {
         let href;
         if (isStatus) {
@@ -282,11 +290,11 @@ export function renderTranslatedPage(lang, page, sourceContent, englishHtml) {
 
     // 3. Rewrite relative asset paths
     // style.css, favicon.png, bean.png, fonts/, main.js, assets/
-    out = out.replace(/\bhref="style\.css(?:\?v=[^"]*)?"/g, 'href="../style.css$1"');
+    out = out.replace(/\bhref="style\.css(\?v=[^"]*)?"/g, 'href="../style.css$1"');
     out = out.replace(/\bhref="favicon\.png"/g, 'href="../favicon.png"');
     out = out.replace(/\bsrc="bean\.png"/g, 'src="../bean.png"');
     out = out.replace(/\bhref="fonts\//g, 'href="../fonts/');
-    out = out.replace(/\bsrc="main\.js(?:\?v=[^"]*)?"/g, 'src="../main.js$1"');
+    out = out.replace(/\bsrc="main\.js(\?v=[^"]*)?"/g, 'src="../main.js$1"');
     out = out.replace(/\bsrc="assets\//g, 'src="../assets/');
     out = out.replace(/\bhref="guide\//g, 'href="../guide/');
 

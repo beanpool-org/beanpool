@@ -21,7 +21,7 @@ Di komunitas global, kartu **Temukan komunitas Anda** di **Beranda** menampilkan
 Belum berada di komunitas global? Ketuk ikon kacang di kiri atas dan, di bawah **KOMUNITASMU**, ketuk **Komunitas global**, lalu bergabunglah dengannya menggunakan akun yang kamu miliki: lihat "More than one community". Jika belum memiliki akun, ketuk **Jelajahi BeanPool di seluruh dunia** pada layar pertama aplikasi: lihat "Joining BeanPool".
 
 - Ketuk **Komunitas di sekitar Anda** untuk melihat seluruh daftarnya.
-- Komunitas dicantumkan dengan yang terdekat terlebih dahulu ketika aplikasi mengetahui lokasimu. Jika tidak, ketuk **Pakai lokasiku**, atau cari berdasarkan nama. Lebih suka tidak membagikan lokasimu? Ketuk **atau ketik kota Anda**, mulailah mengetik, dan pilih kotamu dari daftar: hanya perkiraan titik yang disimpan, dan **ubah** memilih yang lain.
+- Komunitas dicantumkan dengan yang terdekat terlebih dahulu ketika aplikasi mengetahui lokasimu. Jika tidak, ketuk **Gunakan lokasiku**, atau cari berdasarkan nama. Lebih suka tidak membagikan lokasimu? Ketuk **atau ketik kota Anda**, mulailah mengetik, dan pilih kotamu dari daftar: hanya perkiraan titik yang disimpan, dan **ubah** memilih yang lain.
 - Komunitas dengan jarak yang kurang lebih sama darimu akan diacak, sehingga tidak ada satu komunitas pun yang selalu berada di paling atas.
 - Masing-masing menampilkan seberapa jauh jaraknya dan berapa banyak anggotanya, jika komunitas telah mengatakannya.
 
@@ -29,7 +29,7 @@ Komunitas yang belum mempublikasikan alamatnya tetap dicantumkan, tetapi belum d
 
 ## Meminta bergabung
 
-- Ketuk **Minta untuk bergabung** pada suatu komunitas.
+- Ketuk **Minta bergabung** pada suatu komunitas.
 - Periksa namamu, dan tulis beberapa kata tentang dirimu, hingga 280 karakter: tempat tinggalmu, apa yang ingin kamu bagikan atau pelajari.
 - Ketuk **Kirim**.
 
@@ -59,7 +59,7 @@ Kamu tetap menjadi anggota komunitas global, dan dapat berpindah di antara kedua
 
 ## Jika kamu adalah anggota komunitas lokal
 
-Orang dapat meminta bergabung dengan komunitasmu dari komunitas global. Ketuk **Obrolan**, lalu **Warga**, lalu **Invites**: permintaan dicantumkan di bawah **Wants to join**, beserta nama mereka, kata-kata mereka, dan dari mana mereka berasal. Permintaan dijawab di aplikasi ponsel: web app tidak mencantumkannya.
+Orang dapat meminta bergabung dengan komunitasmu dari komunitas global. Ketuk **Obrolan**, lalu **Orang**, lalu **Invites**: permintaan dicantumkan di bawah **Wants to join**, beserta nama mereka, kata-kata mereka, dan dari mana mereka berasal. Permintaan dijawab di aplikasi ponsel: web app tidak mencantumkannya.
 
 - **Undang:** membuat undangan yang hanya dapat digunakan oleh akun mereka. Aplikasi mereka menemukannya dengan sendirinya, dan mereka bergabung dengan satu ketukan.
 - **Nanti saja:** mereka tidak diberi tahu. Mereka tetap melihat pesan "belum ada jawaban", dan tidak dapat meminta lagi selama 30 hari.

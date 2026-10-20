@@ -54,7 +54,7 @@ Ketuk salah satunya untuk membuka **Mengapa ini ada di komunitas lokal**. Bagian
 Layar dengan penanda tersebut menampilkan **Lembah Contoh**: sebuah komunitas fiktif, sehingga kamu dapat melihat layar komunitas lokal dengan konten di dalamnya.
 
 - **Buku kas:** contoh anggota dengan 85 Kacang, batas untuk berbelanja hingga −200, lencana kepercayaan, dan beberapa transaksi terkini, seperti roti, satu jam berkebun, dan beberapa bibit tanaman.
-- **Bersama:** Example Valley Bakery, sebuah usaha yang dikelola anggotanya, dan satu Keputusan: tempat pengomposan, dibiayai dari Kacang bersama milik Sarana Bersama.
+- **Sarana Bersama:** Example Valley Bakery, sebuah usaha yang dikelola anggotanya, dan satu Keputusan: tempat pengomposan, dibiayai dari Kacang bersama milik Sarana Bersama.
 - **Kesepakatan Saya,** di Pasar: tiga contoh kesepakatan: satu menunggu tindakanmu, satu dengan Kacang yang disimpan dengan aman, dan satu selesai.
 
 Tidak seorang pun di Example Valley yang memiliki nama asli. Kamu melihat "seorang tetangga", "Sarana Bersama", atau "Toko Roti Lembah Contoh". Tidak ada yang nyata, dan tidak ada yang milikmu.
@@ -85,10 +85,10 @@ Jika suatu hari komunitas global dapat memeriksa identitas pengguna, beberapa fi
 
 Komunitas lokal berjalan di server kecilnya sendiri, yang dirawat oleh seseorang dari warga setempat. Orang itu bisa jadi kamu.
 
-- **Berapa biayanya:** komputer cadangan yang terus menyala di rumah, atau server sewa kecil seharga beberapa dolar sebulan. Perangkat lunaknya gratis.
+- **Biayanya:** komputer cadangan yang terus menyala di rumah, atau server sewa kecil seharga beberapa dolar sebulan. Perangkat lunaknya gratis.
 - **Siapa yang menjalankannya:** kamu sendiri, di mesin milikmu sendiri atau yang kamu sewa. Server ini tidak memerlukan beanpool.org: ia dapat memiliki alamat web miliknya sendiri.
 - **Tanggung jawabmu:** laporan dari anggotamu masuk kepadamu. Data komunitas adalah milikmu untuk dicadangkan, dengan kode pemulihan. Pastikan memiliki dua pemilik, dan jaga agar server tetap menyala dan selalu diperbarui.
-- **Apa yang tidak pernah kamu lihat:** obrolan antarpribadi anggotamu. Pesan-pesan tersebut terkunci sehingga server tidak dapat membacanya.
+- **Yang tidak pernah kamu lihat:** obrolan antarpribadi anggotamu. Pesan-pesan tersebut terkunci sehingga server tidak dapat membacanya.
 - **Berapa lama penyiapannya:** sekitar setengah jam, bagi seseorang yang bisa mengikuti petunjuk.
 
 Untuk memulai, ketuk **Mulai komunitas** di lembar **Mengapa ini ada di komunitas lokal** mana pun, atau, di ponsel, pada kartu **Temukan komunitas Anda** di Beranda. Ini menampilkan tiga cara untuk menjalankannya: komputer cadangan di rumah, server sewa kecil, atau meminta bantuan di komunitas global. **Salin detail komunitas saya** menyalin nama komunitasmu, lokasi, dan cara orang dapat menghubungimu, untuk ditempelkan ke pengaturan server barumu.
@@ -100,7 +100,7 @@ Langkah-langkahnya ada di "First-time setup", dalam panduan untuk pengelola komu
 Di ponsel:
 
 - **Komunitas di sekitar Anda** mencantumkan komunitas terdekat darimu yang memilih untuk ditampilkan.
-- Ketuk **Minta untuk bergabung**: seorang anggota di sana dapat mengizinkanmu masuk. Jika komunitas hanya mengizinkan adminnya mengundang, pemilik atau admin yang akan melakukannya.
+- Ketuk **Minta bergabung**: seorang anggota di sana dapat mengizinkanmu masuk. Jika komunitas hanya mengizinkan adminnya mengundang, pemilik atau admin yang akan melakukannya.
 - Belum ada yang dekat denganmu? **Beri tahu saya jika ada yang dimulai di sini** memberi tahumu jika ada komunitas yang baru dimulai.
 
 Di web app, kartu **Temukan komunitas Anda** di Beranda menautkan setiap komunitas di dekatmu ke halamannya masing-masing.

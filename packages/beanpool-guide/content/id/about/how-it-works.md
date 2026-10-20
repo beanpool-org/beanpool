@@ -80,7 +80,7 @@ Lencana adalah bentuk pengakuan, tidak lebih. Lencana tidak membatasi tindakan a
 
 ## Biaya dan Sarana Bersama
 
-Komunitasmu memiliki kolam kacang bersama yang disebut **Bersama**. Biaya-biaya disalurkan ke dalamnya. Anggota memutuskan bersama bagaimana biaya tersebut dibelanjakan.
+Komunitasmu memiliki kolam kacang bersama yang disebut **Sarana Bersama**. Biaya-biaya disalurkan ke dalamnya. Anggota memutuskan bersama bagaimana biaya tersebut dibelanjakan.
 
 - **Biaya pasar:** 1,5% dari setiap pembayaran pasar disalurkan ke Sarana Bersama. Biaya ini dipotong dari apa yang diterima penjual.
 - **Biaya peredaran:** kacang dimaksudkan untuk terus berputar, bukan diam mengendap. 200 kacang pertama yang kamu miliki selalu bebas biaya. Di atas jumlah itu, biaya bulanan kecil disalurkan ke Sarana Bersama: 1% per bulan untuk kacang antara 200 dan 500, 1,5% antara 500 dan 1.000, 2% antara 1.000 dan 2.000, dan 2,5% di atas 2.000.

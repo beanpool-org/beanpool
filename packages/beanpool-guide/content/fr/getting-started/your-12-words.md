@@ -37,7 +37,7 @@ Le kit de récupération est une page imprimable : vos 12 mots dans l'ordre, le 
 
 Ouvrez les **Paramètres** avec le bouton des curseurs en haut de l'écran. Ensuite, au choix :
 
-- Sous **COMPTE ET IDENTITÉ**, touchez **Afficher la phrase de récupération**. Tapez **CONFIRMER**, touchez **Afficher la phrase de récupération**, et passez le contrôle de verrouillage de l'écran de votre téléphone.
+- Sous **COMPTE ET IDENTITÉ**, touchez **Afficher la phrase de récupération**. Tapez **CONFIRM**, touchez **Afficher la phrase de récupération**, et passez le contrôle de verrouillage de l'écran de votre téléphone.
 - Ou touchez **Protection du compte**, puis **Afficher mes 12 mots de récupération**, et passez le contrôle de l'écran de verrouillage de votre téléphone. Touchez **Masquer** lorsque vous avez terminé.
 
 Dans les deux cas, les mots se masquent également lorsque vous quittez cet écran, ou quittez l'application pendant 15 secondes ou plus, et le téléphone demande à nouveau la fois suivante. Un contrôle de l'écran de verrouillage qui prend plus de deux minutes n'affiche rien : touchez à nouveau.

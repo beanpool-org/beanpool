@@ -540,7 +540,11 @@ async function main(): Promise<void> {
     const walk = (dir: string) => {
         for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
             const file = path.join(dir, e.name);
-            if (e.isDirectory()) { if (!['node_modules', 'dist', '__tests__', '__fixtures__', 'generated', 'build', '.expo'].includes(e.name)) walk(file); continue; }
+            if (e.isDirectory()) {
+                // beanpool-core has no database (it runs on the phone and the web too): its tools types only name the table in comments.
+                if (!['node_modules', 'dist', '__tests__', '__fixtures__', 'generated', 'build', '.expo'].includes(e.name) && path.relative(root, file) !== path.join('packages', 'beanpool-core')) walk(file);
+                continue;
+            }
             if (!/\.(ts|tsx|mts|js|mjs|sql)$/.test(e.name) || /^(test-|bench-)|-test-harness\.ts$|\.test\.tsx?$/.test(e.name)) continue;
             if (fs.readFileSync(file, 'utf-8').includes('member_tool_state')) named.push(path.relative(root, file));
         }

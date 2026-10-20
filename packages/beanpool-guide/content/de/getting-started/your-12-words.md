@@ -30,7 +30,7 @@ Dein Konto ist kein Passwort, das von jemand anderem verwahrt wird. Es ist ein S
 Das Wiederherstellungs-Kit ist eine einzelne druckbare Seite: deine 12 Wörter der Reihe nach (englische Wörter), Name und Adresse deiner Community, das Erstellungsdatum und die Schritte, um auf einem Smartphone und in einem Webbrowser wieder Zugang zu erhalten. Es steht nicht darauf, wessen Konto es ist. Es ist optional: Du kannst auch ohne fortfahren.
 
 - **Auf dem Smartphone**: Tippe neben deinen 12 Wörtern (in der Sicherheitskopie beim Beitritt und in den Einstellungen) auf **Wiederherstellungs-Kit drucken**, um es zu drucken, oder auf **Als PDF speichern**, um ein PDF zu erstellen und seinen Speicherort zu wählen. Vor dem Speichern warnt die App: „Halte diese Datei von Cloud-Backups und Chats fern. Jeder, der sie besitzt, kann sich als du anmelden.“ Das Smartphone löscht seine eigene Kopie der PDF-Datei anschließend.
-- **In der Web-App**: Klicke neben deinen 12 Wörtern (beim Beitritt und in den Einstellungen unter **12 Wörter anzeigen**) auf **Drucke oder speichere dein Wiederherstellungs-Set**. Die App warnt: „Halte diese Seite oder Datei von Cloud-Backups und Chats fern. Jeder, der sie besitzt, kann sich als du anmelden.“ Klicke auf **Fortfahren** für den Druckdialog deines Browsers. Um ein PDF statt Papier aufzubewahren, wähle dort **Als PDF speichern**.
+- **In der Web-App**: Klicke neben deinen 12 Wörtern (beim Beitritt und in den Einstellungen unter **12 Wörter anzeigen**) auf **Drucke oder speichere dein Wiederherstellungs-Set**. Die App warnt: „Halte diese Seite oder Datei von Cloud-Backups und Chats fern. Jeder, der sie besitzt, kann sich als du anmelden.“ Klicke auf **Weiter** für den Druckdialog deines Browsers. Um ein PDF statt Papier aufzubewahren, wähle dort **Als PDF speichern**.
 - Bewahre die Seite genauso auf wie die Wörter: Jeder, der sie besitzt, kann sich als du anmelden.
 
 ## Wo du sie wiedersehen kannst
@@ -60,13 +60,13 @@ Dein Telefon prüft, ob die Wörter zu deinem Konto gehören — dieselbe Prüfu
 
 Du kannst der globalen Community allein mit 12 geheimen Wörtern beitreten, ohne ein Google-, Apple- oder Facebook-Konto (siehe „BeanPool beitreten“). Wenn dadurch ein neues Konto für dich erstellt wurde, sind deine 12 Wörter dein einziger Weg zurück. Es wird nirgendwo eine Kopie deines Kontos aufbewahrt außer auf deinem Telefon, und niemand kann sie zurücksetzen: weder BeanPool noch die Community. Wenn du sie und dein Telefon verlierst, ist das Konto für immer verloren. (Wenn du mit dem Konto beigetreten bist, das du bereits hattest, stellt eine in einer anderen Community verknüpfte Anmeldung es dort weiterhin wieder her.)
 
-Die App teilt dies bei **Sicherheitskopie** mit. Nach deinem Beitritt weist eine Karte auf der **Startseite** sowohl auf dem Smartphone als auch in der Web-App erneut darauf hin: **Dein Konto hat einen Weg zurück: deine 12 Wörter. Prüfe, ob du sie noch hast, oder füge eine Anmeldung hinzu.** Sie hindert dich niemals daran, etwas zu tun. Auf dem Smartphone:
+Die App teilt dies bei **Sicheres Backup** mit. Nach deinem Beitritt weist eine Karte auf der **Start** sowohl auf dem Smartphone als auch in der Web-App erneut darauf hin: **Dein Konto hat einen Weg zurück: deine 12 Wörter. Prüfe, ob du sie noch hast, oder füge eine Anmeldung hinzu.** Sie hindert dich niemals daran, etwas zu tun. Auf dem Smartphone:
 
 - **✕** blendet die Karte aus. Sie erscheint einmal nach deinem ersten Beitrag und einmal nach einer Woche wieder und verbleibt danach nur in den **Einstellungen** unter **Kontoschutz**.
 - **Meine 12 Wörter anzeigen** öffnet den **Kontoschutz**, wo du sie wieder ansehen kannst.
 - Im **Kontoschutz** blendet **Ich habe meine 12 Wörter noch** die Karte dauerhaft aus. **Anmeldung hinzufügen** bleibt dort erhalten.
 
-In der Web-App trägt die Karte die Überschrift **Ein Weg zurück**, mit **Meine 12 Wörter ansehen** und **Anmeldung hinzufügen**. **✕** blendet sie aus: Sie kehrt einmal zurück, nachdem einer deiner Beiträge online geblieben ist, und einmal, wenn deine erste Woche vorüber ist. Durch Tippen auf **Meine 12 Wörter ansehen** auf der **Startseite**-Karte werden sie angezeigt, und die Karte erscheint dort nicht mehr. Sie verbleibt ganz oben in den **Einstellungen**, bis du eine Anmeldung hinzufügst.
+In der Web-App trägt die Karte die Überschrift **Ein Weg zurück**, mit **Meine 12 Wörter ansehen** und **Anmeldung hinzufügen**. **✕** blendet sie aus: Sie kehrt einmal zurück, nachdem einer deiner Beiträge online geblieben ist, und einmal, wenn deine erste Woche vorüber ist. Durch Tippen auf **Meine 12 Wörter ansehen** auf der **Start**-Karte werden sie angezeigt, und die Karte erscheint dort nicht mehr. Sie verbleibt ganz oben in den **Einstellungen**, bis du eine Anmeldung hinzufügst.
 
 Ein mit 12 Wörtern erstelltes Konto startet in seiner ersten Woche auch mit engeren Grenzen als eines, das mit einer Anmeldung erstellt wurde. Siehe „Ein Problem melden“ bezüglich seiner Limits und der Gründe dafür.
 
@@ -76,7 +76,7 @@ Du kannst später von jedem Smartphone oder Browser aus, in dem du in deinem Kon
 
 Wenn der Schlüsseltresor von BeanPool bereits eine Kopie deines Kontos aufbewahrt, ist diese Kopie ebenfalls ein Weg zurück. Die App zeigt dann die „Ein Weg zurück“-Karte nicht an. **Anmeldung hinzufügen** wird dennoch unaufdringlich im **Kontoschutz** in den **Einstellungen** angeboten, da sie die 12-Wörter-Limits aufhebt.
 
-- Tippe auf **Anmeldung hinzufügen**: auf der Karte oder in den **Einstellungen** unter **Kontoschutz**. Bei **Sicherheitskopie** heißt die Schaltfläche **Eine Anmeldung als zweiten Weg zurück hinzufügen**.
+- Tippe auf **Anmeldung hinzufügen**: auf der Karte oder in den **Einstellungen** unter **Kontoschutz**. Bei **Sicheres Backup** heißt die Schaltfläche **Eine Anmeldung als zweiten Weg zurück hinzufügen**.
 - Tippe auf **Weiter mit Google**, **Weiter mit Facebook** oder auf einem iPhone auf **Weiter mit Apple** und melde dich einmal an. Die App fragt möglicherweise zuerst nach der Bildschirmsperre deines Telefons.
 - **Anmeldung hinzugefügt** bestätigt den Erfolg. Dein Konto hat nun die üblichen Limits für neue Konten, und diese Anmeldung stellt es wieder her, wenn du dein Smartphone verlierst, genau wie bei jemandem, der damit beigetreten ist. Siehe „Dein Konto wiederherstellen“, wer die dafür aufbewahrte Kopie öffnen kann.
 

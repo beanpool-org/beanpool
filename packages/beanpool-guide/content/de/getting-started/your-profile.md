@@ -18,7 +18,7 @@ source-hash: 7adea0e9b76c043c
 
 Tippe in der Web-App auf **Profil bearbeiten**, ändere das Foto mit **Kamera** oder **Galerie** und tippe auf **Profiländerungen speichern**.
 
-Du kannst in den Einstellungen auch auf **Einrichtung erneut ausführen** tippen. Es führt dich noch einmal durch deinen Namen und dein Foto, deinen ungefähren Aufenthaltsort (in der globalen Community in der Smartphone-App) und die kurze Tour darüber, wie BeanPool funktioniert. Lege dein Gebiet im Webbrowser in den **Einstellungen** unter **Dein Gebiet** fest.
+Du kannst in den Einstellungen auch auf **Einrichtung erneut ausführen** tippen. Es führt dich noch einmal durch deinen Namen und dein Foto, deinen ungefähren Aufenthaltsort (in der globalen Community in der Smartphone-App) und die kurze Tour darüber, wie BeanPool funktioniert. Lege dein Gebiet im Webbrowser in den **Einstellungen** unter **Deine Gegend** fest.
 
 ## Bevor du etwas veröffentlichst
 

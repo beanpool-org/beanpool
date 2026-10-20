@@ -14,15 +14,15 @@ Auf dem Smartphone ist die Leiste am oberen Bildschirmrand auf jedem Tab gleich.
 - **Die „Braucht dich“-Symbole:** Nur solange etwas auf dich wartet.
 - **Das ?-Symbol, das Einladungssymbol, die Einstellungen und dein Foto.**
 
-In einem Webbrowser ist die obere Leiste einfacher gestaltet. Sie enthält den Verbindungsstatus links, den Namen der Seite sowie dein Profil, das **?** und die Einstellungen rechts. Sie hat kein Bohnen-Menüblatt, keine „Braucht dich“-Symbole und kein Einladungssymbol: **Einladungen** befindet sich unter **Personen**. Die Tabs befinden sich am unteren Rand oder auf einem breiten Bildschirm auf der linken Seite.
+In einem Webbrowser ist die obere Leiste einfacher gestaltet. Sie enthält den Verbindungsstatus links, den Namen der Seite sowie dein Profil, das **?** und die Einstellungen rechts. Sie hat kein Bohnen-Menüblatt, keine „Braucht dich“-Symbole und kein Einladungssymbol: **Einladungen** befindet sich unter **Leute**. Die Tabs befinden sich am unteren Rand oder auf einem breiten Bildschirm auf der linken Seite.
 
 ## Die Bohne
 
 Tippe oben links auf die Bohne, um die **BeanPool**-Ansicht zu öffnen. Sie zeigt:
 
 - **Deine Community:** Ihr Name oben und ob sie derzeit erreichbar ist.
-- **Deine Communitys:** Tippe auf eine, um zu ihr zu wechseln, oder tippe auf **Community hinzufügen**. Die **Globale Community** ist immer eine davon: Ihre zweite Zeile gibt an, ob du ihr beitreten kannst.
-- **Im Leitfaden suchen**, danach **Leitfäden** (wie BeanPool funktioniert, die Regeln, häufige Fragen), **Bedienung der App** (dieser Leitfaden, Abschnitt für Abschnitt) und **Das BeanPool-Projekt** mit **What's new**.
+- **Deine Communitys:** Tippe auf eine, um zu ihr zu wechseln, oder tippe auf **Community hinzufügen**. Die **Globale Gemeinschaft** ist immer eine davon: Ihre zweite Zeile gibt an, ob du ihr beitreten kannst.
+- **Im Leitfaden suchen**, danach **Leitfäden** (wie BeanPool funktioniert, die Regeln, häufige Fragen), **So nutzt du die App** (dieser Leitfaden, Abschnitt für Abschnitt) und **Das BeanPool-Projekt** mit **What's new**.
 - **beanpool.org:** Die öffentliche Website, mit **Teilen**, um sie an Freunde zu senden.
 
 Der kleine Punkt auf der Bohne zeigt dir den aktuellen Status:
@@ -83,6 +83,6 @@ Manchmal erscheint ein grüner Balken unter der oberen Leiste:
 
 ## Die Tabs
 
-Unter der oberen Leiste befinden sich die Tabs: **Startseite**, **Markt**, **Karte**, **Chat**, **Gemeingut** und **Buch**. Der Name jedes Tabs steht über seinem Symbol. Auf dem Smartphone zeigt eine lokale Community ohne Bohnen weder **Gemeingut** noch **Buch** an. Die globale Community zeigt beide, mit Beispielen aus einer lokalen Community. Siehe „Bohnen und die globale Community“.
+Unter der oberen Leiste befinden sich die Tabs: **Start**, **Markt**, **Karte**, **Chat**, **Gemeingut** und **Buch**. Der Name jedes Tabs steht über seinem Symbol. Auf dem Smartphone zeigt eine lokale Community ohne Bohnen weder **Gemeingut** noch **Buch** an. Die globale Community zeigt beide, mit Beispielen aus einer lokalen Community. Siehe „Bohnen und die globale Community“.
 
 Tippe auf einer langen Seite auf den Tab, auf dem du dich bereits befindest, um direkt wieder nach ganz oben zu springen. Dies funktioniert auf jedem Tab außer der **Karte**.

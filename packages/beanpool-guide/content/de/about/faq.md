@@ -58,7 +58,7 @@ Bohnen sind ein Versprechen zwischen Menschen, die man wiederfinden kann. Jeder 
 
 ## Wie gründe ich eine Community?
 
-Tippe in der App auf **Eine Gemeinschaft gründen**. Eine Community läuft auf ihrem eigenen kleinen Server: Ein ausgedienter Computer zu Hause oder ein gemieteter für wenige Dollar im Monat. Die Software ist kostenlos und die Community benötigt nicht beanpool.org. Siehe „Bohnen und die globale Community“.
+Tippe in der App auf **Eine Community gründen**. Eine Community läuft auf ihrem eigenen kleinen Server: Ein ausgedienter Computer zu Hause oder ein gemieteter für wenige Dollar im Monat. Die Software ist kostenlos und die Community benötigt nicht beanpool.org. Siehe „Bohnen und die globale Community“.
 
 ## Kann ich mehr als einer Community angehören?
 

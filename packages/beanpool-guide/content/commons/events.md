@@ -95,4 +95,4 @@ If you host it, each of the next dates has:
 - **Change this date only:** that day is cancelled and you make a one-off on another date.
 - **Bring it back:** a cancelled date is on again.
 
-**Cancel event** cancels every date. The event's chat stays open until its last date.
+**Cancel event** cancels every date, and its chat becomes read-only. Until then the chat stays open between dates, up to the last date; with no **Until**, it stays open until you cancel the event.

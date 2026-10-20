@@ -1067,8 +1067,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 .catch(err => console.error('[MarketplacePage] Failed to fetch given ratings:', err));
         }
         
-        // Fetch requests if this is a Need
-        if (selectedPost.type === 'need') {
+        // Fetch requests if this is a Need or a lendable Offer
+        if (selectedPost.type === 'need' || selectedPost.lendable) {
             const txPromise = myTransactions.length > 0
                 ? Promise.resolve(myTransactions)
                 : (identity
@@ -1079,16 +1079,18 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     const filtered = txs.filter(t => t.postId === selectedPost.id && t.status === 'requested');
                     const enriched = await Promise.all(filtered.map(async req => {
                         try {
-                            // For needs, the author is the buyer, so the requester is the seller
-                            const cached = ratingsCacheRef.current.get(req.sellerPublicKey);
+                            const requesterKey = selectedPost.type === 'need' ? req.sellerPublicKey : (req.buyerPublicKey || req.sellerPublicKey);
+                            const cached = requesterKey ? ratingsCacheRef.current.get(requesterKey) : undefined;
                             let r: { average: number; count: number };
                             if (cached && Date.now() - cached.fetchedAt <= RATINGS_CACHE_TTL_MS) {
                                 r = cached.rating;
-                            } else {
-                                r = await getMemberRatings(req.sellerPublicKey);
+                            } else if (requesterKey) {
+                                r = await getMemberRatings(requesterKey);
                                 // Written back so a re-run (a new bid arriving) does not refetch
                                 // every existing bidder's rating again.
-                                ratingsCacheRef.current.set(req.sellerPublicKey, { rating: r, fetchedAt: Date.now() });
+                                ratingsCacheRef.current.set(requesterKey, { rating: r, fetchedAt: Date.now() });
+                            } else {
+                                r = { average: 0, count: 0 };
                             }
                             return { ...req, bidderRating: r };
                         } catch(e) { return { ...req, bidderRating: { average: 0, count: 0 } }; }
@@ -1658,8 +1660,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                      </div>
                  )}
 
-                {/* 1.5 Pending Requests (For Authors of Needs) */}
-                {isOwnPost && selectedPost.type === 'need' && selectedPost.status === 'active' && requests.length > 0 && (
+                {/* 1.5 Pending Requests (For Authors of Needs or Lendable Offers) */}
+                {isOwnPost && (selectedPost.type === 'need' || selectedPost.lendable) && selectedPost.status === 'active' && requests.length > 0 && (
                     <div className="mt-4 bg-oat-50 dark:bg-nature-950 border border-amber-200 dark:border-amber-900/50 rounded-xl p-3 shadow-sm">
                         <p className="font-bold text-amber-800 dark:text-amber-500 text-sm mb-2 text-center">
                             {t('✋ Fulfillment Requests ({n})', { n: requests.length })}
@@ -1672,7 +1674,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             onClick={() => { if (onOpenProfile) onOpenProfile(req.sellerPublicKey || req.buyerPublicKey); }}
                                             className="font-bold text-nature-900 dark:text-white text-sm text-left hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors flex items-center gap-1"
                                         >
-                                            <span className="text-amber-600 dark:text-amber-400">🤝</span> <span className="underline decoration-nature-300 underline-offset-2">{req.sellerCallsign}</span>
+                                            <span className="text-amber-600 dark:text-amber-400">🤝</span> <span className="underline decoration-nature-300 underline-offset-2">{req.sellerCallsign || req.buyerCallsign}</span>
                                         </button>
                                         <span className="text-xs text-amber-500 mt-0.5 font-semibold">
                                             {/* The English has always said "reviews" and "hours" whatever the count: both forms keep it. */}

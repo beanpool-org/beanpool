@@ -295,6 +295,40 @@ describe('the Market in the pseudo-locale', () => {
         allThroughT(10);
     });
 
+    it('requests word quantity in the price’s unit: daily says days, fixed lendable loan says days, hourly says hours', async () => {
+        await showIn('xx');
+
+        // Hourly deal unchanged: "{n} hours estimated"
+        const hourlyNeed = { ...need, id: 'need-hourly', authorPublicKey: ME, authorCallsign: 'Mia', priceType: 'hourly' };
+        stubNode([hourlyNeed]);
+        const hourlyBid = tx({ id: 'bid-hourly', postId: 'need-hourly', status: 'requested', buyerPublicKey: ME, sellerPublicKey: 'bob-pk', sellerCallsign: 'Bob', hours: 3 });
+        const v1 = render(<MarketplacePage identity={identity} isMember={true} openPostId="need-hourly" onPostOpened={() => {}} transactions={[hourlyBid]} />);
+        await screen.findByText(xx('✋ Fulfillment Requests ({n})').replace('{n}', '1'));
+        expect(screen.getByText(xx('{n} hours estimated').replace('{n}', '3'))).toBeInTheDocument();
+        allThroughT(10);
+        v1.unmount();
+
+        // Daily deal as days: "{n} days"
+        const dailyNeed = { ...need, id: 'need-daily', authorPublicKey: ME, authorCallsign: 'Mia', priceType: 'daily' };
+        stubNode([dailyNeed]);
+        const dailyBid = tx({ id: 'bid-daily', postId: 'need-daily', status: 'requested', buyerPublicKey: ME, sellerPublicKey: 'bob-pk', sellerCallsign: 'Bob', hours: 3 });
+        const v2 = render(<MarketplacePage identity={identity} isMember={true} openPostId="need-daily" onPostOpened={() => {}} transactions={[dailyBid]} />);
+        await screen.findByText(xx('✋ Fulfillment Requests ({n})').replace('{n}', '1'));
+        expect(screen.getByText(xx('{n} days').replace('{n}', '3'))).toBeInTheDocument();
+        allThroughT(10);
+        v2.unmount();
+
+        // Fixed lendable loan as days: "for {n} days"
+        const loanOffer = { ...offer, id: 'offer-loan', authorPublicKey: ME, authorCallsign: 'Mia', priceType: 'fixed', lendable: true };
+        stubNode([loanOffer]);
+        const loanBid = tx({ id: 'bid-loan', postId: 'offer-loan', status: 'requested', buyerPublicKey: 'bob-pk', buyerCallsign: 'Bob', sellerPublicKey: ME, hours: 3 });
+        const v3 = render(<MarketplacePage identity={identity} isMember={true} openPostId="offer-loan" onPostOpened={() => {}} transactions={[loanBid]} />);
+        await screen.findByText(xx('✋ Fulfillment Requests ({n})').replace('{n}', '1'));
+        expect(screen.getByText(xx('for {n} days').replace('{n}', '3'))).toBeInTheDocument();
+        allThroughT(10);
+        v3.unmount();
+    });
+
     it('a finished trade to rate on the listing, and the rating card a release opens', async () => {
         const done = { ...offer, status: 'completed', acceptedBy: ME, pendingTransactionId: 'tx-9', audienceScope: 'public', targetGroupId: undefined, targetGroupName: undefined };
         stubNode([done]);

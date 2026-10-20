@@ -69,7 +69,8 @@ export function toolManifestProblems(m: ToolManifest): string[] {
     const out: string[] = [];
     const id = typeof m?.id === 'string' ? m.id : String(m?.id);
     const say = (s: string) => out.push(`Tool ${id}: ${s}`);
-    if (!TOOL_ID_PATTERN.test(id) || id.length > TOOL_LIMITS.idChars) {
+    // Tested as a string first: String(undefined) is 'undefined', which the pattern would pass.
+    if (typeof m?.id !== 'string' || !TOOL_ID_PATTERN.test(id) || id.length > TOOL_LIMITS.idChars) {
         say(`its id is 2 to ${TOOL_LIMITS.idChars} lowercase letters and hyphens, a letter at each end and never two hyphens together.`);
     }
     if (typeof m.name !== 'string' || m.name.trim() === '') say("its name is a word('…') sentence.");

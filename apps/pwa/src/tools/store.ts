@@ -1,7 +1,9 @@
 /**
  * The one store of every tool on the web (scratch/tools/DESIGN-tool-template-fable.md §1.6, slice T0.3): IndexedDB, one
  * object store `tool_docs`, one record per community, owner and tool, the document whole as JSON with the browser's write
- * time. The phone keeps the same rows in its community's SQLite file (T0.2); the node's private copy is T0.4.
+ * time and its last sync with the node's private copy (tools/node-copy.ts, slice T0.4). Beside each record, under the same
+ * key and `|settings`, the host's settings for that tool (the node copy's toggle). The phone keeps the same rows in its
+ * community's SQLite file (T0.2).
  *
  * The documents are the member's own (their things, their garden), so they go wherever this browser's account storage
  * goes: {@link clearToolStore} is part of lib/device-prefs.ts `clearAccountStorage`, which every sign-out and delete runs,
@@ -137,6 +139,97 @@ export async function writeToolRecord(owner: string, tool: string, record: ToolR
     }
     await run(db, (s) => s.delete(key));
     return false;
+}
+
+/**
+ * In one transaction: what is kept under `key` now, handed to `next`, and what it answers put in its place (null: nothing
+ * written). True once a value is on disk; false when nothing was written or it couldn't be, or the account has left.
+ */
+async function update(key: string, next: (current: unknown) => unknown | null): Promise<boolean> {
+    if (!accountEpochHolds()) return false;
+    const db = await openDb();
+    if (!db || !accountEpochHolds()) return false;
+    const wrote = await new Promise<boolean>((resolve) => {
+        try {
+            const tx = db.transaction(TOOL_STORE, 'readwrite');
+            const store = tx.objectStore(TOOL_STORE);
+            let put = false;
+            const req = store.get(key);
+            req.onsuccess = () => {
+                const value = next(req.result);
+                if (value !== null) { store.put(value, key); put = true; }
+            };
+            tx.oncomplete = () => resolve(put);
+            tx.onerror = () => resolve(false);
+            tx.onabort = () => resolve(false);
+        } catch {
+            resolve(false);
+        }
+    });
+    if (wrote && !accountEpochHolds()) {
+        await run(db, (s) => s.delete(key));
+        return false;
+    }
+    return wrote;
+}
+
+const same = (v: unknown, was: ToolRecord | null) =>
+    was === null ? !isRecord(v) : isRecord(v) && v.body === was.body && v.updatedAt === was.updatedAt;
+
+/** A write of the document: the body whole, this browser's time, and the last sync kept as it was. */
+export async function keepToolDoc(owner: string, tool: string, body: string, updatedAt: string): Promise<boolean> {
+    const kept = await update(toolRecordKey(owner, tool), (v) => ({ body, updatedAt, syncedAt: isRecord(v) && typeof v.syncedAt === 'string' ? v.syncedAt : null }));
+    if (kept) notifyToolStore(owner, tool);
+    return kept;
+}
+
+/** The node's copy taken (tools/node-copy.ts): kept with both times `at`, unless the record is no longer `was`. */
+export async function takeToolRecord(owner: string, tool: string, body: string, at: string, was: ToolRecord | null): Promise<boolean> {
+    const kept = await update(toolRecordKey(owner, tool), (v) => (same(v, was) ? { body, updatedAt: at, syncedAt: at } : null));
+    if (kept) notifyToolStore(owner, tool);
+    return kept;
+}
+
+/**
+ * The node keeps `body` as of `at`: the last sync becomes `at`, and the write time too unless the record moved on since
+ * `was`. `was` null: nothing was kept here, and the empty document sent is kept now.
+ */
+export async function toolRecordSent(owner: string, tool: string, was: ToolRecord | null, body: string, at: string): Promise<void> {
+    const made = await update(toolRecordKey(owner, tool), (v) => {
+        if (!isRecord(v)) return was === null ? { body, updatedAt: at, syncedAt: at } : null;
+        return { body: v.body, updatedAt: same(v, was) && was !== null ? at : v.updatedAt, syncedAt: at };
+    });
+    if (made && was === null) notifyToolStore(owner, tool);
+}
+
+/** The host's own settings for one tool, for one owner, in this browser's community. Absent fields are the defaults. */
+export interface ToolSettings {
+    /** "Keep a private copy on your community's server": the node's answer, kept here (tools/node-copy.ts). */
+    nodeCopy?: boolean;
+}
+
+const settingsKeyOf = (owner: string, tool: string) => `${toolRecordKey(owner, tool)}|settings`;
+
+export async function readToolSettings(owner: string, tool: string): Promise<ToolSettings> {
+    const db = await openDb();
+    if (!db) return {};
+    return new Promise<ToolSettings>((resolve) => {
+        try {
+            const req = db.transaction(TOOL_STORE, 'readonly').objectStore(TOOL_STORE).get(settingsKeyOf(owner, tool));
+            req.onsuccess = () => {
+                const v: unknown = req.result;
+                resolve(v && typeof v === 'object' && !Array.isArray(v) ? v as ToolSettings : {});
+            };
+            req.onerror = () => resolve({});
+        } catch {
+            resolve({});
+        }
+    });
+}
+
+/** The settings with `patch` over what is kept now. False when it couldn't be kept. */
+export function patchToolSettings(owner: string, tool: string, patch: ToolSettings): Promise<boolean> {
+    return update(settingsKeyOf(owner, tool), (v) => ({ ...(v && typeof v === 'object' && !Array.isArray(v) ? v : {}), ...patch }));
 }
 
 /** Remove my data from this browser: the document of `tool` for `owner`, gone. True once it is. */

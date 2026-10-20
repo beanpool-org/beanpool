@@ -10,6 +10,9 @@
  *   ("I already do this", "I'm starting out" with its examples and guide page) and, once, the offer of its Home card;
  *   then the tool's screen, loaded as its own chunk (tools/index.ts) and given the host (tools/host.ts).
  * - An id or a screen this build doesn't have: "This tool isn't in this version of the app", never a crash.
+ * - For a tool that asks for `node-copy` (slice T0.4, tools/node-copy.ts): its open reconciles this browser's copy with
+ *   the server's, a write is followed five seconds later by one sync, Settings has the toggle (a round trip the setting
+ *   waits for), and Remove my data takes the server's copy first, or nothing at all.
  *
  * `tools` and `apps` default to the registries; a test registers a tool through them. App's state and navigateToTab's
  * context for it are tools/route.ts.
@@ -17,14 +20,15 @@
 import { Component, useCallback, useEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from 'react';
 import {
     TOOLS, TOOL_SHELVES, t, toolById, toolHomeCardType, toolsOnShelf, word,
-    type AnyToolScreenProps, type ToolLine, type ToolManifest, type ToolShelf, type WordKey,
+    type AnyToolScreenProps, type ToolCopyOutcome, type ToolLine, type ToolManifest, type ToolShelf, type WordKey,
 } from '@beanpool/core';
 import type { BeanPoolIdentity } from '../lib/identity';
 import { useCommunityInfo } from '../lib/features';
 import { getNodeApiUrl } from '../lib/api';
 import { TOOL_APPS, type WebToolApp } from '../tools';
 import { isEmptyDoc, readDoc, useToolDoc, type ComposerDraft, type WebHostContext, webHostFor } from '../tools/builder';
-import { readToolRecord } from '../tools/store';
+import { patchToolSettings, readToolRecord, readToolSettings } from '../tools/store';
+import { keepsNodeCopy, openToolCopy, pageNode, removeToolCopyFirst, switchToolCopy, toolCopyAfterWrite, type WebToolCopy } from '../tools/node-copy';
 import type { OpenTool } from '../tools/route';
 import { ToolButton, ToolEmpty, ToolRow, ToolSection } from '../tools/ui';
 
@@ -206,17 +210,67 @@ function ToolView({ id, open, identity, onBack, onComposer, onGuide, onAddHomeCa
     const [attempt, setAttempt] = useState(0);
     const loaded = useToolApp(id, loader, attempt);
     const owner = identity.publicKey;
-    const store = useToolDoc(manifest, owner);
+    const copyOf: WebToolCopy | null = useMemo(
+        () => (manifest && keepsNodeCopy(manifest) ? { manifest, owner: { kind: 'member', publicKey: owner }, node: pageNode() } : null),
+        [manifest, owner]);
+    const [copy, setCopy] = useState<CopyView>({ setting: undefined, note: null, busy: false, failed: null });
+    const noteRef = useRef<CopyView['note']>(null);
+    noteRef.current = copy.note;
+    const reloadRef = useRef<() => Promise<void>>(async () => {});
+    /** What a sync with the server did: its copy taken (read again), switched off elsewhere (the line, once), an older server. */
+    const heard = useCallback((outcome: ToolCopyOutcome) => {
+        if (outcome === 'taken') void reloadRef.current();
+        else if (outcome === 'switched-off') setCopy((c) => ({ ...c, setting: false, note: 'removed' }));
+        else if (outcome === 'older-node') setCopy((c) => ({ ...c, note: 'older-node' }));
+    }, []);
+    const afterWrite = useCallback(() => {
+        if (copyOf && noteRef.current !== 'older-node') toolCopyAfterWrite(copyOf, heard);
+    }, [copyOf, heard]);
+    const store = useToolDoc(manifest, owner, afterWrite);
+    reloadRef.current = store.reload;
     const info = useCommunityInfo();
     const [stack, setStack] = useState<Step[]>(() => [{ screen: open.screen, params: open.key ? { key: open.key } : {} as Record<string, string> }]);
     const [panel, setPanel] = useState<Panel>('tool');
     const [pastDoors, setPastDoors] = useState(false);
-    // Remove my data leaves the document empty, so the doors are back, as on a first open.
-    const remove = useCallback(async () => {
+    // The tool's open: the setting as this browser last heard it, then the server's answer.
+    useEffect(() => {
+        if (!copyOf) return;
+        let gone = false;
+        void (async () => {
+            const s = await readToolSettings(owner, copyOf.manifest.id);
+            if (gone) return;
+            setCopy((c) => ({ ...c, setting: s.nodeCopy }));
+            const outcome = await openToolCopy(copyOf).catch(() => 'later' as const);
+            if (!gone) heard(outcome);
+        })();
+        return () => { gone = true; };
+    }, [copyOf, owner, heard]);
+    /** The toggle: the setting follows the server's answer; with none, the switch stays and its line says why. */
+    const switchCopy = useCallback(async (on: boolean) => {
+        if (!copyOf) return;
+        setCopy((c) => ({ ...c, busy: true, failed: null }));
+        const done = await switchToolCopy(copyOf, on).catch(() => 'failed' as const);
+        if (done === 'on' || done === 'off') {
+            setCopy((c) => ({ ...c, busy: false, failed: null, setting: done === 'on', note: null }));
+            // Switching on may have taken the server's copy.
+            if (done === 'on') void reloadRef.current();
+        } else {
+            setCopy((c) => ({ ...c, busy: false, failed: done }));
+        }
+    }, [copyOf]);
+    // Remove my data: the server's copy first, or nothing. It leaves the document empty, so the doors are back, as on a
+    // first open, and the copy off (the one setting kept, so Settings says what is true).
+    const remove = useCallback(async (): Promise<RemoveOutcome> => {
+        if (copyOf && !await removeToolCopyFirst(copyOf).catch(() => false)) return 'failed';
         const gone = await store.remove();
-        if (gone) setPastDoors(false);
-        return gone;
-    }, [store.remove]);
+        if (!gone) return 'not-kept';
+        if (copyOf) {
+            await patchToolSettings(owner, copyOf.manifest.id, { nodeCopy: false });
+            setCopy({ setting: false, note: null, busy: false, failed: null });
+        }
+        setPastDoors(false);
+        return 'removed';
+    }, [store.remove, copyOf, owner]);
 
     const step = stack[stack.length - 1];
     const back = useCallback(() => {
@@ -231,7 +285,8 @@ function ToolView({ id, open, identity, onBack, onComposer, onGuide, onAddHomeCa
         navigate: (screen, params) => setStack((s) => [...s, { screen, params: { ...(params ?? {}) } }]),
         openComposer: onComposer,
         now,
-    }), [owner, identity.callsign, info, onComposer, now]);
+        nodeCopy: !!copyOf && copy.setting !== false && copy.note !== 'older-node',
+    }), [owner, identity.callsign, info, onComposer, now, copyOf, copy.setting, copy.note]);
     const docHandle = useMemo(() => ({ get: store.get, set: store.set }), [store.get, store.set]);
     const host = useMemo(() => (manifest ? webHostFor(manifest, ctx, docHandle) : null), [manifest, ctx, docHandle]);
 
@@ -261,7 +316,10 @@ function ToolView({ id, open, identity, onBack, onComposer, onGuide, onAddHomeCa
             <PageBar onBack={back} title={t(manifest.name)} icon={manifest.icon} line={lineText(row)}
                 end={<ToolMenu name={t(manifest.name)} onPick={(p) => setPanel(p)} />} />
             <div className="max-w-xl mx-auto px-4 py-4 min-w-0">
-                {panel === 'settings' && <ToolSettings manifest={manifest} onRemove={remove} />}
+                {panel === 'settings' && <ToolSettings manifest={manifest} copy={copy} onCopy={(on) => { void switchCopy(on); }} onRemove={remove} />}
+                {panel === 'tool' && copy.note === 'removed' && (
+                    <p role="status" data-testid="tool-copy-removed" className="m-0 mb-3 text-sm text-nature-700 dark:text-nature-200 break-words">{keptLine(manifest, copy)}</p>
+                )}
                 {panel === 'about' && <ToolAbout manifest={manifest} onGuide={onGuide} />}
                 {panel === 'tool' && !ready && (
                     <p className="m-0 text-sm text-nature-600 dark:text-nature-300 break-words" role="status">{t('Loading...')}</p>
@@ -355,25 +413,76 @@ function EmptyDoors({ manifest, owner, onIn, onGuide, onAddHomeCard }: {
     );
 }
 
-/** The tool's Settings: where its document is kept, and Remove my data. */
-function ToolSettings({ manifest, onRemove }: { manifest: ToolManifest; onRemove: () => Promise<boolean> }) {
+/**
+ * What this page knows of a tool's node copy: the setting as this browser last heard it (undefined: never set, so on),
+ * what this open learned (the server keeps no copies yet, or no longer keeps this one: said once), and the toggle's
+ * round trip (under way, or the last one failed).
+ */
+interface CopyView {
+    setting: boolean | undefined;
+    note: 'older-node' | 'removed' | null;
+    busy: boolean;
+    failed: 'failed' | 'older-node' | null;
+}
+type RemoveOutcome = 'removed' | 'not-kept' | 'failed';
+
+const olderNodeLine = () => t("Your community's server can't keep a copy yet, so for now it stays in this browser only.");
+const copyFailedLine = () => t("Couldn't reach your community's server, so nothing changed. Try again when you're online.");
+
+/** Where a tool's document is kept, in one sentence: this browser only, or with its private copy on the server. */
+function keptLine(manifest: ToolManifest, copy: CopyView, owner: 'member' | 'enterprise' = 'member'): string {
+    if (!keepsNodeCopy(manifest)) return t('Kept in this browser, for you only. Nothing of it leaves this browser, and signing out here removes it.');
+    if (copy.note === 'removed') {
+        return owner === 'enterprise'
+            ? t('A keeper switched off the server copy of this tool, so it is kept in this browser only. You can switch it on again in Settings.')
+            : t("Your community's server no longer keeps a copy of this tool, so it is kept in this browser only. You can switch the copy on again in Settings.");
+    }
+    if (copy.note === 'older-node') return olderNodeLine();
+    if (copy.setting === false) return t('Kept in this browser, for you only. Nothing of it leaves this browser, and signing out here removes it.');
+    return t("Kept in this browser, with a private copy on your community's server that only you can read through the app. Like everything on that server, its operator could.");
+}
+
+/** The tool's Settings: where its document is kept, the node copy's toggle (for a tool that asks for one), and Remove my data. */
+function ToolSettings({ manifest, copy, onCopy, onRemove }: {
+    manifest: ToolManifest; copy: CopyView; onCopy: (on: boolean) => void; onRemove: () => Promise<RemoveOutcome>;
+}) {
     const [confirming, setConfirming] = useState(false);
     const [said, setSaid] = useState<string | null>(null);
+    const keeps = keepsNodeCopy(manifest);
+    const on = copy.setting !== false;
     const remove = async () => {
-        const gone = await onRemove();
+        const done = await onRemove();
         setConfirming(false);
-        setSaid(gone ? t('Removed from this browser.') : t("It couldn't be removed. Try again."));
+        setSaid(done === 'removed' ? t('Removed from this browser.') : done === 'failed' ? copyFailedLine() : t("It couldn't be removed. Try again."));
     };
+    const name = t("Keep a private copy on your community's server");
     return (
         <div data-testid="tool-settings">
             <ToolSection title={t('Where it is kept')}>
-                <p data-testid="tool-kept-line" className="m-0 p-3 text-sm text-nature-800 dark:text-nature-100 break-words">
-                    {t('Kept in this browser, for you only. Nothing of it leaves this browser, and signing out here removes it.')}
-                </p>
+                <p data-testid="tool-kept-line" className="m-0 p-3 text-sm text-nature-800 dark:text-nature-100 break-words">{keptLine(manifest, copy)}</p>
+                {keeps && (
+                    <>
+                        <button type="button" role="switch" aria-checked={on} disabled={copy.busy} onClick={() => onCopy(!on)} data-testid="tool-node-copy"
+                            className="w-full min-h-[48px] px-3 py-2 flex items-center gap-3 text-left bg-transparent border-0 cursor-pointer disabled:cursor-default disabled:opacity-60 hover:bg-nature-50 dark:hover:bg-nature-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-ink-brand">
+                            <span className="min-w-0 flex-1 break-words text-sm font-semibold text-nature-900 dark:text-white">{name}</span>
+                            <span aria-hidden="true" className={`shrink-0 w-11 h-6 p-0.5 rounded-full flex ${on ? 'justify-end bg-bp-commit-fill' : 'justify-start bg-nature-300 dark:bg-nature-700'}`}>
+                                <span className="w-5 h-5 rounded-full bg-white" />
+                            </span>
+                        </button>
+                        <p data-testid="tool-node-copy-note" className="m-0 p-3 text-sm text-nature-700 dark:text-nature-200 break-words">
+                            {copy.note === 'older-node' || copy.failed === 'older-node' ? olderNodeLine() : t('One device at a time: the copy you changed last is the one kept.')}
+                        </p>
+                        {copy.failed === 'failed' && (
+                            <p role="status" data-testid="tool-node-copy-failed" className="m-0 p-3 text-sm font-semibold text-bp-ink-danger break-words">{copyFailedLine()}</p>
+                        )}
+                    </>
+                )}
             </ToolSection>
             <ToolSection title={t('Remove my data from this browser')}>
                 <p className="m-0 px-3 pt-3 text-sm text-nature-800 dark:text-nature-100 break-words">
-                    {t('Takes this community\'s data for {tool} out of this browser. The same tool in another community keeps its own. It can\'t be undone.', { tool: t(manifest.name) })}
+                    {keeps && on
+                        ? t("Takes this community's data for {tool} out of this browser, and its copy on your community's server. Another device signed in as you keeps what it has and stops sending it. The same tool in another community keeps its own. It can't be undone.", { tool: t(manifest.name) })
+                        : t('Takes this community\'s data for {tool} out of this browser. The same tool in another community keeps its own. It can\'t be undone.', { tool: t(manifest.name) })}
                 </p>
                 <div className="p-3 flex flex-wrap gap-2 min-w-0">
                     {!confirming

@@ -7,7 +7,10 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { word } from '../words.js';
-import { TOOL_COPY_PUSH_MS, createToolCopyQueue, readTakenBody, toolCopyPath, toolRemoteOf, type ToolManifest } from '../tools/index.js';
+import {
+    TOOL_COPY_ANSWER_MS, TOOL_COPY_PUSH_MS, createToolCopyQueue, readTakenBody, syncToolCopy, toolCopyPath, toolRemoteOf, turnToolCopyOff,
+    type ToolManifest,
+} from '../tools/index.js';
 
 const T1 = '2026-10-20T01:00:00.000Z';
 
@@ -71,6 +74,36 @@ describe('a taken copy is read through the tool (readTakenBody)', () => {
         expect(readTakenBody(manifest, '{"v":"1"}')).toBeNull();
         const throwing = { ...manifest, doc: { ...manifest.doc, read: () => { throw new Error('bad'); } } } as unknown as ToolManifest<Doc>;
         expect(readTakenBody(throwing, '{"v":1}')).toBeNull();
+    });
+});
+
+describe('a server that never answers', () => {
+    afterEach(() => { vi.useRealTimers(); });
+
+    it("is no answer after TOOL_COPY_ANSWER_MS: the open is tried later, a toggle fails, and the tool's queue moves on", async () => {
+        vi.useFakeTimers();
+        const manifest = { id: 'kit', permissions: ['node-copy'], doc: { version: 1, empty: () => ({ v: 1 }), read: (r: unknown) => r } } as unknown as ToolManifest;
+        const hangs = { get: () => new Promise<never>(() => {}), put: () => new Promise<never>(() => {}), delete: () => new Promise<never>(() => {}) };
+        let setting: boolean | undefined;
+        const device = {
+            read: async () => ({ body: '{"v":1}', updatedAt: T1, syncedAt: null }), take: async () => true, sent: async () => {},
+            setting: async () => setting, setSetting: async (on: boolean) => { setting = on; },
+        };
+        const q = createToolCopyQueue();
+        const open = q.run('k', () => syncToolCopy(manifest, device, hangs));
+        const off = q.run('k', () => turnToolCopyOff(device, hangs));
+        await vi.advanceTimersByTimeAsync(TOOL_COPY_ANSWER_MS - 1);
+        let settled = false;
+        void open.then(() => { settled = true; });
+        await vi.advanceTimersByTimeAsync(0);
+        expect(settled).toBe(false);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(await open).toBe('later');
+        await vi.advanceTimersByTimeAsync(TOOL_COPY_ANSWER_MS);
+        expect(await off).toBe('failed');
+        expect(setting).toBeUndefined();
+        const failing = { ...hangs, get: () => Promise.reject(new TypeError('Failed to fetch')) };
+        expect(await syncToolCopy(manifest, device, failing)).toBe('later');
     });
 });
 

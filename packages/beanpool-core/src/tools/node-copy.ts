@@ -13,6 +13,7 @@
  *   anything is sent.
  * - Switching it on is a GET, the step and a PUT; off is a DELETE. The setting moves only once the node has answered.
  * - Remove my data takes the node's copy first ({@link removeToolCopy}); if that fails, the host removes nothing.
+ * - A request the node hasn't answered in {@link TOOL_COPY_ANSWER_MS} is no answer, so nothing waits on it for ever.
  *
  * The owner is never in a body: a member's copy is the signer's own route, an enterprise's the treasury route of a keeper
  * ({@link toolCopyPath}), and a PUT carries the document alone, under `doc`. Nothing here needs any address but the
@@ -63,6 +64,25 @@ export interface ToolCopyDevice {
     /** The setting as this device last heard it: false is off; true or never set (undefined) is on. */
     setting(): Promise<boolean | undefined>;
     setSetting(on: boolean): Promise<void>;
+}
+
+/**
+ * How long the node has to answer one request: past it, no answer (offline), so a request that never comes back (a
+ * browser's fetch waits minutes) never holds the tool's queue. Long enough for a 64 KB copy on a slow mobile line.
+ */
+export const TOOL_COPY_ANSWER_MS = 30_000;
+
+/** The node's answer, or null once it has taken too long or failed. */
+function answered(request: () => Promise<ToolNodeAnswer | null>): Promise<ToolNodeAnswer | null> {
+    return new Promise((resolve) => {
+        const timer = setTimeout(() => resolve(null), TOOL_COPY_ANSWER_MS);
+        const done = (a: ToolNodeAnswer | null) => { clearTimeout(timer); resolve(a); };
+        try {
+            request().then(done, () => done(null));
+        } catch {
+            done(null);
+        }
+    });
 }
 
 const ok = (a: ToolNodeAnswer | null): a is ToolNodeAnswer => !!a && a.status >= 200 && a.status < 300;
@@ -139,7 +159,7 @@ async function runStep<D>(manifest: ToolManifest<D>, device: ToolCopyDevice, nod
             let doc: unknown;
             try { doc = JSON.parse(body); } catch { doc = null; }
             if (!isObject(doc)) return 'later';
-            const answer = await node.put(doc);
+            const answer = await answered(() => node.put(doc as Record<string, unknown>));
             if (answer?.status === 404) return 'older-node';
             const at = keptAt(answer);
             if (!at) return 'later';
@@ -151,7 +171,7 @@ async function runStep<D>(manifest: ToolManifest<D>, device: ToolCopyDevice, nod
 
 async function syncWith<D>(manifest: ToolManifest<D>, device: ToolCopyDevice, node: ToolCopyNode, intent: ToolSyncIntent): Promise<ToolCopyOutcome> {
     const local = await device.read();
-    const remote = toolRemoteOf(await node.get());
+    const remote = toolRemoteOf(await answered(() => node.get()));
     return runStep(manifest, device, node, local, reconcile(local, remote, intent));
 }
 
@@ -179,7 +199,7 @@ const deleted = (answer: ToolNodeAnswer | null): boolean => answer?.status === 4
 
 /** The member switches the copy off: the DELETE, then the setting, off. `failed`: the setting is not written. */
 export async function turnToolCopyOff(device: ToolCopyDevice, node: ToolCopyNode): Promise<'off' | 'failed'> {
-    if (!deleted(await node.delete())) return 'failed';
+    if (!deleted(await answered(() => node.delete()))) return 'failed';
     await device.setSetting(false);
     return 'off';
 }
@@ -191,7 +211,7 @@ export async function turnToolCopyOff(device: ToolCopyDevice, node: ToolCopyNode
  */
 export async function removeToolCopy(device: ToolCopyDevice, node: ToolCopyNode): Promise<boolean> {
     if (await device.setting() === false) return true;
-    return deleted(await node.delete());
+    return deleted(await answered(() => node.delete()));
 }
 
 /** How long after the last write the sync runs: one PUT for a burst of typing, not one a keystroke. */

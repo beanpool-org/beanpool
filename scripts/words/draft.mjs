@@ -65,9 +65,9 @@ export async function scanWebsitePages(root = ROOT, _langs = null) {
 
 /** Scan app words for missing and orphaned keys per catalog. */
 export async function scanAppWords({ root = ROOT, catalogDefs = APP_CATALOG_DEFS, langs = null, extracted = null } = {}) {
-    const { callKey } = await loadCoreChecks(ROOT);
+    const { callKey } = await loadCoreChecks(root);
     extracted ??= extractRepo(root);
-    const targetLangs = langs ?? (await catalogLangs(ROOT));
+    const targetLangs = langs ?? (await catalogLangs(root));
 
     // Map catalog folder -> { keys: Set, sources: Map(key -> [file:line]) }
     const byFolder = new Map();
@@ -287,7 +287,7 @@ export function scanGuidePages({ root = ROOT, langs = null, guide = null } = {})
 
 /** Complete drafting status across all sources. */
 export async function draftStatus({ root = ROOT, langs = null, catalogDefs = APP_CATALOG_DEFS, extracted = null } = {}) {
-    const allLangs = langs ?? (await catalogLangs(ROOT));
+    const allLangs = langs ?? (await catalogLangs(root));
     const [appWords, guideTitlesResult, website] = await Promise.all([
         scanAppWords({ root, langs: allLangs, catalogDefs, extracted }),
         scanGuideTitles({ root, langs: allLangs }),

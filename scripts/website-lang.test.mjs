@@ -210,7 +210,29 @@ test('main.js on English page presents "Read this in <language>" banner when nav
     assert.ok(dom1.window.document.body.classList.contains('has-read-in-banner'), 'body has has-read-in-banner class when banner is active');
     assert.equal(dom1.window.document.documentElement.style.getPropertyValue('--banner-height'), '61px', 'sets --banner-height custom property');
     const link = banner1.querySelector('a');
-    assert.equal(link.getAttribute('href'), '/es/rules.html', 'banner link points to /es/rules.html');
+    assert.equal(link.getAttribute('href'), '/es/rules', 'banner link points to extensionless /es/rules');
+
+    // Test 1b: Homepage links to extensionless /es/
+    const domHome = new JSDOM(`<!DOCTYPE html><html lang="en"><body><div id="navbar"></div></body></html>`, {
+        url: 'https://beanpool.org/',
+        runScripts: 'dangerously'
+    });
+    Object.defineProperty(domHome.window.navigator, 'language', { value: 'es-ES', configurable: true });
+    Object.defineProperty(domHome.window.navigator, 'languages', { value: ['es-ES', 'es'], configurable: true });
+    domHome.window.eval(mainJsText);
+    const homeBanner = domHome.window.document.getElementById('read-in-banner');
+    assert.ok(homeBanner, 'banner appears on homepage');
+    assert.equal(homeBanner.querySelector('a').getAttribute('href'), '/es/', 'homepage banner links to /es/');
+
+    // Test 1c: Extensionless path /rules links to /es/rules
+    const domRulesExtless = new JSDOM(`<!DOCTYPE html><html lang="en"><body><div id="navbar"></div></body></html>`, {
+        url: 'https://beanpool.org/rules',
+        runScripts: 'dangerously'
+    });
+    Object.defineProperty(domRulesExtless.window.navigator, 'language', { value: 'es-ES', configurable: true });
+    Object.defineProperty(domRulesExtless.window.navigator, 'languages', { value: ['es-ES', 'es'], configurable: true });
+    domRulesExtless.window.eval(mainJsText);
+    assert.equal(domRulesExtless.window.document.getElementById('read-in-banner').querySelector('a').getAttribute('href'), '/es/rules');
 
     // Test 2: Cookie already set -> banner does NOT appear
     const dom2 = new JSDOM(`<!DOCTYPE html><html lang="en"><body><div id="navbar"></div></body></html>`, {
@@ -242,8 +264,8 @@ test('main.js on English page presents "Read this in <language>" banner when nav
     dom4.window.eval(mainJsText);
     assert.equal(dom4.window.document.getElementById('read-in-banner'), null, 'banner does not appear for bilingual user with English primary');
 
-    // Test 5: Untranslated legal pages suppress banner to avoid 404 links
-    for (const legalPage of ['privacy.html', 'terms.html', 'data-deletion.html']) {
+    // Test 5: Untranslated legal pages suppress banner to avoid 404 links (with or without .html)
+    for (const legalPage of ['privacy', 'privacy.html', 'terms', 'terms.html', 'data-deletion', 'data-deletion.html']) {
         const domLegal = new JSDOM(`<!DOCTYPE html><html lang="en"><body><div id="navbar"></div></body></html>`, {
             url: `https://beanpool.org/${legalPage}`,
             runScripts: 'dangerously'

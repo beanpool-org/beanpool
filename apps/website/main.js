@@ -443,15 +443,14 @@ function initLanguageBanner() {
     if (!matched || matched === 'en') return;
 
     // Figure out target page
-    const UNTRANSLATED_PAGES = ['privacy.html', 'terms.html', 'data-deletion.html'];
-    let pName = 'index.html';
+    const UNTRANSLATED_PAGES = ['privacy', 'terms', 'data-deletion'];
+    let p = '';
     if (typeof window !== 'undefined' && window.location && window.location.pathname) {
-        const seg = window.location.pathname.split('/').filter(Boolean).pop();
-        if (seg && seg.endsWith('.html')) {
-            if (UNTRANSLATED_PAGES.includes(seg)) return; // Do not recommend non-existent legal translations
-            pName = seg;
-        }
+        const seg = window.location.pathname.split('/').filter(Boolean).pop() || '';
+        p = seg.replace(/\.html$/, '');
     }
+    if (p === 'index') p = '';
+    if (UNTRANSLATED_PAGES.includes(p)) return; // Do not recommend non-existent legal translations
 
     const langName = LANGUAGE_NAMES[matched] || matched;
     const banner = document.createElement('div');
@@ -459,7 +458,7 @@ function initLanguageBanner() {
     banner.id = 'read-in-banner';
 
     const link = document.createElement('a');
-    link.href = `/${matched}/${pName}`;
+    link.href = p ? `/${matched}/${p}` : `/${matched}/`;
     link.textContent = word('readIn', langName);
     link.addEventListener('click', () => {
         const secure = (typeof window !== 'undefined' && window.location.protocol === 'https:') ? ';Secure' : '';

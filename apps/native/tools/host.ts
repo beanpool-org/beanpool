@@ -26,10 +26,11 @@ import {
 } from '@beanpool/core';
 import { getPost, pausePost, resumePost } from '../utils/db';
 import { keepPicked, openNeedComposer } from './doors';
-import { removeToolPhoto, toolPhotoUri } from './store';
+import { removeToolPhoto, toolPhotoUri } from './photos';
+import { NODE_COPY_BUILT } from './store';
 
-/** The node copy (member_tool_state) is switched on in slice T0.4: until then a tool's document is on this phone only. */
-export const NODE_COPY_BUILT = false;
+export { NODE_COPY_BUILT };
+
 
 /** What the route knows when it builds a tool's host. */
 export interface PhoneHostContext<D> {

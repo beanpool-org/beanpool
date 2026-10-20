@@ -25,9 +25,7 @@ import { sampleDecisions, samplePoolVoting } from '../../components/showcase/sam
 import { LocalCommunitySheet } from '../../components/showcase/LocalCommunityMark';
 import { Sentence } from '../../components/Sentence';
 import { formatNumber, inCapitalsOf, t, tn, word, type WordKey } from '@beanpool/core';
-import { useNodeProfile } from '../../utils/use-node-profile';
-import { phoneTools } from '../../tools/index';
-import { memberShelves } from '../../tools/frame';
+import { memberShelves, phoneTools } from '../../tools/index';
 import { ToolRow } from '../../tools/ui';
 
 /** A group's own role, kind and join policy as the node names them: word() keys, shown through t(). Any other name is
@@ -78,9 +76,9 @@ export default function ProjectsScreen() {
     const reader = useReaderFeatures();
     const showsBeans = beansOn(reader.effective);
     // Commons → Tools (DESIGN-tool-template-fable.md §1.5): drawn only where this build has a tool this community can
-    // have, so the row never leads to an empty screen.
-    const nodeProfile = useNodeProfile();
-    const toolsHere = memberShelves({ profile: nodeProfile?.profile ?? 'local', features: (reader.effective ?? {}) as Record<string, unknown> }, phoneTools().map(x => x.manifest)).length > 0;
+    // have, so the row never leads to an empty screen. From the reader's features this screen already has: no read of its
+    // own (the Tools screen asks each tool with the community's profile too).
+    const toolsHere = memberShelves({ features: (reader.effective ?? {}) as Record<string, unknown> }, phoneTools().map(x => x.manifest)).length > 0;
     // Enterprises and Decide previewed from Example Valley where the node shows its switched-off features (§1 row 6).
     const enterprisesPreview = showcaseMode('enterprises', reader.node, reader.reader) === 'preview';
     // What the screen asks the node for, per feature: nothing until the phone's copy of the node's profile is read (a
@@ -456,18 +454,19 @@ export default function ProjectsScreen() {
                             <Text style={styles.headerDesc}>{t(heading.description)}</Text>
                         </View>
 
-                        {toolsHere ? (
-                            <View style={styles.toolsCard}>
-                                <ToolRow icon="🧰" title={t('Tools')} state={t('Things you can do on your own')} onPress={() => router.push('/tools')} testID="commons-tools-row" />
-                            </View>
-                        ) : null}
-
                         {/* In preview, Example Valley's Commons first, its strip across the top, so a newcomer meets the
                             marker on arrival; the real groups follow (design §1 row 6, §2; review of #1852, finding 5). The
                             preview's cards carry their own 16 dp sides; the negative margin undoes the list's, so at 320 dp
                             they line up with the groups below rather than sitting 32 dp in. Drawn only on Groups (where
                             enterprises live on a local node), so Decide opens at its own content. */}
                         {enterprisesPreview && activeSection === 'groups' && <View style={{ marginHorizontal: -16 }}><CommonsPreview /></View>}
+
+                        {/* Commons → Tools (DESIGN-tool-template-fable.md §1.5): above the pool and the Decide · Groups pills. */}
+                        {toolsHere ? (
+                            <View style={styles.toolsCard}>
+                                <ToolRow icon="🧰" title={t('Tools')} state={t('Things you can do on your own')} onPress={() => router.push('/tools')} testID="commons-tools-row" />
+                            </View>
+                        ) : null}
 
                         {/* Commons Pool + My Governance Credits */}
                         {showsBeans && (

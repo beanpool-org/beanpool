@@ -9,7 +9,10 @@
  * registry through the functions below it.
  */
 import type { ComponentType } from 'react';
-import { TOOLS, toolHomeCardType, type AnyToolScreenProps, type ToolApp, type ToolManifest } from '@beanpool/core';
+import {
+    TOOLS, TOOL_SHELVES, toolHomeCardType, toolsOnShelf, word,
+    type AnyToolScreenProps, type HomeNodeFacts, type ToolApp, type ToolManifest, type ToolShelf, type WordKey,
+} from '@beanpool/core';
 
 export type PhoneToolApp = ToolApp<ComponentType<AnyToolScreenProps>>;
 
@@ -52,4 +55,20 @@ export function toolOfHomeCard(type: string, tools: readonly PhoneTool[] = phone
     if (!type.startsWith('tool-')) return null;
     const tool = phoneTool(type.slice('tool-'.length), tools);
     return tool?.manifest.homeCard ? tool : null;
+}
+
+// ── The Tools screen's shelves (and the Commons row's test: is there any) ──────────────────────────────────────
+
+/** Each shelf's heading (round 2 §7). */
+export const SHELF_HEADINGS: Record<ToolShelf, WordKey> = {
+    stock: word('Stock: what you have'),
+    trade: word('Trade: how you deal'),
+    books: word("Books: how it's going"),
+};
+
+/** The tools of each shelf for a member of this community, in shelf order; an empty shelf is left out. */
+export function memberShelves(facts: HomeNodeFacts, manifests: readonly ToolManifest[]): Array<{ shelf: ToolShelf; tools: ToolManifest[] }> {
+    return TOOL_SHELVES
+        .map((shelf) => ({ shelf, tools: toolsOnShelf(shelf, null, 'member', facts, manifests) }))
+        .filter((s) => s.tools.length > 0);
 }

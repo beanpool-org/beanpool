@@ -13,7 +13,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as Crypto from 'expo-crypto';
 import type { ToolNeedDraft, ToolOfferDraft, ToolPhoto } from '@beanpool/core';
-import { keepToolPhoto, toolPhotoDataUri } from './store';
+import { keepToolPhoto, toolPhotoDataUri } from './photos';
 
 /** The Offer composer's draft key (app/(tabs)/map.tsx `OFFER_DRAFT_KEY`, read there and never changed here). */
 export const OFFER_DRAFT_KEY = 'beanpool_offer_draft';

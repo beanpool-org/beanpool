@@ -138,7 +138,8 @@ import {
 } from '@beanpool/core';
 import { TOOL_APPS, phoneTools, type PhoneTool } from '../../tools/index';
 import { TOOL_DOCS_TABLE, TOOL_SETTINGS_PREFIX } from '../../tools/schema';
-import { keepToolPhoto, readToolDoc, toolPhotoUri, wipeToolDataOnThisPhone, writeToolDoc, writeToolSettings, ToolDocTooBigError } from '../../tools/store';
+import { readToolDoc, wipeToolDataOnThisPhone, writeToolDoc, writeToolSettings, ToolDocTooBigError } from '../../tools/store';
+import { keepToolPhoto, toolPhotoUri } from '../../tools/photos';
 import { hostFor, phoneHost, ungrantedPermissions, type PhoneHostContext } from '../../tools/host';
 import { composerDraft, OFFER_DRAFT_KEY } from '../../tools/doors';
 import { remindersToSchedule, scheduleToolReminders, toolReminderRoute, cancelToolReminders, TOOL_REMINDER_CHANNEL } from '../../tools/reminders';

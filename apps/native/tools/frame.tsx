@@ -20,17 +20,16 @@ import { View, Text, Pressable, Modal, ScrollView, Switch, StyleSheet, Linking, 
 import { router, useFocusEffect } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { t, toolsOnShelf, word, TOOL_SHELVES, type HomeNodeFacts, type ToolLine, type ToolManifest, type ToolShelf, type WordKey } from '@beanpool/core';
+import { t, type ToolLine, type ToolManifest } from '@beanpool/core';
 import type { AppColors } from '../constants/colors';
 import { HOME_TARGET_DP, HomeLink, HomeRow, homeStyles } from '../components/home/HomeParts';
 import { editHomeStyles } from '../components/home/EditHomeSheet';
 import { STORE_URLS } from '../utils/force-update';
-import { NODE_COPY_BUILT } from './host';
-import { reminderOn, readToolDoc, type ToolSettings } from './store';
+import { NODE_COPY_BUILT, reminderOn, readToolDoc, type ToolSettings } from './store';
 import type { PhoneTool } from './index';
 
 /** The row's state line, the Home card's lines: a manifest's function on the document, never a throw. */
-export function safeLine<D>(f: () => ToolLine | null): ToolLine | null {
+export function safeLine(f: () => ToolLine | null): ToolLine | null {
     try {
         return f();
     } catch {
@@ -299,22 +298,6 @@ export function ToolHomeBody({ tool, owner, colors, now }: { tool: PhoneTool; ow
             <HomeLink id={`tool-home-${manifest.id}-open`} text={t('Open {tool}', { tool: name })} a11y={t('Open {tool}', { tool: name })} colors={colors} onPress={() => openTool(manifest.id)} />
         </View>
     );
-}
-
-// ── The Tools screen's shelves ────────────────────────────────────────────────────────────────────────────────
-
-/** Each shelf's heading (round 2 §7). */
-export const SHELF_HEADINGS: Record<ToolShelf, WordKey> = {
-    stock: word('Stock: what you have'),
-    trade: word('Trade: how you deal'),
-    books: word("Books: how it's going"),
-};
-
-/** The tools of each shelf for a member of this community, in shelf order; an empty shelf is left out. */
-export function memberShelves(facts: HomeNodeFacts, manifests: readonly ToolManifest[]): Array<{ shelf: ToolShelf; tools: ToolManifest[] }> {
-    return TOOL_SHELVES
-        .map((shelf) => ({ shelf, tools: toolsOnShelf(shelf, null, 'member', facts, manifests) }))
-        .filter((s) => s.tools.length > 0);
 }
 
 // ── A tool or a screen this build doesn't have ───────────────────────────────────────────────────────────────────

@@ -16,9 +16,9 @@ import { useIdentity } from './IdentityContext';
 import { useTheme } from './ThemeContext';
 import { useNodeProfile } from '../utils/use-node-profile';
 import { HOME_TARGET_DP, homeStyles } from '../components/home/HomeParts';
-import { phoneTools } from '../tools/index';
+import { SHELF_HEADINGS, memberShelves, phoneTools } from '../tools/index';
 import { readToolDoc } from '../tools/store';
-import { SHELF_HEADINGS, memberShelves, openTool, safeLine } from '../tools/frame';
+import { openTool, safeLine } from '../tools/frame';
 import { ToolEmpty, ToolRow } from '../tools/ui';
 
 export default function ToolsScreen() {

@@ -77,6 +77,16 @@ describe("a tool's Home card", () => {
         expect(toolHomeCardTypes([tool('always', { homeCard: withCard.homeCard })])[0].onNode(global)).toBe(true);
     });
 
+    it("is offered only for a tool on a member's shelves: an enterprise's own has none on Home, one for both has it", () => {
+        const [own, both] = toolHomeCardTypes([
+            tool('takings', { owner: 'enterprise', homeCard: withCard.homeCard }),
+            tool('shed', { owner: 'both', homeCard: withCard.homeCard }),
+        ]);
+        expect(own.onNode(local)).toBe(false);
+        expect(own.onNode(global)).toBe(false);
+        expect(both.onNode(local)).toBe(true);
+    });
+
     describe("in Home's registry (home-frame.ts spreads every tool's card in, just before Your community)", () => {
         afterEach(() => {
             vi.doUnmock('../tools/index.js');

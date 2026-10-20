@@ -53,7 +53,8 @@ export const toolHomeCardType = (id: string): string => `tool-${id}`;
 /**
  * The Home card types of the tools that have one, for home-frame.ts's registry (just before Your community): in the
  * picker under For you, worked out on the device from the tool's document (`asks: 'none'`, so the node is never asked
- * and builds nothing), shown where the tool is. An app or node without the tool keeps such a card and draws nothing.
+ * and builds nothing), shown where the tool is: Home is a member's, so a card for a tool that is on no member's shelf (an
+ * enterprise's own) is never offered. An app or node without the tool keeps such a card and draws nothing.
  */
 export function toolHomeCardTypes(tools: readonly ToolManifest[] = TOOLS): HomeCardType[] {
     return tools.filter((t) => t.homeCard).map((t) => ({
@@ -62,6 +63,6 @@ export function toolHomeCardTypes(tools: readonly ToolManifest[] = TOOLS): HomeC
         line: t.homeCard!.line,
         group: 'you',
         asks: 'none',
-        onNode: (answer: HomeNodeFacts) => onThisNode(t, answer),
+        onNode: (answer: HomeNodeFacts) => forReader(t, 'member') && onThisNode(t, answer),
     }));
 }

@@ -429,6 +429,7 @@ export const SUITES = [
     'test-moderation-notices-kept',
     'test-member-blocks',
     'test-member-blocks-standby',
+    'test-tool-store',
     'test-blocks-on-messaging',
     'test-messaging-idor',
     'test-probation',

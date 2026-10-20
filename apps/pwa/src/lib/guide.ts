@@ -5,16 +5,20 @@
  * (@beanpool/guide/generated/guide.json), and beanpool.org/guide/guide.json is the same bytes. The logic — checking a
  * copy, the offline cache, the website update, search, related pages, Learn videos — is shared with the member app
  * in @beanpool/core member-guide.ts. This file adds the copy built into this bundle, localStorage as the cache, and
- * the session state the guide screens share.
+ * the session state the guide screens share; and the guide's titles in the language the screens are in (slice S5a: the
+ * titles arrive with the language's words, lib/guide-titles.ts).
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import bundledGuide from '@beanpool/guide/generated/guide.json';
 import {
-    validateGuide, loadLocalGuide, refreshGuideFromWebsite,
+    validateGuide, loadLocalGuide, refreshGuideFromWebsite, guideInLanguage,
     learnVideosFromFeed, type Guide, type GuideStorage, type LoadedGuide, type LearnVideo,
 } from '@beanpool/core';
 import { getPulseFeed } from './api';
+import { guideTitlesFor } from './guide-titles';
+import { shownLanguage } from './language';
+import { useLanguage } from './useLanguage';
 
 const BUNDLED = validateGuide(bundledGuide);
 
@@ -56,16 +60,30 @@ async function startRefresh() {
     if (remote) publish({ guide: remote, source: 'website' });
 }
 
-/** The guide: the bundled copy at once, then the cached or a newer website copy when there is one. */
+/**
+ * A guide with its titles, summaries and help lines in the language the screens are in now, wherever that language's
+ * titles file has a current translation, else English (core's guideInLanguage). For a reader outside the guide screens
+ * (the "?" sheet), redrawn with the app's root when the language changes.
+ */
+export function inShownLanguage(guide: Guide): Guide {
+    const lang = shownLanguage();
+    return guideInLanguage(guide, lang, guideTitlesFor(lang));
+}
+
+/**
+ * The guide: the bundled copy at once, then the cached or a newer website copy when there is one; its titles in the
+ * member's language (inShownLanguage). Re-renders when the member picks another language.
+ */
 export function useGuide(): LoadedGuide {
     const [loaded, setLoaded] = useState<LoadedGuide>(() => sessionGuide ?? { guide: getBundledGuide(), source: 'bundled' });
+    const [lang] = useLanguage();
     useEffect(() => {
         listeners.add(setLoaded);
         if (sessionGuide) setLoaded(sessionGuide);
         startRefresh().catch(() => { /* keep what is on screen */ });
         return () => { listeners.delete(setLoaded); };
     }, []);
-    return loaded;
+    return useMemo(() => ({ ...loaded, guide: guideInLanguage(loaded.guide, lang, guideTitlesFor(lang)) }), [loaded, lang]);
 }
 
 // The videos in this community's Pulse → Learn lane, for the guide's "Watch" links. Extra only: an empty list

@@ -6,8 +6,9 @@
  * those hooks for real), and the members' guide built into the app.
  *
  * In the pseudo-locale (`xx`) any text, label, hint or placeholder with letters outside a bracket bypassed t(). Shown as
- * written: the guide's own pages (their titles, summaries and search snippets: the guide is translated as pages, slice
- * S5), the communities' names and addresses, the mark (BeanPool) and the website's name.
+ * written: the guide's own pages (their titles, summaries and search snippets: useGuide, stood in for here, puts them in
+ * the member's language, which guide-words-render.test.ts checks), the communities' names and addresses, the mark
+ * (BeanPool) and the website's name.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement } from 'react';

@@ -149,7 +149,7 @@ vi.mock('../use-guide', async () => {
     return { useGuide: () => ({ guide: getBundledGuide(), source: 'bundled' }) };
 });
 
-import { pseudoLocalise, setLanguage, tourSteps, type UiLang } from '@beanpool/core';
+import { inCapitalsOf, pseudoLocalise, setLanguage, tourSteps, type UiLang } from '@beanpool/core';
 import { LanguageProvider } from '../../components/LanguageProvider';
 import { LanguagePickerSheet } from '../../components/LanguagePicker';
 import ForceUpdateBlock from '../../components/ForceUpdateBlock';
@@ -417,11 +417,14 @@ describe('the header in the pseudo-locale (words only)', () => {
 
 describe('the guide\'s pages in the pseudo-locale: the screen\'s own words (the guide\'s are its own, slice S5)', () => {
     const guide = getBundledGuide();
-    /** Everything the guide itself says on a page: its own words, translated by its own build. */
+    /**
+     * Everything the guide itself says on a page: its own words, which useGuide (stood in for here) puts in the member's
+     * language (guide-words-render.test.ts checks those). The section's name above the title is drawn in capitals.
+     */
     const guideWords = (slug: string): string[] => {
         const page = findGuidePage(guide, slug)!;
         const section = findGuideSection(guide, page.section);
-        const out: string[] = [page.title, page.summary, section?.title ?? ''];
+        const out: string[] = [page.title, page.summary, section?.title ?? '', section ? inCapitalsOf(section.title, 'en') : ''];
         // Each bold or plain piece is drawn as a Text of its own (splitBold).
         const pieces = (text: string) => splitBold(text).flatMap((p) => [p.text, p.text.trim()]);
         for (const b of page.blocks as any[]) {

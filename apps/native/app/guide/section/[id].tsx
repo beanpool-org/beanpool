@@ -11,7 +11,8 @@ import { t } from '@beanpool/core';
 
 export { ErrorBoundary };
 
-// One part of the how-to manual (Market, Talk, Ledger …): its pages, one short task each.
+// One part of the how-to manual (Market, Talk, Ledger …): its pages, one short task each. Titles and summaries in the
+// member's language where the guide's titles file has them (useGuide), else English.
 export default function GuideSectionScreen() {
     const { theme, colors } = useTheme();
     const insets = useSafeAreaInsets();
@@ -66,7 +67,8 @@ export default function GuideSectionScreen() {
                                     accessibilityHint={p.summary}
                                 >
                                     <View style={styles.rowText}>
-                                        <Text style={styles.rowTitle} numberOfLines={2}>{p.title}</Text>
+                                        {/* Never cut: a longer language's title takes another line (titles are capped: packages/beanpool-guide/src/titles.mjs). */}
+                                        <Text style={styles.rowTitle}>{p.title}</Text>
                                         <Text style={styles.rowSub} numberOfLines={2}>{p.summary}</Text>
                                     </View>
                                     <MaterialCommunityIcons name="chevron-right" size={22} color={colors.text.muted} />

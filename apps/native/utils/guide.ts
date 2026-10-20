@@ -12,10 +12,10 @@ export {
     GUIDE_SCHEMA, GUIDE_URL, GUIDE_CACHE_KEY, GUIDE_SLUGS, GUIDE_ABOUT_SECTION,
     validateGuide, newerGuide, refreshGuideFromWebsite, findGuidePage, findGuideSection, sectionPages,
     manualSections, relatedPages, splitBold, searchGuide, findGuideVideo, learnVideosFromFeed, youtubeWatchId,
-    BEANPOOL_WEBSITE_URL, beanPoolSettingsEntries, beanPoolSheetEntries,
+    BEANPOOL_WEBSITE_URL, beanPoolSettingsEntries, beanPoolSheetEntries, guideInLanguage, guidePageBodyInEnglish, guideSourceHash,
 } from '@beanpool/core';
 export type {
-    Guide, GuidePage, GuideSection, GuideBlock, GuideSource, LoadedGuide, GuideStorage, GuideSearchResult, LearnVideo,
+    Guide, GuidePage, GuideSection, GuideBlock, GuideSource, LoadedGuide, GuideStorage, GuideSearchResult, LearnVideo, GuideTitles,
 } from '@beanpool/core';
 import { loadLocalGuide as loadLocal, type GuideStorage, type LoadedGuide } from '@beanpool/core';
 

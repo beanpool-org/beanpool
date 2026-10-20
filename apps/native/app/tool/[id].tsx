@@ -12,7 +12,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { t, type ToolManifest, type ToolOfferDraft } from '@beanpool/core';
+import { t, type AnyToolScreenProps, type ToolManifest, type ToolOfferDraft } from '@beanpool/core';
 import { useIdentity } from '../IdentityContext';
 import { useTheme } from '../ThemeContext';
 import { useNodeProfile } from '../../utils/use-node-profile';
@@ -58,7 +58,7 @@ export default function ToolRoute() {
 function ToolHostScreen({ manifest, screenName, Screen, params }: {
     manifest: ToolManifest;
     screenName: string;
-    Screen: React.ComponentType<{ host: never; params: Readonly<Record<string, string>> }>;
+    Screen: React.ComponentType<AnyToolScreenProps>;
     params: Record<string, string>;
 }) {
     const { colors } = useTheme();

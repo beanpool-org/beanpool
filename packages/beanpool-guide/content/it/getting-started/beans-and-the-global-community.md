@@ -47,14 +47,14 @@ Lo incontri in diverse forme:
 - un pulsante che mantiene la propria posizione, come **Richiesta · Fagioli custoditi al sicuro 🏘️** su un annuncio;
 - una riga dove una comunità locale si differenzia, come "🏘️ In una comunità locale questo è un prezzo in fagioli ›".
 
-Tocca uno qualsiasi di essi per aprire **Perché si trova in una comunità locale**. Ne spiega il motivo in una o due frasi, poi propone **Crea una comunità** e, ove possibile, **Comunità vicino a te** e **Come funziona**.
+Tocca uno qualsiasi di essi per aprire **Perché si trova in una comunità locale**. Ne spiega il motivo in una o due frasi, poi propone **Avvia una comunità** e, ove possibile, **Comunità vicino a te** e **Come funziona**.
 
 ## Valle di Esempio
 
 Le schermate con il contrassegno mostrano **Valle di Esempio**: una comunità immaginaria creata affinché tu possa vedere le schermate di una comunità locale con dei contenuti al loro interno.
 
 - **Mastro:** un membro di esempio con 85 fagioli, margine di spesa fino a −200, un badge di fiducia e alcuni scambi recenti, come pane, un'ora di giardinaggio e alcune piantine.
-- **Comuni:** il Forno della Valle di Esempio, un'impresa gestita dai suoi membri, e una Decisione: un'area per il compostaggio, pagata con i fagioli condivisi dei Beni comuni.
+- **Beni comuni:** il Forno della Valle di Esempio, un'impresa gestita dai suoi membri, e una Decisione: un'area per il compostaggio, pagata con i fagioli condivisi dei Beni comuni.
 - **I miei accordi,** nel Mercato: tre accordi di esempio: uno in attesa della tua risposta, uno con i fagioli custoditi al sicuro e uno completato.
 
 Nessuno in Valle di Esempio ha un nome reale. Vedi "un vicino", "i Beni comuni" o "il Forno della Valle di Esempio". Nulla di tutto questo è reale e nulla ti appartiene.
@@ -87,13 +87,13 @@ Una comunità locale opera su un proprio piccolo server, gestito da qualcuno del
 
 - **Cosa costa:** un computer di riserva che resta acceso a casa, oppure un piccolo server noleggiato per pochi euro al mese. Il software è gratuito.
 - **Chi la gestisce:** tu, sulla tua macchina o su quella noleggiata. Non ha bisogno di beanpool.org: può avere un proprio indirizzo web.
-- **Di cosa ti fai carico:** le segnalazioni dei tuoi membri arrivano a te. Il backup dei dati della comunità spetta a te, con un codice di recupero. Mantieni due proprietari e tieni il server acceso e aggiornato.
+- **Cosa ti assumi:** le segnalazioni dei tuoi membri arrivano a te. Il backup dei dati della comunità spetta a te, con un codice di recupero. Mantieni due proprietari e tieni il server acceso e aggiornato.
 - **Cosa non vedi mai:** le chat dei tuoi membri con una singola persona. Sono protette in modo che il server non possa leggerle.
 - **Quanto tempo serve:** circa mezz'ora, per chiunque sia in grado di seguire una ricetta.
 
-Per iniziare, tocca **Crea una comunità** in qualsiasi pannello **Perché si trova in una comunità locale** oppure, sul telefono, sulla scheda **Trova la tua comunità** della Home. Mostra tre modi per gestirne una: un computer di riserva a casa, un piccolo server noleggiato o chiedere aiuto sulla comunità globale. **Copia i dettagli della mia comunità** copia il nome della tua comunità, il luogo e come le persone possono contattarti, da incollare nelle impostazioni del tuo nuovo server.
+Per iniziare, tocca **Avvia una comunità** in qualsiasi pannello **Perché si trova in una comunità locale** oppure, sul telefono, sulla scheda **Trova la tua comunità** della Home. Mostra tre modi per gestirne una: un computer di riserva a casa, un piccolo server noleggiato o chiedere aiuto sulla comunità globale. **Copia i dettagli della mia comunità** copia il nome della tua comunità, il luogo e come le persone possono contattarti, da incollare nelle impostazioni del tuo nuovo server.
 
-I passaggi si trovano in "Configurazione iniziale", nella guida per chi gestisce una comunità, su beanpool.org. Quando il tuo server è attivo, ne prendi possesso con il tuo telefono: inquadra con la fotocamera del telefono il codice QR mostrato dal server, oppure in BeanPool tocca **Configura un nuovo server per la comunità** (in **Trova una comunità** o **Crea una comunità**), poi **Scansiona il codice**. Impostazioni ti aiuta quindi a dare un nome alla tua comunità, ad aggiungere un secondo proprietario e a creare i tuoi primi inviti. Imposta anche la posizione della tua comunità in Impostazioni, così che le persone vicine a te possano trovarla.
+I passaggi si trovano in "Configurazione iniziale", nella guida per chi gestisce una comunità, su beanpool.org. Quando il tuo server è attivo, ne prendi possesso con il tuo telefono: inquadra con la fotocamera del telefono il codice QR mostrato dal server, oppure in BeanPool tocca **Configura un nuovo server per la comunità** (in **Trova una comunità** o **Avvia una comunità**), poi **Scansiona il codice**. Impostazioni ti aiuta quindi a dare un nome alla tua comunità, ad aggiungere un secondo proprietario e a creare i tuoi primi inviti. Imposta anche la posizione della tua comunità in Impostazioni, così che le persone vicine a te possano trovarla.
 
 ## Unirsi a una comunità vicina
 

@@ -16,7 +16,7 @@ Usa un solo account su entrambi. Ti sei iscritto in un browser? Inserisci quello
 
 La comunità globale all'indirizzo global.beanpool.org è aperta a tutti, e puoi entrarvi direttamente da un browser web. Non hai bisogno di un invito né dell'app per telefono.
 
-Prima di entrare, la pagina mostra **Inizio**, il **Mercato**, la **Mappa** e il **Mastro** (un esempio tratto da una comunità locale) così come li vede un visitatore: le schede pubbliche, gli annunci, le foto e la loro posizione approssimativa, ma senza nomi, senza volti e senza posizioni esatte. Nulla consente di pubblicare o rispondere finché non entri. **Partecipa** si trova nella parte superiore della pagina e nella scheda sopra gli annunci.
+Prima di entrare, la pagina mostra **Home**, il **Mercato**, la **Mappa** e il **Mastro** (un esempio tratto da una comunità locale) così come li vede un visitatore: le schede pubbliche, gli annunci, le foto e la loro posizione approssimativa, ma senza nomi, senza volti e senza posizioni esatte. Nulla consente di pubblicare o rispondere finché non entri. **Partecipa** si trova nella parte superiore della pagina e nella scheda sopra gli annunci.
 
 Nel browser di un telefono, quella scheda propone prima **Apri nell'app BeanPool**. Apre l'app BeanPool direttamente al metodo di accesso della comunità globale, oppure l'app store del telefono se l'app non è ancora installata, così che il tuo account sia nell'app fin dall'inizio. Se l'app possiede già un account, apre **Unisciti alla comunità globale** con quello, oppure il pannello **BeanPool** se quell'account ne è già membro. Vedi "Entrare in BeanPool". Sotto di esso, **oppure unisciti qui nel tuo browser** ti fa entrare direttamente qui, come descritto sotto. Su un computer la scheda mostra **Partecipa**.
 
@@ -92,7 +92,7 @@ Se sei entrato nella comunità globale con 12 parole, esse rappresentano il tuo 
 ## Nomi e posizioni differenti
 
 - **Iscriversi con un invito:** il pulsante del primo passaggio dice **Crea l'identità e unisciti →**. Se qualcuno qui ha già il nome scelto, lo ricevi con un numero aggiunto. **← Indietro** su **La tua foto** mostra solo il tuo nome, con **Avanti →**: modificalo (fino a 20 caratteri) o mantienilo, sullo stesso account. Se qualcuno possiede già il nuovo nome, la pagina lo segnala e ne suggerisce altri.
-- **Schede:** l'app web ha **Inizio**, **Mercato**, **Mappa**, **Beni comuni**, **Chat**, **Persone** e **Mastro**. Ciò che l'app per telefono chiama **Chat** è **Chat** sul web, e **Persone** ha una propria scheda.
+- **Schede:** l'app web ha **Home**, **Mercato**, **Mappa**, **Beni comuni**, **Chat**, **Persone** e **Mastro**. Ciò che l'app per telefono chiama **Chat** è **Chat** sul web, e **Persone** ha una propria scheda.
 - **Impostazioni e il tuo profilo:** i piccoli pulsanti in alto a destra: il tuo profilo, il **?**, poi Impostazioni. Su uno schermo ampio si trovano in fondo al menu sulla sinistra.
 - **Pubblicare un'Offerta o una Richiesta:** usa **Nuovo annuncio** sulla pagina della **Mappa**.
 - **Aspetto:** l'opzione si chiama **Come il dispositivo** anziché "Come il telefono".

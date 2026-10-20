@@ -38,7 +38,7 @@ Un singolo controllo lento non fa diventare rosso il puntino. Diventa rosso solo
 Tra il fagiolo e i pulsanti a destra, compaiono piccole icone solo quando qualcosa richiede la tua attenzione. Ognuna rappresenta un tipo di attività. Toccala per andare direttamente lì.
 
 - **Una stretta di mano:** un accordo ti attende. Qualcuno sta aspettando che tu accetti la sua richiesta, oppure un accordo in cui sei coinvolto non è ancora completato. Se ce n'è uno, il tocco apre quell'accordo. Se ce ne sono di più, apre **I miei accordi**.
-- **Un'urna elettorale:** una votazione che non hai ancora espresso. Il tocco apre **Comuni**, su **Decisioni**. Se la prima votazione è all'interno di un gruppo o una votazione dei custodi in un'impresa, il tocco apre invece quel gruppo o quell'impresa. Una votazione a cui non puoi ancora partecipare non viene conteggiata qui, ad esempio una che richiede prima il completamento di uno scambio.
+- **Un'urna elettorale:** una votazione che non hai ancora espresso. Il tocco apre **Beni comuni**, su **Decisioni**. Se la prima votazione è all'interno di un gruppo o una votazione dei custodi in un'impresa, il tocco apre invece quel gruppo o quell'impresa. Una votazione a cui non puoi ancora partecipare non viene conteggiata qui, ad esempio una che richiede prima il completamento di uno scambio.
 - **Un fumetto:** un messaggio non letto da una persona. Se proviene da una sola persona, il tocco apre quella chat. Se proviene da più persone, apre **Chat**, su **Messaggi**, mostrando solo quelli non letti.
 - **Un gruppo di persone:** nuove righe nei tuoi gruppi, nelle chat d'impresa o nelle chat di eventi. Le chat che hai silenziato rimangono silenziose qui. Il tocco apre la chat, oppure **Chat**, su **Gruppi**, se ce ne sono diverse.
 - **Uno scudo:** solo per chi aiuta a gestire la tua comunità. Compare quando c'è lavoro amministrativo in attesa, come una segnalazione da esaminare o uno scambio bloccato che necessita di una decisione. Il tocco richiede il blocco dello schermo del telefono, poi apre le impostazioni della tua comunità in corrispondenza di quell'attività. Se le impostazioni della tua comunità usano un codice di accesso, richiede anche quello.
@@ -83,6 +83,6 @@ A volte sotto la barra in alto compare una barra verde:
 
 ## Le schede
 
-Sotto la barra in alto si trovano le schede: **Inizio**, **Mercato**, **Mappa**, **Chat**, **Comuni** e **Mastro**. Il nome di ciascuna scheda si trova sopra la sua icona. Sul telefono, una comunità locale priva di fagioli non mostra né **Comuni** né **Mastro**. La comunità globale mostra entrambi, con esempi tratti da una comunità locale. Vedi "Fagioli e comunità globale".
+Sotto la barra in alto si trovano le schede: **Home**, **Mercato**, **Mappa**, **Chat**, **Beni comuni** e **Mastro**. Il nome di ciascuna scheda si trova sopra la sua icona. Sul telefono, una comunità locale priva di fagioli non mostra né **Beni comuni** né **Mastro**. La comunità globale mostra entrambi, con esempi tratti da una comunità locale. Vedi "Fagioli e comunità globale".
 
 In una pagina lunga, tocca la scheda su cui ti trovi già per tornare direttamente in cima. Funziona su ogni scheda tranne che su **Mappa**.

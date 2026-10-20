@@ -58,7 +58,7 @@ I fagioli sono una promessa tra persone che possono essere rintracciate. Chiunqu
 
 ## Come faccio ad avviare una comunità?
 
-Tocca **Crea una comunità** nell'app. Una comunità opera su un proprio piccolo server: un computer di riserva a casa, o uno noleggiato per pochi euro al mese. Il software è gratuito e la comunità non ha bisogno di beanpool.org. Vedi "Fagioli e comunità globale".
+Tocca **Avvia una comunità** nell'app. Una comunità opera su un proprio piccolo server: un computer di riserva a casa, o uno noleggiato per pochi euro al mese. Il software è gratuito e la comunità non ha bisogno di beanpool.org. Vedi "Fagioli e comunità globale".
 
 ## Posso appartenere a più di una comunità?
 

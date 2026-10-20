@@ -60,7 +60,7 @@ Simu yako inakagua kwamba maneno hayo ni ya akaunti yako, ukaguzi uleule kama **
 
 Unaweza kujiunga na jumuiya ya kimataifa kwa maneno 12 ya siri pekee, bila akaunti ya Google, Apple au Facebook (tazama "Kujiunga na BeanPool"). Ikiwa hilo lilikutengenezea akaunti mpya, maneno yako 12 ndiyo njia yako pekee ya kurudi. Hakuna nakala ya akaunti yako inayowekwa popote isipokuwa kwenye simu yako, na hakuna anayeweza kuyaweka upya: si BeanPool, wala si jumuiya. Ukipoteza maneno hayo na simu yako, akaunti imepotea kabisa. (Ikiwa ulijiunga na akaunti uliyokuwa nayo tayari, akaunti ya kuingia uliyoiunganisha katika jumuiya nyingine bado inairejesha huko.)
 
-Programu inasema hivyo kwenye **Hifadhi salama**. Baada ya kujiunga, kadi kwenye **Nyumbani** inasema tena, kwenye simu na kwenye programu ya wavuti: **Akaunti yako ina njia moja tu ya kurudi: maneno yako 12. Hakikisha bado unayo, au ongeza njia ya kuingia.** Haikuzuii kamwe kufanya chochote. Kwenye simu:
+Programu inasema hivyo kwenye **Hifadhi salama**. Baada ya kujiunga, kadi kwenye **Nyumbani** inasema tena, kwenye simu na kwenye programu ya wavuti: **Akaunti yako ina njia moja ya kurudi: maneno yako 12. Hakikisha bado unayo, au ongeza njia ya kuingia.** Haikuzuii kamwe kufanya chochote. Kwenye simu:
 
 - **✕** huiondoa kadi. Inarudi mara moja baada ya chapisho lako la kwanza na mara moja baada ya wiki moja, kisha inabaki tu katika **Mipangilio**, chini ya **Ulinzi wa Akaunti**.
 - **Onyesha maneno yangu 12** hufungua **Ulinzi wa Akaunti**, ambapo unaweza kuyaona tena.

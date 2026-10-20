@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 147,
-  "hash": "09641d82826e9045fe15e627dd5a0530c6771f4d3784187661e0682d7170190b",
+  "version": 148,
+  "hash": "3b9cd4212a8f881f0cb63f941ec0dc5a59ae9e4d783cb5dbef34f03885a85fdb",
   "sections": [
     {
       "id": "about",
@@ -17,7 +17,7 @@
     {
       "id": "getting-started",
       "title": "Getting started",
-      "summary": "Home, joining, finding a community near you, Beans and the global community, its limits, your 12 words, your profile, the top bar, this guide, and getting help.",
+      "summary": "Home, joining, finding a community near you, Beans and the global community, its limits, your 12 words, your profile, the top bar, this guide, getting help, using more than one community, and the web app.",
       "slugs": [
         "home",
         "joining",
@@ -58,7 +58,7 @@
     {
       "id": "talk",
       "title": "Talk",
-      "summary": "Messages, groups and their chats, people and friends, event chats, muting and mentions.",
+      "summary": "Messages, groups and their chats, people and friends, event chats, muting, mentions, and a key that changed.",
       "slugs": [
         "messages",
         "groups",
@@ -82,7 +82,7 @@
     {
       "id": "commons",
       "title": "Commons",
-      "summary": "Decisions and voting, polls, events, enterprises and keepers, and the shared beans.",
+      "summary": "Decisions and voting, the shared beans, your groups, enterprises and keepers. Polls and events are here too; you find them in the Market.",
       "slugs": [
         "decisions",
         "proposing-a-decision",
@@ -96,7 +96,7 @@
     {
       "id": "ledger",
       "title": "Ledger",
-      "summary": "Your balance, your credit line, gifts, trust badges and the circulation fee.",
+      "summary": "Your balance, your credit line, gifts, trust badges, the limit per trading partner, and the circulation fee.",
       "slugs": [
         "your-balance",
         "credit-line",
@@ -109,7 +109,7 @@
     {
       "id": "settings",
       "title": "Settings and safety",
-      "summary": "Privacy, your area, blocking and reporting, alerts, light and dark, going away, leaving, getting your account back, and checking your 12 words as an owner.",
+      "summary": "Privacy and what the admins and their AI assistants can see, your area, blocking and reporting, alerts, light and dark, Holiday Mode for going away, leaving, getting your account back, and checking your 12 words as an owner.",
       "slugs": [
         "privacy",
         "your-area",
@@ -369,8 +369,13 @@
           "items": [
             "Give beans from the Commons to a project or an enterprise.",
             "Give a hardship grant from the Commons to a member.",
-            "Pay off a project's or an enterprise's debt from the Commons."
+            "Pay off a project's or an enterprise's debt from the Commons.",
+            "Forgive a debt that a member who left owed to the Commons. No beans move. The record stays, marked forgiven. Where a community keeps a Names list, this is started from there."
           ]
+        },
+        {
+          "type": "p",
+          "text": "A grant can be for no more than the Commons holds now plus what came into it in the last 30 days. A bigger one is refused when you start it."
         },
         {
           "type": "h2",
@@ -532,7 +537,7 @@
             "You can have one open Poll at a time. Your community can have 5 open Polls at once.",
             "A Poll posted to a group can only be answered by that group's members and convenors. Observers can read it but not answer.",
             "Answering a Poll also needs credit that is not frozen. You can change your answer until the Poll closes. The person who started it can close it early.",
-            "A Poll is anonymous: everyone sees only the totals. The person who starts it can make it an **open vote** instead, so members see who chose what. That choice is made when the Poll starts and cannot change once anyone has voted.",
+            "A Poll is anonymous: everyone sees only the totals. The person who starts it can make it an **open vote** instead, so members see who chose what. That choice is made when the Poll starts, and can't be changed after the Poll is posted.",
             "On the global community, a closed anonymous Poll also says how many of its votes came from new or 12-word accounts, if any did. Every vote still counts."
           ]
         },
@@ -590,7 +595,7 @@
         },
         {
           "type": "p",
-          "text": "Only members chosen by an admin, or by a community Decision, can vouch for newcomers. A vouch gives the newcomer a small credit line to start with: 25, 50 or 100 beans. Trust badges never give this right."
+          "text": "Only admins, and members chosen by an admin or by a community Decision, can vouch for newcomers. A vouch gives the newcomer a small credit line to start with: 25, 50 or 100 beans. Trust badges never give this right."
         }
       ]
     },
@@ -663,7 +668,7 @@
         },
         {
           "type": "p",
-          "text": "On a Decision or a Poll, yes, until the vote closes. On a keeper vote, a group's own vote, or a convenor vote, no."
+          "text": "On a Decision or a Poll, yes, until the vote closes. On a keepers' vote, a group's own vote, or a vote for a new lead convenor, no."
         },
         {
           "type": "h2",
@@ -679,7 +684,7 @@
         },
         {
           "type": "p",
-          "text": "No. Only you can see your balance and your trades. A trade shows only its two people. If the community votes on removing you, the members who can vote in it see your balance and any debt, in that vote only. An admin who removes an account sees its balance while doing it, and that look is logged where the owner and admins can read it."
+          "text": "No. Other members never see your balance. On the phone, in a community with Beans, they see your trust badge and how many trades you have done. A trade shows only its two people. If the community votes on removing you, the members who can vote in it see your balance and any debt, in that vote only. Admins can see more in some cases, and those looks are logged: see \"What the admins can see\"."
         },
         {
           "type": "h2",
@@ -762,7 +767,7 @@
     {
       "slug": "whats-new",
       "title": "What's new",
-      "summary": "What changed in each version of the app, in plain words.",
+      "summary": "What changed in the app, in plain words.",
       "section": "about",
       "related": [
         "home",
@@ -977,7 +982,7 @@
         {
           "type": "ul",
           "items": [
-            "**Look around** starts a short tour. A bar at the bottom of the screen moves the app to each tab in turn and says what it is for, one or two sentences a step, with **Step 2 of 7** above. Tap **Next** to go on, or **Skip** to stop. The tab behind the bar works as usual: tap anything, or tap another tab and the tour follows you there.",
+            "**Look around** starts a short tour. A bar at the bottom of the screen moves the app to each tab in turn and says what it is for, one or two sentences a step, with a caption such as **Step 2 of 8** above (the number depends on the app and on your community's tabs). Tap **Next** to go on, or **Skip** to stop. The tab behind the bar works as usual: tap anything, or tap another tab and the tour follows you there.",
             "The last step comes back to Home: **Add your first cards**. Tap a card to put it on Home, or **More cards** for the whole list. Tap **Done**. If you picked nothing, Home starts with the usual five (below).",
             "**Skip**, on the card or the bar, ends the tour. If you have not put a card on Home yourself, it gives you the usual five. If you have (from **Add a card**, or a pick on the tour's last step), Home keeps the cards you chose.",
             "The tour never starts by itself. If you close the app part way, the card says \"Pick up the tour at step 3\".",
@@ -987,7 +992,7 @@
         },
         {
           "type": "p",
-          "text": "When Home first shows your cards, a one-line tip appears under the first card. Tap **✕** to put it away."
+          "text": "After you tap **Skip** on the tour, a one-line tip appears under the first card. Tap **✕** to put it away. After **Done** it does not show."
         },
         {
           "type": "ul",
@@ -1030,13 +1035,13 @@
         },
         {
           "type": "p",
-          "text": "Home shows only the cards that have something to tell you, in this order from top to bottom unless you change it:"
+          "text": "Home shows only the cards that have something to tell you, in your own order. A card you add goes to the top, under **Needs you**. These are the cards you can have:"
         },
         {
           "type": "ul",
           "items": [
             "**Needs you:** only while something is waiting for you: a deal waiting on you, unread messages from people, new lines in your groups, a vote you have not cast yet (amber when it closes within two days), and, for owners, admins and moderators, the admin work waiting for them, such as reports to review. On the phone these are the same things the small icons at the top of the screen show. This card stays first and cannot be moved or hidden.",
-            "**Your way back in:** if you joined with 12 words and have no connected sign-in, this card reminds you to keep them safe or add a sign-in. Tap **✕** to put it away. It comes back once after your first post and once after a week, then lives only in **Settings**, under **Account Protection**. It does not show where BeanPool's key vault already holds a copy of your key.",
+            "**Your way back in:** if you joined with 12 words and have no connected sign-in, this card reminds you to keep them safe or add a sign-in. Tap **✕** to put it away. It comes back once after your first post and once after a week, then lives only in **Settings**: under **Account Protection** on the phone, and at the top of Settings, headed **One way back**, in the web app. It does not show where BeanPool's key vault already holds a copy of your key.",
             "**Find your community:** on the global community only. It shows the communities nearest you and lets you ask to join them (see \"Finding a community near you\"). On the phone it has **Communities near you**, **Start a community** and **Tell me when one starts here**. In the web app, each community is a link to its own page. If it does not know where you are, tap **or type your town** and pick your town instead of sharing your location, on the phone and in the web app. The web app's card also has **Share my area**. Once you have picked a town, the web app's card says \"Near\" and the town, with **change**. If the web app's card already has a place, **Not here? Type your town** does the same. For your first 30 days on the global community it stays at the top, and it cannot be removed or moved. After that it is a card like any other.",
             "**First steps:** a short checklist. On a local community: post your first Offer, add a profile photo, pick a few things you like, and, once you have posted an Offer, where invites are on, invite someone. Where only the admins invite, the phone shows that last line only to owners and admins. The web app shows it to every member, and a line not done keeps the card. On the phone the card goes when every line is done. In the web app it also stays for your first 14 days.",
             "**First steps on the global community:** post something free or for swap, and, if a community within 250 km of you is listed, a suggestion to ask it to let you in (that line never keeps the card open). It can also say the limits on a new account, such as how many posts and new chats you can make a day at first. It stays for your first 14 days, and after that until the post is done and the limits are over.",
@@ -1054,8 +1059,8 @@
             "**Sun and moon:** tonight's moon and today's sunrise and sunset, in one line, such as \"🌔 Waxing gibbous, 72% · Sunrise 6:12 · Sunset 17:48\". Your phone or browser works it out by itself: the card asks nothing of your community's server. It uses your community's place, rounded to about a kilometre, or your area where your community has no place (on the global community it is always your area). On the global community, the phone can also use where it last was, but only if you have already let the app use your location: it never asks. If you typed your town in **Find your community**, the phone uses that instead. To use your area even where your community has a place, tap **…** then **Settings…** and choose **Your area**. The times are on your own phone's or computer's clock, so when you travel you see them in your own time. The moon is drawn as it looks from that side of the equator. Where the sun doesn't rise or set today, it says so, such as \"Sun up all day\" or \"No sunset today\". If no place is known, the card doesn't show, and **Edit home** says \"Nothing to show now: no place is known.\" A screen reader reads it in words, such as \"Moon waxing gibbous, 72 percent lit. Sunrise 6:12 am. Sunset 5:48 pm.\"",
             "**Your Beans:** your balance and credit line (room to spend). Not on the global community. There the phone shows an example card instead: what Beans do in a local community, and **See an example ledger**. It comes once the tour is done or skipped (while **Getting started** is up, the tour's Ledger step shows the example), and stays until you tap **Hide this card**, even after **First steps** has gone.",
             "**From your community:** announcements and notices from your community's admins.",
-            "**Grow your community:** lets you invite new members after your first Offer, where invites are on. Not on the global community. On the phone, where only the admins invite, it shows only for an owner or admin.",
-            "**Your community:** member count and trades this month. It has **Add a card** and **Edit home**. This card stays at the bottom and cannot be moved or removed."
+            "**Grow your community:** lets you invite new members after your first Offer, where invites are on. Not on the global community. On the phone, where only the admins invite, it shows only for an owner or admin. In the web app it does not show there at all.",
+            "**Your community:** the last card, titled with your community's name (**The worldwide community** on the global community). It shows the member count and trades this month; on the global community, the members and how many communities are listed. It has **Add a card** and **Edit home**. This card stays at the bottom and cannot be moved or removed."
           ]
         },
         {
@@ -1144,7 +1149,7 @@
         },
         {
           "type": "p",
-          "text": "Before you join or sign in on the web, a visitor sees a simpler Home:"
+          "text": "On the global community's website, before you join or sign in, a visitor sees a simpler Home (a local community's website shows its welcome page instead):"
         },
         {
           "type": "ul",
@@ -1228,8 +1233,9 @@
             "Install BeanPool and open it. If you tap an invite link first, the app picks up the invite by itself, even straight after installing it from Google Play.",
             "On the first screen, tap **Join with an invite**. If the invite is on your clipboard, you can tap **Paste** instead. On Android the button says **Been sent an invite? Tap to check your clipboard**. In the web app, the button says **I'm New Here**.",
             "Paste the invite link or code. If you only have a code, also type the community's name or address. The person who invited you can tell you.",
-            "Choose the name people will see. It needs at least 2 letters. Keep it short: when you join, names longer than 20 characters are cut short.",
-            "Tap **Next**. The app checks the invite and the name. If someone already has that name, it suggests others. Until it has finished, **← Back to Home** and **Restore Existing Identity** don't work."
+            "Choose the name people will see. It needs at least 2 characters. Keep it short: when you join, names longer than 20 characters are cut short.",
+            "Tap **Next**. The app checks the invite and the name. If someone already has that name, it suggests others. Until it has finished, **← Back to Home** and **Restore Existing Identity** don't work.",
+            "In some communities the same screen also shows **What this community's admins can see**, with an optional **I agree** box. You join either way. See \"What the admins can see\"."
           ]
         },
         {
@@ -1244,7 +1250,7 @@
           "type": "ul",
           "items": [
             "On the first screen, tap **Explore BeanPool worldwide**, right under **Join with an invite**. It is always there. When the global community can't take you right now, a line under it says why: **Can't reach the global community right now. Try again, or join with an invite.**, **Not taking new members right now.**, or **This community is in a private preview. Ask its owner for an invite.** Tapping it asks again.",
-            "Choose one of the two ways in, side by side. **Create an account with 12 secret words** needs no Google, Apple or Facebook account: your 12 words are the only way back in.",
+            "Choose one of the two ways in. **Create an account with 12 secret words** is first. It needs no Google, Apple or Facebook account: your 12 words are the only way back in.",
             "**Or sign in** once with Google, Apple (on an iPhone) or Facebook. That sign-in is also a way back if you lose your phone. BeanPool never sees your password and never posts anything for you.",
             "Choose the name people will see, up to 20 characters, and tap **Join**. If someone already has that name, the app suggests others."
           ]
@@ -1275,7 +1281,7 @@
         },
         {
           "type": "p",
-          "text": "**Already have an account?** Join the global community with it, not with a second one. Tap the bean at the top left and, under **Your communities**, tap **Global community**: it is always there, and when you can join it its second line says **Join with this account: 12 words or a sign-in** (or **…: a sign-in**). If you are visiting the global community as a guest, tap **Join** at the top, beside the **?**, then **Join with a sign-in** (**Join with 12 words or a sign-in** where the community takes the 12 words). If the app says **You're not a member here yet** about the global community, tap **Join with this account**. On a phone, the link beanpool.org/global opens **Join the global community** with your account too (see \"From the website, on a phone\", above). You join with your 12 words or sign in once, check your name and tap **Join**. Your key and your 12 words stay the same, and nothing changes in your other communities. See \"More than one community\"."
+          "text": "**Already have an account?** Join the global community with it, not with a second one. Tap the bean at the top left and, under **Your communities**, tap **Global community**: it is always there, and when you can join it its second line says **Join with this account: 12 words or a sign-in** (or **…: a sign-in**). If you are visiting the global community as a guest, tap **Join** at the top, beside the **?**, then **Join with 12 words or a sign-in** (**Join with a sign-in** where a community takes sign-ins only). If the app says **You're not a member here yet** about the global community, tap **Join with this account**. On a phone, the link beanpool.org/global opens **Join the global community** with your account too (see \"From the website, on a phone\", above). You join with your 12 words or sign in once, check your name and tap **Join**. Your key and your 12 words stay the same, and nothing changes in your other communities. See \"More than one community\"."
         },
         {
           "type": "p",
@@ -1292,8 +1298,8 @@
         {
           "type": "ul",
           "items": [
-            "**Your Photo:** choose a photo or one of the ready-made pictures. You must pick one before **Next** works. People trade more easily with a face or a picture they recognise.",
-            "**← Back** on **Your Photo** takes you back to your name, to change it. It is still the same account: tap **Next** and you carry on to **Your Photo** and **Safety Backup** with the new name. If someone already has it, the app suggests others.",
+            "**Your Photo:** choose a photo or one of the ready-made pictures, or skip it and add one later from your profile. Some communities ask for a picture before your first post. People trade more easily with a face or a picture they recognise.",
+            "After an invite, **← Back** on **Your Photo** takes you back to your name, to change it. It is still the same account: tap **Next** and you carry on to **Your Photo** and **Safety Backup** with the new name. If someone already has it, the app suggests others. On the global community there is no **← Back** here: you have already joined.",
             "**Your Area** (in a web browser on the global community, and in the phone app when you join the global community with an account you already have): **Roughly where are you?** The global community shows you what's on offer near you: the nearest 500 listings within 250 km. Tap **Use my location**, or **Type a town or suburb**. Your area is kept to about 10 km, never your exact spot: your phone or browser rounds it before it is sent. Other members see how far away you are, and a poll you make is shown at your area. **Skip for now** sends nothing and asks for nothing; you still get in, and you see the newest listings worldwide until you set it. You can change or clear it any time in **Settings**, under **Your area**.",
             "**Safety Backup:** the app shows your 12 words. Write them down on paper and keep them safe. The tickbox **I've saved these words** (in a web browser, **I've written these words down somewhere safe**) is there to remind you. Nothing stops you if you skip it, but read \"Your 12 words\" soon. If you joined the global community with a sign-in in the phone app, this step shows your sign-in protecting your account, and your words are one tap away under **Rather write down 12 words?**. If you joined it with 12 words, it says first that these 12 words are your account, and offers **Add a sign-in as a second way back**: you can skip that too.",
             "**How it Works:** a short tour. Tap **Let's Begin!** to start."
@@ -1430,7 +1436,7 @@
         },
         {
           "type": "p",
-          "text": "On the global community, the **Find your community** card on **Home** shows the communities nearest you. For your first 30 days it stays at the top of Home and can't be removed or moved; after that you can remove it like any other card. In the web app, each community on the card is a link to its own page. If it doesn't know where you are, tap **Share my area**, or **or type your town** and pick your town. The steps below are for the phone app."
+          "text": "On the global community, the **Find your community** card on **Home** shows the communities nearest you. For your first 30 days it stays near the top of Home and can't be removed or moved; after that you can remove it like any other card. In the web app, each community on the card is a link to its own page. If it doesn't know where you are, tap **Share my area**, or **or type your town** and pick your town. The steps below are for the phone app."
         },
         {
           "type": "p",
@@ -1526,7 +1532,7 @@
         },
         {
           "type": "p",
-          "text": "Any member can answer, whatever their trust badge, unless the community chose that only its admins invite (**Known** in Settings). Then only its owners and admins see the requests and answer them. A community's admins can turn requests to join off."
+          "text": "Any member can answer, whatever their trust badge, unless the community chose that only its admins invite (**Known**, under **Who may invite** in the community server's Settings). Then only its owners and admins see the requests and answer them. A community's admins can turn requests to join off."
         }
       ]
     },
@@ -1640,7 +1646,7 @@
           "items": [
             "**Ledger:** an example member with 85 Beans, room to spend down to −200, a trust badge, and a few recent trades, such as bread, an hour of gardening and some seedlings.",
             "**Commons:** the Example Valley Bakery, an enterprise its members keep, and one Decision: a compost bay, paid for from the Commons' shared Beans.",
-            "**My Deals,** in the Market: two example deals, one waiting on you and one done."
+            "**My Deals,** in the Market: three example deals: one waiting on you, one with the Beans held safely, and one done."
           ]
         },
         {
@@ -1863,7 +1869,7 @@
             "Keep the paper somewhere safe, away from your phone.",
             "A photo or screenshot of the words is easy for someone else to find. Paper is safer.",
             "While the phone app shows your 12 words, or while you type them, it blocks screenshots and screen recordings of that screen: the phone refuses the screenshot, or the picture comes out blank. Nothing stops a photo of the screen taken with another phone.",
-            "**Copy** puts the words on your phone's clipboard for one minute. Then the app clears them, if the clipboard still holds them. If you leave the app first, it clears them when you come back. Something you copied since is left alone.",
+            "**Copy Words** (**Copy All Words** while you join, and in the web app) puts the words on your phone's clipboard for one minute. Then the app clears them, if the clipboard still holds them. If you leave the app first, it clears them when you come back. Something you copied since is left alone. A keyboard's clipboard history, or a clipboard shared with your other devices, may keep a copy the app can't clear.",
             "In the web app, the copy clears after a minute if you stay on that screen. On an iPhone or iPad, in Safari or in Firefox, the browser lets the app clear it only when you tap or press a key, so it clears at your first tap or key press after the minute. If you leave that screen or switch to another app or tab first, the app can't tell whether you copied something else, so it leaves your clipboard alone: copy something else over the words.",
             "If your phone has no screen lock, anyone holding it can open your 12 words, and the app says so under them. A PIN, pattern, password, fingerprint or face lock, set in your phone's settings, keeps them safer."
           ]
@@ -1941,7 +1947,7 @@
         },
         {
           "type": "p",
-          "text": "The app says so at **Safety Backup**. After you join, a card on **Home** says it again (in the web app it also shows at the top of the other screens, except the map): **Your account has one way back: your 12 words. Check you still have them, or add a sign-in.** It never stops you doing anything."
+          "text": "The app says so at **Safety Backup**. After you join, a card on **Home** says it again, on the phone and in the web app: **Your account has one way back: your 12 words. Check you still have them, or add a sign-in.** It never stops you doing anything. On the phone:"
         },
         {
           "type": "ul",
@@ -1950,6 +1956,10 @@
             "**Show my 12 words** opens **Account Protection**, where you can see them again.",
             "In **Account Protection**, **I still have my 12 words** puts the card away for good. **Add a sign-in** stays there."
           ]
+        },
+        {
+          "type": "p",
+          "text": "In the web app the card is headed **One way back**, with **See my 12 words** and **Add a sign-in**. **✕** puts it away: it comes back once after one of your posts has stayed up, and once when your first week is over. Tapping **See my 12 words** on the **Home** card shows them, and the card no longer comes back there. It stays at the top of **Settings** until you add a sign-in."
         },
         {
           "type": "p",
@@ -2090,10 +2100,13 @@
           "type": "ul",
           "items": [
             "your name, when you joined and your bio;",
-            "your trust badge, how many trades you have done, with how many people, and how many you finished;",
             "star ratings and reviews from people you traded with (nobody else can see who wrote a review);",
             "your posts."
           ]
+        },
+        {
+          "type": "p",
+          "text": "On the phone, in a community with Beans, they also see your trust badge, how many trades you have done, with how many people, and the share you finished (**Completion**). The web app doesn't show these on another member's profile. The global community has no Beans, so it shows none of that."
         },
         {
           "type": "h2",
@@ -2151,9 +2164,10 @@
         {
           "type": "ul",
           "items": [
-            "**Your community:** its name, and whether it can be reached right now.",
+            "**Your community:** its name at the top, and whether it can be reached right now.",
             "**Your communities:** tap one to switch to it, or tap **Add a community**. The **Global community** is always one of them: its second line says whether you can join it.",
-            "**The guides:** this guide, with its search, and what is new."
+            "**Search the guide**, then **Guides** (how BeanPool works, the rules, common questions), **How to use the app** (this guide, section by section) and **The BeanPool project**, with **What's new**.",
+            "**beanpool.org:** the public website, with **Share** to send it to a friend."
           ]
         },
         {
@@ -2232,7 +2246,7 @@
         {
           "type": "ul",
           "items": [
-            "**Join** (amber): you are visiting as a guest. Tap it to open **Invites**. In a local community you join there with an invite. In the global community, tap **Join with a sign-in** (**Join with 12 words or a sign-in** where the community takes the 12 words).",
+            "**Join** (amber): you are visiting as a guest. Tap it to open **Invites**. In a local community you join there with an invite. In the global community, tap **Join with 12 words or a sign-in** (**Join with a sign-in** where a community takes sign-ins only).",
             "**Connect** (red): this phone is not connected to a community. Tap it to open **Settings**, where you can add one."
           ]
         },
@@ -2321,7 +2335,7 @@
         {
           "type": "ul",
           "items": [
-            "**Your community:** its name, and whether its server can be reached right now. On the phone, under it, **Your communities**: tap one to switch to it, or tap **Add a community**. The **Global community** is always one of the rows, with a second line that says whether you are a member, can join it, or why it can't be used right now. See \"More than one community\".",
+            "**Your community:** its name (its address in the web app), and whether its server can be reached right now. On the phone, under it, **Your communities**: tap one to switch to it, or tap **Add a community**. The **Global community** is always one of the rows, with a second line that says whether you are a member, can join it, or why it can't be used right now. See \"More than one community\".",
             "**Guides:** how BeanPool works, the rules and how decisions are made, and common questions.",
             "**How to use the app:** one short page for each task, grouped the way the app is: Getting started, Market, Map, Talk, Pulse, Commons, Ledger and Settings and safety.",
             "**The BeanPool project:** what is new in this version, and a link to the website beanpool.org (on the phone, with a **Share** button to send it to a friend)."
@@ -2360,7 +2374,7 @@
         },
         {
           "type": "p",
-          "text": "Some pages may show **Watch:** and the name of a video. That link only appears when BeanPool has made a video for that page and your community has it in the Pulse, under **Learn**. Videos members add to Learn never show on a guide page. Every page is complete without the video."
+          "text": "Some pages may show **Watch:** and the name of a video. That link only appears when BeanPool has made a video for that page and your community has it in the Pulse, under **Learn** (**How it works** in the web app). Videos members add to Learn never show on a guide page. Every page is complete without the video."
         }
       ]
     },
@@ -2397,12 +2411,12 @@
         {
           "type": "ul",
           "items": [
-            "**About a trade:** message the other person first. Most problems are misunderstandings. On the post, tap **Message** and their name.",
+            "**About a trade:** message the other person first. Most problems are misunderstandings. On the post, tap **Message**.",
             "**About a person or a trade that has gone wrong:** talk to the admins of your community. They look after its server, and they can step in on a stuck trade.",
             "**No community yet:** join the global community and ask there: people from everywhere, and a way to find a community near you. On a phone, beanpool.org/global opens the BeanPool app right at its way in, or your app store first if you don't have the app. See \"Joining BeanPool\".",
             "**About the app itself:** visit beanpool.org. You can open it from **Settings**, under **BeanPool**.",
             "**Running a community yourself:** the owners and admins who run a community's server have their own manual, in that server's Settings: sign in and press **Manual: running your community** in the side bar.",
-            "**Getting into Settings:** owners and admins see **Community admin** in the phone app's **Settings**. **Manage** opens Settings on the phone. On a computer, open Settings in a web browser and choose **Sign in with your phone**, then in the app tap **Manage this community from a computer** (older apps: **Sign in on a computer**) and scan the code. Check the 6-character code on the phone matches the one on the computer before you tap **Sign in**. If the phone then shows two digits, type them on the computer within 30 seconds."
+            "**Getting into Settings:** owners and admins see **Community admin** in the phone app's **Settings**. **Manage** and your community's name opens its Settings on the phone. A moderator sees **Community moderation**, with **Moderate** and the community's name, which opens the reports. On a computer, open Settings in a web browser and choose **Sign in with your phone**, then in the app tap **Manage this community from a computer** (a moderator sees **Moderate this community from a computer**; older apps: **Sign in on a computer**) and scan the code. Check the 6-character code on the phone matches the one on the computer before you tap **Sign in**. If the phone then shows two digits, type them on the computer within 30 seconds."
           ]
         },
         {
@@ -2477,15 +2491,15 @@
         },
         {
           "type": "p",
-          "text": "Under **Your communities** there is always a row for the **Global community**. Its second line says where you stand: its address when you are a member (tap it to switch to it), **Join with this account: 12 words or a sign-in** (**Join with this account: a sign-in** where the community doesn't take the 12 words) when you can join it, or why you can't right now: **Checking…**, **Can't reach it right now. Tap to try again.**, **Not taking new members right now.**, the community's own words when it is in a private preview, or **Your account there was closed.** When the global community can't be reached and you are connected to a community you are a member of, a line under it says **Your own community isn't affected.** Nothing else on the phone depends on it."
+          "text": "Under **Your communities** there is always a row for the **Global community**. Its second line says where you stand: its address when you are a member (tap it to switch to it), **Join with this account: 12 words or a sign-in** (**Join with this account: a sign-in** where the community doesn't take the 12 words) when you can join it, or why you can't right now: **Checking…**, **Can't reach it right now** (with **Tap to try again.** while this phone hasn't saved the global community), **Not taking new members right now.**, **This community is in a private preview. Ask its owner for an invite.**, or **Your account there was closed.** When the global community can't be reached and you are connected to a community you are a member of, a line under it says **Your own community isn't affected.** Nothing else on the phone depends on it."
         },
         {
           "type": "ul",
           "items": [
-            "Tap the bean at the top left. In the **BeanPool** sheet, under **Your communities**, tap **Global community** (its second line says **Join with this account**). It is also in **Settings**, under **Advanced / Subsystem**. If you are visiting the global community as a guest, tap **Join** at the top, beside the **?**, then **Join with a sign-in** (**Join with 12 words or a sign-in** where the community takes the 12 words). If the app shows **You're not a member here yet** for the global community, tap **Join with this account**.",
+            "Tap the bean at the top left. In the **BeanPool** sheet, under **Your communities**, tap **Global community** (its second line says **Join with this account**). It is also in **Settings**, under **Advanced / Subsystem**. If you are visiting the global community as a guest, tap **Join** at the top, beside the **?**, then **Join with 12 words or a sign-in** (**Join with a sign-in** where a community takes sign-ins only). If the app shows **You're not a member here yet** for the global community, tap **Join with this account**.",
             "Choose how to join: **Create an account with 12 secret words**, which uses the 12 words your account already has (no sign-in, so no phone lock), or **Or sign in** once with Google, Apple (on an iPhone) or Facebook. For a sign-in, the app asks for your phone's lock first, because this sign-in also becomes a way back into your account.",
             "Check the name people there will see, and tap **Join**. If someone already has that name, the app suggests others.",
-            "Then choose your photo for the global community, as for any new community, and then roughly where you are (**Your Area**, which you can skip): the global community shows you the listings near it. See \"Joining BeanPool\"."
+            "Then choose your photo for the global community, as for any new community, and then roughly where you are (**Roughly where are you?**; you can tap **Skip for now**): the global community shows you the listings near it. See \"Joining BeanPool\"."
           ]
         },
         {
@@ -2717,7 +2731,7 @@
         },
         {
           "type": "p",
-          "text": "On the global community a new account has a few daily limits for its first 3 days, and until 3 of its posts have stayed up: 3 posts, 5 photos, and 10 new people to message in any 24 hours. An account made with 12 words alone has smaller ones for its first 7 days: 2 posts, 4 photos and 3 new people to message. Adding a sign-in moves it to the usual ones at once. Replying to someone who wrote to you first is never limited. See \"Reporting a problem\" for why."
+          "text": "On the global community a new account has a few daily limits for its first 3 days, and until 3 of its posts have stayed up: 3 posts, 5 photos, and 10 new people to message in any 24 hours. An account made with 12 words alone has smaller ones, for its first 7 days and until 3 of its posts have stayed up: 2 posts, 4 photos and 3 new people to message. Adding a sign-in moves it to the usual ones at once. Replying to someone who wrote to you first is never limited. See \"Reporting a problem\" for why."
         },
         {
           "type": "ul",
@@ -3193,7 +3207,7 @@
         },
         {
           "type": "p",
-          "text": "On the global community there are no deals, so **My Deals** shows two example deals from a local community, Example Valley, marked **🏘️ Local community**: one waiting on you and one done. Their buttons say why deals live in a local community, and change nothing. See \"Beans and the global community\"."
+          "text": "On the global community there are no deals, so **My Deals** shows three example deals from a local community, Example Valley, marked **🏘️ Local community**: one waiting on you, one with the Beans held safely, and one done. Their buttons say why deals live in a local community, and change nothing. See \"Beans and the global community\"."
         },
         {
           "type": "h2",
@@ -3456,7 +3470,7 @@
         },
         {
           "type": "p",
-          "text": "Polls are not on the map either. The one exception is on the phone, in the global community, where a poll can show as a pin at its poster's area."
+          "text": "Polls are not on the map either. The one exception is on the phone, in the global community, where a poll can show as a pin at its poster's area. It looks like an orange Need pin, and shows only under **All**."
         },
         {
           "type": "h2",
@@ -3482,12 +3496,12 @@
           "items": [
             "**All**, **Offers**, **Needs** or **Events**. Tap **✕** to clear.",
             "**All Categories** to show one category.",
-            "For events: **Today**, **This weekend** or **Next 7 days**. The map moves to fit them."
+            "For events: **All**, **Today**, **This weekend** or **Next 7 days**. The map moves to fit them."
           ]
         },
         {
           "type": "p",
-          "text": "In the web app the map has only the event date chips: **All events**, **Today**, **This weekend** and **Next 7 days**."
+          "text": "In the web app the map has only the event date chips: **Today**, **This weekend**, **Next 7 days** and **All events**. They show only while your community has an event coming up."
         },
         {
           "type": "h2",
@@ -3556,7 +3570,7 @@
         },
         {
           "type": "p",
-          "text": "You cannot move the pin later. To change it, delete the post and post it again."
+          "text": "You cannot move an Offer's or a Need's pin later. To change it, delete the post and post it again. A host can move an event's pin by editing the event."
         },
         {
           "type": "h2",
@@ -3568,7 +3582,7 @@
         },
         {
           "type": "p",
-          "text": "Everyone can see the event's place name, so do not type your home address there. Put the exact address in **Note for people who are going**, which only the hosts and the people who tap **Going** can read."
+          "text": "Everyone can see the event's place name, so do not type your home address there. Put the exact address in **Note for people who are going**. The hosts can read it, and so can everyone who taps **Going**, unless the host ticked **Only people I let in see the note and chat**: then only the people the host lets in. That box starts ticked on the global community."
         },
         {
           "type": "h2",
@@ -3604,10 +3618,10 @@
           "type": "ul",
           "items": [
             "Tap **Market**, then **Distance** in the second row of filters. It is not there while **Events** is chosen.",
-            "**Location & Radius** opens. To use where you are, tap the target button. Or tap the map, or drag the pin, to choose another centre.",
+            "**Location & Radius** opens (**Set Location & Radius** in the web app). To use where you are, tap the target button. Or tap the map, or drag the pin, to choose another centre.",
             "Choose how far with **Search radius**: from 100 metres to 50 kilometres.",
             "Tap **Apply**. The button then shows the distance, like **5km**.",
-            "To go back to everything, open it again and tap **Reset**."
+            "To go back to everything, open it again and tap **Reset**. In the web app you can also tap the **✕** on **Distance**."
           ]
         },
         {
@@ -3708,13 +3722,13 @@
           "type": "ul",
           "items": [
             "Search with **Search chats, posts, partners...**.",
-            "The filter button sorts by **Recent**, **Unread** or credits, and can show **Unread Only** or **Friends Only**.",
+            "The filter button sorts by **Recent** or **Unread** (and, where your community uses Beans, by the Beans in each deal, highest or lowest first), and can show **Unread Only** or **Friends Only**.",
             "On the phone, the search and filter button slide away as you scroll down. Scroll up a little and they come back. Tap **Talk** again to jump to the top."
           ]
         },
         {
           "type": "p",
-          "text": "In the web app this is the **Chat** tab. It lists all your chats, groups' and events' too, with **All**, **Transactions** and **Direct** at the top, and it has no search or filter."
+          "text": "In the web app this is the **Chat** tab. It lists all your chats, groups' and events' too, with **All**, **Transactions**, **Direct** and **Groups** at the top, and it has no search or filter."
         },
         {
           "type": "h2",
@@ -3895,12 +3909,16 @@
           "type": "ul",
           "items": [
             "On the phone, in **Talk**, under **Groups**, tap **New group**. Or in **Commons**, under **Groups**, tap the round **+** button. Both open the same **Create a Group** form. (On the **Projects** or **Enterprises** chip, the **+** starts a project or an enterprise instead.)",
-            "In the web app, open **Commons**, then **Groups**, and tap **+ Create Group**. You stay on **Commons** afterwards; inviting people is on the phone.",
+            "In the web app, open **Commons**, then **Groups**, and tap **+ Create Group**. You stay on **Commons** afterwards. To invite people, open the group and tap **Invite people**. You can also open **Chat**, tap **Groups**, then **New group**: that takes you straight into the new group's chat.",
             "Give it a **Group Name**, up to 60 characters, and, if you like, a **Purpose / Description**, up to 300: what the group is for and who it is for.",
             "Choose a **Category**: **Social Circle**, **General**, **Working Group** or **Guild**. On the phone **Social Circle** is chosen for you. In the web app **Working Group** is.",
             "Choose a **Join Policy**: **Open**, **Request to Join** or **Invite Only**.",
             "Tap **Create Group**. You become its **lead convenor**. On the phone, the app takes you straight into the new group's chat."
           ]
+        },
+        {
+          "type": "p",
+          "text": "You can start up to 5 groups in any 24 hours."
         },
         {
           "type": "p",
@@ -3912,11 +3930,7 @@
         },
         {
           "type": "p",
-          "text": "You invite people in the phone app. The web app cannot send invitations yet."
-        },
-        {
-          "type": "p",
-          "text": "A new group's chat asks **Who do you want to invite?**"
+          "text": "You can invite people on the phone and in the web app. On the phone, a new group's chat asks **Who do you want to invite?**"
         },
         {
           "type": "ul",
@@ -3927,7 +3941,7 @@
         },
         {
           "type": "p",
-          "text": "Later, a convenor can invite people from the chat's **⋮** menu, **Invite people**. Each person you invite sees the group in **Commons**, under **Groups**, marked **INVITED** in the phone app (on the phone, in a community with no **Commons** tab, under **Find groups** in **Talk**). The web app does not mark invitations yet; accept them on the phone. When they join, the chat says so."
+          "text": "Later, a convenor can invite people from the chat's **⋮** menu, **Invite people**. In the web app, a convenor opens the group and taps **Invite people**, ticks the people, and taps the button at the bottom in the same way. Each person you invite sees the group in **Commons**, under **Groups**, marked **INVITED** in the phone app (on the phone, in a community with no **Commons** tab, under **Find groups** in **Talk**). The web app does not mark invitations yet: there, they open the group and tap **Accept invitation**. When they join, the chat says so."
         },
         {
           "type": "h2",
@@ -3936,7 +3950,7 @@
         {
           "type": "ul",
           "items": [
-            "On the phone, tap the group's name at the top of the chat to see the group: its members, **Leave Group**, and for convenors, **Convenor Tools**. In the web app, open the group from **Commons**, under **Groups**.",
+            "On the phone, tap the group's name at the top of the chat to see the group: its members, **Leave Group**, and for convenors, **Convenor Tools**. In the web app, tap the group's name at the top of its chat, or open the group from **Commons**, under **Groups**.",
             "The **⋮** menu has **Invite people** (convenors), **Mute notifications** (or **Unmute**), **Search this chat**, **Confirm new phone** and **Group info**. The search runs on your phone, not on your community's server.",
             "Joins, leaves and role changes show in the chat as small grey lines.",
             "Write **@** and someone's name to alert them. See \"Mentions\".",
@@ -3959,7 +3973,7 @@
         },
         {
           "type": "p",
-          "text": "In the web app your group chats are in **Chat**, marked 👥. You can read and write there, end-to-end encrypted as on the phone: reply, react, edit for 15 minutes and search the chat. Inviting people, muting, **Group info**, **Delete** and **Remove** are on the phone only. An enterprise's chat is not encrypted: see \"Messages\"."
+          "text": "In the web app your group chats are in **Chat**, marked 👥. You can read and write there, end-to-end encrypted as on the phone: reply, react, edit for 15 minutes and search the chat. Muting, **Delete** and **Remove** are on the phone only. In the web app, tap the group's name at the top of its chat to open the group; a convenor can invite people from there. An enterprise's chat is not encrypted: see \"Messages\"."
         },
         {
           "type": "h2",
@@ -3978,6 +3992,10 @@
             "**Delete**, on your own messages, at any time. It asks **Delete for everyone?** once, and the message then reads **This message was deleted** to everyone in the group.",
             "**Remove**, for convenors, on anybody else's message. It asks once, and the message then reads **Removed by a convenor**. Your own message is a **Delete**, not a **Remove**."
           ]
+        },
+        {
+          "type": "p",
+          "text": "Two or more messages in a row that their authors deleted show as one line, such as **3 messages were deleted**. Two or more that a convenor removed show as **3 messages removed by a convenor**."
         },
         {
           "type": "p",
@@ -4064,7 +4082,7 @@
         },
         {
           "type": "p",
-          "text": "A group you are invited to shows in **Commons**, under **Groups**, marked **INVITED** in the phone app. The web app does not mark invitations yet; accept them on the phone. On the phone, in a community with no **Commons** tab, it is under **Find groups** in **Talk**. Tap it to see the invitation: who invited you, what the group is, who is in it (for an invite-only group, how many), and who can read its chat."
+          "text": "A group you are invited to shows in **Commons**, under **Groups**, marked **INVITED** in the phone app. On the phone, in a community with no **Commons** tab, it is under **Find groups** in **Talk**. Tap it to see the invitation: who invited you, what the group is, who is in it (for an invite-only group, how many), and who can read its chat. On the phone:"
         },
         {
           "type": "ul",
@@ -4074,6 +4092,10 @@
             "If it says **This invitation is no longer open**, it was withdrawn. Ask whoever invited you to invite you again.",
             "If it says **Couldn't open this group**, your phone could not reach your community's server. Tap **Try again**."
           ]
+        },
+        {
+          "type": "p",
+          "text": "The web app does not mark invitations yet. Open the group in **Commons**, under **Groups**, and tap **Accept invitation**. You join it and stay on the group's page."
         },
         {
           "type": "h2",
@@ -4109,7 +4131,7 @@
         {
           "type": "ul",
           "items": [
-            "change a member's or an observer's role (**Role**), including making them a convenor;",
+            "change a member's or an observer's role (**Role** on the phone, a drop-down in the web app), including making them a convenor;",
             "remove a member or an observer (**✕**)."
           ]
         },
@@ -4223,7 +4245,7 @@
           "type": "ul",
           "items": [
             "Removing a rogue lead convenor by a community Decision. Coming in a later update.",
-            "Invitations in the web app. Today you invite people, and accept an invitation to an invite-only group, in the phone app. The web app can already read and write in a group's chat (in **Chat**), and its **Commons** can list groups, start one, join one and vote in one."
+            "Marking invitations on the web list of groups."
           ]
         }
       ]
@@ -4259,7 +4281,7 @@
         },
         {
           "type": "p",
-          "text": "Tap a person to see their profile: their trust badge, trades, reviews and posts."
+          "text": "Tap a person to see their profile: their reviews and posts, and, on the phone in a community with Beans, their trust badge and trades. See \"Your profile\"."
         },
         {
           "type": "h2",
@@ -4342,7 +4364,7 @@
         },
         {
           "type": "p",
-          "text": "At the top, a pinned box shows the host's **Note for people who are going**, such as the exact address. Tap the event's name at the very top to go back to the event."
+          "text": "At the top, a pinned box shows the host's **Note for people who are going**, such as the exact address. Tap the event's name at the very top (in the web app, **View event**) to go back to the event."
         },
         {
           "type": "h2",
@@ -4362,7 +4384,7 @@
             "Event chats are not end-to-end encrypted. The host, everyone going (where the host lets people in, the ones the host has let in), and the people who run your community's server can read them. The chat says so above the message box.",
             "The host can remove any message. Tap it, then **Remove**. It then says \"removed by the host\".",
             "An event chat has no reply, no reactions, no editing and no deleting your own message — unlike a chat with a person or a group's chat. Ask the host to remove something you regret. If you delete your account, every message you wrote here reads **This message was deleted**.",
-            "When the event ends or is cancelled, the chat becomes read-only. Some time later it goes away."
+            "When the event ends or is cancelled, the chat becomes read-only. A repeating event's chat stays open between dates: up to its last date if the host set an **Until**, and until the host cancels the event if not. Thirty days after the end it goes away."
           ]
         }
       ]
@@ -4386,7 +4408,7 @@
         },
         {
           "type": "p",
-          "text": "In any chat with a person, a group or an enterprise:"
+          "text": "In any chat with a person or a group, and in an enterprise's chat if you are one of its keepers:"
         },
         {
           "type": "ul",
@@ -4414,7 +4436,7 @@
             "An enterprise's chat sends no alerts, so there are none to stop. Muting it keeps it out of the numbers below.",
             "The chat still shows new messages.",
             "In **Talk**, under **Groups**, a muted chat shows a bell with a line through it. Its unread number is grey, and it is not added to the number on **Groups**.",
-            "The top bar stays quiet about it too.",
+            "In a group's or an enterprise's chat, the top bar stays quiet about it too. A muted chat with one person still counts there.",
             "The mute stays when you leave the chat. When you open a group's or an enterprise's chat again, the top says **muted**."
           ]
         },
@@ -4460,7 +4482,9 @@
           "items": [
             "Capital letters do not matter.",
             "The name must be written in full, and not run on into other letters: \"@Anabel\" does not alert Ana.",
-            "Only people in the group can be mentioned."
+            "Only people in the group can be mentioned.",
+            "A message can alert up to 20 people.",
+            "Adding a name by editing a message does not alert them."
           ]
         },
         {
@@ -4535,7 +4559,7 @@
         },
         {
           "type": "p",
-          "text": "From then on your messages go to the new key. The banner and the **key changed** tag in your Inbox go away, and your earlier messages still read."
+          "text": "From then on your messages go to the new key. The banner and the **key changed** tag on the chat in **Talk** go away, and your earlier messages still read."
         },
         {
           "type": "p",
@@ -4711,7 +4735,7 @@
         {
           "type": "ul",
           "items": [
-            "**Someone else's post:** tap the flag, choose why (**Spam or scam**, **Offensive content**, **Misleading post**, **Child safety** or **Other**) and tap **Submit report**. The people who run your community's server look at it.",
+            "**Someone else's post:** tap the flag, choose why (**Spam or scam**, **Offensive content**, **Misleading post**, **Child safety** or **Other**) and tap **Submit report** (**Submit Report** in the web app). The people who run your community's server look at it.",
             "**Your own post:** tap **Hide**, then **Hide from feed**. It comes off the Pulse for everyone. A hidden post can't be brought back. In the web app you can also tap **Delete**, then **Delete permanently**, to remove your post for good."
           ]
         },
@@ -4829,13 +4853,13 @@
           "type": "ul",
           "items": [
             "**Updates itself** (YouTube, SoundCloud, a blog): new posts appear on the Pulse by themselves.",
-            "**A tap per post** (Instagram, TikTok, Facebook): share each post by hand. Where the screen offers **Connect**, you can link the account instead. Your posts then come in when you connect and each time you tap **↻ Sync videos**. Your community's server does not fetch them by itself. The link is kept on this phone only. Signing out of the phone removes it. When you come back the channel keeps its badge, but to bring in posts again tap **Disconnect**, then **Connect**.",
+            "**A tap per post** (Instagram, TikTok, Facebook): share each post by hand. Where the screen offers **Connect TikTok** or **Connect Instagram**, you can link the account instead. Your posts then come in when you connect and each time you tap **↻ Sync videos**. Your community's server does not fetch them by itself. The link is kept on this phone only. Signing out of the phone removes it. When you come back the channel keeps its badge, but to bring in posts again tap **Disconnect**, then **Connect TikTok** or **Connect Instagram** again.",
             "**Shows as a card** (a website)."
           ]
         },
         {
           "type": "p",
-          "text": "**Connect** is only in the phone app. In the web app, share each post with **+ Share post**."
+          "text": "**Connect TikTok** and **Connect Instagram** are only in the phone app. In the web app, share each post with **+ Share post**."
         },
         {
           "type": "h2",
@@ -4844,11 +4868,11 @@
         {
           "type": "ul",
           "items": [
-            "When you tap **Connect**, your community's server asks Instagram or TikTok which account you signed in to. The channel is marked verified only when that is the account on the channel.",
-            "Signed in to a different account? The screen says so. Sign in to the right account and tap **Connect** again.",
+            "When you tap **Connect TikTok** or **Connect Instagram**, your community's server asks Instagram or TikTok which account you signed in to. The channel is marked verified only when that is the account on the channel.",
+            "Signed in to a different account? The screen says so. Sign in to the right account and tap the same **Connect** button again.",
             "Add the channel as your **@handle** so it can be checked. A short link cannot be.",
             "Facebook channels are never marked verified.",
-            "If a channel says **Reconnect to restore your verified badge**, tap **Reconnect**."
+            "If a channel says **Reconnect to restore your verified badge**, tap **Reconnect TikTok** or **Reconnect Instagram**."
           ]
         },
         {
@@ -4860,6 +4884,7 @@
           "items": [
             "**Show on the local feed:** switch it off to keep this channel's posts off the Pulse.",
             "**+ Share post:** add one post by hand.",
+            "**Change** (**Change category** in the web app): pick another subject.",
             "**Make main:** choose your main video channel.",
             "**Remove:** take the channel off."
           ]
@@ -4914,7 +4939,7 @@
         },
         {
           "type": "p",
-          "text": "On the global community, **Commons** shows an example Decision from a local community, marked **🏘️ Local community**, so you can see how one works. Its **Vote** button says why voting lives in a local community, and casts nothing. See \"Beans and the global community\"."
+          "text": "On the global community, **Commons** shows an example Decision from a local community, marked **🏘️ Local community**, so you can see how one works. Its **Vote YES** and **Vote NO** buttons say why voting lives in a local community, and cast nothing. See \"Beans and the global community\"."
         },
         {
           "type": "h2",
@@ -4976,7 +5001,7 @@
         },
         {
           "type": "p",
-          "text": "On the phone, tap the **ⓘ** beside the Commons title for how the Commons' beans and voting work. In the web app, tap **Commons Pool ⓘ** on the **Ledger**."
+          "text": "On the phone, tap the **ⓘ** beside the Commons title for how the Commons' beans and voting work. In the web app, open the **Ledger**, tap **Wallet**, then **Commons Pool ⓘ**."
         }
       ]
     },
@@ -5018,7 +5043,7 @@
             "**Title:** one line, like \"Grant 200 beans to the Tool Library\".",
             "**Description & Case:** explain why, in at least 10 characters. Say it plainly. People vote on what they read here.",
             "From the list below that, choose exactly what should happen. For example, for a member: Remove Member, Suspend Member or Freeze Credit. For the Commons: Give Beans to a project or enterprise, Hardship Grant, or Pay off a project's or enterprise's debt.",
-            "Fill in who it is for, and how many beans if there are any. For a grant to a project or enterprise you type in its key, a long code: neither app has a list to pick it from. On the phone the same goes for paying off a debt or replacing a lead.",
+            "Fill in who it is for, and how many beans if there are any. For a grant to a project or enterprise you type in its key, a long code: neither app has a list to pick it from. To pay off a debt or replace a lead, tap the project or enterprise in the list, or type its key.",
             "Tap **Submit Community Decision**."
           ]
         },
@@ -5060,8 +5085,8 @@
         {
           "type": "ul",
           "items": [
-            "**Complete a Trade First:** you cannot propose yet.",
-            "**Limit Reached:** you already have an open Decision. Wait for it to close.",
+            "**Complete a Trade First** (on the phone): you cannot propose yet. In the web app the **+ Propose Decision** button is greyed out, and a line above it says why.",
+            "**Limit Reached** (on the phone): you already have an open Decision. Wait for it to close. In the web app the button is greyed out here too, with a line saying why.",
             "**A community vote can't remove or suspend an owner or admin of this community's server:** the person you chose runs the server. An owner can take their role away first.",
             "**This grant is bigger than the Commons could pay:** ask for no more than the amount it names, or wait for more beans to come in.",
             "**Invalid Amount** (in the web app, \"Please enter a valid positive grant amount in Beans\"): fill in how many beans.",
@@ -5117,7 +5142,7 @@
             "Add **Context / Notes** if it helps. This is optional.",
             "Write 2 to 4 **Options**. Tap **+ Add Option** for more.",
             "Choose how long it runs: **3 Days**, **7 Days** or **14 Days**.",
-            "Choose whether it is an **Open vote**. Leave it off and the poll is anonymous. Tick it and members can see who chose what. You can change this until someone votes, and never after.",
+            "Choose whether it is an **Open vote** before you tap **Create**. Leave it off and the poll is anonymous. Tick it and members can see who chose what. You can't change it after the poll is posted.",
             "Tap **Create**."
           ]
         },
@@ -5176,7 +5201,7 @@
     {
       "slug": "events",
       "title": "Events",
-      "summary": "Create an event, say you are going, be reminded, share it, and run it as the host.",
+      "summary": "Create an event, in a place or online, once or repeating; say you are going, be reminded, share it, and run it as the host.",
       "section": "commons",
       "related": [
         "event-chat",
@@ -5225,7 +5250,8 @@
           "type": "ul",
           "items": [
             "you can read the host's **Note for people who are going**, once the host lets you in, where the host chose that;",
-            "you can open the **event chat**. See \"Event chat\"."
+            "you can open the **event chat**. See \"Event chat\";",
+            "for an online event, you see its **Link to join** and a **Join** button, on the same terms as the note."
           ]
         },
         {
@@ -5243,7 +5269,7 @@
         {
           "type": "ul",
           "items": [
-            "Tap **Change** to pick **1 week**, **1 day**, **2 hours**, **1 hour** or **30 minutes** before. You can tick more than one.",
+            "Tap **Change** to pick **1 week before**, **1 day before**, **2 hours before**, **1 hour before** or **30 minutes before**. You can tick more than one.",
             "Tick nothing to get no reminder for this event.",
             "Then tap **Save for this event**. A tick is not saved until you do.",
             "Tap **Use my default** to hand it back to your usual choice."
@@ -5298,6 +5324,9 @@
           "items": [
             "Tap **+ ADD POST** on the Market tab or the Map, then **Event**.",
             "**Title**, and when it **Starts**. **Ends** is optional; it is 2 hours later unless you change it.",
+            "Times are in the event's own time zone, taken from the pin. When that is not your own zone, a line under the times names it. Tap **Change** beside it if it is wrong.",
+            "**Repeats:** choose how often it comes round, such as every week on that day or once a month, or leave it at **Does not repeat**. **Until** is optional: leave it blank and the event repeats until you cancel it.",
+            "Choose **At a place** or **Online**. For an online event there is no place and no pin: add a **Link to join** instead. Only you and the people going see it (where you let people in, only the people you let in). Its times are in your own time zone, and everyone else sees them in theirs, marked **your time**.",
             "**Place name**, like \"Town hall\".",
             "Put the pin on the map: tap the map, search **Find an address**, or tap **Use my location**. Tap **Approximate (~100 m)** if you do not want the exact spot shown. See \"Where your pin goes\".",
             "A **Description**, and a photo if you like.",
@@ -5329,8 +5358,32 @@
             "see **Who's going**, and let people in: **Let in** beside a name (tap again to take it back), or **Let everyone in**. Your own friends are let in as they tap Going. If you untick **Only people I let in see the note and chat**, everyone going sees the note and the chat so far, and the chat says the host opened it;",
             "**Edit event**. If you change the time or the place, everyone going is told;",
             "**Copy to a new date**, to run it again;",
-            "**Cancel event**, then **Cancel event** again to confirm. Everyone going can see it is cancelled, and its chat becomes read-only."
+            "**Cancel event**, then confirm (**Cancel event** again on the phone, **OK** in the web app). Everyone going can see it is cancelled, and its chat becomes read-only."
           ]
+        },
+        {
+          "type": "h2",
+          "text": "Repeating events"
+        },
+        {
+          "type": "p",
+          "text": "A repeating event shows **↻** and how often beside its date, such as **Every Friday** or **Monthly on the 16th**. Its card shows the next date; open it to see **Next dates**."
+        },
+        {
+          "type": "p",
+          "text": "If you host it, each of the next dates has:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Cancel this date:** that day only is cancelled. Everyone going that day is told.",
+            "**Change this date only:** that day is cancelled and you make a one-off on another date.",
+            "**Bring it back:** a cancelled date is on again."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "**Cancel event** cancels every date, and its chat becomes read-only. Until then the chat stays open between dates, up to the last date; with no **Until**, it stays open until you cancel the event."
         }
       ]
     },
@@ -5407,10 +5460,42 @@
         {
           "type": "ul",
           "items": [
-            "**Pledge beans to a project:** on its page, under the funding box, enter an amount and tap **Pledge Beans**. You can make or change up to 20 pledges in any 24 hours, a keeper's backing included, and a pledge of beans is one of your payments too. Pledges are held in trust until the project reaches its goal, and then they all go to the enterprise. After that it takes no more pledges, and nor does an enterprise that is winding up or has closed: its page says so where the pledge box was, and your beans stay with you.",
+            "**Pledge beans to a project:** on its page, under the funding box, enter an amount and tap **Pledge Beans**. You can make or change up to 20 pledges in any 24 hours, a keeper's backing included, and a pledge of beans is one of your payments too. Pledges are held in trust until the project reaches its goal, and then they all go to the enterprise. After that it takes no more pledges, and nor does an enterprise that is winding up or has closed: its page says so where the pledge box was, and your beans stay with you. If a project is cancelled before it reaches its goal, every pledge goes back to the person who made it.",
             "**Trade with it:** its Offers and Needs are in the Market like anyone's.",
             "**Become a keeper:** see \"Keepers\"."
           ]
+        },
+        {
+          "type": "h2",
+          "text": "If you keep it"
+        },
+        {
+          "type": "p",
+          "text": "If you keep an enterprise, or help run a project, its page has **Operator controls**:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Post Offer** and **Post Need:** post in its name.",
+            "**To Commons:** send some of its surplus to the Commons.",
+            "In the web app, **Set map pin** puts it on the map."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Pausing and closing it are in the same panel in the web app. On the phone they are in a card of their own below it, **Season & lifecycle controls**, which shows only the buttons you can use:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Pause for Season:** any keeper. Its listings pause so nobody can buy, and its credit line stays where it is, for up to 90 days. **Resume Enterprise** (**Resume Project**) ends the pause.",
+            "**Start Wind-Up:** the lead keeper, the only keeper or a community admin. A 7-day wait starts; nothing closes the enterprise by itself. Any keeper or a community admin can tap **Stop Wind-Up** during the wait.",
+            "**Finalise Wind-Up:** once the 7 days are up, the lead keeper, the only keeper or a community admin finishes closing it. See \"Rules and how decisions work\"."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Before a project reaches its goal, its leader can also cancel it, and every pledge goes back."
         },
         {
           "type": "h2",
@@ -5512,13 +5597,13 @@
         },
         {
           "type": "p",
-          "text": "Tap **Step down as a keeper**, then **Step down**."
+          "text": "Tap **Step down as a keeper**, then confirm (**Step down** on the phone, **OK** in the web app)."
         },
         {
           "type": "ul",
           "items": [
             "The only keeper cannot step down. They can wind the enterprise up instead.",
-            "If the enterprise is below zero and needs your backing to cover it, the app says **Not yet**."
+            "If the enterprise is below zero and needs your backing to cover it, the app says you can't yet (on the phone, **Not yet**)."
           ]
         },
         {
@@ -5601,7 +5686,7 @@
         },
         {
           "type": "p",
-          "text": "Tap **Commons**. At the top, **Commons Pool** shows how many beans it holds. On the phone, tap the **ⓘ** beside the Commons title. In the web app, tap **Commons Pool ⓘ** on the **Ledger**. Either opens a panel with **How It Works**, **Circulation Fees** and **Voting**."
+          "text": "Tap **Commons**. At the top, **Commons Pool** shows how many beans it holds. On the phone, tap the **ⓘ** beside the Commons title. In the web app, open the **Ledger**, tap **Wallet**, then **Commons Pool ⓘ**. Either opens a panel with **How It Works**, **Circulation Fees** and **Voting**."
         },
         {
           "type": "p",
@@ -5668,12 +5753,12 @@
             "How many of your beans are held in deals that are under way, when there are some.",
             "**Community Circulation:** shows when you hold beans. See \"The circulation fee\".",
             "**Project pledges:** beans you have pledged to projects, if any.",
-            "**Send Credits:** send a gift. See \"Sending a gift\"."
+            "**Send Beans:** send a gift. See \"Sending a gift\"."
           ]
         },
         {
           "type": "p",
-          "text": "In the web app the Wallet tab is shorter: **Overdraft Floor**, **Commons Pool**, **Send Credits** and **Community Circulation**. Your balance is at the top of the Ledger."
+          "text": "In the web app the Wallet tab is shorter: **Overdraft Floor**, **Commons Pool**, **Send Beans** and **Community Circulation**. Your balance is at the top of the Ledger."
         },
         {
           "type": "h2",
@@ -5869,7 +5954,7 @@
         {
           "type": "ul",
           "items": [
-            "Tap **Ledger**, then **Wallet**, then **Send Credits**.",
+            "Tap **Ledger**, then **Wallet**, then **Send Beans**.",
             "Tap **Select recipient...**, search for their name and tap it.",
             "Type the **Amount**. Add a **Memo** if you like, such as \"Thanks for the tomatoes\".",
             "Check **Recipient receives**. Gifts have no fee, so they get it all.",
@@ -5957,7 +6042,7 @@
         },
         {
           "type": "p",
-          "text": "On the phone, the Market's **Trust** filter can show only posts from members with a certain badge or higher, or only newcomers. In the web app, **🌱 New members** shows posts from members who have not traded yet."
+          "text": "On the phone, the Market's **Trust** filter can show only posts from members with a certain badge or higher, only **Newcomers**, or only **Founding** members, who have not traded yet. In the web app, **🌱 New members** shows posts from members who have not traded yet."
         },
         {
           "type": "h2",
@@ -6107,7 +6192,7 @@
         },
         {
           "type": "p",
-          "text": "Tap the sliders button at the top right of the screen. Settings is not one of the tabs."
+          "text": "Tap the sliders button at the top right of the screen. In the web app on a wide computer screen, it is a gear at the bottom of the left sidebar instead. Settings is not one of the tabs."
         },
         {
           "type": "h2",
@@ -6150,7 +6235,7 @@
           "items": [
             "**On your community:** nothing of your posts. Its listings, and their photos, are for its members, and so is your profile photo. Each photo opens only from the link that comes with its listing or with your name in the app, so someone outside sees one only if a member passes that link on. Someone who opens your community's address without joining is shown the way to the global community instead.",
             "**On the global community:** anyone can look at its listings before joining, but they see only the words, the photos and roughly where each one is, never your name, your face or the exact spot.",
-            "Anything you share to the Pulse can be seen by anyone who opens it. See \"Sharing your channels\"."
+            "**Your Pulse posts:** nothing. The Pulse is for members. The video or post itself stays on its own site (YouTube, Instagram and so on), as public as it is there. See \"Sharing your channels\"."
           ]
         },
         {
@@ -6163,10 +6248,10 @@
             "**Contact details:** in your profile, choose **Who can see this?**: **Hidden**, **Trade Partners**, **Friends** or **Community**. See \"Your profile\".",
             "**Connections in common:** when you and two people have each added each other, each of them can see your name on the other's profile, as someone they can ask. In Settings, under **Legal & Privacy**, turn off **Show me as a connection in common** and nobody sees your name there. It is on until you turn it off. See \"People and friends\".",
             "**Who added you:** when you add someone, they see a line on their People tab saying you added them, so they can add you back. They are not sent a notification.",
-            "**Location:** in Settings, under **App Settings**, turn **Location** on to use your position for the map and nearby posts. To turn it off, change it in your phone's own settings; the app shows you how.",
+            "**Location (phone):** in Settings, under **App Settings**, turn **Location** on to use your position for the map and nearby posts. To turn it off, change it in your phone's own settings; the app shows you how. In a web browser there is no such switch: the browser asks you, and remembers your answer.",
             "**Your area** (on the global community): in Settings, under **Your area**, see the area you gave, about 10 km around a town or two numbers, or **Not set**. **Clear** removes it. Below it, **Roughly where are you?** sets a new one with **Use my location** or **Type a town or suburb**, and **Cancel** (in a browser, **← Back to Settings**) leaves it as it is. Only the rounded area is ever sent. Other members see how far away you are, and a poll you make is shown at your area. Without one, you see the newest listings worldwide, and members nearby won't see a poll you make in their list, though they can still find it by searching. See \"Your area\".",
             "**App Lock:** asks for your phone's screen lock (its PIN, pattern, password, fingerprint or face) when the app opens, and when you come back to it after 15 seconds or more away. The lock covers the app's screens and pop-ups. On an iPhone it also closes a web page the app opened, such as your community's Settings from **Manage**. It can't cover a web page the app opened on an Android phone, which opens outside the app, or the panel for sharing something on either phone: close them before you put your phone down. Your community's Settings, opened from **Manage**, signs you out after 15 minutes unused. While App Lock is on, the app goes blank as you leave it, and comes back when you return. It needs a screen lock on the phone: without one there is nothing for it to ask.",
-            "**Channels:** anything you share to the Pulse is shown with your name, to anyone who opens the Pulse. See \"Sharing your channels\"."
+            "**Channels:** anything you share to the Pulse is shown with your name, to everyone in your community. See \"Sharing your channels\"."
           ]
         },
         {
@@ -6234,7 +6319,7 @@
         {
           "type": "ul",
           "items": [
-            "Open Settings: tap the sliders button at the top right of the screen.",
+            "Open Settings: tap the sliders button at the top right of the screen (on a wide computer screen, the gear in the left sidebar).",
             "Under **App Settings**, tap **Your area**. On the phone it is just under **Location**."
           ]
         },
@@ -6654,7 +6739,7 @@
         },
         {
           "type": "p",
-          "text": "Choose a reason (**Spam or scam**, **Offensive content**, **Misleading post**, **Child safety** or **Other**), add a few words if there is a box for them, and tap **Submit report**. Every report screen offers the same reasons, in the phone app and the web app."
+          "text": "Choose a reason (**Spam or scam**, **Offensive content**, **Misleading post**, **Child safety** or **Other**), add a few words if there is a box for them, and tap **Submit report** (**Submit Report** in the web app). Every report screen offers the same reasons, in the phone app and the web app."
         },
         {
           "type": "p",
@@ -6760,8 +6845,8 @@
           "items": [
             "Open **Settings**. Under **App Settings**, tap **Notification Preferences**.",
             "Switch each kind on or off:",
-            "**Direct Messages:** when someone messages you.",
-            "**Marketplace Activity:** requests, approvals and refusals on your deals, and what happened to a post you reported or one of yours the admins removed.",
+            "**Direct Messages:** when someone messages you, writes in one of your groups or mentions you, or when a vote opens in a group or enterprise you are in.",
+            "**Marketplace Activity:** requests, approvals and refusals on your deals, and what happened to a post you reported or one of yours the admins removed. Also news about events you are going to, notices from your community's admins, and a community starting near a place you asked about.",
             "**Held in Trust & System:** beans held, released or in question."
           ]
         },
@@ -6851,7 +6936,7 @@
         },
         {
           "type": "p",
-          "text": "Under the switches, **Event reminders** sets how long before an event you are **Going** to or **Interested** in starts you are told. Tick **1 week**, **1 day**, **2 hours**, **1 hour** or **30 minutes** before — you can tick more than one — or tick **Off** for none at all."
+          "text": "Under the switches, **Event reminders** sets how long before an event you are **Going** to or **Interested** in starts you are told. Tick **1 week before**, **1 day before**, **2 hours before**, **1 hour before** or **30 minutes before** — you can tick more than one — or tick **Off** for none at all."
         },
         {
           "type": "p",
@@ -6882,7 +6967,7 @@
     {
       "slug": "appearance",
       "title": "Light and dark",
-      "summary": "The app starts light. Make it dark, or follow your phone.",
+      "summary": "The phone app starts light and the web app starts dark. Change it, or follow your device.",
       "help": "Make the app light or dark, or follow your phone.",
       "section": "settings",
       "related": [
@@ -6901,9 +6986,9 @@
           "items": [
             "Open **Settings**. Under **App Settings**, find **Appearance**.",
             "Choose one:",
-            "**Same as phone:** the app is dark when your phone is set to dark, and light when it is light.",
-            "**Light:** always light. This is how the app starts.",
-            "**Dark:** always dark."
+            "**Same as phone** (**Same as device** in the web app): the app is dark when your phone or computer is set to dark, and light when it is light.",
+            "**Light:** always light. This is how the phone app starts.",
+            "**Dark:** always dark. This is how the web app starts."
           ]
         },
         {
@@ -6912,7 +6997,7 @@
         },
         {
           "type": "p",
-          "text": "Just below **Appearance**, **Background pattern** puts doodles behind the app. Switch it off for a plain background. It is on to begin with, and it is kept on each device."
+          "text": "Under **App Settings** too, **Background pattern** puts doodles behind the app. Switch it off for a plain background. It is on to begin with, and it is kept on each device."
         },
         {
           "type": "p",
@@ -7164,7 +7249,8 @@
         "your-12-words",
         "leaving-or-deleting",
         "communities",
-        "faq"
+        "faq",
+        "key-changed"
       ],
       "blocks": [
         {
@@ -7224,7 +7310,7 @@
           "type": "ul",
           "items": [
             "Open **Settings** and tap **Account Protection**.",
-            "Under **Sign-In Recovery Providers**, tap **Protect with** and choose an account.",
+            "Under **Sign-In Recovery Providers (1-of-N)**, tap **Protect with** and choose an account.",
             "Pass your phone's lock screen check. The linked account can bring your account back, so the app asks first.",
             "With Google on an iPhone, a Google web page opens. Sign in there and choose your account, and you come back to BeanPool."
           ]
@@ -7312,7 +7398,8 @@
             "On your new phone, open BeanPool, tap **Already a Member? Restore Account**, then **An admin gave me a re-key code**. Scan the QR on the admin's screen, or type the code (it starts RK-) and your community's name. In a browser, the QR's link opens the same screen; or open your community's web app, tap **I'm Already a Member →**, then **An admin gave me a re-key code**, and type the code.",
             "Your phone shows a two-digit number, and under it the address of the community it asked. Show both to the admin: they type the number on their screen. The number makes sure it's your phone they bind, and not someone who saw the code. **Not now** leaves the number: your phone keeps its place, and the same code shows the same number again.",
             "If the new phone had no BeanPool account, it then shows the 12 words of your **new** key. Write them down: your old words no longer work, and your old phone stops working for good. A phone that already had an account (for another community) keeps that account's 12 words, and they now bring this account back too.",
-            "If you had linked a sign-in account, your phone asks you to link it again in Account Protection: the one you had protected your old key, so it was removed."
+            "If you had linked a sign-in account, your phone asks you to link it again in Account Protection: the one you had protected your old key, so it was removed.",
+            "People you chat with will see that your key changed. Tell them it was you, and read them your **My key code**, in **Settings** under **Account Protection** on the phone. See \"If a chat says the key behind a name changed\"."
           ]
         },
         {

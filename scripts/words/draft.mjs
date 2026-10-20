@@ -3,7 +3,7 @@
 //
 //   node scripts/words/draft.mjs --report [--langs <list>]
 //     Per language, counts of MISSING and STALE for app words (core, native, pwa, server),
-//     guide titles, guide pages, and website pages (hook). Exits 0 always.
+//     guide titles, guide pages, and website pages (hook). Exits 0, or 2 on scan error.
 //     Prints summary: "words:draft: N missing, M stale across L languages".
 //
 //   node scripts/words/draft.mjs --briefs <dir> [--langs <list>] [--max-keys N]
@@ -346,7 +346,7 @@ export async function draftStatus({ root = ROOT, langs = null, catalogDefs = APP
     };
 }
 
-/** Print the drafting report (always exits 0). */
+/** Print the drafting report (exits 0 on success, 2 on scan error). */
 export async function reportDraft({ root = ROOT, langs = null } = {}) {
     try {
         const status = await draftStatus({ root, langs });
@@ -373,9 +373,9 @@ export async function reportDraft({ root = ROOT, langs = null } = {}) {
         console.log(status.summaryLine);
         return 0;
     } catch (err) {
-        console.error('words:draft --report error:', err?.message || err);
-        console.log('words:draft: 0 missing, 0 stale (scan error)');
-        return 0;
+        const msg = err?.message || String(err);
+        console.error(`words:draft: SCAN ERROR — ${msg}`);
+        return 2;
     }
 }
 

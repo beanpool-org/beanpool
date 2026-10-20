@@ -432,17 +432,25 @@ test('writeBriefs rejects invalid language codes with path traversal', async () 
     }
 });
 
-test('reportDraft exits 0 even on scan errors', async () => {
+test('reportDraft on scan error prints SCAN ERROR, never prints 0 missing, and exits 2', async () => {
     const tmp = makeTempDir();
     try {
+        let errOut = '';
+        let stdOut = '';
         const origErr = console.error;
-        console.error = () => {};
+        const origLog = console.log;
+        console.error = (...args) => { errOut += args.join(' ') + '\n'; };
+        console.log = (...args) => { stdOut += args.join(' ') + '\n'; };
         try {
             // Point root to an empty temp dir that lacks guide manifest
             const rc = await reportDraft({ root: tmp });
-            assert.equal(rc, 0);
+            assert.equal(rc, 2);
+            assert.match(errOut, /^words:draft: SCAN ERROR — /);
+            assert.ok(!errOut.includes('0 missing'));
+            assert.ok(!stdOut.includes('0 missing'));
         } finally {
             console.error = origErr;
+            console.log = origLog;
         }
     } finally {
         fs.rmSync(tmp, { recursive: true, force: true });

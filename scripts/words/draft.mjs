@@ -2,7 +2,7 @@
 // draft.mjs — translation drafting tools (DESIGN-translation-fable.md §5, §7 row S8).
 //
 //   node scripts/words/draft.mjs --report [--langs <list>]
-//     Per language, counts of MISSING and STALE for app words (core, native, pwa),
+//     Per language, counts of MISSING and STALE for app words (core, native, pwa, server),
 //     guide titles, guide pages, and website pages (hook). Exits 0 always.
 //     Prints summary: "words:draft: N missing, M stale across L languages".
 //
@@ -22,6 +22,7 @@ export const APP_CATALOG_DEFS = Object.freeze([
     { name: 'core', folder: 'packages/beanpool-core/words' },
     { name: 'native', folder: 'apps/native/words' },
     { name: 'pwa', folder: 'apps/pwa/words' },
+    { name: 'server', folder: 'apps/server/words' },
 ]);
 
 export const SAFETY_MONEY_PATTERNS = Object.freeze([
@@ -504,7 +505,7 @@ export async function writeBriefs({ root = ROOT, dir, langs = null, maxKeys = nu
         briefLines.push('## Commit and Push Sequence');
         briefLines.push('');
         briefLines.push('### A. App Words Catalogs');
-        briefLines.push('Edit each catalog in order: `core`, then `native`, then `pwa`. After editing each:');
+        briefLines.push('Edit each catalog in order: `core`, then `native`, then `pwa`, then `server`. After editing each:');
         briefLines.push('1. Run structural check: `node scripts/words/words.mjs check` (must exit 0).');
         briefLines.push('2. `git add <catalog-file>`');
         briefLines.push('3. `git commit -m "Words: <lang> <catalog> (machine draft)"`');

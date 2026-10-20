@@ -532,3 +532,27 @@ test('README runner regex matches all 24 supported languages including 2- and 3-
         console.log = origLog;
     }
 });
+
+test('apps/server/words is scanned as fourth catalog, counting in --report and appearing in briefs', async () => {
+    assert.equal(APP_CATALOG_DEFS.length, 4);
+    assert.deepEqual(APP_CATALOG_DEFS[3], { name: 'server', folder: 'apps/server/words' });
+
+    // Verify draftStatus includes server for es
+    const status = await draftStatus({ langs: ['es'] });
+    const es = status.perLang.es;
+    assert.ok(es.appWords.byCatalog.server, 'es should include server catalog');
+    assert.equal(es.appWords.byCatalog.server.missing, 14);
+    assert.equal(es.appWords.byCatalog.server.missingKeys.length, 14);
+
+    // Verify brief includes server catalog and its missing keys
+    const tmp = makeTempDir();
+    try {
+        const briefsDir = path.join(tmp, 'briefs');
+        await writeBriefs({ dir: briefsDir, langs: ['es'] });
+        const briefContent = fs.readFileSync(path.join(briefsDir, 'brief-es.md'), 'utf8');
+        assert.match(briefContent, /server \(14\)/);
+        assert.match(briefContent, /#### Catalog: apps\/server\/words\/es\.json \(14 missing\)/);
+    } finally {
+        fs.rmSync(tmp, { recursive: true, force: true });
+    }
+});

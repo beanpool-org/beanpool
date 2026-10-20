@@ -81,7 +81,7 @@ Before translating, check your language's existing catalog `_meta.glossary` in:
    - The 12 recovery words STAY English words. Never translate example words or word lists. State in your language that the words are English words.
 
 9. **App Component and Button References**:
-   - A sentence quoting a button, tab, row, or screen name (e.g. "tap Show my 12 words", "Settings → Recovery", "Market", "Talk", "Pulse") must use THAT exact button or row translation from the app's catalogs. Search all three catalogs (`packages/beanpool-core/words/<lang>.json`, `apps/native/words/<lang>.json`, `apps/pwa/words/<lang>.json`). If no translation exists yet, retain the English name.
+   - A sentence quoting a button, tab, row, or screen name (e.g. "tap Show my 12 words", "Settings → Recovery", "Market", "Talk", "Pulse") must use THAT exact button or row translation from the app's catalogs. Search all four catalogs (`packages/beanpool-core/words/<lang>.json`, `apps/native/words/<lang>.json`, `apps/pwa/words/<lang>.json`, `apps/server/words/<lang>.json`). If no translation exists yet, retain the English name.
 
 10. **Narrow Screen Constraints**:
     - Mobile buttons, tabs, chips, and pills at 320 dp and 1.3× text scale must not exceed ~1.35× the English character width.

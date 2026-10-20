@@ -296,6 +296,12 @@ export async function leaveThisCommunity(here: string, next: string, storage: St
     } catch (e) {
         console.warn('[Account] The cached copy of the community left could not be removed', e);
     }
+    try {
+        const { removeCommunityToolData } = await import('../tools/store');
+        await removeCommunityToolData(here);
+    } catch (e) {
+        console.warn('[Account] The tool data of the community left could not be removed', e);
+    }
     await storage.setItem(ANCHOR_STORE_KEY, next);
 
     const hereAddress = communityAddress(here);

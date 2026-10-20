@@ -10,6 +10,7 @@ import { registerAccountForPush, retryDueRegistrations } from '../utils/push-reg
 import { checkWhileOpen, followTap, type IncomingNotice } from '../utils/push-notice-check';
 import { postNoticesFromSync, type LocalNotice } from '../utils/sync-notices';
 import { PUSH_TOKEN_STORE_KEY } from '../utils/storage-keys';
+import { toolReminderRoute } from '../tools/reminders';
 
 const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
 let Notifications: typeof import('expo-notifications') | null = null;
@@ -187,6 +188,14 @@ async function followNotificationTap(response: NotificationResponse): Promise<vo
     if (followedTaps.has(id)) return;
     followedTaps.add(id);
     try {
+        // A tool's own reminder (tools/reminders.ts), which only this app posts: it opens the tool.
+        const activeAnchor = await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null);
+        const { communityKey } = await import('../tools/community');
+        const toolRoute = toolReminderRoute(incoming(response.notification), communityKey(activeAnchor));
+        if (toolRoute) {
+            router.push(toolRoute as never);
+            return;
+        }
         await followTap(incoming(response.notification), {
             storage: AsyncStorage,
             account: await loadIdentity().catch(() => null),

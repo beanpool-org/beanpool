@@ -13,6 +13,7 @@ import { clearHomeCache } from './home-cache';
 import { clearGroupChatLocks } from './group-chat-lock-store';
 import { forgetGroupKeys } from './group-chat-keys';
 import { ACCOUNT_EPOCH_KEY } from './account-epoch';
+import { clearToolStore } from '../tools/store';
 
 const DEVICE_KEYS = [
     'beanpool-install-dismissed',
@@ -25,7 +26,8 @@ const DEVICE_KEYS = [
  * IndexedDB besides the key (lib/identity.ts `wipeIdentity` takes the key): Home's last answer (lib/home-cache.ts),
  * which holds the member's Beans, who wrote to them, their groups and their layout; and the group chats' lock rows
  * (lib/group-chat-lock-store.ts: which groups this identity held locked, and their highest epochs), with every opened
- * group key in memory (Force Clear & Re-Sync keeps the lock rows, as the phone keeps its tables). Every sign-out and
+ * group key in memory (Force Clear & Re-Sync keeps the lock rows, as the phone keeps its tables); and every tool's
+ * document (tools/store.ts: the member's things, their garden), with the database that held them. Every sign-out and
  * delete runs this one routine, so a new store of account state belongs here, not beside a caller.
  *
  * First of all, the account's epoch ends (lib/account-epoch.ts, inside clearHomeCache before its first wait): no page of
@@ -36,6 +38,8 @@ export async function clearAccountStorage(): Promise<void> {
     const home = clearHomeCache('signed-out');
     forgetGroupKeys();
     const locks = clearGroupChatLocks();
+    // Every tool's document (tools/store.ts): the member's own, so nothing of it is left once the account has gone.
+    const tools = clearToolStore();
     const keep = new Map<string, string>();
     for (const key of [...DEVICE_KEYS, ACCOUNT_EPOCH_KEY]) {
         const value = localStorage.getItem(key);
@@ -45,5 +49,5 @@ export async function clearAccountStorage(): Promise<void> {
     for (const [key, value] of keep) {
         try { localStorage.setItem(key, value); } catch { /* quota/private mode — not worth failing sign-out over */ }
     }
-    await Promise.all([home, locks]);
+    await Promise.all([home, locks, tools]);
 }

@@ -53,6 +53,18 @@ function wordsChunk(id: string): string | undefined {
     return m ? `words-${m[1]}` : undefined;
 }
 
+/**
+ * One chunk per tool, `tool-<id>` (scratch/tools/DESIGN-tool-template-fable.md §2.3 step 6, §2.4): src/tools/index.ts
+ * loads each tool's folder by `import('./<id>')` on first open, so Rollup already makes it a chunk of its own, holding
+ * what only that tool uses; this only names it. Not a manualChunks rule: a manual chunk takes every dependency of its
+ * modules with it (React, core, the primitives), and the first chunk would then import the tool's chunk at start.
+ * e2e/tool-chunks-check.mjs proves it on a build with the scaffold registered.
+ */
+export function toolChunkFileName(chunk: { facadeModuleId: string | null }): string {
+    const m = chunk.facadeModuleId && /apps[\\/]pwa[\\/]src[\\/]tools[\\/]([a-z]+(?:-[a-z]+)*)[\\/]index\.tsx?$/.exec(chunk.facadeModuleId);
+    return m ? `assets/tool-${m[1]}-[hash].js` : 'assets/[name]-[hash].js';
+}
+
 export default defineConfig({
     define: {
         __APP_VERSION__: JSON.stringify(resolvedVersion),
@@ -108,7 +120,7 @@ export default defineConfig({
     build: {
         outDir: path.resolve(__dirname, '../server/public'),
         emptyOutDir: false,
-        rollupOptions: { output: { manualChunks: wordsChunk } },
+        rollupOptions: { output: { manualChunks: wordsChunk, chunkFileNames: toolChunkFileName } },
     },
     test: {
         globals: true,

@@ -115,12 +115,14 @@ While your account is suspended, you cannot start a group, join one, ask to join
 
 ## Joining by invitation
 
-A group you are invited to shows in **Commons**, under **Groups**, marked **INVITED** in the phone app. The web app does not mark invitations yet. Open the group and tap **Accept invitation**. On the phone, in a community with no **Commons** tab, it is under **Find groups** in **Talk**. Tap it to see the invitation: who invited you, what the group is, who is in it (for an invite-only group, how many), and who can read its chat.
+A group you are invited to shows in **Commons**, under **Groups**, marked **INVITED** in the phone app. On the phone, in a community with no **Commons** tab, it is under **Find groups** in **Talk**. Tap it to see the invitation: who invited you, what the group is, who is in it (for an invite-only group, how many), and who can read its chat. On the phone:
 
-- Tap **Join the group** (in the web app, **Accept invitation**). You land in its chat.
+- Tap **Join the group**. You land in its chat.
 - Tap **Not now** to decide later. The invitation stays.
 - If it says **This invitation is no longer open**, it was withdrawn. Ask whoever invited you to invite you again.
 - If it says **Couldn't open this group**, your phone could not reach your community's server. Tap **Try again**.
+
+The web app does not mark invitations yet. Open the group in **Commons**, under **Groups**, and tap **Accept invitation**. You join it and stay on the group's page.
 
 ## Posting to a group
 

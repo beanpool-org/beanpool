@@ -16,7 +16,7 @@ Một gợi ý ước chừng: 40 Đậu tương đương khoảng một giờ t
 
 ## Lời đề nghị và Nhu cầu
 
-Một **Chia sẻ** là thứ bạn có thể làm hoặc trao tặng: ổ bánh mì, một chuyến đi nhờ, một giờ làm vườn, một công việc sửa chữa.
+Một **Lời đề nghị** là thứ bạn có thể làm hoặc trao tặng: ổ bánh mì, một chuyến đi nhờ, một giờ làm vườn, một công việc sửa chữa.
 
 Một **Nhu cầu** là thứ bạn đang tìm kiếm.
 
@@ -88,7 +88,7 @@ Cộng đồng của bạn có một quỹ Đậu chung gọi là **Chung**. Cá
 
 ## Doanh nghiệp và nhóm
 
-Một **dự án cộng đồng** hoạt động liên tục và giao dịch dưới tên riêng của nó: một tiệm bánh, một thư viện mượn đồ dùng, một quầy hàng ở chợ. Doanh nghiệp được điều hành bởi những **người quản lý**, đứng đầu là một **người quản lý chính**. Những người quản lý có thể cam kết một phần uy tín của chính mình để cấp cho doanh nghiệp một hạn mức tín dụng.
+Một **doanh nghiệp** hoạt động liên tục và giao dịch dưới tên riêng của nó: một tiệm bánh, một thư viện mượn đồ dùng, một quầy hàng ở chợ. Doanh nghiệp được điều hành bởi những **người quản lý**, đứng đầu là một **người quản lý chính**. Những người quản lý có thể cam kết một phần uy tín của chính mình để cấp cho doanh nghiệp một hạn mức tín dụng.
 
 Một **nhóm** là một tập hợp các thành viên có phần chat và bài đăng riêng, được điều hành bởi một hoặc nhiều **điều hành viên**. Một trong số họ là **trưởng ban điều hành** — ban đầu là người đã tạo ra nhóm.
 

@@ -38,9 +38,9 @@ Một lần kiểm tra chậm đơn lẻ không làm chấm đổi sang màu đ�
 Nằm giữa hạt đậu và các nút ở bên phải, những biểu tượng nhỏ chỉ xuất hiện khi có điều gì đó cần bạn xử lý. Mỗi biểu tượng đại diện cho một loại công việc. Nhấn vào đó để đi thẳng đến mục tương ứng.
 
 - **Bắt tay:** một thỏa thuận đang chờ bạn. Ai đó đang chờ bạn chấp nhận yêu cầu của họ, hoặc một thỏa thuận bạn tham gia vẫn chưa hoàn tất. Nếu có một việc, nhấn vào sẽ mở thỏa thuận đó. Nếu có nhiều việc hơn, nhấn vào sẽ mở **Giao dịch của tôi**.
-- **Hòm phiếu:** một cuộc bỏ phiếu bạn chưa tham gia. Nhấn vào sẽ mở **Chung**, tại mục **Biểu quyết**. Nếu cuộc bỏ phiếu đầu tiên nằm trong một nhóm hoặc cuộc bỏ phiếu của người quản lý trong một doanh nghiệp, nhấn vào sẽ mở nhóm hoặc doanh nghiệp đó thay thế. Một cuộc bỏ phiếu mà bạn chưa thể tham gia sẽ không được tính ở đây, ví dụ một cuộc bỏ phiếu yêu cầu bạn phải hoàn tất một giao dịch trước.
-- **Bong bóng trò chuyện:** một tin nhắn chưa đọc từ một người. Nếu từ một người, nhấn vào sẽ mở cuộc trò chuyện đó. Nếu từ nhiều người, nhấn vào sẽ mở **Chat**, tại mục **Tin nhắn**, chỉ hiển thị những tin chưa đọc.
-- **Nhóm người:** các dòng tin nhắn mới trong nhóm của bạn, cuộc trò chuyện doanh nghiệp hoặc trò chuyện sự kiện. Các đoạn chat bạn đã tắt thông báo sẽ giữ yên lặng ở đây. Nhấn vào sẽ mở đoạn chat, hoặc mở **Chat**, tại mục **Nhóm**, nếu có nhiều đoạn chat.
+- **Hòm phiếu:** một cuộc bỏ phiếu bạn chưa tham gia. Nhấn vào sẽ mở **Chung**, tại mục **Quyết định**. Nếu cuộc bỏ phiếu đầu tiên nằm trong một nhóm hoặc cuộc bỏ phiếu của người quản lý trong một doanh nghiệp, nhấn vào sẽ mở nhóm hoặc doanh nghiệp đó thay thế. Một cuộc bỏ phiếu mà bạn chưa thể tham gia sẽ không được tính ở đây, ví dụ một cuộc bỏ phiếu yêu cầu bạn phải hoàn tất một giao dịch trước.
+- **Bong bóng trò chuyện:** một tin nhắn chưa đọc từ một người. Nếu từ một người, nhấn vào sẽ mở cuộc trò chuyện đó. Nếu từ nhiều người, nhấn vào sẽ mở **Trò chuyện**, tại mục **Tin nhắn**, chỉ hiển thị những tin chưa đọc.
+- **Nhóm người:** các dòng tin nhắn mới trong nhóm của bạn, cuộc trò chuyện doanh nghiệp hoặc trò chuyện sự kiện. Các đoạn chat bạn đã tắt thông báo sẽ giữ yên lặng ở đây. Nhấn vào sẽ mở đoạn chat, hoặc mở **Trò chuyện**, tại mục **Nhóm**, nếu có nhiều đoạn chat.
 - **Chiếc khiên:** chỉ dành cho những người tham gia vận hành cộng đồng của bạn. Biểu tượng hiển thị khi có công việc quản trị đang chờ, chẳng hạn như báo cáo cần xem xét hoặc một giao dịch bị đình trệ cần phân xử. Nhấn vào sẽ yêu cầu mở khóa màn hình điện thoại của bạn, sau đó mở phần cài đặt của cộng đồng tại công việc đó. Nếu cài đặt cộng đồng của bạn sử dụng mã đăng nhập, ứng dụng cũng sẽ yêu cầu nhập mã đó.
 
 Các biểu tượng xếp chồng lên nhau từ bên phải. Biểu tượng quan trọng nhất nằm cạnh biểu tượng ?, và giữ nguyên vị trí khi các biểu tượng khác xuất hiện hoặc biến mất.
@@ -83,6 +83,6 @@ Trong khi một trong các nút này hiển thị, biểu tượng lời mời s
 
 ## Các tab
 
-Bên dưới thanh trên cùng là các tab: **Trang chủ**, **Chợ**, **Bản đồ**, **Chat**, **Chung** và **Sổ cái**. Tên của mỗi tab nằm phía trên biểu tượng của tab đó. Trên điện thoại, một cộng đồng địa phương không sử dụng Đậu sẽ không hiển thị tab **Chung** hoặc **Sổ cái**. Cộng đồng toàn cầu hiển thị cả hai, với các ví dụ mẫu từ một cộng đồng địa phương. Xem "Đậu và cộng đồng toàn cầu".
+Bên dưới thanh trên cùng là các tab: **Trang chủ**, **Chợ**, **Bản đồ**, **Trò chuyện**, **Chung** và **Sổ cái**. Tên của mỗi tab nằm phía trên biểu tượng của tab đó. Trên điện thoại, một cộng đồng địa phương không sử dụng Đậu sẽ không hiển thị tab **Chung** hoặc **Sổ cái**. Cộng đồng toàn cầu hiển thị cả hai, với các ví dụ mẫu từ một cộng đồng địa phương. Xem "Đậu và cộng đồng toàn cầu".
 
 Trên một trang dài, nhấn vào chính tab bạn đang mở để nhảy nhanh trở lại đầu trang. Thao tác này hoạt động trên mọi tab ngoại trừ tab **Bản đồ**.

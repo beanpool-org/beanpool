@@ -18,7 +18,7 @@ source-hash: 7adea0e9b76c043c
 
 Trong ứng dụng web, nhấn **Chỉnh sửa hồ sơ**, thay đổi ảnh bằng **Máy ảnh** hoặc **Thư viện ảnh**, rồi nhấn **Lưu thay đổi hồ sơ**.
 
-Bạn cũng có thể nhấn **Chạy lại thiết lập** trong Cài đặt. Ứng dụng sẽ hướng dẫn lại bạn qua các bước đặt tên và chọn ảnh, ước chừng vị trí của bạn (trên cộng đồng toàn cầu, trong ứng dụng điện thoại), và chuyến tham quan ngắn về cách thức hoạt động của BeanPool. Trong trình duyệt web, hãy đặt khu vực của bạn trong **Cài đặt**, dưới mục **Khu vực của bạn**.
+Bạn cũng có thể nhấn **Chạy lại thiết lập** trong Cài đặt. Ứng dụng sẽ hướng dẫn lại bạn qua các bước đặt tên và chọn ảnh, ước chừng vị trí của bạn (trên cộng đồng toàn cầu, trong ứng dụng điện thoại), và chuyến tham quan ngắn về cách thức hoạt động của BeanPool. Trong trình duyệt web, hãy đặt khu vực của bạn trong **Cài đặt**, dưới mục **Khu vực bạn**.
 
 ## Trước khi bạn đăng bài
 

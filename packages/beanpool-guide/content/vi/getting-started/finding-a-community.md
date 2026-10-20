@@ -29,7 +29,7 @@ Một cộng đồng chưa công bố địa chỉ của mình vẫn được li
 
 ## Xin gia nhập
 
-- Nhấn **Yêu cầu tham gia** trên một cộng đồng.
+- Nhấn **Xin tham gia** trên một cộng đồng.
 - Kiểm tra lại tên của bạn, và viết vài lời giới thiệu về bản thân, tối đa 280 ký tự: nơi bạn sống, những gì bạn muốn chia sẻ hoặc học hỏi.
 - Nhấn **Gửi**.
 
@@ -55,11 +55,11 @@ Bạn vẫn là thành viên của cộng đồng toàn cầu, và có thể chu
 ## Chưa có gì ở gần bạn
 
 - **Báo cho tôi khi có cộng đồng ở đây:** bạn sẽ nhận được thông báo khi một cộng đồng được thành lập gần nơi bạn đang ở. Ứng dụng chỉ lưu giữ khu vực, có độ rộng khoảng 10 km, không bao giờ lưu vị trí chính xác của bạn. Bạn có thể theo dõi tối đa 3 địa điểm, và ngừng theo dõi một địa điểm bằng nút **Dừng**.
-- **Bắt đầu một cộng đồng:** mỗi cộng đồng đều có máy chủ nhỏ riêng, do một người tại địa phương chăm sóc. Việc này chỉ cần một chiếc máy tính dư ở nhà hoặc vài đô la mỗi tháng, và mất khoảng nửa giờ: xem "Đậu và cộng đồng toàn cầu". Ứng dụng hiển thị ba cách để vận hành: một máy tính dư ở nhà, một máy chủ thuê nhỏ, hoặc nhờ trợ giúp. Điền tên, địa điểm và cách mọi người có thể liên hệ với bạn, rồi nhấn **Sao chép thông tin cộng đồng của tôi** để dán vào phần cài đặt của máy chủ mới. Cách mọi người liên hệ với bạn sẽ không xuất hiện trên danh bạ công khai trừ khi bạn bật tính năng đó tại đó.
+- **Tạo một cộng đồng:** mỗi cộng đồng đều có máy chủ nhỏ riêng, do một người tại địa phương chăm sóc. Việc này chỉ cần một chiếc máy tính dư ở nhà hoặc vài đô la mỗi tháng, và mất khoảng nửa giờ: xem "Đậu và cộng đồng toàn cầu". Ứng dụng hiển thị ba cách để vận hành: một máy tính dư ở nhà, một máy chủ thuê nhỏ, hoặc nhờ trợ giúp. Điền tên, địa điểm và cách mọi người có thể liên hệ với bạn, rồi nhấn **Sao chép thông tin cộng đồng của tôi** để dán vào phần cài đặt của máy chủ mới. Cách mọi người liên hệ với bạn sẽ không xuất hiện trên danh bạ công khai trừ khi bạn bật tính năng đó tại đó.
 
 ## Nếu bạn là thành viên của một cộng đồng địa phương
 
-Mọi người có thể xin gia nhập cộng đồng của bạn từ cộng đồng toàn cầu. Nhấn **Chat**, sau đó chọn **Mọi người**, rồi chọn **Invites**: các yêu cầu được liệt kê dưới mục **Wants to join**, kèm theo tên, lời nhắn và nơi họ đến. Các yêu cầu được trả lời trong ứng dụng điện thoại: ứng dụng web không liệt kê chúng.
+Mọi người có thể xin gia nhập cộng đồng của bạn từ cộng đồng toàn cầu. Nhấn **Trò chuyện**, sau đó chọn **Mọi người**, rồi chọn **Invites**: các yêu cầu được liệt kê dưới mục **Wants to join**, kèm theo tên, lời nhắn và nơi họ đến. Các yêu cầu được trả lời trong ứng dụng điện thoại: ứng dụng web không liệt kê chúng.
 
 - **Mời:** tạo một lời mời mà chỉ tài khoản của họ mới có thể sử dụng. Ứng dụng của họ sẽ tự tìm thấy lời mời, và họ tham gia chỉ với một lần nhấn.
 - **Không phải bây giờ:** họ sẽ không được thông báo từ chối. Họ sẽ tiếp tục nhìn thấy thông báo "chưa có câu trả lời", và không thể yêu cầu lại trong vòng 30 ngày.

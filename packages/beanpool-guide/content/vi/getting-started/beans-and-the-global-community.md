@@ -47,7 +47,7 @@ Bạn sẽ bắt gặp dấu hiệu này ở một vài dạng:
 - một nút giữ nguyên vị trí, chẳng hạn như **Yêu cầu · Đậu được giữ an toàn 🏘️** trên một tin đăng;
 - một dòng cho biết điểm khác biệt của cộng đồng địa phương, chẳng hạn như "🏘️ Trong cộng đồng địa phương, đây là giá tính bằng đậu ›".
 
-Nhấn vào bất kỳ mục nào trong số đó để mở phần **Vì sao tính năng này thuộc về cộng đồng địa phương**. Phần này sẽ giải thích lý do trong một hoặc hai câu, sau đó đưa ra tùy chọn **Bắt đầu một cộng đồng** và khi có thể, các mục **Cộng đồng gần bạn** và **Cách thức hoạt động**.
+Nhấn vào bất kỳ mục nào trong số đó để mở phần **Vì sao tính năng này thuộc về cộng đồng địa phương**. Phần này sẽ giải thích lý do trong một hoặc hai câu, sau đó đưa ra tùy chọn **Tạo một cộng đồng** và khi có thể, các mục **Cộng đồng gần bạn** và **Cách hoạt động**.
 
 ## Example Valley
 
@@ -87,20 +87,20 @@ Một cộng đồng địa phương vận hành trên một máy chủ nhỏ ri
 
 - **Chi phí:** một chiếc máy tính dư để ở nhà luôn bật, hoặc một máy chủ thuê nhỏ với giá vài đô la một tháng. Phần mềm hoàn toàn miễn phí.
 - **Ai vận hành:** chính bạn, trên máy của riêng bạn hoặc máy bạn thuê. Máy chủ không cần đến beanpool.org: nó có thể có địa chỉ web riêng.
-- **Trách nhiệm của bạn:** các báo cáo từ thành viên sẽ được gửi đến bạn. Dữ liệu của cộng đồng do bạn tự sao lưu, bằng một mã khôi phục. Hãy duy trì hai chủ sở hữu, đồng thời giữ cho máy chủ luôn bật và được cập nhật.
+- **Những gì bạn tiếp nhận:** các báo cáo từ thành viên sẽ được gửi đến bạn. Dữ liệu của cộng đồng do bạn tự sao lưu, bằng một mã khôi phục. Hãy duy trì hai chủ sở hữu, đồng thời giữ cho máy chủ luôn bật và được cập nhật.
 - **Những gì bạn không bao giờ thấy:** các đoạn chat riêng giữa hai thành viên với nhau. Chúng được mã hóa khóa chặt để máy chủ không thể đọc được.
 - **Mất bao lâu:** khoảng nửa giờ, cho một người có thể làm theo hướng dẫn từng bước.
 
-Để bắt đầu, nhấn **Bắt đầu một cộng đồng** trong bất kỳ bảng **Vì sao tính năng này thuộc về cộng đồng địa phương** nào, hoặc trên điện thoại, trên thẻ **Tìm cộng đồng của bạn** của Trang chủ. Màn hình sẽ hiển thị ba cách để vận hành: một máy tính dư ở nhà, một máy chủ thuê nhỏ, hoặc nhờ trợ giúp trên cộng đồng toàn cầu. Nút **Sao chép thông tin cộng đồng của tôi** sẽ sao chép tên, địa điểm của cộng đồng và cách mọi người có thể liên hệ với bạn, để dán vào phần cài đặt của máy chủ mới.
+Để bắt đầu, nhấn **Tạo một cộng đồng** trong bất kỳ bảng **Vì sao tính năng này thuộc về cộng đồng địa phương** nào, hoặc trên điện thoại, trên thẻ **Tìm cộng đồng của bạn** của Trang chủ. Màn hình sẽ hiển thị ba cách để vận hành: một máy tính dư ở nhà, một máy chủ thuê nhỏ, hoặc nhờ trợ giúp trên cộng đồng toàn cầu. Nút **Sao chép thông tin cộng đồng của tôi** sẽ sao chép tên, địa điểm của cộng đồng và cách mọi người có thể liên hệ với bạn, để dán vào phần cài đặt của máy chủ mới.
 
-Các bước thực hiện nằm trong "Thiết lập lần đầu", trong hướng dẫn dành cho người vận hành cộng đồng trên beanpool.org. Khi máy chủ của bạn đã hoạt động, bạn xác nhận quyền sở hữu bằng điện thoại của mình: hướng máy ảnh của điện thoại vào mã QR mà máy chủ của bạn hiển thị, hoặc trong BeanPool nhấn **Thiết lập máy chủ cộng đồng mới** (trong **Tìm cộng đồng** hoặc **Bắt đầu một cộng đồng**), sau đó chọn **Quét mã**. Cài đặt sau đó sẽ hướng dẫn bạn đặt tên cho cộng đồng, thêm chủ sở hữu thứ hai và tạo những lời mời đầu tiên. Hãy đặt cả vị trí của cộng đồng trong Cài đặt, để mọi người ở gần có thể tìm thấy.
+Các bước thực hiện nằm trong "Thiết lập lần đầu", trong hướng dẫn dành cho người vận hành cộng đồng trên beanpool.org. Khi máy chủ của bạn đã hoạt động, bạn xác nhận quyền sở hữu bằng điện thoại của mình: hướng máy ảnh của điện thoại vào mã QR mà máy chủ của bạn hiển thị, hoặc trong BeanPool nhấn **Thiết lập máy chủ cộng đồng mới** (trong **Tìm cộng đồng** hoặc **Tạo một cộng đồng**), sau đó chọn **Quét mã**. Cài đặt sau đó sẽ hướng dẫn bạn đặt tên cho cộng đồng, thêm chủ sở hữu thứ hai và tạo những lời mời đầu tiên. Hãy đặt cả vị trí của cộng đồng trong Cài đặt, để mọi người ở gần có thể tìm thấy.
 
 ## Tham gia một cộng đồng gần bạn
 
 Trên điện thoại:
 
 - **Cộng đồng gần bạn** liệt kê các cộng đồng ở gần bạn nhất đã chọn hiển thị trong danh sách.
-- Nhấn **Yêu cầu tham gia**: một thành viên ở đó có thể cho bạn vào. Ở nơi cộng đồng chỉ cho phép quản trị viên mời, một chủ sở hữu hoặc quản trị viên sẽ thực hiện việc đó.
+- Nhấn **Xin tham gia**: một thành viên ở đó có thể cho bạn vào. Ở nơi cộng đồng chỉ cho phép quản trị viên mời, một chủ sở hữu hoặc quản trị viên sẽ thực hiện việc đó.
 - Chưa có cộng đồng nào ở gần bạn? Nút **Báo cho tôi khi có cộng đồng ở đây** sẽ thông báo cho bạn khi có cộng đồng xuất hiện.
 
 Trong ứng dụng web, thẻ **Tìm cộng đồng của bạn** trên Trang chủ liên kết từng cộng đồng gần bạn đến trang riêng của cộng đồng đó.

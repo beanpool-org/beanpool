@@ -1,4 +1,754 @@
 {
-  "sections": {},
-  "pages": {}
+  "sections": {
+    "about": {
+      "title": {
+        "text": "Über BeanPool",
+        "sourceHash": "2d9dd281fa519636"
+      },
+      "summary": {
+        "text": "Wie BeanPool funktioniert, die Regeln und Entscheidungen, häufige Fragen und was neu ist.",
+        "sourceHash": "003302493f5fd51a"
+      }
+    },
+    "getting-started": {
+      "title": {
+        "text": "Erste Schritte",
+        "sourceHash": "831d0f72d242b7d1"
+      },
+      "summary": {
+        "text": "Startseite, Beitritt, Communitys in der Nähe, Bohnen und die globale Community, Grenzen, deine 12 Wörter, Profil, Leiste oben, dieser Guide, Hilfe, mehrere Communitys und die Web-App.",
+        "sourceHash": "63d6211469096565"
+      }
+    },
+    "market": {
+      "title": {
+        "text": "Markt",
+        "sourceHash": "5238d9bd03d543e6"
+      },
+      "summary": {
+        "text": "Angebote und Gesuche finden und einstellen, und wie ein Deal von Anfang bis Ende abläuft.",
+        "sourceHash": "6008ab9bf397a83a"
+      }
+    },
+    "map": {
+      "title": {
+        "text": "Karte",
+        "sourceHash": "be176b0015c424b7"
+      },
+      "summary": {
+        "text": "Was die Pins bedeuten, wo deiner steht und wie du Dinge in deiner Nähe findest.",
+        "sourceHash": "b4e17982e037f558"
+      }
+    },
+    "talk": {
+      "title": {
+        "text": "Chat",
+        "sourceHash": "449f5a775762cdc5"
+      },
+      "summary": {
+        "text": "Nachrichten, Gruppen und deren Chats, Leute und Freunde, Event-Chats, Stummschalten, Erwähnungen und geänderte Schlüssel.",
+        "sourceHash": "e680a96492c72e47"
+      }
+    },
+    "pulse": {
+      "title": {
+        "text": "Pulse",
+        "sourceHash": "f7a403c6cdf31e72"
+      },
+      "summary": {
+        "text": "Was deine Nachbarn teilen, die Lern-Videos und das Hinzufügen eigener Kanäle.",
+        "sourceHash": "9ab06ad52ef86462"
+      }
+    },
+    "commons": {
+      "title": {
+        "text": "Gemeingut",
+        "sourceHash": "6aa9f1a43424d37b"
+      },
+      "summary": {
+        "text": "Entscheidungen und Abstimmungen, die gemeinsamen Bohnen, Gruppen, Betriebe und Verwalter. Umfragen und Veranstaltungen findest du im Markt.",
+        "sourceHash": "bd9454f4374e35ae"
+      }
+    },
+    "ledger": {
+      "title": {
+        "text": "Buch",
+        "sourceHash": "ee69eb4afc76aae0"
+      },
+      "summary": {
+        "text": "Dein Kontostand, Kreditrahmen, Geschenke, Vertrauensabzeichen, das Limit je Handelspartner und die Umlaufgebühr.",
+        "sourceHash": "99d7457bf048947c"
+      }
+    },
+    "settings": {
+      "title": {
+        "text": "Einstellungen & Schutz",
+        "sourceHash": "8ee717d56a807cd5"
+      },
+      "summary": {
+        "text": "Privatsphäre und was Admins und deren KI-Assistenten sehen, deine Gegend, Blockieren und Melden, Benachrichtigungen, Hell und Dunkel, Urlaubsmodus, Austritt, Kontowiederherstellung und Prüfung deiner 12 Wörter.",
+        "sourceHash": "767b3834909fa76c"
+      }
+    }
+  },
+  "pages": {
+    "how-it-works": {
+      "title": {
+        "text": "So funktioniert BeanPool",
+        "sourceHash": "8ee2145ba2a47e77"
+      },
+      "summary": {
+        "text": "Bohnen, Handel, Angebote und Gesuche sowie Kredit, in einfachen Worten.",
+        "sourceHash": "921252df227ae544"
+      }
+    },
+    "rules": {
+      "title": {
+        "text": "Regeln und Entscheidungen",
+        "sourceHash": "482819c153332e58"
+      },
+      "summary": {
+        "text": "Abstimmungen, Beteiligung, geheime Wahl, Stimmberechtigung, Suspendierung, Ausschluss, Verwalter sowie Koordinatoren und Hauptkoordinatoren.",
+        "sourceHash": "b111b31338cdd2a3"
+      }
+    },
+    "faq": {
+      "title": {
+        "text": "Fragen",
+        "sourceHash": "9a72221a27476f3e"
+      },
+      "summary": {
+        "text": "Kurze Antworten auf die häufigsten Fragen der Mitglieder.",
+        "sourceHash": "8feb7069cb08f93d"
+      }
+    },
+    "whats-new": {
+      "title": {
+        "text": "Was neu ist",
+        "sourceHash": "135e912e89054ffa"
+      },
+      "summary": {
+        "text": "Was sich in der App geändert hat, in einfachen Worten.",
+        "sourceHash": "e1f96938296c5950"
+      }
+    },
+    "home": {
+      "title": {
+        "text": "Startseite",
+        "sourceHash": "3a78695388b38b5c"
+      },
+      "summary": {
+        "text": "Was die Startseite ist, welche Karten sie auf dem Smartphone und im Web zeigt, wie man sie anordnet oder entfernt, Interessen wählen und Datenschutz beim Abmelden.",
+        "sourceHash": "a1c1ff42cd312dd2"
+      },
+      "help": {
+        "text": "Deine Startseite: Karten zu deinen Aufgaben und Events in der Nähe. Unten Karte hinzufügen oder über … verschieben bzw. entfernen.",
+        "sourceHash": "3842000d41b06fa3"
+      }
+    },
+    "joining": {
+      "title": {
+        "text": "BeanPool beitreten",
+        "sourceHash": "4a4fa8d50d056023"
+      },
+      "summary": {
+        "text": "Zwei Wege: eine Community mit Einladung oder die globale Community mit 12 geheimen Wörtern oder einem Login. Beitritt anfragen und andere einladen.",
+        "sourceHash": "bfa09f20fea858c6"
+      },
+      "help": {
+        "text": "Tritt einer Community per Einladung bei oder der globalen Community mit 12 geheimen Wörtern oder einem Login.",
+        "sourceHash": "288300534966c3d2"
+      }
+    },
+    "finding-a-community": {
+      "title": {
+        "text": "Community in der Nähe finden",
+        "sourceHash": "dbb0b4170f999d18"
+      },
+      "summary": {
+        "text": "Aus der globalen Community lokale Gruppen finden und beitreten, informiert werden wenn eine startet, oder selbst eine gründen.",
+        "sourceHash": "d7fada0c8e749ecf"
+      }
+    },
+    "beans-and-the-global-community": {
+      "title": {
+        "text": "Bohnen & globale Community",
+        "sourceHash": "e44e1649e26e9122"
+      },
+      "summary": {
+        "text": "Wozu die globale Community dient, eine unter vielen, und was du dort siehst: 🏘️ Lokale Community, Beispieltal, warum Bohnen warten, und wie du lokale Gruppen findest.",
+        "sourceHash": "f91dcd042d53fdfb"
+      }
+    },
+    "global-community-limits": {
+      "title": {
+        "text": "Grenzen der Community",
+        "sourceHash": "79186984a4ee4919"
+      },
+      "summary": {
+        "text": "Die globale Community ist kostenlos mit Limits für planbare Kosten: Archivierung nach 90 Tagen, bis zu 5 Fotos, die nächsten 500 Einträge auf dem Handy und 3 beobachtete Orte.",
+        "sourceHash": "feba3e6c852b6d3b"
+      }
+    },
+    "your-12-words": {
+      "title": {
+        "text": "Deine 12 Wörter",
+        "sourceHash": "dd2264b1e132960b"
+      },
+      "summary": {
+        "text": "Die 12 Wörter sind der Schlüssel zu deinem Konto. Warum sie wichtig sind, wo du sie findest, wie du sie schützt und ein Login als zweiten Weg hinzufügst.",
+        "sourceHash": "7033308ae096c586"
+      }
+    },
+    "your-profile": {
+      "title": {
+        "text": "Dein Profil",
+        "sourceHash": "528d89ad72cba22e"
+      },
+      "summary": {
+        "text": "Dein Name, Foto, ein paar Worte über dich und wer deine Kontaktdaten sehen kann.",
+        "sourceHash": "f405b4421669fcdb"
+      }
+    },
+    "the-top-bar": {
+      "title": {
+        "text": "Die Leiste oben",
+        "sourceHash": "67f6e62947dde848"
+      },
+      "summary": {
+        "text": "Die Bohne, kleine Symbole bei Handlungsbedarf und die Schaltflächen oben rechts.",
+        "sourceHash": "19dc6a309244ae90"
+      }
+    },
+    "the-bean": {
+      "title": {
+        "text": "Dieser Guide",
+        "sourceHash": "1d8917503dda7b5f"
+      },
+      "summary": {
+        "text": "Wo du diesen Guide findest, wie du ihn durchsuchst und wie er aktuell bleibt.",
+        "sourceHash": "7e694a121aa2314d"
+      }
+    },
+    "getting-help": {
+      "title": {
+        "text": "Hilfe erhalten",
+        "sourceHash": "418313b75b185ab8"
+      },
+      "summary": {
+        "text": "Wo du nachsehen kannst, wenn du nicht weiterkommst, und wen du fragen kannst.",
+        "sourceHash": "8d12d16dc2217232"
+      }
+    },
+    "communities": {
+      "title": {
+        "text": "Mehrere Communitys",
+        "sourceHash": "b753dd3e548b2230"
+      },
+      "summary": {
+        "text": "Mit einem Konto zu mehreren Communitys gehören, wechseln, einer Community zu einer neuen Adresse folgen und die globale Ansicht nutzen.",
+        "sourceHash": "71e99c6bbffadcbe"
+      }
+    },
+    "web-app": {
+      "title": {
+        "text": "BeanPool im Webbrowser nutzen",
+        "sourceHash": "1daaa01a91ba4b17"
+      },
+      "summary": {
+        "text": "Die Web-App bietet fast alles wie die Smartphone-App. Beitritt im Browser, Wiederherstellung per Login, Nutzung auf dem Handy und abweichende Tastenbezeichnungen.",
+        "sourceHash": "8afd3ad2f9117fd5"
+      }
+    },
+    "browsing-the-market": {
+      "title": {
+        "text": "Im Markt stöbern",
+        "sourceHash": "ab1b6bf5f734c023"
+      },
+      "summary": {
+        "text": "Angebote und Gesuche über Suche, Filter und Entfernung finden.",
+        "sourceHash": "e73e882abbebfa8d"
+      },
+      "help": {
+        "text": "Angebote und Gesuche aus deiner Nähe. Suchen, nach Kategorie oder Distanz filtern, oder mit + BEITRAG ERSTELLEN inserieren.",
+        "sourceHash": "0bc8b01c4d9effb6"
+      }
+    },
+    "posting": {
+      "title": {
+        "text": "Angebot oder Gesuch aufgeben",
+        "sourceHash": "e218de31c1bbad00"
+      },
+      "summary": {
+        "text": "Stelle etwas ein, das du tun oder geben kannst, oder etwas, das du suchst.",
+        "sourceHash": "9ffa9b1e66834bc0"
+      }
+    },
+    "my-deals": {
+      "title": {
+        "text": "Meine Deals",
+        "sourceHash": "bfad6bb30e1876c5"
+      },
+      "summary": {
+        "text": "Ein Ort für alle deine laufenden Deals, aktiven Beiträge und vergangenen Abschlüsse.",
+        "sourceHash": "8772e2ee242712d3"
+      },
+      "help": {
+        "text": "Alle laufenden Deals und aktiven Beiträge. Deals, die auf dich warten, stehen ganz oben.",
+        "sourceHash": "3ec4be8c87368ed9"
+      }
+    },
+    "a-deal-step-by-step": {
+      "title": {
+        "text": "Deal Schritt für Schritt",
+        "sourceHash": "d2b29952cde1ab00"
+      },
+      "summary": {
+        "text": "Von der Anfrage bis zur Zahlung, für Angebote und Gesuche, und wie man eine Bewertung abgibt.",
+        "sourceHash": "88d4362d08a13bc5"
+      }
+    },
+    "when-a-deal-goes-wrong": {
+      "title": {
+        "text": "Wenn ein Deal scheitert",
+        "sourceHash": "190bfad1746f9e84"
+      },
+      "summary": {
+        "text": "Einen Deal abbrechen und was passiert, wenn ihr euch nicht einig werdet.",
+        "sourceHash": "a68c0d7af60988b4"
+      }
+    },
+    "map-pins": {
+      "title": {
+        "text": "Was die Karte zeigt",
+        "sourceHash": "dbd1bae516674246"
+      },
+      "summary": {
+        "text": "Die Pins auf der Karte, was ihre Farben bedeuten und die Symbole drumherum.",
+        "sourceHash": "79dec90cc1871495"
+      },
+      "help": {
+        "text": "Was in deiner Nähe ist: Grüne Pins sind Angebote, orange Gesuche, lila Events. Tippe auf einen Pin zum Anzeigen.",
+        "sourceHash": "0dae9edef568b7cd"
+      }
+    },
+    "pin-locations": {
+      "title": {
+        "text": "Wo dein Pin steht",
+        "sourceHash": "271264e11ffa7eaf"
+      },
+      "summary": {
+        "text": "Wer sieht, wo deine Beiträge und Events sind, und wie dein Zuhause privat bleibt.",
+        "sourceHash": "a6ef3083e3ca4bfc"
+      }
+    },
+    "near-you": {
+      "title": {
+        "text": "Dinge in der Nähe finden",
+        "sourceHash": "21bac241e8aef2ca"
+      },
+      "summary": {
+        "text": "Nur Beiträge in einem bestimmten Umkreis um dich oder einen gewählten Ort anzeigen.",
+        "sourceHash": "5158de7099e0e89b"
+      }
+    },
+    "messages": {
+      "title": {
+        "text": "Nachrichten",
+        "sourceHash": "04d7b48339271ea6"
+      },
+      "summary": {
+        "text": "Einen Chat starten, Fotos senden, antworten, reagieren, bearbeiten, löschen, stummschalten und Privatsphäre.",
+        "sourceHash": "d97a6ef5d498fdde"
+      },
+      "help": {
+        "text": "Deine Chats. Einzelchats sind Ende-zu-Ende verschlüsselt. Tippe auf einen Chat zum Öffnen oder auf + zum Starten.",
+        "sourceHash": "bb7067d935067660"
+      }
+    },
+    "groups": {
+      "title": {
+        "text": "Gruppen",
+        "sourceHash": "39bbb719fa2b9d22"
+      },
+      "summary": {
+        "text": "Einer Gruppe beitreten, eine gründen, Gruppenchats, offene und geschlossene Gruppen, Koordinatoren und neue Leitung wählen.",
+        "sourceHash": "4fa880d88c4b646f"
+      },
+      "help": {
+        "text": "Deine Gruppen und Gruppen zum Beitreten. Tippe auf eine Gruppe zum Öffnen des Chats oder auf + zum Starten.",
+        "sourceHash": "ae3496f349eba2b3"
+      }
+    },
+    "people": {
+      "title": {
+        "text": "Leute und Freunde",
+        "sourceHash": "99d59d29a0f3c756"
+      },
+      "summary": {
+        "text": "Mitglieder finden, Freunde, Profile, jemanden in eine Gruppe einladen und wer dich sehen kann.",
+        "sourceHash": "4be4971d826d83fe"
+      },
+      "help": {
+        "text": "Mitglieder deiner Community. Tippe auf ein Mitglied für das Profil, zum Chatten oder als Freund hinzufügen.",
+        "sourceHash": "d90b46866bc2bb6f"
+      }
+    },
+    "event-chat": {
+      "title": {
+        "text": "Event-Chat",
+        "sourceHash": "9c298662a4d6fc3e"
+      },
+      "summary": {
+        "text": "Ein Gruppenchat für alle Teilnehmenden und wie er sich von anderen Chats unterscheidet.",
+        "sourceHash": "ae8ca7988e16e019"
+      }
+    },
+    "mute": {
+      "title": {
+        "text": "Chat stummschalten",
+        "sourceHash": "8a491f4109c925c7"
+      },
+      "summary": {
+        "text": "Benachrichtigungen für einen einzelnen Chat ausschalten, ohne ihn zu verlassen.",
+        "sourceHash": "ce143abea39ce423"
+      }
+    },
+    "mentions": {
+      "title": {
+        "text": "Erwähnungen (@Name)",
+        "sourceHash": "2e133ecc601b188f"
+      },
+      "summary": {
+        "text": "Wie du jemanden in einer Gruppe oder einem Event-Chat direkt ansprichst.",
+        "sourceHash": "265d8fd594c5af23"
+      }
+    },
+    "key-changed": {
+      "title": {
+        "text": "Wenn ein Schlüssel im Chat wechselt",
+        "sourceHash": "79c7dc48aa148094"
+      },
+      "summary": {
+        "text": "Warum ein Chat den Versand stoppt, wie du den Schlüsselcode prüfst und wann du fortfahren kannst.",
+        "sourceHash": "c7a3e58ca019f963"
+      }
+    },
+    "the-pulse": {
+      "title": {
+        "text": "Der Puls",
+        "sourceHash": "a974f2e05f105a24"
+      },
+      "summary": {
+        "text": "Was Nachbarn anderswo erstellen und teilen, gesammelt in einem Feed.",
+        "sourceHash": "999659aebbfe69d2"
+      },
+      "help": {
+        "text": "Beiträge, die Nachbarn erstellt oder geteilt haben, in einem Feed. Tippe darauf zum Öffnen.",
+        "sourceHash": "1d19387da6116082"
+      }
+    },
+    "learn": {
+      "title": {
+        "text": "Die Lernspur",
+        "sourceHash": "498e66e5947ca0c3"
+      },
+      "summary": {
+        "text": "Kurze Videos über BeanPool und die passenden Seiten aus dem Guide.",
+        "sourceHash": "4d2fdf4c850fe47f"
+      }
+    },
+    "your-channels": {
+      "title": {
+        "text": "Eigene Kanäle teilen",
+        "sourceHash": "e47ac70a91b21162"
+      },
+      "summary": {
+        "text": "Bringe YouTube, Blogs, Instagram und andere Kanäle in den Puls.",
+        "sourceHash": "bc9819c938b91f04"
+      }
+    },
+    "decisions": {
+      "title": {
+        "text": "Über Beschlüsse abstimmen",
+        "sourceHash": "67b17269f83d1030"
+      },
+      "summary": {
+        "text": "Offene Entscheidungen finden, abstimmen, Stimme ändern und Ergebnisse einsehen.",
+        "sourceHash": "fc4b9c95d8478a91"
+      }
+    },
+    "proposing-a-decision": {
+      "title": {
+        "text": "Beschluss vorschlagen",
+        "sourceHash": "3a20703895de04dc"
+      },
+      "summary": {
+        "text": "Die Community bitten, eine verbindliche Entscheidung zu treffen.",
+        "sourceHash": "69756653393ec8b4"
+      }
+    },
+    "polls": {
+      "title": {
+        "text": "Umfragen",
+        "sourceHash": "996729458535904a"
+      },
+      "summary": {
+        "text": "Der Community eine schnelle Frage stellen. Umfragen zeigen Meinungen, ändern aber allein nichts.",
+        "sourceHash": "d7fadda691d8879b"
+      },
+      "help": {
+        "text": "Eine Umfrage stellt eine schnelle Frage an alle. Sie zeigt ein Stimmungsbild, ändert allein aber nichts.",
+        "sourceHash": "99dfd4781ce0785d"
+      }
+    },
+    "events": {
+      "title": {
+        "text": "Veranstaltung",
+        "sourceHash": "8d14f6e72de8f18a"
+      },
+      "summary": {
+        "text": "Events vor Ort oder online erstellen, einmalig oder wiederkehrend; Teilnahme zusagen, Erinnerungen erhalten, teilen und leiten.",
+        "sourceHash": "29e8adc52f9b6df9"
+      }
+    },
+    "enterprises": {
+      "title": {
+        "text": "Projekte und Betriebe",
+        "sourceHash": "e1ccbac49d2ba550"
+      },
+      "summary": {
+        "text": "Gemeinsame Unternehmungen mit eigenen Bohnen: finden, unterstützen oder selbst gründen.",
+        "sourceHash": "8302886bb796749e"
+      }
+    },
+    "keepers": {
+      "title": {
+        "text": "Verwalter",
+        "sourceHash": "ffc8948f6b16666e"
+      },
+      "summary": {
+        "text": "Die Personen, die einen Betrieb führen und dafür einstehen. Wie man beitritt, widerspricht und zurücktritt.",
+        "sourceHash": "cbe734a215f75289"
+      }
+    },
+    "commons-fund": {
+      "title": {
+        "text": "Das Gemeingut",
+        "sourceHash": "b1b09e953a4dd7c0"
+      },
+      "summary": {
+        "text": "Die geteilten Bohnen deiner Community: woher sie kommen und wie sie verwendet werden.",
+        "sourceHash": "aaf9158560e5d6aa"
+      }
+    },
+    "your-balance": {
+      "title": {
+        "text": "Kontostand und Historie",
+        "sourceHash": "fb3a96eb2bfcd2a8"
+      },
+      "summary": {
+        "text": "Wie viele Bohnen du hast, was gebunden ist und jeder Handel sowie jedes Geschenk.",
+        "sourceHash": "61df521108b36035"
+      },
+      "help": {
+        "text": "Deine Bohnen: dein Guthaben, was in einem Deal gebunden ist, und jeder Handel sowie jedes Geschenk. Jeder startet bei null.",
+        "sourceHash": "a40a5f9fef426c85"
+      }
+    },
+    "credit-line": {
+      "title": {
+        "text": "Dein Kreditrahmen",
+        "sourceHash": "dd11b44ecc1037c9"
+      },
+      "summary": {
+        "text": "Wie weit du ins Minus gehen kannst und wie dieser Rahmen wächst.",
+        "sourceHash": "18b609abc63667e7"
+      }
+    },
+    "gifts": {
+      "title": {
+        "text": "Bohnen schenken",
+        "sourceHash": "5440f4f6ef954605"
+      },
+      "summary": {
+        "text": "Jemandem Bohnen ohne Gegenleistung senden.",
+        "sourceHash": "7eaddf0c6cd54a04"
+      }
+    },
+    "trust-badges": {
+      "title": {
+        "text": "Vertrauensstufen",
+        "sourceHash": "a1d8765277383923"
+      },
+      "summary": {
+        "text": "Neuling, Bewohner, Verwalter und Ältester. Was sie bedeuten und warum sie nichts freischalten.",
+        "sourceHash": "90926482e87ba9fa"
+      }
+    },
+    "trading-partner-limit": {
+      "title": {
+        "text": "Limit je Handelspartner",
+        "sourceHash": "c40110de7df3670c"
+      },
+      "summary": {
+        "text": "Warum der Handel mit vielen Personen mehr Vertrauen schafft als viel Handel mit einer Person.",
+        "sourceHash": "ce231d025501d5bc"
+      }
+    },
+    "circulation-fee": {
+      "title": {
+        "text": "Die Umlaufgebühr",
+        "sourceHash": "e237d280aa62b186"
+      },
+      "summary": {
+        "text": "Eine kleine monatliche Gebühr auf hohe Guthaben, damit Bohnen in Bewegung bleiben. Die ersten 200 sind frei.",
+        "sourceHash": "c9efbe6aa5cb9873"
+      }
+    },
+    "privacy": {
+      "title": {
+        "text": "Privatsphäre",
+        "sourceHash": "d2a7115d0455956b"
+      },
+      "summary": {
+        "text": "Was andere über dich sehen können und welche Einstellungen dies steuern.",
+        "sourceHash": "e4a23a87e82cf7a6"
+      },
+      "help": {
+        "text": "Was andere Mitglieder über dich sehen können und mit welchen Schaltern du es steuerst.",
+        "sourceHash": "0a1a1831174d443b"
+      }
+    },
+    "your-area": {
+      "title": {
+        "text": "Deine Gegend",
+        "sourceHash": "b0adfdbb4ce55184"
+      },
+      "summary": {
+        "text": "Der ungefähre Ort, den die globale Community für Einträge in deiner Nähe nutzt, und wie du ihn änderst oder löschst.",
+        "sourceHash": "de4a8af84def7d30"
+      },
+      "help": {
+        "text": "Der ungefähre Ort für Einträge in deiner Nähe. Hier ändern oder löschen; es ist nie deine genaue Adresse.",
+        "sourceHash": "f3099801c4d773a5"
+      }
+    },
+    "what-the-admins-can-see": {
+      "title": {
+        "text": "Was die Admins sehen",
+        "sourceHash": "261de35d8123a845"
+      },
+      "summary": {
+        "text": "In einer Community mit Namensliste: was über dich gespeichert wird, wer es lesen darf, was der Server behält und was bestätigt bedeutet.",
+        "sourceHash": "5960a4392bb32b4b"
+      }
+    },
+    "admins-ai-assistants": {
+      "title": {
+        "text": "Wenn Admins KI-Hilfe nutzen",
+        "sourceHash": "9180d368e5d11c1e"
+      },
+      "summary": {
+        "text": "Was der KI-Assistent eines Eigentümers oder Admins über dich lesen kann, was er nie sieht und wer Daten erhält.",
+        "sourceHash": "d693c47b7b2cbfef"
+      }
+    },
+    "blocking": {
+      "title": {
+        "text": "Jemanden blockieren",
+        "sourceHash": "f2ddac8bd6e31ad5"
+      },
+      "summary": {
+        "text": "Beiträge und Nachrichten einer Person ausblenden und dies später wieder aufheben.",
+        "sourceHash": "9e63d5d87e52a1b9"
+      },
+      "help": {
+        "text": "Personen, die du blockiert hast. Deren Inhalte sind für dich unsichtbar; hier kannst du jemanden wieder freigeben.",
+        "sourceHash": "baecf7f0bec3735c"
+      }
+    },
+    "reporting": {
+      "title": {
+        "text": "Ein Problem melden",
+        "sourceHash": "59274c49ac87bb2f"
+      },
+      "summary": {
+        "text": "Den Moderatoren deiner Community einen Beitrag, ein Event, einen Puls-Beitrag, ein Projekt oder einen Betrieb melden.",
+        "sourceHash": "4b773ef8eef237fa"
+      }
+    },
+    "notifications": {
+      "title": {
+        "text": "Benachrichtigungen",
+        "sourceHash": "788011833a5a0f22"
+      },
+      "summary": {
+        "text": "Wähle aus, welche Hinweise dein Handy erreichen und wann Events dich erinnern.",
+        "sourceHash": "70c8aa586befc843"
+      },
+      "help": {
+        "text": "Wähle aus, welche Hinweise dich erreichen und wann Events dich erinnern.",
+        "sourceHash": "7f7ecf01321aba59"
+      }
+    },
+    "appearance": {
+      "title": {
+        "text": "Hell und Dunkel",
+        "sourceHash": "596443341c105af1"
+      },
+      "summary": {
+        "text": "Die Smartphone-App startet hell und die Web-App dunkel. Passe es an oder folge deinem Gerät.",
+        "sourceHash": "31cf0aeff28a2052"
+      },
+      "help": {
+        "text": "Stelle die App auf hell oder dunkel, oder passe sie an dein Smartphone an.",
+        "sourceHash": "1ef643d6832c782a"
+      }
+    },
+    "holiday-mode": {
+      "title": {
+        "text": "Verreisen",
+        "sourceHash": "03098a2ccb21c3c2"
+      },
+      "summary": {
+        "text": "Der Urlaubsmodus blendet deine Angebote aus und pausiert neue Anfragen, während du weg bist.",
+        "sourceHash": "53d1ceef93b0a7a1"
+      }
+    },
+    "leaving-or-deleting": {
+      "title": {
+        "text": "Konto verlassen oder löschen",
+        "sourceHash": "6128699c3d7f036a"
+      },
+      "summary": {
+        "text": "Auf diesem Handy abmelden oder dein Konto dauerhaft löschen, und was mit deinen Bohnen passiert.",
+        "sourceHash": "d28cb71428dd6615"
+      }
+    },
+    "recovery": {
+      "title": {
+        "text": "Konto wiederherstellen",
+        "sourceHash": "7a6a763f943871ce"
+      },
+      "summary": {
+        "text": "Stelle dein Konto auf einem neuen Handy wieder her und schütze es mit einem Login.",
+        "sourceHash": "5235d9f9073b2e63"
+      },
+      "help": {
+        "text": "So holst du dein Konto auf einem neuen Handy zurück: mit deinen 12 Wörtern oder einem verknüpften Login.",
+        "sourceHash": "05fba497e5466e59"
+      }
+    },
+    "check-your-12-words": {
+      "title": {
+        "text": "Deine 12 Wörter und der Server",
+        "sourceHash": "0a24c7fe8ed3b0a4"
+      },
+      "summary": {
+        "text": "Für Eigentümer einer Community: 12 Wörter prüfen, den Server mit dem Handy übernehmen oder wiederherstellen, und automatische Handy-Checks.",
+        "sourceHash": "c3a1b3cdc4e7d8df"
+      }
+    }
+  }
 }

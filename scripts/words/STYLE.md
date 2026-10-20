@@ -75,7 +75,7 @@ Before translating, check your language's existing catalog `_meta.glossary` in:
    - Words that the member must type literally into an input stay in English (e.g. **CONFIRM**). The application validates the exact English word.
 
 7. **Layout & Direction**:
-   - "Left" and "right" stay as English: the app layout is left-to-right (LTR) everywhere across all languages (including Arabic, Persian, and Urdu).
+   - Translate the words left and right, but never swap them: the app draws left-to-right in every language, so 'top left' stays the top LEFT in Arabic, Persian and Urdu too.
 
 8. **Recovery Phrase (12 Words)**:
    - The 12 recovery words STAY English words. Never translate example words or word lists. State in your language that the words are English words.

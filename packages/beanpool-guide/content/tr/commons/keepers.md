@@ -29,7 +29,7 @@ Desteklemek için ne kadar güveninizin kaldığını yalnızca siz görürsün�
 ## Sorumlular için
 
 - **BEKLEYEN SORUMLU İSTEKLERİ** (web uygulamasında **Sorumlu olarak katılmak isteyenler**) altındaki istekleri **Onayla** veya **Reddet** seçeneğiyle değerlendirin. Her istek taahhüdü gösterir ve kişinin itibarının bunu karşılayıp karşılamadığını belirtir. Karşılamıyorsa, karşılayana kadar onaylama reddedilir.
-- **BEKLEYEN SORUMLU DEĞİŞİKLİKLERİ** altında bekleyen değişiklikler itiraz süresini gösterir. Birini durdurmak için **Object** seçeneğine dokunun. **Object ilk dokunuşta, ikinci bir soru sormadan çalışır.** Tek bir itiraz değişikliği iptal eder.
+- **BEKLEYEN SORUMLU DEĞİŞİKLİKLERİ** altında bekleyen değişiklikler itiraz süresini gösterir. Birini durdurmak için **İtiraz et** seçeneğine dokunun. **Object ilk dokunuşta, ikinci bir soru sormadan çalışır.** Tek bir itiraz değişikliği iptal eder.
 - Baş sorumlu, **Kaldır** ve adlarıyla bir sorumluyu çıkarabilir. Diğer sorumlular da aynı şekilde itiraz edebilir.
 - **İşletmeci Kontrolleri**, sorumluların girişimin Tekliflerini ve İhtiyaçlarını paylaşmasına olanak tanır.
 

@@ -46,4 +46,4 @@ Bu, kuyruğun serbest kalmasını sağlar. Ortak Alanda eksik varken bir hibe ka
 - **A community vote can't remove or suspend an owner or admin of this community's server:** seçtiğiniz kişi sunucuyu yönetmektedir. Bir sahip önce onun rolünü geri alabilir.
 - **This grant is bigger than the Commons could pay:** belirttiği miktardan fazlasını istemeyin veya daha fazla fasulye gelmesini bekleyin.
 - **Geçersiz Tutar** (web uygulamasında "Lütfen Fasulye cinsinden geçerli ve pozitif bir hibe miktarı girin."): kaç fasulye olduğunu doldurun.
-- **Error:** açıklamanızın en az 10 karakter uzunluğunda olduğunu kontrol edin.
+- **Hata:** açıklamanızın en az 10 karakter uzunluğunda olduğunu kontrol edin.

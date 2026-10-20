@@ -41,7 +41,7 @@ Web uygulamasında adımlar biraz farklıdır:
 
 ## Küresel toplulukta
 
-Küresel toplulukta Fasulye yoktur, bu nedenle oradaki bir ilanın fiyatı yoktur. Formda **Fiyat** bulunmaz: açıklamada karşılığında ne istediğinizi veya ücretsiz olduğunu belirtin. Fiyatın geleceği yerde web uygulamasının formu ve telefonun bir ilanı değiştirme formu "🏘️ In a local community this is a price in Beans ›" der: nedenini görmek için dokunun. "Fasulye ve küresel topluluk" bölümüne bakın.
+Küresel toplulukta Fasulye yoktur, bu nedenle oradaki bir ilanın fiyatı yoktur. Formda **Fiyat** bulunmaz: açıklamada karşılığında ne istediğinizi veya ücretsiz olduğunu belirtin. Fiyatın geleceği yerde web uygulamasının formu ve telefonun bir ilanı değiştirme formu "🏘️ Yerel bir toplulukta bu fasulye cinsinden bir fiyattır ›" der: nedenini görmek için dokunun. "Fasulye ve küresel topluluk" bölümüne bakın.
 
 Küresel topluluğun ziyaretçileri katılmadan önce bu ilanın fotoğraflarını ve yaklaşık bölgesini görebilir. İlanın metnini, fotoğraflarını ve yaklaşık olarak nerede olduğunu görürler; adınızı, yüzünüzü veya tam yeri göremezler. Web uygulamasında form bunu fotoğrafların altında belirtir. Küresel topluluğun üyeleri yerinizi yaklaşık bir kilometreye kadar görür.
 

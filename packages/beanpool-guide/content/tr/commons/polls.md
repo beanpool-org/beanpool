@@ -11,7 +11,7 @@ source-hash: c1e4eb171c19552f
 
 Bir **Anket** insanların ne düşündüğünü sorar: "Pazar Pazar günü mü yoksa Cumartesi günü mü kurulsun?". Tek başına hiçbir şeyi değiştirmez. Bağlayıcı bir şey için bir Karar önerin.
 
-Küresel toplulukta her anket **Resmi olmayan bir anket; hiçbir şeye karar vermez** der. 12 kelimeyle veya bir oturum açma yöntemiyle herkes katılabilir, bu nedenle birden fazla hesabı olan tek bir kişi sayımı etkileyebilir ve orada Kararlar yoktur. Altındaki "🏘️ In a local community a Decision binds ›", bir oylamanın neden yalnızca yerel bir toplulukta bağlayıcı olduğunu açıklar.
+Küresel toplulukta her anket **Resmi olmayan bir anket; hiçbir şeye karar vermez** der. 12 kelimeyle veya bir oturum açma yöntemiyle herkes katılabilir, bu nedenle birden fazla hesabı olan tek bir kişi sayımı etkileyebilir ve orada Kararlar yoktur. Altındaki "🏘️ Yerel bir toplulukta bir Karar bağlayıcıdır ›", bir oylamanın neden yalnızca yerel bir toplulukta bağlayıcı olduğunu açıklar.
 
 Oradaki anonim bir anket kapandığında, oylarının kaçının **yeni veya 12 kelimelik hesaplar**dan geldiğini de belirtir; örneğin "12 oyun 5'i yeni veya 12 kelimelik hesaplardan geldi". Her oy, hesabın oy verdiği andaki durumuna göre sayılır: yeni bir hesap, yeni hesap limitlerine hâlâ sahip olan bir hesaptır ve 12 kelimelik bir hesap, 12 kelimeyle oluşturulmuş ve henüz bir oturum açma yöntemi eklenmemiş olan bir hesaptır. Oyların en az 3'ü yeni veya 12 kelimelik hesaplardan geldiğinde ve diğer oylar hiç yoksa ya da en az 3 ise, her yanıt da kendi oylarının kaçının bu hesaplardan geldiğini belirtir. Her oy yine de sayılır ve hiçbir şey kimin oy verdiğini göstermez.
 

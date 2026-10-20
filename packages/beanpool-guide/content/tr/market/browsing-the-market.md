@@ -73,6 +73,6 @@ Açmak için bir gönderiye dokunun.
 
 Web uygulamasında bir gönderideki düğmeler **💬 Mesaj Gönder** ve **🚩 Bildir** şeklindedir. Birini profilinden engelleyin.
 
-Küresel toplulukta bir gönderinin Fasulye cinsinden fiyatı yoktur: kişinin karşılığında ne istediğini söyler. Fiyatın olacağı yerde "🏘️ In a local community this is a price in Beans ›" yazar. İlanı talep etmek yerine gönderi **Talep · Fasulyeler güvende tutulur 🏘️** seçeneğini gösterir: yerel bir toplulukta bir takasın nasıl işlediğini görmek için dokunun. Kişiye mesaj göndermek her yerdeki gibi çalışır. "Fasulye ve küresel topluluk" bölümüne bakın.
+Küresel toplulukta bir gönderinin Fasulye cinsinden fiyatı yoktur: kişinin karşılığında ne istediğini söyler. Fiyatın olacağı yerde "🏘️ Yerel bir toplulukta bu fasulye cinsinden bir fiyattır ›" yazar. İlanı talep etmek yerine gönderi **Talep · Fasulyeler güvende tutulur 🏘️** seçeneğini gösterir: yerel bir toplulukta bir takasın nasıl işlediğini görmek için dokunun. Kişiye mesaj göndermek her yerdeki gibi çalışır. "Fasulye ve küresel topluluk" bölümüne bakın.
 
 Henüz bir gönderiyi kaydedemez veya paylaşamazsınız.

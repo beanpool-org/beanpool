@@ -26,7 +26,7 @@ Her site biraz farklı çalışır. Ekran hangisi olduğunu belirtir:
 ## Doğrulanmış hesaplar
 
 - **Connect TikTok** veya **Connect Instagram** seçeneğine dokunduğunuzda topluluğunuzun sunucusu Instagram veya TikTok'a hangi hesapla giriş yaptığınızı sorar. Kanal yalnızca o hesap kanaldaki hesap olduğunda doğrulanmış olarak işaretlenir.
-- Farklı bir hesapla mı giriş yaptınız? Ekran bunu belirtir. Doğru hesapla giriş yapın ve aynı **Connect** düğmesine tekrar dokunun.
+- Farklı bir hesapla mı giriş yaptınız? Ekran bunu belirtir. Doğru hesapla giriş yapın ve aynı **Bağlan** düğmesine tekrar dokunun.
 - Kanalı kontrol edilebilmesi için **@kullanıcıadınız** olarak ekleyin. Kısa bir bağlantı kontrol edilemez.
 - Facebook kanalları hiçbir zaman doğrulanmış olarak işaretlenmez.
 - Bir kanal **Doğrulanmış rozetini geri yüklemek için yeniden bağlan** diyorsa **Reconnect TikTok** veya **Reconnect Instagram** seçeneğine dokunun.

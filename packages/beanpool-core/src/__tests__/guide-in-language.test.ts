@@ -231,6 +231,12 @@ describe('guideInLanguage with translated page bodies (slice S5b)', () => {
         );
         expect(rejected).toBeNull();
         expect(storage['beanpool_member_guide_v2:es']).toBeUndefined();
+
+        // Rejects cached guide if stored language does not match requested locale
+        storage['beanpool_member_guide_v2:es'] = JSON.stringify(englishFallback);
+        expect(await loadCachedLanguageGuide(mockStorage, 'es')).toBeNull();
+        storage['beanpool_member_guide_v2:es'] = JSON.stringify({ ...translatedGuide, language: 'pt' });
+        expect(await loadCachedLanguageGuide(mockStorage, 'es')).toBeNull();
     });
 
     it('ignores translatedGuide if language does not match the target language', () => {

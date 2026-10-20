@@ -290,7 +290,9 @@ export async function loadCachedLanguageGuide(
     try {
         const raw = await storage.getItem(guideCacheKey(lang));
         if (!raw) return null;
-        return validateGuide(JSON.parse(raw));
+        const g = validateGuide(JSON.parse(raw));
+        if (!g || g.language !== lang) return null;
+        return g;
     } catch {
         return null;
     }

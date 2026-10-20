@@ -1,4 +1,754 @@
 {
-  "sections": {},
-  "pages": {}
+  "sections": {
+    "about": {
+      "title": {
+        "text": "Về BeanPool",
+        "sourceHash": "2d9dd281fa519636"
+      },
+      "summary": {
+        "text": "Cách BeanPool hoạt động, quy tắc và cách đưa ra quyết định, các câu hỏi thường gặp và những điểm mới.",
+        "sourceHash": "003302493f5fd51a"
+      }
+    },
+    "getting-started": {
+      "title": {
+        "text": "Bắt đầu",
+        "sourceHash": "831d0f72d242b7d1"
+      },
+      "summary": {
+        "text": "Trang chủ, tham gia, tìm cộng đồng gần bạn, Đậu và cộng đồng toàn cầu, các giới hạn, 12 từ của bạn, hồ sơ, thanh trên cùng, hướng dẫn này, nhận trợ giúp, dùng nhiều cộng đồng và ứng dụng web.",
+        "sourceHash": "63d6211469096565"
+      }
+    },
+    "market": {
+      "title": {
+        "text": "Chợ",
+        "sourceHash": "5238d9bd03d543e6"
+      },
+      "summary": {
+        "text": "Tìm và đăng Lời đề nghị cùng Nhu cầu, và cách một giao dịch diễn ra từ đầu đến cuối.",
+        "sourceHash": "6008ab9bf397a83a"
+      }
+    },
+    "map": {
+      "title": {
+        "text": "Bản đồ",
+        "sourceHash": "be176b0015c424b7"
+      },
+      "summary": {
+        "text": "Các ghim là gì, ghim của bạn ở đâu và tìm kiếm những thứ ở gần bạn.",
+        "sourceHash": "b4e17982e037f558"
+      }
+    },
+    "talk": {
+      "title": {
+        "text": "Trò chuyện",
+        "sourceHash": "449f5a775762cdc5"
+      },
+      "summary": {
+        "text": "Tin nhắn, nhóm và các đoạn chat, mọi người và bạn bè, chat sự kiện, tắt thông báo, nhắc đến và khóa đã đổi.",
+        "sourceHash": "e680a96492c72e47"
+      }
+    },
+    "pulse": {
+      "title": {
+        "text": "Nhịp đập",
+        "sourceHash": "f7a403c6cdf31e72"
+      },
+      "summary": {
+        "text": "Những gì hàng xóm chia sẻ, video Tìm hiểu và thêm các kênh của riêng bạn.",
+        "sourceHash": "9ab06ad52ef86462"
+      }
+    },
+    "commons": {
+      "title": {
+        "text": "Commons",
+        "sourceHash": "6aa9f1a43424d37b"
+      },
+      "summary": {
+        "text": "Quyết định và bỏ phiếu, đậu chung, các nhóm, dự án cộng đồng và người quản lý. Thăm dò và sự kiện cũng có ở đây; bạn tìm thấy chúng trong Chợ.",
+        "sourceHash": "bd9454f4374e35ae"
+      }
+    },
+    "ledger": {
+      "title": {
+        "text": "Sổ cái",
+        "sourceHash": "ee69eb4afc76aae0"
+      },
+      "summary": {
+        "text": "Số dư, hạn mức tín dụng, quà tặng, huy hiệu tin cậy, hạn mức cho mỗi đối tác và phí lưu thông.",
+        "sourceHash": "99d7457bf048947c"
+      }
+    },
+    "settings": {
+      "title": {
+        "text": "Cài đặt và an toàn",
+        "sourceHash": "8ee717d56a807cd5"
+      },
+      "summary": {
+        "text": "Quyền riêng tư và những gì quản trị viên cùng trợ lý AI có thể thấy, khu vực của bạn, chặn và báo cáo, thông báo, giao diện sáng tối, Chế độ nghỉ lễ, rời đi, khôi phục tài khoản và kiểm tra 12 từ với tư cách chủ sở hữu.",
+        "sourceHash": "767b3834909fa76c"
+      }
+    }
+  },
+  "pages": {
+    "how-it-works": {
+      "title": {
+        "text": "Cách BeanPool hoạt động",
+        "sourceHash": "8ee2145ba2a47e77"
+      },
+      "summary": {
+        "text": "Đậu, giao dịch, lời đề nghị và nhu cầu, cùng tín dụng bằng lời giải thích đơn giản.",
+        "sourceHash": "921252df227ae544"
+      }
+    },
+    "rules": {
+      "title": {
+        "text": "Quy tắc và cách quyết định vận hành",
+        "sourceHash": "482819c153332e58"
+      },
+      "summary": {
+        "text": "Bỏ phiếu, tỷ lệ tham gia, bỏ phiếu kín, ai có quyền bỏ phiếu, đình chỉ, xóa thành viên, người quản lý, cùng người triệu tập.",
+        "sourceHash": "b111b31338cdd2a3"
+      }
+    },
+    "faq": {
+      "title": {
+        "text": "Câu hỏi",
+        "sourceHash": "9a72221a27476f3e"
+      },
+      "summary": {
+        "text": "Câu trả lời ngắn gọn cho những câu hỏi thành viên thường thắc mắc nhất.",
+        "sourceHash": "8feb7069cb08f93d"
+      }
+    },
+    "whats-new": {
+      "title": {
+        "text": "Có gì mới",
+        "sourceHash": "135e912e89054ffa"
+      },
+      "summary": {
+        "text": "Những thay đổi trong ứng dụng, được diễn đạt dễ hiểu.",
+        "sourceHash": "e1f96938296c5950"
+      }
+    },
+    "home": {
+      "title": {
+        "text": "Trang chủ",
+        "sourceHash": "3a78695388b38b5c"
+      },
+      "summary": {
+        "text": "Trang chủ là gì, các thẻ hiển thị trên điện thoại và web, cách thêm, di chuyển hoặc xóa thẻ, chọn sở thích và quyền riêng tư khi đăng xuất.",
+        "sourceHash": "a1c1ff42cd312dd2"
+      },
+      "help": {
+        "text": "Đây là Trang chủ: vài thẻ về việc cần bạn và sự việc gần đây. Thêm thẻ ở dưới cùng, hoặc nhấn … để di chuyển hoặc xóa.",
+        "sourceHash": "3842000d41b06fa3"
+      }
+    },
+    "joining": {
+      "title": {
+        "text": "Tham gia BeanPool",
+        "sourceHash": "4a4fa8d50d056023"
+      },
+      "summary": {
+        "text": "Hai cách tham gia: cộng đồng qua lời mời từ thành viên, hoặc cộng đồng toàn cầu khi mở, bằng 12 từ bí mật hoặc đăng nhập. Xin gia nhập và mời người khác.",
+        "sourceHash": "bfa09f20fea858c6"
+      },
+      "help": {
+        "text": "Tham gia cộng đồng qua lời mời từ thành viên, hoặc cộng đồng toàn cầu với 12 từ bí mật hay một lần đăng nhập.",
+        "sourceHash": "288300534966c3d2"
+      }
+    },
+    "finding-a-community": {
+      "title": {
+        "text": "Tìm một cộng đồng gần bạn",
+        "sourceHash": "dbb0b4170f999d18"
+      },
+      "summary": {
+        "text": "Từ cộng đồng toàn cầu, tìm một cộng đồng gần bạn và xin gia nhập, nhận thông báo khi có cộng đồng mới ở gần, hoặc tự tạo một cộng đồng.",
+        "sourceHash": "d7fada0c8e749ecf"
+      }
+    },
+    "beans-and-the-global-community": {
+      "title": {
+        "text": "Đậu và cộng đồng toàn cầu",
+        "sourceHash": "e44e1649e26e9122"
+      },
+      "summary": {
+        "text": "Mục đích của cộng đồng toàn cầu, một trong nhiều cộng đồng, và những gì bạn thấy: dấu hiệu 🏘️ Cộng đồng địa phương, cộng đồng mẫu Example Valley, lý do Đậu chờ ở đó và cách bắt đầu hoặc tìm cộng đồng địa phương.",
+        "sourceHash": "f91dcd042d53fdfb"
+      }
+    },
+    "global-community-limits": {
+      "title": {
+        "text": "Giới hạn của cộng đồng toàn cầu",
+        "sourceHash": "79186984a4ee4919"
+      },
+      "summary": {
+        "text": "Cộng đồng toàn cầu miễn phí, với vài giới hạn để duy trì chi phí thấp. Tin đăng được lưu trữ sau 90 ngày kể từ lần đổi cuối. Mỗi tin tối đa 5 ảnh, điện thoại lưu 500 tin gần nhất và bạn có thể theo dõi 3 địa điểm.",
+        "sourceHash": "feba3e6c852b6d3b"
+      }
+    },
+    "your-12-words": {
+      "title": {
+        "text": "12 từ của bạn",
+        "sourceHash": "dd2264b1e132960b"
+      },
+      "summary": {
+        "text": "12 từ là chìa khóa tài khoản của bạn. Tầm quan trọng của chúng, nơi tìm thấy, cách giữ an toàn và thêm phương thức đăng nhập phụ.",
+        "sourceHash": "7033308ae096c586"
+      }
+    },
+    "your-profile": {
+      "title": {
+        "text": "Hồ sơ của bạn",
+        "sourceHash": "528d89ad72cba22e"
+      },
+      "summary": {
+        "text": "Tên, ảnh đại diện, vài dòng giới thiệu về bạn và ai có thể xem thông tin liên hệ của bạn.",
+        "sourceHash": "f405b4421669fcdb"
+      }
+    },
+    "the-top-bar": {
+      "title": {
+        "text": "Thanh trên cùng",
+        "sourceHash": "67f6e62947dde848"
+      },
+      "summary": {
+        "text": "Hạt đậu, các biểu tượng nhỏ hiện lên khi có việc cần bạn, và các nút ở góc trên bên phải.",
+        "sourceHash": "19dc6a309244ae90"
+      }
+    },
+    "the-bean": {
+      "title": {
+        "text": "Hướng dẫn này",
+        "sourceHash": "1d8917503dda7b5f"
+      },
+      "summary": {
+        "text": "Nơi tìm thấy hướng dẫn này, cách tìm kiếm và cách hướng dẫn luôn được cập nhật.",
+        "sourceHash": "7e694a121aa2314d"
+      }
+    },
+    "getting-help": {
+      "title": {
+        "text": "Nhận trợ giúp",
+        "sourceHash": "418313b75b185ab8"
+      },
+      "summary": {
+        "text": "Tìm ở đâu khi bạn gặp khó khăn và nên hỏi ai.",
+        "sourceHash": "8d12d16dc2217232"
+      }
+    },
+    "communities": {
+      "title": {
+        "text": "Nhiều hơn một cộng đồng",
+        "sourceHash": "b753dd3e548b2230"
+      },
+      "summary": {
+        "text": "Thuộc về nhiều cộng đồng với một tài khoản, chuyển đổi qua lại, theo dõi cộng đồng đến địa chỉ mới và xem những gì cộng đồng toàn cầu hiển thị.",
+        "sourceHash": "71e99c6bbffadcbe"
+      }
+    },
+    "web-app": {
+      "title": {
+        "text": "Dùng BeanPool trên trình duyệt web",
+        "sourceHash": "1daaa01a91ba4b17"
+      },
+      "summary": {
+        "text": "Ứng dụng web làm được hầu hết những gì ứng dụng điện thoại làm. Tham gia cộng đồng toàn cầu trên trình duyệt, khôi phục tài khoản, đồng bộ sang điện thoại và các tên nút khác biệt.",
+        "sourceHash": "8afd3ad2f9117fd5"
+      }
+    },
+    "browsing-the-market": {
+      "title": {
+        "text": "Xem qua chợ",
+        "sourceHash": "ab1b6bf5f734c023"
+      },
+      "summary": {
+        "text": "Tìm Lời đề nghị và Nhu cầu bằng tìm kiếm, bộ lọc và khoảng cách.",
+        "sourceHash": "e73e882abbebfa8d"
+      },
+      "help": {
+        "text": "Lời đề nghị và Nhu cầu từ mọi người gần bạn. Tìm kiếm, lọc theo danh mục hoặc khoảng cách, hoặc nhấn ĐĂNG TIN để đăng tin của bạn.",
+        "sourceHash": "0bc8b01c4d9effb6"
+      }
+    },
+    "posting": {
+      "title": {
+        "text": "Đăng Lời đề nghị hoặc Nhu cầu",
+        "sourceHash": "e218de31c1bbad00"
+      },
+      "summary": {
+        "text": "Đăng thứ bạn có thể làm hoặc trao tặng, hoặc thứ bạn đang tìm kiếm.",
+        "sourceHash": "9ffa9b1e66834bc0"
+      }
+    },
+    "my-deals": {
+      "title": {
+        "text": "Giao dịch",
+        "sourceHash": "bfad6bb30e1876c5"
+      },
+      "summary": {
+        "text": "Một nơi cho mọi giao dịch bạn tham gia, mọi tin bạn đã đăng và các giao dịch trước đây.",
+        "sourceHash": "8772e2ee242712d3"
+      },
+      "help": {
+        "text": "Mọi giao dịch bạn tham gia và tin bạn đăng. Giao dịch đang chờ bạn xử lý nằm ở trên cùng.",
+        "sourceHash": "3ec4be8c87368ed9"
+      }
+    },
+    "a-deal-step-by-step": {
+      "title": {
+        "text": "Giao dịch từng bước một",
+        "sourceHash": "d2b29952cde1ab00"
+      },
+      "summary": {
+        "text": "Từ yêu cầu đến khi nhận thanh toán, cho Lời đề nghị và Nhu cầu, cùng việc để lại đánh giá.",
+        "sourceHash": "88d4362d08a13bc5"
+      }
+    },
+    "when-a-deal-goes-wrong": {
+      "title": {
+        "text": "Khi giao dịch trục trặc",
+        "sourceHash": "190bfad1746f9e84"
+      },
+      "summary": {
+        "text": "Hủy giao dịch và những gì xảy ra khi hai bên không thể thống nhất ý kiến.",
+        "sourceHash": "a68c0d7af60988b4"
+      }
+    },
+    "map-pins": {
+      "title": {
+        "text": "Những gì bản đồ hiển thị",
+        "sourceHash": "dbd1bae516674246"
+      },
+      "summary": {
+        "text": "Các ghim trên Bản đồ, ý nghĩa màu sắc của chúng và các nút xung quanh.",
+        "sourceHash": "79dec90cc1871495"
+      },
+      "help": {
+        "text": "Những gì gần bạn: ghim xanh là Lời đề nghị, cam là Nhu cầu, tím là sự kiện. Nhấn vào ghim để xem.",
+        "sourceHash": "0dae9edef568b7cd"
+      }
+    },
+    "pin-locations": {
+      "title": {
+        "text": "Vị trí ghim của bạn",
+        "sourceHash": "271264e11ffa7eaf"
+      },
+      "summary": {
+        "text": "Ai thấy vị trí các bài đăng và sự kiện của bạn, và cách giữ riêng tư cho ngôi nhà.",
+        "sourceHash": "a6ef3083e3ca4bfc"
+      }
+    },
+    "near-you": {
+      "title": {
+        "text": "Tìm kiếm thứ ở gần bạn",
+        "sourceHash": "21bac241e8aef2ca"
+      },
+      "summary": {
+        "text": "Chỉ hiển thị các bài đăng trong phạm vi khoảng cách từ bạn hoặc từ bất kỳ nơi nào bạn chọn.",
+        "sourceHash": "5158de7099e0e89b"
+      }
+    },
+    "messages": {
+      "title": {
+        "text": "Tin nhắn",
+        "sourceHash": "04d7b48339271ea6"
+      },
+      "summary": {
+        "text": "Bắt đầu cuộc trò chuyện, gửi ảnh, trả lời, thả cảm xúc, chỉnh sửa, xóa, tắt thông báo và tính riêng tư.",
+        "sourceHash": "d97a6ef5d498fdde"
+      },
+      "help": {
+        "text": "Các đoạn chat. Chat 1-1 được mã hóa đầu cuối. Nhấn để mở, hoặc bắt đầu từ một bài đăng hay từ bạn bè.",
+        "sourceHash": "bb7067d935067660"
+      }
+    },
+    "groups": {
+      "title": {
+        "text": "Nhóm",
+        "sourceHash": "39bbb719fa2b9d22"
+      },
+      "summary": {
+        "text": "Các nhóm và đoạn chat nhóm, trò chuyện, tạo nhóm, mời người khác, tham gia qua lời mời và các cuộc bỏ phiếu riêng của nhóm.",
+        "sourceHash": "4fa880d88c4b646f"
+      },
+      "help": {
+        "text": "Các nhóm và đoạn chat của bạn. Tạo nhóm, mời người khác, hoặc mở nhóm để trò chuyện và bỏ phiếu cùng nhau.",
+        "sourceHash": "ae3496f349eba2b3"
+      }
+    },
+    "people": {
+      "title": {
+        "text": "Mọi người và bạn bè",
+        "sourceHash": "99d59d29a0f3c756"
+      },
+      "summary": {
+        "text": "Tìm thành viên trong cộng đồng, kết bạn và bảo lãnh cho một người.",
+        "sourceHash": "4be4971d826d83fe"
+      },
+      "help": {
+        "text": "Thành viên cộng đồng và bạn bè. Nhấn vào ai đó để xem hồ sơ, hoặc nhấn 💬 bên cạnh bạn bè để nhắn tin.",
+        "sourceHash": "d90b46866bc2bb6f"
+      }
+    },
+    "event-chat": {
+      "title": {
+        "text": "Chat sự kiện",
+        "sourceHash": "9c298662a4d6fc3e"
+      },
+      "summary": {
+        "text": "Trò chuyện với người tổ chức và tất cả những người tham gia sự kiện.",
+        "sourceHash": "ae8ca7988e16e019"
+      }
+    },
+    "mute": {
+      "title": {
+        "text": "Tắt thông báo chat",
+        "sourceHash": "8a491f4109c925c7"
+      },
+      "summary": {
+        "text": "Tắt tiếng một cuộc trò chuyện — cá nhân, nhóm hoặc dự án — trong 8 giờ, một tuần hoặc vĩnh viễn.",
+        "sourceHash": "ce143abea39ce423"
+      }
+    },
+    "mentions": {
+      "title": {
+        "text": "Nhắc đến (@tên)",
+        "sourceHash": "2e133ecc601b188f"
+      },
+      "summary": {
+        "text": "Báo cho ai đó trong đoạn chat nhóm bằng cách viết @ kèm tên của họ.",
+        "sourceHash": "265d8fd594c5af23"
+      }
+    },
+    "key-changed": {
+      "title": {
+        "text": "Khi đoạn chat báo khóa của người trò chuyện đã đổi",
+        "sourceHash": "79c7dc48aa148094"
+      },
+      "summary": {
+        "text": "Tại sao đoạn chat ngừng gửi tin, cách kiểm tra mã khóa với người đó và khi nào nên tiếp tục.",
+        "sourceHash": "c7a3e58ca019f963"
+      }
+    },
+    "the-pulse": {
+      "title": {
+        "text": "Nhịp đập",
+        "sourceHash": "a974f2e05f105a24"
+      },
+      "summary": {
+        "text": "Những gì hàng xóm chia sẻ ở nơi khác, tập hợp trong một bảng tin duy nhất.",
+        "sourceHash": "999659aebbfe69d2"
+      },
+      "help": {
+        "text": "Liên kết hàng xóm tạo hoặc chia sẻ, trong một bảng tin. Nhấn vào một mục để mở.",
+        "sourceHash": "1d19387da6116082"
+      }
+    },
+    "learn": {
+      "title": {
+        "text": "Mục Tìm hiểu",
+        "sourceHash": "498e66e5947ca0c3"
+      },
+      "summary": {
+        "text": "Các video ngắn về BeanPool và các trang hướng dẫn đi kèm.",
+        "sourceHash": "4d2fdf4c850fe47f"
+      }
+    },
+    "your-channels": {
+      "title": {
+        "text": "Chia sẻ các kênh của bạn",
+        "sourceHash": "e47ac70a91b21162"
+      },
+      "summary": {
+        "text": "Đưa các kênh YouTube, blog, Instagram và các kênh khác của bạn lên Nhịp đập.",
+        "sourceHash": "bc9819c938b91f04"
+      }
+    },
+    "decisions": {
+      "title": {
+        "text": "Bỏ phiếu cho Quyết định",
+        "sourceHash": "67b17269f83d1030"
+      },
+      "summary": {
+        "text": "Tìm các Quyết định đang mở, bỏ phiếu, đổi phiếu bầu và xem kết quả.",
+        "sourceHash": "fc4b9c95d8478a91"
+      }
+    },
+    "proposing-a-decision": {
+      "title": {
+        "text": "Đề xuất một Quyết định",
+        "sourceHash": "3a20703895de04dc"
+      },
+      "summary": {
+        "text": "Yêu cầu cộng đồng cùng đưa ra một quyết định có tính ràng buộc.",
+        "sourceHash": "69756653393ec8b4"
+      }
+    },
+    "polls": {
+      "title": {
+        "text": "Thăm dò",
+        "sourceHash": "996729458535904a"
+      },
+      "summary": {
+        "text": "Hỏi cộng đồng một câu hỏi nhanh. Thăm dò thể hiện ý kiến; tự chúng không làm thay đổi điều gì.",
+        "sourceHash": "d7fadda691d8879b"
+      },
+      "help": {
+        "text": "Khảo sát hỏi cộng đồng câu hỏi nhanh. Nó thể hiện suy nghĩ của mọi người; tự nó không làm đổi điều gì.",
+        "sourceHash": "99dfd4781ce0785d"
+      }
+    },
+    "events": {
+      "title": {
+        "text": "Sự kiện",
+        "sourceHash": "8d14f6e72de8f18a"
+      },
+      "summary": {
+        "text": "Tạo sự kiện trực tiếp hoặc trực tuyến, một lần hoặc lặp lại; xác nhận tham gia, nhận nhắc nhở, chia sẻ và chủ trì sự kiện.",
+        "sourceHash": "29e8adc52f9b6df9"
+      }
+    },
+    "enterprises": {
+      "title": {
+        "text": "Dự án và sáng kiến chung",
+        "sourceHash": "e1ccbac49d2ba550"
+      },
+      "summary": {
+        "text": "Các dự án chung có quỹ đậu riêng: tìm kiếm, ủng hộ hoặc khởi tạo một dự án.",
+        "sourceHash": "8302886bb796749e"
+      }
+    },
+    "keepers": {
+      "title": {
+        "text": "Người quản lý",
+        "sourceHash": "ffc8948f6b16666e"
+      },
+      "summary": {
+        "text": "Những người điều hành và chịu trách nhiệm cho dự án. Cách tham gia, phản đối và từ nhiệm.",
+        "sourceHash": "cbe734a215f75289"
+      }
+    },
+    "commons-fund": {
+      "title": {
+        "text": "Quỹ Commons",
+        "sourceHash": "b1b09e953a4dd7c0"
+      },
+      "summary": {
+        "text": "Số đậu chung của cộng đồng: nguồn gốc từ đâu và được chi tiêu như thế nào.",
+        "sourceHash": "aaf9158560e5d6aa"
+      }
+    },
+    "your-balance": {
+      "title": {
+        "text": "Số dư và lịch sử giao dịch",
+        "sourceHash": "fb3a96eb2bfcd2a8"
+      },
+      "summary": {
+        "text": "Bạn có bao nhiêu đậu, số lượng đang bị giữ, cùng mọi giao dịch và quà tặng.",
+        "sourceHash": "61df521108b36035"
+      },
+      "help": {
+        "text": "Đậu của bạn: số hiện có, số đang giữ trong giao dịch, mọi trao đổi và quà tặng. Ai cũng bắt đầu từ số 0.",
+        "sourceHash": "a40a5f9fef426c85"
+      }
+    },
+    "credit-line": {
+      "title": {
+        "text": "Hạn mức tín dụng",
+        "sourceHash": "dd11b44ecc1037c9"
+      },
+      "summary": {
+        "text": "Mức âm tối đa bạn có thể chi tiêu và cách hạn mức này tăng lên.",
+        "sourceHash": "18b609abc63667e7"
+      }
+    },
+    "gifts": {
+      "title": {
+        "text": "Gửi quà tặng",
+        "sourceHash": "5440f4f6ef954605"
+      },
+      "summary": {
+        "text": "Gửi đậu cho ai đó mà không cần giao dịch trao đổi.",
+        "sourceHash": "7eaddf0c6cd54a04"
+      }
+    },
+    "trust-badges": {
+      "title": {
+        "text": "Huy hiệu tin cậy",
+        "sourceHash": "a1d8765277383923"
+      },
+      "summary": {
+        "text": "Người mới, Cư dân, Quản lý và Trưởng bối. Ý nghĩa của chúng và lý do chúng không mở khóa quyền hạn nào.",
+        "sourceHash": "90926482e87ba9fa"
+      }
+    },
+    "trading-partner-limit": {
+      "title": {
+        "text": "Hạn mức 500 đậu cho đối tác",
+        "sourceHash": "c40110de7df3670c"
+      },
+      "summary": {
+        "text": "Lý do giao dịch với nhiều người giúp xây dựng lòng tin hơn là giao dịch nhiều với chỉ một người.",
+        "sourceHash": "ce231d025501d5bc"
+      }
+    },
+    "circulation-fee": {
+      "title": {
+        "text": "Phí lưu thông",
+        "sourceHash": "e237d280aa62b186"
+      },
+      "summary": {
+        "text": "Khoản phí nhỏ hàng tháng cho số dư lớn để đậu luôn được luân chuyển. 200 đậu đầu tiên miễn phí.",
+        "sourceHash": "c9efbe6aa5cb9873"
+      }
+    },
+    "privacy": {
+      "title": {
+        "text": "Quyền riêng tư",
+        "sourceHash": "d2a7115d0455956b"
+      },
+      "summary": {
+        "text": "Những gì người khác có thể thấy về bạn và các cài đặt để kiểm soát điều đó.",
+        "sourceHash": "e4a23a87e82cf7a6"
+      },
+      "help": {
+        "text": "Những gì thành viên khác có thể thấy về bạn và các nút bật tắt để kiểm soát.",
+        "sourceHash": "0a1a1831174d443b"
+      }
+    },
+    "your-area": {
+      "title": {
+        "text": "Khu vực bạn",
+        "sourceHash": "b0adfdbb4ce55184"
+      },
+      "summary": {
+        "text": "Vị trí ước tính cộng đồng toàn cầu dùng để hiển thị các bài đăng ở gần bạn và cách đổi hoặc xóa.",
+        "sourceHash": "de4a8af84def7d30"
+      },
+      "help": {
+        "text": "Vị trí ước tính để hiện tin đăng gần bạn. Đổi hoặc xóa tại đây; đây không phải địa chỉ chính xác.",
+        "sourceHash": "f3099801c4d773a5"
+      }
+    },
+    "what-the-admins-can-see": {
+      "title": {
+        "text": "Quản trị viên có thể thấy gì",
+        "sourceHash": "261de35d8123a845"
+      },
+      "summary": {
+        "text": "Trong cộng đồng có danh sách tên: thông tin về bạn, ai có thể đọc, máy chủ lưu những gì và ý nghĩa của việc được xác nhận.",
+        "sourceHash": "5960a4392bb32b4b"
+      }
+    },
+    "admins-ai-assistants": {
+      "title": {
+        "text": "Khi quản trị viên dùng trợ lý AI",
+        "sourceHash": "9180d368e5d11c1e"
+      },
+      "summary": {
+        "text": "Những gì trợ lý AI của chủ sở hữu hay quản trị viên có thể đọc về bạn, những gì không bao giờ thấy và ai nhận được dữ liệu.",
+        "sourceHash": "d693c47b7b2cbfef"
+      }
+    },
+    "blocking": {
+      "title": {
+        "text": "Chặn một người",
+        "sourceHash": "f2ddac8bd6e31ad5"
+      },
+      "summary": {
+        "text": "Ẩn bài đăng và tin nhắn của ai đó khỏi bạn và bỏ chặn bất cứ lúc nào.",
+        "sourceHash": "9e63d5d87e52a1b9"
+      },
+      "help": {
+        "text": "Những người bạn đã chặn. Bài đăng và tin nhắn của họ bị ẩn; bỏ chặn tại đây.",
+        "sourceHash": "baecf7f0bec3735c"
+      }
+    },
+    "reporting": {
+      "title": {
+        "text": "Báo cáo vấn đề",
+        "sourceHash": "59274c49ac87bb2f"
+      },
+      "summary": {
+        "text": "Báo cho kiểm duyệt viên cộng đồng về bài đăng, sự kiện, bài đăng Nhịp đập hoặc dự án.",
+        "sourceHash": "4b773ef8eef237fa"
+      }
+    },
+    "notifications": {
+      "title": {
+        "text": "Thông báo",
+        "sourceHash": "788011833a5a0f22"
+      },
+      "summary": {
+        "text": "Chọn thông báo gửi đến điện thoại của bạn và thời điểm sự kiện nhắc nhở.",
+        "sourceHash": "70c8aa586befc843"
+      },
+      "help": {
+        "text": "Chọn thông báo gửi đến bạn và thời điểm sự kiện nhắc nhở bạn.",
+        "sourceHash": "7f7ecf01321aba59"
+      }
+    },
+    "appearance": {
+      "title": {
+        "text": "Giao diện sáng tối",
+        "sourceHash": "596443341c105af1"
+      },
+      "summary": {
+        "text": "Ứng dụng điện thoại khởi đầu ở giao diện sáng và web ở giao diện tối. Bạn có thể đổi hoặc theo thiết bị.",
+        "sourceHash": "31cf0aeff28a2052"
+      },
+      "help": {
+        "text": "Đặt ứng dụng ở chế độ sáng hoặc tối, hoặc theo cài đặt điện thoại.",
+        "sourceHash": "1ef643d6832c782a"
+      }
+    },
+    "holiday-mode": {
+      "title": {
+        "text": "Chế độ nghỉ lễ",
+        "sourceHash": "03098a2ccb21c3c2"
+      },
+      "summary": {
+        "text": "Chế độ nghỉ lễ ẩn các Lời đề nghị và tạm dừng các yêu cầu mới khi bạn vắng mặt.",
+        "sourceHash": "53d1ceef93b0a7a1"
+      }
+    },
+    "leaving-or-deleting": {
+      "title": {
+        "text": "Rời khỏi hoặc xóa tài khoản",
+        "sourceHash": "6128699c3d7f036a"
+      },
+      "summary": {
+        "text": "Đăng xuất khỏi điện thoại này hoặc xóa vĩnh viễn tài khoản và điều gì xảy ra với số đậu của bạn.",
+        "sourceHash": "d28cb71428dd6615"
+      }
+    },
+    "recovery": {
+      "title": {
+        "text": "Khôi phục tài khoản của bạn",
+        "sourceHash": "7a6a763f943871ce"
+      },
+      "summary": {
+        "text": "Khôi phục tài khoản trên điện thoại mới và bảo vệ tài khoản bằng liên kết đăng nhập.",
+        "sourceHash": "5235d9f9073b2e63"
+      },
+      "help": {
+        "text": "Cách lấy lại tài khoản trên điện thoại mới: 12 từ của bạn hoặc tài khoản đăng nhập đã liên kết.",
+        "sourceHash": "05fba497e5466e59"
+      }
+    },
+    "check-your-12-words": {
+      "title": {
+        "text": "12 từ của bạn và khóa máy chủ (chủ sở hữu)",
+        "sourceHash": "0a24c7fe8ed3b0a4"
+      },
+      "summary": {
+        "text": "Dành cho chủ sở hữu cộng đồng. Kiểm tra 12 từ, tiếp quản hoặc khôi phục máy chủ bằng điện thoại và tự động kiểm tra.",
+        "sourceHash": "c3a1b3cdc4e7d8df"
+      }
+    }
+  }
 }

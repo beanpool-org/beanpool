@@ -33,7 +33,8 @@
 //                                     this change starts from (findBase) — a published copy changed its text without
 //                                     a higher version, took a new version for the same text, skipped a version, is
 //                                     not the text of the pages, or was published by a change that also edits the
-//                                     pages. Run by `pnpm test`, so CI refuses all of these.
+//                                     pages; or if a language's titles (content/<lang>/manifest.json) do not check
+//                                     (src/titles.mjs). Run by `pnpm test`, so CI refuses all of these.
 //   node scripts/build.mjs --pending  exit 1, naming them, while the pages hold text that is not published yet.
 
 import fs from 'node:fs';
@@ -41,6 +42,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { loadGuide, renderWebsite, renderOperatorsWebsite, serializeGuide, contentHash, GUIDE_SCHEMA } from '../src/guide.mjs';
+import { readGuideTitles, checkGuideTitles } from '../src/titles.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const pkgDir = path.resolve(here, '..');
@@ -227,6 +229,15 @@ function versionProblems(published, pages, ref) {
 
 // ─── The check ─────────────────────────────────────────────────────────────────
 
+/**
+ * What is wrong with the guide's titles in other languages (content/<lang>/manifest.json, src/titles.mjs), as sentences.
+ * They are not part of a published copy: the apps bundle them from the pages, so they need no version. A stale entry is
+ * not a problem (the apps show the English); `pnpm --filter @beanpool/guide titles` lists those.
+ */
+export function titleProblems(guide) {
+    return checkGuideTitles(guide, readGuideTitles(CONTENT_DIR)).problems.map(p => `the guide's titles: ${p}`);
+}
+
 /** Every file under a folder, as absolute paths. */
 function filesUnder(dir) {
     if (!fs.existsSync(dir)) return [];
@@ -248,6 +259,7 @@ export function check({ base = findBase() } = {}) {
     } catch (e) {
         problems.push(`the pages do not build: ${e.message}`);
     }
+    if (pages) problems.push(...titleProblems(pages.guide));
     let published;
     try {
         published = publishedGuides();
@@ -326,6 +338,11 @@ function pendingNote(waiting) {
 /** The author's build: check the pages, copy the pictures, re-render the website from the published copies. */
 function generate() {
     const pages = pagesOrExit();
+    const titles = titleProblems(pages.guide);
+    if (titles.length) {
+        console.error(`The guide's titles in other languages do not check:\n${titles.map(p => `  - ${p}`).join('\n')}`);
+        process.exit(1);
+    }
     const published = publishedGuides();
     const missing = COLLECTIONS.filter(c => !published[c.key]);
     if (missing.length) {

@@ -80,6 +80,53 @@ function importsOf(sf) {
     return out;
 }
 
+/** The names a module's top level binds: its imports and its declarations. */
+function topLevelNames(sf) {
+    const names = new Set();
+    for (const st of sf.statements) {
+        if (ts.isImportDeclaration(st) && st.importClause) {
+            if (st.importClause.name) names.add(st.importClause.name.text);
+            const b = st.importClause.namedBindings;
+            if (b && ts.isNamespaceImport(b)) names.add(b.name.text);
+            if (b && ts.isNamedImports(b)) for (const el of b.elements) names.add(el.name.text);
+        } else for (const name of declaredNames(st)) names.add(name);
+    }
+    return names;
+}
+
+/** The names one top-level statement declares (a const, a function, a class, an interface, a type, an enum). */
+function declaredNames(st) {
+    if (ts.isVariableStatement(st)) return st.declarationList.declarations.filter((d) => ts.isIdentifier(d.name)).map((d) => d.name.text);
+    const named = ts.isFunctionDeclaration(st) || ts.isClassDeclaration(st) || ts.isInterfaceDeclaration(st) || ts.isTypeAliasDeclaration(st) || ts.isEnumDeclaration(st);
+    return named && st.name ? [st.name.text] : [];
+}
+
+/**
+ * The names the module `file` exports, following each `export * from './…'` to its .ts source. `read(file)` gives a
+ * file's text or null. Parsed, not type-checked: enough to see a name two modules would both export.
+ */
+function exportedNames(file, read, seen = new Set()) {
+    const out = new Set();
+    const text = seen.has(file) ? null : read(file);
+    seen.add(file);
+    if (text === null) return out;
+    const sf = parse(file, text);
+    for (const st of sf.statements) {
+        if (ts.isExportDeclaration(st)) {
+            const from = st.moduleSpecifier && ts.isStringLiteral(st.moduleSpecifier) ? st.moduleSpecifier.text : null;
+            if (st.exportClause && ts.isNamedExports(st.exportClause)) for (const el of st.exportClause.elements) out.add(el.name.text);
+            else if (!st.exportClause && from?.startsWith('.')) {
+                const target = path.resolve(path.dirname(file), from.replace(/\.js$/, ''));
+                const found = [`${target}.ts`, `${target}.tsx`, path.join(target, 'index.ts')].find((f) => read(f) !== null);
+                if (found) for (const name of exportedNames(found, read, seen)) out.add(name);
+            }
+        } else if (ts.canHaveModifiers(st) && ts.getModifiers(st)?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword)) {
+            for (const name of declaredNames(st)) out.add(name);
+        }
+    }
+    return out;
+}
+
 const propKey = (p) => (ts.isIdentifier(p.name) || ts.isStringLiteral(p.name) ? p.name.text : null);
 
 /**
@@ -159,6 +206,11 @@ export function registerIn(p, text, id) {
     if (problems.length) throw new Error(problems[0]);
     if (entries.some((e) => e.folder === id || e.id === id)) throw new Error(`${p.index} already registers ${id}.`);
     const key = /^[a-z]+$/.test(id) ? id : `'${id}'`;
+    // The phone's binding is `<camel>App`, never the bare word: an id may be one JavaScript keeps (new, delete, package).
+    const local = p.part === 'core' ? n.constant : p.part === 'native' ? `${n.camel}App` : null;
+    if (local && topLevelNames(parse(p.index, text)).has(local)) {
+        throw new Error(`${p.index} already has a ${local}, the name the tool ${id} would have there: pick another id.`);
+    }
     if (p.part === 'core') {
         let out = insertAfterLast(text, parse(p.index, text), ts.isImportDeclaration, `import { ${n.constant} } from './${id}/index.js';`);
         out = insertAfterLast(out, parse(p.index, out), (s) => ts.isExportDeclaration(s) && !!s.moduleSpecifier, `export * from './${id}/index.js';`);
@@ -166,12 +218,29 @@ export function registerIn(p, text, id) {
         const init = registryInit(sf, p.registry);
         return appendElement(out, sf, init, init.elements, n.constant);
     }
-    const local = p.part === 'native' ? n.camel : null;
     let out = local ? insertAfterLast(text, parse(p.index, text), ts.isImportDeclaration, `import ${local} from './${id}';`) : text;
     const sf = parse(p.index, out);
     const init = registryInit(sf, p.registry);
-    const entry = p.part === 'native' ? (key === local ? local : `${key}: ${local}`) : `${key}: () => import('./${id}')`;
+    const entry = p.part === 'native' ? `${key}: ${local}` : `${key}: () => import('./${id}')`;
     return appendElement(out, sf, init, init.properties, entry);
+}
+
+/**
+ * The names the tool `id`'s core half (from the scaffold) would export that core's tools index under `root` already
+ * exports or binds: its own names, the template's (manifest, host, check, reconcile, read from this repository when
+ * `root` has none) and every registered tool's. Two such names are a compile error in a file new-tool writes.
+ */
+export function toolNameClashes(id, root = ROOT) {
+    const core = PARTS.find((p) => p.part === 'core');
+    const overlay = new Map(scaffoldFiles(id).filter((f) => f.part === 'core').map((f) => [path.join(root, core.dir, f.rel), f.text]));
+    const fromDisk = (file) => {
+        for (const f of [file, path.join(ROOT, path.relative(root, file))]) if (fs.existsSync(f)) return fs.readFileSync(f, 'utf8');
+        return null;
+    };
+    const index = path.join(root, core.index);
+    const taken = new Set([...exportedNames(index, fromDisk), ...topLevelNames(parse(index, fromDisk(index) ?? ''))]);
+    const mine = exportedNames(path.join(root, core.dir, id, 'index.ts'), (f) => overlay.get(f) ?? null);
+    return [...mine].filter((name) => taken.has(name)).sort();
 }
 
 /** The scaffold's files for a tool `id`: [{ part, rel, text }], `rel` under that part's tools root. */

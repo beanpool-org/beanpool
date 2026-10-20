@@ -8,6 +8,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import ts from 'typescript';
 import { BUDGETS, checkTools } from './check-tool-budgets.mjs';
 import { newTool } from './new-tool.mjs';
 import { PARTS, ROOT, readRegistry, registerIn, toolNames } from './registry.mjs';
@@ -65,7 +66,7 @@ test('new-tool writes one line in each registry, keeps what is there, and refuse
     const core = fs.readFileSync(path.join(root, PARTS[0].index), 'utf8');
     assert.match(core, /export \* from '\.\/seed-library\/index\.js';/);
     assert.match(core, /\[\n {4}THINGS,\n {4}SEED_LIBRARY,\n\]/);
-    assert.match(fs.readFileSync(path.join(root, PARTS[1].index), 'utf8'), /\{\n {4}things,\n {4}'seed-library': seedLibrary,\n\}/);
+    assert.match(fs.readFileSync(path.join(root, PARTS[1].index), 'utf8'), /\{\n {4}things: thingsApp,\n {4}'seed-library': seedLibraryApp,\n\}/);
     assert.match(fs.readFileSync(path.join(root, PARTS[2].index), 'utf8'), /'seed-library': \(\) => import\('\.\/seed-library'\),/);
     const generated = fs.readFileSync(path.join(root, 'packages/beanpool-core/src/tools/seed-library/manifest.ts'), 'utf8');
     assert.match(generated, /export const SEED_LIBRARY: ToolManifest<SeedLibraryDoc> = \{\n {4}id: 'seed-library',/);
@@ -77,6 +78,34 @@ test('new-tool writes one line in each registry, keeps what is there, and refuse
     assert.deepEqual(toolNames('seed-library'), { id: 'seed-library', camel: 'seedLibrary', pascal: 'SeedLibrary', constant: 'SEED_LIBRARY' });
     // An entry already on the same line as the brackets keeps its place.
     assert.match(registerIn(PARTS[0], "import { A } from './a/index.js';\nexport const TOOLS = [A];\n", 'b'), /\[A, B \]/);
+});
+
+test('an id JavaScript keeps for itself makes registries that parse; an id naming what core already has is refused, writing nothing', async () => {
+    const root = tree();
+    const ids = ['new', 'delete', 'class', 'package', 'export', 'default'];
+    for (const id of ids) await newTool(id, { root });
+    for (const p of PARTS) {
+        const text = fs.readFileSync(path.join(root, p.index), 'utf8');
+        const { diagnostics } = ts.transpileModule(text, { fileName: p.index, reportDiagnostics: true });
+        assert.deepEqual(diagnostics.map((d) => ts.flattenDiagnosticMessageText(d.messageText, ' ')), [], p.index);
+        const { entries, problems } = readRegistry(p, text);
+        assert.deepEqual(problems, []);
+        assert.deepEqual(entries.map((e) => e.folder), ids, p.index);
+    }
+    assert.match(fs.readFileSync(path.join(root, PARTS[1].index), 'utf8'), /import newApp from '\.\/new';[\s\S]*\{\n {4}new: newApp,\n {4}delete: deleteApp,\n/);
+    assert.deepEqual((await checkTools({ root })).problems, []);
+
+    const before = PARTS.map((p) => fs.readFileSync(path.join(root, p.index), 'utf8'));
+    await assert.rejects(newTool('tools', { root }), /^Error: The tool tools would export TOOLS from core, which core's tools already have: pick another id\.$/);
+    await assert.rejects(newTool('tool', { root }), /^Error: The tool tool would export TOOL_PERMISSIONS, ToolDoc, ToolPermission, ToolScreenProps from core,/);
+    assert.deepEqual(PARTS.map((p) => fs.readFileSync(path.join(root, p.index), 'utf8')), before);
+    for (const p of PARTS) for (const id of ['tools', 'tool']) assert.ok(!fs.existsSync(path.join(root, p.dir, id)), `${p.dir}/${id}`);
+    // Two tools' names clash too: a seed tool's SEED_MAX_ITEMS is a seed-max-items tool's manifest.
+    await newTool('seed', { root });
+    await assert.rejects(newTool('seed-max-items', { root }), /would export SEED_MAX_ITEMS from core/);
+    // On its own, registerIn refuses a name its index already binds.
+    assert.throws(() => registerIn(PARTS[0], fs.readFileSync(path.join(ROOT, PARTS[0].index), 'utf8'), 'tools'),
+        /^Error: packages\/beanpool-core\/src\/tools\/index\.ts already has a TOOLS, the name the tool tools would have there: pick another id\.$/);
 });
 
 test('an unregistered folder is refused, and so is a line with no folder or a tool missing a half', async () => {
@@ -106,7 +135,10 @@ test('a name in a comment is not a registration', async () => {
     const root = tree();
     await newTool('things', { root });
     const native = path.join(root, PARTS[1].index);
-    fs.writeFileSync(native, fs.readFileSync(native, 'utf8').replace('    things,\n', '    // things,\n'));
+    const was = fs.readFileSync(native, 'utf8');
+    const commented = was.replace('    things: thingsApp,\n', '    // things: thingsApp,\n');
+    assert.notEqual(commented, was);
+    fs.writeFileSync(native, commented);
     one((await checkTools({ root })).problems, /^apps\/native\/tools\/things is not registered/);
 });
 

@@ -8,7 +8,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { PARTS, ROOT, loadToolLimits, registerIn, scaffoldFiles, toolFolders } from './registry.mjs';
+import { PARTS, ROOT, loadToolLimits, registerIn, scaffoldFiles, toolFolders, toolNameClashes } from './registry.mjs';
 
 /** Writes the tool `id` under `root`; returns the paths written. Throws one sentence when it can't, having written nothing. */
 export async function newTool(id, { root = ROOT } = {}) {
@@ -19,6 +19,10 @@ export async function newTool(id, { root = ROOT } = {}) {
     const folders = toolFolders(root);
     for (const p of PARTS) {
         if (folders[p.part].includes(id)) throw new Error(`${p.dir}/${id} already exists.`);
+    }
+    const clashes = toolNameClashes(id, root);
+    if (clashes.length) {
+        throw new Error(`The tool ${id} would export ${clashes.join(', ')} from core, which core's tools already have: pick another id.`);
     }
     // Every registry first, so a file that isn't the template's stops it before anything is written.
     const indexes = PARTS.map((p) => {

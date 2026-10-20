@@ -27,7 +27,8 @@ eslint fence). It talks to the app only through `host`, which has exactly the fu
 
 1. **`node scripts/tools/new-tool.mjs <id>`** copies `scripts/tools/_scaffold/` into the three roots as `<id>/` (a
    compiling empty tool with its fixtures and a test) and writes the three registry lines. Pick the id: 2 to 16 lowercase
-   letters and hyphens, never two together. Then the shelf (`stock`, `trade` or `books`), the shop kinds, the owner.
+   letters and hyphens, never two together; new-tool refuses one whose names in core are already taken (`tools`, `tool`).
+   Then the shelf (`stock`, `trade` or `books`), the shop kinds, the owner.
 2. **Fill the manifest** (`<id>/manifest.ts` in core): words through `word()`, one emoji, the permissions you need and no
    more, `doc` with `version: 1`, `empty()`, `read()`, `row()`, `examples`. Add `homeCard` and `reminders` only if the
    tool has something to say on Home or at a time. A tool's Home card is offered once from inside the tool, never added

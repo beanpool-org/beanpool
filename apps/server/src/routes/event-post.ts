@@ -51,6 +51,9 @@ export function createEventFromBody(body: any, author: string, createdBy?: strin
             eventStartLocal: b.eventStartLocal, eventEndLocal: b.eventEndLocal, eventTz: b.eventTz,
             eventOnline: b.eventOnline, eventLink: b.eventLink,
             eventRepeat: b.eventRepeat, eventRepeatUntil: b.eventRepeatUntil,
+            // Passed so the engine refuses them (engine/posts.ts lendColumnsOnCreate): an event asked to be lent, or
+            // sent a term no listing may hold, is a 400, not one quietly made without them.
+            lendable: b.lendable, lendMaxDays: b.lendMaxDays, lendTerms: b.lendTerms, replacementValue: b.replacementValue,
             createdBy,
             beforeWrite,
             out,

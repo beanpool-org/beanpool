@@ -252,6 +252,19 @@ async function main(): Promise<void> {
     }
     const need = await signed('/api/marketplace/posts', dave, { type: 'need', category: 'tools', title: 'Need a drill', description: 'Anyone?', credits: 0, authorPublicKey: dave.pk, lendable: true });
     assert(need.status === 400 && need.body?.error === LEND_OFFERS_ONLY && postsTitled('Need a drill') === 0, `a Need can't be lent (${brief(need)})`);
+    // An event is built from the whole body (routes/event-post.ts), so it gets the same refusals, not its lend fields dropped.
+    const event = (title: string, body: Record<string, unknown>) => signed('/api/marketplace/posts', dave, {
+        type: 'event', title, description: 'Bring gloves', authorPublicKey: dave.pk, lat: -33.8688, lng: 151.2093,
+        eventStartAt: new Date(Date.now() + 86_400_000).toISOString(), eventPlaceName: 'The hall', ...body,
+    });
+    const eventLent = await event('Tool swap', { lendable: true });
+    assert(eventLent.status === 400 && eventLent.body?.error === LEND_OFFERS_ONLY && postsTitled('Tool swap') === 0, `an event can't be lent (${brief(eventLent)})`);
+    const eventNumbered = await event('Repair cafe', { replacementValue: 123 });
+    assert(eventNumbered.status === 400 && eventNumbered.body?.error === REPLACEMENT_VALUE_NOT_WORDS && postsTitled('Repair cafe') === 0,
+        `an event sent a replacement value as a number is refused too (${brief(eventNumbered)})`);
+    const eventPlain = await event('Working bee', {});
+    assert(eventPlain.status === 200 && postRow(eventPlain.body.post.id).lendable === 0 && !('lendable' in eventPlain.body.post),
+        `the same event with no lend fields is made, and isn't lent (${brief(eventPlain)})`);
     for (const pt of ['hourly', 'monthly']) {
         const r = await offer(dave, { title: `Lent ${pt}`, lendable: true, credits: 2, priceType: pt });
         assert(r.status === 400 && r.body?.error === LEND_PRICE_TYPE_REFUSED && postsTitled(`Lent ${pt}`) === 0, `a loan priced ${pt} is refused (${brief(r)})`);

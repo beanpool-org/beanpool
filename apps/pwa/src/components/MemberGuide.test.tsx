@@ -17,7 +17,7 @@ import { BeanPoolSettingsGroup } from '../pages/SettingsPage';
 import { getBundledGuide, resetGuideSessionForTests } from '../lib/guide';
 import { showLanguage } from '../lib/language';
 import {
-    validateGuide, manualSections, sectionPages, relatedPages, findGuidePage, FEEDBACK_LIVE, GUIDE_SLUGS, guideBodyHash, guideCacheKey, guideSourceHash, pseudoLocalise,
+    validateGuide, manualSections, sectionPages, relatedPages, findGuidePage, FEEDBACK_LIVE, GUIDE_SLUGS, guideBodyHash, guideCacheKey, guideSourceHash, pseudoLocalise, setLanguage,
     type Guide, type GuidePage, type GuideSection,
 } from '@beanpool/core';
 
@@ -51,6 +51,9 @@ beforeEach(() => {
     api.getPulseFeed.mockReset().mockResolvedValue({ items: [], nextCursor: null });
     // No network in tests: the website check fails fast and the bundled copy stays.
     vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('offline'); }));
+});
+afterEach(async () => {
+    await act(async () => { await showLanguage('en'); });
 });
 
 describe('one source: the web app bundles the same guide as the member app and the website', () => {
@@ -294,6 +297,7 @@ describe("the three page states on web: current, behind with toggle, missing, an
         });
         expect(screen.queryByTestId('guide-english-note')).toBeNull();
         expect(screen.queryByTestId('guide-newer-note')).toBeNull();
+        expect(screen.getByTestId('guide-draft-note')).toHaveTextContent('Translated by machine: some words may be wrong.');
     });
 
     it('behind state: older source-hash renders translated body with newer note and toggle to read English', async () => {
@@ -320,12 +324,14 @@ describe("the three page states on web: current, behind with toggle, missing, an
             expect(screen.getByText('Corpo traduzido antigo na web.')).toBeInTheDocument();
         });
         expect(screen.getByTestId('guide-newer-note')).toHaveTextContent('This page is newer in English.');
+        expect(screen.getByTestId('guide-draft-note')).toHaveTextContent('Translated by machine: some words may be wrong.');
         const toggle = screen.getByTestId('guide-toggle-english');
         expect(toggle).toHaveTextContent('Read in English');
 
         // Toggle to English
         fireEvent.click(toggle);
         expect(toggle).toHaveTextContent('Show translation');
+        expect(screen.queryByTestId('guide-draft-note')).toBeNull();
         const englishDiv = document.querySelector('article [lang="en"]');
         expect(englishDiv).not.toBeNull();
 
@@ -333,6 +339,7 @@ describe("the three page states on web: current, behind with toggle, missing, an
         fireEvent.click(toggle);
         expect(toggle).toHaveTextContent('Read in English');
         expect(screen.getByText('Corpo traduzido antigo na web.')).toBeInTheDocument();
+        expect(screen.getByTestId('guide-draft-note')).toHaveTextContent('Translated by machine: some words may be wrong.');
     });
 
     it('missing state: untranslated page renders English body with english note', async () => {
@@ -357,6 +364,7 @@ describe("the three page states on web: current, behind with toggle, missing, an
         render(<MemberGuide onBack={() => {}} feedbackLive={false} initialPage={related.slug} />);
         expect(screen.getByTestId('guide-english-note')).toHaveTextContent('This page is in English for now.');
         expect(screen.queryByTestId('guide-newer-note')).toBeNull();
+        expect(screen.queryByTestId('guide-draft-note')).toBeNull();
         expect(document.querySelector('article [lang="en"]')).not.toBeNull();
     });
 
@@ -385,6 +393,40 @@ describe("the three page states on web: current, behind with toggle, missing, an
             expect(screen.getByText('Corpo em cache offline na web.')).toBeInTheDocument();
         });
         expect(screen.queryByTestId('guide-english-note')).toBeNull();
+        expect(screen.getByTestId('guide-draft-note')).toHaveTextContent('Translated by machine: some words may be wrong.');
+    });
+
+    it('English page has no draft line', async () => {
+        await act(async () => { await showLanguage('en'); });
+        render(<MemberGuide onBack={() => {}} feedbackLive={false} initialPage={page.slug} />);
+        expect(screen.queryByTestId('guide-draft-note')).toBeNull();
+    });
+
+    it('a language whose catalogs are not machine draft has no draft line', async () => {
+        await act(async () => { await showLanguage('pt'); });
+        setLanguage('pt', [{ _meta: { language: 'pt', review: 'human', reviewed: true } }]);
+        const ptGuide: Guide = {
+            schema: getBundledGuide().schema,
+            version: 1,
+            language: 'pt',
+            hash: '1234567890abcdef',
+            sections: [{ id: section.id, title: 'Secção traduzida', summary: 'Resumo.', slugs: [page.slug] }],
+            guides: [{
+                slug: page.slug,
+                title: 'Página traduzida',
+                summary: 'Resumo da página.',
+                section: section.id,
+                related: [],
+                sourceHash: currentHash,
+                blocks: [{ type: 'p', text: 'Corpo traduzido humano na web.' }],
+            }],
+        };
+        vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, text: async () => JSON.stringify(ptGuide) })));
+        render(<MemberGuide onBack={() => {}} feedbackLive={false} initialPage={page.slug} />);
+        await waitFor(() => {
+            expect(screen.getByText('Corpo traduzido humano na web.')).toBeInTheDocument();
+        });
+        expect(screen.queryByTestId('guide-draft-note')).toBeNull();
     });
 
     it('xx pseudo-locale render of a page with the new line at 320 px × 1.3', async () => {
@@ -414,6 +456,7 @@ describe("the three page states on web: current, behind with toggle, missing, an
         await waitFor(() => {
             expect(screen.getByTestId('guide-newer-note')).toHaveTextContent(pseudoLocalise('This page is newer in English.'));
         });
+        expect(screen.queryByTestId('guide-draft-note')).toBeNull();
         const toggle = screen.getByTestId('guide-toggle-english');
         expect(toggle).toHaveTextContent(pseudoLocalise('Read in English'));
         expect(container).toBeInTheDocument();

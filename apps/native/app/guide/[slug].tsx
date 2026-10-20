@@ -6,6 +6,8 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { useTheme, useStyles } from '../ThemeContext';
 import { useGuide } from '../../utils/use-guide';
+import { useWords } from '../../components/LanguageProvider';
+import { isMachineDraft } from '../../components/LanguagePicker';
 import { findGuidePage, findGuideSection, relatedPages, findGuideVideo, splitBold, guidePageBodyInEnglish, guidePageNewerInEnglish } from '../../utils/guide';
 import { useLearnVideos } from '../../utils/use-learn-videos';
 import { inCapitalsOf, t } from '@beanpool/core';
@@ -21,6 +23,7 @@ export { ErrorBoundary };
 export default function GuideScreen() {
     const { theme, colors } = useTheme();
     const insets = useSafeAreaInsets();
+    const { lang } = useWords();
     const params = useLocalSearchParams<{ slug?: string | string[] }>();
     const slug = Array.isArray(params.slug) ? params.slug[0] : params.slug;
     const { guide } = useGuide();
@@ -38,6 +41,7 @@ export default function GuideScreen() {
     const englishShown = showEnglish && newerInEnglish && !!page?.englishBlocks;
     const blocksToRender = englishShown ? page!.englishBlocks! : page?.blocks ?? [];
     const currentBodyLanguage = (englishShown || bodyInEnglish) ? 'en' : undefined;
+    const showDraftNote = !!page && !bodyInEnglish && !englishShown && isMachineDraft(lang);
 
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
         container: { flex: 1, backgroundColor: colors.surface.page },
@@ -58,6 +62,7 @@ export default function GuideScreen() {
         kicker: { alignSelf: 'flex-start', minHeight: 48, justifyContent: 'center', marginTop: -8 },
         kickerText: { fontSize: 13, fontWeight: '700', color: colors.brand.primary, letterSpacing: 0.5 },
         englishNote: { fontSize: 14, color: colors.text.secondary, lineHeight: 20, marginTop: 4, marginBottom: 4 },
+        draftNote: { fontSize: 14, color: colors.text.secondary, lineHeight: 20, marginTop: 4, marginBottom: 4 },
         toggleEnglish: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center', marginTop: 2, marginBottom: 8 },
         toggleEnglishText: { fontSize: 14, fontWeight: '600', color: colors.brand.primary },
         watch: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 48, marginTop: 8, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 14, borderWidth: 1, borderColor: colors.border.strong, backgroundColor: colors.surface.card },
@@ -120,6 +125,11 @@ export default function GuideScreen() {
                                     <Text style={styles.toggleEnglishText}>{showEnglish ? t('Show translation') : t('Read in English')}</Text>
                                 </Pressable>
                             </View>
+                        )}
+                        {showDraftNote && (
+                            <Text style={styles.draftNote} testID="guide-draft-note">
+                                {t('Translated by machine: some words may be wrong.')}
+                            </Text>
                         )}
                         {video && (
                             <Pressable

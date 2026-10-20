@@ -118,6 +118,7 @@ import {
 import { LanguageProvider, useWords } from '../../components/LanguageProvider';
 import { getBundledGuide } from '../guide';
 import { resetGuideSessionForTests } from '../use-guide';
+import { setTestCatalogsFor } from '../words-catalogs';
 import { displayColumns, titleCap, TITLE_FLOOR_COLUMNS } from '../../../../packages/beanpool-guide/src/titles.mjs';
 import BeanPoolSheet from '../../app/beanpool';
 import GuideSectionScreen from '../../app/guide/section/[id]';
@@ -130,6 +131,7 @@ let host: HTMLDivElement;
 let root: Root;
 beforeEach(() => {
     resetGuideSessionForTests();
+    setTestCatalogsFor(null);
     host = document.createElement('div');
     document.body.appendChild(host);
     root = createRoot(host);
@@ -139,7 +141,7 @@ beforeEach(() => {
     params.value = {};
     globalThis.fetch = vi.fn(async () => { throw new TypeError('offline'); }) as typeof fetch;
 });
-afterEach(() => { act(() => root.unmount()); host.remove(); setLanguage('en'); });
+afterEach(() => { act(() => root.unmount()); host.remove(); setLanguage('en'); setTestCatalogsFor(null); });
 
 const settle = async (n = 6) => { for (let i = 0; i < n; i++) await act(async () => { await new Promise((r) => setTimeout(r, 0)); }); };
 const grabbed: { choose: ((lang: Lang | null) => void) | null } = { choose: null };
@@ -307,6 +309,7 @@ describe("the guide in the pseudo-locale at 320 dp with 1.3× text: every title 
         globalThis.fetch = vi.fn(async () => ({ ok: true, text: async () => JSON.stringify(xxGuide) })) as unknown as typeof fetch;
         params.value = { slug: page.slug };
         await renderIn('xx', GuideScreen);
+        expect(host.querySelector('[data-testid="guide-draft-note"]')).toBeNull();
         const newerNote = host.querySelector('[data-testid="guide-newer-note"]');
         expect(newerNote?.textContent).toBe(xx('This page is newer in English.'));
         const toggle = host.querySelector('[data-testid="guide-toggle-english"]');
@@ -452,6 +455,7 @@ describe('the three page states in the mobile app: current, behind with toggle, 
         expect(host.textContent).toContain('Corpo traduzido atual.');
         expect(host.querySelector('[data-testid="guide-english-note"]')).toBeNull();
         expect(host.querySelector('[data-testid="guide-newer-note"]')).toBeNull();
+        expect(host.querySelector('[data-testid="guide-draft-note"]')?.textContent).toBe('Traduzido por máquina: algumas palavras podem estar erradas.');
     });
 
     it('behind state: older source-hash renders translated body with newer note and toggle to read English', async () => {
@@ -476,6 +480,10 @@ describe('the three page states in the mobile app: current, behind with toggle, 
         await renderIn('pt', GuideScreen);
         expect(host.textContent).toContain('Corpo traduzido antigo.');
         expect(host.querySelector('[data-testid="guide-newer-note"]')).not.toBeNull();
+        expect(host.querySelector('[data-testid="guide-draft-note"]')?.textContent).toBe('Traduzido por máquina: algumas palavras podem estar erradas.');
+        const ptHeader = ['Traduzido por máquina: algumas palavras podem estar erradas.'];
+        expect(tooWide(ptHeader, COLUMN.pageHeader)).toEqual([]);
+        expect(cut(ptHeader)).toEqual([]);
         const toggle = host.querySelector('[data-testid="guide-toggle-english"]');
         expect(toggle?.textContent).toBe('Read in English');
 
@@ -483,6 +491,7 @@ describe('the three page states in the mobile app: current, behind with toggle, 
         await act(async () => { (toggle as HTMLElement).click(); });
         await settle();
         expect(toggle?.textContent).toBe('Show translation');
+        expect(host.querySelector('[data-testid="guide-draft-note"]')).toBeNull();
         const englishLines = page.blocks.flatMap((b) => (b.type === 'ul' ? b.items : [b.text])).map((t) => splitBold(t).map((s) => s.text).join(''));
         expect(Array.from(host.querySelectorAll('[lang="en"]')).map((e) => e.textContent)).toEqual(englishLines);
 
@@ -491,6 +500,7 @@ describe('the three page states in the mobile app: current, behind with toggle, 
         await settle();
         expect(toggle?.textContent).toBe('Read in English');
         expect(host.textContent).toContain('Corpo traduzido antigo.');
+        expect(host.querySelector('[data-testid="guide-draft-note"]')?.textContent).toBe('Traduzido por máquina: algumas palavras podem estar erradas.');
     });
 
     it('missing state: untranslated page renders English body with english note', async () => {
@@ -519,6 +529,7 @@ describe('the three page states in the mobile app: current, behind with toggle, 
         await renderIn('pt', GuideScreen);
         expect(host.querySelector('[data-testid="guide-english-note"]')).not.toBeNull();
         expect(host.querySelector('[data-testid="guide-newer-note"]')).toBeNull();
+        expect(host.querySelector('[data-testid="guide-draft-note"]')).toBeNull();
         const englishLines = otherPage.blocks.flatMap((b) => (b.type === 'ul' ? b.items : [b.text])).map((t) => splitBold(t).map((s) => s.text).join(''));
         expect(Array.from(host.querySelectorAll('[lang="en"]')).map((e) => e.textContent)).toEqual(englishLines);
     });
@@ -546,5 +557,37 @@ describe('the three page states in the mobile app: current, behind with toggle, 
         await renderIn('pt', GuideScreen);
         expect(host.textContent).toContain('Corpo em cache offline.');
         expect(host.querySelector('[data-testid="guide-english-note"]')).toBeNull();
+        expect(host.querySelector('[data-testid="guide-draft-note"]')?.textContent).toBe('Traduzido por máquina: algumas palavras podem estar erradas.');
+    });
+
+    it('English page has no draft line', async () => {
+        params.value = { slug: page.slug };
+        await renderIn('en', GuideScreen);
+        expect(host.querySelector('[data-testid="guide-draft-note"]')).toBeNull();
+    });
+
+    it('a language whose catalogs are not machine draft has no draft line', async () => {
+        setTestCatalogsFor((l) => (l === 'pt' ? [{ _meta: { language: 'pt', review: 'human', reviewed: true } }] : undefined));
+        const ptGuide: Guide = {
+            schema: GUIDE.schema,
+            version: 1,
+            language: 'pt',
+            hash: '1234567890abcdef',
+            sections: [{ id: page.section, title: 'Início', summary: 'Resumo.', slugs: [page.slug] }],
+            guides: [{
+                slug: page.slug,
+                title: 'Página traduzida',
+                summary: 'Resumo da página.',
+                section: page.section,
+                related: [],
+                sourceHash: currentHash,
+                blocks: [{ type: 'p', text: 'Corpo traduzido humano.' }],
+            }],
+        };
+        globalThis.fetch = vi.fn(async () => ({ ok: true, text: async () => JSON.stringify(ptGuide) })) as unknown as typeof fetch;
+        params.value = { slug: page.slug };
+        await renderIn('pt', GuideScreen);
+        expect(host.textContent).toContain('Corpo traduzido humano.');
+        expect(host.querySelector('[data-testid="guide-draft-note"]')).toBeNull();
     });
 });

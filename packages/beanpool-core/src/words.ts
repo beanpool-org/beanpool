@@ -433,6 +433,8 @@ export type TnFunction = <A extends string, B extends string>(n: number, one: A 
 /** Everything that writes words, bound to ONE language: what a server uses to render for a recipient. */
 export interface Words {
     readonly lang: UiLang;
+    /** Whether this language's words are a machine draft no native speaker has checked yet. */
+    readonly isMachineDraft: boolean;
     /** One sentence; the English (the key) when there is no translation. Takes a literal or a `word()` key. */
     t: TFunction;
     /** A sentence with a count: `tn(n, '{n} new message', '{n} new messages')`; a missing form falls back to `other`, then English. */
@@ -454,6 +456,16 @@ function timeAgoWith(t: TFunction, tn: TnFunction, ms: number): string {
     return tn(days, '{n} day ago', '{n} days ago');
 }
 
+/** Whether a catalog is marked as a machine draft no native speaker has checked yet (its _meta.review === 'machine'). */
+export function isMachineDraftCatalog(catalog: Catalog | undefined | null): boolean {
+    return (catalog?._meta as { review?: unknown } | undefined)?.review === 'machine';
+}
+
+/** Whether any catalog in the list is marked as a machine draft. */
+export function areCatalogsMachineDraft(catalogs: readonly Catalog[]): boolean {
+    return catalogs.some(isMachineDraftCatalog);
+}
+
 /**
  * The words of one language: the app's catalogs and core's for that language (`en` needs none: the key is the
  * English). Holds no global state, so two requests rendering for two recipients never see each other's language.
@@ -462,6 +474,7 @@ function timeAgoWith(t: TFunction, tn: TnFunction, ms: number): string {
 export function wordsFor(requested: UiLang, catalogs: readonly Catalog[] = []): Words {
     const lang = usableLang(requested);
     const table = new Map<string, string | PluralForms>();
+    const machineDraft = lang !== 'en' && lang !== PSEUDO_LANG && areCatalogsMachineDraft(catalogs);
     if (lang !== 'en' && lang !== PSEUDO_LANG) {
         for (const catalog of catalogs) {
             for (const [key, value] of Object.entries(catalog ?? {})) {
@@ -499,6 +512,7 @@ export function wordsFor(requested: UiLang, catalogs: readonly Catalog[] = []): 
     };
     return Object.freeze({
         lang,
+        isMachineDraft: machineDraft,
         t,
         tn,
         formatDate: (d: Date, pattern: DatePattern, opts: Omit<DateOptions, 'lang'> = {}) => dateIn(lang, d, pattern, opts),
@@ -521,6 +535,17 @@ export function setLanguage(lang: UiLang, catalogs: readonly Catalog[] = []): vo
 
 export function currentLanguage(): UiLang {
     return active.lang;
+}
+
+/**
+ * Whether the active language's words are a machine draft no native speaker has checked yet.
+ * Always false for English ('en') and the pseudo-locale ('xx').
+ */
+export function isMachineDraft(lang: UiLang = active.lang, catalogs?: readonly Catalog[]): boolean {
+    if (lang === 'en' || lang === 'xx') return false;
+    if (catalogs) return areCatalogsMachineDraft(catalogs);
+    if (lang === active.lang) return active.isMachineDraft;
+    return false;
 }
 
 /** One sentence in the current language; the English (the key) when there is no translation. */

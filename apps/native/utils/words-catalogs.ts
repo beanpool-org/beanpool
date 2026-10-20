@@ -12,7 +12,16 @@
 
 import type { Catalog, UiLang } from '@beanpool/core';
 
+let testCatalogsOverride: ((lang: UiLang) => Catalog[] | undefined) | null = null;
+
+/** Tests only: provide catalogs for a language (e.g. to test a language whose catalogs are not machine). */
+export function setTestCatalogsFor(fn: ((lang: UiLang) => Catalog[] | undefined) | null): void {
+    testCatalogsOverride = fn;
+}
+
 export function catalogsFor(lang: UiLang): Catalog[] {
+    const overridden = testCatalogsOverride?.(lang);
+    if (overridden) return overridden;
     switch (lang) {
         case 'en':
         case 'xx':

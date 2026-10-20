@@ -5,6 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import childProcess from 'node:child_process';
 import fs from 'node:fs';
+import module from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import {
@@ -22,7 +23,7 @@ import {
 } from './draft.mjs';
 import { guideBodyHash, loadGuide } from '../../packages/beanpool-guide/src/guide.mjs';
 import { guideSourceHash } from '../../packages/beanpool-guide/src/titles.mjs';
-import { ROOT } from './words.mjs';
+import { ROOT, baselineBase } from './words.mjs';
 
 function makeTempDir(prefix = 'words-draft-test-') {
     return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -363,7 +364,7 @@ test('writeBriefs creates deterministic, self-contained brief files with style r
     }
 });
 
-test('assert draft script NEVER spawns child processes or uses network', async () => {
+test('assert draft script NEVER spawns child processes', async () => {
     let processSpawns = 0;
     const originals = {
         exec: childProcess.exec,
@@ -386,6 +387,7 @@ test('assert draft script NEVER spawns child processes or uses network', async (
         childProcess.execFileSync = intercept;
         childProcess.spawn = intercept;
         childProcess.spawnSync = intercept;
+        module.syncBuiltinESMExports();
 
         // Run draftStatus
         const status = await draftStatus({ langs: ['es'] });
@@ -403,6 +405,30 @@ test('assert draft script NEVER spawns child processes or uses network', async (
         assert.equal(processSpawns, 0);
     } finally {
         Object.assign(childProcess, originals);
+        module.syncBuiltinESMExports();
+    }
+});
+
+test('assert child process spawn guard catches words.mjs execFileSync', () => {
+    let processSpawns = 0;
+    const originals = {
+        execFileSync: childProcess.execFileSync,
+    };
+    const intercept = () => {
+        processSpawns++;
+        throw new Error('drafting tooling must never spawn a child process!');
+    };
+
+    try {
+        childProcess.execFileSync = intercept;
+        module.syncBuiltinESMExports();
+
+        // words.mjs's baselineBase executes git via named execFileSync import
+        baselineBase();
+        assert.equal(processSpawns, 1, 'Expected guard to catch execFileSync call from words.mjs');
+    } finally {
+        Object.assign(childProcess, originals);
+        module.syncBuiltinESMExports();
     }
 });
 

@@ -44,7 +44,7 @@ Vous le rencontrez sous plusieurs formes :
 
 - une petite étiquette sur un écran ou une carte ;
 - un bandeau en haut d'un écran d'exemple ;
-- un bouton qui garde sa place, comme **Demande · Haricots retenus en sécurité 🏘️** sur une annonce ;
+- un bouton qui garde sa place, comme **Demande · Haricots conservés en sécurité 🏘️** sur une annonce ;
 - une ligne là où une communauté locale est différente, comme « 🏘️ Dans une communauté locale, c'est un prix en haricots › ».
 
 Touchez l'un d'eux pour ouvrir **Pourquoi cela vit dans une communauté locale**. Il en explique la raison en une phrase ou deux, puis propose **Créer une communauté** et, si possible, **Communautés près de chez vous** et **Comment ça marche**.
@@ -53,8 +53,8 @@ Touchez l'un d'eux pour ouvrir **Pourquoi cela vit dans une communauté locale**
 
 Les écrans comportant le repère affichent **Vallée d'Exemple** : une communauté fictive, afin que vous puissiez voir les écrans d'une communauté locale avec du contenu.
 
-- **Registre:** un membre d'exemple avec 85 haricots, une marge de dépense jusqu'à −200, un badge de confiance, et quelques échanges récents, comme du pain, une heure de jardinage et quelques semis.
-- **Communs:** l'Example Valley Bakery, une entreprise dont les membres sont gestionnaires, et une Décision : un bac à compost, financé par les haricots partagés des Communs.
+- **Registre :** un membre d'exemple avec 85 haricots, une marge de dépense jusqu'à −200, un badge de confiance, et quelques échanges récents, comme du pain, une heure de jardinage et quelques semis.
+- **Communs :** l'Example Valley Bakery, une entreprise dont les membres sont gestionnaires, et une Décision : un bac à compost, financé par les haricots partagés des Communs.
 - **Mes accords**, dans le Marché : trois exemples d'accords : un qui attend votre action, un avec les haricots conservés en sécurité, et un terminé.
 
 Personne dans Example Valley n'a de nom. Vous voyez « un voisin », « les Communs » ou « l'Example Valley Bakery ». Rien de tout cela n'est réel, et rien n'est à vous.
@@ -85,10 +85,10 @@ Si la communauté globale peut un jour vérifier qui est qui, certains de ces é
 
 Une communauté locale fonctionne sur son propre petit serveur, pris en charge par quelqu'un sur place. Cela peut être vous.
 
-- **Combien cela coûte:** un ordinateur disponible qui reste allumé à la maison, ou un petit serveur loué pour quelques dollars par mois. Le logiciel est gratuit.
+- **Ce que cela coûte :** un ordinateur disponible qui reste allumé à la maison, ou un petit serveur loué pour quelques dollars par mois. Le logiciel est gratuit.
 - **Qui le gère :** c'est vous, sur votre propre machine ou celle que vous louez. Il n'a pas besoin de beanpool.org : il peut avoir sa propre adresse web.
-- **Ce que vous prenez en charge:** les signalements de vos membres vous parviennent. Les données de la communauté sont sous votre responsabilité pour les sauvegardes, avec un code de récupération. Gardez deux propriétaires, et maintenez le serveur allumé et à jour.
-- **Ce que vous ne voyez jamais:** les discussions de vos membres en tête-à-tête. Elles sont verrouillées de façon à ce que le serveur ne puisse pas les lire.
+- **Ce que vous prenez en charge :** les signalements de vos membres vous parviennent. Les données de la communauté sont sous votre responsabilité pour les sauvegardes, avec un code de récupération. Gardez deux propriétaires, et maintenez le serveur allumé et à jour.
+- **Ce que vous ne voyez jamais :** les discussions de vos membres en tête-à-tête. Elles sont verrouillées de façon à ce que le serveur ne puisse pas les lire.
 - **Combien de temps :** environ une demi-heure, pour quelqu'un sachant suivre des instructions.
 
 Pour commencer, touchez **Créer une communauté** dans n'importe quel volet **Pourquoi cela vit dans une communauté locale**, ou, sur le téléphone, sur la carte **Trouvez votre communauté** de l'Accueil. Elle présente trois façons d'en héberger une : un ordinateur disponible à la maison, un petit serveur loué, ou demander de l'aide sur la communauté globale. **Copier les détails de ma communauté** copie le nom, le lieu de votre communauté et la façon de vous joindre, pour les coller dans les réglages de votre nouveau serveur.

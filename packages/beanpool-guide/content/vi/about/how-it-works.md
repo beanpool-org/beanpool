@@ -80,7 +80,7 @@ Huy hiệu chỉ là sự công nhận, không hơn. Huy hiệu không khóa hay
 
 ## Phí và Commons
 
-Cộng đồng của bạn có một quỹ Đậu chung gọi là **Commons**. Các khoản phí sẽ được chuyển vào quỹ này. Các thành viên cùng nhau quyết định cách chi tiêu quỹ.
+Cộng đồng của bạn có một quỹ Đậu chung gọi là **Chung**. Các khoản phí sẽ được chuyển vào quỹ này. Các thành viên cùng nhau quyết định cách chi tiêu quỹ.
 
 - **Phí thị trường:** 1,5% của mỗi khoản thanh toán trên chợ được chuyển vào Commons. Khoản phí này được trừ từ số Đậu người bán nhận được.
 - **Phí lưu thông:** Đậu sinh ra là để luân chuyển, không phải để nằm yên. 200 Đậu đầu tiên bạn nắm giữ luôn hoàn toàn miễn phí. Trên mức đó, một khoản phí nhỏ hàng tháng sẽ được chuyển vào Commons: 1% mỗi tháng cho số Đậu từ 200 đến 500, 1,5% từ 500 đến 1.000, 2% từ 1.000 đến 2.000, và 2,5% trên 2.000.

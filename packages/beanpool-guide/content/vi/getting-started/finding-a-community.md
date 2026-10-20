@@ -16,12 +16,12 @@ Chưa có cộng đồng nào ở gần bạn? Bạn có thể tự bắt đầu
 
 ## Các cộng đồng gần bạn
 
-Trên cộng đồng toàn cầu, thẻ **Find your community** trên **Trang chủ** hiển thị các cộng đồng ở gần bạn nhất. Trong 30 ngày đầu tiên, thẻ này luôn ở gần trên cùng của Trang chủ và không thể xóa hoặc di chuyển; sau đó bạn có thể xóa nó như bất kỳ thẻ nào khác. Trong ứng dụng web, mỗi cộng đồng trên thẻ là một liên kết dẫn đến trang riêng của cộng đồng đó. Nếu ứng dụng không biết bạn đang ở đâu, hãy nhấn **Chia sẻ khu vực của tôi**, hoặc **or type your town** và chọn thị trấn của bạn. Các bước dưới đây dành cho ứng dụng điện thoại.
+Trên cộng đồng toàn cầu, thẻ **Tìm cộng đồng của bạn** trên **Trang chủ** hiển thị các cộng đồng ở gần bạn nhất. Trong 30 ngày đầu tiên, thẻ này luôn ở gần trên cùng của Trang chủ và không thể xóa hoặc di chuyển; sau đó bạn có thể xóa nó như bất kỳ thẻ nào khác. Trong ứng dụng web, mỗi cộng đồng trên thẻ là một liên kết dẫn đến trang riêng của cộng đồng đó. Nếu ứng dụng không biết bạn đang ở đâu, hãy nhấn **Chia sẻ khu vực của tôi**, hoặc **hoặc nhập tên thị trấn** và chọn thị trấn của bạn. Các bước dưới đây dành cho ứng dụng điện thoại.
 
 Bạn chưa tham gia cộng đồng toàn cầu? Hãy nhấn vào hạt đậu ở trên cùng bên trái và dưới mục **Your communities**, nhấn **Cộng đồng toàn cầu**, sau đó tham gia bằng tài khoản bạn đang có: xem "Nhiều hơn một cộng đồng". Khi chưa có tài khoản nào, hãy nhấn **Khám phá BeanPool toàn cầu** trên màn hình đầu tiên của ứng dụng: xem "Tham gia BeanPool".
 
 - Nhấn **Cộng đồng gần bạn** để xem toàn bộ danh sách.
-- Các cộng đồng được liệt kê theo thứ tự từ gần nhất đến xa hơn khi ứng dụng biết bạn đang ở đâu. Nếu không biết, hãy nhấn **Dùng vị trí của tôi**, hoặc tìm kiếm theo tên. Bạn không muốn chia sẻ vị trí của mình? Hãy nhấn **or type your town**, bắt đầu nhập và chọn thị trấn của bạn từ danh sách: chỉ một điểm ước chừng được lưu giữ, và nút **change** sẽ chọn thị trấn khác.
+- Các cộng đồng được liệt kê theo thứ tự từ gần nhất đến xa hơn khi ứng dụng biết bạn đang ở đâu. Nếu không biết, hãy nhấn **Dùng vị trí của tôi**, hoặc tìm kiếm theo tên. Bạn không muốn chia sẻ vị trí của mình? Hãy nhấn **hoặc nhập tên thị trấn**, bắt đầu nhập và chọn thị trấn của bạn từ danh sách: chỉ một điểm ước chừng được lưu giữ, và nút **đổi** sẽ chọn thị trấn khác.
 - Các cộng đồng ở cùng khoảng cách tương đương nhau sẽ được xáo trộn ngẫu nhiên, để không có một cộng đồng nào luôn nằm ở trên cùng.
 - Mỗi cộng đồng hiển thị khoảng cách bao xa và có bao nhiêu thành viên, khi cộng đồng đó đã công khai thông tin.
 
@@ -33,7 +33,7 @@ Một cộng đồng chưa công bố địa chỉ của mình vẫn được li
 - Kiểm tra lại tên của bạn, và viết vài lời giới thiệu về bản thân, tối đa 280 ký tự: nơi bạn sống, những gì bạn muốn chia sẻ hoặc học hỏi.
 - Nhấn **Gửi**.
 
-Yêu cầu của bạn sẽ được gửi thẳng đến cộng đồng đó, không qua cộng đồng toàn cầu, kèm theo tên, lời nhắn và ảnh của bạn. Chỉ các thành viên của cộng đồng đó mới thấy yêu cầu. Ở nơi cộng đồng chỉ cho phép quản trị viên mời, chỉ các chủ sở hữu và quản trị viên mới thấy yêu cầu. Một thành viên ở đó có thể cho bạn vào: họ nhấn **Invite**, và một lời mời sẽ được tạo ra mà chỉ tài khoản của bạn mới có thể sử dụng.
+Yêu cầu của bạn sẽ được gửi thẳng đến cộng đồng đó, không qua cộng đồng toàn cầu, kèm theo tên, lời nhắn và ảnh của bạn. Chỉ các thành viên của cộng đồng đó mới thấy yêu cầu. Ở nơi cộng đồng chỉ cho phép quản trị viên mời, chỉ các chủ sở hữu và quản trị viên mới thấy yêu cầu. Một thành viên ở đó có thể cho bạn vào: họ nhấn **Mời**, và một lời mời sẽ được tạo ra mà chỉ tài khoản của bạn mới có thể sử dụng.
 
 Trong khi bạn chờ đợi, thẻ cộng đồng sẽ ghi **You asked to join. No answer yet**. Các cộng đồng thường phản hồi trong vòng vài ngày. Bạn có thể mở một yêu cầu với mỗi cộng đồng, và mỗi cộng đồng chỉ tiếp nhận một vài yêu cầu mỗi ngày từ cùng một kết nối internet.
 
@@ -61,7 +61,7 @@ Bạn vẫn là thành viên của cộng đồng toàn cầu, và có thể chu
 
 Mọi người có thể xin gia nhập cộng đồng của bạn từ cộng đồng toàn cầu. Nhấn **Trò chuyện**, sau đó chọn **Mọi người**, rồi chọn **Invites**: các yêu cầu được liệt kê dưới mục **Wants to join**, kèm theo tên, lời nhắn và nơi họ đến. Các yêu cầu được trả lời trong ứng dụng điện thoại: ứng dụng web không liệt kê chúng.
 
-- **Invite:** tạo một lời mời mà chỉ tài khoản của họ mới có thể sử dụng. Ứng dụng của họ sẽ tự tìm thấy lời mời, và họ tham gia chỉ với một lần nhấn.
+- **Mời:** tạo một lời mời mà chỉ tài khoản của họ mới có thể sử dụng. Ứng dụng của họ sẽ tự tìm thấy lời mời, và họ tham gia chỉ với một lần nhấn.
 - **Không phải bây giờ:** họ sẽ không được thông báo từ chối. Họ sẽ tiếp tục nhìn thấy thông báo "chưa có câu trả lời", và không thể yêu cầu lại trong vòng 30 ngày.
 
 Bất kỳ thành viên nào cũng có thể trả lời, bất kể huy hiệu tin cậy của họ là gì, trừ khi cộng đồng đã chọn chỉ để các quản trị viên mời (**Known**, dưới mục **Who may invite** trong Cài đặt của máy chủ cộng đồng). Khi đó, chỉ các chủ sở hữu và quản trị viên mới thấy các yêu cầu và trả lời chúng. Quản trị viên của cộng đồng có thể tắt các yêu cầu xin gia nhập.

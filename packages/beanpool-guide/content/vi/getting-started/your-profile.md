@@ -30,7 +30,7 @@ Dưới mục **Thông tin liên hệ**, bạn có thể thêm số điện tho�
 
 Khi bạn đã thêm, hãy chọn **Ai có thể thấy thông tin này?**:
 
-- **Hidden:** không ai cả.
+- **Ẩn:** không ai cả.
 - **Đối tác trao đổi:** những thành viên bạn đang có thỏa thuận giao dịch cùng. Thông tin được tính từ thời điểm một trong hai người nhấn **Accept Offer** hoặc **Offer to Fulfill** trên bài đăng của người kia, ngay cả khi thỏa thuận sau đó bị hủy hoặc bị từ chối. Việc chỉ gửi riêng Đậu không được tính là một thỏa thuận.
 - **Bạn bè:** những người bạn đã thêm vào danh sách bạn bè.
 - **Cộng đồng:** mọi thành viên trong cộng đồng của bạn.

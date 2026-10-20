@@ -56,6 +56,8 @@ import {
     saveOffboxSettings,
     runOffboxBackupNow,
     listOffboxBackups,
+    getTlsStatus,
+    setOwnAddress,
 } from './node-client';
 
 describe('normalizeNodeUrl', () => {
@@ -186,6 +188,55 @@ describe('resolveNodeApiUrl', () => {
 
         const url = resolveNodeApiUrl('https://node.beanpool.org', '/api/local/admin/onboarding-funnel', { days: '30' });
         expect(url).toBe('/proxy/https/node.beanpool.org/api/local/admin/onboarding-funnel?days=30');
+
+        vi.unstubAllGlobals();
+    });
+});
+
+describe('getTlsStatus and setOwnAddress', () => {
+    it('getTlsStatus returns parsed status on success, null on 403/404, and throws on failure/network error', async () => {
+        const tlsData = { ca: "Let's Encrypt", testCa: false, orders: true, identifiers: [] };
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({ ok: true, status: 200, json: async () => tlsData }));
+        const got = await getTlsStatus('https://node.example', 'pw', 'tfa-1');
+        expect(got).toEqual(tlsData);
+
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({ ok: false, status: 404, json: async () => ({}) }));
+        expect(await getTlsStatus('https://node.example', 'pw')).toBeNull();
+
+        vi.stubGlobal('fetch', vi.fn().mockRejectedValueOnce(new Error('Network error')));
+        await expect(getTlsStatus('https://node.example', 'pw')).rejects.toThrow('Could not reach the server.');
+
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({ ok: false, status: 429, json: async () => ({}) }));
+        await expect(getTlsStatus('https://node.example', 'pw')).rejects.toThrow('Too many tries. Wait a minute.');
+    });
+
+    it('setOwnAddress posts address input and returns result, or throws fresh proof / status sentence on refusal', async () => {
+        const fetchMock = vi.fn().mockResolvedValueOnce({
+            ok: true,
+            status: 200,
+            json: async () => ({ success: true, address: 'node.example.org', kind: 'own', communityAddress: true, primaryAddress: 'node.example.org' }),
+        });
+        vi.stubGlobal('fetch', fetchMock);
+
+        const res = await setOwnAddress('https://node.example', { domain: 'node.example.org' }, 'pw', 'tfa-1', 'code-123');
+        expect(res).toEqual({ address: 'node.example.org', kind: 'own', communityAddress: true, primaryAddress: 'node.example.org' });
+        const [url, init] = fetchMock.mock.calls[0];
+        expect(url).toContain('/api/local/admin/public-address/own');
+        expect(JSON.parse(init.body)).toEqual({ domain: 'node.example.org', password: 'pw', code: 'code-123' });
+
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({
+            ok: false,
+            status: 401,
+            json: async () => ({ totpRequired: true, error: 'Code required' }),
+        }));
+        await expect(setOwnAddress('https://node.example', { domain: 'node.example.org' }, 'pw')).rejects.toThrow('Code required');
+
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({
+            ok: false,
+            status: 400,
+            json: async () => ({ error: 'Invalid domain name' }),
+        }));
+        await expect(setOwnAddress('https://node.example', { domain: 'bad' }, 'pw')).rejects.toThrow('Invalid domain name');
 
         vi.unstubAllGlobals();
     });

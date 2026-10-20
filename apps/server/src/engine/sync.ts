@@ -1013,6 +1013,8 @@ const MEMBER_KEY_PARTS: Record<string, number[]> = {
     push_tokens: [0],
     chat_mutes: [1],
     thread_read_cursors: [1],
+    // A tool's private copy, `<owner>|<tool>` (engine/tool-state.ts).
+    member_tool_state: [0],
     // The owner (engine/recovery-shares.ts recoveryTombstoneKey). Its copies stay under the old key when this standby
     // follows (dropMovedRecoveryCopies goes by the main server's), so either order ends the same; this keeps the main
     // server's.
@@ -1154,6 +1156,21 @@ function postModeration(rp: any): [string | null, string | null] {
  */
 function postSearch(rp: any): [number, string | null] {
     return [rp.cashAlsoNeeded ? 1 : 0, typeof rp.searchKeywords === 'string' ? rp.searchKeywords : null];
+}
+
+/**
+ * lendable, lend_max_days, lend_terms, replacement_value, in that order: a lendable Offer and its terms (S3), plain
+ * assignment as the cash note is, so a lender who takes a thing out of lending, or clears a term, has it cleared here too.
+ * A payload from a main server older than lending says nothing, and it held no lendable Offer to say.
+ */
+function postLending(rp: any): [number, number | null, string | null, string | null] {
+    if (rp.lendable !== true) return [0, null, null, null];
+    return [
+        1,
+        Number.isInteger(rp.lendMaxDays) ? rp.lendMaxDays : null,
+        typeof rp.lendTerms === 'string' ? rp.lendTerms : null,
+        typeof rp.replacementValue === 'string' ? rp.replacementValue : null,
+    ];
 }
 
 // members.area_lat / area_lng / area_updated_at (G4) come from importedArea (engine/member-area.ts): plain assignment,
@@ -1929,8 +1946,9 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                                 event_start_local, event_end_local, event_tz, event_online, event_link,
                                 event_repeat, event_repeat_until, event_repeat_skips, event_host_lets_in,
                                 audience_scope, target_group_id, target_pubkey, assigned_to, reach, reach_peers,
-                                hidden_by_reports_at, removed_by_moderator_at, cash_also_needed, search_keywords)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, ''))`).run(
+                                hidden_by_reports_at, removed_by_moderator_at, cash_also_needed, search_keywords,
+                                lendable, lend_max_days, lend_terms, replacement_value)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, ''), ?, ?, ?, ?)`).run(
                         rp.id,
                         rp.type,
                         rp.category,
@@ -1971,6 +1989,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         ...postScope(rp),
                         ...postModeration(rp),
                         ...postSearch(rp),
+                        ...postLending(rp),
                     );
                     newPosts++;
                 } else {
@@ -2022,6 +2041,10 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         removed_by_moderator_at = ?,
                         cash_also_needed = ?,
                         search_keywords = COALESCE(?, search_keywords),
+                        lendable = ?,
+                        lend_max_days = ?,
+                        lend_terms = ?,
+                        replacement_value = ?,
                         updated_at = ?
                         WHERE id = ?`).run(
                         rp.category,
@@ -2055,6 +2078,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         ...postScope(rp),
                         ...postModeration(rp),
                         ...postSearch(rp),
+                        ...postLending(rp),
                         rp.updatedAt || existing.updated_at || new Date().toISOString(),
                         rp.id
                     );

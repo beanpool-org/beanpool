@@ -319,6 +319,18 @@ CREATE TABLE IF NOT EXISTS posts (
     -- auto-mute counts.
     hidden_by_reports_at TEXT,
     removed_by_moderator_at TEXT,
+    -- A lendable Offer (scratch/tools/DESIGN-tool-library-fable.md §2.3; DESIGN-shops-and-tools-fable.md §12 S3): one
+    -- borrower at a time, off the board while it is out, back on it when the loan is done or called off (engine/escrow.ts).
+    -- 1 on an Offer only; such a row is also repeatable = 1, which every app in the store reads as "back on the board after
+    -- each deal" (its deal heal). 0 on every other row. The three below are NULL unless it is 1.
+    lendable INTEGER NOT NULL DEFAULT 0,
+    -- The longest loan, in days (1 to 365); NULL, as long as the two agree.
+    lend_max_days INTEGER,
+    -- The lender's terms, in their words (≤ 300).
+    lend_terms TEXT,
+    -- What it would cost to replace, in the lender's own words and currency ("$120", "like for like"), ≤ 40 characters.
+    -- Shown, never parsed, never moved: settled between the two people, as the cash flag above is.
+    replacement_value TEXT,
     CONSTRAINT lat_lng_check CHECK (lat BETWEEN -90 AND 90 AND lng BETWEEN -180 AND 180)
 );
 CREATE INDEX IF NOT EXISTS idx_posts_hidden_by_reports ON posts(hidden_by_reports_at) WHERE hidden_by_reports_at IS NOT NULL;
@@ -2726,4 +2738,21 @@ CREATE TABLE IF NOT EXISTS signature_audiences (
     address  TEXT NOT NULL,
     people   INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (day, kind, address)
+);
+
+-- 28. The tool store (scratch/tools/DESIGN-shops-and-tools-fable.md §9.3, slice S2; DESIGN-tool-template-fable.md §1.6): each
+-- tool's private copy of its owner's document, one row per owner and tool, a JSON document the device writes whole (last
+-- writer wins). The owner is a member, or an enterprise for its tools, which its keepers write. Only the owner reads it,
+-- through the app (routes/tools.ts); no list, search, Home answer to another member, pooled count or admin screen reads
+-- it. The node never reads inside `body`. Photos stay on the device. Copied to a standby verbatim (a plain table,
+-- engine/replication-manifest.ts); a delete leaves a tombstone (engine/tool-state.ts).
+CREATE TABLE IF NOT EXISTS member_tool_state (
+    public_key TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
+    -- The tool's id: 1 to 24 of a-z, 0-9 and '-' (engine/tool-state.ts TOOL_ID).
+    tool       TEXT NOT NULL CHECK (length(tool) BETWEEN 1 AND 24 AND tool NOT GLOB '*[^a-z0-9-]*'),
+    -- The document as JSON text, at most 64 KB as UTF-8 (TOOL_STATE_MAX_BYTES).
+    body       TEXT NOT NULL CHECK (length(CAST(body AS BLOB)) <= 65536),
+    -- The replication watermark (a plain table), and the copy's time the apps reconcile by: engine/tool-state.ts stamps it.
+    updated_at DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    PRIMARY KEY (public_key, tool)
 );

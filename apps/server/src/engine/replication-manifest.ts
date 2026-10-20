@@ -202,7 +202,7 @@ export const TABLES: Record<string, TableEntry> = {
     // by each server's boot backfill alike, from the same words (state-engine.ts backfillSearchKeywords).
     posts: {
         kind: 'replicated-except', payload: 'posts', watermark: 'updated_at',
-        columns: cols('id type category title description credits author_pubkey created_at active status price_type repeatable accepted_by accepted_at pending_transaction_id completed_at lat lng origin_node updated_at search_keywords cash_also_needed reach reach_peers created_by poll_options poll_closes_at poll_open_vote audience_scope target_group_id target_pubkey assigned_to event_start_at event_end_at event_place_name event_private_note event_host_lets_in event_state event_start_local event_end_local event_tz event_online event_link event_repeat event_repeat_until event_repeat_skips hidden_by_reports_at removed_by_moderator_at'),
+        columns: cols('id type category title description credits author_pubkey created_at active status price_type repeatable accepted_by accepted_at pending_transaction_id completed_at lat lng origin_node updated_at search_keywords cash_also_needed reach reach_peers created_by poll_options poll_closes_at poll_open_vote audience_scope target_group_id target_pubkey assigned_to event_start_at event_end_at event_place_name event_private_note event_host_lets_in event_state event_start_local event_end_local event_tz event_online event_link event_repeat event_repeat_until event_repeat_skips hidden_by_reports_at removed_by_moderator_at lendable lend_max_days lend_terms replacement_value'),
         except: {
             target_archetypes: { reason: 'dormant: nothing reads or writes it (db.ts; archetypes gate nothing)' },
             event_conversation_id: { reason: 'dormant: nothing reads or writes it (only db.ts adds the column)' },
@@ -478,6 +478,9 @@ export const TABLES: Record<string, TableEntry> = {
     pricing_guide_items: plain('id category emoji name description price_beans unit is_pinned confidence_count trend seasonality_hint thumbnail_url updated_at'),
     // Only members' reports (MEMBERS_REPORTS).
     pricing_reports: plain('id item_id reporter_pubkey report_type comment status created_at updated_at', { rows: MEMBERS_REPORTS }),
+    // Each tool's private copy of its owner's document (engine/tool-state.ts), so a second phone, or the same one after a
+    // take-over, gets it back. Only a member or an enterprise's keeper writes a row, for themselves or the enterprise.
+    member_tool_state: plain('public_key tool body updated_at'),
 
     // ── Not copied today, and the design says they should be ──
     message_attachments: { kind: 'local', gap: 'G4', reason: 'not in the payload: chat photos (they need the image-store path post_photos has)' },

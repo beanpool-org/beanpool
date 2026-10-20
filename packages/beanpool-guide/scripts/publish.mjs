@@ -18,6 +18,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { GUIDE_LANGS } from '../src/guide.mjs';
 
 const REMOTE = 'origin';
 const BASE = 'main';
@@ -48,7 +49,10 @@ function run(cmd, cmdArgs, cwd, { quiet = false } = {}) {
 const tryRun = (cmd, cmdArgs, cwd) => { try { return run(cmd, cmdArgs, cwd, { quiet: true }); } catch { return null; } };
 
 const repo = run('git', ['rev-parse', '--show-toplevel'], process.cwd());
-const version = (dir, file) => JSON.parse(fs.readFileSync(path.join(dir, 'packages/beanpool-guide/generated', file), 'utf8')).version;
+const version = (dir, file) => {
+    const full = path.join(dir, 'packages/beanpool-guide/generated', file);
+    return fs.existsSync(full) ? JSON.parse(fs.readFileSync(full, 'utf8')).version : null;
+};
 
 /** One attempt from the current origin/main. Returns 'done', or 'again' when main changed the guide meanwhile. */
 function attempt() {
@@ -60,18 +64,31 @@ function attempt() {
     run('git', ['worktree', 'add', '-q', '--detach', dir, base], repo);
     try {
         const before = { guide: version(dir, 'guide.json'), manual: version(dir, 'operators.json') };
+        for (const lang of GUIDE_LANGS) {
+            before[`guide:${lang}`] = version(dir, `guide.${lang}.json`);
+        }
         const built = run(process.execPath, [BUILD, '--publish'], dir);
         if (!run('git', ['status', '--porcelain', '--', ...PUBLISHED], dir)) {
             console.log(`Nothing to publish: ${REMOTE}/${BASE} (${base.slice(0, 10)}) has published every page — members' guide v${before.guide}, operator manual v${before.manual}.`);
             return 'done';
         }
         const after = { guide: version(dir, 'guide.json'), manual: version(dir, 'operators.json') };
+        for (const lang of GUIDE_LANGS) {
+            after[`guide:${lang}`] = version(dir, `guide.${lang}.json`);
+        }
         const changes = [
             after.guide !== before.guide ? `members' guide v${before.guide} → v${after.guide}` : null,
             after.manual !== before.manual ? `operator manual v${before.manual} → v${after.manual}` : null,
+            ...GUIDE_LANGS.map(lang => {
+                const b = before[`guide:${lang}`];
+                const a = after[`guide:${lang}`];
+                if (a === b) return null;
+                return `${lang} guide v${b ?? 'none'} → v${a}`;
+            }),
         ].filter(Boolean);
         const title = `Publish the guide: ${changes.join(', ') || 'regenerated files'}`;
-        branch = `guide/publish-members-v${after.guide}-manual-v${after.manual}`;
+        const langSuffix = GUIDE_LANGS.filter(l => after[`guide:${l}`] !== before[`guide:${l}`]).map(l => `-${l}-v${after[`guide:${l}`]}`).join('');
+        branch = `guide/publish-members-v${after.guide}-manual-v${after.manual}${langSuffix}`;
         run('git', ['switch', '-q', '-c', branch], dir);
         run('git', ['add', '--', ...PUBLISHED], dir);
         run('git', ['commit', '-q', '-m', title, '-m',

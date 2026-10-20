@@ -72,6 +72,7 @@ export interface MarketplacePost {
     photos?: string[];
     status?: 'active' | 'pending' | 'paused' | 'completed' | 'cancelled';
     repeatable?: boolean;
+    lendable?: boolean;
     /** #108: a real cash outlay is involved (fuel / consumables). No amount — terms live in chat. */
     cashAlsoNeeded?: boolean;
     acceptedBy?: string;

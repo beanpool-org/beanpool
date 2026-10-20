@@ -146,6 +146,8 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     // (o) member_preferences
     move('member_preferences', 'public_key');
     move('chat_mutes', 'member_pubkey');
+    // Their tools' private copies (engine/tool-state.ts): the new phone gets them back from here.
+    move('member_tool_state', 'public_key');
     db.prepare('UPDATE OR IGNORE thread_read_cursors SET member_pubkey = ? WHERE member_pubkey = ?').run(newKey, oldKey);
     db.prepare('DELETE FROM thread_read_cursors WHERE member_pubkey = ?').run(oldKey);
 

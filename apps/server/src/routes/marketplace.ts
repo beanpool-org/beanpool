@@ -315,7 +315,7 @@ function photoKeysSince(): string {
 
 /** The posts route's parameters read as one value each. Given twice (`q=a&q=b`), one arrives as an array, which made
  *  getPosts throw or reached SQL as one, and answered 500 to anyone (#1808 review, finding 4): it is a 400. */
-const ONE_VALUE_POSTS_PARAMS = ['id', 'type', 'category', 'author', 'q', 'updatedAfter', 'audienceScope', 'targetGroupId', 'assignedTo'] as const;
+const ONE_VALUE_POSTS_PARAMS = ['id', 'type', 'category', 'author', 'q', 'updatedAfter', 'audienceScope', 'targetGroupId', 'assignedTo', 'lendable'] as const;
 
 /**
  * A by-area read's query as its ETag describes it: without where the read starts, its page, the hash the phone holds, or
@@ -361,6 +361,8 @@ router.get('/api/marketplace/posts', async (ctx) => {
     const audienceScope = ctx.query.audienceScope as string | undefined;
     const targetGroupId = ctx.query.targetGroupId as string | undefined;
     const assignedTo = ctx.query.assignedTo as string | undefined;
+    // `lendable=1`: lendable Offers only (S3), a member's shop with `author=`. Anything else reads as without it.
+    const lendableOnly = ctx.query.lendable === '1';
     // A few listings by id at once (`ids=a,b,c`, at most IDS_MAX), each read as `id=` reads one: a phone fetches the
     // listings of its set it doesn't hold (DESIGN-global-sync-by-area §2.3). Garbage is a 400, never a quiet empty list.
     let ids: string[] | undefined;
@@ -387,7 +389,7 @@ router.get('/api/marketplace/posts', async (ctx) => {
     const nearby = ctx.query.nearby === '1' && switches.nearbyListings && (sync || !!updatedAfter)
         && !!ctx.state.actor && viewerTier(ctx) === 'member';
     if (nearby && (id || ids || point || author || q || (category && category !== 'all') || (type && type !== 'all') || ctx.query.audienceScope !== undefined
-        || targetGroupId || assignedTo || offset > 0 || ctx.query.beansOnly === 'true' || ctx.query.online !== undefined)) {
+        || targetGroupId || assignedTo || offset > 0 || ctx.query.beansOnly === 'true' || ctx.query.online !== undefined || ctx.query.lendable !== undefined)) {
         ctx.status = 400;
         ctx.body = { error: 'nearby=1 reads your own set of listings: it takes types, limit, updatedAfter and the paging parameters only' };
         return;
@@ -410,7 +412,7 @@ router.get('/api/marketplace/posts', async (ctx) => {
     // counts went to the pull it threw away (review of fe4c27ce, finding 1). A later one (a new install, an emptied
     // cache) doesn't: it holds no old URL (restartPhotoHealFor; review of 1bc39eb0, finding 2). Here, not in photoHealFor: the
     // phone's read of one listing by id (refreshCachedPost, `?id=…&sync=true`) has no cursor either.
-    if (!nearby && !point && sync && !updatedAfter && !pageAfter && !id && !ids && !author && !q && !category && !audienceScope && !targetGroupId && !assignedTo) {
+    if (!nearby && !point && sync && !updatedAfter && !pageAfter && !id && !ids && !author && !q && !category && !audienceScope && !targetGroupId && !assignedTo && !lendableOnly) {
         restartPhotoHealFor(ctx.state.actor as string | undefined);
     }
 
@@ -579,7 +581,7 @@ router.get('/api/marketplace/posts', async (ctx) => {
     const listing = {
         id, ids, type, types, excludeEvents, category, query: q, authorPubkey: author, viewerPubkey: reader, beansOnly, audienceScope,
         targetGroupId, assignedTo, includeHidden, includeVoters, coarse: guestView || undefined, guest: guestView || undefined, eventOnline,
-        neighbourhood: neighbourhood || undefined,
+        neighbourhood: neighbourhood || undefined, lendable: lendableOnly || undefined,
     };
     // On a node with members on demand and no by-area listings, a member's plain delta sends again each listing whose
     // author changed their card since, as a set's delta does: the phone holds no card for most of its listings' authors,
@@ -667,7 +669,8 @@ router.get('/api/marketplace/posts', async (ctx) => {
 
 router.post('/api/marketplace/posts', async (ctx) => {
     // The event fields are not read here: an event is built by `createEventFromBody` from the whole body.
-    const { id, type, category, title, description, credits, priceType, authorPublicKey, lat, lng, photos, repeatable, cashAlsoNeeded, reach, reachPeers, pollOptions, durationDays, pollOpenVote, audienceScope, targetGroupId, targetPubkey, assignedTo } =
+    const { id, type, category, title, description, credits, priceType, authorPublicKey, lat, lng, photos, repeatable, cashAlsoNeeded, reach, reachPeers, pollOptions, durationDays, pollOpenVote, audienceScope, targetGroupId, targetPubkey, assignedTo,
+        lendable, lendMaxDays, lendTerms, replacementValue } =
         (ctx as any).requestBody || {};
     if (!type || !title || !authorPublicKey) {
         ctx.status = 400;
@@ -720,7 +723,9 @@ router.post('/api/marketplace/posts', async (ctx) => {
             ? createEventFromBody((ctx as any).requestBody, authorPublicKey, undefined, underDailyPosts, timeOut)
             : createPost(
             type, category || 'other', title, description || '',
-            Number(credits) || 0, priceType === 'hourly' ? 'hourly' : 'fixed', authorPublicKey,
+            // A loan's fee may be per day or per week too (S3), and is passed as sent, so one priced by the hour or the month
+            // is refused in the engine's words rather than made one fee. Any other listing is one fee or by the hour, as before.
+            Number(credits) || 0, lendable === true ? (priceType ?? 'fixed') : priceType === 'hourly' ? 'hourly' : 'fixed', authorPublicKey,
             // With no place, on a node that syncs by area, the engine gives the listing its author's area (Q4).
             lat != null ? Number(lat) : undefined,
             lng != null ? Number(lng) : undefined,
@@ -731,7 +736,11 @@ router.post('/api/marketplace/posts', async (ctx) => {
             // #143 step 4. Passed through RAW — `normaliseReach` in the engine is the single place that
             // decides what an unrecognised reach means, and it fail-closes to 'local'. Validating here as
             // well would put two answers in the codebase for "what if this is nonsense".
-            { reach, reachPeers, pollOptions, durationDays, pollOpenVote, audienceScope, targetGroupId, targetPubkey, assignedTo, beforeWrite: underDailyPosts }
+            {
+                reach, reachPeers, pollOptions, durationDays, pollOpenVote, audienceScope, targetGroupId, targetPubkey, assignedTo, beforeWrite: underDailyPosts,
+                // A lendable Offer and its terms, raw: the engine checks each (engine/post-fields.ts assertLendFields).
+                lendable, lendMaxDays, lendTerms, replacementValue,
+            }
         );
         if (!post) {
             ctx.status = 400;

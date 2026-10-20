@@ -14,7 +14,8 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
     FEEDBACK_LIVE, BEANPOOL_WEBSITE_URL, GUIDE_SLUGS,
-    beanPoolSheetEntries, findGuidePage, findGuideSection, findGuideVideo, guidePageBodyInEnglish, manualSections, relatedPages,
+    beanPoolSheetEntries, findGuidePage, findGuideSection, findGuideVideo, guidePageBodyInEnglish,
+    guidePageNewerInEnglish, manualSections, relatedPages,
     searchGuide, sectionPages, splitBold, t, tn,
     type GuidePage,
 } from '@beanpool/core';
@@ -216,12 +217,21 @@ export function MemberGuide({ onBack, onSuggest, feedbackLive = FEEDBACK_LIVE, i
 function GuidePageView({ slug, openPage, openSection }: { slug: string; openPage: (slug: string) => void; openSection: (id: string) => void }) {
     const { guide } = useGuide();
     const videos = useLearnVideos();
+    const [showEnglish, setShowEnglish] = useState(false);
+    useEffect(() => { setShowEnglish(false); }, [slug]);
+
     const page = findGuidePage(guide, slug);
     if (!page) return <p className="text-center text-nature-700 dark:text-nature-300 mt-8">{t('This guide is not available. Go back and pick another one.')}</p>;
     const section = findGuideSection(guide, page.section);
     const video = findGuideVideo(page, videos);
     const related = relatedPages(guide, page);
     const bodyInEnglish = guidePageBodyInEnglish(page);
+    const newerInEnglish = guidePageNewerInEnglish(page);
+    // The English body only while the page is behind and the member asked for it: a page that turns current shows its translation.
+    const englishShown = showEnglish && newerInEnglish && !!page.englishBlocks;
+    const blocksToRender = englishShown ? page.englishBlocks! : page.blocks;
+    const currentLang = (englishShown || bodyInEnglish) ? 'en' : undefined;
+
     return (
         <article className="text-nature-800 dark:text-nature-200 text-base leading-relaxed">
             {section && (
@@ -232,14 +242,27 @@ function GuidePageView({ slug, openPage, openSection }: { slug: string; openPage
             <h1 className="text-2xl font-extrabold text-nature-950 dark:text-white m-0">{page.title}</h1>
             <p className="text-nature-600 dark:text-nature-300 mt-2">{page.summary}</p>
             {bodyInEnglish && <p data-testid="guide-english-note" className="text-sm text-nature-600 dark:text-nature-300 mt-1 mb-0">{t('This page is in English for now.')}</p>}
+            {newerInEnglish && (
+                <div className="mt-1 mb-2">
+                    <p data-testid="guide-newer-note" className="text-sm text-nature-600 dark:text-nature-300 m-0">{t('This page is newer in English.')}</p>
+                    <button
+                        type="button"
+                        data-testid="guide-toggle-english"
+                        onClick={() => setShowEnglish(!showEnglish)}
+                        className="mt-1 min-h-[48px] p-0 bg-transparent border-none cursor-pointer text-sm font-semibold text-emerald-600 dark:text-emerald-400 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded"
+                    >
+                        {showEnglish ? t('Show translation') : t('Read in English')}
+                    </button>
+                </div>
+            )}
             {video && (
                 <a href={video.url} target="_blank" rel="noopener noreferrer" className="mt-3 flex items-center gap-2 min-h-[48px] px-4 py-2 rounded-2xl border border-nature-300 dark:border-nature-700 bg-white dark:bg-nature-900 font-semibold text-nature-900 dark:text-white no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
                     <span aria-hidden="true">▶️</span>
                     <span className="flex-1 min-w-0 break-words">{t('Watch: {title}', { title: video.title })}</span>
                 </a>
             )}
-            <div lang={bodyInEnglish ? 'en' : undefined}>
-                {page.blocks.map((b, i) => {
+            <div lang={currentLang}>
+                {blocksToRender.map((b, i) => {
                     if (b.type === 'ul') return (
                         <ul key={i} className="mt-2 mb-0 pl-5 list-disc space-y-1.5">
                             {b.items.map((it, j) => <li key={j}><Rich text={it} /></li>)}

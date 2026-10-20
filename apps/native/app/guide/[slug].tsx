@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView, Linking } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams, ErrorBoundary } from 'expo-router';
@@ -6,7 +6,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { useTheme, useStyles } from '../ThemeContext';
 import { useGuide } from '../../utils/use-guide';
-import { findGuidePage, findGuideSection, relatedPages, findGuideVideo, splitBold, guidePageBodyInEnglish } from '../../utils/guide';
+import { findGuidePage, findGuideSection, relatedPages, findGuideVideo, splitBold, guidePageBodyInEnglish, guidePageNewerInEnglish } from '../../utils/guide';
 import { useLearnVideos } from '../../utils/use-learn-videos';
 import { inCapitalsOf, t } from '@beanpool/core';
 
@@ -28,9 +28,16 @@ export default function GuideScreen() {
     const section = page ? findGuideSection(guide, page.section) : null;
     const videos = useLearnVideos();
     const video = page ? findGuideVideo(page, videos) : null;
+    const [showEnglish, setShowEnglish] = useState(false);
+    useEffect(() => { setShowEnglish(false); }, [slug]);
+
     // The title is in the member's language over an English body: one line says so, and VoiceOver reads the body as English.
     const bodyInEnglish = !!page && guidePageBodyInEnglish(page);
-    const bodyLanguage = bodyInEnglish ? 'en' : undefined;
+    const newerInEnglish = !!page && guidePageNewerInEnglish(page);
+    // The English body only while the page is behind and the member asked for it: a page that turns current shows its translation.
+    const englishShown = showEnglish && newerInEnglish && !!page?.englishBlocks;
+    const blocksToRender = englishShown ? page!.englishBlocks! : page?.blocks ?? [];
+    const currentBodyLanguage = (englishShown || bodyInEnglish) ? 'en' : undefined;
 
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
         container: { flex: 1, backgroundColor: colors.surface.page },
@@ -51,6 +58,8 @@ export default function GuideScreen() {
         kicker: { alignSelf: 'flex-start', minHeight: 48, justifyContent: 'center', marginTop: -8 },
         kickerText: { fontSize: 13, fontWeight: '700', color: colors.brand.primary, letterSpacing: 0.5 },
         englishNote: { fontSize: 14, color: colors.text.secondary, lineHeight: 20, marginTop: 4, marginBottom: 4 },
+        toggleEnglish: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center', marginTop: 2, marginBottom: 8 },
+        toggleEnglishText: { fontSize: 14, fontWeight: '600', color: colors.brand.primary },
         watch: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 48, marginTop: 8, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 14, borderWidth: 1, borderColor: colors.border.strong, backgroundColor: colors.surface.card },
         watchText: { flex: 1, minWidth: 0, fontSize: 15, fontWeight: '600', color: colors.text.heading },
         relatedLabel: { fontSize: 12, fontWeight: 'bold', color: colors.text.secondary, letterSpacing: 1, marginTop: 32, marginBottom: 8 },
@@ -99,6 +108,19 @@ export default function GuideScreen() {
                         <Text style={styles.title} accessibilityRole="header">{page.title}</Text>
                         <Text style={styles.summary}>{page.summary}</Text>
                         {bodyInEnglish && <Text style={styles.englishNote} testID="guide-english-note">{t('This page is in English for now.')}</Text>}
+                        {newerInEnglish && (
+                            <View style={{ marginBottom: 4 }}>
+                                <Text style={styles.englishNote} testID="guide-newer-note">{t('This page is newer in English.')}</Text>
+                                <Pressable
+                                    style={styles.toggleEnglish}
+                                    onPress={() => setShowEnglish(!showEnglish)}
+                                    accessibilityRole="button"
+                                    testID="guide-toggle-english"
+                                >
+                                    <Text style={styles.toggleEnglishText}>{showEnglish ? t('Show translation') : t('Read in English')}</Text>
+                                </Pressable>
+                            </View>
+                        )}
                         {video && (
                             <Pressable
                                 style={styles.watch}
@@ -110,22 +132,22 @@ export default function GuideScreen() {
                                 <Text style={styles.watchText} numberOfLines={2}>{t('Watch: {title}', { title: video.title })}</Text>
                             </Pressable>
                         )}
-                        {page.blocks.map((b, i) => {
+                        {blocksToRender.map((b, i) => {
                             if (b.type === 'ul') {
                                 return (
                                     <View key={i}>
                                         {b.items.map((item, j) => (
                                             <View key={j} style={styles.li}>
                                                 <Text style={styles.bullet} importantForAccessibility="no" accessibilityElementsHidden>•</Text>
-                                                <Text style={styles.liText} accessibilityLanguage={bodyLanguage}>{rich(item)}</Text>
+                                                <Text style={styles.liText} accessibilityLanguage={currentBodyLanguage}>{rich(item)}</Text>
                                             </View>
                                         ))}
                                     </View>
                                 );
                             }
-                            if (b.type === 'h2') return <Text key={i} style={styles.h2} accessibilityRole="header" accessibilityLanguage={bodyLanguage}>{rich(b.text)}</Text>;
-                            if (b.type === 'h3') return <Text key={i} style={styles.h3} accessibilityRole="header" accessibilityLanguage={bodyLanguage}>{rich(b.text)}</Text>;
-                            return <Text key={i} style={styles.p} accessibilityLanguage={bodyLanguage}>{rich(b.text)}</Text>;
+                            if (b.type === 'h2') return <Text key={i} style={styles.h2} accessibilityRole="header" accessibilityLanguage={currentBodyLanguage}>{rich(b.text)}</Text>;
+                            if (b.type === 'h3') return <Text key={i} style={styles.h3} accessibilityRole="header" accessibilityLanguage={currentBodyLanguage}>{rich(b.text)}</Text>;
+                            return <Text key={i} style={styles.p} accessibilityLanguage={currentBodyLanguage}>{rich(b.text)}</Text>;
                         })}
                         {relatedPages(guide, page).length > 0 && (
                             <>

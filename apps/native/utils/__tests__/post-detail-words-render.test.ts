@@ -289,6 +289,85 @@ describe("a listing's page in the pseudo-locale: every word on it came through t
         expect(bypassing(), 'the edit form').toEqual([]);
     });
 
+    it('requests word quantity in the price’s unit: daily says days, fixed lendable loan says days, hourly says hours', async () => {
+        // Hourly deal unchanged
+        await open(NEED, 'xx', { all: (sql) => (sql.includes("status='requested'") ? REQUESTS : []) });
+        expect(host.textContent).toContain(pseudoLocalise('{n} hours estimated').replace('{n}', '2'));
+        expect(bypassing(), 'hourly requests').toEqual([]);
+
+        // Daily deal as days
+        act(() => root.unmount());
+        root = createRoot(host);
+        const DAILY_NEED = { ...NEED, id: 'p-daily-need', price_type: 'daily' };
+        await open(DAILY_NEED, 'xx', { all: (sql) => (sql.includes("status='requested'") ? REQUESTS : []) });
+        expect(host.textContent).toContain(pseudoLocalise('{n} days').replace('{n}', '2'));
+        expect(bypassing(), 'daily requests').toEqual([]);
+
+        // Fixed lendable loan as days
+        act(() => root.unmount());
+        root = createRoot(host);
+        const LENDABLE_OFFER = { ...OFFER, id: 'p-loan', author_pubkey: ME.publicKey, author_callsign: ME.callsign, price_type: 'fixed', lendable: 1 };
+        const LOAN_REQUESTS = [{ id: 'tx-loan', post_id: 'p-loan', status: 'requested', buyer_pubkey: KOFI.pubkey, buyer_callsign: KOFI.callsign, credits: 0, hours: 3 }];
+        await open(LENDABLE_OFFER, 'xx', { all: (sql) => (sql.includes("status='requested'") ? LOAN_REQUESTS : []) });
+        expect(host.textContent).toContain(pseudoLocalise('for {n} days').replace('{n}', '3'));
+        expect(bypassing(), 'loan requests').toEqual([]);
+
+        // Weekly lendable loan as weeks
+        act(() => root.unmount());
+        root = createRoot(host);
+        const WEEKLY_LENDABLE_OFFER = { ...OFFER, id: 'p-loan-wk', author_pubkey: ME.publicKey, author_callsign: ME.callsign, price_type: 'weekly', lendable: 1 };
+        const WEEKLY_LOAN_REQUESTS = [{ id: 'tx-loan-wk', post_id: 'p-loan-wk', status: 'requested', buyer_pubkey: KOFI.pubkey, buyer_callsign: KOFI.callsign, credits: 0, hours: 2 }];
+        await open(WEEKLY_LENDABLE_OFFER, 'xx', { all: (sql) => (sql.includes("status='requested'") ? WEEKLY_LOAN_REQUESTS : []) });
+        expect(host.textContent).toContain(pseudoLocalise('for {n} weeks').replace('{n}', '2'));
+        expect(bypassing(), 'weekly loan requests').toEqual([]);
+
+        // Fixed non-loan: no quantity unit line
+        act(() => root.unmount());
+        root = createRoot(host);
+        const FIXED_NEED = { ...NEED, id: 'p-fixed-need', price_type: 'fixed' };
+        await open(FIXED_NEED, 'xx', { all: (sql) => (sql.includes("status='requested'") ? REQUESTS : []) });
+        expect(host.textContent).not.toContain('estimated');
+        expect(bypassing(), 'fixed non-loan requests').toEqual([]);
+
+        // Fixed non-loan need commitment: no hours in commitment sentence
+        act(() => root.unmount());
+        root = createRoot(host);
+        const OTHER_FIXED_NEED = { ...NEED, id: 'p-other-fixed-need', author_pubkey: KOFI.pubkey, author_callsign: KOFI.callsign, price_type: 'fixed' };
+        const MY_FIXED_NEED_REQUEST = [{ id: 'tx-req-fixed', post_id: 'p-other-fixed-need', status: 'requested', buyer_pubkey: KOFI.pubkey, seller_pubkey: ME.publicKey, seller_callsign: ME.callsign, credits: 20, hours: 2 }];
+        await open(OTHER_FIXED_NEED, 'xx', { all: (sql) => (sql.includes("status='requested'") ? MY_FIXED_NEED_REQUEST : []) });
+        expect(host.textContent).toContain(pseudoLocalise('Deal Established'));
+        expect(host.textContent).not.toContain(pseudoLocalise('{hours} hours').replace('{hours}', '2'));
+        expect(bypassing(), 'fixed need commitment').toEqual([]);
+
+        // In English: words read as expected
+        act(() => root.unmount());
+        root = createRoot(host);
+        await open(NEED, 'en', { all: (sql) => (sql.includes("status='requested'") ? REQUESTS : []) });
+        expect(host.textContent).toContain('2 hours estimated');
+
+        act(() => root.unmount());
+        root = createRoot(host);
+        await open(DAILY_NEED, 'en', { all: (sql) => (sql.includes("status='requested'") ? REQUESTS : []) });
+        expect(host.textContent).toContain('2 days');
+
+        act(() => root.unmount());
+        root = createRoot(host);
+        await open(LENDABLE_OFFER, 'en', { all: (sql) => (sql.includes("status='requested'") ? LOAN_REQUESTS : []) });
+        expect(host.textContent).toContain('for 3 days');
+
+        act(() => root.unmount());
+        root = createRoot(host);
+        await open(WEEKLY_LENDABLE_OFFER, 'en', { all: (sql) => (sql.includes("status='requested'") ? WEEKLY_LOAN_REQUESTS : []) });
+        expect(host.textContent).toContain('for 2 weeks');
+
+        act(() => root.unmount());
+        root = createRoot(host);
+        await open(OTHER_FIXED_NEED, 'en', { all: (sql) => (sql.includes("status='requested'") ? MY_FIXED_NEED_REQUEST : []) });
+        expect(host.textContent).toContain('Deal Established');
+        expect(host.textContent).toContain('You have requested to earn 20 credits (19.70 net after 1.5% transaction fee)');
+        expect(host.textContent).not.toContain('hours');
+    });
+
     it('a deal held in trust: the one who pays, releasing the credits by the hour', async () => {
         await open(HELD, 'xx', { first: (sql) => (sql.includes('marketplace_transactions') ? HELD_TX : null) }, 'tx-held');
         expect(host.textContent).toContain(pseudoLocalise('✅ Action Required: Release Credits'));

@@ -38,7 +38,7 @@ import { useReaderFeatures } from '../../utils/use-reader-features';
 import { readsOwn } from '../../utils/reads-own';
 import { showcaseMode } from '../../utils/node-profile';
 import { LocalCommunityMark } from '../../components/showcase/LocalCommunityMark';
-import { LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_EMOJI, placeShownRoughly, PLACE_WORDS, formatNumber, t, tn, upperCase, parseAmount, amountRefusalWords, ANY_DECIMALS } from '@beanpool/core';
+import { LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_EMOJI, placeShownRoughly, PLACE_WORDS, formatNumber, t, tn, upperCase, parseAmount, amountRefusalWords, ANY_DECIMALS, dealQuantityUnit, type DealQuantityUnit } from '@beanpool/core';
 import { Sentence } from '../../components/Sentence';
 import { hostLetsInDefault } from '../../utils/events';
 import { marketShowsBeans, NO_BEANS_TERMS, NO_BEANS_EDIT_NOTE, noBeansTermsNote } from '../../utils/market-global';
@@ -65,6 +65,99 @@ function explainTradeError(e: any): { title: string; message: string } {
         return { title: t('🌴 Holiday mode is on'), message: t('Turn off holiday mode in Settings before trading.') };
     }
     return { title: t('Error'), message: raw.replace(/^[A-Z_]+:\s*/, '') };
+}
+
+/** A request's estimated length, in the listing price's own unit ("for {n} days" or "for {n} weeks" for a loan). */
+function requestQuantityWords(unit: DealQuantityUnit | null, isLoan: boolean, n: number): string {
+    if (isLoan) {
+        if (unit === 'week') return tn(n, 'for {n} week', 'for {n} weeks');
+        return tn(n, 'for {n} day', 'for {n} days');
+    }
+    if (unit === 'day') return tn(n, '{n} day', '{n} days');
+    if (unit === 'week') return tn(n, '{n} week', '{n} weeks');
+    if (unit === 'month') return tn(n, '{n} month', '{n} months');
+    if (unit === 'hour') return tn(n, '{n} hours estimated', '{n} hours estimated');
+    return '';
+}
+
+/** The commitment sentence for an Offer: in the price's own unit, and "for {n} days" or "for {n} weeks" for a loan. */
+function committedOfferWords(unit: DealQuantityUnit | null, isLoan: boolean, hours: number, credits: number): string {
+    if (isLoan) {
+        if (unit === 'week') {
+            return tn(
+                hours,
+                'You have committed {credits} credits (for {n} week) to a Trust Wallet for this offer.',
+                'You have committed {credits} credits (for {n} weeks) to a Trust Wallet for this offer.',
+                { credits }
+            );
+        }
+        return tn(
+            hours,
+            'You have committed {credits} credits (for {n} day) to a Trust Wallet for this offer.',
+            'You have committed {credits} credits (for {n} days) to a Trust Wallet for this offer.',
+            { credits }
+        );
+    }
+    if (unit === 'day') {
+        return tn(
+            hours,
+            'You have committed {credits} credits ({n} day) to a Trust Wallet for this offer.',
+            'You have committed {credits} credits ({n} days) to a Trust Wallet for this offer.',
+            { credits }
+        );
+    }
+    if (unit === 'week') {
+        return tn(
+            hours,
+            'You have committed {credits} credits ({n} week) to a Trust Wallet for this offer.',
+            'You have committed {credits} credits ({n} weeks) to a Trust Wallet for this offer.',
+            { credits }
+        );
+    }
+    if (unit === 'month') {
+        return tn(
+            hours,
+            'You have committed {credits} credits ({n} month) to a Trust Wallet for this offer.',
+            'You have committed {credits} credits ({n} months) to a Trust Wallet for this offer.',
+            { credits }
+        );
+    }
+    if (unit === 'hour') {
+        return t('You have committed {credits} credits ({hours} hours) to a Trust Wallet for this offer.', { credits, hours });
+    }
+    return t('You have committed {credits} credits to a Trust Wallet for this offer.', { credits });
+}
+
+/** The commitment sentence for a Need: in the price's own unit (a Need is never a loan). */
+function requestedNeedWords(unit: DealQuantityUnit | null, hours: number, credits: number, net: string): string {
+    if (unit === 'day') {
+        return tn(
+            hours,
+            'You have requested to earn {credits} credits ({n} day) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.',
+            'You have requested to earn {credits} credits ({n} days) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.',
+            { credits, net }
+        );
+    }
+    if (unit === 'week') {
+        return tn(
+            hours,
+            'You have requested to earn {credits} credits ({n} week) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.',
+            'You have requested to earn {credits} credits ({n} weeks) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.',
+            { credits, net }
+        );
+    }
+    if (unit === 'month') {
+        return tn(
+            hours,
+            'You have requested to earn {credits} credits ({n} month) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.',
+            'You have requested to earn {credits} credits ({n} months) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.',
+            { credits, net }
+        );
+    }
+    if (unit === 'hour') {
+        return t('You have requested to earn {credits} credits ({hours} hours) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.', { credits, hours, net });
+    }
+    return t('You have requested to earn {credits} credits ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.', { credits, net });
 }
 
 /** Lines kept as word() elsewhere (utils/market-global.ts, core), shown here in the member's language. */
@@ -1445,12 +1538,12 @@ export default function PostDetailModal() {
                                 <Text style={{ color: theme === 'dark' ? colors.text.secondary : palette.gray600, fontSize: 13, textAlign: 'center', marginBottom: 12 }}>
                                     {isOffer ? (
                                         myRequest.hours
-                                            ? t('You have committed {credits} credits ({hours} hours) to a Trust Wallet for this offer.', { credits: myRequest.credits, hours: myRequest.hours })
+                                            ? committedOfferWords(dealQuantityUnit(post.price_type, post.lendable), Boolean(post.lendable), myRequest.hours, myRequest.credits)
                                             : t('You have committed {credits} credits to a Trust Wallet for this offer.', { credits: myRequest.credits })
                                     ) : (
                                         <Sentence
                                             text={myRequest.hours
-                                                ? t('You have requested to earn {credits} credits ({hours} hours) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.', { credits: myRequest.credits, hours: myRequest.hours, net: formatNumber(myRequest.credits * 0.985, 2) })
+                                                ? requestedNeedWords(dealQuantityUnit(post.price_type, post.lendable), myRequest.hours, myRequest.credits, formatNumber(myRequest.credits * 0.985, 2))
                                                 : t('You have requested to earn {credits} credits ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.', { credits: myRequest.credits, net: formatNumber(myRequest.credits * 0.985, 2) })}
                                             parts={{ owned: <Text style={{ color: colors.brand.primary, fontWeight: 'bold' }}>{t('(100% community owned)')}</Text> }}
                                         />
@@ -1603,7 +1696,7 @@ export default function PostDetailModal() {
                                                     ? tn(req.count, '★ {average} ({n} reviews)', '★ {average} ({n} reviews)', { average: formatNumber(req.avgRating, 1) })
                                                     : t('☆☆☆☆☆ No ratings yet')}
                                             </Text>
-                                            <Text style={styles.requestAmt}>{req.hours ? tn(req.hours, '{n} hours estimated', '{n} hours estimated') : t('Offered to fulfill')}</Text>
+                                            <Text style={styles.requestAmt}>{req.hours ? requestQuantityWords(dealQuantityUnit(post.price_type, post.lendable), Boolean(post.lendable), req.hours) : t('Offered to fulfill')}</Text>
                                         </View>
                                         <Pressable
                                             accessibilityRole="button"

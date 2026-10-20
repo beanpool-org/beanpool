@@ -51,13 +51,13 @@ export function checkInline(file, line, text) {
 }
 
 /** Parse one guide file. `file` is only used in error messages. */
-export function parseGuideMarkdown(source, file = 'guide.md', { allowImages = false } = {}) {
+export function parseGuideMarkdown(source, file = 'guide.md', { allowImages = false, isTranslated = false } = {}) {
     const lines = source.replace(/\r\n/g, '\n').split('\n');
     if (lines[0] !== '---') fail(file, 1, 'must start with front matter (---)');
     const meta = {};
     let i = 1;
     for (; i < lines.length && lines[i] !== '---'; i++) {
-        const m = /^([a-z]+):\s*(.+)$/.exec(lines[i]);
+        const m = /^([a-z-]+):\s*(.+)$/.exec(lines[i]);
         if (!m) fail(file, i + 1, 'front matter lines are "key: value"');
         meta[m[1]] = m[2].trim();
     }
@@ -65,8 +65,16 @@ export function parseGuideMarkdown(source, file = 'guide.md', { allowImages = fa
     for (const key of ['slug', 'title', 'summary', 'related']) {
         if (!meta[key]) fail(file, null, `front matter needs "${key}"`);
     }
+    const translated = isTranslated || meta['source-hash'] !== undefined;
+    const allowedKeys = translated
+        ? ['slug', 'title', 'summary', 'related', 'video', 'help', 'source-hash']
+        : ['slug', 'title', 'summary', 'related', 'video', 'help'];
     for (const key of Object.keys(meta)) {
-        if (!['slug', 'title', 'summary', 'related', 'video', 'help'].includes(key)) fail(file, null, `unknown front matter "${key}"`);
+        if (!allowedKeys.includes(key)) fail(file, null, `unknown front matter "${key}"`);
+    }
+    if (isTranslated && !meta['source-hash']) fail(file, null, 'front matter needs "source-hash"');
+    if (meta['source-hash'] !== undefined && !/^[0-9a-f]{16}$/.test(meta['source-hash'])) {
+        fail(file, null, '"source-hash" must be 16 hex digits');
     }
     if (!SLUG_RE.test(meta.slug)) fail(file, null, `slug "${meta.slug}" must be lowercase letters, digits and dashes`);
     checkInline(file, null, meta.title);
@@ -151,6 +159,10 @@ export function parseGuideMarkdown(source, file = 'guide.md', { allowImages = fa
     const page = { slug: meta.slug, title: meta.title, summary: meta.summary, related };
     if (meta.video) page.video = meta.video;
     if (meta.help) page.help = meta.help;
+    if (meta['source-hash']) {
+        page.sourceHash = meta['source-hash'];
+        page['source-hash'] = meta['source-hash'];
+    }
     page.blocks = blocks;
     return page;
 }
@@ -158,6 +170,18 @@ export function parseGuideMarkdown(source, file = 'guide.md', { allowImages = fa
 /** Hash of the guide text only (not the version), so publishing can tell whether the text changed. */
 export function contentHash(content) {
     return crypto.createHash('sha256').update(JSON.stringify(content)).digest('hex');
+}
+
+/** Hash of an English string (sha256, first 16 hex digits). */
+export function guideSourceHash(english) {
+    return crypto.createHash('sha256').update(english, 'utf8').digest('hex').slice(0, 16);
+}
+
+/** Hash of an English page body (the canonical JSON of its blocks): first 16 hex digits of sha256. */
+export function guideBodyHash(pageOrBlocks) {
+    const blocks = Array.isArray(pageOrBlocks) ? pageOrBlocks : pageOrBlocks.blocks;
+    const canonical = blocks.map(b => b.type === 'ul' ? { type: 'ul', items: b.items } : { type: b.type, text: b.text });
+    return guideSourceHash(JSON.stringify(canonical));
 }
 
 /**
@@ -258,10 +282,10 @@ function blockHtml(b, linkable = () => true) {
     return `<ul>\n${b.items.map(it => `            <li>${inline(it)}</li>`).join('\n')}\n        </ul>`;
 }
 
-function page({ title, description, body, root = '../', nav = `<a href="index.html">Members' guide</a>` }) {
+function page({ title, description, body, root = '../', nav = `<a href="index.html">Members' guide</a>`, lang = 'en', source = root === '../' ? 'content' : 'operators' }) {
     return `<!DOCTYPE html>
-<!-- Generated from packages/beanpool-guide/${root === '../' ? 'content' : 'operators'} by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
-<html lang="en">
+<!-- Generated from packages/beanpool-guide/${source} by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="${esc(lang)}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -381,6 +405,175 @@ export function renderWebsite(guide, { operatorManualOnWeb = false } = {}) {
         });
     }
     files['guide.json'] = serializeGuide(guide);
+    return files;
+}
+
+// ─── Language guides (slice S5b) ──────────────────────────────────────────────
+// Translated pages live in content/<lang>/<section>/<slug>.md.
+
+/**
+ * Load all translated pages for a language, or null if the language has no translated pages yet.
+ * Returns { schema, version, language, hash, sections, guides }.
+ */
+export function loadLanguagePages(contentDir, lang, englishGuide, { version = null } = {}) {
+    const langDir = path.join(contentDir, lang);
+    if (!fs.existsSync(langDir)) return null;
+    const guides = [];
+    const sections = [];
+    let titles = null;
+    const titlesFile = path.join(langDir, 'manifest.json');
+    if (fs.existsSync(titlesFile)) {
+        try { titles = JSON.parse(fs.readFileSync(titlesFile, 'utf8')); } catch { /* ignore */ }
+    }
+    for (const enSec of englishGuide.sections) {
+        const secDir = path.join(langDir, enSec.id);
+        if (!fs.existsSync(secDir)) continue;
+        const slugs = [];
+        for (const slug of enSec.slugs) {
+            const mdFile = path.join(secDir, `${slug}.md`);
+            if (!fs.existsSync(mdFile)) continue;
+            const file = `${lang}/${enSec.id}/${slug}.md`;
+            const g = parseGuideMarkdown(fs.readFileSync(mdFile, 'utf8'), file, { isTranslated: true });
+            if (g.slug !== slug) throw new Error(`${file}: slug "${g.slug}" must match the file name`);
+            const { blocks, video, related, ...head } = g;
+            guides.push({ ...head, section: enSec.id, related, ...(video ? { video } : {}), blocks });
+            slugs.push(slug);
+        }
+        if (slugs.length > 0) {
+            const secTitles = titles?.sections?.[enSec.id];
+            const title = (secTitles?.title?.text && secTitles.title.sourceHash === guideSourceHash(enSec.title))
+                ? secTitles.title.text
+                : enSec.title;
+            const summary = (secTitles?.summary?.text && secTitles.summary.sourceHash === guideSourceHash(enSec.summary))
+                ? secTitles.summary.text
+                : enSec.summary;
+            sections.push({ id: enSec.id, title, summary, slugs });
+        }
+    }
+    if (guides.length === 0) return null;
+    return {
+        schema: GUIDE_SCHEMA,
+        version,
+        language: lang,
+        hash: contentHash({ sections, guides }),
+        sections,
+        guides,
+    };
+}
+
+/**
+ * Check translated pages for one language. Returns an array of problem sentences.
+ */
+export function checkLanguagePages(contentDir, lang, englishGuide) {
+    const problems = [];
+    const langDir = path.join(contentDir, lang);
+    if (!fs.existsSync(langDir)) return problems;
+    const englishSections = new Map(englishGuide.sections.map(s => [s.id, s]));
+    const englishPages = new Map(englishGuide.guides.map(p => [p.slug, p]));
+    const entries = fs.readdirSync(langDir, { withFileTypes: true })
+        .filter(d => !d.name.startsWith('.'));
+    for (const entry of entries) {
+        if (entry.isFile()) {
+            if (entry.name !== 'manifest.json') {
+                problems.push(`content/${lang}/${entry.name}: a language's folder holds only manifest.json and section folders for translated pages`);
+            }
+            continue;
+        }
+        if (!entry.isDirectory()) continue;
+        const secId = entry.name;
+        if (!englishSections.has(secId)) {
+            problems.push(`content/${lang}/${secId}: "${secId}" is not a section in the guide`);
+            continue;
+        }
+        const secDir = path.join(langDir, secId);
+        const enSec = englishSections.get(secId);
+        const files = fs.readdirSync(secDir, { withFileTypes: true }).filter(f => !f.name.startsWith('.'));
+        for (const f of files) {
+            if (!f.isFile() || !f.name.endsWith('.md')) {
+                problems.push(`content/${lang}/${secId}/${f.name}: only .md files are allowed in section folders`);
+                continue;
+            }
+            const slug = f.name.slice(0, -3);
+            if (!enSec.slugs.includes(slug)) {
+                problems.push(`content/${lang}/${secId}/${f.name}: "${slug}" is not a page in section "${secId}"`);
+                continue;
+            }
+            const file = `content/${lang}/${secId}/${f.name}`;
+            let parsed = null;
+            try {
+                parsed = parseGuideMarkdown(fs.readFileSync(path.join(secDir, f.name), 'utf8'), file, { isTranslated: true });
+            } catch (e) {
+                problems.push(e.message);
+                continue;
+            }
+            if (parsed.slug !== slug) {
+                problems.push(`${file}: slug "${parsed.slug}" must match the file name "${slug}"`);
+            }
+            if (!parsed.sourceHash) {
+                problems.push(`${file}: front matter needs "source-hash"`);
+            } else if (!/^[0-9a-f]{16}$/.test(parsed.sourceHash)) {
+                problems.push(`${file}: "source-hash" must be 16 hex digits`);
+            }
+            for (const r of parsed.related) {
+                if (!englishPages.has(r)) {
+                    problems.push(`${file}: related page "${r}" does not exist in the guide`);
+                }
+            }
+        }
+    }
+    return problems;
+}
+
+/**
+ * Render the website pages for a language collection: guide.json and <slug>.html for each translated page.
+ */
+export function renderLanguageWebsite(langGuide, englishGuide) {
+    const files = {};
+    const root = '../../';
+    const lang = langGuide.language ?? 'en';
+    const nav = `<a href="../index.html">Members' guide</a>`;
+    const foot = `        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version ${langGuide.version}.</p>`;
+    const englishBySlug = new Map(englishGuide.guides.map(g => [g.slug, g]));
+    const langBySlug = new Map(langGuide.guides.map(g => [g.slug, g]));
+
+    for (const g of langGuide.guides) {
+        const enPage = englishBySlug.get(g.slug);
+        const enHash = enPage ? guideBodyHash(enPage) : null;
+        const isBehind = g.sourceHash && enHash && g.sourceHash !== enHash;
+        const section = langGuide.sections.find(s => s.id === g.section) ?? englishGuide.sections.find(s => s.id === g.section);
+        const relatedItems = g.related.map(slug => {
+            const relLang = langBySlug.get(slug);
+            if (relLang) return `            <li><a href="${relLang.slug}.html"><strong>${inline(relLang.title)}</strong><span>${inline(relLang.summary)}</span></a></li>`;
+            const relEn = englishBySlug.get(slug);
+            if (relEn) return `            <li><a href="../${relEn.slug}.html"><strong>${inline(relEn.title)}</strong><span>${inline(relEn.summary)}</span></a></li>`;
+            return '';
+        }).filter(Boolean);
+
+        const staleNote = isBehind
+            ? `        <p class="guide-stale-note">This page is newer in English.</p>`
+            : '';
+
+        files[`${g.slug}.html`] = page({
+            root, nav, lang, source: `content/${lang}`,
+            title: `${g.title} — BeanPool members' guide`,
+            description: g.summary,
+            body: [
+                `        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#${section?.id ?? ''}">${inline(section?.title ?? '')}</a></p>`,
+                `        <h1>${inline(g.title)}</h1>`,
+                `        <p class="lede">${inline(g.summary)}</p>`,
+                ...(staleNote ? [staleNote] : []),
+                ...g.blocks.map(b => `        ${blockHtml(b)}`),
+                ...(relatedItems.length ? [
+                    `        <h2 class="guide-related">Related</h2>`,
+                    `        <ul class="guide-list">`,
+                    ...relatedItems,
+                    `        </ul>`,
+                ] : []),
+                foot,
+            ].join('\n'),
+        });
+    }
+    files['guide.json'] = serializeGuide(langGuide);
     return files;
 }
 

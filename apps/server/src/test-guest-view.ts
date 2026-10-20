@@ -1429,6 +1429,8 @@ async function main(): Promise<void> {
             'POST /api/recovery/shares/hub-fragment', 'POST /api/recovery/shares/sso', 'DELETE /api/recovery/shares/sso/:provider',
             'POST /api/recovery/shares/status', 'POST /api/recovery/sso-nonce',
             'POST /api/reports',
+            // A tool's private copy of its owner's document (routes/tools.ts): the signer's own, or a keeper's for the enterprise.
+            'GET /api/tools/:tool', 'PUT /api/tools/:tool', 'DELETE /api/tools/:tool',
             'GET /api/treasuries', 'GET /api/treasuries/map', 'GET /api/treasuries/statuses',
             'POST /api/treasury', 'GET /api/treasury/:treasury', 'POST /api/treasury/:treasury/approve', 'DELETE /api/treasury/:treasury/backing',
             'GET /api/treasury/:treasury/backing', 'POST /api/treasury/:treasury/backing', 'POST /api/treasury/:treasury/backing/release',
@@ -1443,7 +1445,8 @@ async function main(): Promise<void> {
             'POST /api/treasury/:treasury/resume', 'GET /api/treasury/:treasury/succession', 'POST /api/treasury/:treasury/succession/:proposalId/vote',
             'POST /api/treasury/:treasury/succession/propose', 'POST /api/treasury/:treasury/sweep', 'GET /api/treasury/:treasury/thread',
             'POST /api/treasury/:treasury/thread/message', 'DELETE /api/treasury/:treasury/thread/message/:messageId',
-            'POST /api/treasury/:treasury/thread/remove', 'POST /api/treasury/:treasury/wind-up/cancel', 'POST /api/treasury/:treasury/wind-up/finalise',
+            'POST /api/treasury/:treasury/thread/remove', 'GET /api/treasury/:treasury/tools/:tool', 'PUT /api/treasury/:treasury/tools/:tool',
+            'DELETE /api/treasury/:treasury/tools/:tool', 'POST /api/treasury/:treasury/wind-up/cancel', 'POST /api/treasury/:treasury/wind-up/finalise',
             'POST /api/treasury/:treasury/wind-up/initiate',
             'POST /api/trust/profile',
             'GET /api/version',

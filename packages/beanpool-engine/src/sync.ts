@@ -1009,6 +1009,13 @@ function postOfRow(row: any): MarketplacePost {
         // it is, so a promoted standby's listings are its own (apps/server engine/sync.ts importRemoteState, design G1).
         originNode: row.origin_node,
         cashAlsoNeeded: !!row.cash_also_needed,
+        // A lendable Offer and its terms, as the main server holds them (apps/server engine/sync.ts postLending).
+        ...(row.lendable === 1 ? {
+            lendable: true,
+            ...(row.lend_max_days != null ? { lendMaxDays: row.lend_max_days } : {}),
+            ...(row.lend_terms != null ? { lendTerms: row.lend_terms } : {}),
+            ...(row.replacement_value != null ? { replacementValue: row.replacement_value } : {}),
+        } : {}),
         // This server's search words for it (synonyms included), so a standby's search finds what this one's does.
         searchKeywords: row.search_keywords ?? '',
         createdBy: row.created_by ?? undefined,

@@ -12,7 +12,9 @@ export {
     GUIDE_SCHEMA, GUIDE_URL, GUIDE_CACHE_KEY, GUIDE_SLUGS, GUIDE_ABOUT_SECTION,
     validateGuide, newerGuide, refreshGuideFromWebsite, findGuidePage, findGuideSection, sectionPages,
     manualSections, relatedPages, splitBold, searchGuide, findGuideVideo, learnVideosFromFeed, youtubeWatchId,
-    BEANPOOL_WEBSITE_URL, beanPoolSettingsEntries, beanPoolSheetEntries, guideInLanguage, guidePageBodyInEnglish, guideSourceHash,
+    BEANPOOL_WEBSITE_URL, beanPoolSettingsEntries, beanPoolSheetEntries, guideInLanguage, guidePageBodyInEnglish,
+    guidePageNewerInEnglish, guidePageBodyState, guideSourceHash, guideBodyHash, guideUrl, guideCacheKey,
+    loadCachedLanguageGuide, refreshLanguageGuideFromWebsite,
 } from '@beanpool/core';
 export type {
     Guide, GuidePage, GuideSection, GuideBlock, GuideSource, LoadedGuide, GuideStorage, GuideSearchResult, LearnVideo, GuideTitles,

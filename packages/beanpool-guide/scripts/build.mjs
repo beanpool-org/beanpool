@@ -41,7 +41,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { loadGuide, renderWebsite, renderOperatorsWebsite, serializeGuide, contentHash, GUIDE_SCHEMA } from '../src/guide.mjs';
+import { loadGuide, renderWebsite, renderOperatorsWebsite, serializeGuide, contentHash, GUIDE_SCHEMA, GUIDE_LANGS, loadLanguagePages, checkLanguagePages, renderLanguageWebsite } from '../src/guide.mjs';
 import { readGuideTitles, checkGuideTitles } from '../src/titles.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -58,7 +58,7 @@ export const OPERATORS_WEBSITE_DIR = path.join(WEBSITE_DIR, 'operators');
 /** The operator manual's pages the build writes to the website; the rest stay in Settings only (see the header). */
 export const OPERATOR_PAGES_ON_WEBSITE = ['first-time-setup'];
 
-/** The two collections: where each one's pages are, and its published copy. */
+/** The two base collections: where each one's pages are, and its published copy. */
 const COLLECTIONS = [
     { key: 'guide', name: "members' guide", dir: CONTENT_DIR, json: BUNDLED_JSON, load: {} },
     { key: 'manual', name: 'operator manual', dir: OPERATORS_DIR, json: OPERATORS_JSON, load: { aboutSection: null, allowImages: true } },
@@ -68,9 +68,32 @@ const PUBLISHED_PATHS = ['packages/beanpool-guide/generated', 'apps/website/guid
 
 const rel = file => path.relative(repoRoot, file).split(path.sep).join('/');
 
+/** Active collections: base collections, plus any language collections that have pages or published copies. */
+export function activeCollections(published = {}, pages = {}) {
+    const cols = [...COLLECTIONS];
+    for (const lang of GUIDE_LANGS) {
+        const key = `guide:${lang}`;
+        if (pages?.[key] || published?.[key]) {
+            cols.push({
+                key,
+                name: `${lang} guide`,
+                lang,
+                dir: path.join(CONTENT_DIR, lang),
+                json: path.join(pkgDir, 'generated', `guide.${lang}.json`),
+            });
+        }
+    }
+    return cols;
+}
+
 /** The pages as they stand, per collection, with no version. Throws on a page that does not build. */
 export function sourceGuides() {
-    return Object.fromEntries(COLLECTIONS.map(c => [c.key, loadGuide(c.dir, c.load)]));
+    const base = Object.fromEntries(COLLECTIONS.map(c => [c.key, loadGuide(c.dir, c.load)]));
+    for (const lang of GUIDE_LANGS) {
+        const langGuide = loadLanguagePages(CONTENT_DIR, lang, base.guide);
+        if (langGuide) base[`guide:${lang}`] = langGuide;
+    }
+    return base;
 }
 
 function parsePublished(text, file) {
@@ -79,7 +102,14 @@ function parsePublished(text, file) {
 
 /** The published copies (the committed generated JSON), per collection; null for one never published. */
 export function publishedGuides() {
-    return Object.fromEntries(COLLECTIONS.map(c => [c.key, fs.existsSync(c.json) ? parsePublished(fs.readFileSync(c.json, 'utf8'), c.json) : null]));
+    const base = Object.fromEntries(COLLECTIONS.map(c => [c.key, fs.existsSync(c.json) ? parsePublished(fs.readFileSync(c.json, 'utf8'), c.json) : null]));
+    for (const lang of GUIDE_LANGS) {
+        const json = path.join(pkgDir, 'generated', `guide.${lang}.json`);
+        if (fs.existsSync(json)) {
+            base[`guide:${lang}`] = parsePublished(fs.readFileSync(json, 'utf8'), json);
+        }
+    }
+    return base;
 }
 
 /** Whether two copies of a collection hold the same text in the same schema. Their versions do not count. */
@@ -89,16 +119,20 @@ export function sameText(a, b) {
 
 /** What publishing writes: each collection's pages, one version above its published copy where the text changed. */
 export function nextPublished(published, pages) {
-    return Object.fromEntries(COLLECTIONS.map(({ key }) => {
+    const cols = activeCollections(published, pages);
+    return Object.fromEntries(cols.map(({ key }) => {
         const before = published[key];
-        return [key, before && sameText(before, pages[key]) ? before : { ...pages[key], version: (before?.version ?? 0) + 1 }];
+        const pageObj = pages[key];
+        if (!pageObj) return [key, before];
+        return [key, before && sameText(before, pageObj) ? before : { ...pageObj, version: (before?.version ?? 0) + 1 }];
     }));
 }
 
 /** The collections whose pages hold text their published copy does not, with the version publishing would give. */
 export function unpublished(published, pages) {
+    const cols = activeCollections(published, pages);
     const next = nextPublished(published, pages);
-    return COLLECTIONS.filter(({ key }) => next[key] !== published[key])
+    return cols.filter(({ key }) => next[key] !== published[key])
         .map(({ key, name }) => ({ name, from: published[key]?.version ?? null, to: next[key].version }));
 }
 
@@ -108,6 +142,18 @@ export function outputsFor(published) {
     for (const c of COLLECTIONS) if (published[c.key]) out[c.json] = serializeGuide(published[c.key]);
     if (published.guide) {
         for (const [name, text] of Object.entries(renderWebsite(published.guide))) out[path.join(WEBSITE_DIR, name)] = text;
+    }
+    for (const lang of GUIDE_LANGS) {
+        const key = `guide:${lang}`;
+        if (published[key]) {
+            out[path.join(pkgDir, 'generated', `guide.${lang}.json`)] = serializeGuide(published[key]);
+            if (published.guide) {
+                const langWeb = renderLanguageWebsite(published[key], published.guide);
+                for (const [name, text] of Object.entries(langWeb)) {
+                    out[path.join(WEBSITE_DIR, lang, name)] = text;
+                }
+            }
+        }
     }
     if (OPERATOR_PAGES_ON_WEBSITE.length && published.manual) {
         const only = OPERATOR_PAGES_ON_WEBSITE;
@@ -189,8 +235,15 @@ function publishedAt(ref, file) {
 function pagesEditedSince(ref, c) {
     const dir = rel(c.dir);
     const lines = s => (s ?? '').split('\n').filter(Boolean);
-    return [...lines(git('diff', '--name-only', ref, '--', dir)), ...lines(git('ls-files', '--others', '--exclude-standard', '--', dir))]
+    const edited = [...lines(git('diff', '--name-only', ref, '--', dir)), ...lines(git('ls-files', '--others', '--exclude-standard', '--', dir))]
         .filter(f => !f.startsWith(`${rel(OPERATORS_IMAGES_DIR)}/`));
+    if (c.key === 'guide') {
+        return edited.filter(f => !GUIDE_LANGS.some(l => f.startsWith(`${rel(CONTENT_DIR)}/${l}/`)));
+    }
+    if (c.lang) {
+        return edited.filter(f => !f.endsWith('/manifest.json'));
+    }
+    return edited;
 }
 
 /** The version rules, as sentences: each published copy against the one at `ref`. */
@@ -198,9 +251,27 @@ function versionProblems(published, pages, ref) {
     const problems = [];
     const short = ref.slice(0, 10);
     const restore = `restore main's copy with \`git checkout ${short} -- ${PUBLISHED_PATHS.join(' ')}\` and run \`pnpm --filter @beanpool/guide generate\``;
-    for (const c of COLLECTIONS) {
+    const cols = activeCollections(published, pages);
+    for (const c of cols) {
         const before = publishedAt(ref, c.json);
         const now = published[c.key];
+        if (before && !now) {
+            problems.push(`${rel(c.json)} was removed; published copies cannot be deleted`);
+            continue;
+        }
+        if (!before && now) {
+            if (now.version !== 1) {
+                problems.push(`${rel(c.json)} is v${now.version}; the first published version must be v1`);
+            }
+            const edited = pagesEditedSince(ref, c);
+            if (edited.length) {
+                const named = edited.slice(0, 3).join(', ') + (edited.length > 3 ? ` and ${edited.length - 3} more` : '');
+                problems.push(`this change edits the ${c.name}'s pages (${named}) AND publishes them as v${now.version}. A pull request changes only the pages; the director publishes after merge (pnpm guide:publish). So that PRs never conflict on a version, ${restore}`);
+            } else if (pages && pages[c.key] && !sameText(now, pages[c.key])) {
+                problems.push(`${rel(c.json)} v${now.version} is not the text of the pages; publish only with pnpm guide:publish, never by hand`);
+            }
+            continue;
+        }
         if (!before || !now) continue;
         if (sameText(before, now)) {
             if (now.version !== before.version) {
@@ -220,7 +291,7 @@ function versionProblems(published, pages, ref) {
         if (edited.length) {
             const named = edited.slice(0, 3).join(', ') + (edited.length > 3 ? ` and ${edited.length - 3} more` : '');
             problems.push(`this change edits the ${c.name}'s pages (${named}) AND publishes them as v${now.version}. A pull request changes only the pages; the director publishes after merge (pnpm guide:publish). So that PRs never conflict on a version, ${restore}`);
-        } else if (pages && !sameText(now, pages[c.key])) {
+        } else if (pages && pages[c.key] && !sameText(now, pages[c.key])) {
             problems.push(`${rel(c.json)} v${now.version} is not the text of the pages; publish only with pnpm guide:publish, never by hand`);
         }
     }
@@ -259,17 +330,25 @@ export function check({ base = findBase() } = {}) {
     } catch (e) {
         problems.push(`the pages do not build: ${e.message}`);
     }
-    if (pages) problems.push(...titleProblems(pages.guide));
+    if (pages) {
+        problems.push(...titleProblems(pages.guide));
+        for (const lang of GUIDE_LANGS) {
+            problems.push(...checkLanguagePages(CONTENT_DIR, lang, pages.guide));
+        }
+    }
     let published;
     try {
         published = publishedGuides();
     } catch (e) {
         return [...problems, e.message];
     }
-    for (const c of COLLECTIONS) {
+    const cols = activeCollections(published, pages);
+    for (const c of cols) {
         const copy = published[c.key];
         if (!copy) {
-            problems.push(`${rel(c.json)} is missing: the ${c.name} has never been published (pnpm guide:publish)`);
+            if (!c.lang) {
+                problems.push(`${rel(c.json)} is missing: the ${c.name} has never been published (pnpm guide:publish)`);
+            }
         } else if (copy.hash !== contentHash({ sections: copy.sections, guides: copy.guides })) {
             problems.push(`${rel(c.json)} was edited by hand: its "hash" does not match its text. Restore it from main`);
         } else if (copy.schema !== GUIDE_SCHEMA) {
@@ -361,7 +440,8 @@ function publish() {
     const published = publishedGuides();
     const next = nextPublished(published, pages);
     writeOutputs(outputsFor(next));
-    for (const c of COLLECTIONS) {
+    const cols = activeCollections(published, pages);
+    for (const c of cols) {
         const from = published[c.key]?.version;
         console.log(next[c.key] === published[c.key] ? `The ${c.name} stays v${from}.` : `The ${c.name} v${from ?? 'none'} → v${next[c.key].version}.`);
     }
@@ -383,7 +463,10 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
             process.exit(1);
         }
         const published = publishedGuides();
-        console.log(`Members' guide v${published.guide.version} and operator manual v${published.manual.version}: the pages build and the generated files match the published copies.`);
+        const baseNames = `Members' guide v${published.guide.version} and operator manual v${published.manual.version}`;
+        const langNames = GUIDE_LANGS.filter(l => published[`guide:${l}`]).map(l => `${l} guide v${published[`guide:${l}`].version}`);
+        const allNames = langNames.length ? `${baseNames}, ${langNames.join(', ')}` : baseNames;
+        console.log(`${allNames}: the pages build and the generated files match the published copies.`);
         console.log(base.ref ? `Versions checked against ${base.ref.slice(0, 10)} (${base.why}).` : `Versions not compared: ${base.why}.`);
         const note = pendingNote(unpublished(published, sourceGuides()));
         if (note) console.log(note);

@@ -4,6 +4,7 @@ import path from 'node:path';
 import {
     validateGuide, getBundledGuide, loadLocalGuide, refreshGuideFromWebsite, splitBold, findGuidePage,
     searchGuide, relatedPages, manualSections, sectionPages, findGuideVideo, learnVideosFromFeed, youtubeWatchId, beanPoolSettingsEntries, beanPoolSheetEntries,
+    loadCachedLanguageGuide, refreshLanguageGuideFromWebsite, guidePageNewerInEnglish, guidePageBodyState, guideBodyHash, guideUrl, guideCacheKey,
     GUIDE_CACHE_KEY, GUIDE_SLUGS, GUIDE_URL, type Guide,
 } from '../guide';
 import { FEEDBACK_LIVE, LANGS, guideInLanguage, guidePageBodyInEnglish, guideSourceHash, type GuideTitles } from '@beanpool/core';
@@ -441,5 +442,146 @@ describe("the guide's titles in the member's language", () => {
         expect(byEnglish.find(r => r.page.slug === 'posting')!.page.title).toBe('Anunciar no mercado');
         // The same search in English is unchanged.
         expect(searchGuide(PAGES, posting.title.split(' ')[0]).map(r => r.page.slug)).toContain('posting');
+    });
+});
+
+describe('translated guide pages (slice S5b): the three states, caching, and fetch', () => {
+    const entry = (english: string, text: string) => ({ text, sourceHash: guideSourceHash(english) });
+    const homePage = findGuidePage(PAGES, 'home')!;
+    const homeHash = guideBodyHash(homePage);
+
+    it('slug lookup across languages finds pages with matching slugs and titles', () => {
+        const langGuide: Guide = {
+            schema: PAGES.schema,
+            version: 1,
+            language: 'pt',
+            hash: '0123456789abcdef',
+            sections: PAGES.sections,
+            guides: [{
+                slug: 'home',
+                title: 'Início',
+                summary: 'Resumo.',
+                section: 'getting-started',
+                related: ['rules'],
+                sourceHash: homeHash,
+                blocks: [{ type: 'p', text: 'Texto traduzido.' }],
+            }],
+        };
+        const pt = guideInLanguage(PAGES, 'pt', null, langGuide);
+        const page = findGuidePage(pt, 'home');
+        expect(page).not.toBeNull();
+        expect(page!.slug).toBe('home');
+        expect(page!.title).toBe('Início');
+        expect(page!.blocks).toEqual([{ type: 'p', text: 'Texto traduzido.' }]);
+    });
+
+    it('the three page states: current, behind, missing', () => {
+        const currentHash = homeHash;
+        const staleHash = '0000000000000000';
+
+        const langGuide: Guide = {
+            schema: PAGES.schema,
+            version: 1,
+            language: 'es',
+            hash: 'abcdef0123456789',
+            sections: [{ id: 'getting-started', title: 'Inicio', summary: 'Resumo.', slugs: ['home', 'rules'] }],
+            guides: [
+                {
+                    slug: 'home',
+                    title: 'Inicio',
+                    summary: 'Resumo.',
+                    section: 'getting-started',
+                    related: [],
+                    sourceHash: currentHash,
+                    blocks: [{ type: 'p', text: 'Cuerpo actual.' }],
+                },
+                {
+                    slug: 'rules',
+                    title: 'Reglas',
+                    summary: 'Reglas resumen.',
+                    section: 'getting-started',
+                    related: [],
+                    sourceHash: staleHash,
+                    blocks: [{ type: 'p', text: 'Cuerpo viejo.' }],
+                },
+            ],
+        };
+
+        const titles = {
+            pages: {
+                faq: { title: entry(findGuidePage(PAGES, 'faq')!.title, 'Preguntas frecuentes') },
+            },
+        };
+        const es = guideInLanguage(PAGES, 'es', titles, langGuide);
+
+        // State 1: current (matching hash)
+        const current = findGuidePage(es, 'home')!;
+        expect(guidePageBodyState(current)).toBe('current');
+        expect(guidePageBodyInEnglish(current)).toBe(false);
+        expect(guidePageNewerInEnglish(current)).toBe(false);
+        expect(current.blocks).toEqual([{ type: 'p', text: 'Cuerpo actual.' }]);
+
+        // State 2: behind (older hash)
+        const behind = findGuidePage(es, 'rules')!;
+        expect(guidePageBodyState(behind)).toBe('behind');
+        expect(guidePageBodyInEnglish(behind)).toBe(false);
+        expect(guidePageNewerInEnglish(behind)).toBe(true);
+        expect(behind.blocks).toEqual([{ type: 'p', text: 'Cuerpo viejo.' }]);
+        expect(behind.englishBlocks).toEqual(findGuidePage(PAGES, 'rules')!.blocks);
+
+        // State 3: missing (untranslated page)
+        const missing = findGuidePage(es, 'faq')!;
+        expect(guidePageBodyState(missing)).toBe('missing');
+        expect(guidePageBodyInEnglish(missing)).toBe(true);
+        expect(guidePageNewerInEnglish(missing)).toBe(false);
+        expect(missing.blocks).toEqual(findGuidePage(PAGES, 'faq')!.blocks);
+    });
+
+    it('offline fallback and caching with mocked fetch', async () => {
+        const storage = memoryStorage();
+        expect(guideCacheKey('es')).toBe(`${GUIDE_CACHE_KEY}:es`);
+        expect(guideUrl('es')).toBe('https://beanpool.org/guide/es/guide.json');
+
+        // No cached copy initially
+        const initial = await loadCachedLanguageGuide(storage, 'es');
+        expect(initial).toBeNull();
+
+        // Offline fallback: fetch throws, leaves null without error
+        const offlineFetch = async () => { throw new Error('Network error'); };
+        const offlineResult = await refreshLanguageGuideFromWebsite(null, storage, offlineFetch, 'es');
+        expect(offlineResult).toBeNull();
+
+        // 404 fallback: returns null without error
+        const notFoundFetch = async () => ({ ok: false, status: 404 } as Response);
+        const notFoundResult = await refreshLanguageGuideFromWebsite(null, storage, notFoundFetch, 'es');
+        expect(notFoundResult).toBeNull();
+
+        // Successful fetch: caches and returns valid guide
+        const validGuideJson = JSON.stringify({
+            schema: PAGES.schema,
+            version: 2,
+            language: 'es',
+            hash: '1234567890abcdef',
+            sections: [{ id: 'getting-started', title: 'Inicio', summary: 'Resumen.', slugs: ['home'] }],
+            guides: [{
+                slug: 'home',
+                title: 'Inicio',
+                summary: 'Resumen.',
+                section: 'getting-started',
+                related: [],
+                sourceHash: homeHash,
+                blocks: [{ type: 'p', text: 'Texto en español.' }],
+            }],
+        });
+        const successFetch = okFetch(validGuideJson);
+        const remote = await refreshLanguageGuideFromWebsite(null, storage, successFetch as any, 'es');
+        expect(remote).not.toBeNull();
+        expect(remote!.version).toBe(2);
+        expect(remote!.language).toBe('es');
+
+        // Storage now holds cached copy
+        const cached = await loadCachedLanguageGuide(storage, 'es');
+        expect(cached).not.toBeNull();
+        expect(cached!.version).toBe(2);
     });
 });

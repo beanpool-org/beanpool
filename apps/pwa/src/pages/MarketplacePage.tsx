@@ -21,7 +21,7 @@ import { MyDealsModal } from '../components/MyDealsModal';
 import { LocalCommunityAction, LocalCommunityLine } from '../components/LocalCommunityMark';
 import {
     LOCAL_COMMUNITY_EMOJI, LOCAL_COMMUNITY_LINES, placeShownRoughly, PLACE_WORDS, formatNumber, t, tn, word, type WordKey,
-    amountRefusalWords, ANY_DECIMALS, isAmbiguousAmount, parseAmount,
+    amountRefusalWords, ANY_DECIMALS, isAmbiguousAmount, parseAmount, dealQuantityUnit, type DealQuantityUnit,
 } from '@beanpool/core';
 import { Sentence } from '../components/Sentence';
 import { marked, readsOwn, treasuriesFallback, useFeatureMode, useReadsOwn } from '../lib/features';
@@ -211,6 +211,19 @@ function estimateLength(priceType: string | undefined, n: number): string | null
     if (priceType === 'weekly') return t('{n} w', { n }, 'a number of weeks');
     if (priceType === 'monthly') return t('{n} m', { n }, 'a number of months');
     return null;
+}
+
+/** A request's estimated length, in the listing price's own unit ("for {n} days" or "for {n} weeks" for a loan). */
+function requestQuantityWords(unit: DealQuantityUnit | null, isLoan: boolean, n: number): string {
+    if (isLoan) {
+        if (unit === 'week') return tn(n, 'for {n} week', 'for {n} weeks');
+        return tn(n, 'for {n} day', 'for {n} days');
+    }
+    if (unit === 'day') return tn(n, '{n} day', '{n} days');
+    if (unit === 'week') return tn(n, '{n} week', '{n} weeks');
+    if (unit === 'month') return tn(n, '{n} month', '{n} months');
+    if (unit === 'hour') return tn(n, '{n} hours estimated', '{n} hours estimated');
+    return '';
 }
 
 /** Why the profile gate stops an accept: the whole sentence for what is missing (lib/profile-status describeMissing). */
@@ -979,7 +992,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     // Depending on `myTransactions` directly would re-run this effect on every poll even when
     // nothing relevant changed, re-rendering an open post every 10s; this only changes when the
     // set of outstanding bids for THIS post actually changes.
-    const openNeedBidIds = selectedPost?.type === 'need'
+    const openNeedBidIds = (selectedPost?.type === 'need' || selectedPost?.lendable)
         ? myTransactions
             .filter(t => t.postId === selectedPost.id && t.status === 'requested')
             .map(t => t.id)
@@ -1058,8 +1071,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 .catch(err => console.error('[MarketplacePage] Failed to fetch given ratings:', err));
         }
         
-        // Fetch requests if this is a Need
-        if (selectedPost.type === 'need') {
+        // Fetch requests if this is a Need or a lendable Offer
+        if (selectedPost.type === 'need' || selectedPost.lendable) {
             const txPromise = myTransactions.length > 0
                 ? Promise.resolve(myTransactions)
                 : (identity
@@ -1070,23 +1083,25 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     const filtered = txs.filter(t => t.postId === selectedPost.id && t.status === 'requested');
                     const enriched = await Promise.all(filtered.map(async req => {
                         try {
-                            // For needs, the author is the buyer, so the requester is the seller
-                            const cached = ratingsCacheRef.current.get(req.sellerPublicKey);
+                            const requesterKey = selectedPost.type === 'need' ? req.sellerPublicKey : (req.buyerPublicKey || req.sellerPublicKey);
+                            const cached = requesterKey ? ratingsCacheRef.current.get(requesterKey) : undefined;
                             let r: { average: number; count: number };
                             if (cached && Date.now() - cached.fetchedAt <= RATINGS_CACHE_TTL_MS) {
                                 r = cached.rating;
-                            } else {
-                                r = await getMemberRatings(req.sellerPublicKey);
+                            } else if (requesterKey) {
+                                r = await getMemberRatings(requesterKey);
                                 // Written back so a re-run (a new bid arriving) does not refetch
                                 // every existing bidder's rating again.
-                                ratingsCacheRef.current.set(req.sellerPublicKey, { rating: r, fetchedAt: Date.now() });
+                                ratingsCacheRef.current.set(requesterKey, { rating: r, fetchedAt: Date.now() });
+                            } else {
+                                r = { average: 0, count: 0 };
                             }
                             return { ...req, bidderRating: r };
                         } catch(e) { return { ...req, bidderRating: { average: 0, count: 0 } }; }
                     }));
-                    setRequests(enriched);
+                    if (!cancelled) setRequests(enriched);
                 })
-                .catch(() => setRequests([]));
+                .catch(() => { if (!cancelled) setRequests([]); });
         } else {
             setRequests([]);
         }
@@ -1649,21 +1664,26 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                      </div>
                  )}
 
-                {/* 1.5 Pending Requests (For Authors of Needs) */}
-                {isOwnPost && selectedPost.type === 'need' && selectedPost.status === 'active' && requests.length > 0 && (
+                {/* 1.5 Pending Requests (For Authors of Needs or Lendable Offers) */}
+                {isOwnPost && (selectedPost.type === 'need' || selectedPost.lendable) && selectedPost.status === 'active' && requests.length > 0 && (
                     <div className="mt-4 bg-oat-50 dark:bg-nature-950 border border-amber-200 dark:border-amber-900/50 rounded-xl p-3 shadow-sm">
                         <p className="font-bold text-amber-800 dark:text-amber-500 text-sm mb-2 text-center">
                             {t('✋ Fulfillment Requests ({n})', { n: requests.length })}
                         </p>
                         <div className="flex flex-col gap-2">
-                            {requests.map((req: any) => (
+                            {requests.map((req: any) => {
+                                const isNeed = selectedPost.type === 'need';
+                                const requesterKey = isNeed ? req.sellerPublicKey : (req.buyerPublicKey || req.sellerPublicKey);
+                                const requesterCallsign = isNeed ? (req.sellerCallsign || req.buyerCallsign) : (req.buyerCallsign || req.sellerCallsign);
+                                return (
                                 <div key={req.id} className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-lg p-3 flex flex-col shadow-sm">
                                     <div className="flex flex-col mb-3">
                                         <button 
-                                            onClick={() => { if (onOpenProfile) onOpenProfile(req.sellerPublicKey || req.buyerPublicKey); }}
+                                            type="button"
+                                            onClick={() => { if (onOpenProfile && requesterKey) onOpenProfile(requesterKey); }}
                                             className="font-bold text-nature-900 dark:text-white text-sm text-left hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors flex items-center gap-1"
                                         >
-                                            <span className="text-amber-600 dark:text-amber-400">🤝</span> <span className="underline decoration-nature-300 underline-offset-2">{req.sellerCallsign}</span>
+                                            <span className="text-amber-600 dark:text-amber-400">🤝</span> <span className="underline decoration-nature-300 underline-offset-2">{requesterCallsign}</span>
                                         </button>
                                         <span className="text-xs text-amber-500 mt-0.5 font-semibold">
                                             {/* The English has always said "reviews" and "hours" whatever the count: both forms keep it. */}
@@ -1672,7 +1692,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 : t('☆☆☆☆☆ No ratings yet')}
                                         </span>
                                         <span className="text-xs text-nature-500 dark:text-nature-400 mt-1">
-                                            {req.hours ? tn(req.hours, '{n} hours estimated', '{n} hours estimated') : t('Offered to fulfill')}
+                                            {req.hours ? requestQuantityWords(dealQuantityUnit(selectedPost.priceType, selectedPost.lendable), Boolean(selectedPost.lendable), req.hours) : t('Offered to fulfill')}
                                         </span>
                                     </div>
                                     <div className="flex gap-2">
@@ -1721,7 +1741,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         </button>
                                     </div>
                                 </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     </div>
                 )}

@@ -540,7 +540,8 @@ export async function draftCli(argv = process.argv.slice(2), root = ROOT) {
             briefsDir = argv[++i];
         } else if (arg === '--langs') {
             const raw = argv[++i] ?? '';
-            langs = raw.split(/[,\s]+/).map((s) => s.trim()).filter(Boolean);
+            const parsed = raw.split(/[,\s]+/).map((s) => s.trim()).filter(Boolean);
+            langs = parsed.length > 0 ? parsed : null;
         } else if (arg === '--max-keys') {
             const n = parseInt(argv[++i], 10);
             if (!Number.isNaN(n) && n > 0) maxKeys = n;

@@ -10,6 +10,7 @@ import path from 'node:path';
 import {
     APP_CATALOG_DEFS,
     SAFETY_MONEY_PATTERNS,
+    draftCli,
     draftStatus,
     isSafetyOrMoney,
     reportDraft,
@@ -371,5 +372,19 @@ test('assert draft script NEVER spawns child processes or uses network', async (
         assert.equal(processSpawns, 0);
     } finally {
         Object.assign(childProcess, originals);
+    }
+});
+
+test('draftCli with empty --langs falls back to scanning all catalog languages instead of 0', async () => {
+    // Calling draftCli with --report and --langs "" should not crash and should scan all languages
+    const origLog = console.log;
+    let output = '';
+    console.log = (...args) => { output += args.join(' ') + '\n'; };
+    try {
+        const rc = await draftCli(['--report', '--langs', '']);
+        assert.equal(rc, 0);
+        assert.ok(!output.includes('across 0 languages'));
+    } finally {
+        console.log = origLog;
     }
 });

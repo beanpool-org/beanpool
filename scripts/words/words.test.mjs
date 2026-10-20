@@ -302,3 +302,11 @@ test('catalogs follow core\'s LANGS: 24 tags may have one, a missing one is untr
         fs.rmSync(root, { recursive: true, force: true });
     }
 });
+
+test('words.mjs CLI draft command runs without unsettled top-level await deadlock', () => {
+    const stdout = execFileSync(process.execPath, [path.join(ROOT, 'scripts/words/words.mjs'), 'draft', '--report', '--langs', 'es'], {
+        encoding: 'utf8',
+    });
+    assert.ok(stdout.includes('es:'));
+    assert.ok(stdout.includes('words:draft:'));
+});

@@ -562,5 +562,5 @@ async function main(argv) {
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-    process.exitCode = await main(process.argv.slice(2));
+    main(process.argv.slice(2)).then((code) => { process.exitCode = code; });
 }

@@ -67,9 +67,9 @@ export function OffboardMemberWizard({
                         setResolutionChoice('donate_to_commons');
                     }
                 }
-            } catch (err: any) {
+            } catch (err: unknown) {
                 if (mounted) {
-                    setError(err?.message || 'Failed to load offboard preview');
+                    setError(err instanceof Error && err.message ? err.message : 'Failed to load offboard preview');
                 }
             } finally {
                 if (mounted) {
@@ -150,9 +150,9 @@ export function OffboardMemberWizard({
             proof.close();
             setCompleted(true);
             onSuccess?.();
-        } catch (err: any) {
+        } catch (err: unknown) {
             if (proof.checkError(err, (c) => handleConfirmOffboard(c), code)) return;
-            setError(err?.message || 'Failed to offboard member');
+            setError(err instanceof Error && err.message ? err.message : 'Failed to offboard member');
         } finally {
             submittingRef.current = false;
             setSubmitting(false);

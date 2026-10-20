@@ -319,6 +319,18 @@ CREATE TABLE IF NOT EXISTS posts (
     -- auto-mute counts.
     hidden_by_reports_at TEXT,
     removed_by_moderator_at TEXT,
+    -- A lendable Offer (scratch/tools/DESIGN-tool-library-fable.md §2.3; DESIGN-shops-and-tools-fable.md §12 S3): one
+    -- borrower at a time, off the board while it is out, back on it when the loan is done or called off (engine/escrow.ts).
+    -- 1 on an Offer only; such a row is also repeatable = 1, which every app in the store reads as "back on the board after
+    -- each deal" (its deal heal). 0 on every other row. The three below are NULL unless it is 1.
+    lendable INTEGER NOT NULL DEFAULT 0,
+    -- The longest loan, in days (1 to 365); NULL, as long as the two agree.
+    lend_max_days INTEGER,
+    -- The lender's terms, in their words (≤ 300).
+    lend_terms TEXT,
+    -- What it would cost to replace, in the lender's own words and currency ("$120", "like for like"), ≤ 40 characters.
+    -- Shown, never parsed, never moved: settled between the two people, as the cash flag above is.
+    replacement_value TEXT,
     CONSTRAINT lat_lng_check CHECK (lat BETWEEN -90 AND 90 AND lng BETWEEN -180 AND 180)
 );
 CREATE INDEX IF NOT EXISTS idx_posts_hidden_by_reports ON posts(hidden_by_reports_at) WHERE hidden_by_reports_at IS NOT NULL;

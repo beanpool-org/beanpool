@@ -13,7 +13,7 @@ import {
 import { getMemberTrustProfile } from './trust.js';
 import { isVisitorKey, isSuspendedAccount } from './members.js';
 import { isGroupConvenor } from './groups.js';
-import { avatarUrlOf, tierForCredit } from '@beanpool/core';
+import { avatarUrlOf, lendBackAroundOf, tierForCredit } from '@beanpool/core';
 import { areaBox, boundingBox, roundToArea, placeForOthers, neighbourhoodBox } from './geo.js';
 import { onPublicBoard, postPhotoUrl } from './photo-url.js';
 import { prepared } from './statements.js';
@@ -86,6 +86,21 @@ export interface MarketplacePost {
     repeatable?: boolean;
     /** #108: a real cash outlay is involved (fuel/consumables). No amount — terms live in the chat. */
     cashAlsoNeeded?: boolean;
+    /**
+     * A lendable Offer (DESIGN-tool-library-fable.md §2.3, DESIGN-shops-and-tools-fable.md §12 S3): one borrower at a time,
+     * `pending` while it is out, back to `active` when the loan is done or called off. Such a post is `repeatable` too, which
+     * every app that predates lending reads as "back on the board after each deal". Only on a lendable post, as are the four
+     * below, so every other post reads byte for byte as before.
+     */
+    lendable?: boolean;
+    /** The longest loan, in days. */
+    lendMaxDays?: number;
+    /** The lender's terms, in their words. */
+    lendTerms?: string;
+    /** What it would cost to replace, in the lender's own words and currency. Shown, never parsed: settled between the two. */
+    replacementValue?: string;
+    /** While it is out: when it is due back (the hand-over plus the loan's days, @beanpool/core lendBackAroundOf). Never a name. */
+    lendBackAround?: string;
     acceptedBy?: string;
     acceptedByCallsign?: string;
     acceptedAt?: string;
@@ -229,6 +244,8 @@ export interface PostFilter {
     sync?: boolean;
     /** #108: exclude listings with a cash outlay — the beans-only browse. */
     beansOnly?: boolean;
+    /** Lendable Offers only (the list route's `lendable=1`): a member's shop, things to borrow. */
+    lendable?: boolean;
     includeInactive?: boolean;
     includeAllScopes?: boolean;
     audienceScope?: AudienceScope | string;
@@ -668,6 +685,7 @@ export function rowToPost(db: Db, row: any, photosByPost: Map<string, any[]>, fo
         status: row.status,
         repeatable: Boolean(row.repeatable),
         cashAlsoNeeded: Boolean(row.cash_also_needed),
+        ...lendFieldsOf(row),
         acceptedBy: row.accepted_by,
         acceptedByCallsign: row.accepted_callsign,
         acceptedAt: row.accepted_at,
@@ -708,6 +726,22 @@ export function rowToPost(db: Db, row: any, photosByPost: Map<string, any[]>, fo
             ...seriesFieldsOf(row),
         } : {}),
         ...(row.hidden_by_reports_at ? { hiddenByReportsAt: row.hidden_by_reports_at } : {}),
+    };
+}
+
+/**
+ * A lendable Offer's fields from its row; nothing for any other post. While it is out, when it is due back: from the
+ * quantity its deal holds (`lend_deal_units`, read with the row by POST_ROW_SELECT) and the day it was handed over.
+ */
+export function lendFieldsOf(row: any): Pick<MarketplacePost, 'lendable' | 'lendMaxDays' | 'lendTerms' | 'replacementValue' | 'lendBackAround'> {
+    if (row.lendable !== 1) return {};
+    const backAround = row.status === 'pending' ? lendBackAroundOf(row.accepted_at, row.price_type, row.lend_deal_units) : null;
+    return {
+        lendable: true,
+        ...(typeof row.lend_max_days === 'number' ? { lendMaxDays: row.lend_max_days } : {}),
+        ...(typeof row.lend_terms === 'string' && row.lend_terms ? { lendTerms: row.lend_terms } : {}),
+        ...(typeof row.replacement_value === 'string' && row.replacement_value ? { replacementValue: row.replacement_value } : {}),
+        ...(backAround ? { lendBackAround: backAround } : {}),
     };
 }
 
@@ -887,7 +921,7 @@ const HEALED_DEALS = 50;
  * - An upcoming event of an off-board host that the member read by id outside a sync, until the cursor passes the read
  *   (eventReadsCountingAt).
  * - An open listing of an off-board author on which one of the member's last 50 deals is cancelled, or completed on a
- *   repeatable listing. Each time the phone applies a changed list of those deals it writes those listings back as
+ *   repeatable or lendable listing. Each time the phone applies a changed list of those deals it writes those listings back as
  *   active (apps/native utils/db.ts applyDelta, after the posts: the deal heal). A new deal, a rating or a cold start
  *   changes or re-applies that list with no listing row moving, so these go in every delta.
  * - An open listing of an off-board author on which one of those deals is rejected. While the request was open the
@@ -917,8 +951,8 @@ function offBoardPostsToResend(db: Db, viewer: string, kept: Set<string>, cursor
     const rejected = new Set(deals.filter(d => d.status === 'rejected').map(d => d.post_id));
     const candidates = [...new Set([...reads, ...cancelled, ...completed, ...rejected])];
     if (candidates.length === 0) return [];
-    const rows = selectInChunks<{ id: string; type: string; author_pubkey: string; repeatable: number; status: string; active: number; accepted_by: string | null; event_end_at: string | null }>(
-        db, candidates, ph => `SELECT p.id, p.type, p.author_pubkey, p.repeatable, p.status, p.active, p.accepted_by, p.event_end_at FROM posts p WHERE p.id IN (${ph})`);
+    const rows = selectInChunks<{ id: string; type: string; author_pubkey: string; repeatable: number; lendable: number; status: string; active: number; accepted_by: string | null; event_end_at: string | null }>(
+        db, candidates, ph => `SELECT p.id, p.type, p.author_pubkey, p.repeatable, p.lendable, p.status, p.active, p.accepted_by, p.event_end_at FROM posts p WHERE p.id IN (${ph})`);
     const off = authorsOffBoard(db, [...new Set(rows.map(r => r.author_pubkey))]);
     const open = postsInOpenDealWith(db, viewer);
     return rows.filter(r => {
@@ -926,7 +960,7 @@ function offBoardPostsToResend(db: Db, viewer: string, kept: Set<string>, cursor
         if (r.accepted_by === viewer || open.has(r.id) || r.active !== 1) return false;
         if (!(r.status === 'active' || r.status === 'pending' || (r.type === 'poll' && r.status === 'completed'))) return false;
         const readEvent = reads.has(r.id) && r.type === 'event' && (!r.event_end_at || r.event_end_at > nowIso);
-        return readEvent || cancelled.has(r.id) || rejected.has(r.id) || (completed.has(r.id) && r.repeatable === 1);
+        return readEvent || cancelled.has(r.id) || rejected.has(r.id) || (completed.has(r.id) && (r.repeatable === 1 || r.lendable === 1));
     }).map(r => r.id);
 }
 
@@ -954,10 +988,15 @@ export function liveOfferCount(db: Db, publicKey: string): number {
     return row?.c || 0;
 }
 
-/** A listed post's row: the post, its author, who took it, its group, and the author's trade count. */
+/**
+ * A listed post's row: the post, its author, who took it, its group, and the author's trade count; and on a lendable Offer
+ * that is out, the quantity its loan's deal holds (lendFieldsOf), one lookup by the deal's key.
+ */
 const POST_ROW_SELECT = `
         SELECT p.*, m.callsign as author_callsign, m.avatar_ref as author_avatar, a.callsign as accepted_callsign,
                g.name as target_group_name,
+               CASE WHEN p.lendable = 1 AND p.pending_transaction_id IS NOT NULL
+                    THEN (SELECT lt.hours FROM marketplace_transactions lt WHERE lt.id = p.pending_transaction_id) END as lend_deal_units,
                COALESCE(m.earned_credit, 0) as author_earned_credit,
                (
                  COALESCE((SELECT COUNT(*) FROM transactions t
@@ -1147,7 +1186,7 @@ const CIRCLE_FIELDS: { readonly [K in keyof PostFilter]-?: ((filter: PostFilter)
     authorCardsChanged: null,
     localAuthorCardsChanged: null,
     id: null, ids: null, status: null, updatedAfter: null, syncPage: null, query: null, authorPubkey: null, sync: null, beansOnly: null,
-    includeInactive: null, includeAllScopes: null, audienceScope: null, targetGroupId: null, assignedTo: null,
+    lendable: null, includeInactive: null, includeAllScopes: null, audienceScope: null, targetGroupId: null, assignedTo: null,
 };
 
 /** Whether a nearest-first read may search circles before its one pass (CIRCLE_FIELDS). */
@@ -1731,6 +1770,7 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
     // #108: beans-only browse. COALESCE so rows predating the column are treated as beans-only
     // rather than vanishing from the filtered view.
     if (filter?.beansOnly) { where += " AND COALESCE(p.cash_also_needed, 0) = 0"; }
+    if (filter?.lendable) { where += " AND p.type = 'offer' AND p.lendable = 1"; }
 
     // Audience scoping (docs/the-commons.md §9, Item 10)
     // Non-members must NEVER see group-scoped or direct-scoped posts in feeds, map pins, search, or direct queries.
@@ -2186,6 +2226,9 @@ const GUEST_FIELDS: { readonly [K in keyof MarketplacePost]-?: GuestRule<K> } = 
     // 'pending' stays: "spoken for", without saying by whom.
     status: 'keep',
     repeatable: 'keep', cashAlsoNeeded: 'keep', photos: 'keep', originNode: 'keep', reach: 'keep', audienceScope: 'keep',
+    // A lendable Offer's own words, as its price and description are. When it is due back is dropped below, with when it
+    // was taken.
+    lendable: 'keep', lendMaxDays: 'keep', lendTerms: 'keep', replacementValue: 'keep',
     pollOptions: 'keep', pollClosesAt: 'keep', pollOpenVote: 'keep', totalVotes: 'keep', pollNewOrWordsVotes: 'keep',
     eventStartAt: 'keep', eventEndAt: 'keep', eventState: 'keep', goingCount: 'keep', interestedCount: 'keep',
     // That the host lets people in is what a visitor needs to know before they join to go; who was let in is not.
@@ -2209,7 +2252,7 @@ const GUEST_FIELDS: { readonly [K in keyof MarketplacePost]-?: GuestRule<K> } = 
     distanceKm: p => typeof p.distanceKm === 'number' ? Math.round(p.distanceKm) : p.distanceKm,
     // The trade, the keeper behind an enterprise's post, the voters, the reader's own vote and RSVP, the host's lists and
     // note, the peers named, who a direct or group post was for, the typed place (often an address), and moderation.
-    acceptedBy: 'drop', acceptedAt: 'drop', pendingTransactionId: 'drop', completedAt: 'drop', createdBy: 'drop',
+    acceptedBy: 'drop', acceptedAt: 'drop', pendingTransactionId: 'drop', completedAt: 'drop', createdBy: 'drop', lendBackAround: 'drop',
     pollVotes: 'drop', userVotedOptionId: 'drop', myRsvp: 'drop', myLastRsvp: 'drop', eventRsvps: 'drop', eventPrivateNote: 'drop', eventLink: 'drop', myLetIn: 'drop',
     reachPeers: 'drop', targetPubkey: 'drop', assignedTo: 'drop', targetGroupId: 'drop', targetGroupName: 'drop',
     eventPlaceName: 'drop', hiddenByReportsAt: 'drop', removedByModeratorAt: 'drop',

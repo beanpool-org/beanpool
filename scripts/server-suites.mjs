@@ -482,6 +482,7 @@ export const SUITES = [
     'test-health-access-log-migration',
     'test-rip-out-legacy-voting',
     'test-escrow-disputes',
+    'test-lendable-offers',
     'test-process-handlers',
     'test-shutdown-recovery',
     'test-clean-stop',

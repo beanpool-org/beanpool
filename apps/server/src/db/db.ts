@@ -1468,6 +1468,12 @@ export function initSchema() {
     // nothing removed by a moderator, nobody muted.
     try { db.prepare(`ALTER TABLE posts ADD COLUMN hidden_by_reports_at TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE posts ADD COLUMN removed_by_moderator_at TEXT`).run(); } catch { }
+    // Lendable Offers (schema.sql; DESIGN-shops-and-tools-fable.md §12 S3). 0 and NULL on every existing row: nothing is
+    // lent until its author says so.
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN lendable INTEGER NOT NULL DEFAULT 0`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN lend_max_days INTEGER`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN lend_terms TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN replacement_value TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE members ADD COLUMN moderation_muted_until TEXT`).run(); } catch { }
     // A person's coarse area (G4, engine/member-area.ts). Before the schema.sql exec, whose members_touch_updated_at
     // (dropped below, so the exec recreates it) lists all three. NULL on every existing row: nobody has an area.

@@ -446,20 +446,34 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
     }, [openNewPost, initialGroupId, onOpenNewPostHandled, tryOpenComposer]);
 
     // A tool's draft (openDraft): its fields in the composer, as the member would have typed them, and nothing posted.
+    // Everything the draft doesn't say starts as a new post's would: a composer left open on a group, a pin or a peer
+    // reach never carries into the tool's post.
     useEffect(() => {
         if (!openDraft) return;
         onDraftOpened?.();
-        setEventEdit(null);
-        setEventIsCopy(false);
+        resetEventForm();
         setNewPostType(openDraft.type);
         setNewPostTitle(openDraft.title);
         setNewPostDescription(openDraft.description);
-        if (openDraft.category) setNewPostCategory(openDraft.category);
+        setNewPostCategory(openDraft.category ?? 'general');
         setNewPostCredits(openDraft.credits === null ? '' : String(openDraft.credits));
-        if (openDraft.priceType) setNewPostPriceType(openDraft.priceType);
+        setNewPostPriceType(openDraft.priceType ?? 'fixed');
         setNewPostRepeatable(openDraft.repeatable);
         setNewPostCashAlsoNeeded(openDraft.cashAlsoNeeded);
+        setNewPostReach('local');
+        setNewPostReachPeers([]);
         setNewPostPhotos([]);
+        setAudienceScope('public');
+        setTargetGroupId('');
+        setPostLat(null);
+        setPostLng(null);
+        setPinDropMode(false);
+        exactPinRef.current = null;
+        if (pinDropMarkerRef.current) {
+            pinDropMarkerRef.current.remove();
+            pinDropMarkerRef.current = null;
+        }
+        setValidationErrors(new Set());
         tryOpenComposer();
     }, [openDraft, onDraftOpened, tryOpenComposer]);
 

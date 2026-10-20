@@ -499,3 +499,36 @@ test('writeBriefs reflects custom catalogDefs in header summary', async () => {
         fs.rmSync(tmp, { recursive: true, force: true });
     }
 });
+
+test('README runner regex matches all 24 supported languages including 2- and 3-letter codes and zh subtags', async () => {
+    const allLangs = [
+        'es', 'pt', 'hi', 'bn', 'fr', 'ar', 'id', 'ru',
+        'zh-Hans', 'zh-Hant', 'it', 'de', 'tr', 'sw', 'ml',
+        'ta', 'uk', 'ur', 'fa', 'vi', 'el', 'fil', 'ja', 'ko',
+    ];
+    assert.equal(allLangs.length, 24);
+
+    const regex = /^[a-z]{2,3}(-[A-Za-z]+)?:$/;
+    for (const lang of allLangs) {
+        assert.ok(regex.test(`${lang}:`), `Expected regex to match "${lang}:"`);
+    }
+
+    // Verify against report output lines
+    let reportOutput = '';
+    const origLog = console.log;
+    console.log = (...args) => { reportOutput += args.join(' ') + '\n'; };
+    try {
+        const rc = await reportDraft();
+        assert.equal(rc, 0);
+        const matched = reportOutput
+            .split('\n')
+            .filter((line) => /^[a-z]{2,3}(-[A-Za-z]+)?:$/.test(line.trim()))
+            .map((line) => line.trim().replace(':', ''));
+        assert.equal(matched.length, 24);
+        assert.ok(matched.includes('fil'));
+        assert.ok(matched.includes('zh-Hans'));
+        assert.ok(matched.includes('zh-Hant'));
+    } finally {
+        console.log = origLog;
+    }
+});

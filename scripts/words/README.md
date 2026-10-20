@@ -80,7 +80,7 @@ A runner script (modeled on `scratch/words-topup/run-1020.sh` and `run-guide-pag
 set -u
 R=/Users/marty/projects/beanpool
 BASE=$(git rev-parse HEAD)
-LANGS=$(pnpm words:draft --report | grep -E '^[a-z]{2}(-[A-Za-z]+)?:' | tr -d ':')
+LANGS=$(pnpm words:draft --report | grep -E '^[a-z]{2,3}(-[A-Za-z]+)?:' | tr -d ':')
 BRIEFS_DIR=$R/scratch/words-topup/briefs
 
 run_one() {

@@ -631,3 +631,47 @@ test('loadLanguagePages and renderLanguageWebsite render HTML and guide.json, sh
         fs.rmSync(dir, { recursive: true, force: true });
     }
 });
+
+test('loadLanguagePages preserves canonical section and slug order defined by englishGuide', () => {
+    const englishGuide = loadGuide(CONTENT_DIR);
+    const firstSec = englishGuide.sections[0];
+    const secondSec = englishGuide.sections[1];
+    if (!firstSec || !secondSec || firstSec.slugs.length < 2) return;
+
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'guide-lang-order-'));
+    try {
+        const ptDir = path.join(dir, 'pt');
+        // Intentionally create second section first on filesystem
+        fs.mkdirSync(path.join(ptDir, secondSec.id), { recursive: true });
+        fs.mkdirSync(path.join(ptDir, firstSec.id), { recursive: true });
+
+        const makePage = (slug, related) => [
+            '---',
+            `slug: ${slug}`,
+            `title: Título ${slug}`,
+            'summary: Resumo.',
+            `related: ${related}`,
+            'source-hash: 0123456789abcdef',
+            '---',
+            '',
+            `Texto de ${slug}.`,
+        ].join('\n');
+
+        // Intentionally write slugs in reverse order
+        const [s1, s2] = [firstSec.slugs[0], firstSec.slugs[1]];
+        fs.writeFileSync(path.join(ptDir, firstSec.id, `${s2}.md`), makePage(s2, s1));
+        fs.writeFileSync(path.join(ptDir, firstSec.id, `${s1}.md`), makePage(s1, s2));
+        const s3 = secondSec.slugs[0];
+        fs.writeFileSync(path.join(ptDir, secondSec.id, `${s3}.md`), makePage(s3, s1));
+
+        const loaded = loadLanguagePages(dir, 'pt', englishGuide, { version: 1 });
+        assert.ok(loaded);
+        // Sections must match english order
+        assert.deepEqual(loaded.sections.map(s => s.id), [firstSec.id, secondSec.id]);
+        // Slugs in first section must match english order, not alphabetical or creation order
+        assert.deepEqual(loaded.sections[0].slugs, [s1, s2]);
+        assert.deepEqual(loaded.guides.map(g => g.slug), [s1, s2, s3]);
+    } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+});

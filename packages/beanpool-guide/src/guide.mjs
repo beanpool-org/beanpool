@@ -418,44 +418,35 @@ export function renderWebsite(guide, { operatorManualOnWeb = false } = {}) {
 export function loadLanguagePages(contentDir, lang, englishGuide, { version = null } = {}) {
     const langDir = path.join(contentDir, lang);
     if (!fs.existsSync(langDir)) return null;
-    const englishSections = new Map(englishGuide.sections.map(s => [s.id, s]));
-    const englishPages = new Map(englishGuide.guides.map(p => [p.slug, p]));
-    const entries = fs.readdirSync(langDir, { withFileTypes: true })
-        .filter(d => d.isDirectory() && !d.name.startsWith('.'));
     const guides = [];
-    const sectionMap = new Map();
-    for (const d of entries) {
-        const secId = d.name;
-        if (!englishSections.has(secId)) continue;
-        const secDir = path.join(langDir, secId);
-        const mdFiles = fs.readdirSync(secDir).filter(f => f.endsWith('.md')).sort();
-        for (const f of mdFiles) {
-            const slug = f.slice(0, -3);
-            if (!englishPages.has(slug)) continue;
-            const file = `${lang}/${secId}/${f}`;
-            const g = parseGuideMarkdown(fs.readFileSync(path.join(secDir, f), 'utf8'), file, { isTranslated: true });
-            if (g.slug !== slug) throw new Error(`${file}: slug "${g.slug}" must match the file name`);
-            const { blocks, video, related, ...head } = g;
-            guides.push({ ...head, section: secId, related, ...(video ? { video } : {}), blocks });
-            if (!sectionMap.has(secId)) sectionMap.set(secId, []);
-            sectionMap.get(secId).push(slug);
-        }
-    }
-    if (guides.length === 0) return null;
-    // Load titles if available
+    const sections = [];
     let titles = null;
     const titlesFile = path.join(langDir, 'manifest.json');
     if (fs.existsSync(titlesFile)) {
         try { titles = JSON.parse(fs.readFileSync(titlesFile, 'utf8')); } catch { /* ignore */ }
     }
-    const sections = [];
-    for (const [secId, slugs] of sectionMap.entries()) {
-        const enSec = englishSections.get(secId);
-        const secTitles = titles?.sections?.[secId];
-        const title = secTitles?.title?.text ?? enSec.title;
-        const summary = secTitles?.summary?.text ?? enSec.summary;
-        sections.push({ id: secId, title, summary, slugs });
+    for (const enSec of englishGuide.sections) {
+        const secDir = path.join(langDir, enSec.id);
+        if (!fs.existsSync(secDir)) continue;
+        const slugs = [];
+        for (const slug of enSec.slugs) {
+            const mdFile = path.join(secDir, `${slug}.md`);
+            if (!fs.existsSync(mdFile)) continue;
+            const file = `${lang}/${enSec.id}/${slug}.md`;
+            const g = parseGuideMarkdown(fs.readFileSync(mdFile, 'utf8'), file, { isTranslated: true });
+            if (g.slug !== slug) throw new Error(`${file}: slug "${g.slug}" must match the file name`);
+            const { blocks, video, related, ...head } = g;
+            guides.push({ ...head, section: enSec.id, related, ...(video ? { video } : {}), blocks });
+            slugs.push(slug);
+        }
+        if (slugs.length > 0) {
+            const secTitles = titles?.sections?.[enSec.id];
+            const title = secTitles?.title?.text ?? enSec.title;
+            const summary = secTitles?.summary?.text ?? enSec.summary;
+            sections.push({ id: enSec.id, title, summary, slugs });
+        }
     }
+    if (guides.length === 0) return null;
     return {
         schema: GUIDE_SCHEMA,
         version,

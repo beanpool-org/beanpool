@@ -2,7 +2,7 @@
  * The tool store's routes (engine/tool-state.ts; slice S2 of scratch/tools/DESIGN-shops-and-tools-fable.md §9.3): each
  * tool's private copy of its owner's document, read and written only by its owner.
  *
- *   GET    /api/tools/:tool              → { tool, doc, updatedAt, bytes, max }; doc and updatedAt null when none is kept
+ *   GET    /api/tools/:tool              → { tool, doc, updatedAt, deletedAt, bytes, max }; doc and updatedAt null when none is kept
  *   PUT    /api/tools/:tool  { doc }     → { success: true, tool, updatedAt, bytes, max }
  *   DELETE /api/tools/:tool              → { success: true, tool, removed }
  *
@@ -35,7 +35,7 @@ import { db } from '../db/db.js';
 import { StandbyLedgerError } from '../config/node-role.js';
 import { NOT_A_MEMBER_CODE, NOT_A_MEMBER_ERROR } from '../engine/members.js';
 import {
-    readToolState, writeToolState, deleteToolState, toolIdRefusal, ToolStateRefusal, TOOL_STATE_MAX_BYTES,
+    readToolState, writeToolState, deleteToolState, toolStateDeletedAt, toolIdRefusal, ToolStateRefusal, TOOL_STATE_MAX_BYTES,
 } from '../engine/tool-state.js';
 import type Koa from 'koa';
 import type { RouteDeps } from './types.js';
@@ -120,7 +120,15 @@ function handlers(ownerOf: (ctx: Ctx, op: Op) => string | undefined) {
             const tool = owner && toolOf(ctx);
             if (!owner || !tool) return;
             const state = readToolState(owner, tool);
-            answer(ctx, { tool, doc: state?.doc ?? null, updatedAt: state?.updatedAt ?? null, bytes: state?.bytes ?? 0, max: TOOL_STATE_MAX_BYTES });
+            const deletedAt = state ? null : toolStateDeletedAt(owner, tool);
+            answer(ctx, {
+                tool,
+                doc: state?.doc ?? null,
+                updatedAt: state?.updatedAt ?? null,
+                deletedAt,
+                bytes: state?.bytes ?? 0,
+                max: TOOL_STATE_MAX_BYTES,
+            });
         },
         put: async (ctx: Ctx) => {
             const owner = ownerOf(ctx, 'write');

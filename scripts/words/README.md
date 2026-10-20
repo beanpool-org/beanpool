@@ -10,7 +10,7 @@ This directory contains the tools for managing translations and the words layer 
 - `pnpm words:lint`: Checks the ratchet on English literals outside `t()` per directory against `lint-baseline.json`. `words:lint --update` records falls; rises require `--raise "<reason>"`.
 - `pnpm words:extract`: Extracts English calls and writes `<catalog>/en.sources.json` mapping keys to `file:line` locations.
 - `pnpm words:count`: Reports counts of user-facing strings and word totals per package.
-- `pnpm words:draft --report`: Heartbeat report listing missing, stale, and orphaned counts across app words, guide titles, guide pages, and website pages per language. Exit 0 always.
+- `pnpm words:draft --report`: Heartbeat report listing missing, stale, and orphaned counts across app words, guide titles, guide pages, and website pages per language. Exit 0, or 2 with `words:draft: SCAN ERROR — …` on stderr and no summary line when a scan fails.
 - `pnpm words:draft --briefs <dir>`: Generates self-contained drafting briefs for AGY Flash runs.
 
 ---
@@ -23,10 +23,10 @@ This directory contains the tools for managing translations and the words layer 
 pnpm words:draft --report [--langs <l1,l2>]
 ```
 
-Always exits with code `0`. Outputs:
+Exits with code `0`, or `2` when a scan fails (stderr `words:draft: SCAN ERROR — <what failed>`, and no `words:draft: … missing` line, so a heartbeat never reads a failed scan as a clean tree). Outputs:
 1. Website pages status (or `website pages: skipped (S6 not yet implemented)` until slice S6 exists).
 2. Per-language breakdown:
-   - App words per catalog (`packages/beanpool-core/words`, `apps/native/words`, `apps/pwa/words`): missing, stale (0), and orphaned.
+   - App words per catalog (`packages/beanpool-core/words`, `apps/native/words`, `apps/pwa/words`, `apps/server/words`): missing, stale (0), and orphaned.
    - Guide titles & summaries (`packages/beanpool-guide/content/<lang>/manifest.json`): missing and stale.
    - Guide pages (`packages/beanpool-guide/content/<lang>/<section>/<slug>.md`): missing (no file) and stale (source-hash behind).
    - SAFETY/MONEY count: missing and stale items requiring meaning-check.

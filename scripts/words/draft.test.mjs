@@ -577,8 +577,9 @@ test('apps/server/words is scanned as fourth catalog, counting in --report and a
     const status = await draftStatus({ langs: ['es'] });
     const es = status.perLang.es;
     assert.ok(es.appWords.byCatalog.server, 'es should include server catalog');
-    assert.equal(es.appWords.byCatalog.server.missing, 14);
-    assert.equal(es.appWords.byCatalog.server.missingKeys.length, 14);
+    // The count is live data (drafting rounds shrink it), so the report, the key list and the brief must agree on it.
+    const n = es.appWords.byCatalog.server.missing;
+    assert.equal(es.appWords.byCatalog.server.missingKeys.length, n);
 
     // Verify brief includes server catalog and its missing keys
     const tmp = makeTempDir();
@@ -586,8 +587,10 @@ test('apps/server/words is scanned as fourth catalog, counting in --report and a
         const briefsDir = path.join(tmp, 'briefs');
         await writeBriefs({ dir: briefsDir, langs: ['es'] });
         const briefContent = fs.readFileSync(path.join(briefsDir, 'brief-es.md'), 'utf8');
-        assert.match(briefContent, /server \(14\)/);
-        assert.match(briefContent, /#### Catalog: apps\/server\/words\/es\.json \(14 missing\)/);
+        if (n > 0) {
+            assert.ok(briefContent.includes(`server (${n})`), 'the brief counts the server catalog');
+            assert.ok(briefContent.includes(`#### Catalog: apps/server/words/es.json (${n} missing)`), 'the brief lists its keys');
+        }
     } finally {
         fs.rmSync(tmp, { recursive: true, force: true });
     }
@@ -690,9 +693,15 @@ test('step 1 of Section C creates target directory and drafts pages successfully
         fs.mkdirSync(path.join(tmp, 'packages'), { recursive: true });
         fs.cpSync(path.join(ROOT, 'packages/beanpool-guide'), path.join(tmp, 'packages/beanpool-guide'), { recursive: true });
 
+        // Day zero for es pages, whatever main holds by now: drop every es page (its titles file, manifest.json, stays), so
+        // every English page is missing and the count never pins live data (round 2 took es from 44 missing to 1).
+        const esDir = path.join(tmp, 'packages/beanpool-guide/content/es');
+        for (const e of fs.readdirSync(esDir, { withFileTypes: true })) if (e.isDirectory()) fs.rmSync(path.join(esDir, e.name), { recursive: true });
+        const english = loadGuide(path.join(tmp, 'packages/beanpool-guide/content')).guides;
         const pages = scanGuidePages({ root: tmp, langs: ['es'] });
         const missing = pages.es.missingPages;
-        assert.equal(missing.length, 44);
+        assert.ok(english.length > 0);
+        assert.equal(missing.length, english.length);
 
         for (const page of missing) {
             const targetDir = path.join(tmp, 'packages/beanpool-guide/content/es', page.section);

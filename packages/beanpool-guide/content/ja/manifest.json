@@ -1,4 +1,754 @@
 {
-  "sections": {},
-  "pages": {}
+  "sections": {
+    "about": {
+      "title": {
+        "text": "BeanPoolについて",
+        "sourceHash": "2d9dd281fa519636"
+      },
+      "summary": {
+        "text": "BeanPoolの仕組み、ルールと意思決定の方法、よくある質問、最新情報について説明します。",
+        "sourceHash": "003302493f5fd51a"
+      }
+    },
+    "getting-started": {
+      "title": {
+        "text": "はじめに",
+        "sourceHash": "831d0f72d242b7d1"
+      },
+      "summary": {
+        "text": "ホーム、参加方法、近くのコミュニティの検索、豆とグローバルコミュニティ、制限事項、あなたの12個の単語、プロフィール、トップバー、本ガイド、ヘルプ、複数コミュニティの利用、Webアプリについて説明します。",
+        "sourceHash": "63d6211469096565"
+      }
+    },
+    "market": {
+      "title": {
+        "text": "マーケット",
+        "sourceHash": "5238d9bd03d543e6"
+      },
+      "summary": {
+        "text": "提供と求めの検索・投稿、そして取引の開始から完了までの流れについて説明します。",
+        "sourceHash": "6008ab9bf397a83a"
+      }
+    },
+    "map": {
+      "title": {
+        "text": "地図",
+        "sourceHash": "be176b0015c424b7"
+      },
+      "summary": {
+        "text": "ピンの意味、自分のピンの配置場所、近くのものを見つける方法について説明します。",
+        "sourceHash": "b4e17982e037f558"
+      }
+    },
+    "talk": {
+      "title": {
+        "text": "トーク",
+        "sourceHash": "449f5a775762cdc5"
+      },
+      "summary": {
+        "text": "メッセージ、グループとチャット、メンバーと友達、イベントチャット、ミュート、メンション、鍵の更新について説明します。",
+        "sourceHash": "e680a96492c72e47"
+      }
+    },
+    "pulse": {
+      "title": {
+        "text": "パルス",
+        "sourceHash": "f7a403c6cdf31e72"
+      },
+      "summary": {
+        "text": "近隣住民が共有する情報、学びの動画、自分のチャンネルの追加について説明します。",
+        "sourceHash": "9ab06ad52ef86462"
+      }
+    },
+    "commons": {
+      "title": {
+        "text": "コモンズ",
+        "sourceHash": "6aa9f1a43424d37b"
+      },
+      "summary": {
+        "text": "決定と投票、共有の豆、グループ、事業体と運営者について説明します。投票やイベントもここにあり、マーケットでも見つかります。",
+        "sourceHash": "bd9454f4374e35ae"
+      }
+    },
+    "ledger": {
+      "title": {
+        "text": "台帳",
+        "sourceHash": "ee69eb4afc76aae0"
+      },
+      "summary": {
+        "text": "残高、信用枠、ギフト、信頼バッジ、取引相手ごとの制限、流通手数料について説明します。",
+        "sourceHash": "99d7457bf048947c"
+      }
+    },
+    "settings": {
+      "title": {
+        "text": "設定と安全性",
+        "sourceHash": "8ee717d56a807cd5"
+      },
+      "summary": {
+        "text": "プライバシーと管理者やAIアシスタントが確認できる情報、地域、ブロックと通報、通知、ライトとダーク、不在時のお休みモード、退会、アカウント復元、オーナーとしての12個の単語の確認について説明します。",
+        "sourceHash": "767b3834909fa76c"
+      }
+    }
+  },
+  "pages": {
+    "how-it-works": {
+      "title": {
+        "text": "BeanPoolの仕組み",
+        "sourceHash": "8ee2145ba2a47e77"
+      },
+      "summary": {
+        "text": "豆、取引、提供と求め、そしてクレジットについてわかりやすく説明します。",
+        "sourceHash": "921252df227ae544"
+      }
+    },
+    "rules": {
+      "title": {
+        "text": "ルールと決定の仕組み",
+        "sourceHash": "482819c153332e58"
+      },
+      "summary": {
+        "text": "投票、投票率、秘密投票、投票権、停止処分、メンバーの除名、運営者、まとめ役および代表まとめ役について説明します。",
+        "sourceHash": "b111b31338cdd2a3"
+      }
+    },
+    "faq": {
+      "title": {
+        "text": "よくある質問",
+        "sourceHash": "9a72221a27476f3e"
+      },
+      "summary": {
+        "text": "メンバーから最も多く寄せられる質問への簡潔な回答です。",
+        "sourceHash": "8feb7069cb08f93d"
+      }
+    },
+    "whats-new": {
+      "title": {
+        "text": "更新情報",
+        "sourceHash": "135e912e89054ffa"
+      },
+      "summary": {
+        "text": "アプリの変更点をわかりやすく説明します。",
+        "sourceHash": "e1f96938296c5950"
+      }
+    },
+    "home": {
+      "title": {
+        "text": "ホーム",
+        "sourceHash": "3a78695388b38b5c"
+      },
+      "summary": {
+        "text": "ホームの概要、スマートフォンやWebアプリで表示されるカード、追加・移動・削除方法、興味の設定、サインアウト時のプライバシーについて説明します。",
+        "sourceHash": "a1c1ff42cd312dd2"
+      },
+      "help": {
+        "text": "ここはホームです。必要な情報や近くの出来事が表示されます。下部でカードを追加したり、…をタップして移動や削除ができます。",
+        "sourceHash": "3842000d41b06fa3"
+      }
+    },
+    "joining": {
+      "title": {
+        "text": "BeanPoolへの参加",
+        "sourceHash": "4a4fa8d50d056023"
+      },
+      "summary": {
+        "text": "参加方法は2つあります。メンバーからの招待によるコミュニティ参加、または公開されているグローバルコミュニティへの12個の秘密の単語か1つのサインインによる参加です。参加申請や他者の招待方法も説明します。",
+        "sourceHash": "bfa09f20fea858c6"
+      },
+      "help": {
+        "text": "メンバーからの招待でコミュニティに参加するか、12個の秘密の単語またはサインインでグローバルコミュニティに参加できます。",
+        "sourceHash": "288300534966c3d2"
+      }
+    },
+    "finding-a-community": {
+      "title": {
+        "text": "近くのコミュニティを探す",
+        "sourceHash": "dbb0b4170f999d18"
+      },
+      "summary": {
+        "text": "グローバルコミュニティから近くのコミュニティを探して参加申請したり、近隣で新しいコミュニティが始まった際に通知を受け取ったり、自分で立ち上げることができます。",
+        "sourceHash": "d7fada0c8e749ecf"
+      }
+    },
+    "beans-and-the-global-community": {
+      "title": {
+        "text": "豆とグローバルコミュニティ",
+        "sourceHash": "e44e1649e26e9122"
+      },
+      "summary": {
+        "text": "グローバルコミュニティの目的、多数のコミュニティの1つとしての位置付け、表示内容（🏘️ コミュニティマーカー、サンプルコミュニティExample Valley、豆がそこで待機する理由、ローカルコミュニティの探し方や立ち上げ方）を説明します。",
+        "sourceHash": "f91dcd042d53fdfb"
+      }
+    },
+    "global-community-limits": {
+      "title": {
+        "text": "グローバルコミュニティの制限",
+        "sourceHash": "79186984a4ee4919"
+      },
+      "summary": {
+        "text": "グローバルコミュニティは無料ですが、費用を抑えるためのいくつかの制限があります。投稿は最終更新から90日後にアーカイブされます。写真は最大5枚、端末には最も近い500件の投稿が保持され、3か所まで注目エリアを設定できます。",
+        "sourceHash": "feba3e6c852b6d3b"
+      }
+    },
+    "your-12-words": {
+      "title": {
+        "text": "あなたの12個の単語",
+        "sourceHash": "dd2264b1e132960b"
+      },
+      "summary": {
+        "text": "12個の単語はアカウントの鍵です。その重要性、確認場所、安全な保管方法、復元のバックアップ手段としてサインインを追加する方法を説明します。",
+        "sourceHash": "7033308ae096c586"
+      }
+    },
+    "your-profile": {
+      "title": {
+        "text": "プロフィール",
+        "sourceHash": "528d89ad72cba22e"
+      },
+      "summary": {
+        "text": "名前、写真、自己紹介、連絡先情報を閲覧できる範囲について説明します。",
+        "sourceHash": "f405b4421669fcdb"
+      }
+    },
+    "the-top-bar": {
+      "title": {
+        "text": "トップバー",
+        "sourceHash": "67f6e62947dde848"
+      },
+      "summary": {
+        "text": "豆のアイコン、確認が必要な項目を示す小さなアイコン、右上のボタンについて説明します。",
+        "sourceHash": "19dc6a309244ae90"
+      }
+    },
+    "the-bean": {
+      "title": {
+        "text": "本ガイド",
+        "sourceHash": "1d8917503dda7b5f"
+      },
+      "summary": {
+        "text": "本ガイドの確認場所、検索方法、最新の状態に保たれる仕組みについて説明します。",
+        "sourceHash": "7e694a121aa2314d"
+      }
+    },
+    "getting-help": {
+      "title": {
+        "text": "ヘルプとサポート",
+        "sourceHash": "418313b75b185ab8"
+      },
+      "summary": {
+        "text": "困ったときの確認場所と相談先について説明します。",
+        "sourceHash": "8d12d16dc2217232"
+      }
+    },
+    "communities": {
+      "title": {
+        "text": "複数のコミュニティ",
+        "sourceHash": "b753dd3e548b2230"
+      },
+      "summary": {
+        "text": "1つのアカウントで複数のコミュニティに参加し、切り替えたり、コミュニティの移転先に追従したり、グローバルコミュニティの表示内容を確認する方法を説明します。",
+        "sourceHash": "71e99c6bbffadcbe"
+      }
+    },
+    "web-app": {
+      "title": {
+        "text": "WebブラウザでのBeanPool利用",
+        "sourceHash": "1daaa01a91ba4b17"
+      },
+      "summary": {
+        "text": "Webアプリではアプリのほとんどの機能が利用できます。ブラウザでのグローバルコミュニティへの参加、サインインによるアカウント復元、同じアカウントの端末への設定、ボタン名の違いについて説明します。",
+        "sourceHash": "8afd3ad2f9117fd5"
+      }
+    },
+    "browsing-the-market": {
+      "title": {
+        "text": "マーケットの閲覧",
+        "sourceHash": "ab1b6bf5f734c023"
+      },
+      "summary": {
+        "text": "検索、フィルター、距離を利用して提供と求めを探します。",
+        "sourceHash": "e73e882abbebfa8d"
+      },
+      "help": {
+        "text": "近隣の人々からの提供や求めです。検索、カテゴリや距離での絞り込み、または「+ 投稿を作成」で自身も投稿できます。",
+        "sourceHash": "0bc8b01c4d9effb6"
+      }
+    },
+    "posting": {
+      "title": {
+        "text": "提供や求めの投稿",
+        "sourceHash": "e218de31c1bbad00"
+      },
+      "summary": {
+        "text": "自分ができること・提供できるもの、または探しているものを投稿します。",
+        "sourceHash": "9ffa9b1e66834bc0"
+      }
+    },
+    "my-deals": {
+      "title": {
+        "text": "自分の取引",
+        "sourceHash": "bfad6bb30e1876c5"
+      },
+      "summary": {
+        "text": "参加中のすべての取引、公開中の投稿、過去の取引を一か所で管理します。",
+        "sourceHash": "8772e2ee242712d3"
+      },
+      "help": {
+        "text": "参加中のすべての取引と投稿です。あなたの対応を待っている取引が上部に表示されます。",
+        "sourceHash": "3ec4be8c87368ed9"
+      }
+    },
+    "a-deal-step-by-step": {
+      "title": {
+        "text": "取引のステップ",
+        "sourceHash": "d2b29952cde1ab00"
+      },
+      "summary": {
+        "text": "問い合わせから支払いまで、提供と求めの双方について、そしてレビューの記入方法を説明します。",
+        "sourceHash": "88d4362d08a13bc5"
+      }
+    },
+    "when-a-deal-goes-wrong": {
+      "title": {
+        "text": "取引で問題が起きたとき",
+        "sourceHash": "190bfad1746f9e84"
+      },
+      "summary": {
+        "text": "取引のキャンセルや、合意が得られない場合の対応について説明します。",
+        "sourceHash": "a68c0d7af60988b4"
+      }
+    },
+    "map-pins": {
+      "title": {
+        "text": "地図の見方",
+        "sourceHash": "dbd1bae516674246"
+      },
+      "summary": {
+        "text": "地図上のピン、色の意味、ピン周囲のボタンについて説明します。",
+        "sourceHash": "79dec90cc1871495"
+      },
+      "help": {
+        "text": "近隣の情報：緑のピンは提供、オレンジは求め、紫はイベントです。ピンをタップすると詳細が表示されます。",
+        "sourceHash": "0dae9edef568b7cd"
+      }
+    },
+    "pin-locations": {
+      "title": {
+        "text": "ピンの位置",
+        "sourceHash": "271264e11ffa7eaf"
+      },
+      "summary": {
+        "text": "投稿やイベントの場所が誰に表示されるか、自宅のプライバシーを守る方法について説明します。",
+        "sourceHash": "a6ef3083e3ca4bfc"
+      }
+    },
+    "near-you": {
+      "title": {
+        "text": "近くの投稿を探す",
+        "sourceHash": "21bac241e8aef2ca"
+      },
+      "summary": {
+        "text": "現在地や任意の指定場所から一定の距離内にある投稿のみを表示します。",
+        "sourceHash": "5158de7099e0e89b"
+      }
+    },
+    "messages": {
+      "title": {
+        "text": "メッセージ",
+        "sourceHash": "04d7b48339271ea6"
+      },
+      "summary": {
+        "text": "チャットの開始、写真の送信、返信、リアクション、編集、削除、ミュート、公開範囲について説明します。",
+        "sourceHash": "d97a6ef5d498fdde"
+      },
+      "help": {
+        "text": "チャット一覧です。1対1のチャットはエンドツーエンドで暗号化されています。タップして開きます。",
+        "sourceHash": "bb7067d935067660"
+      }
+    },
+    "groups": {
+      "title": {
+        "text": "グループ",
+        "sourceHash": "39bbb719fa2b9d22"
+      },
+      "summary": {
+        "text": "グループとチャット、会話、グループの作成、メンバーの招待、招待による参加、グループ内投票について説明します。",
+        "sourceHash": "4fa880d88c4b646f"
+      },
+      "help": {
+        "text": "グループとチャットです。グループの作成、招待、またはタップして会話や投票に参加できます。",
+        "sourceHash": "ae3496f349eba2b3"
+      }
+    },
+    "people": {
+      "title": {
+        "text": "メンバーと友達",
+        "sourceHash": "99d59d29a0f3c756"
+      },
+      "summary": {
+        "text": "コミュニティメンバーの検索、プロフィールと信頼バッジ、誰かが退会したときに気付ける友達機能について説明します。",
+        "sourceHash": "4be4971d826d83fe"
+      },
+      "help": {
+        "text": "コミュニティのメンバーです。タップしてプロフィール、提供、求め、信頼バッジを確認できます。",
+        "sourceHash": "d90b46866bc2bb6f"
+      }
+    },
+    "event-chat": {
+      "title": {
+        "text": "イベントトーク",
+        "sourceHash": "9c298662a4d6fc3e"
+      },
+      "summary": {
+        "text": "主催者やイベント参加者全員と会話できます。",
+        "sourceHash": "ae8ca7988e16e019"
+      }
+    },
+    "mute": {
+      "title": {
+        "text": "チャットのミュート",
+        "sourceHash": "8a491f4109c925c7"
+      },
+      "summary": {
+        "text": "個人、グループ、事業体のチャットを8時間、1週間、または無期限でミュートします。",
+        "sourceHash": "ce143abea39ce423"
+      }
+    },
+    "mentions": {
+      "title": {
+        "text": "メンション",
+        "sourceHash": "2e133ecc601b188f"
+      },
+      "summary": {
+        "text": "@を入力してチャット内で誰かをメンションし、自分がメンションされた場所を確認できます。",
+        "sourceHash": "265d8fd594c5af23"
+      }
+    },
+    "key-changed": {
+      "title": {
+        "text": "鍵や名前が変更されたとき",
+        "sourceHash": "79c7dc48aa148094"
+      },
+      "summary": {
+        "text": "チャットが送信停止する理由、相手とキーコードを確認する方法、再開のタイミングについて説明します。",
+        "sourceHash": "c7a3e58ca019f963"
+      }
+    },
+    "the-pulse": {
+      "title": {
+        "text": "The Pulse",
+        "sourceHash": "a974f2e05f105a24"
+      },
+      "summary": {
+        "text": "近隣住民が作成・共有した外部コンテンツを1つのフィードで確認できます。",
+        "sourceHash": "999659aebbfe69d2"
+      },
+      "help": {
+        "text": "近隣住民が作成・共有したリンク一覧です。タップして開きます。",
+        "sourceHash": "1d19387da6116082"
+      }
+    },
+    "learn": {
+      "title": {
+        "text": "学びレーン",
+        "sourceHash": "498e66e5947ca0c3"
+      },
+      "summary": {
+        "text": "BeanPoolに関する短い動画と、対応するガイドページについて説明します。",
+        "sourceHash": "4d2fdf4c850fe47f"
+      }
+    },
+    "your-channels": {
+      "title": {
+        "text": "チャンネルの共有",
+        "sourceHash": "e47ac70a91b21162"
+      },
+      "summary": {
+        "text": "YouTube、ブログ、Instagramなどのチャンネルをパルスに連携します。",
+        "sourceHash": "bc9819c938b91f04"
+      }
+    },
+    "decisions": {
+      "title": {
+        "text": "決定への投票",
+        "sourceHash": "67b17269f83d1030"
+      },
+      "summary": {
+        "text": "進行中の決定事項を確認し、投票や投票内容の変更を行い、結果を確認できます。",
+        "sourceHash": "fc4b9c95d8478a91"
+      }
+    },
+    "proposing-a-decision": {
+      "title": {
+        "text": "決定の提案",
+        "sourceHash": "3a20703895de04dc"
+      },
+      "summary": {
+        "text": "コミュニティ全体に拘束力のある決定事項を提案します。",
+        "sourceHash": "69756653393ec8b4"
+      }
+    },
+    "polls": {
+      "title": {
+        "text": "アンケート",
+        "sourceHash": "996729458535904a"
+      },
+      "summary": {
+        "text": "コミュニティに手軽に質問できます。アンケートは意見を把握するためのもので、それ自体で何かが変更されることはありません。",
+        "sourceHash": "d7fadda691d8879b"
+      },
+      "help": {
+        "text": "コミュニティへの簡単な質問です。意見を把握するもので、自動的にルールが変わることはありません。",
+        "sourceHash": "99dfd4781ce0785d"
+      }
+    },
+    "events": {
+      "title": {
+        "text": "イベント",
+        "sourceHash": "8d14f6e72de8f18a"
+      },
+      "summary": {
+        "text": "対面またはオンライン、単発または定期的なイベントを作成し、参加表明、リマインダー受け取り、共有、主催者としての運営を行います。",
+        "sourceHash": "29e8adc52f9b6df9"
+      }
+    },
+    "enterprises": {
+      "title": {
+        "text": "プロジェクトと事業体",
+        "sourceHash": "e1ccbac49d2ba550"
+      },
+      "summary": {
+        "text": "独自の豆を持つ共同の取り組みです。探す、支援する、または新しく立ち上げることができます。",
+        "sourceHash": "8302886bb796749e"
+      }
+    },
+    "keepers": {
+      "title": {
+        "text": "運営者",
+        "sourceHash": "ffc8948f6b16666e"
+      },
+      "summary": {
+        "text": "事業体を運営し責任を持つ人々です。参加、異議申し立て、辞任の手続きについて説明します。",
+        "sourceHash": "cbe734a215f75289"
+      }
+    },
+    "commons-fund": {
+      "title": {
+        "text": "コモンズ",
+        "sourceHash": "b1b09e953a4dd7c0"
+      },
+      "summary": {
+        "text": "コミュニティで共有される豆の出所と使い道について説明します。",
+        "sourceHash": "aaf9158560e5d6aa"
+      }
+    },
+    "your-balance": {
+      "title": {
+        "text": "残高と履歴",
+        "sourceHash": "fb3a96eb2bfcd2a8"
+      },
+      "summary": {
+        "text": "保有している豆の数、保留中の分、すべての取引とギフトの履歴です。",
+        "sourceHash": "61df521108b36035"
+      },
+      "help": {
+        "text": "あなたの豆：保有額、取引で保留中の額、すべての取引とギフト。全員がゼロからスタートします。",
+        "sourceHash": "a40a5f9fef426c85"
+      }
+    },
+    "credit-line": {
+      "title": {
+        "text": "信用枠",
+        "sourceHash": "dd11b44ecc1037c9"
+      },
+      "summary": {
+        "text": "残高をどこまでマイナスにできるか、またその枠がどのように増えるかを説明します。",
+        "sourceHash": "18b609abc63667e7"
+      }
+    },
+    "gifts": {
+      "title": {
+        "text": "ギフトを送る",
+        "sourceHash": "5440f4f6ef954605"
+      },
+      "summary": {
+        "text": "取引を伴わずに、誰かに豆をプレゼントします。",
+        "sourceHash": "7eaddf0c6cd54a04"
+      }
+    },
+    "trust-badges": {
+      "title": {
+        "text": "信頼バッジ",
+        "sourceHash": "a1d8765277383923"
+      },
+      "summary": {
+        "text": "新規、住民、世話人、長老。それぞれの意味と、特権が付与されるわけではない理由を説明します。",
+        "sourceHash": "90926482e87ba9fa"
+      }
+    },
+    "trading-partner-limit": {
+      "title": {
+        "text": "取引相手ごとの500豆制限",
+        "sourceHash": "c40110de7df3670c"
+      },
+      "summary": {
+        "text": "特定の人と多額の取引をするより、多くの人と取引する方が信頼を築ける理由を説明します。",
+        "sourceHash": "ce231d025501d5bc"
+      }
+    },
+    "circulation-fee": {
+      "title": {
+        "text": "流通手数料",
+        "sourceHash": "e237d280aa62b186"
+      },
+      "summary": {
+        "text": "豆の循環を促すための、高額残高に対する少額の月額手数料です。最初の200豆は無料です。",
+        "sourceHash": "c9efbe6aa5cb9873"
+      }
+    },
+    "privacy": {
+      "title": {
+        "text": "プライバシー",
+        "sourceHash": "d2a7115d0455956b"
+      },
+      "summary": {
+        "text": "他のメンバーに公開される情報と、それを管理する設定について説明します。",
+        "sourceHash": "e4a23a87e82cf7a6"
+      },
+      "help": {
+        "text": "他のメンバーに表示されるあなたの情報と、それを切り替える設定です。",
+        "sourceHash": "0a1a1831174d443b"
+      }
+    },
+    "your-area": {
+      "title": {
+        "text": "お住まいの地域",
+        "sourceHash": "b0adfdbb4ce55184"
+      },
+      "summary": {
+        "text": "グローバルコミュニティが近くの投稿を表示するために使用するおおよその地域と、その変更や消去方法について説明します。",
+        "sourceHash": "de4a8af84def7d30"
+      },
+      "help": {
+        "text": "近くの投稿を表示するためのおおよその地域です。ここで変更や削除ができます。正確な住所ではありません。",
+        "sourceHash": "f3099801c4d773a5"
+      }
+    },
+    "what-the-admins-can-see": {
+      "title": {
+        "text": "管理者が確認できる情報",
+        "sourceHash": "261de35d8123a845"
+      },
+      "summary": {
+        "text": "管理者が名簿を保持しているコミュニティにおいて、記録される情報、閲覧権限、サーバーの保持情報、認証済みの意味を説明します。",
+        "sourceHash": "5960a4392bb32b4b"
+      }
+    },
+    "admins-ai-assistants": {
+      "title": {
+        "text": "管理者がAIアシスタントを使う場合",
+        "sourceHash": "9180d368e5d11c1e"
+      },
+      "summary": {
+        "text": "オーナーや管理者のAIアシスタントが確認できる情報、決して見られない情報、送信先について説明します。",
+        "sourceHash": "d693c47b7b2cbfef"
+      }
+    },
+    "blocking": {
+      "title": {
+        "text": "ユーザーのブロック",
+        "sourceHash": "f2ddac8bd6e31ad5"
+      },
+      "summary": {
+        "text": "特定の人の投稿やメッセージを非表示にし、後から解除する方法について説明します。",
+        "sourceHash": "9e63d5d87e52a1b9"
+      },
+      "help": {
+        "text": "ブロックしたユーザーです。相手の投稿やメッセージは非表示になります。ここで解除できます。",
+        "sourceHash": "baecf7f0bec3735c"
+      }
+    },
+    "reporting": {
+      "title": {
+        "text": "問題の通報",
+        "sourceHash": "59274c49ac87bb2f"
+      },
+      "summary": {
+        "text": "投稿、イベント、パルスの投稿、プロジェクト、事業体についてコミュニティのモデレーターに通報します。",
+        "sourceHash": "4b773ef8eef237fa"
+      }
+    },
+    "notifications": {
+      "title": {
+        "text": "通知設定",
+        "sourceHash": "788011833a5a0f22"
+      },
+      "summary": {
+        "text": "スマートフォンに届く通知と、イベントのリマインダーを受け取るタイミングを選択します。",
+        "sourceHash": "70c8aa586befc843"
+      },
+      "help": {
+        "text": "受け取る通知や、イベントのリマインダーを受け取るタイミングを選択できます。",
+        "sourceHash": "7f7ecf01321aba59"
+      }
+    },
+    "appearance": {
+      "title": {
+        "text": "ライトとダーク",
+        "sourceHash": "596443341c105af1"
+      },
+      "summary": {
+        "text": "スマートフォンアプリはライト、Webアプリはダークで始まります。変更したり、端末の設定に合わせることができます。",
+        "sourceHash": "31cf0aeff28a2052"
+      },
+      "help": {
+        "text": "アプリをライトまたはダークに設定するか、端末の設定に合わせます。",
+        "sourceHash": "1ef643d6832c782a"
+      }
+    },
+    "holiday-mode": {
+      "title": {
+        "text": "お休み",
+        "sourceHash": "03098a2ccb21c3c2"
+      },
+      "summary": {
+        "text": "お休みモードは、不在中に提供を非表示にし、新しいリクエストを一時停止します。",
+        "sourceHash": "53d1ceef93b0a7a1"
+      }
+    },
+    "leaving-or-deleting": {
+      "title": {
+        "text": "アカウントの退会または削除",
+        "sourceHash": "6128699c3d7f036a"
+      },
+      "summary": {
+        "text": "この端末からサインアウトするか、アカウントを完全に削除します。その際の豆の扱いについても説明します。",
+        "sourceHash": "d28cb71428dd6615"
+      }
+    },
+    "recovery": {
+      "title": {
+        "text": "アカウントの復元",
+        "sourceHash": "7a6a763f943871ce"
+      },
+      "summary": {
+        "text": "新しい端末でアカウントを復元し、連携したサインインアカウントで保護します。",
+        "sourceHash": "5235d9f9073b2e63"
+      },
+      "help": {
+        "text": "新しい端末でアカウントを復元する方法：12個の単語、または連携したサインインアカウントを使用します。",
+        "sourceHash": "05fba497e5466e59"
+      }
+    },
+    "check-your-12-words": {
+      "title": {
+        "text": "12個の単語とサーバーの鍵（オーナー用）",
+        "sourceHash": "0a24c7fe8ed3b0a4"
+      },
+      "summary": {
+        "text": "コミュニティのオーナー向け。12個の単語の確認、スマートフォンによるサーバーの引き継ぎや復元、端末による自動確認について説明します。",
+        "sourceHash": "c3a1b3cdc4e7d8df"
+      }
+    }
+  }
 }

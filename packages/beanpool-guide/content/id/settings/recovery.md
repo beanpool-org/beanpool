@@ -69,7 +69,7 @@ Jika seseorang mulai memulihkan akunmu, Pengaturan menampilkan **Seseorang sedan
 
 ## Jika ponsel sudah memiliki akun
 
-Memulihkan akun yang berbeda akan menggantikan akun yang ada di ponsel ini, baik kamu memulihkannya dengan 12 katamu atau dengan akun masuk. Aplikasi menanyakannya terlebih dahulu, pada layar **Ganti akun di ponsel ini?** (dengan akun masuk, setelah kamu masuk). Tidak ada yang berubah sampai kamu mengetik **WIPE**, mengetuk **Ganti Akun**, dan melewati pemeriksaan kunci layar ponselmu. Ketuk **Simpan**, lalu nama akun tersebut, **kembali** untuk membiarkan semuanya seperti semula.
+Memulihkan akun yang berbeda akan menggantikan akun yang ada di ponsel ini, baik kamu memulihkannya dengan 12 katamu atau dengan akun masuk. Aplikasi menanyakannya terlebih dahulu, pada layar **Ganti akun di ponsel ini?** (dengan akun masuk, setelah kamu masuk). Tidak ada yang berubah sampai kamu mengetik **WIPE**, mengetuk **Ganti Akun**, dan melewati pemeriksaan kunci layar ponselmu. Ketuk **Pertahankan**, lalu nama akun tersebut, **kembali** untuk membiarkan semuanya seperti semula.
 
 Pastikan kamu memiliki 12 kata untuk akun yang kamu gantikan. Jika ponsel ini memilikinya, layar tersebut menampilkannya saat kamu mengetuk **Tampilkan** 12 kata (nama akun) dan melewati pemeriksaan kunci layar ponselmu. Jika ponsel ini tidak memiliki 12 kata untuk akun tersebut (Pengaturan menyatakan hal itu), tanpa akun masuk yang terhubung kamu tidak dapat memulihkannya kembali.
 

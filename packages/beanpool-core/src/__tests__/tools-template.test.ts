@@ -120,6 +120,7 @@ describe('the checks bite', () => {
 
     it('refuses a manifest out of shape, one sentence each', () => {
         one(toolManifestProblems({ ...good, id: 'Sample_1' }), /id/);
+        one(toolManifestProblems({ ...good, id: 'ab--cd' }), /never two hyphens together/);
         one(toolManifestProblems({ ...good, icon: 'S' }), /emoji/);
         one(toolManifestProblems({ ...good, shopKinds: ['tools', 'spaceships' as never] }), /spaceships is not a shop kind/);
         one(toolManifestProblems({ ...good, permissions: ['contacts' as never] }), /contacts is not a permission/);

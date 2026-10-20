@@ -54,7 +54,7 @@ export async function registrationProblems(root = ROOT) {
     for (const id of ids) {
         let ok = true;
         if (!TOOL_ID_PATTERN.test(id) || id.length > TOOL_LIMITS.idChars) {
-            problems.push(`Tool ${id}: an id is 2 to ${TOOL_LIMITS.idChars} lowercase letters and hyphens, a letter at each end.`);
+            problems.push(`Tool ${id}: an id is 2 to ${TOOL_LIMITS.idChars} lowercase letters and hyphens, a letter at each end and never two hyphens together.`);
             ok = false;
         }
         for (const p of PARTS) {

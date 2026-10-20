@@ -14,7 +14,7 @@ import { PARTS, ROOT, loadToolLimits, registerIn, scaffoldFiles, toolFolders } f
 export async function newTool(id, { root = ROOT } = {}) {
     const { TOOL_ID_PATTERN, TOOL_LIMITS } = await loadToolLimits();
     if (typeof id !== 'string' || !TOOL_ID_PATTERN.test(id) || id.length > TOOL_LIMITS.idChars) {
-        throw new Error(`A tool's id is 2 to ${TOOL_LIMITS.idChars} lowercase letters and hyphens, a letter at each end (as things or seed-library).`);
+        throw new Error(`A tool's id is 2 to ${TOOL_LIMITS.idChars} lowercase letters and hyphens, a letter at each end and never two hyphens together (as things or seed-library).`);
     }
     const folders = toolFolders(root);
     for (const p of PARTS) {

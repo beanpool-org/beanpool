@@ -70,7 +70,7 @@ export function toolManifestProblems(m: ToolManifest): string[] {
     const id = typeof m?.id === 'string' ? m.id : String(m?.id);
     const say = (s: string) => out.push(`Tool ${id}: ${s}`);
     if (!TOOL_ID_PATTERN.test(id) || id.length > TOOL_LIMITS.idChars) {
-        say(`its id is 2 to ${TOOL_LIMITS.idChars} lowercase letters and hyphens, a letter at each end.`);
+        say(`its id is 2 to ${TOOL_LIMITS.idChars} lowercase letters and hyphens, a letter at each end and never two hyphens together.`);
     }
     if (typeof m.name !== 'string' || m.name.trim() === '') say("its name is a word('…') sentence.");
     if (typeof m.line !== 'string' || m.line.trim() === '') say("its line is a word('…') sentence.");

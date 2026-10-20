@@ -13,8 +13,11 @@ import type { WordKey } from '../words.js';
 
 /** A tool's id: the store key (the node's member_tool_state.tool ≤ 24), the route param and the Home card type's tail. */
 export type ToolId = string;
-/** 2 to 16 lowercase letters and hyphens, a letter at each end. `community:` and other prefixes stay free for runtime plugins (§5). */
-export const TOOL_ID_PATTERN = /^[a-z](?:[a-z-]{0,14}[a-z])$/;
+/**
+ * 2 to 16 lowercase letters and hyphens, a letter at each end and never two hyphens together (each word between them is
+ * a word of the id's names in code). `community:` and other prefixes stay free for runtime plugins (§5).
+ */
+export const TOOL_ID_PATTERN = /^(?=.{2,16}$)[a-z]+(?:-[a-z]+)*$/;
 
 /** The three shelves of the Tools screen (round 2 §7): what you have, how you deal, how it's going. */
 export type ToolShelf = 'stock' | 'trade' | 'books';

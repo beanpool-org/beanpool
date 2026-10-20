@@ -70,7 +70,7 @@ test('new-tool writes one line in each registry, keeps what is there, and refuse
     const generated = fs.readFileSync(path.join(root, 'packages/beanpool-core/src/tools/seed-library/manifest.ts'), 'utf8');
     assert.match(generated, /export const SEED_LIBRARY: ToolManifest<SeedLibraryDoc> = \{\n {4}id: 'seed-library',/);
     assert.doesNotMatch(generated.replace('scripts/tools/_scaffold', ''), /scaffold/i);
-    for (const bad of ['Things', 'a', 'x-', 'seed_library', 'a-very-long-tool-id', '-x']) {
+    for (const bad of ['Things', 'a', 'x-', 'seed_library', 'a-very-long-tool-id', '-x', 'a--b', 'ab--cd']) {
         await assert.rejects(newTool(bad, { root }), /lowercase letters and hyphens/, bad);
     }
     await assert.rejects(newTool('things', { root }), /already exists/);

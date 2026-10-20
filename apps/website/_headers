@@ -11,3 +11,9 @@
   Access-Control-Allow-Origin: *
   Cache-Control: public, max-age=600
 
+# Block indexing and caching for translation sources
+/content/*
+  X-Robots-Tag: noindex, nofollow
+  Cache-Control: no-store
+
+

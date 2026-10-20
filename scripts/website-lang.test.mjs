@@ -450,11 +450,24 @@ test('apps/website/_headers matches at most one rule per path', () => {
         '/guide/guide.json',
         ...GUIDE_LANGS.map(l => `/guide/${l}/guide.json`),
         '/rules.html',
-        '/es/rules.html'
+        '/es/rules.html',
+        '/content/es/rules.html',
+        '/content/es/rules'
     ];
 
     for (const p of testPaths) {
         const hits = rules.filter(r => matches(r, p));
         assert.ok(hits.length <= 1, `${p} matched ${hits.length} rules: ${hits.join(', ')}`);
     }
+});
+
+test('apps/website/_redirects blocks public access to /content/* with 404', () => {
+    const redirectsFile = path.join(WEBSITE_DIR, '_redirects');
+    assert.ok(fs.existsSync(redirectsFile), 'apps/website/_redirects exists');
+    const content = fs.readFileSync(redirectsFile, 'utf8');
+    const lines = content.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+
+    const contentRule = lines.find(l => l.startsWith('/content/*'));
+    assert.ok(contentRule, '_redirects contains rule for /content/*');
+    assert.match(contentRule, /^\/content\/\*\s+\S+\s+404$/, '/content/* rule returns 404 status');
 });

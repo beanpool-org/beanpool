@@ -37,7 +37,7 @@ Das Wiederherstellungs-Kit ist eine einzelne druckbare Seite: deine 12 Wörter d
 
 Öffne die **Einstellungen** über die Schieberegler-Schaltfläche oben auf dem Bildschirm. Dann entweder:
 
-- Tippe unter **KONTO & IDENTITÄT** auf **12 Wörter anzeigen**. Tippe **Bestätigen**, tippe auf **12 Wörter anzeigen** und bestehe die Bildschirmsperren-Prüfung deines Smartphones.
+- Tippe unter **KONTO & IDENTITÄT** auf **12 Wörter anzeigen**. Gib **CONFIRM** ein, tippe auf **12 Wörter anzeigen** und bestehe die Bildschirmsperren-Prüfung deines Smartphones.
 - Oder tippe auf **Kontoschutz**, dann auf **Meine 12 Wiederherstellungswörter anzeigen** und bestehe die Bildschirmsperren-Prüfung deines Smartphones. Tippe auf **Ausblenden**, wenn du fertig bist.
 
 In beiden Fällen werden die Wörter auch ausgeblendet, wenn du diesen Bildschirm verlässt oder die App für 15 Sekunden oder länger verlässt, und das Telefon fragt beim nächsten Mal erneut nach. Eine Sperrbildschirm-Prüfung, die länger als zwei Minuten dauert, zeigt nichts an: Tippe erneut.

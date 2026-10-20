@@ -15,6 +15,7 @@ export * from './manifest.js';
 export * from './host.js';
 export * from './check.js';
 export * from './reconcile.js';
+export * from './node-copy.js';
 
 /** Every tool this build has, in shelf order. */
 export const TOOLS: readonly ToolManifest[] = [

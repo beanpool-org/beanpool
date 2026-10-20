@@ -56,6 +56,30 @@ test('isSafetyOrMoney matches reviewed safety and money patterns and ignores gen
     assert.equal(isSafetyOrMoney(null), false);
 });
 
+test('scanAppWords accurately detects missing keys even if they collide with Object.prototype properties', async () => {
+    const tmp = makeTempDir();
+    try {
+        const catalogDefs = [{ name: 'core', folder: 'packages/beanpool-core/words' }];
+        fs.mkdirSync(path.join(tmp, 'packages/beanpool-core/words'), { recursive: true });
+        fs.writeFileSync(
+            path.join(tmp, 'packages/beanpool-core/words/es.json'),
+            JSON.stringify({ _meta: { language: 'es' } }),
+        );
+        const extracted = [
+            {
+                name: 'core',
+                words: 'packages/beanpool-core/words',
+                calls: [{ fn: 't', text: 'toString', at: 'core/a.ts:1' }],
+            },
+        ];
+        const result = await scanAppWords({ root: tmp, catalogDefs, langs: ['es'], extracted });
+        assert.equal(result.es.missing, 1);
+        assert.equal(result.es.byCatalog.core.missingKeys[0].key, 'toString');
+    } finally {
+        fs.rmSync(tmp, { recursive: true, force: true });
+    }
+});
+
 test('scanAppWords accurately counts missing, stale (0), and orphaned keys with fixtures', async () => {
     const tmp = makeTempDir();
     try {

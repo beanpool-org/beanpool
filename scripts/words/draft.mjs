@@ -124,7 +124,7 @@ export async function scanAppWords({ root = ROOT, catalogDefs = APP_CATALOG_DEFS
                 }
             } else {
                 for (const key of [...sourceKeys].sort()) {
-                    if (catalog[key] === undefined) {
+                    if (!Object.hasOwn(catalog, key)) {
                         const item = {
                             catalog: def.name,
                             folder: def.folder,

@@ -83,3 +83,21 @@ If the check says a change "edits the pages AND publishes them", restore main's 
 
 ### 4.1 Website Isolation
 Only one page of the operator manual is published on the public website: First-time setup (`OPERATOR_PAGES_ON_WEBSITE = ['first-time-setup']` in `scripts/build.mjs`; Marty, 2026-10-13). The rest stays in node Settings until the security weak spots it describes are fixed (Marty, 2026-09-19). `apps/website/guide/operators/` holds only `first-time-setup.html` and its one picture, `images/cold-start.webp`: no index, no `operators.json`. A Related page that is not published is named there without a link.
+
+## 5. The guide in other languages: titles and summaries (slice S5a)
+
+English stays the source (each page's front matter and `content/manifest.json`). Each of the 24 other languages has **one** file, `content/<lang>/manifest.json`, holding its section titles and summaries and every page's title, summary and `help:` line; the page bodies stay English until slice S5b. Shape (`src/titles.mjs` says more):
+
+```json
+{
+  "_meta": { "language": "pt", "reviewed": false },
+  "sections": { "market": { "title": { "text": "Mercado", "sourceHash": "<16 hex digits>" } } },
+  "pages": { "posting": { "title": { "text": "…", "sourceHash": "…" }, "summary": { … }, "help": { … } } }
+}
+```
+
+* **`sourceHash`** is the first 16 hex digits of the sha256 of the English the line was drafted from. The apps show a line in the member's language only while it matches the English they are showing; when the English changes, they show the English again until the line is redrafted. A stale line is never an error, so the PR that changes an English title costs nothing.
+* **Any line may be missing**: the English shows. Every language's file must exist, even empty (`{ "sections": {}, "pages": {} }`): the phone bundles each by name (`apps/native/utils/guide-titles.ts`), the web app loads each with its language's words (`apps/pwa/src/lib/language.ts`).
+* **Not published**: the apps bundle these files from the pages, so they carry no version and need no `pnpm guide:publish`. The website stays English.
+* **Checked** by `node scripts/build.mjs --check` (so `pnpm test` and CI): every key a real section or page, every field one the English has, no `{placeholder}` and no markup beyond `**bold**`, the apps' length limits, and a per-language cap on titles: 35 % over the English in display columns (a Chinese, Japanese or Korean character counts two), never under 14.
+* **The drafting round**: `pnpm --filter @beanpool/guide titles` lists, per language, the lines translated, stale and missing, then every stale line; `pnpm --filter @beanpool/guide titles --draft <lang>` prints what `<lang>` lacks in the file's own shape, with the English as `text` and today's `sourceHash`: translate each `text` and merge the entries into the language's file.

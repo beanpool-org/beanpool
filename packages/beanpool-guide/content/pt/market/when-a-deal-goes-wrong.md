@@ -17,7 +17,7 @@ A maior parte dos problemas decorre de mal-entendidos. Toque em **Mensagem** na 
 
 No aplicativo web, **Retirar pedido** é **Cancelar oferta**, e **Recusar** rejeita imediatamente, sem mensagem. Para cancelar um acordo retido por lá, toque em **Cancelar retenção** e depois em **OK**.
 
-Qualquer uma das pessoas pode cancelar sozinha, a qualquer momento antes de os feijões serem liberados. Isso inclui depois que o trabalho tiver sido realizado. Se isso acontecer com você, converse com a outra pessoa e, se necessário, procure os administradores da sua comunidade.
+Qualquer uma das pessoas pode cancelar sozinha, a qualquer momento antes de os feijões serem liberados. Isso inclui depois que o trabalho tiver sido realizado. Se isso acontecer com você, converse com a outra pessoa e, depois, com os administradores da sua comunidade.
 
 ## Quando vocês não chegam a um acordo
 

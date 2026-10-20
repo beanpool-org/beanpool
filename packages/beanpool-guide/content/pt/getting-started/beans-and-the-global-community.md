@@ -47,14 +47,14 @@ Você o encontra em alguns formatos:
 - um botão que mantém seu lugar, como **Pedido · Feijões retidos em segurança 🏘️** em um anúncio;
 - uma linha onde uma comunidade local é diferente, como "🏘️ Em uma comunidade local este é um preço em Feijões ›".
 
-Toque em qualquer um deles para abrir **Por que isso vive em uma comunidade local**. Ele explica o motivo em uma ou duas frases, oferecendo em seguida **Criar uma comunidade** e, onde possível, **Comunidades perto de você** e **Como funciona**.
+Toque em qualquer um deles para abrir **Por que isso vive em uma comunidade local**. Ele explica o motivo em uma ou duas frases, oferecendo em seguida **Começar uma comunidade** e, onde possível, **Comunidades perto de você** e **Como funciona**.
 
 ## Example Valley
 
 As telas com o marcador mostram **Vale do Exemplo**: uma comunidade fictícia, para que você possa ver as telas de uma comunidade local preenchidas com algo.
 
 - **Registro:** um membro de exemplo com 85 Feijões, limite para gastar até −200, um emblema de confiança e algumas trocas recentes, como pão, uma hora de jardinagem e algumas mudas.
-- **Comuns:** a Example Valley Bakery, um empreendimento sob a custódia de seus membros, e uma Decisão: uma composteira, paga com os Feijões compartilhados dos Bens comuns.
+- **Bens comuns:** a Example Valley Bakery, um empreendimento sob a custódia de seus membros, e uma Decisão: uma composteira, paga com os Feijões compartilhados dos Bens comuns.
 - **Meus acordos,** no Mercado: três acordos de exemplo: um aguardando sua resposta, um com os Feijões retidos com segurança e um concluído.
 
 Ninguém em Example Valley tem nome. Você vê "um vizinho", "os Bens comuns" ou "a Example Valley Bakery". Nada disso é real e nada disso é seu.
@@ -87,21 +87,21 @@ Uma comunidade local roda em seu próprio pequeno servidor, administrado por alg
 
 - **Quanto custa:** um computador sobressalente ligado em casa ou um pequeno servidor alugado por poucos dólares por mês. O software é gratuito.
 - **Quem opera:** você mesmo, na sua própria máquina ou na que você alugar. Não precisa do beanpool.org: pode ter seu próprio endereço na web.
-- **Suas responsabilidades:** as denúncias dos seus membros chegam até você. Fazer o backup dos dados da comunidade é sua responsabilidade, com um código de recuperação. Mantenha dois proprietários e conserve o servidor ligado e atualizado.
+- **O que você assume:** as denúncias dos seus membros chegam até você. Fazer o backup dos dados da comunidade é sua responsabilidade, com um código de recuperação. Mantenha dois proprietários e conserve o servidor ligado e atualizado.
 - **O que você nunca vê:** as conversas privadas entre dois membros. Elas são criptografadas para que o servidor não possa lê-las.
 - **Quanto tempo leva:** cerca de meia hora, para quem consegue seguir uma receita.
 
-Para começar, toque em **Criar uma comunidade** em qualquer painel **Por que isso vive em uma comunidade local**, ou, no celular, no cartão **Encontre sua comunidade** do Início. Ele mostra três formas de operar uma: um computador sobressalente em casa, um pequeno servidor alugado ou pedindo ajuda na comunidade global. **Copiar detalhes da minha comunidade** copia o nome, o local e as formas de contato da sua comunidade para colar nas configurações do seu novo servidor.
+Para começar, toque em **Começar uma comunidade** em qualquer painel **Por que isso vive em uma comunidade local**, ou, no celular, no cartão **Encontre sua comunidade** do Início. Ele mostra três formas de operar uma: um computador sobressalente em casa, um pequeno servidor alugado ou pedindo ajuda na comunidade global. **Copiar detalhes da minha comunidade** copia o nome, o local e as formas de contato da sua comunidade para colar nas configurações do seu novo servidor.
 
-As instruções estão em "First-time setup", no guia para operadores de comunidade, no beanpool.org. Quando seu servidor estiver ativo, você o reivindica com seu celular: aponte a câmera do celular para o código QR que seu servidor exibe ou, no BeanPool, toque em **Configurar um novo servidor de comunidade** (em **Encontrar uma comunidade** ou **Criar uma comunidade**) e depois em **Escanear o código**. As Configurações ajudam você a nomear sua comunidade, adicionar um segundo proprietário e criar seus primeiros convites. Defina também a localização da sua comunidade nas Configurações, para que pessoas perto de você possam encontrá-la.
+As instruções estão em "First-time setup", no guia para operadores de comunidade, no beanpool.org. Quando seu servidor estiver ativo, você o reivindica com seu celular: aponte a câmera do celular para o código QR que seu servidor exibe ou, no BeanPool, toque em **Configurar um novo servidor de comunidade** (em **Encontrar uma comunidade** ou **Começar uma comunidade**) e depois em **Escanear o código**. As Configurações ajudam você a nomear sua comunidade, adicionar um segundo proprietário e criar seus primeiros convites. Defina também a localização da sua comunidade nas Configurações, para que pessoas perto de você possam encontrá-la.
 
 ## Entrar em uma perto de você
 
 No celular:
 
 - **Comunidades perto de você** lista as comunidades mais próximas de você que escolheram ser listadas.
-- Toque em **Solicitar entrada**: um membro de lá pode autorizar sua entrada. Onde a comunidade permite que apenas seus administradores convidem, um proprietário ou administrador autoriza.
-- Nada perto de você ainda? **Avisar quando começar uma aqui** avisa quando uma começar.
+- Toque em **Pedir para entrar**: um membro de lá pode autorizar sua entrada. Onde a comunidade permite que apenas seus administradores convidem, um proprietário ou administrador autoriza.
+- Nada perto de você ainda? **Avise-me quando uma começar aqui** avisa quando uma começar.
 
 No aplicativo web, o cartão **Encontre sua comunidade** do Início vincula cada comunidade perto de você à sua própria página.
 

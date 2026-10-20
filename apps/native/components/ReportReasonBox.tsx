@@ -96,6 +96,7 @@ export function ReportReasonBox({ onSubmit, onCancel }: {
                 )}
                 <Pressable
                     accessibilityRole="button"
+                    accessibilityLabel={sending ? t('Submitting report...') : t('Submit report')}
                     accessibilityState={{ disabled: !reason || sending, busy: sending }}
                     disabled={!reason || sending}
                     onPress={submit}

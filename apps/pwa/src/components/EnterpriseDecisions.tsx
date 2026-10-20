@@ -46,7 +46,9 @@ const btnNo = `${btn} border border-nature-300 dark:border-nature-600 bg-white d
 export function EnterpriseDecisions({ treasuryKey, myPubkey, keepers, balance, earnedSurplus, lifecycle }: EnterpriseDecisionsProps) {
     const roll: RollPerson[] = useMemo(() => keepers.filter(k => !k.suspended)
         .map(k => ({ pubkey: k.publicKey, name: k.callsign || t('A keeper'), role: k.role })), [keepers]);
-    const nameOf = useCallback((pk: string) => keepers.find(k => k.publicKey === pk)?.callsign || t('a member'), [keepers]);
+    // ⚡ Bolt: O(1) Map lookup for keeper callsigns instead of O(K) .find() scans
+    const keepersMap = useMemo(() => new Map(keepers.map(k => [k.publicKey, k])), [keepers]);
+    const nameOf = useCallback((pk: string) => keepersMap.get(pk)?.callsign || t('a member'), [keepersMap]);
     const read = useCallback(() => getEnterpriseDecisions(treasuryKey), [treasuryKey]);
     const cast = useCallback((id: string, support: boolean) => voteEnterpriseDecision(treasuryKey, id, support), [treasuryKey]);
     return (

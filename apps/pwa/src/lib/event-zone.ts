@@ -6,7 +6,7 @@
  * online event's is this device's, from one Intl call; the node turns clock + zone into the instant.
  */
 
-import { formatDate, localClockMs, utcOffsetName, zoneLabelFor } from '@beanpool/core';
+import { formatDate, localClockMs, t, utcOffsetName, zoneLabelFor, zonePlaceFor } from '@beanpool/core';
 import type { EventTimeAdjusted, EventZone } from './api';
 
 /** Where the form's zone came from: the pin (in person), this device (online), or the host's own pick. */
@@ -30,14 +30,12 @@ export function deviceZone(now: Date = new Date()): EventZone | null {
     return { tz, label: zoneLabelFor(tz, offsetMinutes), offsetMinutes };
 }
 
-/** "Lagos time" → "Lagos"; "UTC+1 time" → "UTC+1". */
-export function placeOfLabel(label: string): string {
-    return label.replace(/ time$/, '');
-}
-
-/** A picker entry: "Lagos (UTC+1)". */
+/**
+ * A picker entry: "Lagos (UTC+1)", the place from core's zonePlaceFor, in the phone's words ("{place} ({offset})"). Never
+ * cut from the zone's label: one this form named is in the member's language ("heure de Sydney"), the node's in English.
+ */
 export function zoneOptionText(zone: EventZone): string {
-    return `${placeOfLabel(zone.label)} (${utcOffsetName(zone.offsetMinutes)})`;
+    return t('{place} ({offset})', { place: zonePlaceFor(zone.tz, zone.offsetMinutes), offset: utcOffsetName(zone.offsetMinutes) });
 }
 
 /** The picker's entries, by name, each zone once. */
@@ -50,7 +48,8 @@ export function zoneOptions(zones: EventZone[]): Array<{ tz: string; text: strin
 }
 
 export interface EventZoneLine {
-    /** "Lagos time"; null when the form has no zone to name (online, and this device cannot name its own). */
+    /** "Lagos time" in the member's language, from the zone's id and offset (a zone from the node carries its label in
+     *  English); null when the form has no zone to name (online, and this device cannot name its own). */
     label: string | null;
     /** Why that zone: the pin's ("(where the pin is)"), this device's ("(your device)"), or null when the host picked it.
      *  A reason, not words: the form says it in the member's language (t()). */
@@ -68,11 +67,11 @@ export interface EventZoneLine {
 export function eventZoneLine(online: boolean, zone: EventZone | null, source: EventZoneSource | null, deviceTz: string | null): EventZoneLine | null {
     if (online) {
         if (!zone) return { label: null, why: null };
-        return { label: zone.label, why: source === 'device' ? 'device' : null };
+        return { label: zoneLabelFor(zone.tz, zone.offsetMinutes), why: source === 'device' ? 'device' : null };
     }
     if (!zone) return null;
     if (source !== 'picked' && zone.tz === deviceTz) return null;
-    return { label: zone.label, why: source === 'pin' ? 'pin' : null };
+    return { label: zoneLabelFor(zone.tz, zone.offsetMinutes), why: source === 'pin' ? 'pin' : null };
 }
 
 /**
@@ -120,23 +119,30 @@ function clockWords(local: string): { time: string; date: string } | null {
 }
 
 /**
- * What the node did with a clock that falls in a DST change (§3, §7; #1937's eventTimeAdjusted), in words for the host:
+ * What the node did with a clock that falls in a DST change (§3, §7; #1937's eventTimeAdjusted), in words for the host,
+ * the phone's sentences (utils/events.ts adjustedSentence) with the place from core's zonePlaceFor:
  *   "2:30 does not exist on 4 Oct in Sydney (clocks go forward). It was saved as 3:30."
  *   "2:30 happens twice on 5 Apr in Sydney (clocks go back). The first one is used."
  */
-export function eventAdjustedWords(adjusted: EventTimeAdjusted | null | undefined, zoneLabel: string): string[] {
+export function eventAdjustedWords(adjusted: EventTimeAdjusted | null | undefined, tz: string, offsetMinutes: number): string[] {
     if (!adjusted) return [];
-    const place = placeOfLabel(zoneLabel);
+    const place = zonePlaceFor(tz, offsetMinutes);
     const out: string[] = [];
     for (const [which, a] of [['start', adjusted.start], ['end', adjusted.end]] as const) {
         if (!a) continue;
         const asked = clockWords(a.asked);
         const saved = clockWords(a.saved);
         if (!asked || !saved) continue;
-        const subject = which === 'end' ? `The end, ${asked.time},` : asked.time;
-        out.push(a.kind === 'gap'
-            ? `${subject} does not exist on ${asked.date} in ${place} (clocks go forward). It was saved as ${saved.time}.`
-            : `${subject} happens twice on ${asked.date} in ${place} (clocks go back). The first one is used.`);
+        const v = { time: asked.time, date: asked.date, place, saved: saved.time };
+        if (a.kind === 'gap') {
+            out.push(which === 'end'
+                ? t('The end, {time}, does not exist on {date} in {place} (clocks go forward). It was saved as {saved}.', v)
+                : t('{time} does not exist on {date} in {place} (clocks go forward). It was saved as {saved}.', v));
+        } else {
+            out.push(which === 'end'
+                ? t('The end, {time}, happens twice on {date} in {place} (clocks go back). The first one is used.', v)
+                : t('{time} happens twice on {date} in {place} (clocks go back). The first one is used.', v));
+        }
     }
     return out;
 }

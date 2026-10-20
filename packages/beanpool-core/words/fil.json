@@ -2,7 +2,7 @@
   "_meta": {
     "language": "fil",
     "name": "Filipino",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-19",
@@ -672,5 +672,14 @@
   "I thrive in spontaneous, novel settings": "Lalong sumisigla ako sa mga bago at pabago-bagong sitwasyon",
   "I am patient with different paces and value keeping the community atmosphere harmonious.": "Matiyaga ako sa iba't ibang bilis at pinapahalagahan ang pagpapanatili ng maayos at nagkakaisang samahan sa komunidad.",
   "I push for faster progress when needed": "Itinutulak ko ang mas mabilis na pag-usad kapag kinakailangan",
-  "I push for higher standards when needed": "Itinutulak ko ang mas mataas na pamantayan kapag kinakailangan"
+  "I push for higher standards when needed": "Itinutulak ko ang mas mataas na pamantayan kapag kinakailangan",
+  "Type an amount.": "Mag-type ng halaga.",
+  "The amount can’t be below 0.": "Hindi puwedeng mas mababa sa 0 ang halaga.",
+  "Type the amount without thousands separators, like {example}.": "I-type ang halaga nang walang separator ng libo, tulad ng {example}.",
+  "Type one decimal mark at most, like {example}.": "Mag-type ng hindi hihigit sa isang decimal mark, tulad ng {example}.",
+  "Type at most {n} decimal, like {example}.|Type at most {n} decimals, like {example}.": {
+    "one": "Mag-type ng hindi hihigit sa {n} decimal, tulad ng {example}.",
+    "other": "Mag-type ng hindi hihigit sa {n} na decimal, tulad ng {example}."
+  },
+  "Type the amount as a number, like {example}.": "I-type ang halaga bilang numero, tulad ng {example}."
 }

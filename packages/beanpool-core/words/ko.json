@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ko",
     "name": "Korean",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-19",
@@ -639,5 +639,13 @@
   "I thrive in spontaneous, novel settings": "자유롭고 새로운 환경에서 힘을 얻어요",
   "I am patient with different paces and value keeping the community atmosphere harmonious.": "사람마다 다른 속도를 이해하고 커뮤니티의 화목한 분위기를 지키는 것을 소중히 여겨요.",
   "I push for faster progress when needed": "필요할 때는 속도감 있게 밀어붙여요",
-  "I push for higher standards when needed": "필요할 때는 기준을 더 높이 끌어올려요"
+  "I push for higher standards when needed": "필요할 때는 기준을 더 높이 끌어올려요",
+  "Type an amount.": "금액을 입력하세요.",
+  "The amount can’t be below 0.": "금액은 0보다 작을 수 없어요.",
+  "Type the amount without thousands separators, like {example}.": "{example}처럼 천 단위 구분 기호 없이 금액을 입력하세요.",
+  "Type one decimal mark at most, like {example}.": "{example}처럼 소수점은 최대 하나만 입력하세요.",
+  "Type at most {n} decimal, like {example}.|Type at most {n} decimals, like {example}.": {
+    "other": "{example}처럼 소수점 이하 자릿수는 최대 {n}자리까지 입력하세요."
+  },
+  "Type the amount as a number, like {example}.": "{example}처럼 금액을 숫자로 입력하세요."
 }

@@ -16,7 +16,7 @@ import { MemberGuide } from './MemberGuide';
 import { BeanPoolSettingsGroup } from '../pages/SettingsPage';
 import { getBundledGuide, resetGuideSessionForTests } from '../lib/guide';
 import { showLanguage } from '../lib/language';
-import { addGuideTitles } from '../lib/guide-titles';
+import ptWords from '../../words/pt.json';
 import {
     validateGuide, manualSections, sectionPages, relatedPages, findGuidePage, FEEDBACK_LIVE, GUIDE_SLUGS, guideBodyHash, guideCacheKey, guideSourceHash, pseudoLocalise, setLanguage,
     type Guide, type GuidePage, type GuideSection,
@@ -252,6 +252,9 @@ describe("MemberGuide in the member's language: the guide's titles, the English 
     });
 });
 
+// The draft line in the member's language: the web catalog's own words (pt), never the English.
+const DRAFT_NOTE_PT = (ptWords as Record<string, unknown>)['Translated by machine: some words may be wrong.'] as string;
+
 describe("the three page states on web: current, behind with toggle, missing, and offline fallback", () => {
     const { section, page, related } = SAMPLE;
     const currentHash = guideBodyHash(page.blocks);
@@ -271,6 +274,11 @@ describe("the three page states on web: current, behind with toggle, missing, an
     });
     afterEach(async () => {
         await act(async () => { await showLanguage('en'); });
+    });
+
+    it('the draft line has its own Portuguese words in the web catalog, not the English', () => {
+        expect(DRAFT_NOTE_PT).toBeTruthy();
+        expect(DRAFT_NOTE_PT).not.toBe('Translated by machine: some words may be wrong.');
     });
 
     it('current state: matching source-hash renders translated body without english or newer notes', async () => {
@@ -298,7 +306,7 @@ describe("the three page states on web: current, behind with toggle, missing, an
         });
         expect(screen.queryByTestId('guide-english-note')).toBeNull();
         expect(screen.queryByTestId('guide-newer-note')).toBeNull();
-        expect(screen.getByTestId('guide-draft-note')).toHaveTextContent('Translated by machine: some words may be wrong.');
+        expect(screen.getByTestId('guide-draft-note')).toHaveTextContent(DRAFT_NOTE_PT);
     });
 
     it('behind state: older source-hash renders translated body with newer note and toggle to read English', async () => {
@@ -325,7 +333,7 @@ describe("the three page states on web: current, behind with toggle, missing, an
             expect(screen.getByText('Corpo traduzido antigo na web.')).toBeInTheDocument();
         });
         expect(screen.getByTestId('guide-newer-note')).toHaveTextContent('This page is newer in English.');
-        expect(screen.getByTestId('guide-draft-note')).toHaveTextContent('Translated by machine: some words may be wrong.');
+        expect(screen.getByTestId('guide-draft-note')).toHaveTextContent(DRAFT_NOTE_PT);
         const toggle = screen.getByTestId('guide-toggle-english');
         expect(toggle).toHaveTextContent('Read in English');
 
@@ -340,7 +348,7 @@ describe("the three page states on web: current, behind with toggle, missing, an
         fireEvent.click(toggle);
         expect(toggle).toHaveTextContent('Read in English');
         expect(screen.getByText('Corpo traduzido antigo na web.')).toBeInTheDocument();
-        expect(screen.getByTestId('guide-draft-note')).toHaveTextContent('Translated by machine: some words may be wrong.');
+        expect(screen.getByTestId('guide-draft-note')).toHaveTextContent(DRAFT_NOTE_PT);
     });
 
     it('missing state: untranslated page renders English body with english note', async () => {
@@ -370,7 +378,9 @@ describe("the three page states on web: current, behind with toggle, missing, an
     });
 
     it('missing state without translated title has no draft line', async () => {
-        addGuideTitles('pt', { sections: {}, pages: {} });
+        // The related page has no translated title either (showLanguage loads the mocked pt titles file).
+        delete ptTitles.pages[related.slug];
+        expect(DRAFT_NOTE_PT).toBeTruthy();
         const ptGuide: Guide = {
             schema: getBundledGuide().schema,
             version: 1,
@@ -418,7 +428,7 @@ describe("the three page states on web: current, behind with toggle, missing, an
             expect(screen.getByText('Corpo em cache offline na web.')).toBeInTheDocument();
         });
         expect(screen.queryByTestId('guide-english-note')).toBeNull();
-        expect(screen.getByTestId('guide-draft-note')).toHaveTextContent('Translated by machine: some words may be wrong.');
+        expect(screen.getByTestId('guide-draft-note')).toHaveTextContent(DRAFT_NOTE_PT);
     });
 
     it('English page has no draft line', async () => {

@@ -16,7 +16,7 @@ export * from './host.js';
 export * from './check.js';
 export * from './reconcile.js';
 
-/** Every tool this build has, in shelf order. None yet: the first two are the Tool shed (T1) and Your garden (T2). */
+/** Every tool this build has, in shelf order. */
 export const TOOLS: readonly ToolManifest[] = [
 ];
 

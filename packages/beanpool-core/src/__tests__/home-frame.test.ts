@@ -3,8 +3,9 @@ import {
     HOME_CARD_TYPES, HOME_FRAME_LIMITS, HOME_NEWCOMER_FIVE, HOME_STARTER_SET, addCard, cardsToAsk, checkHomeLayout, defaultCards, moveCard,
     readHomeLayout, readSearchSettings, removeCard, translateV1, type HomeLayoutV2, type HomeNodeFacts,
 } from '../home-frame.js';
+import { toolHomeCardTypes } from '../tools/index.js';
 
-const AT = '2026-10-08T10:00:00.000Z';
+const AT ='2026-10-08T10:00:00.000Z';
 const NOW = Date.parse(AT);
 const layout = (cards: HomeLayoutV2['cards'], dismissed: Record<string, string> = {}): HomeLayoutV2 => ({ v: 2, cards, dismissed, updatedAt: AT });
 const one = (type: string) => ({ id: type, type });
@@ -184,7 +185,10 @@ describe('home frame §5.2 (4): the default and the words', () => {
         const local: HomeNodeFacts = { profile: 'local', features: { beans: true, escrow: true, enterprises: true, invites: true, decisions: true, wordsDoor: false } };
         const global: HomeNodeFacts = { profile: 'global', features: { beans: false, escrow: false, enterprises: false, invites: false, decisions: false, wordsDoor: true } };
         const on = (a: HomeNodeFacts, role?: 'admin' | null) => HOME_CARD_TYPES.filter(t => t.onNode(a, role)).map(t => t.id);
-        expect(on(global)).toEqual(['needs', 'safety', 'find', 'start', 'steps', 'tips', 'interests', 'events', 'market', 'search', 'groups', 'joined', 'pulse', 'sky', 'notices', 'community']);
+        // A tool's card (tools/index.ts) is wherever its tool is, by its own manifest: the built-in types are pinned here.
+        const toolCards = new Set(toolHomeCardTypes().map(t => t.id));
+        expect(on(global).filter(id => !toolCards.has(id))).toEqual(['needs', 'safety', 'find', 'start', 'steps', 'tips', 'interests', 'events', 'market', 'search', 'groups', 'joined', 'pulse', 'sky', 'notices', 'community']);
+        expect(on(global).filter(id => toolCards.has(id))).toEqual(toolHomeCardTypes().filter(t => t.onNode(global)).map(t => t.id));
         expect(on(local)).toEqual(HOME_CARD_TYPES.map(t => t.id).filter(id => id !== 'safety' && id !== 'find'));
         const adminsInvite = { ...local, features: { ...local.features, door: 'admins' } };
         expect(on(adminsInvite, null)).not.toContain('invite');

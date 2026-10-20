@@ -12,6 +12,6 @@ import type { AnyToolScreenProps, ToolApp } from '@beanpool/core';
 
 export type PhoneToolApp = ToolApp<ComponentType<AnyToolScreenProps>>;
 
-/** Every tool's phone half, by id. None yet. */
+/** Every tool's phone half, by id. */
 export const TOOL_APPS: Readonly<Record<string, PhoneToolApp>> = {
 };

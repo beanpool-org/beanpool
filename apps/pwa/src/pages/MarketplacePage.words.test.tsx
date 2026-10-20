@@ -281,6 +281,25 @@ describe('the Market in the pseudo-locale', () => {
         allThroughT(10);
     });
 
+    it('a lendable Offer with a fee per day is never "Free to borrow", not even while its days are cleared or 0', async () => {
+        const daily = { ...offer, id: 'offer-lend-daily', priceType: 'daily', credits: 5, lendable: true, audienceScope: 'public', targetGroupId: undefined, targetGroupName: undefined };
+        stubNode([daily]);
+        await showIn('xx');
+        render(<MarketplacePage identity={identity} isMember={true} openPostId="offer-lend-daily" onPostOpened={() => {}} />);
+        await screen.findByRole('heading', { name: /Bicycle Repair/ });
+        await settle();
+        fireEvent.click(screen.getByText(xx('📦 Ask to borrow')));
+        await screen.findByText(xx('Ask to borrow this?'));
+        const days = screen.getByDisplayValue('1');
+        for (const value of ['', '0']) {
+            fireEvent.change(days, { target: { value } });
+            expect(screen.queryByText(xx('Free to borrow. Nothing is held: the lender says yes first.'))).toBeNull();
+            // The fee is not known yet, so it is not named (as the phone's post/[id].tsx).
+            expect(document.body.textContent).toContain(xx('Nothing is held until the lender says yes. Then the fee goes into a temporary Trust Wallet, and once it is back the lender receives it net of 1.5% transaction fee {owned} to fund the Commons Pool.').split('{owned}')[0]);
+            allThroughT(10);
+        }
+    });
+
     it('my own offer: pause, edit (the type, the categories, the price units, the photos) and delete', async () => {
         const mine = { ...offer, id: 'mine-1', authorPublicKey: ME, authorCallsign: 'Mia', audienceScope: 'public', targetGroupId: undefined, targetGroupName: undefined };
         stubNode([mine]);

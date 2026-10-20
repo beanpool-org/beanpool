@@ -1848,12 +1848,26 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         if (selectedPost.priceType !== 'fixed' && !acceptHoursRead.ok && isAmbiguousAmount(acceptHoursRead.refusal)) return amountRefusalWords(acceptHoursRead.refusal);
                                         const hrs = acceptHoursValue || 0;
                                         const tot = selectedPost.priceType !== 'fixed' ? selectedPost.credits * hrs : selectedPost.credits;
-                                        if (tot === 0) return isLoan ? t('Free to borrow. Nothing is held: the lender says yes first.') : t('This is a free listing (0 B). No credits transferred.');
+                                        // A loan is free by its price, not by the days typed so far: a fee per day with no days yet is
+                                        // not free (as the phone's post/[id].tsx).
+                                        if (isLoan && !selectedPost.credits) return t('Free to borrow. Nothing is held: the lender says yes first.');
+                                        if (!isLoan && tot === 0) return t('This is a free listing (0 B). No credits transferred.');
 
                                         const duration = selectedPost.priceType !== 'fixed' ? estimateLength(selectedPost.priceType, hrs) : null;
                                         const owned = <span className="text-emerald-600 dark:text-emerald-400 font-bold">{t('(100% community owned)')}</span>;
 
                                         if (isLoan) {
+                                            // No days yet: the fee is not known, so it is not named.
+                                            if (tot === 0) {
+                                                return (
+                                                    <span>
+                                                        <Sentence
+                                                            text={t('Nothing is held until the lender says yes. Then the fee goes into a temporary Trust Wallet, and once it is back the lender receives it net of 1.5% transaction fee {owned} to fund the Commons Pool.')}
+                                                            parts={{ owned }}
+                                                        />
+                                                    </span>
+                                                );
+                                            }
                                             const net = Math.round(tot * 0.985 * 100) / 100;
                                             return (
                                                 <span>

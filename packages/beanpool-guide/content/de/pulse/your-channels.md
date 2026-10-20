@@ -8,7 +8,7 @@ source-hash: bc8099cfeda70bea
 
 ## Einen Kanal hinzufügen
 
-- Tippe im **Pulse** auf **+ Kanäle**. Auf dem Smartphone kannst du auch die **Einstellungen** öffnen und auf **Kanäle & Schaufenster** tippen.
+- Tippe im **Puls** auf **+ Kanäle**. Auf dem Smartphone kannst du auch die **Einstellungen** öffnen und auf **Kanäle & Schaufenster** tippen.
 - Tippe auf **+ Einen Kanal hinzufügen**.
 - Wähle unter **Wo veröffentlichst du?** die Plattform aus.
 - Gib **Dein Link oder Benutzername** ein oder füge ihn ein.

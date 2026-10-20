@@ -8,7 +8,7 @@ source-hash: d668d9d4149309e7
 
 ## Was darin enthalten ist
 
-Öffne auf dem Smartphone den **Pulse** und tippe auf **Lernen**. Öffne in der Web-App den Pulse und tippe oben auf **So funktioniert's**. Die Spur enthält:
+Öffne auf dem Smartphone den **Puls** und tippe auf **Lernen**. Öffne in der Web-App den Pulse und tippe oben auf **So funktioniert's**. Die Spur enthält:
 
 - Videos von BeanPool darüber, wie es funktioniert;
 - die **Tägliche Reflexion**, ein kurzer Gedanke, der jeden Morgen wechselt. Es ist nur eine Überschrift; es gibt nichts zum Öffnen.

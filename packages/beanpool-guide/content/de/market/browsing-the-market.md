@@ -71,7 +71,7 @@ Tippe auf einen Beitrag, um ihn zu öffnen.
 - **Beitrag melden**, wenn es sich um Betrug, Beleidigung oder Täuschung handelt oder ein Kind gefährdet wird (**Kinderschutz**).
 - **Benutzer blockieren**, um die Beiträge und Chats dieser Person auf deinem Smartphone auszublenden. Dies benachrichtigt auch deine Admins. Siehe „Jemanden blockieren“.
 
-In der Web-App lauten die Schaltflächen auf einem Beitrag **💬 Message** und **🚩 Report**. Blockiere jemanden über dessen Profil.
+In der Web-App lauten die Schaltflächen auf einem Beitrag **💬 Nachricht** und **🚩 Melden**. Blockiere jemanden über dessen Profil.
 
 In der globalen Community hat ein Beitrag keinen Preis in Bohnen: Dort steht, was die Person sich als Gegenleistung wünscht. Anstelle des Preises steht „🏘️ In einer lokalen Gemeinschaft ist dies ein Preis in Bohnen ›“. Anstelle der Kaufanfrage zeigt der Beitrag **Anfrage · Bohnen sicher verwahrt 🏘️**: Tippe darauf, um zu sehen, wie ein Deal in einer lokalen Community funktioniert. Nachrichten an die Person funktionieren wie überall sonst. Siehe „Bohnen & globale Community“.
 

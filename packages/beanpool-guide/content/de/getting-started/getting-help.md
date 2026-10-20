@@ -26,7 +26,7 @@ source-hash: c2f55bbef94860d8
 
 - Wenn ein Beitrag Betrug, beleidigend oder irreführend ist, melde ihn. Siehe „Ein Problem melden“.
 - Wenn dich jemand belästigt, blockiere die Person. Siehe „Jemanden blockieren“.
-- Wenn du der globalen Community noch nicht beigetreten bist und sie nicht erreichbar ist, besagt die Zeile **Globale Gemeinschaft** in der **BeanPool**-Ansicht (tippe oben links auf die Bohne) **Gerade nicht erreichbar**. Während du mit einer anderen Community verbunden bist, in der du Mitglied bist, informiert eine Zeile darunter: **Deine eigene Gemeinschaft ist nicht betroffen.** Die globale Community ist eine Community unter vielen. Deine eigene Community läuft auf ihrem eigenen Server und benötigt sie niemals, sodass alles andere wie gewohnt funktioniert.
+- Wenn du der globalen Community noch nicht beigetreten bist und sie nicht erreichbar ist, besagt die Zeile **Globale Community** in der **BeanPool**-Ansicht (tippe oben links auf die Bohne) **Gerade nicht erreichbar**. Während du mit einer anderen Community verbunden bist, in der du Mitglied bist, informiert eine Zeile darunter: **Deine eigene Gemeinschaft ist nicht betroffen.** Die globale Community ist eine Community unter vielen. Deine eigene Community läuft auf ihrem eigenen Server und benötigt sie niemals, sodass alles andere wie gewohnt funktioniert.
 
 ## Sicherheitsseiten
 

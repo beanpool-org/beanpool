@@ -11,7 +11,6 @@
 //     embedding the shared style rules (STYLE.md), listing exact keys/pages with English and
 //     source hashes, and commit/push steps per catalog/page. Deterministic output.
 
-import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';

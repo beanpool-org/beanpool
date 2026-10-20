@@ -599,7 +599,7 @@ export async function wipeIdentity(): Promise<void> {
     // Every tool's documents, photos, reminders and settings (tools/store.ts): no row and no file is left, and no
     // reminder fires for an account that has gone. On its own, so nothing above failing keeps any of it.
     try {
-        const { wipeToolDataOnThisPhone } = require('../tools/store');
+        const { wipeToolDataOnThisPhone } = await import('../tools/store');
         await wipeToolDataOnThisPhone();
     } catch (e) {
         console.error('Failed to wipe the tools\' data on this phone', e);

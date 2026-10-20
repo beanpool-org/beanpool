@@ -103,13 +103,15 @@ export function ToolFrame({ manifest, state, settings, colors, onSettings, onAbo
             <View style={frame.body}>{children}</View>
             <Text style={[frame.backup, { color: colors.text.secondary, paddingBottom: 8 + insets.bottom }]} testID="tool-backup-line">{backupLine(settings)}</Text>
             <Modal visible={menu} transparent animationType="fade" onRequestClose={() => setMenu(false)} statusBarTranslucent>
-                <Pressable style={editHomeStyles.backdrop} onPress={() => setMenu(false)} accessibilityRole="button" accessibilityLabel={t('Close')}>
+                <View style={editHomeStyles.backdrop}>
+                    {/* The dimmed space above the sheet closes it, as a tap outside does. */}
+                    <Pressable style={frame.dismiss} onPress={() => setMenu(false)} accessibilityRole="button" accessibilityLabel={t('Close')} testID="tool-menu-close" />
                     <View style={[editHomeStyles.sheet, { backgroundColor: colors.surface.card, paddingBottom: 12 + insets.bottom }]} testID="tool-menu-sheet">
                         <MenuRow text={t('Settings')} icon="cog-outline" colors={colors} onPress={pick(onSettings)} testID="tool-menu-settings" />
                         <MenuRow text={t('About this tool')} icon="information-outline" colors={colors} onPress={pick(onAbout)} testID="tool-menu-about" />
                         <MenuRow text={t('Remove my data from this phone')} icon="delete-outline" colors={colors} danger onPress={pick(onRemove)} testID="tool-menu-remove" />
                     </View>
-                </Pressable>
+                </View>
             </Modal>
         </View>
     );
@@ -148,9 +150,9 @@ export function ToolDoors({ manifest, settings, colors, onDoor, onHomeAnswer }: 
         <View testID="tool-doors">
             {!settings.door ? (
                 <View style={s.card}>
-                    <HomeRow text={t('I already do this')} sub={t('Go straight in and add what you keep.')} strong colors={colors}
+                    <HomeRow text={t('I already do this')} sub={t('Go straight in and add what you keep.')} a11y={t('I already do this: go straight in and add what you keep.')} strong colors={colors}
                         onPress={() => onDoor('doing')} testID="tool-door-doing" />
-                    <HomeRow text={t("I'm starting out")} sub={t('A few examples to start from, and a guide.')} strong colors={colors}
+                    <HomeRow text={t("I'm starting out")} sub={t('A few examples to start from, and a guide.')} a11y={t("I'm starting out: a few examples to start from, and a guide.")} strong colors={colors}
                         onPress={() => onDoor('starting')} testID="tool-door-starting" />
                 </View>
             ) : null}
@@ -160,10 +162,10 @@ export function ToolDoors({ manifest, settings, colors, onDoor, onHomeAnswer }: 
                         <Text style={s.caption} accessibilityRole="header" numberOfLines={2}>{t('Some examples')}</Text>
                     </View>
                     {manifest.examples.map((_, i) => (
-                        <HomeRow key={i} text={t(manifest.examples[i])} colors={colors} lines={1} />
+                        <HomeRow key={i} text={t(manifest.examples[i])} a11y={t(manifest.examples[i])} colors={colors} lines={1} />
                     ))}
                     {manifest.guide ? (
-                        <HomeLink id="tool-guide" text={t('Read the guide')} colors={colors} testID="tool-guide"
+                        <HomeLink id="tool-guide" text={t('Read the guide')} a11y={t('Read the guide')} colors={colors} testID="tool-guide"
                             onPress={() => router.push({ pathname: '/guide/[slug]', params: { slug: manifest.guide as string } })} />
                     ) : null}
                 </View>
@@ -291,10 +293,10 @@ export function ToolHomeBody({ tool, owner, colors, now }: { tool: PhoneTool; ow
     return (
         <View testID={`tool-home-${manifest.id}`}>
             {lines.map((line, i) => (
-                <HomeRow key={i} text={t(line.key, line.values)} colors={colors} lines={2}
+                <HomeRow key={i} text={t(line.key, line.values)} a11y={t(line.key, line.values)} colors={colors} lines={2}
                     onPress={() => openTool(manifest.id, line.screen && manifest.screens.includes(line.screen) ? line.screen : undefined)} />
             ))}
-            <HomeLink id={`tool-home-${manifest.id}-open`} text={t('Open {tool}', { tool: name })} colors={colors} onPress={() => openTool(manifest.id)} />
+            <HomeLink id={`tool-home-${manifest.id}-open`} text={t('Open {tool}', { tool: name })} a11y={t('Open {tool}', { tool: name })} colors={colors} onPress={() => openTool(manifest.id)} />
         </View>
     );
 }
@@ -377,6 +379,7 @@ const frame = StyleSheet.create({
     state: { fontSize: 13, marginTop: 1 },
     body: { flex: 1 },
     backup: { fontSize: 12, lineHeight: 17, paddingHorizontal: 16, paddingTop: 8, textAlign: 'center' },
+    dismiss: { flex: 1 },
     menuRow: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: HOME_TARGET_DP + 8, paddingHorizontal: 16 },
     menuText: { flex: 1, fontSize: 16, fontWeight: '600' },
 });

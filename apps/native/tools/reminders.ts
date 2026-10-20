@@ -10,7 +10,6 @@
  * names the tool in its data, so a tap opens the tool ({@link toolReminderRoute}): only the app posts a local one.
  */
 import { Platform } from 'react-native';
-import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { t, TOOL_LIMITS, type ToolDue, type ToolManifest } from '@beanpool/core';
 import { phoneTool } from './index';
 
@@ -37,6 +36,8 @@ let loaded: ToolNotifications | null | undefined;
 function deviceNotifications(): ToolNotifications | null {
     if (loaded !== undefined) return loaded;
     try {
+        // Loaded on first use, as services/push-notifications.ts does: Expo Go has no local notifications of ours.
+        const { default: Constants, ExecutionEnvironment } = require('expo-constants');
         loaded = Constants.executionEnvironment === ExecutionEnvironment.StoreClient ? null : require('expo-notifications');
     } catch {
         loaded = null;

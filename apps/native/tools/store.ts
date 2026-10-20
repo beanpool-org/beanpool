@@ -13,7 +13,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
 import { TOOL_LIMITS, toolDocBytes, type ToolManifest, type ToolPhoto } from '@beanpool/core';
 import { getDb } from '../utils/db';
-import { cancelToolReminders } from './reminders';
+import { cancelToolReminders, type ToolNotifications } from './reminders';
 import { TOOL_DOCS_TABLE, TOOL_SETTINGS_PREFIX } from './schema';
 
 export { TOOL_SETTINGS_PREFIX };
@@ -152,10 +152,10 @@ export async function removeToolDataHere(owner: string, tool: string): Promise<v
  * clearDB({ identityLeaves }) drops the table in the open one. Each step is tried even when one before it fails, so a
  * stuck file never keeps a reminder alive; the first failure is thrown at the end, for the caller to log.
  */
-export async function wipeToolDataOnThisPhone(): Promise<void> {
+export async function wipeToolDataOnThisPhone(notifications?: ToolNotifications | null): Promise<void> {
     let failed: unknown = null;
     const step = async (f: () => Promise<unknown>) => { try { await f(); } catch (e) { failed ??= e; } };
-    await step(() => cancelToolReminders());
+    await step(() => cancelToolReminders(undefined, notifications));
     await step(async () => {
         const db = await getDb();
         // The table first: a file opened since clearDB dropped it has it again, empty; one that never had it gets it.

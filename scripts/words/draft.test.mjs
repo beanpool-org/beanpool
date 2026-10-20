@@ -22,6 +22,7 @@ import {
 } from './draft.mjs';
 import { guideBodyHash, loadGuide } from '../../packages/beanpool-guide/src/guide.mjs';
 import { guideSourceHash } from '../../packages/beanpool-guide/src/titles.mjs';
+import { ROOT } from './words.mjs';
 
 function makeTempDir(prefix = 'words-draft-test-') {
     return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -348,9 +349,10 @@ test('writeBriefs creates deterministic, self-contained brief files with style r
         assert.match(firstRunText, /# Style Rules/);
         assert.match(firstRunText, /Warm, plain and short/);
 
-        // Verify commit instructions present
-        assert.match(firstRunText, /git commit -m "Words: <lang> <catalog> \(machine draft\)"/);
-        assert.match(firstRunText, /git commit -m "Guide page: <lang> <slug> \(machine draft\)"/);
+        // Verify commit instructions present with interpolated lang and mkdir -p in Section C
+        assert.match(firstRunText, /git commit -m "Words: es <catalog> \(machine draft\)"/);
+        assert.match(firstRunText, /git commit -m "Guide page: es <slug> \(machine draft\)"/);
+        assert.match(firstRunText, /mkdir -p packages\/beanpool-guide\/content\/es\/<section>/);
 
         // Verify deterministic output: second run matches byte-for-byte
         await writeBriefs({ root: tmp, dir: briefsDir, langs: ['es'], maxKeys: 2, extracted: [] });
@@ -651,6 +653,31 @@ test('writeBriefs removes old brief-*.md files and leaves no brief for a complet
         const remainingBriefs = fs.readdirSync(briefsDir).filter((f) => /^brief-.*\.md$/.test(f));
         assert.equal(remainingBriefs.length, 0);
         assert.equal(fs.existsSync(path.join(briefsDir, 'notes.txt')), true);
+    } finally {
+        fs.rmSync(tmp, { recursive: true, force: true });
+    }
+});
+
+test('step 1 of Section C creates target directory and drafts pages successfully for missing pages', async () => {
+    const tmp = makeTempDir();
+    try {
+        fs.mkdirSync(path.join(tmp, 'packages'), { recursive: true });
+        fs.cpSync(path.join(ROOT, 'packages/beanpool-guide'), path.join(tmp, 'packages/beanpool-guide'), { recursive: true });
+
+        const pages = scanGuidePages({ root: tmp, langs: ['es'] });
+        const missing = pages.es.missingPages;
+        assert.equal(missing.length, 44);
+
+        for (const page of missing) {
+            const targetDir = path.join(tmp, 'packages/beanpool-guide/content/es', page.section);
+            const targetFile = path.join(targetDir, `${page.slug}.md`);
+            const script = path.join(tmp, 'packages/beanpool-guide/scripts/titles.mjs');
+            const cmd = `mkdir -p "${targetDir}" && node "${script}" --draft-page es "${page.slug}" > "${targetFile}"`;
+            childProcess.execSync(cmd);
+            assert.ok(fs.existsSync(targetFile), `Expected ${targetFile} to exist`);
+            const content = fs.readFileSync(targetFile, 'utf8');
+            assert.match(content, new RegExp(`slug: ${page.slug}`));
+        }
     } finally {
         fs.rmSync(tmp, { recursive: true, force: true });
     }

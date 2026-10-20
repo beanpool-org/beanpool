@@ -511,6 +511,9 @@ export async function writeBriefs({ root = ROOT, dir, langs = null, maxKeys = nu
                 briefLines.push(`  - Title: ${JSON.stringify(page.title)}`);
                 briefLines.push(`  - Source Hash: \`${page.sourceHash}\``);
                 briefLines.push(`  - Target File: \`packages/beanpool-guide/content/${lang}/${page.section}/${page.slug}.md\``);
+                if (page.status === 'MISSING') {
+                    briefLines.push(`  - Draft Command: \`mkdir -p packages/beanpool-guide/content/${lang}/${page.section} && node packages/beanpool-guide/scripts/titles.mjs --draft-page ${lang} ${page.slug} > packages/beanpool-guide/content/${lang}/${page.section}/${page.slug}.md\``);
+                }
             }
         }
 
@@ -520,26 +523,26 @@ export async function writeBriefs({ root = ROOT, dir, langs = null, maxKeys = nu
         briefLines.push('## Commit and Push Sequence');
         briefLines.push('');
         briefLines.push('### A. App Words Catalogs');
-        briefLines.push('Edit each catalog in order: `core`, then `native`, then `pwa`, then `server`. After editing each:');
+        briefLines.push(`Edit each catalog in order: ${catalogDefs.map((d) => `\`${d.name}\``).join(', ')}. After editing each:`);
         briefLines.push('1. Run structural check: `node scripts/words/words.mjs check` (must exit 0).');
         briefLines.push('2. `git add <catalog-file>`');
-        briefLines.push('3. `git commit -m "Words: <lang> <catalog> (machine draft)"`');
+        briefLines.push(`3. \`git commit -m "Words: ${lang} <catalog> (machine draft)"\``);
         briefLines.push('4. `git push -u origin <branch>`');
         briefLines.push('');
         briefLines.push('### B. Guide Titles');
-        briefLines.push('Edit `packages/beanpool-guide/content/<lang>/manifest.json`.');
+        briefLines.push(`Edit \`packages/beanpool-guide/content/${lang}/manifest.json\`.`);
         briefLines.push('1. Check: `node packages/beanpool-guide/scripts/build.mjs --check`');
-        briefLines.push('2. `git add packages/beanpool-guide/content/<lang>/manifest.json`');
-        briefLines.push('3. `git commit -m "Guide titles: <lang> (machine draft)"`');
+        briefLines.push(`2. \`git add packages/beanpool-guide/content/${lang}/manifest.json\``);
+        briefLines.push(`3. \`git commit -m "Guide titles: ${lang} (machine draft)"\``);
         briefLines.push('4. `git push -u origin <branch>`');
         briefLines.push('');
         briefLines.push('### C. Guide Pages');
         briefLines.push('For each page:');
-        briefLines.push('1. Draft scaffold: `node packages/beanpool-guide/scripts/titles.mjs --draft-page <lang> <slug> > packages/beanpool-guide/content/<lang>/<section>/<slug>.md`');
+        briefLines.push(`1. Draft scaffold: \`mkdir -p packages/beanpool-guide/content/${lang}/<section> && node packages/beanpool-guide/scripts/titles.mjs --draft-page ${lang} <slug> > packages/beanpool-guide/content/${lang}/<section>/<slug>.md\``);
         briefLines.push('2. Translate body under front matter in full. Keep front matter untouched.');
         briefLines.push('3. Check: `node packages/beanpool-guide/scripts/build.mjs --check`');
-        briefLines.push('4. `git add packages/beanpool-guide/content/<lang>/<section>/<slug>.md`');
-        briefLines.push('5. `git commit -m "Guide page: <lang> <slug> (machine draft)"`');
+        briefLines.push(`4. \`git add packages/beanpool-guide/content/${lang}/<section>/<slug>.md\``);
+        briefLines.push(`5. \`git commit -m "Guide page: ${lang} <slug> (machine draft)"\``);
         briefLines.push('6. `git push -u origin <branch>`');
         briefLines.push('');
         briefLines.push('### D. Finish');

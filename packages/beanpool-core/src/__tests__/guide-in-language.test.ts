@@ -220,5 +220,33 @@ describe('guideInLanguage with translated page bodies (slice S5b)', () => {
         const cached = await loadCachedLanguageGuide(mockStorage, 'pt');
         expect(cached?.version).toBe(1);
         expect(cached?.guides[0].slug).toBe('browsing-the-market');
+
+        // Rejects remote guide if its language does not match the requested locale (prevents cache poisoning)
+        const englishFallback = { ...translatedGuide, language: undefined, version: 150 };
+        const rejected = await refreshLanguageGuideFromWebsite(
+            cached,
+            mockStorage,
+            async () => ({ ok: true, text: async () => JSON.stringify(englishFallback) }),
+            'es',
+        );
+        expect(rejected).toBeNull();
+        expect(storage['beanpool_member_guide_v2:es']).toBeUndefined();
+    });
+
+    it('ignores translatedGuide if language does not match the target language', () => {
+        // translatedGuide is 'pt', but target is 'es'
+        const esTitles: GuideTitles = {
+            sections: {},
+            pages: {
+                'browsing-the-market': {
+                    title: entry('Browsing the Market', 'Explorar el Mercado'),
+                },
+            },
+        };
+        const es = guideInLanguage(GUIDE, 'es', esTitles, translatedGuide);
+        const page = findGuidePage(es, 'browsing-the-market')!;
+        expect(page.title).toBe('Explorar el Mercado');
+        expect(page.bodyInEnglish).toBe(true);
+        expect(page.blocks).toEqual(GUIDE.guides.find(p => p.slug === 'browsing-the-market')!.blocks);
     });
 });

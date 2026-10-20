@@ -317,7 +317,7 @@ export async function refreshLanguageGuideFromWebsite(
         const text = await res.text();
         if (text.length > GUIDE_MAX_BYTES) return null;
         const remote = validateGuide(JSON.parse(text));
-        if (!remote || (current && remote.version <= current.version)) return null;
+        if (!remote || remote.language !== lang || (current && remote.version <= current.version)) return null;
         try { await storage.setItem(guideCacheKey(lang), JSON.stringify(remote)); } catch { /* shown now; cached next time */ }
         return remote;
     } catch {
@@ -600,7 +600,7 @@ export function guideInLanguage<P extends GuidePage<OperatorGuideBlock>>(
         const sectionTitles = ownObject(titles, 'sections');
         const pageTitles = ownObject(titles, 'pages');
         const translatedPages = new Map<string, GuidePage<OperatorGuideBlock>>();
-        if (translatedGuide && Array.isArray(translatedGuide.guides)) {
+        if (translatedGuide && (!translatedGuide.language || translatedGuide.language === lang) && Array.isArray(translatedGuide.guides)) {
             for (const tp of translatedGuide.guides) {
                 if (tp && typeof tp.slug === 'string') translatedPages.set(tp.slug, tp as GuidePage<OperatorGuideBlock>);
             }

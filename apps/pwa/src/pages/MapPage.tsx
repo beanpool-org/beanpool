@@ -56,6 +56,7 @@ import { composerVisitorNote, visitorsSeeListings } from '../lib/visitor-lobby';
 import { communityInfoOnce } from '../lib/visitor-lobby-gate';
 import { marked, treasuriesFallback, useCommunityInfo, useFeatureMode, useReadsOwn } from '../lib/features';
 import { LocalCommunityLine } from '../components/LocalCommunityMark';
+import type { ComposerDraft } from '../tools/host';
 import { LOCAL_COMMUNITY_LINES, postRulesFor } from '@beanpool/core';
 import {
     CLIENT_POST_TYPES, EVENT_WINDOWS, buildEventCopy, eventEditBlockedReason, eventEditForm, eventEditNotifies, eventEditPayload, formatDistance,
@@ -111,6 +112,13 @@ interface Props {
     openNewPost?: boolean;
     initialGroupId?: string;
     onOpenNewPostHandled?: () => void;
+    /**
+     * A tool's offer or need door (scratch/tools/DESIGN-tool-template-fable.md §1.4, T0.3): the composer opens with the
+     * tool's draft in it, through the same profile check as + ADD POST; taken once, then `onDraftOpened`. Nothing is
+     * posted until the member taps Post.
+     */
+    openDraft?: ComposerDraft | null;
+    onDraftOpened?: () => void;
     onNavigate?: (tab: string, contextId?: string) => void;
     onOpenTreasury?: (pubkey: string) => void;
     /**
@@ -152,7 +160,7 @@ interface Props {
 const EVENT_PLACE_NAME_MAX = 80;
 const EVENT_PRIVATE_NOTE_MAX = 1000;
 
-export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHandled, onNavigate, onOpenTreasury, isMember, covered = false, focusPostId, onFocusPostHandled, copyEventPostId, onCopyEventHandled, editEventPostId, onEditEventHandled, visitor = false }: Props) {
+export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHandled, openDraft, onDraftOpened, onNavigate, onOpenTreasury, isMember, covered = false, focusPostId, onFocusPostHandled, copyEventPostId, onCopyEventHandled, editEventPostId, onEditEventHandled, visitor = false }: Props) {
     const mapContainer = useRef<HTMLDivElement>(null);
     const mapRef = useRef<L.Map | null>(null);
     const markersRef = useRef<L.LayerGroup | null>(null);
@@ -436,6 +444,38 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
             tryOpenComposer();
         }
     }, [openNewPost, initialGroupId, onOpenNewPostHandled, tryOpenComposer]);
+
+    // A tool's draft (openDraft): its fields in the composer, as the member would have typed them, and nothing posted.
+    // Everything the draft doesn't say starts as a new post's would: a composer left open on a group, a pin or a peer
+    // reach never carries into the tool's post.
+    useEffect(() => {
+        if (!openDraft) return;
+        onDraftOpened?.();
+        resetEventForm();
+        setNewPostType(openDraft.type);
+        setNewPostTitle(openDraft.title);
+        setNewPostDescription(openDraft.description);
+        setNewPostCategory(openDraft.category ?? 'general');
+        setNewPostCredits(openDraft.credits === null ? '' : String(openDraft.credits));
+        setNewPostPriceType(openDraft.priceType ?? 'fixed');
+        setNewPostRepeatable(openDraft.repeatable);
+        setNewPostCashAlsoNeeded(openDraft.cashAlsoNeeded);
+        setNewPostReach('local');
+        setNewPostReachPeers([]);
+        setNewPostPhotos([]);
+        setAudienceScope('public');
+        setTargetGroupId('');
+        setPostLat(null);
+        setPostLng(null);
+        setPinDropMode(false);
+        exactPinRef.current = null;
+        if (pinDropMarkerRef.current) {
+            pinDropMarkerRef.current.remove();
+            pinDropMarkerRef.current = null;
+        }
+        setValidationErrors(new Set());
+        tryOpenComposer();
+    }, [openDraft, onDraftOpened, tryOpenComposer]);
 
     // Initialize map
     useEffect(() => {

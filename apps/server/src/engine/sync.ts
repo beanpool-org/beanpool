@@ -1013,6 +1013,8 @@ const MEMBER_KEY_PARTS: Record<string, number[]> = {
     push_tokens: [0],
     chat_mutes: [1],
     thread_read_cursors: [1],
+    // A tool's private copy, `<owner>|<tool>` (engine/tool-state.ts).
+    member_tool_state: [0],
     // The owner (engine/recovery-shares.ts recoveryTombstoneKey). Its copies stay under the old key when this standby
     // follows (dropMovedRecoveryCopies goes by the main server's), so either order ends the same; this keeps the main
     // server's.

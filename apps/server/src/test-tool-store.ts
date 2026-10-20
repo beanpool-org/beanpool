@@ -26,7 +26,8 @@
  *      to read; a re-key moves the copies to the new key, and the old key reads nothing
  *   7. replication: a whole copy carries every row verbatim and a new standby holds them exactly; a delta carries a new
  *      copy and a delete's tombstone, and the standby follows both; a delete and a write again in one millisecond, and a
- *      write then a delete, order on the standby as on the main server
+ *      write then a delete, order on the standby as on the main server; a delete and then a re-key between two pulls,
+ *      and the deleted copy comes back under neither key
  *   8. privacy by construction: no code outside the store's own files names the table
  *
  * Local only: it talks to the server it starts on localhost, and to nothing else.
@@ -500,6 +501,37 @@ async function main(): Promise<void> {
     assert(importError === '' && rowOf(bo.pk, 'jobs')?.body === '{"v":2}' && rowOf(ann.pk, 'costs') === undefined && same(everyRow(), afterMain2),
         `and on the standby: the copy written again stays, the one deleted goes (${importError || `${rowOf(bo.pk, 'jobs')?.body}, ${rowOf(ann.pk, 'costs')?.body ?? 'gone'}`})`);
 
+    // Between two pulls, Fay deletes a copy and is then re-keyed. The standby follows the re-key before the copy's rows,
+    // so the delete, keyed by her old key, goes first: after the move it would match no row, and the deleted copy would
+    // stay on the standby under her new key, sent back to her phone by a standby that takes over.
+    const fay = member('Fay');
+    await put(fay, own('kept'), { v: 1 });
+    await put(fay, own('gone'), { v: 1 });
+    const beforeRekey: any = await exportSyncState(nodeId);
+    const since3 = new Date(Date.now() - 1).toISOString();
+    await sleep(5);
+    const fayDelete = await call('DELETE', fay, own('gone'));
+    const fayNew = newId('FayNew');
+    const fayMoved = attempt(() => { const code = issueRekeyCode(fay.pk, owner.pk).code; return completeRekey(fay.pk, fayNew.pk, code, owner.pk); });
+    const afterMain3 = everyRow();
+    assert(fayDelete.status === 200 && fayMoved?.success === true && rowsOf(fay.pk).length === 0 && same(rowsOf(fayNew.pk).map(r => r.tool), ['kept']),
+        `on the main server: her deleted copy gone, the one she kept on her new key (${show(fayDelete)}; ${rowsOf(fayNew.pk).map(r => r.tool).join(', ')})`);
+    const delta3: any = await exportSyncState(nodeId, since3);
+    // The standby as it was before: a whole copy from then.
+    const beforeCopy = await signSyncPayload((({ signature: _s, publicKey: _k, ...rest }) => rest)(beforeRekey));
+    const delta3Copy = await signSyncPayload((({ signature: _s, publicKey: _k, ...rest }) => rest)(delta3));
+    attempt(() => emptyCopiedTables(db));
+    setNodeRole('backup');
+    importError = '';
+    try { await importRemoteState(beforeCopy, { full: true }); } catch (e: any) { importError = e?.message || String(e); }
+    const standbyHad = rowsOf(fay.pk).map(r => r.tool);
+    try { await importRemoteState(delta3Copy); } catch (e: any) { importError ||= e?.message || String(e); }
+    setNodeRole('primary');
+    reconcileLedgerFromDb();
+    assert(importError === '' && same(standbyHad, ['gone', 'kept']) && rowsOf(fay.pk).length === 0 && rowOf(fayNew.pk, 'gone') === undefined
+        && same(everyRow(), afterMain3),
+        `and the standby follows both: the deleted copy gone under either key, the kept one on her new key (${importError || `${standbyHad.join(', ')} → ${rowsOf(fayNew.pk).map(r => r.tool).join(', ')}`})`);
+
     // ── 8. privacy by construction ──────────────────────────────────────────────────────────────
     console.log('\n── 8. no other code reads the store ──');
     const here = path.dirname(fileURLToPath(import.meta.url));
@@ -514,8 +546,10 @@ async function main(): Promise<void> {
         }
     };
     for (const dir of ['apps/server/src', 'packages']) walk(path.join(root, dir));
-    const EXPECTED = ['apps/server/src/db/schema.sql', 'apps/server/src/engine/key-move.ts', 'apps/server/src/engine/replication-manifest.ts', 'apps/server/src/engine/tool-state.ts'];
-    assert(same(named.sort(), EXPECTED), `only the store, its schema, its manifest line and the re-key name the table (${named.join(', ')})`);
+    const EXPECTED = ['apps/server/src/db/schema.sql', 'apps/server/src/engine/key-move.ts', 'apps/server/src/engine/replication-manifest.ts',
+        'apps/server/src/engine/sync.ts', 'apps/server/src/engine/tool-state.ts'];
+    assert(same(named.sort(), EXPECTED),
+        `only the store, its schema, its manifest line, the re-key and the standby's re-key tombstones name the table (${named.join(', ')})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) process.exit(1);

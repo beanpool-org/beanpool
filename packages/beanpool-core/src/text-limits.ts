@@ -64,6 +64,13 @@ export const DECISION_TITLE_LIMIT: TextLimit = limitOf(200);
 export const DECISION_DESCRIPTION_LIMIT: TextLimit = limitOf(5_000);
 /** How to reach a member (a phone number, an email, a handle): 200 characters. */
 export const CONTACT_VALUE_LIMIT: TextLimit = limitOf(200);
+/** A lendable Offer's terms, in the lender's words ("Clean it. Full tank. Back within a week."): 300 characters. */
+export const LEND_TERMS_LIMIT: TextLimit = limitOf(300);
+/**
+ * A lendable Offer's replacement value, in the lender's own words and currency ("$120", "R$ 300", "like for like"): 40
+ * characters. Shown, never parsed, never moved: settled between the two people (DESIGN-shops-and-tools-fable.md §0 row 9).
+ */
+export const REPLACEMENT_VALUE_LIMIT: TextLimit = limitOf(40);
 
 /** The words a refusal of `what` over `limit` says, as both apps show it: "A listing's title can be at most 200 characters. …" */
 export function textTooLongMessage(what: string, limit: TextLimit): string {

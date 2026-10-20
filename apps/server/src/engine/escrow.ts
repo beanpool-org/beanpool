@@ -2,7 +2,7 @@
 //
 // Extracted from apps/server/src/state-engine.ts.
 
-import { isSyntheticAccount, isBeanAmount, type PushNoticeKind } from '@beanpool/core';
+import { isSyntheticAccount, isBeanAmount, loanDays, type PushNoticeKind } from '@beanpool/core';
 import { db, memberHasPhoto } from '../db/db.js';
 import { heldPrivilegedRole } from './node-roles.js';
 import { recordActivity } from '../db/activity-feed-db.js';
@@ -181,6 +181,66 @@ function postHiddenNoNewDeal(): Error {
     );
 }
 
+// LENDABLE OFFERS (scratch/tools/DESIGN-tool-library-fable.md §2.4-2.5; DESIGN-shops-and-tools-fable.md §12 S3). A loan is
+// an ordinary deal on a lendable Offer: one borrower at a time (the listing is `pending` while it is out, as a one-off
+// Offer is under its deal), and back to `active` when the deal is done, called off or ruled on, never `completed`. A Free
+// loan is a deal of 0 Beans, which every door already allows; the 1.5% to the Commons is taken at the payout as on every
+// deal. The four places that decide a listing's fate after a deal: approvePostRequest and acceptPost (one at a time),
+// completePostTransaction and resolveEscrowDispute's release and split (back on the board). cancelPostTransaction and the
+// refund ruling put every listing back already.
+
+/** The refusal to anyone who asks for a lendable Offer while it is out. */
+export const LOAN_OUT_ERROR = "It's out on loan right now. Ask again when it's back.";
+/** A loan's length (its deal's quantity, @beanpool/core loanDays) below a day. */
+export const LOAN_TOO_SHORT_ERROR = 'A loan is for at least 1 day.';
+/** A loan longer than its lender's longest (posts.lend_max_days). */
+export function loanTooLongError(maxDays: number): string {
+    return `This can be borrowed for up to ${maxDays} day${maxDays === 1 ? '' : 's'}.`;
+}
+
+function loanOut(): Error {
+    return Object.assign(new Error(LOAN_OUT_ERROR), { status: 409, statusCode: 409, code: 'loan_out' });
+}
+
+/** A listing row that takes one deal at a time: a one-off Offer or Need, and a lendable Offer (which is repeatable too). */
+function oneDealAtATime(post: { repeatable?: unknown; lendable?: unknown }): boolean {
+    return !post.repeatable || post.lendable === 1;
+}
+
+/** A listing row that goes back on the board when its deal is done: a repeatable one, and a lendable Offer. */
+function backOnBoardAfterDeal(post: { repeatable?: unknown; lendable?: unknown }): boolean {
+    return !!post.repeatable || post.lendable === 1;
+}
+
+/**
+ * A loan's length, at the doors that start one: at least a day, and no longer than the lender's longest when they set one.
+ * A loan asked for with no quantity on one fee (an app that predates lending sends none there) has no length to check.
+ */
+function assertLoanLength(priceType: string | null | undefined, maxDays: unknown, units: number | undefined): void {
+    const days = loanDays(priceType, units);
+    if (days === null) return;
+    if (days < 1) throw new Error(LOAN_TOO_SHORT_ERROR);
+    if (typeof maxDays === 'number' && days > maxDays) throw new Error(loanTooLongError(maxDays));
+}
+
+/**
+ * The others who were waiting to borrow a lendable Offer, told when it goes out to someone else: their requests are closed
+ * with the loan's own words (design §2.4), so they know to ask again when it is back.
+ */
+function tellWaitingBorrowers(cb: EscrowCallbacks, waiting: Array<{ buyer_pubkey: string }>, lender: string, post: { id: string; title?: string }): void {
+    for (const w of waiting) {
+        cb.dispatchPushNotification(
+            [w.buyer_pubkey],
+            lender,
+            '📦 Out on loan',
+            `"${post.title || 'This'}" is out on loan now. Ask again when it's back.`,
+            { screen: 'post', postId: post.id },
+            'marketplace',
+            'market.answer'
+        );
+    }
+}
+
 /**
  * How often a new deal from the same member on the same listing pushes the listing's author: a request, or a 1-step
  * accept, cancelled by its maker and made again, over and over, is one push an hour, not one each time (the push audit's
@@ -258,6 +318,8 @@ export function requestPost(
         || hiddenFromCaller(post.hidden_by_reports_at, post.author_pubkey, requesterPublicKey)) {
         throw new Error('Post not found');
     }
+    // A lendable Offer that is out says so, to anyone who may see it: the second borrower is told to ask again later.
+    if (post.lendable === 1 && post.status === 'pending') throw loanOut();
     if (post.status !== 'active') throw new Error('Post is not active');
     assertAccountOpen(post.author_pubkey);
     const authorMember = db.prepare('SELECT is_treasury, paused, status FROM members WHERE public_key=?').get(post.author_pubkey) as any;
@@ -319,6 +381,10 @@ export function requestPost(
     if (post.price_type !== 'fixed' && !isDealQuantity(hours)) {
         throw new Error(`Must provide a valid quantity for a ${post.price_type} post`);
     }
+    // A loan's days are kept on its deal whatever the fee (on one fee they move no Beans): they say when it is due back.
+    const lendable = post.lendable === 1;
+    if (lendable) assertLoanLength(post.price_type, post.lend_max_days, hours);
+    const keptHours = post.price_type !== 'fixed' || (lendable && hours != null) ? hours : undefined;
 
     const requester = getMember(db, requesterPublicKey);
     const finalCredits = post.price_type !== 'fixed' ? post.credits * hours! : post.credits;
@@ -355,7 +421,7 @@ export function requestPost(
         sellerPublicKey,
         sellerCallsign,
         credits: finalCredits,
-        hours: post.price_type !== 'fixed' ? hours : undefined,
+        hours: keptHours,
         status: 'requested',
         createdAt: new Date().toISOString()
     };
@@ -506,13 +572,23 @@ export function approvePostRequest(
         if (balance - row.credits < uFloor) throw cb.floorLockedError(row.buyer_pubkey, balance - row.credits);
     }
 
+    // One deal at a time (a one-off listing, or a lendable Offer): refused here, before the escrow opens, when the listing
+    // is no longer on the board, rather than by the update below, inside it (a throw there unwinds the ledger).
+    const oneAtATime = oneDealAtATime(post);
+    if (oneAtATime && post.status !== 'active') {
+        throw post.lendable === 1 && post.status === 'pending' ? loanOut() : new Error('Post is no longer available');
+    }
+    const waitingBorrowers = oneAtATime && post.lendable === 1
+        ? db.prepare(`SELECT buyer_pubkey FROM marketplace_transactions WHERE post_id=? AND id!=? AND status='requested'`).all(post.id, row.id) as Array<{ buyer_pubkey: string }>
+        : [];
+
     cb.ensureTransactionConversation(row.post_id, row.buyer_pubkey, row.seller_pubkey);
 
     cb.conservingTransaction(() => {
         const res = db.prepare(`UPDATE marketplace_transactions SET status='pending' WHERE id=? AND status='requested'`).run(transactionId);
         if (res.changes === 0) throw new Error('Transaction is no longer in requested state');
 
-        if (!post.repeatable) {
+        if (oneAtATime) {
             const updated = db.prepare(`UPDATE posts SET status='pending', accepted_by=?, accepted_at=?, pending_transaction_id=?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id=? AND status='active'`).run(row.buyer_pubkey, new Date().toISOString(), row.id, post.id);
             if (updated.changes === 0) throw new Error('Post is no longer available');
 
@@ -567,6 +643,7 @@ export function approvePostRequest(
         'marketplace',
         'market.answer'
     );
+    tellWaitingBorrowers(cb, waitingBorrowers, authorPublicKey, post);
 
     return tx;
 }
@@ -649,6 +726,9 @@ export function acceptPost(
     // As requestPost: a group or direct post this caller can't see is an id nobody has.
     if (!post || marketplacePostOutOfSight(post, buyerPublicKey)
         || hiddenFromCaller(post.hiddenByReportsAt, post.authorPublicKey, buyerPublicKey)) {
+        // A lendable Offer that is out says so, to anyone who may see it (as requestPost).
+        const out = post ? null : db.prepare("SELECT * FROM posts WHERE id = ? AND lendable = 1 AND status = 'pending' AND active = 1").get(postId) as any;
+        if (out && !postOutOfSight(out, buyerPublicKey) && !hiddenFromCaller(out.hidden_by_reports_at, out.author_pubkey, buyerPublicKey)) throw loanOut();
         throw new Error('Post not found or not active');
     }
     assertAccountOpen(post.authorPublicKey);
@@ -707,6 +787,10 @@ export function acceptPost(
     if (post.priceType !== 'fixed' && !isDealQuantity(hours)) {
         throw new Error(`Must provide a valid quantity for a ${post.priceType} post`);
     }
+    // As requestPost: a loan's days are kept on its deal whatever the fee.
+    const lendable = post.lendable === true;
+    if (lendable) assertLoanLength(post.priceType, post.lendMaxDays, hours);
+    const keptHours = post.priceType !== 'fixed' || (lendable && hours != null) ? hours : undefined;
 
     const buyer = getMember(db, buyerPublicKey);
     const finalCredits = post.priceType !== 'fixed' ? post.credits * hours! : post.credits;
@@ -777,15 +861,21 @@ export function acceptPost(
         sellerPublicKey: post.authorPublicKey,
         sellerCallsign: post.authorCallsign,
         credits: finalCredits,
-        hours: post.priceType !== 'fixed' ? hours : undefined,
+        hours: keptHours,
         status: 'pending',
         createdAt: new Date().toISOString()
     };
 
+    const oneAtATime = !post.repeatable || lendable;
+    // Not the one taking it, whose own request waiting on it is closed by this too.
+    const waitingBorrowers = lendable
+        ? db.prepare(`SELECT buyer_pubkey FROM marketplace_transactions WHERE post_id=? AND status='requested' AND buyer_pubkey != ?`).all(post.id, buyerPublicKey) as Array<{ buyer_pubkey: string }>
+        : [];
+
     cb.ensureTransactionConversation(post.id, buyerPublicKey, post.authorPublicKey);
 
     cb.conservingTransaction(() => {
-        if (!post.repeatable) {
+        if (oneAtATime) {
             const updated = db.prepare(`UPDATE posts SET status='pending', accepted_by=?, accepted_at=?, pending_transaction_id=?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id=? AND status='active'`).run(buyerPublicKey, tx.createdAt, tx.id, post.id);
             if (updated.changes === 0) throw new Error('Post is no longer available — it is already committed to another deal');
 
@@ -843,6 +933,7 @@ export function acceptPost(
         'marketplace',
         'market.request'
     );
+    tellWaitingBorrowers(cb, waitingBorrowers, post.authorPublicKey, post);
 
     return tx;
 }
@@ -920,7 +1011,12 @@ export function completePostTransaction(
     // at it (FABLE-sec-money MEDIUM 2). A row with no hours (a fixed price, or an old row that never stored them) pays
     // what it holds, whatever hours are confirmed.
     const bookedHours = Number(row.hours);
-    const isHourly = Number.isFinite(bookedHours) && bookedHours > 0;
+    // A loan for one fee (a Free loan included) keeps its days on the deal to say when it is due back, not to price it: it
+    // pays what it holds, whatever days are confirmed, as every deal on a fixed price does. The listing's price and its
+    // lending hold while the deal is open (engine/posts.ts assertPriceNotFrozen, lendColumnsOnEdit), so what they say
+    // here is what the deal was struck under.
+    const oneFeeLoan = post?.lendable === 1 && (post?.price_type || 'fixed') === 'fixed';
+    const isHourly = Number.isFinite(bookedHours) && bookedHours > 0 && !oneFeeLoan;
 
     // A final quantity that is given and isn't a finite one in range is refused, not ignored, on a fixed deal as on an
     // hourly one: Infinity (F6), and a negative, 0 or text, which used to pay the booked hours (F3). None given pays them.
@@ -1031,10 +1127,11 @@ export function completePostTransaction(
         releaseResult = cb.transfer(`escrow_${row.id}`, row.seller_pubkey, releaseCredits, `Escrow payout for completed post ${row.post_id}`, 'escrow', false, opts?.authSigner ? { signer: opts.authSigner } : undefined);
         if (!releaseResult) throw new Error('Failed to release escrow funds');
 
-        if (post && !post.repeatable) {
+        if (post && !backOnBoardAfterDeal(post)) {
             db.prepare(`UPDATE posts SET status = 'completed', completed_at = ?, updated_at = ? WHERE id = ?`).run(completedAt, completedAt, row.post_id);
-        } else if (post && post.repeatable) {
-            // Not a listing a prune cancelled under an open trade (adminPruneUser): it stays down.
+        } else if (post) {
+            // Repeatable, or a loan that is back. Not a listing a prune cancelled under an open trade (adminPruneUser): it
+            // stays down.
             db.prepare(`UPDATE posts SET status = 'active', accepted_by = NULL, accepted_at = NULL, pending_transaction_id = NULL, updated_at = ? WHERE id = ? AND status != 'cancelled'`).run(completedAt, row.post_id);
         }
     });
@@ -1301,10 +1398,11 @@ export function resolveEscrowDispute(
                 }
             }
 
-            if (post && !post.repeatable) {
+            if (post && !backOnBoardAfterDeal(post)) {
                 db.prepare(`UPDATE posts SET status = 'completed', completed_at = ?, updated_at = ? WHERE id = ?`).run(completedAt, completedAt, row.post_id);
-            } else if (post && post.repeatable) {
-                // Not a listing a prune cancelled under this deal, as in completePostTransaction: it stays down.
+            } else if (post) {
+                // Repeatable, or a loan. Not a listing a prune cancelled under this deal, as in completePostTransaction: it
+                // stays down.
                 db.prepare(`UPDATE posts SET status = 'active', accepted_by = NULL, accepted_at = NULL, pending_transaction_id = NULL, updated_at = ? WHERE id = ? AND status != 'cancelled'`).run(completedAt, row.post_id);
             }
         } else if (action === 'refund_to_buyer') {
@@ -1390,10 +1488,11 @@ export function resolveEscrowDispute(
                 }
             }
 
-            if (post && !post.repeatable) {
+            if (post && !backOnBoardAfterDeal(post)) {
                 db.prepare(`UPDATE posts SET status = 'completed', completed_at = ?, updated_at = ? WHERE id = ?`).run(completedAt, completedAt, row.post_id);
-            } else if (post && post.repeatable) {
-                // Not a listing a prune cancelled under this deal, as in completePostTransaction: it stays down.
+            } else if (post) {
+                // Repeatable, or a loan. Not a listing a prune cancelled under this deal, as in completePostTransaction: it
+                // stays down.
                 db.prepare(`UPDATE posts SET status = 'active', accepted_by = NULL, accepted_at = NULL, pending_transaction_id = NULL, updated_at = ? WHERE id = ? AND status != 'cancelled'`).run(completedAt, row.post_id);
             }
         }

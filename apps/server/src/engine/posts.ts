@@ -2,7 +2,7 @@
 //
 // Extracted from apps/server/src/state-engine.ts.
 
-import { isSyntheticAccount, isBeanAmount, postRulesFor, parseReachPeers, type PostReach, type AudienceScope, type PushNoticeKind } from '@beanpool/core';
+import { isSyntheticAccount, isBeanAmount, isLendablePriceType, postRulesFor, parseReachPeers, type PostReach, type AudienceScope, type PushNoticeKind } from '@beanpool/core';
 import { db, writeTombstone, deletePlainRows, afterTransactionCommit, idNamesMoney, memberHasPhoto } from '../db/db.js';
 import { getNodeRole, assertPlainTablesWritable } from '../config/node-role.js';
 import { recordActivity } from '../db/activity-feed-db.js';
@@ -23,6 +23,7 @@ import { getProfileSwitches, profileLimits } from '../config/node-profile.js';
 import { nudgeOrphanSweep } from './storage-health.js';
 import { deleteStoredObjects, photoDataOf, storeUploadedPhotoColumns, type PhotoColumns } from '../storage/image-columns.js';
 import { assertMayStorePhotoBytes, incomingPhotosBytes, recordStoredPhotoBytes } from './photo-upload-budget.js';
+import { assertLendFields, type LendFieldsIn } from './post-fields.js';
 import {
     canonicalZone,
     parseRepeatPattern,
@@ -485,6 +486,11 @@ export function createPost(
         eventRepeatUntil?: unknown;
         /** Filled when a clock the host set was adjusted (a DST gap or overlap); the route answers it next to the post. */
         out?: EventTimeOut;
+        /** A lendable Offer and its terms (lendColumnsOnCreate). */
+        lendable?: unknown;
+        lendMaxDays?: unknown;
+        lendTerms?: unknown;
+        replacementValue?: unknown;
         /**
          * A caller's own limit on new posts (a route's 100 a day, W-main): run once every refusal below has passed (an
          * inactive or unfinished account, a group the author may not post to, a poll or event that is not valid, a Need
@@ -572,6 +578,10 @@ export function createPost(
             }
         }
     }
+
+    // Before a poll's or an event's fields are forced: a poll or an event asked to be lent is refused, not quietly made one.
+    const lend = lendColumnsOnCreate(type, priceType, options);
+    if (lend.lendable === 1) repeatable = true;
 
     let cleanPollOptions: Array<{ id: string; text: string }> | null = null;
     let pollClosesAt: string | null = null;
@@ -741,8 +751,9 @@ export function createPost(
             id, type, category, title, description, credits, price_type, author_pubkey, created_at, active, status, repeatable, lat, lng, updated_at, search_keywords, cash_also_needed, reach, reach_peers, created_by, poll_options, poll_closes_at, poll_open_vote, audience_scope, target_group_id, target_pubkey, assigned_to,
             event_start_at, event_end_at, event_place_name, event_private_note, event_state,
             event_start_local, event_end_local, event_tz, event_online, event_link, event_host_lets_in,
-            event_repeat, event_repeat_until, event_repeat_skips
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+            event_repeat, event_repeat_until, event_repeat_skips,
+            lendable, lend_max_days, lend_terms, replacement_value
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
             finalId, type, category, title, description, credits, priceType, authorPublicKey, createdAt,
             repeatable ? 1 : 0, lat ?? null, lng ?? null, createdAt, searchKeywords,
             cashAlsoNeeded ? 1 : 0, reach, reachPeers, options?.createdBy ?? null,
@@ -759,7 +770,8 @@ export function createPost(
             type === 'event' ? 'scheduled' : null,
             eventStartLocal, eventEndLocal, eventTz, type === 'event' ? (eventOnline ? 1 : 0) : null, eventLink,
             eventHostLetsIn,
-            series.repeat, series.until, series.skips
+            series.repeat, series.until, series.skips,
+            lend.lendable, lend.lend_max_days, lend.lend_terms, lend.replacement_value
         );
 
         if (photoColumns.length > 0) {
@@ -967,6 +979,81 @@ function assertPriceNotFrozen(id: string, existingPost: MarketplacePost, updates
         "SELECT 1 FROM marketplace_transactions WHERE post_id = ? AND status IN ('requested', 'pending') LIMIT 1"
     ).get(id);
     if (open) throw Object.assign(new Error(PRICE_FROZEN_ERROR), { status: 409, statusCode: 409, code: 'price_frozen' });
+}
+
+// LENDABLE OFFERS (scratch/tools/DESIGN-tool-library-fable.md §2.4; DESIGN-shops-and-tools-fable.md §12 S3). Only an Offer
+// is lent; its fee is one fee (Free is 0 Beans), per day or per week; and it is repeatable too (schema.sql), so every app
+// that predates lending puts it back on its board after each deal. What a loan does to the post after a deal is
+// engine/escrow.ts's.
+export const LEND_OFFERS_ONLY = 'Only an Offer can be lent';
+export const LEND_PRICE_TYPE_REFUSED = "A loan's fee is one fee (Free is 0 Beans), per day or per week";
+export const LEND_TERMS_FROZEN = 'Someone has asked to borrow this or has it now, so its loan terms can’t change until that loan is finished. To change them, cancel or decline it first.';
+
+/** A listing's lend columns as stored: all four set on a lendable Offer, 0 and NULLs on every other post. */
+interface LendColumns {
+    lendable: 0 | 1;
+    lend_max_days: number | null;
+    lend_terms: string | null;
+    replacement_value: string | null;
+}
+const NOT_LENT: LendColumns = { lendable: 0, lend_max_days: null, lend_terms: null, replacement_value: null };
+
+/**
+ * A new listing's lend columns. Every term is checked whatever the flag (engine/post-fields.ts), so a number sent as a
+ * replacement value is refused, never stored; without `lendable: true` none is stored, since a listing not lent has no
+ * terms.
+ */
+function lendColumnsOnCreate(type: string, priceType: string, options: LendFieldsIn | undefined): LendColumns {
+    const fields: LendFieldsIn = {
+        lendable: options?.lendable, lendMaxDays: options?.lendMaxDays, lendTerms: options?.lendTerms, replacementValue: options?.replacementValue,
+    };
+    assertLendFields(fields);
+    if (fields.lendable !== true) return NOT_LENT;
+    if (type !== 'offer') throw new Error(LEND_OFFERS_ONLY);
+    if (!isLendablePriceType(priceType)) throw new Error(LEND_PRICE_TYPE_REFUSED);
+    return {
+        lendable: 1,
+        lend_max_days: (fields.lendMaxDays as number | null | undefined) ?? null,
+        lend_terms: (fields.lendTerms as string | null | undefined) ?? null,
+        replacement_value: (fields.replacementValue as string | null | undefined) ?? null,
+    };
+}
+
+/**
+ * An edit's lend columns, or null when it leaves them as they are. Refused before anything is written: a term that isn't
+ * one, lending asked of anything but an Offer, a lendable Offer priced by the hour or the month, and any real change of the
+ * loan's terms (lent or not, the longest loan, the terms, the replacement value) while someone has asked for it or has it,
+ * as its price is (assertPriceNotFrozen): the borrower agreed to those. Sets `updates.repeatable` to what a lendable Offer
+ * is, and a post that stops being lent goes back to one-off unless the edit says repeatable.
+ */
+function lendColumnsOnEdit(id: string, existing: MarketplacePost, updates: Record<string, any>): LendColumns | null {
+    const fields: LendFieldsIn = {
+        lendable: updates.lendable, lendMaxDays: updates.lendMaxDays, lendTerms: updates.lendTerms, replacementValue: updates.replacementValue,
+    };
+    assertLendFields(fields);
+    const wasLent = existing.lendable === true;
+    const lent = fields.lendable !== undefined ? fields.lendable === true : wasLent;
+    if (!lent && !wasLent) return null;
+    if (lent && existing.type !== 'offer') throw new Error(LEND_OFFERS_ONLY);
+    if (lent && !isLendablePriceType(updates.priceType ?? existing.priceType)) throw new Error(LEND_PRICE_TYPE_REFUSED);
+
+    const next: LendColumns = !lent ? NOT_LENT : {
+        lendable: 1,
+        lend_max_days: fields.lendMaxDays !== undefined ? (fields.lendMaxDays as number | null) : (existing.lendMaxDays ?? null),
+        lend_terms: fields.lendTerms !== undefined ? (fields.lendTerms as string | null) : (existing.lendTerms ?? null),
+        replacement_value: fields.replacementValue !== undefined ? (fields.replacementValue as string | null) : (existing.replacementValue ?? null),
+    };
+    const changed = lent !== wasLent
+        || next.lend_max_days !== (existing.lendMaxDays ?? null)
+        || next.lend_terms !== (existing.lendTerms ?? null)
+        || next.replacement_value !== (existing.replacementValue ?? null);
+    if (changed && db.prepare(
+        "SELECT 1 FROM marketplace_transactions WHERE post_id = ? AND status IN ('requested', 'pending') LIMIT 1"
+    ).get(id)) {
+        throw Object.assign(new Error(LEND_TERMS_FROZEN), { status: 409, statusCode: 409, code: 'lend_terms_frozen' });
+    }
+    updates.repeatable = lent ? true : updates.repeatable === true;
+    return next;
 }
 
 /**
@@ -1200,6 +1287,7 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
     }
 
     assertPriceNotFrozen(id, existingPost, updates);
+    const lendCells = lendColumnsOnEdit(id, existingPost, updates as Record<string, any>);
 
     let uploadPhotoBytes: number | undefined;
     if (updates.photos !== undefined && Array.isArray(updates.photos)) {
@@ -1261,6 +1349,10 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
     if (updates.cashAlsoNeeded !== undefined) { fields.push('cash_also_needed = ?'); values.push((updates.cashAlsoNeeded === true || (updates.cashAlsoNeeded as any) === 'true') ? 1 : 0); }
     if (updates.lat !== undefined) { fields.push('lat = ?'); values.push(updates.lat); }
     if (updates.lng !== undefined) { fields.push('lng = ?'); values.push(updates.lng); }
+    if (lendCells) {
+        fields.push('lendable = ?', 'lend_max_days = ?', 'lend_terms = ?', 'replacement_value = ?');
+        values.push(lendCells.lendable, lendCells.lend_max_days, lendCells.lend_terms, lendCells.replacement_value);
+    }
 
     // The creator may still change the ballot while nobody has voted (refused above once anyone has). Only `true` opens it.
     if (existingPost.type === 'poll' && updates.pollOpenVote !== undefined) {

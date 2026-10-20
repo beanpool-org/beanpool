@@ -1203,6 +1203,16 @@ function purgeSyntheticMembers(): void {
 const REQUEST_TTL_DAYS = 7;
 const ESCROW_NUDGE_DAYS = 7;
 
+/**
+ * The lingering-deal nudge for a loan (DESIGN-tool-library-fable.md §2.5 step 5): "Is Dave's drill back?". The borrower
+ * finishes the loan by confirming the return, which pays the fee if there is one; only they can (engine/escrow.ts).
+ */
+export function loanNudgeBody(lenderCallsign: string | null | undefined, title: string | null | undefined, feeHeld: boolean): string {
+    const whose = lenderCallsign?.trim() ? `${lenderCallsign.trim()}'s ` : '';
+    const what = title?.trim() ? `"${title.trim()}"` : 'the thing you borrowed';
+    return `Is ${whose}${what} back? Once it is, confirm the return to finish the loan${feeHeld ? ' and release the Beans held for it' : ''}.`;
+}
+
 export function runMarketplaceHygiene(): void {
     // A main server's alone (its timer starts only there, initStateEngine): it writes deals and the activity list, and pushes.
     if (getNodeRole() === 'backup') return;
@@ -1232,18 +1242,22 @@ export function runMarketplaceHygiene(): void {
     // 2. Nudge buyers whose deals have been sitting in escrow — beans in limbo
     // help nobody. Re-nudges every ESCROW_NUDGE_DAYS via last_reminded_at.
     const lingering = db.prepare(`
-        SELECT t.*, p.title AS post_title FROM marketplace_transactions t
+        SELECT t.*, p.title AS post_title, p.lendable AS post_lendable, m.callsign AS seller_callsign FROM marketplace_transactions t
         LEFT JOIN posts p ON p.id = t.post_id
+        LEFT JOIN members m ON m.public_key = t.seller_pubkey
         WHERE t.status='pending'
           AND t.created_at < datetime('now', ?)
           AND (t.last_reminded_at IS NULL OR t.last_reminded_at < datetime('now', ?))
     `).all(`-${ESCROW_NUDGE_DAYS} days`, `-${ESCROW_NUDGE_DAYS} days`) as any[];
     for (const row of lingering) {
+        // A loan (a lendable Offer, S3) is asked about the thing, not the Beans: the borrower is the one who says it's back.
+        const loan = row.post_lendable === 1;
         dispatchPushNotification(
             [row.buyer_pubkey],
             'SYSTEM',
-            '⏳ Deal Awaiting Completion',
-            `"${row.post_title || 'A deal'}" has been in escrow for over ${ESCROW_NUDGE_DAYS} days — release the Beans to the seller or cancel the deal.`,
+            loan ? '⏳ Is it back?' : '⏳ Deal Awaiting Completion',
+            loan ? loanNudgeBody(row.seller_callsign, row.post_title, Number(row.credits) > 0)
+                : `"${row.post_title || 'A deal'}" has been in escrow for over ${ESCROW_NUDGE_DAYS} days — release the Beans to the seller or cancel the deal.`,
             { screen: 'post', postId: row.post_id },
             'marketplace',
             'trade.update'
@@ -5278,6 +5292,11 @@ export function createPost(
         eventRepeatUntil?: unknown;
         /** Filled when a clock the host set was adjusted (engine/posts.ts EventTimeOut). */
         out?: EventTimeOut;
+        /** A lendable Offer and its terms (engine/posts.ts lendColumnsOnCreate). */
+        lendable?: unknown;
+        lendMaxDays?: unknown;
+        lendTerms?: unknown;
+        replacementValue?: unknown;
         /** A caller's own limit, run after every refusal and before anything is stored (engine/posts.ts). */
         beforeWrite?: () => void;
     }
@@ -5429,7 +5448,8 @@ export function processDeferredWageClaims(enterprisePubkey: string): number {
                         }
                     }
                     if (claim.post_id) {
-                        listingDone = db.prepare("UPDATE posts SET status = 'completed', completed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ? AND repeatable = 0 AND status != 'completed'")
+                        // Not a repeatable or a lendable one: it stays on the board (engine/escrow.ts).
+                        listingDone = db.prepare("UPDATE posts SET status = 'completed', completed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ? AND repeatable = 0 AND lendable = 0 AND status != 'completed'")
                             .run(claim.post_id).changes > 0;
                     }
                     return true;

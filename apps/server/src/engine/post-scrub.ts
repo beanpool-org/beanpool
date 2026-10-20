@@ -8,7 +8,9 @@
  *   - its title (DELETED_POST_TITLE) and description (empty), and the search words made from them;
  *   - every photo: the row, with a `post_photos` tombstone per slot so a standby deletes its copy too, and the object in
  *     the image store once the deletion has committed (storage design §7: row first);
- *   - its place: the pin (lat, lng) and, for an event, the place name and the private note for the people going.
+ *   - its place: the pin (lat, lng) and, for an event, the place name and the private note for the people going;
+ *   - for a lendable Offer, its terms, its replacement value and its longest loan: the lender's own words, often a street
+ *     or a phone number. It stays lendable, as it stays an Offer: only the member's words go.
  * An event's replies stay until the 30-day scrub (engine/posts.ts scrubEndedEvents), as a cancelled event's do: they are
  * the people going's own, and what lets them read the event's chat (engine/event-thread.ts canReadEventThread), which
  * holds their messages too and stays readable, read-only, until then. Nobody is reminded of a cancelled event. The chat
@@ -56,6 +58,7 @@ export function scrubPostsOf(publicKey: string, at: string): string[] {
         UPDATE posts
            SET title = ?, description = '', search_keywords = ?,
                lat = NULL, lng = NULL, event_place_name = NULL, event_private_note = NULL, event_link = NULL,
+               lend_terms = NULL, replacement_value = NULL, lend_max_days = NULL,
                updated_at = ?
          WHERE id = ?`);
     const renameChat = db.prepare(`UPDATE conversations SET name = ? WHERE id = ? AND type = 'event_thread'`);

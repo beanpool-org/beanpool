@@ -21,6 +21,7 @@
 
 import {
     LISTING_CATEGORY_LIMIT, LISTING_DESCRIPTION_LIMIT, LISTING_TITLE_LIMIT, fitsTextLimit, replaceLoneSurrogates, textTooLongMessage, type TextLimit,
+    LEND_MAX_DAYS_MAX, LEND_TERMS_LIMIT, REPLACEMENT_VALUE_LIMIT,
 } from '@beanpool/core';
 
 /** The most Beans one listing may ask, per unit: far above any real price, and far below where arithmetic misbehaves. */
@@ -125,4 +126,49 @@ export function assertPostFields(fields: PostFieldsIn, mode: 'create' | 'edit', 
     if (has('lat')) coordinate(fields.lat, 'Latitude', 90, mode);
     if (has('lng')) coordinate(fields.lng, 'Longitude', 180, mode);
     if (has('hours') && !isDealQuantity(fields.hours)) throw new Error(DEAL_QUANTITY_ERROR);
+}
+
+// LENDABLE OFFERS (scratch/tools/DESIGN-tool-library-fable.md §2.3-2.4; DESIGN-shops-and-tools-fable.md §0 row 9, §12 S3).
+// A lendable Offer carries three terms of its own. The replacement value is the lender's words in their own currency ("$120",
+// "like for like"): text and only text, held to 40 characters and never read as a number, so a JSON number (412345678) is
+// refused here rather than stored as '412345678.0' in a TEXT column (the memo's trap, #1426). The longest loan is a whole
+// number of days. Each is asked on a create and on an edit, before anything is written, by engine/posts.ts.
+
+/** The lend fields as a create or an edit carries them. An edit names only what it changes; null clears a term. */
+export interface LendFieldsIn {
+    lendable?: unknown;
+    lendMaxDays?: unknown;
+    lendTerms?: unknown;
+    replacementValue?: unknown;
+}
+
+export const LENDABLE_NOT_A_FLAG = 'lendable must be true or false';
+export const LEND_MAX_DAYS_REFUSED = `The longest loan must be a whole number of days from 1 to ${LEND_MAX_DAYS_MAX}`;
+export const LEND_TERMS_NOT_TEXT = 'Lend terms must be text';
+export const LEND_TERMS_TOO_LONG = textTooLongMessage('Lend terms', LEND_TERMS_LIMIT);
+export const REPLACEMENT_VALUE_NOT_WORDS = 'A replacement value is words in your own currency, such as "$120" or "like for like"';
+export const REPLACEMENT_VALUE_TOO_LONG = textTooLongMessage('A replacement value', REPLACEMENT_VALUE_LIMIT);
+
+function lendText(fields: LendFieldsIn, key: 'lendTerms' | 'replacementValue', limit: TextLimit, notText: string, tooLong: string): void {
+    const raw = fields[key];
+    if (raw === undefined || raw === null) return;
+    if (typeof raw !== 'string') throw new Error(notText);
+    const v = replaceLoneSurrogates(raw).trim();
+    if (!fitsTextLimit(v, limit)) throw new Error(tooLong);
+    fields[key] = v === '' ? null : v;
+}
+
+/**
+ * Refuses lend fields no listing may hold, and writes back each text term as it will be stored (trimmed; empty is none).
+ * Whether this listing may be lent at all (an Offer, priced as a loan is) is engine/posts.ts's to say.
+ */
+export function assertLendFields(fields: LendFieldsIn): void {
+    if (fields.lendable !== undefined && typeof fields.lendable !== 'boolean') throw new Error(LENDABLE_NOT_A_FLAG);
+    const days = fields.lendMaxDays;
+    if (days !== undefined && days !== null
+        && (typeof days !== 'number' || !Number.isInteger(days) || days < 1 || days > LEND_MAX_DAYS_MAX)) {
+        throw new Error(LEND_MAX_DAYS_REFUSED);
+    }
+    lendText(fields, 'lendTerms', LEND_TERMS_LIMIT, LEND_TERMS_NOT_TEXT, LEND_TERMS_TOO_LONG);
+    lendText(fields, 'replacementValue', REPLACEMENT_VALUE_LIMIT, REPLACEMENT_VALUE_NOT_WORDS, REPLACEMENT_VALUE_TOO_LONG);
 }

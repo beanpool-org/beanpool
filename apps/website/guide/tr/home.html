@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/tr by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ana Sayfa — BeanPool members' guide</title>
+    <meta name="description" content="Ana Sayfa nedir, telefonda ve web uygulamasında hangi kartları gösterir, nasıl eklenir, taşınır veya kaldırılır, ilgi alanları seçimi ve çıkışta gizlilik.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#getting-started">Başlarken</a></p>
+        <h1>Ana Sayfa</h1>
+        <p class="lede">Ana Sayfa nedir, telefonda ve web uygulamasında hangi kartları gösterir, nasıl eklenir, taşınır veya kaldırılır, ilgi alanları seçimi ve çıkışta gizlilik.</p>
+        <h2>Ana Sayfa nedir</h2>
+        <p><strong>Ana Sayfa</strong> ilk sekmedir ve telefonda ile web uygulamasında uygulamanın açıldığı ekrandır. Size neyin ihtiyaç duyduğunu, etrafınızda neler olduğunu ve bundan sonra ne yapabileceğinizi yanıtlayan kartlardan oluşan bir panodur. Her kart birkaç satırdan oluşur ve uygulamanın o bölümüne tek bir dokunuşla ulaşmanızı sağlar. Söyleyecek bir şeyi olmayan kart ekranda yer kaplamaz.</p>
+        <p>Telefon ve web uygulaması birkaç fark dışında aynı kartları gösterir. Bu sayfada farklı oldukları yerlerde &quot;telefonda&quot; veya &quot;web uygulamasında&quot; ifadesi yer alır.</p>
+        <h2>Başlarken</h2>
+        <p>Yeni bir üyenin Ana Sayfası neredeyse boş başlar: <strong>Sana ihtiyacı var</strong> ile <strong>Topluluğun</strong> arasında tek bir kart, <strong>Başlarken</strong> (küresel toplulukta, <strong>Topluluğunu bul</strong> bunun üstünde durur). Şöyle yazar: &quot;Burası Ana Sayfanız. Buraya nelerin geleceğini siz seçersiniz. Başlamadan önce diğer sekmelere bir dakika göz atın.&quot;</p>
+        <ul>
+            <li><strong>Göz at</strong> kısa bir tur başlatır. Ekranın altındaki bir çubuk, uygulamayı sırayla her sekmeye taşır ve üstte <strong>Adım 2 / 8</strong> gibi bir başlıkla her adımda bir veya iki cümleyle sekmenin ne işe yaradığını anlatır (sayı, uygulamaya ve topluluğunuzun sekmelerine bağlıdır). Devam etmek için <strong>İleri</strong>'ye, durdurmak için <strong>Atla</strong>'ya dokunun. Çubuğun arkasındaki sekme normal şekilde çalışır: herhangi bir şeye dokunun veya başka bir sekmeye dokunduğunuzda tur sizi oraya kadar takip eder.</li>
+            <li>Son adım Ana Sayfa'ya geri döner: <strong>İlk kartlarını ekle</strong>. Ana Sayfa'ya koymak için bir karta veya tüm liste için <strong>Daha fazla kart</strong>'a dokunun. <strong>Bitti</strong>'ye dokunun. Hiçbir şey seçmediyseniz, Ana Sayfa her zamanki beş kartla başlar (aşağıda).</li>
+            <li>Karttaki veya çubuktaki <strong>Atla</strong>, turu sonlandırır. Ana Sayfa'ya kendiniz bir kart koymadıysanız, size her zamanki beş kartı verir. Koyduysanız (<strong>Kart ekle</strong>'den veya turun son adımındaki bir seçimden), Ana Sayfa seçtiğiniz kartları korur.</li>
+            <li>Tur asla kendiliğinden başlamaz. Uygulamayı turun ortasında kapatırsanız, kart &quot;Tura 3. adımdan devam et&quot; der.</li>
+            <li>Bitti veya Atla hesabınızda tutulur, bu nedenle kart diğer telefonlarınızda veya tarayıcılarınızda tekrar görünmez. Turu tekrar görmek için üstteki <strong>?</strong> işaretine ve <strong>Turu tekrar yap</strong>'a dokunun.</li>
+            <li>Ana Sayfanızı tur çıkmadan önce ayarladıysanız, sizin için hiçbir şey değişmez. İsterseniz <strong>Başlarken</strong>, <strong>Kart ekle</strong> içinde, <strong>Başlarken</strong> altındadır.</li>
+        </ul>
+        <p>Turda <strong>Atla</strong>'ya dokunduktan sonra ilk kartın altında tek satırlık bir ipucu belirir. Kapatmak için <strong>✕</strong> işaretine dokunun. <strong>Bitti</strong>'den sonra görünmez.</p>
+        <ul>
+            <li>Telefonda &quot;Burası Ana Sayfanız. Alta bir kart ekleyin veya taşımak ya da kaldırmak için bir kart üzerindeki … simgesine dokunun.&quot; yazar. <strong>✕</strong> işaretine dokunsanız da dokunmasanız da bir kez gösterilir ve bir daha gösterilmez. Bir kart eklemek veya kaldırmak da onu kaldırır.</li>
+            <li>Web uygulamasında da aynı kelimeler yazar. <strong>✕</strong> işaretine dokunana kadar Ana Sayfa'yı her açtığınızda tekrar gelir.</li>
+        </ul>
+        <h2>Kartlarınız</h2>
+        <p>Telefonda ve web uygulamasında Ana Sayfanız, seçtiğiniz kartların bir listesidir. Turdan sonra her zamanki beş kart şunlardır: <strong>İlk adımlar</strong>, <strong>İpuçları</strong>, <strong>Pazar'da Yeni</strong> (küresel toplulukta <strong>Yakınında</strong>), <strong>Yaklaşanlar</strong> ve <strong>Topluluğundan</strong>. <strong>Nelerle ilgileniyorsun?</strong> ve <strong>Geri dönüş yolun</strong> da eklenir ve yalnızca söyleyecek bir şeyleri olduğunda gösterilir. <strong>Sana ihtiyacı var</strong> her zaman en üstte, <strong>Topluluğun</strong> ise her zaman en alttadır.</p>
+        <ul>
+            <li>Ana Sayfa'nın altındaki topluluğunuzun kartında yer alan <strong>Kart ekle</strong>, topluluğunuzun gösterebileceği her kartın listesini üç grup halinde açar: <strong>Sana özel</strong>, <strong>Çevrende</strong> ve <strong>Başlarken</strong>. Ana Sayfa'ya koymak için bir kartın yanındaki <strong>Ekle</strong>'ye dokunun. Kart, <strong>Sana ihtiyacı var</strong>'ın hemen altına, en üste gider ve Ana Sayfa onu göstermek için yukarı kayar.</li>
+            <li>Zaten Ana Sayfa'da olan bir kart, <strong>Ekle</strong> yerine <strong>Ana Sayfa'da</strong> der. <strong>Kayıtlı bir arama</strong> gibi bazı kartlar birden fazla kez eklenebilir: kaç tanesine sahip olduğunuzu belirtirler, örneğin &quot;2 / 5 Ana Sayfa'da&quot;.</li>
+            <li><strong>Kayıtlı bir arama</strong>, eklenmeden önce &quot;yumurta&quot; gibi aranacak kelimeleri sorar. Ayrıca <strong>Teklifler</strong>, <strong>İhtiyaçlar</strong> veya <strong>İkisi de</strong>, bir kategori ve ne kadar uzağa bakılacağını seçebilirsiniz: 1, 2, 5, 10 veya 25 km. Mesafe yalnızca topluluğunuz bölgenizi bildiğinde veya konumunuzu paylaştığınızda sunulur; bunlar olmadan arama her yere bakar.</li>
+            <li><strong>Güneş ve ay</strong>, eklenmeden önce kimin konumunun kullanılacağını sorar: <strong>Topluluğun</strong> (olağan seçim) veya <strong>Bölgen</strong>.</li>
+            <li>Bir Ana Sayfa en fazla 24 kart tutabilir. Dolduğunda liste bunu belirtir ve başka bir kart eklemek için bir kartı kaldırırsınız.</li>
+            <li>Kartlarınız hesabınızda tutulur, bu nedenle sizi diğer telefonlarınıza ve tarayıcılarınıza kadar takip eder. Topluluğunuzun sunucusu henüz güncellenmediyse, bu telefonda veya bu tarayıcıda kalırlar ve <strong>Ana Sayfayı düzenle</strong> &quot;Kartlarınızın diğer cihazlara aktarılabilmesi için topluluğunuzun sunucusunun güncellenmesi gerekiyor.&quot; der. Ana Sayfa'yı her açtığınızda tekrar gönderilirler.</li>
+            <li>Bu değişiklikten önce kartları zaten taşıdıysanız veya gizlediyseniz, Ana Sayfanız gizlediğiniz kartlar olmadan sıranızı korur. Taşımadıysanız, <strong>Başlarken</strong>'i tek başına görürsünüz ve turun <strong>Atla</strong> veya <strong>Bitti</strong> seçeneği size beş kartı veya seçtiğiniz kartları verir (yukarıda). Bir haftadan daha uzun bir süre önce katıldıysanız, Ana Sayfa ilk açıldığında <strong>Başlarken</strong> altında size bir kez şunu da söyler: &quot;Ana Sayfa artık daha az kartla başlıyor. Kart ekle geri kalanları geri getirir.&quot;</li>
+        </ul>
+        <h2>Pazar'dan bir aramayı kaydetme</h2>
+        <p>Pazar'ın aramasında kelimeler varken, altındaki bir düğmede <strong>Bu aramayı Ana Sayfaya kaydet</strong> yazar. Ana Sayfa'yı eklenmeye hazır kayıtlı bir aramayla açar: kelimeleriniz, yalnızca birine bakıyorsanız <strong>Teklifler</strong> veya <strong>İhtiyaçlar</strong>, seçtiğiniz kategori ve seçtiğiniz mesafe (kapsayan 1, 2, 5, 10 veya 25 km'den en yakını). İstediğiniz her şeyi değiştirin, ardından <strong>Ana Sayfaya Ekle</strong>'ye dokunun: kart en üste gider. Eşleşen en yeni ilanları ilk olarak gösterir; dünya çapındaki toplulukta, Pazar'ının yaptığı gibi, en yakın olanı ilk olarak gösterir. Aynı arama zaten Ana Sayfa'da varsa veya beş tanesine sahipseniz, Ana Sayfa bunu belirtir ve hiçbir şey eklemez. <strong>Etkinlikler</strong> ve <strong>Anketler</strong> altında düğme yoktur: kayıtlı bir arama Teklifler ve İhtiyaçlar'ı arar.</p>
+        <h2>Kartlar</h2>
+        <p>Ana Sayfa yalnızca size söyleyecek bir şeyi olan kartları, kendi sıranızda gösterir. Eklediğiniz bir kart en üste, <strong>Sana ihtiyacı var</strong>'ın altına gider. Sahip olabileceğiniz kartlar şunlardır:</p>
+        <ul>
+            <li><strong>Sana ihtiyacı var:</strong> yalnızca sizi bekleyen bir şey varken: sizi bekleyen bir anlaşma, kişilerden gelen okunmamış mesajlar, gruplarınızdaki yeni satırlar, henüz kullanmadığınız bir oy (iki gün içinde kapandığında kehribar rengi) ve mülk sahipleri, yöneticiler ile moderatörler için onları bekleyen inceleme raporları gibi yönetici işleri. Telefonda bunlar ekranın üst kısmındaki küçük simgelerin gösterdiği şeylerle aynıdır. Bu kart ilk sırada kalır, taşınamaz veya gizlenemez.</li>
+            <li><strong>Geri dönüş yolun:</strong> 12 kelimeyle katıldıysanız ve bağlı bir giriş yönteminiz yoksa, bu kart onları güvende tutmanızı veya bir giriş yöntemi eklemenizi hatırlatır. Kapatmak için <strong>✕</strong> işaretine dokunun. İlk gönderinizden sonra bir kez ve bir hafta sonra bir kez tekrar gelir, ardından yalnızca <strong>Ayarlar</strong>'da yer alır: telefonda <strong>Hesap Koruması</strong> altında ve web uygulamasında Ayarlar'ın üst kısmında, <strong>Tek bir geri dönüş yolu</strong> başlığı altında. BeanPool'un anahtar kasasının anahtarınızın bir kopyasını zaten tuttuğu yerlerde görünmez.</li>
+            <li><strong>Topluluğunu bul:</strong> yalnızca küresel toplulukta. Size en yakın toplulukları gösterir ve onlara katılma talebinde bulunmanızı sağlar (&quot;Yakınınızda bir topluluk bulma&quot; bölümüne bakın). Telefonda <strong>Yakınındaki topluluklar</strong>, <strong>Bir topluluk başlat</strong> ve <strong>Burada bir topluluk başladığında bana haber ver</strong> seçenekleri bulunur. Web uygulamasında her topluluk kendi sayfasına bir bağlantıdır. Nerede olduğunuzu bilmiyorsa, konumunuzu paylaşmak yerine telefonda ve web uygulamasında <strong>veya kasabanı yaz</strong> seçeneğine dokunup kasabanızı seçin. Web uygulamasının kartında ayrıca <strong>Bölgemi paylaş</strong> bulunur. Bir kasaba seçtikten sonra, web uygulamasının kartında &quot;Yakınında&quot; ve kasaba adı ile birlikte <strong>değiştir</strong> yazar. Web uygulamasının kartında zaten bir yer varsa, <strong>Burada değil mi? Şehrini yaz</strong> da aynısını yapar. Küresel topluluktaki ilk 30 gününüz boyunca en üstte kalır ve kaldırılamaz veya taşınamaz. Bundan sonra diğerleri gibi bir karttır.</li>
+            <li><strong>İlk adımlar:</strong> kısa bir kontrol listesi. Yerel bir toplulukta: ilk Teklifinizi paylaşın, bir profil fotoğrafı ekleyin, beğendiğiniz birkaç şeyi seçin ve bir Teklif paylaştıktan sonra davetler açıksa birini davet edin. Yalnızca yöneticilerin davet ettiği yerlerde, telefon bu son satırı yalnızca mülk sahiplerine ve yöneticilere gösterir. Web uygulaması bunu her üyeye gösterir ve tamamlanmamış bir satır kartı tutar. Telefonda kart her satır tamamlandığında gider. Web uygulamasında ayrıca ilk 14 gününüz boyunca kalır.</li>
+            <li><strong>Küresel toplulukta ilk adımlar:</strong> ücretsiz veya takas için bir şey paylaşın ve 250 km yakınınızda bir topluluk listelenmişse sizi içeri almasını isteme önerisi sunar (bu satır kartı asla açık tutmaz). Ayrıca yeni bir hesaptaki sınırlamaları da söyleyebilir, örneğin ilk başta günde kaç gönderi ve yeni sohbet yapabileceğiniz gibi. İlk 14 gününüz boyunca ve sonrasında gönderi tamamlanana ve sınırlar bitene kadar kalır.</li>
+            <li><strong>İpuçları:</strong> üyeler için BeanPool'un nasıl çalıştığına dair her seferinde kısa bir ipucu. Bir sonraki için <strong>İleri</strong>'ye veya bu kılavuzun geldiği sayfasını açmak için <strong>Daha fazla oku</strong>'ya dokunun. Yeni bir günün ilk ziyaretinde de yeni bir ipucu gösterilir. Her ipucunu gördüğünüzde veya <strong>İpuçlarını bir daha gösterme</strong>'ye dokunduğunuzda kart kendiliğinden gider. <strong>Kart ekle</strong> ile tekrar eklemek ipuçlarını ilk baştan yeniden başlatır.</li>
+            <li><strong>Nelerle ilgileniyorsun?:</strong> beğendiğiniz kategorileri yıldızlamanızı sağlar. Yalnızca üyeler içindir. Henüz yıldızlanmış bir kategoriniz olmadığında veya Pazar kartında <strong>Ayarla</strong>'ya dokunduğunuzda gösterilir ve siz seçim yaparken ekranda kalır.</li>
+            <li><strong>Anlaşmaların:</strong> açık anlaşmalarınızı ve sizi bekleyen anlaşmaları gösterir. Küresel toplulukta yoktur: orada, Pazar'daki <strong>Takaslarım</strong> bunun yerine yerel bir topluluktan örnek anlaşmaları gösterir.</li>
+            <li><strong>Girişimin:</strong> sorumlusu olduğunuz girişimler için onay bekleyen istekleri gösterir. Sorumlusu olduğunuz bir proje olduğunda <strong>Projen</strong> olarak adlandırılır. Küresel toplulukta yoktur: orada, <strong>Ortak</strong> bunun yerine yerel bir topluluktan örnek bir girişimi gösterir.</li>
+            <li><strong>Yaklaşanlar:</strong> katılım durumunuzla birlikte yakınınızdaki yaklaşan etkinlikler.</li>
+            <li><strong>Pazar'da Yeni:</strong> yıldızlı kategoriler başta olmak üzere en yeni ilanlar. Küresel toplulukta <strong>Yakınında</strong> olarak adlandırılır ve en yakın ilanlar ilk sırada gelir. <strong>Topluluğunu bul</strong> bölümünde kasabanızı yazdıysanız, telefon o kasabadan itibaren hesaplar. İlgi alanlarınızı seçmek için <strong>Ayarla</strong>'ya veya Pazar'ı açmak için <strong>Tümünü gör</strong>'e dokunun. Yalnızca birkaç ilan varken, topluluğunuz bunları etkinleştirdiyse, örnek olarak işaretlenmiş birkaç örnek ilan gösterebilir.</li>
+            <li><strong>Karar Al:</strong> telefonda ayrı satırlar olarak açık Kararlar ve açık anketler. Telefonda, Kararlar <strong>Ortak</strong> içindeki <strong>Karar Al</strong>'ı, anketler ise Pazar'daki <strong>Anketler</strong>'i açar. Web uygulamasında tek bir satırdır ve dokunulduğunda Ortak açılır. Küresel toplulukta yoktur: oradaki anketler Pazar'ın <strong>Anketler</strong> bölümündedir ve <strong>Ortak</strong> yerel bir topluluktan örnek bir Karar gösterir.</li>
+            <li><strong>Kayıtlı bir arama:</strong> seçtiğiniz kelimelerle eşleşen ilanlar. En fazla beş taneye sahip olabilirsiniz. İlk satırı kelimeleriniz ve mesafedir, örneğin &quot;yumurta · 5 km içinde&quot;. Ardından her biri ilanı açan en fazla dört ilan gelir; <strong>Daha fazlasını gör</strong>, kelimeleriniz aramasında hazır olacak şekilde Pazar'ı açar. Pazar aramasının bulduğu şeyleri bulur, böylece &quot;yumurta&quot; aynı anlama gelen kelimelere sahip ilanları da bulur. Hiçbir şey eşleşmediğinde &quot;Şu anda 5 km içinde yumurta yok&quot; gibi bunu belirtir. Bağlantı olmadan yeni eklediğiniz veya değiştirdiğiniz bir arama, topluluğunuzun sunucusu yanıt verene kadar &quot;Topluluğunuz yanıt verdiğinde gösterilir&quot; der. Kelimeleri değiştirmek için <strong>…</strong> simgesine, ardından <strong>Ayarlar…</strong> seçeneğine dokunun: kart olduğu yerde kalır.</li>
+            <li><strong>Grupların:</strong> okunmamış mesaj sayılarıyla birlikte gruplarınız ve sohbetleriniz.</li>
+            <li><strong>Kimler katıldı:</strong> bu hafta katılan kişiler. Yerel bir toplulukta isimleri ve yüzleri gösterir. Küresel toplulukta ise isimleri değil, yalnızca bölgeye göre sayıyı gösterir.</li>
+            <li><strong>Nabız:</strong> yıldızlı kategoriler başta olmak üzere komşular tarafından YouTube ve bloglar gibi harici kanallardan paylaşılan gönderiler. Pulse'ı açmak için <strong>Tümünü gör</strong>'e dokunun.</li>
+            <li><strong>Güneş ve ay:</strong> bu gecenin ayı ile bugünün gün doğumu ve gün batımı tek bir satırda, örneğin &quot;🌔 Şişkin ay, %72 · Gün doğumu 6:12 · Gün batımı 17:48&quot;. Telefonunuz veya tarayıcınız bunu kendisi hesaplar: kart, topluluğunuzun sunucusundan hiçbir şey istemez. Topluluğunuzun yaklaşık bir kilometreye yuvarlanmış yerini veya topluluğunuzun bir yeri olmadığında bölgenizi kullanır (küresel toplulukta bu her zaman bölgenizdir). Küresel toplulukta telefon en son bulunduğu yeri de kullanabilir, ancak yalnızca uygulamanın konumunuzu kullanmasına zaten izin verdiyseniz: asla sormaz. <strong>Topluluğunu bul</strong> bölümünde kasabanızı yazdıysanız, telefon bunun yerine onu kullanır. Topluluğunuzun bir yeri olduğu durumlarda bile bölgenizi kullanmak için <strong>…</strong> simgesine, ardından <strong>Ayarlar…</strong> seçeneğine dokunun ve <strong>Bölgen</strong>'i seçin. Saatler kendi telefonunuzun veya bilgisayarınızın saatine göredir, bu nedenle seyahat ettiğinizde onları kendi saatinizde görürsünüz. Ay, ekvatorun o tarafından göründüğü şekilde çizilir. Güneşin bugün doğmadığı veya batmadığı yerlerde &quot;Güneş bütün gün tepede&quot; veya &quot;Bugün gün batımı yok&quot; gibi bunu belirtir. Bilinen bir yer yoksa kart gösterilmez ve <strong>Ana Sayfayı düzenle</strong> &quot;Şimdi gösterilecek bir şey yok: bilinen bir yer yok.&quot; der. Ekran okuyucu bunu kelimelerle okur, örneğin &quot;Ay şişkin ay, yüzde 72 aydınlık. Gün doğumu 06:12. Gün batımı 17:48.&quot;</li>
+            <li><strong>Fasulyelerin:</strong> bakiyeniz ve kredi limitiniz (harcama alanı). Küresel toplulukta yoktur. Orada telefon bunun yerine örnek bir kart gösterir: Fasulyelerin yerel bir toplulukta ne işe yaradığı ve <strong>Örnek bir defter gör</strong>. Tur bittiğinde veya atlandığında gelir (<strong>Başlarken</strong> açıkken, turun Defter adımı örneği gösterir) ve <strong>İlk adımlar</strong> gitmiş olsa bile siz <strong>Bu kartı gizle</strong>'ye dokunana kadar kalır.</li>
+            <li><strong>Topluluğundan:</strong> topluluğunuzun yöneticilerinden duyurular ve bildirimler.</li>
+            <li><strong>Topluluğunu büyüt:</strong> davetlerin açık olduğu yerlerde ilk Teklifinizden sonra yeni üyeler davet etmenizi sağlar. Küresel toplulukta yoktur. Telefonda, yalnızca yöneticilerin davet ettiği yerlerde, yalnızca bir sahip veya yönetici için gösterilir. Web uygulamasında orada hiç gösterilmez.</li>
+            <li><strong>Topluluğun:</strong> topluluğunuzun adıyla başlıklandırılmış son kart (küresel toplulukta <strong>Dünya çapındaki topluluk</strong>). Bu ayki üye sayısını ve takasları gösterir; küresel toplulukta ise üyeleri ve kaç topluluğun listelendiğini gösterir. <strong>Kart ekle</strong> ve <strong>Ana Sayfayı düzenle</strong> seçeneklerine sahiptir. Bu kart en altta kalır ve taşınamaz veya kaldırılamaz.</li>
+        </ul>
+        <p>Telefonda, topluluğunuz yeni bir adrese taşındığında, tüm bunların üzerindeki bir kart onun kullanılıp kullanılmayacağını sorar: &quot;Birden fazla topluluk&quot; içindeki &quot;Topluluğunuz yeni bir adrese taşındığında&quot; bölümüne bakın.</p>
+        <h2>&quot;…&quot; menüsü</h2>
+        <p>Çoğu kartın sağ üst köşesinde bir <strong>…</strong> düğmesi bulunur. Bunlarda bulunmaz:</p>
+        <ul>
+            <li><strong>Sana ihtiyacı var</strong>, <strong>Başlarken</strong> ve <strong>Topluluğun</strong>. <strong>Başlarken</strong> kartında bunun yerine <strong>Atla</strong> vardır.</li>
+            <li>Telefonda <strong>Geri dönüş yolun</strong>. Kendi <strong>✕</strong> simgesine sahiptir.</li>
+            <li>Küresel topluluktaki ilk 30 gününüz boyunca <strong>Topluluğunu bul</strong>.</li>
+        </ul>
+        <p>Şunları yapmak için <strong>…</strong> simgesine dokunun:</p>
+        <ul>
+            <li><strong>Ayarlar…:</strong> yalnızca <strong>Kayıtlı bir arama</strong> veya <strong>Güneş ve ay</strong> gibi ayarları olan bir kartta bulunur. Kartı bulunduğu yerde değiştirir.</li>
+            <li><strong>Yukarı taşı:</strong> kartı üstündeki kartla değiştirir.</li>
+            <li><strong>Aşağı taşı:</strong> kartı altındaki kartla değiştirir.</li>
+            <li><strong>Kaldır:</strong> kartı ayarlarıyla birlikte Ana Sayfa'dan çıkarır. <strong>Kart ekle</strong> onu geri koyar. Hiçbir şey onaylamanızı istemez. <strong>İpuçları</strong>'nı kaldırmak, <strong>İpuçlarını bir daha gösterme</strong> ile aynıdır.</li>
+        </ul>
+        <p>Web uygulamasında <strong>Geri dönüş yolun</strong> kartının da bir <strong>…</strong> menüsü vardır ve <strong>Yukarı taşı</strong>, <strong>Aşağı taşı</strong> ile <strong>Kaldır</strong> seçeneklerini içerir.</p>
+        <p>Gidecek yer olmadığında taşıma seçeneği soluk renkte görünür: taşıyabileceğiniz kartların en üstünde veya en altında. <strong>Sana ihtiyacı var</strong> altındaki ilk kart yukarı taşınamaz ve <strong>Topluluğun</strong> üstündeki son kart aşağı taşınamaz.</p>
+        <h2>Ana Sayfayı düzenle</h2>
+        <p>Ana Sayfa'nın en altında, topluluğunuzun kartında <strong>Ana Sayfayı düzenle</strong>'ye dokunun.</p>
+        <ul>
+            <li>İlk olarak <strong>＋ Bir kart ekle</strong> gelir. Ana Sayfa'daki <strong>Kart ekle</strong> ile aynı listeyi açar.</li>
+            <li>Ardından kendi sıranızla Ana Sayfanızdaki kartlar gelir. Her birinin yukarı ve aşağı okları ve kendi <strong>…</strong> menüsü vardır (Ayarlar…, Yukarı taşı, Aşağı taşı, Kaldır). Kayıtlı bir arama, kelimelerine göre ve yalnızca birini aradığında <strong>Teklifler</strong> veya <strong>İhtiyaçlar</strong>'a göre listelenir, örneğin &quot;yumurta&quot; veya &quot;İhtiyaçlar · yumurta&quot;, böylece iki arama iki farklı satır olur.</li>
+            <li>Şu anda gösterecek bir şeyi olmayan kart <strong>Şu anda gösterilecek bir şey yok</strong> der. Her ipucunu gördüğünüzde <strong>İpuçları</strong> kartı <strong>Tüm ipuçları görüldü</strong> der ve üzerinde çalışılacak bir yer yokken <strong>Güneş ve ay</strong> kartı <strong>Şimdi gösterilecek bir şey yok: bilinen bir yer yok.</strong> der.</li>
+            <li>Her zamanki beş karta geri dönmek için <strong>Varsayılanlara sıfırla</strong>'ya dokunun.</li>
+            <li>Anahtar ve gizli liste yoktur: kaldırdığınız bir kart <strong>Kart ekle</strong> içindedir.</li>
+            <li>Telefonda ve web uygulamasında yalnızca topluluğunuzun gösterebileceği kartlar listelenir. Örneğin küresel topluluğun listesinde <strong>Fasulyelerin</strong> veya <strong>Anlaşmaların</strong> yoktur: orada Defter ve <strong>Takaslarım</strong> bunun yerine yerel bir topluluktan örnekler gösterir.</li>
+            <li><strong>Sana ihtiyacı var</strong> her zaman en üstte kalır ve <strong>Topluluğun</strong> her zaman en altta kalır.</li>
+            <li>Küresel topluluktaki ilk 30 gününüzde <strong>Topluluğunu bul</strong> listelenmez. Şimdilik üste yakın kalır.</li>
+            <li><strong>Geri dönüş yolun</strong>, Ana Sayfanızda olduğu sürece okları ve <strong>…</strong> simgesiyle birlikte listelenir.</li>
+        </ul>
+        <h2>Nelerle ilgileniyorsun?</h2>
+        <p>Beğendiğiniz kategorileri (Yiyecek, Aletler, Hizmetler, Bahçe ve diğerleri) yıldızlamak için dokunun:</p>
+        <ul>
+            <li>Yıldızlı kategoriler Ana Sayfa'da <strong>Pazar'da Yeni</strong> ve <strong>Nabız</strong> bölümlerinde ilk sırada gelir.</li>
+            <li>Yıldızlı kategoriler hiçbir şeyi gizlemez: diğer ilanlar ve gönderiler hemen ardından gelir.</li>
+            <li>Ana Sayfa'da seçtiğiniz yıldızlar, Pazar sekmesindeki <strong>★ Sana Özel</strong> altında kullanılan yıldızlarla tamamen aynıdır.</li>
+            <li>Yıldızlarınızı değiştirmek için istediğiniz zaman Pazar kartındaki <strong>Ayarla</strong>'ya dokunun.</li>
+        </ul>
+        <h2>Web lobisinde</h2>
+        <p>Küresel topluluğun web sitesinde, katılmadan veya giriş yapmadan önce bir ziyaretçi daha sade bir Ana Sayfa görür (yerel bir topluluğun web sitesi bunun yerine hoş geldiniz sayfasını gösterir):</p>
+        <ul>
+            <li>En üstte bir <strong>Katıl</strong> kartı.</li>
+            <li>Yalnızca herkese açık kartlar: yakınınızdaki toplulukların bir kartı, <strong>Yaklaşanlar</strong>, <strong>İnsanların paylaştıkları</strong> (fotoğraflar ve kategoriler içeren ancak üye adı veya yüzü içermeyen ilanlar) ve <strong>Topluluğun</strong>.</li>
+            <li>Ziyaretçilerin <strong>…</strong> menüsü, <strong>Ana Sayfayı düzenle</strong> seçeneği ve <strong>Sana ihtiyacı var</strong> ya da <strong>Fasulyelerin</strong> gibi özel kartları yoktur.</li>
+        </ul>
+        <h2>Gizlilik ve çıkış yapma</h2>
+        <ul>
+            <li>Bir cihazdan çıkış yaptığınızda (web uygulamasında <strong>Çıkış Yap (Yalnızca Bu Cihaz)</strong>, ayrıca <strong>Yalnızca Bu Cihazdan Kaldır</strong> olarak etiketlenmiştir), o cihazın tuttuğu Ana Sayfanızın kopyaları cihazdan kaldırılır: son yanıtı, düzeniniz ve yıldızlarınız. Web uygulamasında <strong>Veritabanını Zorla Temizle ve Yeniden Eşitle</strong> ve hesabınızı silmek de aynı kopyaları temizler.</li>
+            <li>Düzeniniz ve yıldızlı kategorileriniz topluluğunuzdaki hesabınızda da kaydedilir. Bu cihazda veya başka bir cihazda yeniden giriş yaptığınızda onları geri alırsınız. Farklı bir hesap kendi düzeni ve yıldızlarıyla başlar.</li>
+            <li>Web uygulamasında, başka bir sekmede çıkış yapmak Ana Sayfa'yı tarayıcıdan hemen temizler.</li>
+        </ul>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="the-top-bar.html"><strong>Üst çubuk</strong><span>Fasulye simgesi, dikkatiniz gerektiğinde beliren küçük simgeler ve sağ üstteki düğmeler.</span></a></li>
+            <li><a href="../browsing-the-market.html"><strong>Browsing the market</strong><span>Find Offers and Needs with search, filters and distance.</span></a></li>
+            <li><a href="your-profile.html"><strong>Profiliniz</strong><span>Adınız, fotoğrafınız, hakkınızda birkaç kelime ve iletişim bilgilerinizi kimlerin görebileceği.</span></a></li>
+            <li><a href="finding-a-community.html"><strong>Yakınınızda bir topluluk bulma</strong><span>Küresel topluluktan yakınınızdaki bir topluluğu bulup katılma isteği gönderin, yakınınızda yeni bir topluluk başladığında bildirim alın veya kendiniz başlatın.</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>Fasulye ve küresel topluluk</strong><span>Küresel topluluğun amacı, birçok topluluktan biri olması, orada gördükleriniz: 🏘️ Yerel topluluk işareti, örnek topluluk Example Valley, Fasulyelerin neden beklediği ve yerel topluluk başlatma veya bulma.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

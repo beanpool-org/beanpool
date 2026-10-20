@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/zh-Hans by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="zh-Hans">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BeanPool 运作方式 — BeanPool members' guide</title>
+    <meta name="description" content="用通俗的话解释豆子、交易、提供与需求以及信用。">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#about">关于 BeanPool</a></p>
+        <h1>BeanPool 运作方式</h1>
+        <p class="lede">用通俗的话解释豆子、交易、提供与需求以及信用。</p>
+        <h2>豆子</h2>
+        <p>你所在的社区使用<strong>豆子</strong>进行交易。豆子并不是来自银行的货币。它们是记录谁帮助了谁的凭据。</p>
+        <p>每个人的账户都从零开始。当你帮助他人时，你会赚取豆子。当他人帮助你时，你会花费豆子。</p>
+        <p>大致参考标准：40 颗豆子大约相当于一个人一小时的时间。实际价格由你与对方协商一致确定。</p>
+        <h2>提供与需求</h2>
+        <p><strong>提供</strong>是指你能做的事或能给出的物品：面包、顺风车、一小时园艺、修理服务。</p>
+        <p><strong>需求</strong>是指你正在寻求的帮助或物品。</p>
+        <p>在启用豆子的社区中，在你发布“需求”或申请他人的“提供”之前，你必须至少发布一条属于自己的“提供”。每个人都能为社区贡献一份力量。在不涉及豆子的社区（如全球社区），你的第一条发布就可以是“需求”。</p>
+        <h2>交易如何运作</h2>
+        <ul>
+            <li>你找到了心仪的“提供”并提出申请，或者有人响应了你的“需求”。</li>
+            <li>当交易达成一致时，买家的豆子会被安全托管。在交易进行期间，任何人都无法动用这笔豆子。</li>
+            <li>任务顺利完成。</li>
+            <li>买家确认完成。随后豆子将转入卖家账户。</li>
+        </ul>
+        <p>如果交易陷入僵局，社区管理员可以介入调解。他们可以向卖家付款、将豆子退还给买家，或按比例分配。管理员不能对自己参与的交易进行裁决。</p>
+        <h2>赠予</h2>
+        <p>你也可以无需交易，直接将豆子作为礼物赠送给某人。</p>
+        <ul>
+            <li>赠予只能使用你实际拥有的豆子。它绝不能使你的余额低于零。</li>
+            <li>一旦你在市集中完成了一笔交易，即可使用赠予功能。仅涉及 1 或 2 颗豆子的交易金额过小，不计入在内。</li>
+            <li>赠予不收取任何费用。</li>
+        </ul>
+        <h2>允许负余额：你的信用额度</h2>
+        <p>你的支出可以略微超出所拥有的数量，使余额变为负数。这就是你的<strong>信用额度</strong>。它是你日后帮助他人的一种承诺。</p>
+        <p>你的信用额度从零开始。当你在市集中完成首笔交易时即可开启（仅涉及 1 或 2 颗豆子的交易金额过小，不计入在内）。社区中负责迎接新人的成员也可以通过为你担保，给予你一个良好的开端：25、50 或 100 颗豆子。</p>
+        <p>你的信用额度随你的<strong>信任值</strong>增长：</p>
+        <ul>
+            <li>你通过在市集中完成交易来赚取信任值。赠予不会赚取信任值。</li>
+            <li>与许多不同的人开展交易可以建立更高的信任。与任何单一对象的交易最多累计计入 500 颗豆子。</li>
+            <li>信任值起初增长较快，随后逐渐放缓。</li>
+            <li>星级评价很重要。如果他人对你进行了评分，你的平均评分将按比例折算交易带来的信任值：5 星保留全部，1 星保留 60%。</li>
+            <li>信用额度的最大透支深度为负 2,000 颗豆子。确认成员真实身份的社区可以允许更多（见下文）。</li>
+        </ul>
+        <h2>你的“提供”开启你的额度</h2>
+        <p>信任值决定了你<strong>能够</strong>透支的深度上限。你发布的有效“提供”决定了你当前<strong>允许</strong>透支的深度。额度取两者中的较小值。</p>
+        <ul>
+            <li>没有有效“提供”：余额不能低于零。</li>
+            <li>1 个“提供”：最多可透支至 -200。</li>
+            <li>2 个“提供”：最多可透支至 -500。</li>
+            <li>3 个“提供”：最多可透支至 -1,000。</li>
+            <li>4 个“提供”：最多可透支至 -1,500。</li>
+            <li>5 个“提供”：最多可透支至 -2,000。</li>
+        </ul>
+        <p>如果你在余额为负时下架了“提供”，你欠下的豆子可能超出当前“提供”所支持的范围。此时你无法继续支出，直到额度恢复到限制范围内。你依然可以赚取豆子，且不会扣除你的任何资产。</p>
+        <p>某些社区会确认成员的真实身份。在那里，经过确认的成员会立即获得信用额度：通常为 1,000 颗豆子（除非社区设定了其他数额）。发布一个有效“提供”即可开启全部额度。那里的最大透支额度可达 5,000。参见“你的信用额度”。</p>
+        <h2>信任徽章</h2>
+        <p>你的信任值表现为一枚徽章。徽章级别分别为：新人、居民、管家和长者。徽章背后的信任值由三部分累加而成：他人担保给予的基础、通过交易赚取的信任值，以及管理员授予的信任值。管理员可以直接向成员授予徽章，无需通过交易。在确认成员身份的社区中，确认成员获得的信用额度也会计入。</p>
+        <ul>
+            <li>居民：信任值达到 200。</li>
+            <li>管家：信任值达到 600。</li>
+            <li>长者：信任值达到 1,400。</li>
+        </ul>
+        <p>徽章仅代表社区的认可，仅此而已。它不设任何权限门槛，也不限制任何功能。无论佩戴什么徽章，每个人都可以开展交易、发起邀请和参与投票。</p>
+        <h2>费用与公共资金池</h2>
+        <p>你所在的社区拥有一个共享的豆子储备池，称为<strong>公共资金池</strong>。收取的费用将汇入其中。成员共同决定如何支配这些资金。</p>
+        <ul>
+            <li><strong>交易费：</strong>每笔市集支付金额的 1.5% 会汇入公共资金池。这笔费用从卖家收到的款项中扣除。</li>
+            <li><strong>流通费：</strong>豆子应当流转起来，而非沉淀不动。持有的前 200 颗豆子始终免收流通费。超出部分按月收取小额费用并汇入公共资金池：200 至 500 颗之间的豆子每月收取 1%，500 至 1,000 颗之间收取 1.5%，1,000 至 2,000 颗之间收取 2%，2,000 颗以上收取 2.5%。</li>
+            <li>负余额永远不收取流通费。赠予永远不收取任何费用。</li>
+        </ul>
+        <h2>企业与群组</h2>
+        <p><strong>企业</strong>是一个持续运转并以自身名义开展交易的实体：例如面包店、工具图书馆、集市摊位。它由<strong>管理者</strong>运营，并由<strong>主管理者</strong>领导。管理者可以认捐自己的一部分信任值，为企业提供信用额度。</p>
+        <p><strong>群组</strong>是拥有专属聊天室和帖子的成员圈子，由一位或多位<strong>召集人</strong>运营。其中一人为<strong>首席召集人</strong>（最初由创建该群组的人担任）。</p>
+        <p>关于如何推选管理者和召集人，请参见“规则与决策机制”。</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="../posting.html"><strong>Posting an Offer or a Need</strong><span>Put up something you can do or give, or something you are looking for.</span></a></li>
+            <li><a href="../a-deal-step-by-step.html"><strong>A deal, step by step</strong><span>From asking to getting paid, for an Offer and for a Need, and leaving a review.</span></a></li>
+            <li><a href="../credit-line.html"><strong>Your credit line</strong><span>How far below zero you can go, and how it grows.</span></a></li>
+            <li><a href="../gifts.html"><strong>Sending a gift</strong><span>Send beans to someone, with no trade.</span></a></li>
+            <li><a href="../circulation-fee.html"><strong>The circulation fee</strong><span>A small monthly fee on large balances, so beans keep moving. The first 200 are free.</span></a></li>
+            <li><a href="../trust-badges.html"><strong>Trust badges</strong><span>Newcomer, Resident, Steward and Elder. What they mean, and why they unlock nothing.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

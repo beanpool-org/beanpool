@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/bn by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>এই গাইড — BeanPool members' guide</title>
+    <meta name="description" content="কোথায় এই গাইড পাবেন, কীভাবে এতে অনুসন্ধান করবেন এবং কীভাবে এটি আপ-টু-ডেট থাকে।">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#getting-started">শুরু করা</a></p>
+        <h1>এই গাইড</h1>
+        <p class="lede">কোথায় এই গাইড পাবেন, কীভাবে এতে অনুসন্ধান করবেন এবং কীভাবে এটি আপ-টু-ডেট থাকে।</p>
+        <h2>এটি খোলা</h2>
+        <p>ফোনে, স্ক্রিনের উপরে বাম দিকে থাকা শিমটিতে ট্যাপ করুন। অথবা:</p>
+        <ul>
+            <li>স্ক্রিনের উপরের স্লাইডার বোতামটি দিয়ে <strong>সেটিংস</strong> খুলুন।</li>
+            <li><strong>BeanPool</strong>-এর অধীনে, <strong>সহায়তা এবং এটি কীভাবে কাজ করে</strong> ট্যাপ করুন।</li>
+        </ul>
+        <p>ওয়েব অ্যাপে এটি একই স্থানে রয়েছে: <strong>সেটিংস</strong>, তারপর <strong>BeanPool</strong>-এর অধীনে <strong>সহায়তা এবং এটি কীভাবে কাজ করে</strong>।</p>
+        <h2>এতে কী আছে</h2>
+        <ul>
+            <li><strong>আপনার সম্প্রদায়:</strong> এর নাম (ওয়েব অ্যাপে এর ঠিকানা), এবং এই মুহূর্তে এর সার্ভারে পৌঁছানো যাচ্ছে কিনা। ফোনে এর অধীনে রয়েছে <strong>আপনার কমিউনিটিসমূহ</strong>: সেটিতে যেতে একটিতে ট্যাপ করুন, অথবা <strong>একটি কমিউনিটি যোগ করুন</strong> ট্যাপ করুন। <strong>বৈশ্বিক কমিউনিটি</strong> সর্বদা সারিগুলোর একটি হিসেবে থাকে, সাথে দ্বিতীয় একটি লাইন থাকে যা বলে আপনি এর সদস্য কিনা, এতে যোগ দিতে পারেন কিনা, অথবা এই মুহূর্তে কেন এটি ব্যবহার করা যাচ্ছে না। &quot;একাধিক সম্প্রদায়&quot; দেখুন।</li>
+            <li><strong>নির্দেশিকা:</strong> BeanPool কীভাবে কাজ করে, নিয়ম ও কীভাবে সিদ্ধান্ত নেওয়া হয় এবং সাধারণ প্রশ্ন।</li>
+            <li><strong>অ্যাপটি কীভাবে ব্যবহার করবেন:</strong> প্রতিটি কাজের জন্য একটি সংক্ষিপ্ত পাতা, যেভাবে অ্যাপটি সাজানো রয়েছে সেভাবে দলভুক্ত: শুরু করা, বাজার, মানচিত্র, আলাপ, পালস, যৌথ তহবিল, খতিয়ান এবং সেটিংস ও নিরাপত্তা।</li>
+            <li><strong>BeanPool প্রকল্প:</strong> এই সংস্করণে নতুন কী আছে এবং beanpool.org ওয়েবসাইটের একটি লিংক (ফোনে কোনো বন্ধুকে এটি পাঠানোর জন্য <strong>শেয়ার করুন</strong> বোতামসহ)।</li>
+        </ul>
+        <h2>অনুসন্ধান করা</h2>
+        <p><strong>গাইডে খুঁজুন</strong>-এ একটি বা দুটি শব্দ টাইপ করুন (ওয়েব অ্যাপে শীর্ষে; ফোনে <strong>আপনার কমিউনিটিসমূহ</strong>-এর অধীনে)। এটি আপনার সমস্ত শব্দসহ প্রতিটি পাতা দেখায়। এটি কোনো সংযোগ ছাড়াই কাজ করে।</p>
+        <ul>
+            <li>ছোট শব্দও কাজ করে: &quot;vot&quot; লিখলে &quot;vote&quot; এবং &quot;voting&quot; খুঁজে পাওয়া যায়।</li>
+            <li>কিছু না আসলে, &quot;gift&quot;, &quot;photo&quot; বা &quot;block&quot;-এর মতো একটি সহজ শব্দ দিয়ে চেষ্টা করুন।</li>
+        </ul>
+        <h2>সর্বদা উপস্থিত, আপ-টু-ডেট রাখা হয়</h2>
+        <p>গাইডটি অ্যাপের মধ্যেই তৈরি করা, তাই এটি কোনো সংযোগ ছাড়াই কাজ করে। আপনি যখন অনলাইনে থাকেন, অ্যাপটি নতুন গাইডের জন্য beanpool.org পরীক্ষা করে এবং নতুন কোনো গাইড থাকলে সেটি ব্যবহার করে। গাইডের নিচের অংশে আপনি কোন সংস্করণটি পড়ছেন তা দেখানো হয়।</p>
+        <p>একই গাইড beanpool.org/guide ওয়েবসাইটেও রয়েছে।</p>
+        <h2>ভিডিও</h2>
+        <p>কিছু পাতা <strong>দেখুন:</strong> এবং একটি ভিডিওর নাম দেখাতে পারে। সেই লিংকটি কেবল তখনই দেখা যায় যখন BeanPool সেই পাতার জন্য একটি ভিডিও তৈরি করেছে এবং আপনার সম্প্রদায়ের পালসে, <strong>শিখুন</strong>-এর অধীনে এটি রয়েছে (ওয়েব অ্যাপে <strong>কীভাবে কাজ করে</strong>)। সদস্যরা শিখুন-এ যে ভিডিওগুলো যোগ করেন তা কখনই গাইডের পাতায় প্রদর্শিত হয় না। ভিডিও ছাড়াই প্রতিটি পাতা সম্পূর্ণ।</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="getting-help.html"><strong>সাহায্য পাওয়া</strong><span>কোথায় আটকে গেলে দেখতে হবে এবং কাকে জিজ্ঞাসা করতে হবে।</span></a></li>
+            <li><a href="how-it-works.html"><strong>BeanPool কীভাবে কাজ করে</strong><span>শিম, লেনদেন, প্রস্তাব ও প্রয়োজন এবং ক্রেডিট, সহজ কথায়।</span></a></li>
+            <li><a href="faq.html"><strong>প্রশ্নোত্তর</strong><span>সদস্যদের সবচেয়ে সাধারণ প্রশ্নের সংক্ষিপ্ত উত্তর।</span></a></li>
+            <li><a href="../whats-new.html"><strong>What's new</strong><span>What changed in the app, in plain words.</span></a></li>
+            <li><a href="the-top-bar.html"><strong>শীর্ষ বার</strong><span>শিম, ছোট আইকন যা কিছু প্রয়োজন হলে দেখায় এবং উপরের ডানদিকের বোতামগুলো।</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

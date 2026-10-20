@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/fil by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="fil">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mga tanong — BeanPool members' guide</title>
+    <meta name="description" content="Maikling sagot sa mga tanong na pinakamadalas itanong ng mga miyembro.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#about">Tungkol sa BeanPool</a></p>
+        <h1>Mga tanong</h1>
+        <p class="lede">Maikling sagot sa mga tanong na pinakamadalas itanong ng mga miyembro.</p>
+        <h2>Sino ang nagpapatakbo ng aking komunidad?</h2>
+        <p>Ang iyong komunidad ang nagpapatakbo sa sarili nito. Ang server nito ay inaalagaan ng mga taong pinili ng iyong komunidad: ang mga may-ari at admin nito. Ang iyong mga kalakalan, post at boto ay itinatago sa server na iyon. Ang proyektong BeanPool ang nagsusulat ng app, at kahit sino ay maaaring gumamit nito upang magsimula ng isang komunidad.</p>
+        <h2>Mayroon bang interes sa utang?</h2>
+        <p>Wala. Ang pagiging nasa ilalim ng zero ay walang bayad. Tanging ang mga munggo na hawak mo na lampas sa 200 ang nagbabayad ng maliit na circulation fee.</p>
+        <h2>Maaari ba akong bumili o magbenta ng munggo para sa pera?</h2>
+        <p>Walang paraan ang app upang bumili o magbenta ng munggo para sa pera. Ang munggo ay kinikita sa pamamagitan ng pagtulong sa mga tao.</p>
+        <h2>Bakit hindi ako makapagpadala ng regalo?</h2>
+        <p>Ang isang regalo ay nangangailangan ng dalawang bagay. Dapat ay nakakumpleto ka na ng isang kalakalan sa merkado (ang 1 o 2 munggo ay masyadong maliit para mabilang), at maaari ka lamang magbigay ng munggo na mayroon ka. Ang isang regalo ay hindi ka maaaring dalhin kailanman sa ilalim ng zero.</p>
+        <h2>Bakit hindi ako makagastos sa ilalim ng zero?</h2>
+        <p>Dalawang bagay ang nagtatakda kung gaano kalalim sa ilalim ng zero ang maaari mong marating. Ang iyong tiwala mula sa pakikipagkalakalan ang nagtatakda ng pinakamalalim na maaari mong marating. Ang iyong mga aktibong Alok ang nagtatakda kung gaano karami niyon ang magagamit mo sa ngayon. Kung walang aktibong Alok, hindi ka maaaring bumaba sa ilalim ng zero kahit kailan. Karamihan sa mga tao ay nagsisimula sa pamamagitan ng pagbebenta: mag-post ng isang Alok, at kapag may kumuha nito, kikita ka ng munggo at ng iyong unang tiwala.</p>
+        <h2>Sinasabi ng aking badge na Katiwala. Bakit napakaliit ng maaari kong gastusin?</h2>
+        <p>Ipinapakita ng iyong badge ang iyong tiwala. Ang maaari mong gastusin sa ngayon ay nakadepende rin sa kung gaano karaming aktibong Alok ang mayroon ka. Ang mga badge ay hindi nagbubukas o nagkakandado ng anuman sa sarili nila.</p>
+        <h2>Maaari ko bang palitan ang aking boto?</h2>
+        <p>Sa isang Desisyon o Poll, oo, hanggang sa magsara ang botohan. Sa boto ng mga tagapangalaga, sariling boto ng isang grupo, o boto para sa isang bagong punong tagapag-ugnay, hindi.</p>
+        <h2>May makakakita ba kung paano ako bumoto?</h2>
+        <p>Sa isang Desisyon, ipinapakita lamang ng app ang mga kabuuan, at ang iyong sariling boto sa iyo. Ang iyong boto ay nakaimbak sa server ng iyong komunidad. Ang mga may-ari at admin na nagpapatakbo ng server ay maaaring kumuha ng kopya ng mga file nito, at maaaring hanapin ito roon. Ang isang Poll ay hindi rin nagpapakilala sa parehong paraan, maliban kung ginawa ito ng taong nagsimula nito na isang <strong>bukas na botohan</strong>: kung gayon ay makikita ng mga miyembro kung sino ang pumili ng ano. Sinasabi ng poll kung alin ito bago ka bumoto.</p>
+        <h2>Makikita ba ng ibang miyembro ang aking balanse?</h2>
+        <p>Hindi. Hindi kailanman nakikita ng ibang miyembro ang iyong balanse. Sa telepono, sa isang komunidad na may Munggo, nakikita nila ang iyong trust badge at kung gaano karaming kalakalan ang nagawa mo. Ang isang kalakalan ay nagpapakita lamang ng dalawang tao nito. Kung bumoto ang komunidad sa pag-alis sa iyo, makikita ng mga miyembrong maaaring bumoto rito ang iyong balanse at anumang utang, sa botong iyon lamang. Mas marami ang makikita ng mga admin sa ilang sitwasyon, at naitatala ang mga pagtinging iyon: tingnan ang &quot;Makikita ng mga admin&quot;.</p>
+        <h2>Nawala ang aking telepono. Nawala na ba ang aking account?</h2>
+        <p>Hindi, kung naitabi mo ang iyong 12-salitang recovery phrase (sa Ingles). I-install ang app at ibalik ang iyong account gamit ang 12 salitang iyon. Kung nag-link ka ng sign-in account sa Proteksyon ng Account, maaari mo ring gamitin iyon. Itago ang iyong 12 salita sa isang ligtas at pribadong lugar. Sinumang may hawak sa mga ito ay maaaring gumamit ng iyong account.</p>
+        <p>Nawala rin ang iyong 12 salita? Maaaring ilipat ng isang admin ng iyong komunidad ang iyong account sa isang bagong telepono, nang personal: tingnan ang &quot;Nawala ang iyong telepono at ang iyong 12 salita&quot; sa &quot;Pagbawi sa iyong account&quot;.</p>
+        <h2>Kailangan ko ba ng Google, Apple o Facebook account?</h2>
+        <p>Hindi. Pinapapasok ka ng isang lokal na komunidad gamit ang imbitasyon mula sa isa sa mga miyembro nito. Pinapapasok ng pandaigdigang komunidad ang sinuman gamit ang 12 lihim na salita sa Ingles, o gamit ang sign-in kung mas gusto mo. Kung sumali ka gamit ang 12 salita lamang, ang mga ito ang iyong tanging paraan pabalik sa iyong account, at ang isang bagong account na ginawa sa ganoong paraan ay nagsisimula nang mas mabagal para sa unang linggo nito. Maaari kang magdagdag ng sign-in sa ibang pagkakataon, mula sa anumang telepono o browser kung saan nakapasok ka sa iyong account, at hindi habang suspendido ang iyong account. Tingnan ang &quot;Pagsali sa BeanPool&quot; at &quot;Iyong 12 salita&quot;.</p>
+        <h2>Bakit walang Munggo sa pandaigdigang komunidad?</h2>
+        <p>Ang munggo ay isang pangako sa pagitan ng mga taong maaaring matagpuan muli. Kahit sino ay maaaring sumali sa pandaigdigang komunidad gamit ang 12 salita, kaya wala pang makakapag-vouch doon kung sino ang sino sa ngayon. Ang Munggo, mga deal, mga negosyo at Mga Desisyon ay naninirahan sa mga lokal na komunidad. Ipinapakita ng pandaigdigang komunidad ang mga ito mula sa isang halimbawang komunidad, ang Example Valley, na minarkahang <strong>🏘️ Lokal na komunidad</strong>. Tingnan ang &quot;Munggo at ang pandaigdigang komunidad&quot;.</p>
+        <h2>Paano ako magsisimula ng isang komunidad?</h2>
+        <p>I-tap ang <strong>Magsimula ng komunidad</strong> sa app. Tumatakbo ang isang komunidad sa sarili nitong maliit na server: isang reserbang computer sa bahay, o isang inupahan para sa ilang dolyar bawat buwan. Libre ang software, at hindi kailangan ng komunidad ang beanpool.org. Tingnan ang &quot;Munggo at ang pandaigdigang komunidad&quot;.</p>
+        <h2>Maaari ba akong mapabilang sa mahigit sa isang komunidad?</h2>
+        <p>Oo. Sa telepono maaari kang mag-save ng ilang komunidad at lumipat sa pagitan ng mga ito, gamit ang parehong pagkakakilanlan sa bawat isa. Sa web app, ang bawat komunidad ay nagbubukas sa sarili nitong address. Bawat komunidad ay may sariling munggo, mga tuntunin at mga miyembro.</p>
+        <h2>Maaari ba akong sumali sa isa pang komunidad na maaaring salihan ng sinuman?</h2>
+        <p>Oo, gamit ang account na mayroon ka na. Ang ilang komunidad ay nagpapahintulot sa sinuman na sumali, tulad ng ginagawa ng pandaigdigang komunidad, at pinapatakbo ng sarili nilang mga tao ang mga ito sa sarili nilang mga address. Kapag naabot ng iyong telepono ang isa kung saan hindi ka pa miyembro, sinasabi nito ang <strong>Hindi ka pa miyembro rito</strong> at nag-aalok ng <strong>Sumali gamit ang account na ito</strong>. Sasali ka rito sa parehong paraan tulad ng sa pandaigdigang komunidad: gamit ang 12 salita na nasa iyong telepono na, o gamit ang sign-in kung humihingi ito ng isa. Ito ay nasa ilalim ng sariling pangalan ng komunidad na iyon, at ipinapakita ang address nito, upang makita mo kung saan ka sumasali. Ang iyong susi at ang iyong 12 salita ay mananatiling pareho, at walang magbabago sa iba mo pang mga komunidad. Ang isang link ay nagbubukas lamang ng screen na iyon, at walang sumasali hanggang sa mag-tap ka. Upang ipakita ito, tinatanong ng iyong telepono ang komunidad na iyon para sa pangalan nito at kung pinapayagan nito ang mga tao na sumali, kaya sinumang nagpapatakbo ng address na iyon ay makikita na may nagbukas ng link (walang ipinapadala tungkol sa iyong account).</p>
+        <h2>Aalis ako. Ano ang dapat kong gawin?</h2>
+        <p>I-on ang Holiday Mode sa Mga Setting. Nakatago ang iyong Mga Alok at walang makakapagpadala sa iyo ng mga bagong kahilingan. Tapusin o kanselahin muna ang anumang bukas na kalakalan, dahil hindi makakapagsimula ang Holiday Mode habang may bukas na kalakalan.</p>
+        <h2>Paano ako aalis?</h2>
+        <p>Maaari mong burahin ang iyong account sa Mga Setting. Tapusin o kanselahin muna ang anumang bukas na kalakalan. Kapag binura mo ang iyong account, ang anumang munggo na hawak mo ay mapupunta sa Komun ng iyong komunidad, at kung ikaw ay nasa ilalim ng zero, sasagutin ito ng Komun. Hindi na ito mababawi, kahit gamit ang iyong 12 salita. Binubura lamang nito ang iyong account sa komunidad na iyong ginagamit. Kung may isa pang komunidad sa telepono na mayroon ka pa, pinapanatili ng telepono ang iyong susi para dito; mawawala lamang ang susi kapag nagbura ka sa iyong huling komunidad.</p>
+        <h2>May mali o maaaring gawing mas maayos. Kanino ko sasabihin?</h2>
+        <p>Para sa mga problema sa isang tao o isang kalakalan, makipag-usap sa mga admin ng iyong komunidad. Upang mag-ulat ng isang post, isang event o isang post sa Pulse, i-tap ang watawat nito na <strong>🚩 I-report</strong> (sa telepono, sinasabi ng button ng isang post ang <strong>I-report ang Post</strong>). Sa web app ang chat sa isang tao ay may button ding <strong>Iulat</strong>. Sinasabihan ang mga admin ng iyong komunidad. Piliin ang <strong>Kaligtasan ng bata</strong> kung maaaring nasa panganib ang isang bata. Tingnan ang &quot;Pag-ulat ng problema&quot;. Para sa mga ideya tungkol sa app mismo, bisitahin ang beanpool.org.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="your-12-words.html"><strong>Iyong 12 salita</strong><span>Ang 12 salita ang susi sa iyong account. Bakit mahalaga ang mga ito, saan mahahanap, paano panatilihing ligtas, at pagdaragdag ng sign-in bilang pangalawang paraan pabalik.</span></a></li>
+            <li><a href="../recovery.html"><strong>Getting your account back</strong><span>Restore your account on a new phone, and protect it with a sign-in account.</span></a></li>
+            <li><a href="communities.html"><strong>Mahigit sa isang komunidad</strong><span>Maging kabilang sa ilang komunidad gamit ang iisang account, lumipat sa pagitan nila, sundan ang iyong komunidad sa bagong address, at tingnan ang ipinapakita ng pandaigdigang komunidad.</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>Munggo at pandaigdigang komunidad</strong><span>Para saan ang pandaigdigang komunidad, isang komunidad sa marami, at ano ang makikita roon: ang marker na 🏘️ Komunidad, ang halimbawang komunidad na Example Valley, bakit naghihintay ang Munggo roon, at paano magsimula o humanap ng lokal na komunidad.</span></a></li>
+            <li><a href="../holiday-mode.html"><strong>Going away</strong><span>Holiday Mode hides your Offers and pauses new requests while you are away.</span></a></li>
+            <li><a href="../leaving-or-deleting.html"><strong>Leaving or deleting your account</strong><span>Sign out of this phone, or delete your account for good, and what happens to your beans.</span></a></li>
+            <li><a href="getting-help.html"><strong>Humingi ng tulong</strong><span>Saan titingin kapag hindi alam ang gagawin, at sino ang tatanungin.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

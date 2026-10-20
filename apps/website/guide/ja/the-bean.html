@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ja by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>本ガイド — BeanPool members' guide</title>
+    <meta name="description" content="本ガイドの確認場所、検索方法、最新の状態に保たれる仕組みについて説明します。">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#getting-started">はじめに</a></p>
+        <h1>本ガイド</h1>
+        <p class="lede">本ガイドの確認場所、検索方法、最新の状態に保たれる仕組みについて説明します。</p>
+        <h2>ガイドを開く</h2>
+        <p>スマートフォンでは、画面左上の豆のマークをタップします。または：</p>
+        <ul>
+            <li>画面上部のスライダーボタンから<strong>設定</strong>を開きます。</li>
+            <li><strong>BeanPool</strong>の下にある<strong>ヘルプと仕組み</strong>をタップします。</li>
+        </ul>
+        <p>Webアプリでも同じ場所にあります。<strong>設定</strong>を開き、<strong>BeanPool</strong>の下にある<strong>ヘルプと仕組み</strong>を選びます。</p>
+        <h2>掲載内容</h2>
+        <ul>
+            <li><strong>あなたのコミュニティ:</strong> コミュニティの名前（Webアプリではアドレス）、および現在そのサーバーに接続できるかどうかを表示します。スマートフォンでは、その下に<strong>あなたのコミュニティ一覧</strong>があり、タップして切り替えたり、<strong>コミュニティを追加</strong>をタップしたりできます。<strong>グローバルコミュニティ</strong>は常に一覧の行の1つとして表示され、2行目にメンバーであるか、参加可能か、あるいは現在利用できない理由が表示されます。「複数のコミュニティ」を参照してください。</li>
+            <li><strong>ガイド:</strong> BeanPoolの仕組み、ルール、意思決定の方法、よくある質問が掲載されています。</li>
+            <li><strong>アプリの使い方:</strong> タスクごとに1つの短いページでまとめられており、アプリの構成に合わせて分類されています（はじめに、マーケット、地図、トーク、Pulse、コモンズ、台帳、設定と安全）。</li>
+            <li><strong>BeanPoolプロジェクト:</strong> このバージョンの新機能、および公式ウェブサイト（beanpool.org）へのリンクが掲載されています（スマートフォンでは、友達に送信できる<strong>共有</strong>ボタンが付いています）。</li>
+        </ul>
+        <h2>ガイドの検索</h2>
+        <p><strong>ガイドを検索</strong>（Webアプリでは最上部、スマートフォンでは<strong>あなたのコミュニティ一覧</strong>の下）に1〜2単語を入力します。入力したすべての単語を含むページが一覧表示されます。インターネット接続がなくても機能します。</p>
+        <ul>
+            <li>短い単語でも検索できます（例：「vot」で「vote」や「voting」が見つかります）。</li>
+            <li>結果が出ない場合は、「gift」、「photo」、「block」のようなより単純な単語を1つ試してください。</li>
+        </ul>
+        <h2>いつでも使え、常に最新</h2>
+        <p>ガイドはアプリに内蔵されているため、接続がまったくないオフライン環境でも利用できます。オンラインになると、アプリは beanpool.org に新しいガイドがないか確認し、存在する場合は新しいものを適用します。ガイドの最下部には、現在読んでいるバージョン番号が表示されます。</p>
+        <p>同じガイドは公式ウェブサイト（beanpool.org/guide）でもご覧いただけます。</p>
+        <h2>動画</h2>
+        <p>一部のページには、<strong>視聴：</strong>と動画のタイトルが表示されることがあります。このリンクは、BeanPoolがそのページ用の動画を作成し、コミュニティのPulseの<strong>学び</strong>（Webアプリでは<strong>仕組み</strong>）にその動画がある場合にのみ表示されます。メンバーが「学び」に追加した動画がガイドページに表示されることはありません。どのページも動画がなくても内容が完結しています。</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="getting-help.html"><strong>ヘルプとサポート</strong><span>困ったときの確認場所と相談先について説明します。</span></a></li>
+            <li><a href="how-it-works.html"><strong>BeanPoolの仕組み</strong><span>豆、取引、提供と求め、そしてクレジットについてわかりやすく説明します。</span></a></li>
+            <li><a href="faq.html"><strong>よくある質問</strong><span>メンバーから最も多く寄せられる質問への簡潔な回答です。</span></a></li>
+            <li><a href="../whats-new.html"><strong>What's new</strong><span>What changed in the app, in plain words.</span></a></li>
+            <li><a href="the-top-bar.html"><strong>トップバー</strong><span>豆のアイコン、確認が必要な項目を示す小さなアイコン、右上のボタンについて説明します。</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

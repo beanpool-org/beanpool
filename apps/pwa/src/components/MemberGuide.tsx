@@ -15,7 +15,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
     FEEDBACK_LIVE, BEANPOOL_WEBSITE_URL, GUIDE_SLUGS,
     beanPoolSheetEntries, findGuidePage, findGuideSection, findGuideVideo, guidePageBodyInEnglish,
-    guidePageNewerInEnglish, manualSections, relatedPages,
+    guidePageNewerInEnglish, isMachineDraft, manualSections, relatedPages,
     searchGuide, sectionPages, splitBold, t, tn,
     type GuidePage,
 } from '@beanpool/core';
@@ -231,6 +231,8 @@ function GuidePageView({ slug, openPage, openSection }: { slug: string; openPage
     const englishShown = showEnglish && newerInEnglish && !!page.englishBlocks;
     const blocksToRender = englishShown ? page.englishBlocks! : page.blocks;
     const currentLang = (englishShown || bodyInEnglish) ? 'en' : undefined;
+    const isTranslatedBody = page.bodyState === 'current' || page.bodyState === 'behind';
+    const showDraftNote = isTranslatedBody && !englishShown && isMachineDraft();
 
     return (
         <article className="text-nature-800 dark:text-nature-200 text-base leading-relaxed">
@@ -254,6 +256,11 @@ function GuidePageView({ slug, openPage, openSection }: { slug: string; openPage
                         {showEnglish ? t('Show translation') : t('Read in English')}
                     </button>
                 </div>
+            )}
+            {showDraftNote && (
+                <p data-testid="guide-draft-note" className="text-sm text-nature-600 dark:text-nature-300 mt-1 mb-2">
+                    {t('Translated by machine: some words may be wrong.')}
+                </p>
             )}
             {video && (
                 <a href={video.url} target="_blank" rel="noopener noreferrer" className="mt-3 flex items-center gap-2 min-h-[48px] px-4 py-2 rounded-2xl border border-nature-300 dark:border-nature-700 bg-white dark:bg-nature-900 font-semibold text-nature-900 dark:text-white no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">

@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/id by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>12 katamu — BeanPool members' guide</title>
+    <meta name="description" content="12 kata adalah kunci akunmu. Mengapa penting, di mana menemukannya, cara menyimpannya dengan aman, dan menambahkan akun masuk sebagai cadangan.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#getting-started">Memulai</a></p>
+        <h1>12 katamu</h1>
+        <p class="lede">12 kata adalah kunci akunmu. Mengapa penting, di mana menemukannya, cara menyimpannya dengan aman, dan menambahkan akun masuk sebagai cadangan.</p>
+        <h2>Mengapa 12 kata ini penting</h2>
+        <p>Akunmu bukanlah kata sandi yang disimpan oleh orang lain. Akunmu adalah sebuah kunci yang tersimpan di ponselmu. <strong>12 katamu</strong> (dalam bahasa Inggris) adalah kunci tersebut, yang dituliskan dalam bentuk kata-kata.</p>
+        <ul>
+            <li>Dengan 12 kata ini, kamu bisa memulihkan akunmu di ponsel baru: namamu, kacangmu, dan tingkat kepercayaanmu.</li>
+            <li>Tanpanya, ponsel yang hilang atau rusak bisa berarti akunmu hilang selamanya.</li>
+            <li>Kunci tersebut tetap berada di ponsel yang menyimpannya. Kunci ini tidak disalin ke cadangan ponselmu, jadi ponsel baru, bahkan iPhone yang dipulihkan dari cadangan ponsel lamamu, memerlukan 12 katamu atau akun masuk yang terhubung (lihat &quot;Recovery&quot;).</li>
+            <li>Siapa pun yang memiliki 12 katamu dapat menggunakan akunmu. Jangan pernah membagikannya, jangan pernah mengetikkannya di mana pun kecuali di aplikasi BeanPool atau web app BeanPool komunitasmu sendiri, dan jangan pernah mengirimkannya melalui pesan. Tidak ada seorang pun dari BeanPool atau komunitasmu yang akan memintanya.</li>
+        </ul>
+        <h2>Catat di atas kertas</h2>
+        <ul>
+            <li>Tuliskan 12 kata tersebut di atas kertas, secara berurutan, dan periksa ejaannya (kata-kata ini dalam bahasa Inggris).</li>
+            <li>Simpan kertas tersebut di tempat yang aman, terpisah dari ponselmu.</li>
+            <li>Foto atau tangkapan layar dari kata-kata tersebut mudah ditemukan oleh orang lain. Kertas jauh lebih aman.</li>
+            <li>Saat aplikasi ponsel menampilkan 12 katamu, atau saat kamu mengetikkannya, aplikasi memblokir tangkapan layar dan perekaman layar dari layar tersebut: ponsel akan menolak tangkapan layar, atau gambarnya akan keluar kosong. Namun tidak ada yang bisa mencegah foto layar yang diambil menggunakan ponsel lain.</li>
+            <li><strong>Salin kata</strong> (<strong>Copy All Words</strong> saat kamu bergabung, dan di web app) menyalin kata-kata tersebut ke papan klip ponselmu selama satu menit. Setelah itu aplikasi akan membersihkannya, jika papan klip masih menyimpannya. Jika kamu keluar dari aplikasi lebih dulu, aplikasi akan membersihkannya saat kamu kembali. Sesuatu yang kamu salin setelah itu tidak akan disentuh. Riwayat papan klip keyboard, atau papan klip yang dibagikan ke perangkatmu yang lain, mungkin tetap menyimpan salinan yang tidak bisa dibersihkan oleh aplikasi.</li>
+            <li>Di web app, salinan akan dihapus setelah satu menit jika kamu tetap berada di layar tersebut. Di iPhone atau iPad, di Safari atau Firefox, browser hanya mengizinkan aplikasi membersihkannya saat kamu mengetuk atau menekan tombol, sehingga salinan akan terhapus pada ketukan atau penekanan tombol pertamamu setelah satu menit tersebut. Jika kamu meninggalkan layar itu atau beralih ke aplikasi atau tab lain terlebih dahulu, aplikasi tidak tahu apakah kamu menyalin hal lain, sehingga papan klipmu tidak disentuh: salinlah hal lain di atas kata-kata tersebut.</li>
+            <li>Jika ponselmu tidak memiliki kunci layar, siapa pun yang memegangnya dapat membuka 12 katamu, dan aplikasi akan memberi tahu demikian di bawah kata-kata tersebut. Kunci PIN, pola, kata sandi, sidik jari, atau wajah, yang diatur di pengaturan ponselmu, membuatnya jauh lebih aman.</li>
+        </ul>
+        <h2>Kit pemulihanmu</h2>
+        <p>Kit pemulihan adalah satu halaman yang dapat dicetak: 12 katamu secara berurutan, nama dan alamat komunitasmu, tanggal pembuatannya, dan langkah-langkah untuk kembali masuk di ponsel dan di browser web. Halaman ini tidak mencantumkan akun siapa ini. Kit ini opsional: kamu bisa melanjutkan tanpanya.</p>
+        <ul>
+            <li><strong>Di ponsel</strong>: di samping 12 katamu (pada Cadangan aman saat kamu bergabung, dan di Pengaturan), ketuk <strong>Cetak kit pemulihanmu</strong> untuk mencetaknya, atau <strong>Simpan sebagai PDF</strong> untuk membuat file PDF dan memilih tempat menyimpannya. Sebelum menyimpan, aplikasi memperingatkan: &quot;Jauhkan file ini dari cadangan cloud dan obrolan. Siapa pun yang memilikinya dapat masuk sebagai dirimu.&quot; Ponsel akan menghapus salinan PDF miliknya sendiri setelah itu.</li>
+            <li><strong>Di web app</strong>: di samping 12 katamu (saat kamu bergabung, dan di Pengaturan di bawah <strong>Lihat Frasa Pemulihan</strong>), klik <strong>Cetak atau simpan kit pemulihanmu</strong>. Aplikasi memperingatkan: &quot;Jauhkan halaman atau file ini dari cadangan cloud dan obrolan. Siapa pun yang memilikinya dapat masuk sebagai dirimu.&quot; Klik <strong>Lanjutkan</strong> untuk membuka dialog cetak browser. Untuk menyimpan sebagai PDF dan bukan kertas, pilih <strong>Simpan sebagai PDF</strong> di sana.</li>
+            <li>Simpan halaman tersebut sebagaimana kamu menyimpan kata-katamu: siapa pun yang memilikinya dapat masuk sebagai dirimu.</li>
+        </ul>
+        <h2>Tempat untuk melihatnya lagi</h2>
+        <p>Buka <strong>Pengaturan</strong> dengan tombol bilah geser di bagian atas layar. Kemudian salah satu dari:</p>
+        <ul>
+            <li>Di bawah <strong>AKUN &amp; IDENTITAS</strong>, ketuk <strong>Lihat Frasa Pemulihan</strong>. Ketik <strong>CONFIRM</strong>, ketuk <strong>Tampilkan Frasa Pemulihan</strong>, dan lewati pemeriksaan layar kunci ponselmu.</li>
+            <li>Atau ketuk <strong>Perlindungan Akun</strong>, lalu <strong>Tampilkan 12 Kata Pemulihanku</strong>, dan lewati pemeriksaan layar kunci ponselmu. Ketuk <strong>Sembunyikan</strong> setelah selesai.</li>
+        </ul>
+        <p>Apa pun pilihannya, kata-kata tersebut juga akan disembunyikan saat kamu meninggalkan layar itu, atau meninggalkan aplikasi selama 15 detik atau lebih, dan ponsel akan meminta verifikasi lagi lain kali. Pemeriksaan layar kunci yang memakan waktu lebih dari dua menit tidak akan menampilkan apa pun: ketuk lagi.</p>
+        <p>Di web app, <strong>Lihat Frasa Pemulihan</strong> di bawah <strong>AKUN &amp; IDENTITAS</strong> langsung menampilkannya seketika.</p>
+        <p>Ponsel yang dipulihkan dengan akun masuk hanya akan mendapatkan kembali 12 katamu jika akun masuk tersebut dihubungkan dari ponsel yang menyimpannya, pada aplikasi yang terbaru. Jika tidak, ponsel tidak memiliki salinannya: kata-kata tersebut tidak dapat dibuat ulang dari akun masuk. <strong>Lihat Frasa Pemulihan</strong> tetap ada di sana, dan bertuliskan <strong>No copy on this phone yet</strong>. Pada ponsel tersebut, akun masuk yang terhubung adalah caramu untuk kembali masuk, jadi pastikan selalu ada yang terhubung di bawah <strong>Perlindungan Akun</strong>.</p>
+        <h2>Masukkan kembali 12 katamu ke ponsel ini</h2>
+        <p>Jika ponsel ini tidak memiliki salinan 12 katamu, dan kamu mencatatnya di atas kertas, kamu bisa menambahkannya:</p>
+        <ul>
+            <li>Buka <strong>Pengaturan</strong>. Di bawah <strong>AKUN &amp; IDENTITAS</strong>, ketuk <strong>Lihat Frasa Pemulihan</strong>. (Atau, di <strong>Perlindungan Akun</strong>, ketuk <strong>Tampilkan 12 Kata Pemulihanku</strong>.) Pada ponsel tanpa salinan, salah satunya akan membuka <strong>Tambahkan 12 katamu ke ponsel ini</strong>.</li>
+            <li>Ketik 12 kata tersebut secara berurutan (dalam bahasa Inggris), atau ketuk <strong>Tempel</strong>. Huruf kapital dan spasi ekstra tidak berpengaruh. Kata yang bukan merupakan kata dalam daftar kata pemulihan bahasa Inggris akan ditandai saat kamu mengetik.</li>
+            <li>Ketuk <strong>Tambahkan kata-kata ini</strong>.</li>
+        </ul>
+        <p>Ponselmu memeriksa apakah kata-kata tersebut milik akunmu, pemeriksaan yang sama seperti <strong>Periksa 12 katamu</strong> untuk pemilik. Kata-kata ini tidak dikirim ke mana pun. Jika kata-kata tersebut milik akun yang berbeda, tidak ada yang berubah dan aplikasi akan memberi tahu demikian. Setelah ditambahkan, <strong>Lihat Frasa Pemulihan</strong> akan menampilkannya, di setiap komunitas pada ponsel ini.</p>
+        <h2>Jika kamu bergabung ke komunitas global dengan 12 kata</h2>
+        <p>Kamu dapat bergabung ke komunitas global hanya dengan 12 kata rahasia (dalam bahasa Inggris), tanpa akun Google, Apple, atau Facebook (lihat &quot;Joining BeanPool&quot;). Jika itu membuatmu akun baru, 12 katamu adalah satu-satunya caramu untuk kembali masuk. Tidak ada salinan akunmu yang disimpan di mana pun selain di ponselmu, dan tidak ada yang bisa menyetel ulangnya: bukan BeanPool, dan bukan komunitas. Jika kamu kehilangan kata-kata itu dan ponselmu, akunmu akan hilang selamanya. (Jika kamu bergabung dengan akun yang sudah kamu miliki, akun masuk yang kamu hubungkan di komunitas lain tetap memulihkannya di sana.)</p>
+        <p>Aplikasi menyatakan demikian pada <strong>Cadangan aman</strong>. Setelah kamu bergabung, sebuah kartu di <strong>Beranda</strong> mengatakannya lagi, di ponsel dan di web app: <strong>Akunmu memiliki satu cara untuk kembali: 12 katamu. Periksa apakah kamu masih memilikinya, atau tambahkan akun masuk.</strong> Pesan ini tidak pernah menghalangimu melakukan apa pun. Di ponsel:</p>
+        <ul>
+            <li><strong>✕</strong> menutup kartu tersebut. Kartu ini akan muncul kembali sekali setelah postingan pertamamu dan sekali lagi setelah seminggu, lalu hanya tinggal di <strong>Pengaturan</strong>, di bawah <strong>Perlindungan Akun</strong>.</li>
+            <li><strong>Tampilkan 12 kataku</strong> membuka <strong>Perlindungan Akun</strong>, tempat kamu bisa melihatnya lagi.</li>
+            <li>Di <strong>Perlindungan Akun</strong>, <strong>Saya masih memiliki 12 kataku</strong> akan menutup kartu untuk selamanya. <strong>Tambahkan akun masuk</strong> tetap ada di sana.</li>
+        </ul>
+        <p>Di web app kartu tersebut berkepala <strong>Satu cara kembali</strong>, dengan <strong>Lihat 12 kataku</strong> dan <strong>Tambahkan akun masuk</strong>. <strong>✕</strong> menutupnya: kartu ini muncul kembali sekali setelah salah satu postinganmu tetap aktif, dan sekali ketika minggu pertamamu selesai. Mengetuk <strong>Lihat 12 kataku</strong> pada kartu <strong>Beranda</strong> akan menampilkannya, dan kartu tersebut tidak akan muncul kembali di sana. Kartu ini tetap berada di bagian atas <strong>Pengaturan</strong> sampai kamu menambahkan akun masuk.</p>
+        <p>Akun yang dibuat dengan 12 kata juga dimulai lebih lambat daripada akun yang dibuat dengan akun masuk, untuk minggu pertamanya. Lihat &quot;Reporting a problem&quot; untuk batasannya, dan alasannya.</p>
+        <h3>Menambahkan akun masuk nanti</h3>
+        <p>Kamu dapat menambahkan akun masuk nanti, dari ponsel atau browser mana pun tempat kamu berada di akunmu, tidak hanya yang kamu gunakan saat bergabung. Di ponsel tempat kamu memulihkan akunmu dengan 12 katamu, buka komunitas global di aplikasi: komunitas menyatakan akunmu hanya memiliki 12 katanya, dan kartu serta <strong>Tambahkan akun masuk</strong> akan muncul (ini bisa memakan waktu sebentar). Kamu tidak dapat menambahkannya saat akunmu ditangguhkan, atau jika komunitas telah menutup akunmu (aplikasi akan memberi tahu demikian, dan tidak ada yang berubah). Akun masuk tersebut menjadi cara kedua untuk kembali, dan langsung mengangkat batasan 12 kata seketika.</p>
+        <p>Jika brankas kunci BeanPool sudah menyimpan salinan akunmu, salinan tersebut juga menjadi cara kembali. Aplikasi kemudian tidak menampilkan kartu satu cara kembali. <strong>Tambahkan akun masuk</strong> tetap ditawarkan, secara hening, di <strong>Perlindungan Akun</strong> pada <strong>Pengaturan</strong>, karena ini mengangkat batasan 12 kata.</p>
+        <ul>
+            <li>Ketuk <strong>Tambahkan akun masuk</strong>: pada kartu, atau di <strong>Pengaturan</strong> di bawah <strong>Perlindungan Akun</strong>. Pada <strong>Cadangan aman</strong> tombolnya berbunyi <strong>Tambahkan akun masuk sebagai cara kedua untuk kembali</strong>.</li>
+            <li>Ketuk <strong>Lanjutkan dengan Google</strong>, <strong>Lanjutkan dengan Facebook</strong> atau, di iPhone, <strong>Lanjutkan dengan Apple</strong>, lalu masuk sekali. Aplikasi mungkin meminta kunci ponselmu terlebih dahulu.</li>
+            <li><strong>Sign-in added</strong> menyatakan proses berhasil. Akunmu sekarang memiliki batasan wajar akun baru, dan akun masuk tersebut memulihkannya jika kamu kehilangan ponselmu, seperti halnya seseorang yang bergabung dengannya. Lihat &quot;Recovery&quot; untuk mengetahui siapa yang dapat membuka salinan yang disimpan untuknya.</li>
+        </ul>
+        <p>Jika salinan akunmu tidak dapat disimpan saat itu juga, akun masuk tetap ditambahkan dan batasanmu tetap diangkat, tetapi 12 katamu tetap menjadi caramu untuk kembali. Aplikasi akan memberi tahu demikian. Akun masuk yang sudah memiliki akun BeanPool lain di komunitas global, atau milik akun yang dihapus oleh komunitas, tidak dapat ditambahkan, dan tidak ada yang berubah.</p>
+        <p><strong>Protect with</strong>, lebih ke bawah di <strong>Perlindungan Akun</strong> di bawah <strong>Sign-In Recovery Providers</strong>, juga menghubungkan akun masuk sebagai cara kembali, tetapi membiarkan batasan 12 kata dan kartunya tetap seperti semula. Gunakan <strong>Tambahkan akun masuk</strong> untuk keduanya.</p>
+        <h2>Cara kedua untuk kembali: akun masuk</h2>
+        <p>Di aplikasi ponsel kamu juga dapat menghubungkan akun Google atau Facebook (dan Apple di iPhone). Jika kamu kehilangan ponselmu, akun tersebut dapat memulihkan akunmu di ponsel baru, melalui server komunitasmu, yang menyimpan salinan terkunci untuknya. Pengelola server tersebut dapat membuka salinan itu. Lihat &quot;Recovery&quot;.</p>
+        <p>Akun masuk yang kamu hubungkan dari ponsel yang menyimpan 12 katamu juga akan menyimpannya, sehingga memulihkan dengannya akan mengembalikannya. Akun masuk yang kamu hubungkan di versi aplikasi yang lebih lama akan memulihkan akunmu tanpanya: di bawah <strong>Perlindungan Akun</strong>, ketuk <strong>Hubungkan lagi</strong> di sampingnya dan lewati pemeriksaan layar kunci ponselmu untuk menyertakannya. Simpan juga catatannya di kertas.</p>
+        <h2>Di browser web</h2>
+        <p>Di komunitas global, akun masuk yang kamu gunakan untuk bergabung di browser disimpan sebagai cara kedua untuk kembali: Pengaturan menampilkan <strong>Sign-in recovery: connected</strong>. Di browser baru atau yang telah dibersihkan, ketuk <strong>Sudah punya BeanPool?</strong>, lalu <strong>Gunakan akun masuk saya</strong>, dan akunmu akan dipulihkan, beserta 12 katanya (lihat &quot;Using BeanPool in a web browser&quot;). Jika kamu bergabung di sana menggunakan 12 kata sebagai gantinya, kata-kata tersebut adalah satu-satunya caramu untuk kembali sampai kamu menambahkan akun masuk: sebuah kartu bernama <strong>Satu cara kembali</strong> menyatakan demikian, dengan <strong>Lihat 12 kataku</strong> dan <strong>Tambahkan akun masuk</strong>, setelah kamu bergabung dan di Pengaturan. Di komunitas lain web app tidak memiliki pemulihan akun masuk, dan 12 katamu adalah cara untuk kembali. Browser juga dapat membersihkan data yang tersimpan, jadi catat kata-kata tersebut di kertas sebelum kamu mengandalkan web app.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="../recovery.html"><strong>Getting your account back</strong><span>Restore your account on a new phone, and protect it with a sign-in account.</span></a></li>
+            <li><a href="joining.html"><strong>Bergabung ke BeanPool</strong><span>Dua cara masuk: komunitas dengan undangan anggota, atau komunitas global saat terbuka dengan 12 kata rahasia atau satu akun masuk. Meminta bergabung ke komunitas, dan mengundang orang lain.</span></a></li>
+            <li><a href="communities.html"><strong>Lebih dari satu komunitas</strong><span>Bergabung di beberapa komunitas dengan satu akun, berpindah antar komunitas, mengikuti komunitas saat pindah alamat, dan melihat apa yang ditampilkan komunitas global.</span></a></li>
+            <li><a href="faq.html"><strong>Pertanyaan</strong><span>Jawaban singkat untuk pertanyaan yang paling sering diajukan anggota.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

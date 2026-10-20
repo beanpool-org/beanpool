@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/pt by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Barra superior — BeanPool members' guide</title>
+    <meta name="description" content="O feijão, os pequenos ícones que avisam quando algo precisa de você e os botões no canto superior direito.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#getting-started">Primeiros passos</a></p>
+        <h1>Barra superior</h1>
+        <p class="lede">O feijão, os pequenos ícones que avisam quando algo precisa de você e os botões no canto superior direito.</p>
+        <h2>O que há nela</h2>
+        <p>No celular, a barra na parte superior da tela é a mesma em todas as abas. Da esquerda para a direita:</p>
+        <ul>
+            <li><strong>O feijão:</strong> sua comunidade e este guia.</li>
+            <li><strong>Os ícones de &quot;precisa de você&quot;:</strong> aparecem apenas enquanto algo estiver esperando por você.</li>
+            <li><strong>O ícone ?, o ícone de convite, Configurações e sua foto.</strong></li>
+        </ul>
+        <p>Em um navegador web, a barra superior é mais simples. Ela tem o status da conexão à esquerda, o nome da página e seu perfil, o <strong>?</strong> e as Configurações à direita. Não há a aba do feijão, nem ícones de &quot;precisa de você&quot;, nem ícone de convite: <strong>Convites</strong> fica em <strong>Pessoas</strong>. As abas ficam na parte inferior ou na lateral esquerda em uma tela ampla.</p>
+        <h2>O feijão</h2>
+        <p>Toque no feijão no canto superior esquerdo para abrir a aba do <strong>BeanPool</strong>. Ela mostra:</p>
+        <ul>
+            <li><strong>Sua comunidade:</strong> o nome dela no topo e se ela pode ser alcançada agora.</li>
+            <li><strong>SUAS COMUNIDADES:</strong> toque em uma para alternar para ela, ou toque em <strong>Adicionar uma comunidade</strong>. A <strong>Comunidade global</strong> é sempre uma delas: sua segunda linha diz se você pode entrar nela.</li>
+            <li><strong>Buscar no guia</strong>, depois <strong>Guias</strong> (como o BeanPool funciona, as regras, perguntas frequentes), <strong>Como usar o app</strong> (este guia, seção por seção) e <strong>O projeto BeanPool</strong>, com novidades.</li>
+            <li><strong>beanpool.org:</strong> o site público, com <strong>Compartilhar</strong> para enviar a um amigo.</li>
+        </ul>
+        <p>O pequeno ponto no feijão informa como estão as coisas:</p>
+        <ul>
+            <li><strong>Verde:</strong> conectado, e você é membro aqui.</li>
+            <li><strong>Âmbar:</strong> você está visitando como convidado.</li>
+            <li><strong>Vermelho:</strong> o servidor da sua comunidade não pode ser alcançado agora, ou este celular ainda não está conectado a uma comunidade.</li>
+        </ul>
+        <p>Uma única verificação lenta não torna o ponto vermelho. Ele só fica vermelho após várias falhas consecutivas de verificação.</p>
+        <h2>Os ícones de &quot;precisa de você&quot;</h2>
+        <p>Entre o feijão e os botões à direita, pequenos ícones aparecem apenas enquanto algo precisa de você. Cada um representa um tipo de ação pendente. Toque nele para ir direto até lá.</p>
+        <ul>
+            <li><strong>Um aperto de mãos:</strong> um acordo aguarda você. Alguém espera que você aceite uma solicitação, ou um acordo do qual você participa ainda não foi concluído. Se houver apenas um, o toque abre esse acordo. Se houver mais, abre <strong>Meus acordos</strong>.</li>
+            <li><strong>Uma urna eleitoral:</strong> uma votação na qual você ainda não votou. O toque abre <strong>Bens comuns</strong>, em <strong>Decidir</strong>. Se a primeira votação for em um grupo ou uma votação de custódios em um empreendimento, o toque abre esse grupo ou empreendimento. Uma votação na qual você ainda não pode votar não conta aqui, por exemplo, uma que exige concluir uma troca primeiro.</li>
+            <li><strong>Um balão de fala:</strong> uma mensagem não lida de uma pessoa. Se for de uma única pessoa, o toque abre essa conversa. Se for de várias pessoas, abre <strong>Conversas</strong>, em <strong>Mensagens</strong>, mostrando apenas as não lidas.</li>
+            <li><strong>Um grupo de pessoas:</strong> novas mensagens nos seus grupos, conversas de empreendimentos ou de eventos. Conversas que você silenciou permanecem discretas aqui. O toque abre a conversa, ou <strong>Conversas</strong>, em <strong>Grupos</strong>, se houver várias.</li>
+            <li><strong>Um escudo:</strong> apenas para quem ajuda a administrar sua comunidade. Aparece enquanto houver trabalho administrativo pendente, como uma denúncia a revisar ou uma negociação travada que precisa de mediação. O toque solicita o bloqueio de tela do celular e abre as configurações da comunidade nessa tarefa. Se as configurações da sua comunidade exigirem um código de login, ele também será solicitado.</li>
+        </ul>
+        <p>Os ícones se empilham a partir da direita. O mais importante fica ao lado do ícone ? e mantém seu lugar enquanto outros aparecem e desaparecem.</p>
+        <h3>O número e a cor</h3>
+        <ul>
+            <li>Um número pequeno em um ícone indica mais de um item daquele tipo: por exemplo, 3 pessoas que escreveram para você. Exibe <strong>9+</strong> para valores acima de 9.</li>
+            <li>Um ícone fica <strong>âmbar</strong> quando for mais urgente: um acordo aguardando você, trabalho de administração ou uma votação que encerra em até 2 dias. Nada fica vermelho.</li>
+        </ul>
+        <h3>Em uma tela pequena</h3>
+        <p>Se não houver espaço para todos os ícones, o último espaço exibe <strong>•••</strong>. Toque nele para ver a lista completa, <strong>Precisa de você</strong>, por extenso. Toque em uma linha para ir até ela.</p>
+        <h3>Uma barra vazia é um bom sinal</h3>
+        <p>Quando nada precisa de você, nenhum ícone aparece. Você não perdeu nada. Os ícones se atualizam conforme você navega pelo aplicativo e quando você retorna a ele.</p>
+        <h2>Entrar ou Conectar</h2>
+        <p>No lugar dos ícones, você pode ver um botão:</p>
+        <ul>
+            <li><strong>Entrar</strong> (âmbar): você está visitando como convidado. Toque nele para abrir <strong>Convites</strong>. Em uma comunidade local, você entra lá com um convite. Na comunidade global, toque em <strong>Entrar com 12 palavras ou um login</strong> (<strong>Entrar com um login</strong> onde a comunidade aceita apenas logins).</li>
+            <li><strong>Conectar</strong> (vermelho): este celular não está conectado a uma comunidade. Toque nele para abrir as <strong>Configurações</strong>, onde você pode adicionar uma.</li>
+        </ul>
+        <p>Enquanto um desses botões estiver visível, o ícone de convite fica oculto.</p>
+        <h2>Os botões à direita</h2>
+        <ul>
+            <li><strong>O ícone ?</strong> (um ponto de interrogação em um círculo): ajuda para a tela em que você está. Abre um painel curto com a finalidade da tela, além de <strong>Ler a página do guia</strong>, <strong>Buscar no guia</strong> e <strong>Fazer o tour novamente</strong>. Está presente em todas as abas, para membros e convidados. No aplicativo web, fica entre sua foto e as Configurações no topo, e ao lado de Configurações na parte inferior da barra lateral em telas amplas.</li>
+            <li><strong>O ícone de convite</strong> (uma pessoa com um sinal de mais): abre <strong>Convites</strong>, para convidar alguém ou entrar em outra comunidade. Consulte &quot;Entrar no BeanPool&quot;.</li>
+            <li><strong>Configurações</strong> (os controles deslizantes): abre as <strong>Configurações</strong>. Toque novamente para voltar de onde parou.</li>
+            <li><strong>Sua foto:</strong> abre seu próprio perfil, como as outras pessoas o veem.</li>
+        </ul>
+        <h2>Mensagens de atualização</h2>
+        <p>Às vezes, uma barra verde aparece sob a barra superior:</p>
+        <ul>
+            <li><strong>Atualização disponível:</strong> uma versão mais nova do aplicativo está disponível. Toque em <strong>Atualizar</strong> para obtê-la, ou no X para fechar o aviso.</li>
+            <li><strong>Seu app é muito antigo para esta comunidade:</strong> você precisa atualizar antes que o aplicativo volte a funcionar corretamente aqui. Este aviso não pode ser fechado. Toque em <strong>Atualizar</strong>.</li>
+        </ul>
+        <h2>As abas</h2>
+        <p>Abaixo da barra superior ficam as abas: <strong>Início</strong>, <strong>Mercado</strong>, <strong>Mapa</strong>, <strong>Conversas</strong>, <strong>Bens comuns</strong> e <strong>Registro</strong>. O nome de cada aba fica acima do seu ícone. No celular, uma comunidade local sem Feijões não exibe <strong>Bens comuns</strong> nem <strong>Registro</strong>. A comunidade global mostra ambos, com exemplos de uma comunidade local. Consulte &quot;Os Feijões e a comunidade global&quot;.</p>
+        <p>Em uma página longa, toque na aba em que você já está para voltar rapidamente ao topo. Isso funciona em todas as abas, exceto no <strong>Mapa</strong>.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="home.html"><strong>Início</strong><span>O que é o Início, quais cartões ele mostra no celular e na web, como adicionar, mover ou remover, escolher seus interesses e privacidade ao sair.</span></a></li>
+            <li><a href="the-bean.html"><strong>Este guia</strong><span>Onde encontrar este guia, como pesquisar nele e como ele se mantém atualizado.</span></a></li>
+            <li><a href="communities.html"><strong>Mais de uma comunidade</strong><span>Participe de várias comunidades com uma só conta, alterne entre elas, acompanhe sua comunidade para um novo endereço e veja o que a comunidade global mostra.</span></a></li>
+            <li><a href="../my-deals.html"><strong>My Deals</strong><span>One place for every trade you are in, every post you have up, and your past trades.</span></a></li>
+            <li><a href="../decisions.html"><strong>Voting on a Decision</strong><span>Find open Decisions, vote, change your vote, and see results.</span></a></li>
+            <li><a href="../messages.html"><strong>Messages</strong><span>Start a chat, send photos, reply, react, edit, delete, mute, and what is private.</span></a></li>
+            <li><a href="../notifications.html"><strong>Notifications</strong><span>Choose which alerts reach your phone, and when events remind you.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

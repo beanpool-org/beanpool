@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ta by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ta">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BeanPool செயல்படும் விதம் — BeanPool members' guide</title>
+    <meta name="description" content="பயறுகள், பரிமாற்றம், உதவிகள் மற்றும் தேவைகள், மற்றும் கடன் பற்றி எளிய சொற்களில்.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#about">BeanPool பற்றி</a></p>
+        <h1>BeanPool செயல்படும் விதம்</h1>
+        <p class="lede">பயறுகள், பரிமாற்றம், உதவிகள் மற்றும் தேவைகள், மற்றும் கடன் பற்றி எளிய சொற்களில்.</p>
+        <h2>பயறுகள்</h2>
+        <p>உங்கள் சமூகம் <strong>பயறுகள்</strong> மூலம் வர்த்தகம் செய்கிறது. பயறுகள் என்பது வங்கியின் பணம் அல்ல. யார் யாருக்கு உதவினார்கள் என்பதற்கான பதிவு இது.</p>
+        <p>அனைவரும் பூஜ்ஜியத்திலேயே தொடங்குகிறார்கள். நீங்கள் ஒருவருக்கு உதவும் போது, பயறுகளை ஈட்டுகிறீர்கள். யாராவது உங்களுக்கு உதவும் போது, பயறுகளைச் செலவழிக்கிறீர்கள்.</p>
+        <p>ஒரு தோராயமான வழிகாட்டுதல்: 40 பயறுகள் என்பது ஒருவரின் நேரத்தின் சுமார் ஒரு மணி நேரமாகும். நீங்களும் மற்ற நபரும் உண்மையான விலையை ஒப்புக்கொள்கிறீர்கள்.</p>
+        <h2>உதவிகள் மற்றும் தேவைகள்</h2>
+        <p>ஓர் <strong>உதவி</strong> என்பது நீங்கள் செய்யக்கூடிய அல்லது கொடுக்கக்கூடிய ஒன்றாகும்: ரொட்டி, வாகனப் பயணம், ஒரு மணி நேரத் தோட்ட வேலை, ஒரு பழுதுபார்ப்பு.</p>
+        <p>ஒரு <strong>தேவை</strong> என்பது நீங்கள் தேடும் ஒன்றாகும்.</p>
+        <p>பயறுகள் உள்ள ஒரு சமூகத்தில், ஒரு தேவையைப் பதிவிடுவதற்கோ அல்லது வேறொருவரின் உதவியைக் கேட்பதற்கோ முன், உங்கள் சொந்த உதவியில் குறைந்தபட்சம் ஒன்றையாவது நீங்கள் பதிவிட்டிருக்க வேண்டும். ஒவ்வொருவரும் எதையாவது கொண்டு வருகிறார்கள். உலகளாவிய சமூகம் போல பயறுகள் இல்லாத இடங்களில், உங்கள் முதல் பதிவு ஒரு தேவையாக இருக்கலாம்.</p>
+        <h2>ஒரு வர்த்தகம் எவ்வாறு செயல்படுகிறது</h2>
+        <ul>
+            <li>நீங்கள் விரும்பும் ஓர் உதவியைக் கண்டறிந்து அதைக் கேட்கிறீர்கள், அல்லது யாராவது உங்கள் தேவையை ஏற்றுக்கொள்கிறார்கள்.</li>
+            <li>வர்த்தகம் ஒப்புக்கொள்ளப்பட்டதும், வாங்குபவரின் பயறுகள் பாதுகாப்பாக வைக்கப்படுகின்றன. வர்த்தகம் நடைபெற்றுக்கொண்டிருக்கும் போது யாரும் அவற்றைச் செலவழிக்க முடியாது.</li>
+            <li>வேலை முடிவடைகிறது.</li>
+            <li>அது முடிந்துவிட்டது என்பதை வாங்குபவர் உறுதிப்படுத்துகிறார். பின்னர் பயறுகள் விற்பனையாளருக்குச் செல்கின்றன.</li>
+        </ul>
+        <p>ஒரு வர்த்தகம் முடங்கிவிட்டால், உங்கள் சமூகத்தின் ஓர் நிர்வாகி தலையிடலாம். அவர்கள் விற்பனையாளருக்கு வழங்கலாம், வாங்குபவருக்குப் பயறுகளைத் திருப்பித் தரலாம் அல்லது அவற்றைப் பிரிக்கலாம். ஒரு நிர்வாகி தான் ஒரு பகுதியாக உள்ள வர்த்தகத்தில் தீர்மானிக்க முடியாது.</p>
+        <h2>பரிசுகள்</h2>
+        <p>வர்த்தகம் இல்லாமல், ஒருவருக்குப் பரிசாகவும் நீங்கள் பயறுகளை அனுப்பலாம்.</p>
+        <ul>
+            <li>ஒரு பரிசு உங்களிடம் உள்ள பயறுகளிலிருந்து மட்டுமே வர முடியும். அது உங்களை ஒருபோதும் பூஜ்ஜியத்திற்குக் கீழே கொண்டு செல்ல முடியாது.</li>
+            <li>சந்தையில் ஒரு வர்த்தகத்தை முடித்தவுடன் நீங்கள் பரிசுகளை அனுப்பலாம். 1 அல்லது 2 பயறுகளின் வர்த்தகம் மட்டுமே கணக்கில் எடுத்துக்கொள்ள முடியாத அளவுக்கு மிகச் சிறியது.</li>
+            <li>பரிசுகளுக்குக் கட்டணம் எதுவும் இல்லை.</li>
+        </ul>
+        <h2>பூஜ்ஜியத்திற்குக் கீழே செல்லுதல்: உங்கள் கடன் வரம்பு</h2>
+        <p>உங்களிடம் உள்ளதை விடச் சற்று அதிகமாக நீங்கள் செலவழிக்கலாம், மற்றும் பூஜ்ஜியத்திற்குக் கீழே செல்லலாம். இது உங்கள் <strong>கடன் வரம்பு</strong> ஆகும். இது பின்னர் மற்றவர்களுக்கு உதவுவதற்கான ஒரு வாக்குறுதியாகும்.</p>
+        <p>உங்கள் கடன் வரம்பு பூஜ்ஜியத்தில் தொடங்குகிறது. சந்தையில் உங்கள் முதல் வர்த்தகத்தை முடிக்கும் போது இது திறக்கிறது (1 அல்லது 2 பயறுகள் மட்டுமே கொண்ட வர்த்தகம் கணக்கில் எடுத்துக்கொள்ள முடியாத அளவுக்கு மிகச் சிறியது). புதியவர்களை வரவேற்க உங்கள் சமூகம் தேர்ந்தெடுத்த ஒருவர், உங்களுக்காகச் சான்றளிப்பதன் மூலம் ஒரு சிறிய தொடக்கத்தையும் உங்களுக்கு வழங்கலாம்: 25, 50 அல்லது 100 பயறுகள்.</p>
+        <p>உங்கள் கடன் வரம்பு உங்கள் <strong>நம்பிக்கை</strong>-யுடன் வளர்கிறது:</p>
+        <ul>
+            <li>சந்தையில் வர்த்தகங்களை முடிப்பதன் மூலம் நீங்கள் நம்பிக்கையைப் பெறுகிறீர்கள். பரிசுகள் நம்பிக்கையை ஈட்டாது.</li>
+            <li>பல வெவ்வேறு நபர்களுடன் வர்த்தகம் செய்வது அதிக நம்பிக்கையை உருவாக்குகிறது. எந்த ஒரு நபருடனான வர்த்தகமும் 500 பயறுகள் வரை மட்டுமே கணக்கிடப்படும்.</li>
+            <li>நம்பிக்கை முதலில் வேகமாக வளர்கிறது, பின்னர் மெதுவாக வளர்கிறது.</li>
+            <li>நட்சத்திர மதிப்பீடுகள் முக்கியம். மக்கள் உங்களை மதிப்பிட்டால், உங்கள் சராசரி மதிப்பீடு உங்கள் வர்த்தகங்கள் ஈட்டும் நம்பிக்கையைத் தீர்மானிக்கிறது: 5 நட்சத்திரங்கள் அனைத்தையும் வைத்திருக்கும், 1 நட்சத்திரம் 60%-ஐ வைத்திருக்கும்.</li>
+            <li>எந்தவொரு கடன் வரம்பும் செல்லக்கூடிய அதிகபட்ச ஆழம் பூஜ்ஜியத்திற்குக் கீழே 2,000 பயறுகள் ஆகும். அதன் உறுப்பினர்களை உறுதிப்படுத்தும் ஒரு சமூகம் மேலும் அனுமதிக்கலாம் (கீழே பார்க்கவும்).</li>
+        </ul>
+        <h2>உங்கள் உதவிகள் உங்கள் கடனை அனுமதிக்கின்றன</h2>
+        <p>நீங்கள் எவ்வளவு ஆழமாகச் <strong>செல்ல முடியும்</strong> என்பதை நம்பிக்கை தீர்மானிக்கிறது. இப்போது நீங்கள் எவ்வளவு ஆழமாகச் <strong>செல்லலாம்</strong> என்பதை உங்கள் நேரலை உதவிகள் தீர்மானிக்கின்றன. இரண்டில் சிறியதை நீங்கள் பெறுவீர்கள்.</p>
+        <ul>
+            <li>நேரலை உதவிகள் இல்லை: நீங்கள் பூஜ்ஜியத்திற்குக் கீழே செல்ல முடியாது.</li>
+            <li>1 உதவி: பூஜ்ஜியத்திற்குக் கீழே 200 வரை.</li>
+            <li>2 உதவிகள்: 500 வரை.</li>
+            <li>3 உதவிகள்: 1,000 வரை.</li>
+            <li>4 உதவிகள்: 1,500 வரை.</li>
+            <li>5 உதவிகள்: 2,000 வரை.</li>
+        </ul>
+        <p>நீங்கள் பூஜ்ஜியத்திற்குக் கீழே இருக்கும்போது உதவிகளை அகற்றினால், உங்கள் உதவிகள் இப்போது ஈடுசெய்வதை விட அதிகமாக நீங்கள் கடன்பட்டிருக்கலாம். அப்போது நீங்கள் உங்கள் வரம்பிற்குள் திரும்பும் வரை கூடுதலாகச் செலவழிக்க முடியாது. நீங்கள் இன்னமும் பயறுகளை ஈட்டலாம், மேலும் உங்களிடமிருந்து எதுவும் எடுக்கப்படாது.</p>
+        <p>சில சமூகங்கள் தங்களின் உறுப்பினர்கள் யார் என்பதை உறுதிப்படுத்துகின்றன. அங்கு, உறுதிப்படுத்தப்பட்ட ஓர் உறுப்பினர் உடனடியாக ஒரு கடன் வரம்பைப் பெறுகிறார்: சமூகம் மற்றொரு தொகையைத் தேர்வு செய்யாவிட்டால், 1,000 பயறுகள். ஒரு நேரலை உதவி அது முழுவதையும் கிடைக்கச் செய்கிறது. அங்கு மிக ஆழமான வரம்பு 5,000 வரை இருக்கலாம். &quot;உங்கள் கடன் வரம்பு&quot; என்பதைப் பார்க்கவும்.</p>
+        <h2>நம்பிக்கை பேட்ஜ்கள்</h2>
+        <p>உங்கள் நம்பிக்கை ஒரு பேட்ஜாகக் காட்டப்படுகிறது. பேட்ஜ்கள்: புதியவர், குடியிருப்பாளர், பொறுப்பாளர் மற்றும் மூத்தவர். உங்கள் பேட்ஜுக்குப் பின்னால் உள்ள நம்பிக்கை மூன்று விஷயங்களைக் கூட்டுகிறது: ஒரு சான்றளிப்பு உங்களுக்கு வழங்கிய தொடக்கம், வர்த்தகம் மூலம் நீங்கள் பெற்ற நம்பிக்கை, மற்றும் ஓர் நிர்வாகி உங்களுக்கு வழங்கிய எந்தவொரு நம்பிக்கையும். ஓர் நிர்வாகி வர்த்தகங்கள் இல்லாமல் நேரடியாக ஓர் உறுப்பினருக்கு ஒரு பேட்ஜை வழங்க முடியும். உறுப்பினர்களை உறுதிப்படுத்தும் ஒரு சமூகத்தில், உறுதிப்படுத்தப்பட்ட ஓர் உறுப்பினர் பெறும் கடன் வரம்பும் கணக்கிடப்படுகிறது.</p>
+        <ul>
+            <li>200 நம்பிக்கையிலிருந்து குடியிருப்பாளர்.</li>
+            <li>600 நம்பிக்கையிலிருந்து பொறுப்பாளர்.</li>
+            <li>1,400 நம்பிக்கையிலிருந்து மூத்தவர்.</li>
+        </ul>
+        <p>ஒரு பேட்ஜ் என்பது அங்கீகாரம் மட்டுமே, வேறொன்றும் இல்லை. இது எதையும் கட்டுப்படுத்துவதோ அல்லது அனுமதிப்பதோ இல்லை. பேட்ஜ் எதுவாக இருந்தாலும் அனைவரும் வர்த்தகம் செய்யலாம், அழைக்கலாம் மற்றும் வாக்களிக்கலாம்.</p>
+        <h2>கட்டணங்களும் பொதுவும்</h2>
+        <p>உங்கள் சமூகம் <strong>பொது</strong> என்று அழைக்கப்படும் பயறுகளின் பகிரப்பட்ட தொகுப்பைக் கொண்டுள்ளது. கட்டணங்கள் இதில் செல்கின்றன. இது எவ்வாறு செலவிடப்படுகிறது என்பதை உறுப்பினர்கள் ஒன்றாகத் தீர்மானிக்கிறார்கள்.</p>
+        <ul>
+            <li><strong>சந்தைக் கட்டணம்:</strong> ஒவ்வொரு சந்தைப் பணம் செலுத்துதலிலும் 1.5% பொதுவிற்குச் செல்கிறது. இது விற்பனையாளர் பெறுவதிலிருந்து கழிக்கப்படுகிறது.</li>
+            <li><strong>சுழற்சிக் கட்டணம்:</strong> பயறுகள் நகர வேண்டும், சும்மா இருக்கக்கூடாது. நீங்கள் வைத்திருக்கும் முதல் 200 பயறுகள் எப்போதும் இலவசம். அதற்கு மேல், ஒரு சிறிய மாதாந்திரக் கட்டணம் பொதுவிற்குச் செல்கிறது: 200 முதல் 500 வரையிலான பயறுகளுக்கு மாதம் 1%, 500 முதல் 1,000 வரை 1.5%, 1,000 முதல் 2,000 வரை 2%, மற்றும் 2,000-க்கு மேல் 2.5%.</li>
+            <li>பூஜ்ஜியத்திற்குக் கீழே உள்ள இருப்புகள் ஒருபோதும் சுழற்சிக் கட்டணத்தைச் செலுத்துவதில்லை. பரிசுகள் ஒருபோதும் கட்டணம் செலுத்துவதில்லை.</li>
+        </ul>
+        <h2>கூட்டு முயற்சிகளும் குழுக்களும்</h2>
+        <p>ஒரு <strong>கூட்டு முயற்சி</strong> தொடர்ந்து இயங்குகிறது மற்றும் அதன் சொந்த பெயரில் வர்த்தகம் செய்கிறது: ஒரு பேக்கரி, ஒரு கருவி நூலகம், ஒரு சந்தைக் கடை. இது ஒரு <strong>முதன்மைப் பொறுப்பாளர்</strong> தலைமையில் <strong>பொறுப்பாளர்கள்</strong> மூலம் நடத்தப்படுகிறது. கூட்டு முயற்சிக்கு ஒரு கடன் வரம்பை வழங்கப் பொறுப்பாளர்கள் தங்களின் சொந்த நம்பிக்கையில் சிலவற்றை உறுதிமொழியளிக்கலாம்.</p>
+        <p>ஒரு <strong>குழு</strong> என்பது அதன் சொந்த அரட்டை மற்றும் பதிவுகளுடன் கூடிய உறுப்பினர்களின் வட்டமாகும், இது ஒன்று அல்லது அதற்கு மேற்பட்ட <strong>ஒருங்கிணைப்பாளர்கள்</strong> மூலம் நடத்தப்படுகிறது. அவர்களில் ஒருவர் அதன் <strong>முதன்மை ஒருங்கிணைப்பாளர்</strong> — தொடங்குவதற்கு, குழுவை உருவாக்கியவர் யாரோ அவர்.</p>
+        <p>&quot;விதிகளும் முடிவுகள் செயல்படும் விதமும்&quot; என்பதில் பொறுப்பாளர்களும் ஒருங்கிணைப்பாளர்களும் எவ்வாறு தேர்ந்தெடுக்கப்படுகிறார்கள் என்பதை நீங்கள் படிக்கலாம்.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="../posting.html"><strong>Posting an Offer or a Need</strong><span>Put up something you can do or give, or something you are looking for.</span></a></li>
+            <li><a href="../a-deal-step-by-step.html"><strong>A deal, step by step</strong><span>From asking to getting paid, for an Offer and for a Need, and leaving a review.</span></a></li>
+            <li><a href="../credit-line.html"><strong>Your credit line</strong><span>How far below zero you can go, and how it grows.</span></a></li>
+            <li><a href="../gifts.html"><strong>Sending a gift</strong><span>Send beans to someone, with no trade.</span></a></li>
+            <li><a href="../circulation-fee.html"><strong>The circulation fee</strong><span>A small monthly fee on large balances, so beans keep moving. The first 200 are free.</span></a></li>
+            <li><a href="../trust-badges.html"><strong>Trust badges</strong><span>Newcomer, Resident, Steward and Elder. What they mean, and why they unlock nothing.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

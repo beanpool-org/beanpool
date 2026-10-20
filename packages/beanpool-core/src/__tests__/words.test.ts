@@ -14,7 +14,8 @@ import { fileURLToPath } from 'node:url';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import {
-    canonicalLang, capitalFirst, currentLanguage, DATE_WORDS, formatCount, formatDate, formatNumber, inCapitalsOf, isLang, LANGS, LANGUAGE_HEADER,
+    areCatalogsMachineDraft,
+    canonicalLang, capitalFirst, currentLanguage, DATE_WORDS, formatCount, formatDate, formatNumber, inCapitalsOf, isLang, isMachineDraft, isMachineDraftCatalog, LANGS, LANGUAGE_HEADER,
     normaliseLang, PLURAL_CATEGORIES, PLURAL_RULES, pluralCategory, pluralKey, PSEUDO_LANG, pseudoLocalise, setLanguage, t, timeAgo, tn, upperCase,
     withDigits, word,
     wordKey, wordsFor, type Lang, type UiLang,
@@ -165,6 +166,36 @@ describe('t and tn', () => {
         expect(formatDate(dec, 'day-month', { utc: true })).toBe('17 дек.');
         expect(formatNumber(2.5, undefined, 'en')).toBe('2.5');
         expect(fr.timeAgo(5e3)).toBe('just now');
+    });
+
+    it('isMachineDraft checks whether catalogs are machine-reviewed drafts', () => {
+        expect(isMachineDraft('en')).toBe(false);
+        expect(isMachineDraft('xx')).toBe(false);
+        expect(isMachineDraft()).toBe(false);
+
+        const machineCatalog = { _meta: { language: 'pt', review: 'machine' } };
+        const humanCatalog = { _meta: { language: 'pt', review: 'human', reviewed: true } };
+
+        expect(isMachineDraftCatalog(machineCatalog)).toBe(true);
+        expect(isMachineDraftCatalog(humanCatalog)).toBe(false);
+        expect(areCatalogsMachineDraft([machineCatalog])).toBe(true);
+        expect(areCatalogsMachineDraft([humanCatalog])).toBe(false);
+
+        const ptMachine = wordsFor('pt', [machineCatalog]);
+        expect(ptMachine.isMachineDraft).toBe(true);
+
+        const ptHuman = wordsFor('pt', [humanCatalog]);
+        expect(ptHuman.isMachineDraft).toBe(false);
+
+        setLanguage('pt', [machineCatalog]);
+        expect(currentLanguage()).toBe('pt');
+        expect(isMachineDraft()).toBe(true);
+
+        setLanguage('pt', [humanCatalog]);
+        expect(isMachineDraft()).toBe(false);
+
+        setLanguage('xx');
+        expect(isMachineDraft()).toBe(false);
     });
 
     it('the pseudo-locale pads at least 35 %, accents, brackets, and keeps placeholders whole', () => {

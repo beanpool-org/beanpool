@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ar by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>كيف يعمل BeanPool — BeanPool members' guide</title>
+    <meta name="description" content="الفاصوليا، والتداول، والعروض والطلبات، والائتمان، بكلمات بسيطة.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#about">حول BeanPool</a></p>
+        <h1>كيف يعمل BeanPool</h1>
+        <p class="lede">الفاصوليا، والتداول، والعروض والطلبات، والائتمان، بكلمات بسيطة.</p>
+        <h2>فاصوليا</h2>
+        <p>يتداول مجتمعك باستخدام <strong>فاصوليا</strong>. فاصوليا ليست أموالاً من بنك، بل هي سجل يوثق من ساعد من.</p>
+        <p>يبدأ الجميع من الصفر. وعندما تساعد شخصًا ما، تكسب فاصوليا. وعندما يساعدك شخص ما، تنفق فاصوليا.</p>
+        <p>كدليل تقريبي: 40 فاصوليا تعادل حوالي ساعة واحدة من وقت شخص ما. وتتفق أنت والشخص الآخر على السعر الحقيقي.</p>
+        <h2>العروض والطلبات</h2>
+        <p><strong>العرض</strong> هو شيء يمكنك القيام به أو تقديمه: خبز، أو توصيلة، أو ساعة من العمل في الحديقة، أو إصلاح شيء ما.</p>
+        <p><strong>الطلب</strong> هو شيء تبحث عنه.</p>
+        <p>في المجتمع الذي يستخدم فاصوليا، قبل أن تتمكن من نشر طلب، أو طلب الحصول على عرض شخص آخر، يجب أن تكون قد نشرت عرضًا واحدًا على الأقل من عروضك الخاصة. فالجميع يقدم شيئًا. وحيث لا توجد فاصوليا، كما هو الحال في المجتمع العالمي، يمكن أن يكون أول منشور لك طلبًا.</p>
+        <h2>كيف تسير الصفقة</h2>
+        <ul>
+            <li>تجد عرضًا تريده وتطلبه، أو يقبل شخص ما طلبك.</li>
+            <li>عند الاتفاق على الصفقة، تُحفظ فاصوليا المشتري بأمان. ولا يمكن لأحد إنفاقها أثناء سير الصفقة.</li>
+            <li>يتم إنجاز العمل.</li>
+            <li>يؤكد المشتري إنجازه. ثم تذهب الفاصوليا إلى البائع.</li>
+        </ul>
+        <p>إذا تعثرت صفقة، يمكن لأحد مسؤولي مجتمعك التدخل. ويمكنه الدفع للبائع، أو إعادة الفاصوليا إلى المشتري، أو تقسيمها بينهما. ولا يمكن للمسؤول البت في صفقة هو طرف فيها.</p>
+        <h2>الهدايا</h2>
+        <p>يمكنك أيضًا إرسال فاصوليا إلى شخص ما كهدية، دون وجود صفقة.</p>
+        <ul>
+            <li>لا يمكن أن تأتي الهدية إلا من فاصوليا تملكها بالفعل. ولا يمكنها أبدًا أن تجعلك تنزل تحت الصفر.</li>
+            <li>يمكنك إرسال الهدايا بمجرد إكمال صفقة في السوق. والصفقة المكونة من 1 أو 2 فاصوليا فقط صغيرة جدًا بحيث لا تُحتسب.</li>
+            <li>الهدايا ليس عليها رسوم.</li>
+        </ul>
+        <h2>النزول تحت الصفر: خطك الائتماني</h2>
+        <p>يمكنك إنفاق أكثر قليلاً مما تملك، والنزول إلى ما دون الصفر. هذا هو <strong>خطك الائتماني</strong>. وهو بمثابة وعد بمساعدة الآخرين لاحقًا.</p>
+        <p>يبدأ خطك الائتماني من الصفر. ويُفتح عندما تكمل صفقتك الأولى في السوق (الصفقة المكونة من 1 أو 2 فاصوليا فقط صغيرة جدًا بحيث لا تُحتسب). ويمكن لشخص اختاره مجتمعك للترحيب بالقادمين الجدد أن يمنحك أيضًا بداية صغيرة بتزكيتك: 25 أو 50 أو 100 فاصوليا.</p>
+        <p>ينمو خطك الائتماني مع <strong>ثقتك</strong>:</p>
+        <ul>
+            <li>تكسب الثقة بإكمال الصفقات في السوق. والهدايا لا تكسب ثقة.</li>
+            <li>التداول مع العديد من الأشخاص المختلفين يبني المزيد من الثقة. والتداول مع أي شخص واحد يُحسب حتى 500 فاصوليا.</li>
+            <li>تنمو الثقة بسرعة في البداية، ثم بوتيرة أبطأ.</li>
+            <li>تقييمات النجوم مهمة. إذا قيّمك الناس، فإن متوسط تقييمك يحدد مقدار الثقة التي تكسبها صفقاتك: 5 نجوم تحتفظ بكامل الثقة، ونجمة واحدة تحتفظ بـ 60%.</li>
+            <li>أقصى حد يمكن أن يصل إليه أي خط ائتماني هو 2,000 فاصوليا تحت الصفر. ويمكن للمجتمع الذي يؤكد أعضاءه أن يسمح بالمزيد (انظر أدناه).</li>
+        </ul>
+        <h2>عروضك تتيح لك استخدام ائتمانك</h2>
+        <p>تحدد الثقة الحد الذي <strong>يمكنك</strong> الوصول إليه. وتحدد عروضك النشطة الحد الذي <strong>يُسمح لك</strong> بالوصول إليه الآن. وتحصل على الأقل بين الاثنين.</p>
+        <ul>
+            <li>لا توجد عروض نشطة: لا يمكنك النزول تحت الصفر.</li>
+            <li>عرض واحد: حتى 200 تحت الصفر.</li>
+            <li>عرضان: حتى 500 تحت الصفر.</li>
+            <li>3 عروض: حتى 1,000 تحت الصفر.</li>
+            <li>4 عروض: حتى 1,500 تحت الصفر.</li>
+            <li>5 عروض: حتى 2,000 تحت الصفر.</li>
+        </ul>
+        <p>إذا قمت بحذف عروض أثناء وجودك تحت الصفر، فقد تدين بأكثر مما تغطيه عروضك الحالية. وحينئذٍ لا يمكنك إنفاق المزيد حتى تعود إلى داخل حدودك. ولا يزال بإمكانك كسب الفاصوليا، ولا يُؤخذ منك أي شيء.</p>
+        <p>تؤكد بعض المجتمعات هوية أعضائها. وهناك، يحصل العضو المؤكد على خط ائتماني مباشرةً: 1,000 فاصوليا، ما لم يكن المجتمع قد اختار مبلغًا آخر. ويتيح عرض نشط واحد استخدام هذا المبلغ بالكامل. ويمكن أن يصل الحد الأقصى هناك إلى 5,000. راجع &quot;خطك الائتماني&quot;.</p>
+        <h2>شارات الثقة</h2>
+        <p>تظهر ثقتك في شكل شارة. والشارات هي: قادم جديد، ومقيم، ومشرف، وحكيم. تجمع الثقة الكامنة وراء شارتك ثلاثة أشياء: البداية التي منحتها لك التزكية، والثقة التي كسبتها بالتداول، وأي ثقة منحك إياها مسؤول. ويمكن للمسؤول منح العضو شارة مباشرةً، دون صفقات. وفي المجتمع الذي يؤكد أعضاءه، يُحسب أيضًا الخط الائتماني الذي يحصل عليه العضو المؤكد.</p>
+        <ul>
+            <li>مقيم بدءًا من 200 ثقة.</li>
+            <li>مشرف بدءًا من 600 ثقة.</li>
+            <li>حكيم بدءًا من 1,400 ثقة.</li>
+        </ul>
+        <p>الشارة هي تقدير، لا أكثر. وهي لا تقيد ولا تفتح أي ميزة. يمكن للجميع التداول، وتوجيه الدعوة، والتصويت، أياً كانت شارتهم.</p>
+        <h2>الرسوم والمشاع</h2>
+        <p>لدى مجتمعك صندوق مشترك من الفاصوليا يُسمى <strong>المشاع</strong>. وتذهب الرسوم إليه. ويقرر الأعضاء معًا كيفية إنفاقه.</p>
+        <ul>
+            <li><strong>رسوم السوق:</strong> 1.5% من كل دفعة في السوق تذهب إلى المشاع. وتُخصم مما يتلقاه البائع.</li>
+            <li><strong>رسوم التداول:</strong> الغرض من الفاصوليا أن تتداول، لا أن تظل راكدة. وأول 200 فاصوليا تحتفظ بها تكون مجانية دائمًا. وفوق ذلك، تذهب رسوم شهرية صغيرة إلى المشاع: 1% شهريًا على الفاصوليا بين 200 و500، و1.5% بين 500 و1,000، و2% بين 1,000 و2,000، و2.5% فوق 2,000.</li>
+            <li>الأرصدة التي تقل عن الصفر لا تدفع رسوم التداول أبدًا. ولا تدفع الهدايا أي رسوم أبدًا.</li>
+        </ul>
+        <h2>المبادرات والمجموعات</h2>
+        <p>تستمر <strong>المؤسسة</strong> في العمل وتتداول باسمها الخاص: مثل مخبز، أو مكتبة أدوات، أو كشك في السوق. ويديرها <strong>مسؤولون</strong>، يقودهم <strong>مسؤول رئيسي</strong>. ويمكن للمسؤولين التعهد ببعض من ثقتهم لمنح المؤسسة خطًا ائتمانيًا.</p>
+        <p><strong>المجموعة</strong> هي دائرة من الأعضاء لها محادثتها ومنشوراتها الخاصة، ويديرها <strong>منسق</strong> واحد أو أكثر. وأحدهم هو <strong>المنسق الرئيسي</strong> — وهو من أنشأ المجموعة في البداية.</p>
+        <p>يمكنك قراءة كيفية اختيار المسؤولين والمنسقين في &quot;القواعد وكيفية اتخاذ القرارات&quot;.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="../posting.html"><strong>Posting an Offer or a Need</strong><span>Put up something you can do or give, or something you are looking for.</span></a></li>
+            <li><a href="../a-deal-step-by-step.html"><strong>A deal, step by step</strong><span>From asking to getting paid, for an Offer and for a Need, and leaving a review.</span></a></li>
+            <li><a href="../credit-line.html"><strong>Your credit line</strong><span>How far below zero you can go, and how it grows.</span></a></li>
+            <li><a href="../gifts.html"><strong>Sending a gift</strong><span>Send beans to someone, with no trade.</span></a></li>
+            <li><a href="../circulation-fee.html"><strong>The circulation fee</strong><span>A small monthly fee on large balances, so beans keep moving. The first 200 are free.</span></a></li>
+            <li><a href="../trust-badges.html"><strong>Trust badges</strong><span>Newcomer, Resident, Steward and Elder. What they mean, and why they unlock nothing.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

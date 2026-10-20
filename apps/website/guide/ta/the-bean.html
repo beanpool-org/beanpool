@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ta by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ta">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>இந்த வழிகாட்டி — BeanPool members' guide</title>
+    <meta name="description" content="இந்த வழிகாட்டியை எங்கு காண்பது, எவ்வாறு தேடுவது மற்றும் அது எவ்வாறு புதுப்பித்த நிலையில் உள்ளது என்பது.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#getting-started">தொடங்குதல்</a></p>
+        <h1>இந்த வழிகாட்டி</h1>
+        <p class="lede">இந்த வழிகாட்டியை எங்கு காண்பது, எவ்வாறு தேடுவது மற்றும் அது எவ்வாறு புதுப்பித்த நிலையில் உள்ளது என்பது.</p>
+        <h2>அதைத் திறப்பது எப்படி</h2>
+        <p>தொலைபேசியில், திரையின் மேல் இடதுபுறத்தில் உள்ள பீனைத் தட்டவும். அல்லது:</p>
+        <ul>
+            <li>திரையின் மேற்புறத்தில் உள்ள ஸ்லைடர்கள் பொத்தானைக் கொண்டு <strong>அமைப்புகள்</strong> என்பதைத் திறக்கவும்.</li>
+            <li><strong>BeanPool</strong> என்பதன் கீழ், <strong>உதவி &amp; செயல்படும் விதம்</strong> என்பதைத் தட்டவும்.</li>
+        </ul>
+        <p>வலைப் பயன்பாட்டில், அது அதே இடத்தில் உள்ளது: <strong>அமைப்புகள்</strong>, பின்னர் <strong>BeanPool</strong> என்பதன் கீழ் <strong>உதவி &amp; செயல்படும் விதம்</strong>.</p>
+        <h2>இதில் என்ன இருக்கிறது</h2>
+        <ul>
+            <li><strong>உங்கள் சமூகம்:</strong> அதன் பெயர் (வலைப் பயன்பாட்டில் அதன் முகவரி), மற்றும் அதன் சேவையகத்தை இப்போது தொடர்பு கொள்ள முடியுமா என்பது. தொலைபேசியில், அதன் கீழ், <strong>Your communities</strong>: ஒன்றிற்கு மாற அதைத் தட்டவும், அல்லது <strong>ஒரு சமூகத்தைச் சேர்க்கவும்</strong> என்பதைத் தட்டவும். <strong>உலகளாவிய சமூகம்</strong> எப்போதும் ஒரு வரிசையாக இருக்கும், நீங்கள் ஓர் உறுப்பினரா, அதில் இணைய முடியுமா, அல்லது அதை இப்போது ஏன் பயன்படுத்த முடியாது என்பதைக் கூறும் இரண்டாவது வரியுடன் இருக்கும். &quot;ஒன்றுக்கு மேற்பட்ட சமூகங்கள்&quot; என்பதைப் பார்க்கவும்.</li>
+            <li><strong>வழிகாட்டிகள்:</strong> BeanPool எவ்வாறு செயல்படுகிறது, விதிகள் மற்றும் முடிவுகள் எடுக்கப்படும் விதம், மற்றும் பொதுவான கேள்விகள்.</li>
+            <li><strong>செயலியை எவ்வாறு பயன்படுத்துவது:</strong> ஒவ்வொரு பணிக்கும் ஒரு சிறிய பக்கம், செயலி இருக்கும் விதத்தில் தொகுக்கப்பட்டுள்ளது: தொடங்குதல், சந்தை, வரைபடம், அரட்டை, துடிப்பு, பொது, பேரேடு மற்றும் அமைப்புகளும் பாதுகாப்பும்.</li>
+            <li><strong>BeanPool திட்டம்:</strong> இந்தப் பதிப்பில் புதியவை என்ன, மற்றும் beanpool.org இணையதளத்திற்கான ஓர் இணைப்பு (தொலைபேசியில், நண்பருக்கு அனுப்ப ஒரு <strong>பகிர்</strong> பொத்தானுடன்).</li>
+        </ul>
+        <h2>தேடுதல்</h2>
+        <p><strong>வழிகாட்டியில் தேடுங்கள்</strong> என்பதில் ஒரு சொல் அல்லது இரண்டு சொற்களைத் தட்டச்சு செய்யவும் (வலைப் பயன்பாட்டில் மேலே; தொலைபேசியில் <strong>Your communities</strong> என்பதன் கீழ்). இது உங்கள் எல்லாச் சொற்களையும் கொண்ட ஒவ்வொரு பக்கத்தையும் காட்டுகிறது. இது இணைப்பு இல்லாமலும் செயல்படும்.</p>
+        <ul>
+            <li>குறுகிய சொற்களும் செயல்படும்: &quot;vot&quot; என்பது &quot;vote&quot; மற்றும் &quot;voting&quot; ஆகியவற்றைக் கண்டறியும்.</li>
+            <li>எதுவும் வரவில்லை என்றால், &quot;gift&quot;, &quot;photo&quot; அல்லது &quot;block&quot; போன்ற எளிமையான ஒரு சொல்லைப் பயன்படுத்திப் பார்க்கவும்.</li>
+        </ul>
+        <h2>எப்போதும் இருக்கும், புதுப்பித்த நிலையில் வைக்கப்படும்</h2>
+        <p>வழிகாட்டி செயலியில் கட்டமைக்கப்பட்டுள்ளது, எனவே இது எந்த இணைப்பும் இல்லாமலும் செயல்படும். நீங்கள் ஆன்லைனில் இருக்கும் போது, புதிய வழிகாட்டி உள்ளதா என beanpool.org-ல் செயலி சரிபார்த்து, ஏதேனும் இருந்தால் அதைப் பயன்படுத்துகிறது. வழிகாட்டியின் அடிப்பகுதி நீங்கள் எந்தப் பதிப்பைப் படிக்கிறீர்கள் என்பதைக் காட்டுகிறது.</p>
+        <p>அதே வழிகாட்டி இணையதளத்தில் beanpool.org/guide என்ற முகவரியில் உள்ளது.</p>
+        <h2>காணொளிகள்</h2>
+        <p>சில பக்கங்கள் <strong>Watch:</strong> மற்றும் ஒரு காணொளியின் பெயரைக் காட்டக்கூடும். அந்தப் பக்கத்திற்காக BeanPool ஒரு காணொளியை உருவாக்கியிருந்து, உங்கள் சமூகம் அதைத் துடிப்பில் <strong>கற்றுக்கொள்</strong> (வலைப் பயன்பாட்டில் <strong>செயல்படும் விதம்</strong>) என்பதன் கீழ் வைத்திருக்கும் போது மட்டுமே அந்த இணைப்பு தோன்றும். உறுப்பினர்கள் கற்றுக்கொள் என்பதில் சேர்க்கும் காணொளிகள் ஒருபோதும் வழிகாட்டிப் பக்கத்தில் காட்டப்படாது. காணொளி இல்லாமலும் ஒவ்வொரு பக்கமும் முழுமையானது.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="getting-help.html"><strong>உதவி பெறுதல்</strong><span>சந்தேகம் வரும்போது எங்கு பார்ப்பது மற்றும் யாரிடம் கேட்பது.</span></a></li>
+            <li><a href="how-it-works.html"><strong>BeanPool செயல்படும் விதம்</strong><span>பயறுகள், பரிமாற்றம், உதவிகள் மற்றும் தேவைகள், மற்றும் கடன் பற்றி எளிய சொற்களில்.</span></a></li>
+            <li><a href="faq.html"><strong>கேள்விகள்</strong><span>உறுப்பினர்கள் அதிகம் கேட்கும் கேள்விகளுக்கு சுருக்கமான பதில்கள்.</span></a></li>
+            <li><a href="../whats-new.html"><strong>What's new</strong><span>What changed in the app, in plain words.</span></a></li>
+            <li><a href="the-top-bar.html"><strong>மேல் பட்டை</strong><span>பயறு, உங்கள் கவனம் தேவைப்படும்போது காட்டும் சிறிய சின்னங்கள் மற்றும் மேல் வலதுபுறத்தில் உள்ள பொத்தான்கள்.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

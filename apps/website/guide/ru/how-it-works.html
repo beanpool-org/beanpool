@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ru by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Как устроен BeanPool — BeanPool members' guide</title>
+    <meta name="description" content="Бобы, обмен, предложения и спрос, а также кредит простыми словами.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#about">О BeanPool</a></p>
+        <h1>Как устроен BeanPool</h1>
+        <p class="lede">Бобы, обмен, предложения и спрос, а также кредит простыми словами.</p>
+        <h2>Бобы</h2>
+        <p>Ваше сообщество ведёт обмен в <strong>бобах</strong>. Бобы — это не банковские деньги. Это запись о том, кто кому помог.</p>
+        <p>Все начинают с нуля. Когда вы помогаете кому-то, вы зарабатываете бобы. Когда кто-то помогает вам, вы тратите бобы.</p>
+        <p>Ориентир: 40 бобов примерно равны одному часу времени человека. Конкретную стоимость вы и ваш партнёр согласовываете сами.</p>
+        <h2>Предложения и Спрос</h2>
+        <p><strong>Предложение</strong> — это то, что вы можете сделать или дать: хлеб, поездка на машине, час работы в саду, ремонт.</p>
+        <p><strong>Спрос</strong> — это то, что вы ищете.</p>
+        <p>В сообществе с бобами, прежде чем опубликовать Спрос или откликнуться на чужое Предложение, необходимо разместить хотя бы одно собственное Предложение. Каждый вносит свой вклад. Там, где бобов нет (например, в глобальном сообществе), вашей первой публикацией может быть Спрос.</p>
+        <h2>Как проходит сделка</h2>
+        <ul>
+            <li>Вы находите подходящее Предложение и запрашиваете его, либо кто-то откликается на ваш Спрос.</li>
+            <li>Когда сделка согласована, бобы покупателя надёжно удерживаются. Никто не может потратить их, пока сделка не завершена.</li>
+            <li>Работа выполняется.</li>
+            <li>Покупатель подтверждает выполнение работы. После этого бобы переводятся продавцу.</li>
+        </ul>
+        <p>Если сделка заходит в тупик, администратор сообщества может вмешаться. Он может перевести средства продавцу, вернуть бобы покупателю или разделить сумму. Администратор не может разрешать сделку, в которой участвует сам.</p>
+        <h2>Подарки</h2>
+        <p>Вы также можете подарить бобы кому-то без совершения сделки.</p>
+        <ul>
+            <li>Подарок можно сделать только из тех бобов, которые у вас есть. Он никогда не может увести ваш баланс ниже нуля.</li>
+            <li>Дарить бобы можно после завершения хотя бы одной сделки на Рынке. Сделки всего на 1 или 2 боба слишком малы и не учитываются.</li>
+            <li>За подарки сбор не взимается.</li>
+        </ul>
+        <h2>Баланс ниже нуля: ваша кредитная линия</h2>
+        <p>Вы можете потратить чуть больше, чем у вас есть, уйдя в минус. Это ваша <strong>кредитная линия</strong>. Она представляет собой обещание помочь другим в будущем.</p>
+        <p>Кредитная линия начинается с нуля. Она открывается после вашей первой завершённой сделки на Рынке (сделки на 1 или 2 боба слишком малы и не засчитываются). Человек, выбранный сообществом для встречи новичков, может дать вам начальный старт, поручившись за вас: 25, 50 или 100 бобов.</p>
+        <p>Кредитная линия растёт вместе с вашим <strong>доверием</strong>:</p>
+        <ul>
+            <li>Доверие начисляется за завершённые сделки на Рынке. Подарки доверия не приносят.</li>
+            <li>Сделки с множеством разных людей приносят больше доверия. Сделки с одним человеком учитываются в объёме до 500 бобов.</li>
+            <li>Сначала доверие растёт быстро, затем медленнее.</li>
+            <li>Звёздные оценки имеют значение. Если вам ставят оценки, средний балл определяет долю начисляемого доверия: 5 звёзд дают 100%, 1 звезда — 60%.</li>
+            <li>Максимально возможный минус по кредитной линии составляет 2 000 бобов ниже нуля. Сообщество, подтверждающее личности участников, может разрешить больше (см. ниже).</li>
+        </ul>
+        <h2>Ваши Предложения определяют доступный кредит</h2>
+        <p>Доверие определяет, насколько глубоко вы <strong>могли бы</strong> уйти в минус. Ваши активные Предложения определяют, насколько глубоко вы <strong>можете</strong> уйти в минус прямо сейчас. Действует меньшее из двух значений.</p>
+        <ul>
+            <li>Нет активных Предложений: уходить ниже нуля нельзя.</li>
+            <li>1 Предложение: до −200.</li>
+            <li>2 Предложения: до −500.</li>
+            <li>3 Предложения: до −1 000.</li>
+            <li>4 Предложения: до −1 500.</li>
+            <li>5 Предложений: до −2 000.</li>
+        </ul>
+        <p>Если вы снимете Предложения, находясь в минусе, долг может превысить сумму, покрываемую оставшимися Предложениями. В таком случае вы не сможете тратить бобы, пока снова не войдёте в лимит. Вы по-прежнему можете зарабатывать бобы, и никто ничего у вас не забирает.</p>
+        <p>Некоторые сообщества подтверждают личности участников. Там подтверждённый участник сразу получает кредитную линию: 1 000 бобов, если сообщество не установило другое значение. Одно активное Предложение открывает всю сумму. Максимальный лимит там может достигать 5 000. См. «Кредитная линия».</p>
+        <h2>Значки доверия</h2>
+        <p>Уровень вашего доверия отображается в виде значка. Существуют значки: Новичок, Житель, Хранитель и Старейшина. Доверие за значком складывается из трёх составляющих: начального поручительства, доверия за совершённые сделки и доверия, начисленного администратором. Администратор может присвоить участнику значок напрямую без сделок. В сообществе, подтверждающем личности, кредитная линия подтверждённого участника также идёт в зачёт.</p>
+        <ul>
+            <li>Житель — от 200 доверия.</li>
+            <li>Хранитель — от 600 доверия.</li>
+            <li>Старейшина — от 1 400 доверия.</li>
+        </ul>
+        <p>Значок — это признание заслуг, не более того. Он ничего не блокирует и не предоставляет особых прав. Каждый участник может совершать сделки, приглашать людей и голосовать независимо от своего значка.</p>
+        <h2>Сборы и Общие проекты</h2>
+        <p>В вашем сообществе есть общий фонд бобов — <strong>Общие проекты</strong>. Туда поступают сборы. Участники сообща решают, на что их направить.</p>
+        <ul>
+            <li><strong>Сбор Рынка:</strong> 1,5% от каждого платежа на Рынке перечисляется в Общие проекты. Эта сумма вычитается из того, что получает продавец.</li>
+            <li><strong>Плата за обращение:</strong> бобы должны двигаться, а не лежать без дела. Первые 200 бобов на балансе всегда свободны от сбора. Свыше этой суммы в Общие проекты отчисляется небольшой ежемесячный сбор: 1% в месяц на бобы от 200 до 500, 1,5% от 500 до 1 000, 2% от 1 000 до 2 000 и 2,5% свыше 2 000.</li>
+            <li>Отрицательный баланс никогда не облагается платой за обращение. Подарки также не облагаются сбором.</li>
+        </ul>
+        <h2>Предприятия и группы</h2>
+        <p><strong>Предприятие</strong> действует непрерывно и ведёт обмен от собственного имени: пекарня, прокат инструментов, рыночная палатка. Им руководят <strong>хранители</strong> во главе со <strong>старшим хранителем</strong>. Хранители могут выделить часть своего личного доверия, чтобы обеспечить предприятию кредитную линию.</p>
+        <p><strong>Группа</strong> — это круг участников с собственным чатом и публикациями, которым управляют один или несколько <strong>координаторов</strong>. Один из них является <strong>старшим координатором</strong> — изначально тот, кто создал группу.</p>
+        <p>Порядок избрания хранителей и координаторов описан в разделе «Правила и решения».</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="../posting.html"><strong>Posting an Offer or a Need</strong><span>Put up something you can do or give, or something you are looking for.</span></a></li>
+            <li><a href="../a-deal-step-by-step.html"><strong>A deal, step by step</strong><span>From asking to getting paid, for an Offer and for a Need, and leaving a review.</span></a></li>
+            <li><a href="../credit-line.html"><strong>Your credit line</strong><span>How far below zero you can go, and how it grows.</span></a></li>
+            <li><a href="../gifts.html"><strong>Sending a gift</strong><span>Send beans to someone, with no trade.</span></a></li>
+            <li><a href="../circulation-fee.html"><strong>The circulation fee</strong><span>A small monthly fee on large balances, so beans keep moving. The first 200 are free.</span></a></li>
+            <li><a href="../trust-badges.html"><strong>Trust badges</strong><span>Newcomer, Resident, Steward and Elder. What they mean, and why they unlock nothing.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

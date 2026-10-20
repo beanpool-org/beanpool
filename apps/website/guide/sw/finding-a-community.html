@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/sw by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="sw">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kupata jumuiya iliyo karibu nawe — BeanPool members' guide</title>
+    <meta name="description" content="Kutoka jumuiya ya kimataifa, pata jumuiya iliyo karibu nawe na uombe kujiunga, pata taarifa mpya inapoanza, au anza yako mwenyewe.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#getting-started">Kuanza</a></p>
+        <h1>Kupata jumuiya iliyo karibu nawe</h1>
+        <p class="lede">Kutoka jumuiya ya kimataifa, pata jumuiya iliyo karibu nawe na uombe kujiunga, pata taarifa mpya inapoanza, au anza yako mwenyewe.</p>
+        <h2>Kwa nini jumuiya ya eneo</h2>
+        <p>Jumuiya ya kimataifa ndipo watu kutoka kila mahali wanapokutana. Jumuiya ya eneo ndipo majirani wanapofanya biashara: ina Maharagwe yake yenyewe, biashara na Mali za Pamoja. Kwenye jumuiya ya kimataifa unaweza kuona jinsi mambo hayo yanavyofanya kazi, katika jumuiya ya mfano iliyowekwa alama ya <strong>🏘️ Jamii ya eneo</strong>, lakini hakuna chochote huko kinachopata au kutumia Maharagwe. Kwa hivyo chapisho la huko hueleza katika maelezo yake kile ambacho mtu huyo angependa kupata badala yake: bure, kubadilishana, au kuwauliza. Tazama &quot;Maharagwe na jumuiya ya kimataifa&quot;.</p>
+        <p>Jumuiya ya kimataifa ni jumuiya moja kati ya nyingi. Jumuiya yako mwenyewe hufanya kazi kwenye seva yake yenyewe na haihitaji kamwe jumuiya ya kimataifa: jumuiya ya kimataifa inakusaidia tu kuipata.</p>
+        <p>Hakuna jumuiya karibu nawe bado? Unaweza kuanzisha moja: tazama &quot;Hakuna kitu karibu nawe&quot;, hapa chini.</p>
+        <h2>Jumuiya zilizo karibu nawe</h2>
+        <p>Kwenye jumuiya ya kimataifa, kadi ya <strong>Tafuta jumuiya yako</strong> kwenye <strong>Nyumbani</strong> huonyesha jumuiya zilizo karibu nawe zaidi. Kwa siku zako 30 za kwanza inabaki karibu na juu ya Nyumbani na haiwezi kuondolewa au kuhamishwa; baada ya hapo unaweza kuiondoa kama kadi nyingine yoyote. Kwenye programu ya wavuti, kila jumuiya kwenye kadi hiyo ni kiungo kinachoelekeza kwenye ukurasa wake yenyewe. Ikiwa haijui uko wapi, gusa <strong>Shiriki eneo langu</strong>, au <strong>au andika mji wako</strong> na uchague mji wako. Hatua zilizo hapa chini ni za programu ya simu.</p>
+        <p>Bado haupo kwenye jumuiya ya kimataifa? Gusa haragwe lililo juu kushoto na, chini ya <strong>Your communities</strong>, gusa <strong>Jumuiya ya kimataifa</strong>, kisha ujiunge nayo kwa akaunti uliyo nayo: tazama &quot;Zaidi ya jumuiya moja&quot;. Bila kuwa na akaunti bado, gusa <strong>Gundua BeanPool duniani kote</strong> kwenye skrini ya kwanza ya programu: tazama &quot;Kujiunga na BeanPool&quot;.</p>
+        <ul>
+            <li>Gusa <strong>Jumuiya zilizo karibu nawe</strong> ili kuona orodha nzima.</li>
+            <li>Jumuiya huorodheshwa zile zilizo karibu zaidi kwanza wakati programu inajua ulipo. Ikiwa haijui, gusa <strong>Tumia mahali nilipo</strong>, au utafute kwa jina. Je, ungependa kutoshiriki eneo lako? Gusa <strong>au andika mji wako</strong>, anza kuandika, na uchague mji wako kutoka kwenye orodha: eneo la makadirio pekee ndilo linalowekwa, na <strong>badilisha</strong> huchagua mwingine.</li>
+            <li>Jumuiya zilizo katika takriban umbali sawa kutoka kwako huchanganywa mpangilio wake, ili kusiwe na jumuiya moja inayobaki juu kila wakati.</li>
+            <li>Kila moja huonyesha umbali wake na idadi ya wanachama iliyo nayo, wakati jumuiya imeeleza.</li>
+        </ul>
+        <p>Jumuiya ambayo haijachapisha anwani yake huorodheshwa, lakini haiwezi kuombwa kutoka hapa bado.</p>
+        <h2>Kuomba kujiunga</h2>
+        <ul>
+            <li>Gusa <strong>Omba kujiunga</strong> kwenye jumuiya.</li>
+            <li>Kagua jina lako, na uandike maneno machache kukuhusu, hadi herufi 280: unakoishi, kile ungependa kushiriki au kujifunza.</li>
+            <li>Gusa <strong>Tuma</strong>.</li>
+        </ul>
+        <p>Ombi lako huenda moja kwa moja kwenye jumuiya hiyo, si kupitia jumuiya ya kimataifa, likiwa na jina lako, maneno yako na picha yako. Wanachama wake pekee ndio wanaoliona. Mahali ambapo jumuiya inaruhusu wasimamizi wake pekee kualika, wamiliki na wasimamizi wake pekee ndio wanaoona. Mwanachama wa huko anaweza kukuwezesha kuingia: anagusa <strong>Alika</strong>, na mwaliko hutengenezwa ambao akaunti yako pekee ndiyo inayoweza kuutumia.</p>
+        <p>Wakati unasubiri, kadi ya jumuiya inasema <strong>Uliomba kujiunga. Bado hakuna jibu</strong>. Kwa kawaida jumuiya hujibu ndani ya siku chache. Unaweza kuwa na ombi moja wazi kwa kila jumuiya, na kila jumuiya hupokea maombi machache tu kwa siku kutoka kwa muunganisho mmoja wa intaneti.</p>
+        <p>Ikiwa hakuna anayejibu ndani ya siku 30, kadi inasema <strong>Hakuna jibu lililokuja. Unaweza kuomba tena.</strong></p>
+        <p>Ikiwa jumuiya haiwezi kupokea ombi lako, kadi huonyesha maneno yake yenyewe, kwa mfano kwamba maombi mengi mno yamekuja kutoka kwenye mtandao wako leo, au kwamba haipokei maombi ya kujiunga hivi sasa.</p>
+        <h2>Wanapokubali</h2>
+        <p>Kadi inasema <strong>Mwanachama alikualika</strong>. Gusa <strong>Jiunge</strong> ikiwa na jina la jumuiya.</p>
+        <ul>
+            <li>Akaunti yako inakuja nawe: ufunguo uleule na maneno 12 yaleyale (maneno ya Kiingereza). Jina lako linakuja pia. Ikiwa mtu wa huko tayari anatumia jina hilo, nambari huongezwa, kama vile &quot;Sarah2&quot;. Unaweza kulibadilisha katika hatua inayofuata.</li>
+            <li>Machapisho yako, mazungumzo na biashara hubaki katika kila jumuiya. Kwenye mpya unaanza upya.</li>
+            <li>Kisha unakagua jina na picha yako kwa ajili ya jumuiya mpya.</li>
+            <li>Kuingia kunakolinda akaunti yako huwekwa na kila jumuiya. Programu inakuomba uilinde akaunti yako katika jumuiya mpya pia: gusa <strong>Iilinde</strong>, au <strong>Baadaye</strong>, na ufanye hivyo wakati wowote katika <strong>Mipangilio</strong>.</li>
+        </ul>
+        <p>Unabaki kuwa mwanachama wa jumuiya ya kimataifa, na unaweza kubadili kati yao: tazama &quot;Zaidi ya jumuiya moja&quot;.</p>
+        <h2>Hakuna kitu karibu nawe</h2>
+        <ul>
+            <li><strong>Niambie pindi moja inapoanza hapa:</strong> unapata arifa wakati jumuiya inapoanza karibu na mahali ulipo. Eneo pekee ndilo linalowekwa, la takriban km 10 upana wake, kamwe si mahali pako kamili. Unaweza kutazama hadi maeneo 3, na kuacha kutazama moja kwa <strong>Acha</strong>.</li>
+            <li><strong>Anzisha jumuiya:</strong> kila jumuiya ina seva yake ndogo yenyewe, inayotunzwa na mtu wa eneo hilo. Inahitaji kompyuta ya ziada nyumbani au dola chache kwa mwezi, na takriban nusu saa: tazama &quot;Maharagwe na jumuiya ya kimataifa&quot;. Programu inaonyesha njia tatu za kuendesha moja: kompyuta ya ziada nyumbani, seva ndogo ya kukodi, au kuomba msaada. Jaza jina, mahali na jinsi watu wanavyoweza kukufikia, na uguse <strong>Nakili maelezo ya jumuiya yangu</strong> ili kuyabandika kwenye mipangilio ya seva yako mpya. Jinsi watu wanavyoweza kukufikia hubaki nje ya saraka ya umma isipokuwa uiwashe huko.</li>
+        </ul>
+        <h2>Ikiwa wewe ni mwanachama wa jumuiya ya eneo</h2>
+        <p>Watu wanaweza kuomba kujiunga na jumuiya yako kutoka kwa jumuiya ya kimataifa. Gusa <strong>Gumzo</strong>, kisha <strong>Watu</strong>, kisha <strong>Mialiko</strong>: maombi yameorodheshwa chini ya <strong>Wants to join</strong>, yakiwa na majina yao, maneno yao na walikotoka. Maombi hujibiwa katika programu ya simu: programu ya wavuti haiyoorodheshi.</p>
+        <ul>
+            <li><strong>Alika:</strong> hutengeneza mwaliko ambao akaunti yao pekee ndiyo inayoweza kuutumia. Programu yao huupata yenyewe, na wanajiunga kwa mguso mmoja.</li>
+            <li><strong>Si sasa:</strong> hawataarifiwi. Wanaendelea kuona &quot;bado hakuna jibu&quot;, na hawawezi kuomba tena kwa siku 30.</li>
+        </ul>
+        <p>Mwanachama yeyote anaweza kujibu, bila kujali beji yake ya uaminifu, isipokuwa kama jumuiya ilichagua kwamba wasimamizi wake pekee ndio wanaoalika (<strong>Known</strong>, chini ya <strong>Who may invite</strong> katika Mipangilio ya seva ya jumuiya). Hapo ndipo wamiliki na wasimamizi wake pekee huona maombi na kuyajibu. Wasimamizi wa jumuiya wanaweza kuzima maombi ya kujiunga.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="joining.html"><strong>Kujiunga na BeanPool</strong><span>Njia mbili za kuingia: jumuiya, kwa mwaliko wa mwanachama, au jumuiya ya kimataifa ikiwa wazi, kwa maneno 12 ya siri au kuingia mara moja. Kuomba kujiunga na kuwaalika wengine.</span></a></li>
+            <li><a href="home.html"><strong>Nyumbani</strong><span>Nyumbani ni nini, kadi inazoonyesha kwenye simu na wavuti, jinsi ya kuongeza, kuhamisha au kuziondoa, kuchagua unachopenda, na faragha unapotoka.</span></a></li>
+            <li><a href="communities.html"><strong>Zaidi ya jumuiya moja</strong><span>Kuwa wa jumuiya kadhaa kwa akaunti moja, kubadili kati yao, kufuata jumuiya yako kwenye anwani mpya, na kuona kile jumuiya ya kimataifa inakuonyesha.</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>Maharagwe na jumuiya ya kimataifa</strong><span>Lengo la jumuiya ya kimataifa, jumuiya moja kati ya nyingi, na unachokiona hapo: alama ya 🏘️ Jamii ya eneo, jumuiya ya mfano ya Example Valley, kwa nini Maharagwe husubiri hapo, na jinsi ya kuanza au kupata jumuiya ya ndani.</span></a></li>
+            <li><a href="../near-you.html"><strong>Finding things near you</strong><span>Show only posts within a distance of you, or of any place you choose.</span></a></li>
+            <li><a href="../recovery.html"><strong>Getting your account back</strong><span>Restore your account on a new phone, and protect it with a sign-in account.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

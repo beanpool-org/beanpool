@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/de by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Community in der Nähe finden — BeanPool members' guide</title>
+    <meta name="description" content="Aus der globalen Community lokale Gruppen finden und beitreten, informiert werden wenn eine startet, oder selbst eine gründen.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#getting-started">Erste Schritte</a></p>
+        <h1>Community in der Nähe finden</h1>
+        <p class="lede">Aus der globalen Community lokale Gruppen finden und beitreten, informiert werden wenn eine startet, oder selbst eine gründen.</p>
+        <h2>Warum eine lokale Community</h2>
+        <p>In der globalen Community treffen sich Menschen von überall her. In einer lokalen Community handeln Nachbarn miteinander: Sie hat ihre eigenen Bohnen, Handelsgeschäfte und das Gemeingut. In der globalen Community kannst du sehen, wie diese funktionieren, in einer Beispiel-Community mit der Markierung <strong>🏘️ Lokale Gemeinschaft</strong>, aber nichts dort bringt Bohnen ein oder gibt sie aus. Daher gibt ein Beitrag dort in seiner Beschreibung an, was die Person als Gegenleistung wünscht: kostenlos, Tausch oder auf Nachfrage. Siehe „Bohnen und die globale Community“.</p>
+        <p>Die globale Community ist eine Community unter vielen. Deine eigene Community läuft auf ihrem eigenen Server und benötigt sie niemals: Die globale Community hilft dir lediglich dabei, sie zu finden.</p>
+        <p>Gibt es noch keine Community in deiner Nähe? Du kannst eine gründen: Siehe unten „Noch nichts in deiner Nähe“.</p>
+        <h2>Communitys in deiner Nähe</h2>
+        <p>In der globalen Community zeigt die Karte <strong>Finde deine Community</strong> auf der <strong>Startseite</strong> die Communitys in deiner Nähe an. In deinen ersten 30 Tagen bleibt sie nahe dem oberen Rand der Startseite und kann weder entfernt noch verschoben werden; danach kannst du sie wie jede andere Karte entfernen. In der Web-App ist jede Community auf der Karte ein Link zu ihrer eigenen Seite. Wenn sie nicht weiß, wo du bist, tippe auf <strong>Mein Gebiet teilen</strong> oder auf <strong>oder gib deinen Ort ein</strong> und wähle deinen Ort. Die folgenden Schritte gelten für die Smartphone-App.</p>
+        <p>Noch nicht in der globalen Community? Tippe oben links auf die Bohne und unter <strong>DEINE COMMUNITIES</strong> auf <strong>Globale Community</strong>, tritt ihr dann mit dem bestehenden Konto bei: Siehe „Mehr als eine Community“. Wenn du noch kein Konto hast, tippe auf dem ersten Bildschirm der App auf <strong>BeanPool weltweit entdecken</strong>: Siehe „BeanPool beitreten“.</p>
+        <ul>
+            <li>Tippe auf <strong>Communitys in deiner Nähe</strong>, um die gesamte Liste zu sehen.</li>
+            <li>Communitys werden nach Entfernung aufsteigend aufgeführt, sobald die App weiß, wo du bist. Weiß sie es nicht, tippe auf <strong>Meinen Standort verwenden</strong> oder suche nach Namen. Möchtest du deinen Standort lieber nicht teilen? Tippe auf <strong>oder gib deinen Ort ein</strong>, beginne zu tippen und wähle deinen Ort aus der Liste: Es wird nur ein ungefährer Punkt gespeichert, und <strong>ändern</strong> wählt einen anderen.</li>
+            <li>Communitys in etwa derselben Entfernung zu dir werden gemischt, sodass nicht immer dieselbe Community ganz oben steht.</li>
+            <li>Jede zeigt an, wie weit sie entfernt ist und wie viele Mitglieder sie hat, sofern die Community dies angegeben hat.</li>
+        </ul>
+        <p>Eine Community, die ihre Adresse nicht veröffentlicht hat, wird zwar aufgeführt, kann von hier aus aber noch nicht angefragt werden.</p>
+        <h2>Beitritt anfragen</h2>
+        <ul>
+            <li>Tippe bei einer Community auf <strong>Beitritt anfragen</strong>.</li>
+            <li>Überprüfe deinen Namen und schreibe ein paar Worte über dich, bis zu 280 Zeichen: Wo du wohnst, was du gerne teilen oder lernen möchtest.</li>
+            <li>Tippe auf <strong>Senden</strong>.</li>
+        </ul>
+        <p>Deine Anfrage geht direkt an diese Community, nicht über die globale Community, mit deinem Namen, deinen Worten und deinem Foto. Nur ihre Mitglieder sehen sie. Wo die Community nur ihren Admins das Einladen erlaubt, sehen nur ihre Eigentümer und Admins die Anfrage. Ein Mitglied dort kann dich hereinlassen: Es tippt auf <strong>Einladen</strong>, und es wird eine Einladung erstellt, die nur dein Konto verwenden kann.</p>
+        <p>Während du wartest, besagt die Karte der Community: <strong>Du hast einen Beitritt angefragt. Bisher keine Antwort</strong>. Communitys antworten normalerweise innerhalb weniger Tage. Du kannst bei jeder Community eine offene Anfrage haben, und jede Community nimmt pro Tag nur wenige Anfragen über dieselbe Internetverbindung an.</p>
+        <p>Wenn niemand innerhalb von 30 Tagen antwortet, meldet die Karte: <strong>Es kam keine Antwort. Du kannst erneut anfragen.</strong></p>
+        <p>Wenn eine Community deine Anfrage nicht annehmen kann, zeigt die Karte ihre eigenen Worte an, zum Beispiel, dass heute zu viele Anfragen aus deinem Netzwerk kamen oder dass sie derzeit keine Beitrittsanfragen annimmt.</p>
+        <h2>Wenn sie Ja sagen</h2>
+        <p>Die Karte meldet: <strong>Ein Mitglied hat dich eingeladen</strong>. Tippe auf <strong>Teilnehmen</strong> mit dem Namen der Community.</p>
+        <ul>
+            <li>Dein Konto zieht mit dir um: derselbe Schlüssel und dieselben 12 Wörter (es sind englische Wörter). Dein Name zieht ebenfalls mit um. Wenn ihn dort bereits jemand hat, wird eine Nummer angehängt, wie etwa „Sarah2“. Du kannst ihn im nächsten Schritt ändern.</li>
+            <li>Deine Beiträge, Chats und Handelsgeschäfte verbleiben in der jeweiligen Community. In der neuen fängst du frisch an.</li>
+            <li>Als Nächstes überprüfst du deinen Namen und dein Foto für die neue Community.</li>
+            <li>Eine Anmeldung, die dein Konto schützt, wird von jeder Community separat verwahrt. Die App bittet dich, dein Konto auch in der neuen Community zu schützen: Tippe auf <strong>Jetzt schützen</strong> oder <strong>Später</strong> und hole dies jederzeit in den <strong>Einstellungen</strong> nach.</li>
+        </ul>
+        <p>Du bleibst weiterhin Mitglied der globalen Community und kannst zwischen ihnen wechseln: Siehe „Mehr als eine Community“.</p>
+        <h2>Noch nichts in deiner Nähe</h2>
+        <ul>
+            <li><strong>Benachrichtigen, wenn hier eine startet:</strong> Du erhältst eine Benachrichtigung, wenn eine Community in deiner Nähe entsteht. Es wird nur das Gebiet gespeichert, etwa 10 km im Durchmesser, niemals dein genauer Aufenthaltsort. Du kannst bis zu 3 Orte beobachten und das Beobachten eines Ortes mit <strong>Stopp</strong> beenden.</li>
+            <li><strong>Eine Gemeinschaft gründen:</strong> Jede Community hat ihren eigenen kleinen Server, der von jemandem vor Ort betreut wird. Dazu genügt ein ausgedienter Computer zu Hause oder wenige Dollar im Monat und etwa eine halbe Stunde Zeit: Siehe „Bohnen und die globale Community“. Die App stellt drei Möglichkeiten vor, einen zu betreiben: Ein ausgedienter Computer zu Hause, ein kleiner gemieteter Server oder die Bitte um Hilfe. Trage den Namen, den Ort und die Kontaktmöglichkeiten ein und tippe auf <strong>Details meiner Community kopieren</strong>, um sie in die Einstellungen deines neuen Servers einzufügen. Wie man dich erreichen kann, bleibt außerhalb des öffentlichen Verzeichnisses, es sei denn, du schaltest es dort frei.</li>
+        </ul>
+        <h2>Wenn du Mitglied einer lokalen Community bist</h2>
+        <p>Menschen können aus der globalen Community heraus um Beitritt zu deiner Community bitten. Tippe auf <strong>Chat</strong>, dann auf <strong>Personen</strong>, danach auf <strong>Einladungen</strong>: Anfragen werden unter <strong>Möchte beitreten</strong> aufgeführt, mit ihrem Namen, ihren Worten und ihrer Herkunft. Anfragen werden in der Smartphone-App beantwortet: Die Web-App listet sie nicht auf.</p>
+        <ul>
+            <li><strong>Einladen:</strong> Erstellt eine Einladung, die nur das jeweilige Konto verwenden kann. Die App der Person findet sie automatisch, und sie tritt mit einem Fingertipp bei.</li>
+            <li><strong>Nicht jetzt:</strong> Dies wird ihnen nicht mitgeteilt. Sie sehen weiterhin „noch keine Antwort“ und können 30 Tage lang nicht erneut anfragen.</li>
+        </ul>
+        <p>Jedes Mitglied kann antworten, unabhängig von seinem Vertrauensabzeichen, es sei denn, die Community hat festgelegt, dass nur ihre Admins einladen (<strong>Bekannt</strong>, unter <strong>Wer darf einladen</strong> in den Einstellungen des Community-Servers). Dann sehen nur deren Eigentümer und Admins die Anfragen und beantworten sie. Die Admins einer Community können Beitrittsanfragen deaktivieren.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="joining.html"><strong>BeanPool beitreten</strong><span>Zwei Wege: eine Community mit Einladung oder die globale Community mit 12 geheimen Wörtern oder einem Login. Beitritt anfragen und andere einladen.</span></a></li>
+            <li><a href="home.html"><strong>Startseite</strong><span>Was die Startseite ist, welche Karten sie auf dem Smartphone und im Web zeigt, wie man sie anordnet oder entfernt, Interessen wählen und Datenschutz beim Abmelden.</span></a></li>
+            <li><a href="communities.html"><strong>Mehrere Communitys</strong><span>Mit einem Konto zu mehreren Communitys gehören, wechseln, einer Community zu einer neuen Adresse folgen und die globale Ansicht nutzen.</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>Bohnen &amp; globale Community</strong><span>Wozu die globale Community dient, eine unter vielen, und was du dort siehst: 🏘️ Lokale Community, Beispieltal, warum Bohnen warten, und wie du lokale Gruppen findest.</span></a></li>
+            <li><a href="../near-you.html"><strong>Finding things near you</strong><span>Show only posts within a distance of you, or of any place you choose.</span></a></li>
+            <li><a href="../recovery.html"><strong>Getting your account back</strong><span>Restore your account on a new phone, and protect it with a sign-in account.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

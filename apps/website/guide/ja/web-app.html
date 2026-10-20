@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ja by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebブラウザでのBeanPool利用 — BeanPool members' guide</title>
+    <meta name="description" content="Webアプリではアプリのほとんどの機能が利用できます。ブラウザでのグローバルコミュニティへの参加、サインインによるアカウント復元、同じアカウントの端末への設定、ボタン名の違いについて説明します。">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#getting-started">はじめに</a></p>
+        <h1>WebブラウザでのBeanPool利用</h1>
+        <p class="lede">Webアプリではアプリのほとんどの機能が利用できます。ブラウザでのグローバルコミュニティへの参加、サインインによるアカウント復元、同じアカウントの端末への設定、ボタン名の違いについて説明します。</p>
+        <h2>同じアカウント、異なる画面</h2>
+        <p>お使いのコミュニティは、パソコンやスマートフォンのWebブラウザでも利用できます。本ガイドはスマートフォンアプリ向けに書かれています。Webアプリも同様に動作しますが、一部の名称や配置が異なります。</p>
+        <p>両方で同じ1つのアカウントを使用してください。ブラウザで参加しましたか？同じアカウントをスマートフォンに設定してください（後述の「Webのアカウントをスマートフォンに設定する」参照）。スマートフォンで参加しましたか？それをブラウザに持ち込んでください（後述の「スマートフォンのアカウントをパソコンで使う」参照）。再度参加すると2つ目の別アカウントが作成されてしまい、2つのアカウントを1つに統合することは二度とできません。</p>
+        <h2>ブラウザでglobal.beanpool.orgに参加する</h2>
+        <p>global.beanpool.org のグローバルコミュニティは誰にでも開かれており、Webブラウザから直接参加できます。招待もスマートフォンアプリも不要です。</p>
+        <p>参加前は、訪問者向けの表示として<strong>ホーム</strong>、<strong>マーケット</strong>、<strong>地図</strong>、<strong>台帳</strong>（ローカルコミュニティのサンプル）が表示されます。公開カード、出品、写真、大体の位置は確認できますが、名前、顔写真、正確な場所は表示されません。参加するまで、投稿や返信は行えません。<strong>参加</strong>ボタンはページ上部および出品一覧の上のカード内にあります。</p>
+        <p>スマートフォンのブラウザでは、そのカードにまず<strong>BeanPoolアプリで開く</strong>が表示されます。アプリがインストールされていない場合は端末のアプリストアが開き、インストールされている場合はグローバルコミュニティの参加画面が開くため、最初からアプリ内にアカウントを作成できます。アプリにすでにアカウントがある場合は、そのアカウントで<strong>グローバルコミュニティに参加</strong>が開くか、すでにメンバーであれば<strong>BeanPool</strong>シートが開きます（「BeanPoolへの参加」参照）。その下にある<strong>またはブラウザでここから参加</strong>を選ぶと、以下のようにブラウザ上で直接参加できます。パソコンではカードに<strong>参加</strong>と表示されます。</p>
+        <p>グローバルコミュニティの出品がまだ少ない間は、<strong>マーケット</strong>に<strong>サンプル</strong>と明記されたカードがいくつか表示されます。これらは人々が何を投稿しているかを示すための架空のものであり、詳細を開くことはできません。実際の出品が十分に増えると消えます。</p>
+        <p>誰かが共有した出品やイベントのリンクからアクセスした場合は、まずそのページが開きます。そのページから参加すると、参加完了後に再び開き、今度は投稿者の情報も表示されます。</p>
+        <ul>
+            <li><strong>参加</strong>をタップし、<strong>BeanPoolを初めて使う</strong>を選択します。</li>
+            <li>他の人に表示される名前を決めます。2文字以上、最大20文字までです。</li>
+            <li>参加方法を選択します。<strong>12個の秘密の単語でアカウントを作成</strong>は他のアカウントを必要としません。または、<strong>またはサインイン</strong>の下で、画面に表示されるアカウント（<strong>Google</strong>、<strong>Apple</strong>、<strong>Facebook</strong>）のいずれかで1回サインインします。各サービスのサインイン画面に移動し、完了すると戻ってきます。サインインのみを受け付けるコミュニティでは、サインインの選択肢のみが表示されます。</li>
+            <li>その後は通常と同じステップです（写真、大体の現在地、12個の単語、簡単なツアー）。上部のバーには、<strong>サインイン</strong>（12個の単語で参加した場合は<strong>名前</strong>）、<strong>写真</strong>、<strong>あなたのエリア</strong>、<strong>バックアップ</strong>、<strong>使い方</strong>が表示されます。<strong>あなたのエリア</strong>では、<strong>現在地を使用</strong>を選ぶとブラウザに1回だけ位置情報を尋ね、結果を約10 km単位に丸めてから送信します。<strong>町や地区の名前を入力</strong>は地名で検索します。<strong>今はスキップ</strong>は何も送信しません。最後に再度ブラウザから位置情報を求められることはありません。「BeanPoolへの参加」を参照してください。</li>
+        </ul>
+        <p><strong>12個の単語で参加する場合。</strong> Google、Apple、Facebookのアカウントは不要で、コミュニティには名前と、参加元のネットワークのハッシュ化（暗号化）された参照情報（1日間のみ）以外何も残りません。名前を入力している間に、誰もが無制限にアカウントを量産できないよう、ページがバックグラウンドでコミュニティ向けのわずかな処理を行います。待たされることはありません。完了前にタップした場合は、8段階のバーとともに<strong>アカウントを設定中…</strong>と表示されます。多くの人が同時に参加しているときは時間がかかり、このブラウザでの大体の所要時間が表示されます（サインインのほうが早くなります）。<strong>← 別の方法を選ぶ</strong>を押すと処理を継続したまま2つの選択肢に戻ります。12個の単語が唯一の復元手段となります。BeanPoolもコミュニティも単語をリセットすることはできません。<strong>バックアップ</strong>画面でもその旨が説明され、<strong>戻る手段をもう1つ増やすため、サインインを追加</strong>が提案されます。写真が保存された後、簡単なツアーの最後にサインインを選択できます（後述の「後からサインインを追加する」参照）。どちらを選ぶかは自由です。</p>
+        <p><strong>サインインで参加する場合。</strong> コミュニティはそのサインインの暗号化された参照情報のみを保持し、メールアドレスやアカウント名を保持することはありません。1つのサインインアカウントで参加できるのは1回だけです。</p>
+        <p>同じサインインは、アカウントの復元手段としても保持されます。ページに<strong>アカウントを保護中…</strong>と表示されている間に、12個の単語を含むアカウントのコピーが暗号化保護され、参加時にコミュニティに渡されます。そのサインインアカウントで開くことができます。サーバーの運営者もそのコピーを開くことができます。スマートフォンアプリでサインインアカウントを連携した場合と同様、サーバーがサインインを確認するためです（「アカウントの復元」参照）。その後、設定に<strong>サインイン復元：連携中</strong>と、どのアカウントかが表示されます。コピーの作成や保持ができなかった場合でも参加は完了し、設定には<strong>サインイン復元：未連携</strong>と表示されます。その場合、12個の単語が唯一の復元手段となります。</p>
+        <p>コミュニティにそのコピーを保持されたくない場合、Webアプリから削除することはまだできません。スマートフォンにもアカウントがある場合は、スマートフォンアプリから削除できます。グローバルコミュニティを開いた状態で<strong>設定</strong>へ行き、<strong>アカウント保護</strong>をタップして、サインインの横にある<strong>連携解除</strong>をタップします。どちらの場合も、12個の単語は大切に保管してください。あなただけの復元手段です。</p>
+        <p>希望した名前がすでに使われている場合は、数字が付加された名前になります。設定で変更できます。</p>
+        <p><strong>すでにBeanPoolをお使いですか？</strong> 2つ目のアカウントを作らないでください。<strong>参加</strong>の後、スマートフォンアプリから連携する場合は<strong>スマートフォンでBeanPoolを使っている</strong>を、または<strong>12個の単語を持っている</strong>を選択してください。そのアカウントがまだグローバルコミュニティに参加していない場合、同じ参加方法（12個の単語、または1回のサインイン）が表示され、既存のアカウントとして参加します。以前にサインインでグローバルコミュニティに参加したことがある場合は、<strong>以前サインイン連携で参加した</strong>を選択してください（下記参照）。</p>
+        <p>途中でページを閉じた場合も、10分以内に再度開けば同じ名前で再開できます。</p>
+        <p><strong>1つのブラウザにつき1アカウント。</strong> 2つのタブで同時に参加した場合、2つ目のタブには<strong>このブラウザにはすでにアカウントが存在します</strong>と表示され、そのアカウント名で<strong>開く</strong>が提案されます。上書きされることはありません。2つ目のタブの参加も完了していた場合、そのアカウントもこのブラウザに保持され、<strong>12個の単語を表示</strong>で単語が表示されます。維持したい場合は書き留めてください。代わりにそのアカウントを使いたい場合は、設定でサインアウト（<strong>この端末からのみ削除</strong>）してから、その単語で復元してください。</p>
+        <p><strong>送信済みの参加処理が優先されます。</strong> このブラウザから送信された参加処理が完了している可能性がある場合、ページは招待や他のアカウントの復元よりも前に、まずコミュニティにその状況を確認します。参加が完了していればそのまま進みます。まだ処理中の可能性がある場合は、数分待ってから<strong>もう一度確認</strong>するよう促されます。これはコミュニティが新規メンバーの受け入れを停止している場合でも適用されます。</p>
+        <p>参加処理の送信後にページで問題が発生した場合はその旨が表示され、<strong>ページを再読み込み</strong>が提案されます。参加情報はブラウザに保持されており、再読み込み時に参加が完了しているかが確認されます。</p>
+        <p><strong>同じネットワークからの多数の参加：</strong> 1つのインターネット接続から多数の新規アカウントが作成される場合、参加を拒否するのではなく、ブラウザ側で少し多くの処理を求められます。同じネットワーク上の全員が合算してカウントされるため、大学、オフィス、交流会などでは、あなたではなく他の人が参加している可能性があります。非常に膨大な数に達した場合にのみ一時的に拒否され、待機時間が表示されます。12個の単語のアカウントで拒否された場合でも、サインインによる参加は引き続き機能します。</p>
+        <h2>新規アカウントの利用制限</h2>
+        <p>グローバルコミュニティでは、新規アカウントには最初の3日間、および3件の投稿が維持されるまでの間、1日あたりの制限が適用されます（24時間あたり投稿3件、写真5枚、新しいメッセージ相手10人まで）。12個の単語だけで作成されたアカウントは、最初の7日間かつ3件の投稿が維持されるまで、さらに厳しい制限が適用されます（投稿2件、写真4枚、新しいメッセージ相手3人まで）。サインインを追加すると、直ちに通常の制限に緩和されます。先に相手から送られてきたメッセージへの返信は制限されません。理由については「問題の報告」を参照してください。</p>
+        <ul>
+            <li>参加後、<strong>新規アカウントです</strong>というカードに各項目の残り件数と回復時刻が表示されます。<strong>✕</strong>をタップすると消えます。制限期間が終わるまで<strong>設定</strong>内に留まります。</li>
+            <li>上限に達した場合、<strong>新規投稿</strong>またはチャット画面にどの制限に達したかと解除時刻が表示され、<strong>新規投稿</strong>には同じカードが表示されます。</li>
+            <li>モデレーターによって投稿が一時停止された場合は<strong>新規投稿</strong>とチャットにその旨が表示され、<strong>投稿が一時停止されています</strong>カードに停止期限が表示されます。一時停止が解除されるまで表示され続けます。</li>
+            <li>Webアプリを閉じている間にモデレーターが投稿を非表示・削除したり、投稿を一時停止したりした場合、最大60日間、次回Webアプリを開いたときに通知が表示されます。各通知は<strong>確認しました</strong>をタップするまで表示され、タップ後は再表示されません。複数の通知がある場合は、<strong>Close all</strong>ですべて消去できます。スマートフォンにもアカウントがある場合、スマートフォンですでに見た通知がWebアプリにも表示されることがあります。</li>
+        </ul>
+        <p>ご自身のローカルコミュニティには、これらの制限は一切ありません。</p>
+        <h2>サインインでアカウントを復元する</h2>
+        <p>グローバルコミュニティでは、参加時に使用したサインインを使って、保存データが消去されたブラウザや別のパソコンの新しいブラウザにアカウントを復元できます。同じアカウントが復元され、2つ目のアカウントになることはありません。</p>
+        <ul>
+            <li><strong>すでにBeanPoolをお使いですか？</strong>をタップし、<strong>サインインを使用</strong>を選びます（<strong>参加</strong>の後、<strong>以前サインイン連携で参加した</strong>を選んでも同じです）。</li>
+            <li>BeanPoolアカウントを保持するには古すぎるブラウザの場合、<strong>参加</strong>の代わりにその旨が表示されます。最新のChrome、Firefox、Safari、Edgeを使用してください。</li>
+            <li>ここにお名前を入力します。表示されたらご自身のアカウントをタップします。</li>
+            <li>参加時に使用したサインイン（<strong>Google</strong>、<strong>Apple</strong>、<strong>Facebook</strong>）を選択します。参加時と同様に各サービスのサインイン画面へ移動し、完了すると戻ってきます。</li>
+            <li>ページはブラウザ内でアカウントの暗号化されたコピーを開き、タップしたアカウントと本当に一致するかを確認します。一致しない場合は<strong>一致しません</strong>と表示され、何も保存されません。</li>
+            <li>参加が完了します。コピーに12個の単語が含まれていた場合は単語も戻ってきます（ブラウザで参加したアカウントには常に含まれます）。コピーに含まれていなかった場合、このブラウザには単語がなく、設定にその旨が表示されます（後述の「12個の単語を保管する」参照）。</li>
+        </ul>
+        <p>あなた以外の誰かによる操作である可能性に備えて、アカウントが復元されつつあることが他の端末に通知されます。</p>
+        <p>GitHubで参加していた場合、そのサインインで復元することはできません。BeanPoolはGitHubの利用を終了しました（「アカウントの復元」参照）。代わりに12個の単語を使用してください。</p>
+        <p>参加時とは異なるアカウントでサインインした場合、ページはその旨を表示し、再選択を促します。<strong>参加</strong>をタップした後にすでに参加済みのアカウントでサインインした場合、ページには<strong>すでに参加しています</strong>と表示され、<strong>〜で復元</strong>が提案されます。</p>
+        <p>ここでも<strong>1つのブラウザにつき1アカウント</strong>の原則が適用されます。このブラウザにすでに別のアカウントが存在する場合、上書きされることはありません。ページには<strong>このブラウザにはすでにアカウントが存在します</strong>と表示され、それを開くことが提案されます。ご自身のアカウントをここに持ち込むには、まずそのアカウントからサインアウトしてください。すでにこのブラウザにあなたのアカウントがある場合は、すでに存在している旨が表示されます。</p>
+        <h2>後からサインインを追加する</h2>
+        <p>12個の単語でグローバルコミュニティに参加した場合、それが唯一の復元手段です。参加後、<strong>復元方法は1つ</strong>というカードにその旨が表示され、<strong>自分の12個の単語を確認</strong>と<strong>サインイン方法を追加</strong>が用意されます。<strong>✕</strong>をタップすると消えます。投稿の1つが維持された後と最初の1週間が経過した後にそれぞれ1回再表示されます。サインインを追加するまで<strong>設定</strong>内に留まります。</p>
+        <ul>
+            <li><strong>サインイン方法を追加</strong>をタップし、<strong>Google</strong>、<strong>Apple</strong>、または<strong>Facebook</strong>を選びます。参加時と同様に各サービスの画面へ移動し、完了すると戻ってきます。</li>
+            <li><strong>設定</strong>が開き、追加されたかどうかが表示されます。以降は、そのサインインもアカウントの復元手段となります。サインインで参加したときと同様にコミュニティが暗号化されたコピーを保持し、サーバーの運営者はそのコピーを開くことができます。新規アカウントの制限は直ちに通常の制限に緩和されます。</li>
+            <li>ここですでに別のBeanPoolアカウントに紐付いているサインインアカウントや、コミュニティから除名されたアカウントに属していたサインインアカウントは追加できません。ページがその旨を表示し、何も変更されません。</li>
+        </ul>
+        <h2>名称や配置の違い</h2>
+        <ul>
+            <li><strong>招待で参加する場合:</strong> 最初のステップのボタンには<strong>IDを作成して参加 →</strong>と表示されます。すでに同じ名前の人がいる場合は、数字が付加された名前になります。<strong>写真</strong>画面で<strong>← 戻る</strong>を押すと名前のみが表示され、<strong>次へ →</strong>が付いています。同じアカウントのまま名前（最大20文字）を変更または維持できます。新しい名前がすでに使われている場合は、ページがその旨を表示し、ほかの候補を提案します。</li>
+            <li><strong>タブ:</strong> Webアプリには<strong>ホーム</strong>、<strong>マーケット</strong>、<strong>地図</strong>、<strong>コモンズ</strong>、<strong>チャット</strong>、<strong>仲間</strong>、<strong>台帳</strong>があります。スマートフォンアプリで<strong>トーク</strong>と呼ばれている機能はWebでは<strong>チャット</strong>となり、<strong>仲間</strong>は独立したタブになっています。</li>
+            <li><strong>設定とプロフィール:</strong> 右上の小さなボタン群（プロフィール、<strong>？</strong>、設定）です。ワイド画面では左側のメニュー最下部にあります。</li>
+            <li><strong>提供や求めの投稿:</strong> <strong>地図</strong>ページの<strong>新規投稿</strong>を使用します。</li>
+            <li><strong>外観設定:</strong> 「スマートフォンの設定に合わせる」ではなく<strong>端末の設定に合わせる</strong>という名称になります。</li>
+            <li><strong>ブロック:</strong> 設定には<strong>ブロックしたメンバーの管理</strong>と表示されます。コミュニティはお客さまのアカウント情報とともにブロックリストを保持するため、どのブラウザでサインインしても復元され、サインアウトしてもパソコンにデータは残りません。コミュニティのサーバー運営者はあなたが誰をブロックしたかを確認できます。ブロックと解除にはインターネット接続が必要です。未接続時はその旨が表示され、何も変更されません。スマートフォンアプリで行ったブロックはスマートフォン内にとどまり、ここには表示されません。</li>
+            <li><strong>チャット:</strong> Webチャットの上部には<strong>通報</strong>と<strong>ブロック</strong>ボタンがあります。</li>
+            <li><strong>あなたの地域:</strong> グローバルコミュニティでは、Webアプリの設定にも<strong>あなたの地域</strong>があり、マーケットと地図はそこを起点にします。「あなたの地域」を参照してください。</li>
+            <li><strong>グローバルコミュニティ:</strong> ローカルコミュニティでは、設定の<strong>BEANPOOL</strong>の下に<strong>グローバルコミュニティ</strong>の行があり、そのアドレスと「<strong>グローバルコミュニティは数あるコミュニティの1つに過ぎません。あなた自身のコミュニティは独自のサーバーで稼働しており、グローバルコミュニティを必要としません。</strong>」と記載されています。タップすると、コミュニティのサーバーが指定するグローバルコミュニティが新しいタブで開きます。アカウントを持ち込むまではそこには存在しません。そのタブで<strong>参加</strong>を押し、<strong>12個の単語を持っている</strong>を選んでください。コミュニティが何も指定していない場合、この行は表示されません。</li>
+        </ul>
+        <h2>Webアプリにない機能</h2>
+        <ul>
+            <li>グローバルコミュニティ以外のコミュニティで、サインインを使ってアカウントを復元する機能。そこでは12個の単語を使って復元するか、スマートフォンにもアカウントがある場合はスマートフォンアプリから連携します。</li>
+            <li>Pulseの<strong>学び</strong>レーン。</li>
+            <li>スマートフォンのアプリロック。</li>
+            <li>オーナーや管理者向けに、自分の鍵を使ってコミュニティの設定にサインインする機能。Webアプリの<strong>管理</strong>リンクから設定を開くことはできますが、ブラウザ自体には独自のロック解除機能がありません。パソコンでは設定で<strong>Sign in with your phone</strong>を選び、スマートフォンアプリ（<strong>設定</strong>から<strong>パソコンからこのコミュニティを管理</strong>、古いアプリでは<strong>パソコンでサインイン</strong>）でコードをスキャンしてください。</li>
+        </ul>
+        <h2>Webのアカウントをスマートフォンに設定する</h2>
+        <p>ブラウザで参加した場合は、同じアカウントをスマートフォンアプリに引き継いでください。スマートフォンで新たにアカウントを作成しないでください。2つ目のアカウントが作成されてしまい、2つのアカウントを1つに統合することは二度とできません。12個の単語の横にある<strong>バックアップ</strong>、および設定の<strong>サインイン復元</strong>カードに手順が記載されています。</p>
+        <ul>
+            <li>BeanPoolアプリをインストールして開きます。</li>
+            <li><strong>すでにメンバーですか？アカウントを復元</strong>をタップし、<strong>12個の単語で復元</strong>を選びます。</li>
+            <li>12個の単語を入力し、<strong>どのコミュニティですか？</strong>の下で<strong>グローバルコミュニティ</strong>をタップします。その選択肢がない古いアプリでは、グローバルコミュニティのアドレス（global.beanpool.org）を入力してください。他のコミュニティの場合は、そのコミュニティのアドレスを入力します（Webアプリの同じ説明文の中に表示されています）。</li>
+            <li>サインインで参加していた場合は、同じサインインを使って<strong>ソーシャルアカウントで復元</strong>も利用できます。「アカウントの復元」を参照してください。</li>
+        </ul>
+        <p>ブラウザでの参加画面の最初のステップにも逆の案内があります。すでにいずれかのスマートフォンやパソコンでBeanPoolをお使いの場合は、新しいアカウントを作成するのではなく、そのアカウントを引き継いでください。</p>
+        <h2>スマートフォンのアカウントをパソコンで使う</h2>
+        <ul>
+            <li>パソコンのWebアプリで、モバイルアプリと連携する選択肢を選びます。QRコードが表示されます。</li>
+            <li>スマートフォンで<strong>設定</strong>を開き、<strong>端末をリンク</strong>（古いアプリでは<strong>別端末でアカウントを使う</strong>）をタップします。</li>
+            <li>スマートフォンのカメラをQRコードに向け、<strong>確認して端末を連携</strong>をタップして画面ロック認証を通過します。</li>
+            <li>スマートフォンに<strong>4桁の数字</strong>が表示されます。パソコンにそれを入力し、<strong>確認</strong>を押します。その後初めて、アカウント情報がパソコンに送信されます。3回間違えると何も送信されなくなります。新しいコードを作成してください。数字を声に出して読み上げたり、誰かに送信したりしないでください。</li>
+            <li>アプリのバージョンが古すぎる旨が表示された場合は、スマートフォンのBeanPoolアプリを更新してから、新しいコードをスキャンしてください。</li>
+        </ul>
+        <h2>アプリのインストール</h2>
+        <p>Webアプリには、ホーム画面からアプリのように開けるように<strong>BeanPoolをインストール</strong>が表示されることがあります。お使いのブラウザが対応していない場合は、<strong>方法</strong>をタップして手順を確認してください。</p>
+        <h2>12個の単語を保管する</h2>
+        <p>ブラウザは保存データを消去することがあります（例：Safariで1週間アクセスしなかった場合など）。12個の単語を確認するまで、Webアプリの設定には<strong>復元フレーズを確認・保存</strong>の警告が表示されます。必ず確認し、紙に書き留めてください。</p>
+        <p>12個の単語を含まないコピーのサインインで復元されたブラウザには単語がないため、そのような警告は表示されません。そこでは<strong>復元フレーズを表示</strong>に<strong>このブラウザには保存されていません</strong>と表示され、代わりに何を使ってアカウントを復元できるか（紙に書き留めた12個の単語、または設定で連携中と表示されているサインイン）を説明するページが開きます。どちらもない場合、スマートフォンにもアカウントがある場合に限りスマートフォンアプリから復元できます。サインアウトする前の<strong>この端末からのみ削除</strong>でも同様の案内が表示されます。</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="home.html"><strong>ホーム</strong><span>ホームの概要、スマートフォンやWebアプリで表示されるカード、追加・移動・削除方法、興味の設定、サインアウト時のプライバシーについて説明します。</span></a></li>
+            <li><a href="the-bean.html"><strong>本ガイド</strong><span>本ガイドの確認場所、検索方法、最新の状態に保たれる仕組みについて説明します。</span></a></li>
+            <li><a href="your-12-words.html"><strong>あなたの12個の単語</strong><span>12個の単語はアカウントの鍵です。その重要性、確認場所、安全な保管方法、復元のバックアップ手段としてサインインを追加する方法を説明します。</span></a></li>
+            <li><a href="joining.html"><strong>BeanPoolへの参加</strong><span>参加方法は2つあります。メンバーからの招待によるコミュニティ参加、または公開されているグローバルコミュニティへの12個の秘密の単語か1つのサインインによる参加です。参加申請や他者の招待方法も説明します。</span></a></li>
+            <li><a href="../messages.html"><strong>Messages</strong><span>Start a chat, send photos, reply, react, edit, delete, mute, and what is private.</span></a></li>
+            <li><a href="../reporting.html"><strong>Reporting a problem</strong><span>Tell your community's moderators about a post, an event, a Pulse post, a project or an enterprise.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ur by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ur">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ایک سے زیادہ کمیونٹیز — BeanPool members' guide</title>
+    <meta name="description" content="ایک اکاؤنٹ سے کئی کمیونٹیز سے وابستہ ہوں، ان کے درمیان سوئچ کریں، نئے پتے پر کمیونٹی کی پیروی کریں، اور دیکھیں کہ عالمی کمیونٹی کیا دکھاتی ہے۔">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#getting-started">شروعات</a></p>
+        <h1>ایک سے زیادہ کمیونٹیز</h1>
+        <p class="lede">ایک اکاؤنٹ سے کئی کمیونٹیز سے وابستہ ہوں، ان کے درمیان سوئچ کریں، نئے پتے پر کمیونٹی کی پیروی کریں، اور دیکھیں کہ عالمی کمیونٹی کیا دکھاتی ہے۔</p>
+        <h2>ایک اکاؤنٹ، کئی کمیونٹیز</h2>
+        <p>آپ کا فون ایک اکاؤنٹ رکھتا ہے: ایک نام، ایک چابی، 12 الفاظ کا ایک سیٹ۔ آپ اسے ایک سے زیادہ کمیونٹیز میں شامل ہونے کے لیے استعمال کر سکتے ہیں۔ ہر کمیونٹی اپنی پھلیاں، لین دین اور پوسٹس الگ رکھتی ہے۔</p>
+        <h2>دوسری کمیونٹی میں شامل ہونا</h2>
+        <ul>
+            <li>کوئی کمیونٹی آپ کو اپنے اراکین میں سے کسی ایک کے دعوت نامے کے ذریعے اندر آنے دیتی ہے۔ دعوت نامہ نہیں ہے؟ عالمی کمیونٹی سے آپ اپنے قریب کسی کمیونٹی سے اندر آنے کی درخواست کر سکتے ہیں: &quot;اپنے قریب کمیونٹی تلاش کرنا&quot; دیکھیں۔</li>
+            <li><strong>Invites</strong> کھولنے کے لیے اسکرین کے اوپری دائیں کونے میں دعوت نامے کے آئیکن (پلس کے ساتھ شخص) پر ٹیپ کریں۔</li>
+            <li><strong>Join Another Community</strong> کے تحت، دعوتی لنک یا کوڈ پیسٹ کریں۔ اگر آپ کے پاس صرف کوڈ ہے، تو کمیونٹی کا پتہ بھی درج کریں۔</li>
+            <li><strong>کمیونٹی میں شامل ہوں</strong> پر ٹیپ کریں۔</li>
+        </ul>
+        <p>آپ کی چابی، آپ کے 12 الفاظ اور آپ کا نام آپ کے ساتھ آتے ہیں۔ آپ کی پوسٹس، چیٹس اور لین دین ہر کمیونٹی میں الگ رہتے ہیں۔ اس کے بعد آپ نئی کمیونٹی کے لیے اپنا نام اور تصویر چیک کرتے ہیں۔ آپ کے اکاؤنٹ کی حفاظت کرنے والا سائن ان ہر کمیونٹی اپنے پاس رکھتی ہے، اس لیے ایپ آپ سے نئی کمیونٹی میں بھی اپنے اکاؤنٹ کو محفوظ بنانے کے لیے کہتی ہے: <strong>اسے محفوظ بنائیں</strong> پر ٹیپ کریں، یا <strong>بعد میں</strong> پر۔</p>
+        <h2>اپنے اکاؤنٹ سے عالمی کمیونٹی میں شامل ہونا</h2>
+        <p>عالمی کمیونٹی کو کسی دعوت نامے کی ضرورت نہیں ہوتی، اور آپ اپنے پہلے سے موجود اکاؤنٹ کے ساتھ اس میں شامل ہوتے ہیں: وہی چابی اور وہی 12 الفاظ۔ ایپ اسے اس وقت پیش کرتی ہے جب عالمی کمیونٹی کھلی ہو اور اس نے ایپ کو یہ نہ بتایا ہو کہ یہ اکاؤنٹ پہلے ہی وہاں کا رکن ہے۔</p>
+        <p><strong>Your communities</strong> کے تحت <strong>عالمی کمیونٹی</strong> کے لیے ہمیشہ ایک قطار ہوتی ہے۔ اس کی دوسری سطر بتاتی ہے کہ آپ کی پوزیشن کیا ہے: جب آپ رکن ہوں تو اس کا پتہ (اس پر سوئچ کرنے کے لیے اس پر ٹیپ کریں)، جب آپ اس میں شامل ہو سکتے ہوں تو <strong>اس اکاؤنٹ کے ساتھ شامل ہوں: 12 الفاظ یا سائن ان</strong> (جہاں کمیونٹی 12 الفاظ قبول نہیں کرتی وہاں <strong>اس اکاؤنٹ کے ساتھ شامل ہوں: سائن ان</strong>)، یا یہ کہ آپ فی الحال کیوں شامل نہیں ہو سکتے: <strong>جانچ ہو رہی ہے…</strong>، <strong>ابھی رسائی نہیں ہو رہی</strong> (جبکہ اس فون نے عالمی کمیونٹی کو محفوظ نہ کیا ہو تو <strong>Tap to try again.</strong> کے ساتھ)، <strong>ابھی نئے ممبر نہیں لیے جا رہے۔</strong>، <strong>یہ کمیونٹی نجی پیش نظارہ میں ہے۔ دعوت کے لیے اس کے مالک سے کہیں۔</strong>، یا <strong>وہاں آپ کا اکاؤنٹ بند کر دیا گیا۔</strong>۔ جب عالمی کمیونٹی تک رسائی ممکن نہ ہو اور آپ کسی ایسی کمیونٹی سے منسلک ہوں جس کے آپ رکن ہیں، تو اس کے نیچے ایک سطر کہتی ہے <strong>آپ کی اپنی کمیونٹی اس سے متاثر نہیں ہوتی۔</strong>۔ فون پر موجود کوئی دوسری چیز اس پر منحصر نہیں ہے۔</p>
+        <ul>
+            <li>اوپر بائیں جانب پھلی پر ٹیپ کریں۔ <strong>BeanPool</strong> شیٹ میں، <strong>Your communities</strong> کے تحت، <strong>عالمی کمیونٹی</strong> پر ٹیپ کریں (اس کی دوسری سطر <strong>اس اکاؤنٹ سے شامل ہوں</strong> کہتی ہے)۔ یہ <strong>سیٹنگز</strong> میں، <strong>جدید / ذیلی نظام</strong> کے تحت بھی موجود ہوتی ہے۔ اگر آپ بطور مہمان عالمی کمیونٹی کا دورہ کر رہے ہیں، تو <strong>?</strong> کے ساتھ اوپر <strong>شامل ہوں</strong> پر ٹیپ کریں، پھر <strong>Join with 12 words or a sign-in</strong> پر ٹیپ کریں (<strong>Join with a sign-in</strong> جہاں کمیونٹی صرف سائن ان قبول کرتی ہے)۔ اگر ایپ عالمی کمیونٹی کے لیے <strong>آپ ابھی یہاں کے رکن نہیں ہیں</strong> دکھاتی ہے، تو <strong>اس اکاؤنٹ سے شامل ہوں</strong> پر ٹیپ کریں۔</li>
+            <li>شامل ہونے کا طریقہ منتخب کریں: <strong>12 خفیہ الفاظ کے ساتھ اکاؤنٹ بنائیں</strong>، جو وہ 12 الفاظ استعمال کرتا ہے جو آپ کے اکاؤنٹ کے پاس پہلے سے موجود ہیں (کوئی سائن ان نہیں، اس لیے فون لاک نہیں)، یا گوگل، ایپل (آئی فون پر) یا فیس بک کے ساتھ ایک بار <strong>یا سائن اِن کریں</strong>۔ سائن ان کے لیے، ایپ پہلے آپ کے فون کا لاک مانگتی ہے، کیونکہ یہ سائن ان آپ کے اکاؤنٹ میں واپسی کا ایک راستہ بھی بن جاتا ہے۔</li>
+            <li>وہ نام چیک کریں جو لوگ وہاں دیکھیں گے، اور <strong>شامل ہوں</strong> پر ٹیپ کریں۔ اگر کسی کے پاس پہلے سے وہ نام ہے، تو ایپ دوسرے نام تجویز کرتی ہے۔</li>
+            <li>پھر عالمی کمیونٹی کے لیے اپنی تصویر منتخب کریں، جیسا کہ کسی بھی نئی کمیونٹی کے لیے، اور پھر تقریباً آپ کہاں ہیں (<strong>آپ تقریباً کہاں ہیں؟</strong>؛ آپ <strong>فی الحال چھوڑ دیں</strong> پر ٹیپ کر سکتے ہیں): عالمی کمیونٹی آپ کو اس کے قریب کی لسٹنگز دکھاتی ہے۔ &quot;BeanPool میں شمولیت&quot; دیکھیں۔</li>
+        </ul>
+        <p>آپ کی دیگر کمیونٹیز میں کچھ نہیں بدلتا، اور آپ کے 12 الفاظ وہی رہتے ہیں۔ ایک سائن ان اسی اکاؤنٹ میں واپسی کا دوسرا راستہ بھی بن جاتا ہے: اس سائن ان کے لیے اس کی ایک بند کاپی رکھی جاتی ہے، تاکہ اگر آپ کا فون گم ہو جائے تو یہ اس اکاؤنٹ کو واپس لائے، نہ کہ کسی نئے اکاؤنٹ کو۔ &quot;اپنا اکاؤنٹ واپس حاصل کرنا&quot; دیکھیں۔ وہ سائن ان جو آپ نے اپنے اکاؤنٹ سے پہلے منسلک کیا تھا بدستور کام کرتا رہتا ہے۔ اگر آپ 12 الفاظ کے ساتھ شامل ہوتے ہیں اور کوئی سائن ان آپ کے اکاؤنٹ کی کاپی نہیں رکھتا ہے، تو ایپ <strong>آپ کے اکاؤنٹ کی واپسی کا ایک ہی راستہ ہے</strong> کارڈ دکھاتی ہے، جیسا کہ 12 الفاظ کے ساتھ شامل ہونے والے کسی بھی شخص کے لیے ہوتا ہے (&quot;BeanPool میں شمولیت&quot; دیکھیں۔)</p>
+        <p>اگر ایپ کہتی ہے <strong>This sign-in already joined the global community with a different BeanPool account</strong>، تو اس سائن ان کا وہاں اپنا اکاؤنٹ ہے۔ کوئی مختلف سائن ان استعمال کریں: ایک سائن ان اکاؤنٹ عالمی کمیونٹی میں ایک اکاؤنٹ بناتا ہے۔</p>
+        <p>کسی نئے فون پر جس پر ابھی تک کوئی اکاؤنٹ نہیں ہے، اس کے بجائے پہلی اسکرین پر <strong>پوری دنیا میں BeanPool دیکھیں</strong> کا استعمال کریں۔ &quot;BeanPool میں شمولیت&quot; دیکھیں۔</p>
+        <h2>عالمی کمیونٹی آپ کو کیا دکھاتی ہے</h2>
+        <p>عالمی کمیونٹی میں ہر جگہ کی لسٹنگز ہوتی ہیں، فون کے پاس رکھنے کی گنجائش سے کہیں زیادہ۔ اس لیے آپ کا فون آپ کے قریبی لسٹنگز کو محفوظ رکھتا ہے:</p>
+        <ul>
+            <li>آپ کے علاقے کے 250 کلومیٹر کے اندر قریب ترین 500 لسٹنگز، وہ اندازاً مقام جو آپ نے شامل ہوتے وقت دیا تھا۔ &quot;آپ کا علاقہ&quot; دیکھیں؛</li>
+            <li>آپ کی اپنی لسٹنگز، اور کوئی بھی ایسی لسٹنگ جس میں آپ کا کوئی سودا جاری ہو یا اس کے بارے میں بات چیت ہو، وہ جہاں بھی ہوں۔</li>
+        </ul>
+        <p>مارکیٹ کی فہرست اور آپ کے فون کا نقشہ وہی دکھاتے ہیں جو آپ کا فون رکھتا ہے۔ جیسے ہی آپ کے علاقے کے قریب نئی لسٹنگز پوسٹ کی جاتی ہیں وہ آ جاتی ہیں۔ اگر آپ اپنا علاقہ تبدیل کرتے ہیں، تو آپ کا فون نئے علاقے کے قریبی لسٹنگز کو تبدیل کر دیتا ہے۔</p>
+        <p>دور کی کوئی بھی چیز پہنچ سے باہر نہیں ہے:</p>
+        <ul>
+            <li>مارکیٹ میں <strong>تلاش کریں</strong> کمیونٹی سے پوچھتی ہے، اس لیے یہ نہ صرف آپ کے قریب بلکہ ہر جگہ سے لسٹنگز تلاش کرتی ہے۔ کنکشن کے بغیر، یہ وہی تلاش کرتی ہے جو پہلے سے آپ کے فون پر موجود ہے۔</li>
+            <li><strong>وہ لسٹنگ جو آپ کھولتے ہیں</strong> کسی پیغام، لنک یا ہوم سے کمیونٹی سے حاصل کی جاتی ہے، جہاں کہیں بھی ہو۔ اگر کمیونٹی کے پاس اب وہ موجود نہیں ہے، تو وہ کہتی ہے <strong>Post not found</strong> (پوسٹ نہیں ملی)۔</li>
+            <li><strong>نقشہ</strong> صرف وہی دکھاتا ہے جو آپ کا فون رکھتا ہے، اس لیے آپ کے علاقے سے دور اس میں بہت کم پنیں ہوتی ہیں یا بالکل نہیں ہوتیں۔ وہاں چیزیں تلاش کرنے کے لیے مارکیٹ میں تلاش کریں۔</li>
+        </ul>
+        <p>علاقے کے بغیر، آپ کا فون اس کے بجائے ہر جگہ سے تازہ ترین 100 لسٹنگز رکھتا ہے، اور مارکیٹ کے اوپر ایک سطر کہتی ہے <strong>You're seeing the newest listings worldwide. Set your area to see what's near you.</strong>۔ اسے سیٹ کرنے کے لیے اس پر ٹیپ کریں۔ آپ اب بھی پہلے کی طرح پوسٹ کر سکتے ہیں، پیغام بھیج سکتے ہیں اور تلاش کر سکتے ہیں۔</p>
+        <p>پول کا اپنا کوئی مقام نہیں ہوتا، اس لیے اسے بنانے والے رکن کے علاقے میں دکھایا جاتا ہے: آپ جو پول دیکھتے ہیں وہ زیادہ تر آپ کے قریب بنائے گئے ہوتے ہیں۔</p>
+        <p>ویب ایپ میں، مارکیٹ اور نقشہ ہر بار کمیونٹی سے پوچھتے ہیں: آپ کے علاقے کے قریب یا آپ کے منتخب کردہ مقام کے قریب کی لسٹنگز کے لیے، ورنہ ہر جگہ کی تازہ ترین لسٹنگز کے لیے۔ &quot;اپنے قریب چیزیں تلاش کرنا&quot; دیکھیں۔</p>
+        <p>آپ کی دوسری کمیونٹیز پہلے کی طرح کام کرتی ہیں۔</p>
+        <h2>سوئچ کرنا</h2>
+        <ul>
+            <li>اوپر بائیں جانب پھلی پر ٹیپ کریں۔ <strong>BeanPool</strong> شیٹ کھلتی ہے، جس میں اوپر کے قریب <strong>Your communities</strong> ہوتی ہے۔</li>
+            <li>اپنی مطلوبہ کمیونٹی پر ٹیپ کریں۔</li>
+        </ul>
+        <p>آپ <strong>سیٹنگز</strong> میں، <strong>سسٹم</strong> کے تحت، پھر <strong>جدید / ذیلی نظام</strong> میں بھی سوئچ کر سکتے ہیں۔ آپ کی کمیونٹیز وہاں درج ہیں۔ جسے آپ استعمال کر رہے ہیں اسے فعال (active) کے طور پر نشان زد کیا گیا ہے۔ دوسری کمیونٹی پر جانے کے لیے اس پر <strong>ٹاؤن پر جائیں</strong> پر ٹیپ کریں۔</p>
+        <h2>جب آپ کی کمیونٹی نئے پتے پر منتقل ہوتی ہے</h2>
+        <p>کوئی کمیونٹی نئے پتے پر منتقل ہو سکتی ہے: مثال کے طور پر، اپنے سرور کے نمبر (جیسے 203.0.113.5) سے کسی نام پر۔ فون پر، ہوم پھر سب سے اوپر ایک کارڈ دکھاتا ہے: <strong>This community is also at beans.example.org. Use that address from now on?</strong>۔ یہ صرف اس وقت ظاہر ہوتا ہے جب آپ کے فون نے کمیونٹی کے سرور سے تصدیق کر لی ہو کہ نیا پتہ وہی کمیونٹی ہے۔</p>
+        <ul>
+            <li><strong>نیا پتہ استعمال کریں</strong> پر ٹیپ کریں۔ آپ کا فون اس کمیونٹی کے لیے اپنے پاس محفوظ ڈیٹا کے ساتھ وہاں منتقل ہو جاتا ہے، جس میں آپ کے پیغامات بھی شامل ہیں، اور کمیونٹی کو دوبارہ کھولتا ہے، جیسے جب آپ سوئچ کرتے ہیں۔</li>
+            <li><strong>ابھی نہیں</strong> پر ٹیپ کریں، اور کارڈ 7 دنوں میں دوبارہ پوچھے گا۔ آپ کا فون کبھی بھی خود بخود منتقل نہیں ہوتا۔</li>
+            <li>اگر نیا پتہ کسی مختلف کمیونٹی کے طور پر جواب دیتا ہے، تو ایپ کہتی ہے <strong>یہ فون بدستور اپنی جگہ رہے گا</strong>، اور اپنے پاس موجود پتہ برقرار رکھتی ہے۔ اگر جانچ ممکن نہ ہو، تو یہ کہتی ہے <strong>کچھ تبدیل نہیں ہوا۔ کچھ دیر بعد دوبارہ کوشش کریں۔</strong></li>
+            <li>اگر پرانے پتے نے آپ کے فون کو نئے پتے کی اطلاع ملنے سے پہلے جواب دینا بند کر دیا تھا، تو کوئی بھی چیز آپ کے فون کو نہیں بتا سکتی کہ کمیونٹی کہاں گئی۔ اس کے مالکان سے نیا پتہ مانگیں، پھر پھلی پر ٹیپ کریں، پھر <strong>کوئی کمیونٹی شامل کریں</strong> پر، اور اسے وہاں ٹائپ کریں۔</li>
+        </ul>
+        <h2>اس فون پر کسی کمیونٹی کو فراموش کرنا</h2>
+        <ul>
+            <li><strong>جدید / ذیلی نظام</strong> میں، اس کمیونٹی پر <strong>فراموش کریں</strong> پر ٹیپ کریں جسے آپ فی الحال استعمال نہیں کر رہے ہیں۔ یہ اسے اور اس کے محفوظ کردہ ڈیٹا کو اس فون سے ہٹا دیتا ہے۔</li>
+            <li><strong>BeanPool</strong> شیٹ میں، <strong>Your communities</strong> کے تحت، کسی کمیونٹی کو دبا کر رکھنا اور <strong>ہٹائیں</strong> پر ٹیپ کرنا اسے صرف فہرست سے ہٹاتا ہے۔ اس کا ڈیٹا فون پر رہتا ہے۔</li>
+        </ul>
+        <p>ان میں سے کوئی بھی وہاں آپ کے اکاؤنٹ کو حذف نہیں کرتا، اور آپ کی دوسری کمیونٹیز متاثر نہیں ہوتیں۔</p>
+        <p>کسی ایک کمیونٹی میں اپنا اکاؤنٹ ڈیلیٹ کرنے کے لیے، اسے کھولیں اور سیٹنگز میں <strong>اکاؤنٹ مستقل طور پر حذف کریں</strong> کا استعمال کریں۔ فون آپ کی دیگر کمیونٹیز کے لیے آپ کی چابی کو برقرار رکھتا ہے۔ &quot;اپنا اکاؤنٹ چھوڑنا یا ڈیلیٹ کرنا&quot; دیکھیں۔</p>
+        <h2>بطور مہمان دورہ کرنا</h2>
+        <p>اگر آپ دعوت نامے کے بغیر کوئی کمیونٹی شامل کرتے ہیں، تو آپ وہاں بطور مہمان ہوتے ہیں۔ اوپر، <strong>?</strong> کے پاس ایک <strong>شامل ہوں</strong> بٹن دکھائی دیتا ہے۔ مہمان کو تب تک بہت کم نظر آتا ہے جب تک کہ وہ دعوت نامے کے ساتھ رجسٹر نہ ہو جائے۔ عالمی کمیونٹی میں، جس میں کوئی دعوت نامے نہیں ہوتے، ایک مہمان اس کے بجائے اپنے 12 الفاظ یا سائن ان کے ساتھ شامل ہوتا ہے: اوپر &quot;اپنے اکاؤنٹ سے عالمی کمیونٹی میں شامل ہونا&quot; دیکھیں۔</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="joining.html"><strong>BeanPool میں شمولیت</strong><span>شامل ہونے کے دو طریقے: رکن کے دعوتے سے کمیونٹی میں، یا کھلی ہونے پر 12 خفیہ الفاظ یا سنگل سائن ان سے عالمی کمیونٹی میں۔ شامل ہونے کی درخواست اور دوسروں کو مدعو کرنا۔</span></a></li>
+            <li><a href="finding-a-community.html"><strong>اپنے قریب کمیونٹی تلاش کرنا</strong><span>عالمی کمیونٹی سے، اپنے قریب کمیونٹی تلاش کریں اور شامل ہونے کی درخواست کریں، قریبی نئی کمیونٹی کا علم حاصل کریں، یا خود شروع کریں۔</span></a></li>
+            <li><a href="../your-area.html"><strong>Your area</strong><span>The rough place the global community uses to show you the listings near you, and how to change or clear it.</span></a></li>
+            <li><a href="../leaving-or-deleting.html"><strong>Leaving or deleting your account</strong><span>Sign out of this phone, or delete your account for good, and what happens to your beans.</span></a></li>
+            <li><a href="your-12-words.html"><strong>آپ کے 12 الفاظ</strong><span>12 الفاظ آپ کے اکاؤنٹ کی کلید ہیں۔ ان کی اہمیت، وہ کہاں ملیں گے، انہیں کیسے محفوظ رکھا جائے، اور دوسرے راستے کے طور پر سائن ان کا اضافہ۔</span></a></li>
+            <li><a href="faq.html"><strong>سوالات</strong><span>ارکان کی طرف سے اکثر پوچھے جانے والے سوالات کے مختصر جوابات۔</span></a></li>
+            <li><a href="the-top-bar.html"><strong>اوپر والی بار</strong><span>پھلی کا نشان، ضرورت پڑنے پر ظاہر ہونے والے چھوٹے آئیکونز، اور اوپر دائیں جانب کے بٹنز۔</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

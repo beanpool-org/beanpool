@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/sw by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="sw">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kujiunga na BeanPool — BeanPool members' guide</title>
+    <meta name="description" content="Njia mbili za kuingia: jumuiya, kwa mwaliko wa mwanachama, au jumuiya ya kimataifa ikiwa wazi, kwa maneno 12 ya siri au kuingia mara moja. Kuomba kujiunga na kuwaalika wengine.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#getting-started">Kuanza</a></p>
+        <h1>Kujiunga na BeanPool</h1>
+        <p class="lede">Njia mbili za kuingia: jumuiya, kwa mwaliko wa mwanachama, au jumuiya ya kimataifa ikiwa wazi, kwa maneno 12 ya siri au kuingia mara moja. Kuomba kujiunga na kuwaalika wengine.</p>
+        <h2>Njia mbili za kuingia</h2>
+        <ul>
+            <li><strong>Kwa mwaliko</strong>, unajiunga na jumuiya: watu walio karibu nawe, ikiwa na Maharagwe yake yenyewe, biashara na Mali za Pamoja. Mwanachama wa jumuiya hiyo anakualika.</li>
+            <li><strong>Bila mwaliko</strong>, unaweza kujiunga na <strong>jumuiya ya kimataifa</strong> inapokuwa wazi: watu kutoka kila mahali, ambapo unaweza kuchapisha, kutumia watu ujumbe na kupata jumuiya iliyo karibu nawe. Hakuna Maharagwe wala kura za jumuiya huko. Maharagwe, mkopo, Mali za Pamoja na Maamuzi yake viko katika jumuiya za eneo husika. Jumuiya ya kimataifa inakuonyesha jinsi yanavyofanya kazi, katika mfano wa jumuiya. Tazama &quot;Maharagwe na jumuiya ya kimataifa&quot;.</li>
+        </ul>
+        <p>Huna mwaliko, lakini kuna jumuiya karibu nawe? Jiunge na jumuiya ya kimataifa, kisha uiombe jumuiya hiyo ikuruhusu kuingia: mwanachama wake yeyote anaweza, au, katika jumuiya ambayo wasimamizi pekee ndio wanaoalika, wasimamizi wake. Tazama &quot;Kupata jumuiya iliyo karibu nawe&quot;.</p>
+        <p>Kwa njia yoyote ile, akaunti yako ni ufunguo unaowekwa kwenye simu yako, ukiwa na maneno 12 ya siri yanayoirejesha. Hakuna nenosiri.</p>
+        <h2>Kujiunga kwa mwaliko</h2>
+        <p>Mwaliko ni kiungo, msimbo wa QR au msimbo. Msimbo unafanana na <strong>INV-</strong> ukifuatiwa na herufi, au msimbo mrefu unaoanza na <strong>BP-</strong>.</p>
+        <ul>
+            <li>Mwaliko hufanya kazi <strong>mara moja</strong>.</li>
+            <li>Mwaliko hudumu kwa <strong>siku 30</strong>. Baada ya hapo, omba mwingine mpya.</li>
+        </ul>
+        <p>Ili kujiunga:</p>
+        <ul>
+            <li>Sakinisha BeanPool na uifungue. Ukigusa kiungo cha mwaliko kwanza, programu huuchukua mwaliko huo yenyewe, hata mara tu baada ya kuisakinisha kutoka Google Play.</li>
+            <li>Kwenye skrini ya kwanza, gusa <strong>Jiunge kwa mwaliko</strong>. Ikiwa mwaliko uko kwenye ubao wako wa kunakili, unaweza kugusa <strong>Bandika</strong> badala yake. Kwenye Android kitufe kinasema <strong>Umetumiwa mwaliko? Gusa kukagua ubao wako wa kunakili</strong>. Kwenye programu ya wavuti, kitufe kinasema <strong>Mimi ni Mpya Hapa</strong>.</li>
+            <li>Bandika kiungo au msimbo wa mwaliko. Ikiwa una msimbo tu, andika pia jina la jumuiya au anwani yake. Mtu aliyekualika anaweza kukuambia.</li>
+            <li>Chagua jina ambalo watu wataliona. Linahitaji angalau herufi 2. Liweke fupi: unapojiunga, majina yenye urefu wa zaidi ya herufi 20 hufupishwa.</li>
+            <li>Gusa <strong>Endelea</strong>. Programu inakagua mwaliko na jina. Ikiwa mtu tayari anatumia jina hilo, inapendekeza mengine. Hadi itakapomaliza, <strong>← Rudi Mwanzo</strong> na <strong>Rejesha utambulisho uliopo</strong> havifanyi kazi.</li>
+            <li>Katika baadhi ya jumuiya skrini hiyohiyo huonyesha pia <strong>Kile ambacho wasimamizi wa jumuiya hii wanaweza kuona</strong>, ikiwa na kisanduku cha hiari cha <strong>Ninakubali</strong>. Unajiunga kwa njia yoyote ile. Tazama &quot;Wanachoweza kuona wasimamizi&quot;.</li>
+        </ul>
+        <h2>Kujiunga na jumuiya ya kimataifa</h2>
+        <p>Unaweza kujiunga katika programu ya simu au kwenye kivinjari cha wavuti. Kwenye kivinjari, fungua global.beanpool.org na uguse <strong>Jiunge</strong>: tazama &quot;Kutumia BeanPool kwenye kivinjari cha wavuti&quot; kwa hatua hizo. Katika programu ya simu:</p>
+        <ul>
+            <li>Kwenye skrini ya kwanza, gusa <strong>Gundua BeanPool duniani kote</strong>, chini kabisa ya <strong>Jiunge kwa mwaliko</strong>. Ipo pale kila wakati. Wakati jumuiya ya kimataifa haiwezi kukupokea kwa sasa, mstari ulio chini yake hueleza sababu: <strong>Haiwezekani kufikia jumuiya ya kimataifa sasa hivi. Jaribu tena, au jiunge kwa mwaliko.</strong>, <strong>Haipokei wanachama wapya sasa hivi.</strong>, au <strong>Jumuiya hii iko katika onyesho la faragha. Muombe mmiliki wake mwaliko.</strong> Kuigusa huuliza tena.</li>
+            <li>Chagua moja ya njia mbili za kuingia. <strong>Fungua akaunti yenye maneno 12 ya siri</strong> ndiyo ya kwanza. Haihitaji akaunti ya Google, Apple au Facebook: maneno yako 12 ndiyo njia pekee ya kurudi.</li>
+            <li><strong>Au ingia</strong> mara moja kwa Google, Apple (kwenye iPhone) au Facebook. Kuingia huko pia ni njia ya kurudi ukipoteza simu yako. BeanPool haioni kamwe nenosiri lako na haichapishi chochote kwa niaba yako.</li>
+            <li>Chagua jina ambalo watu wataliona, hadi herufi 20, na uguse <strong>Jiunge</strong>. Ikiwa mtu tayari ana jina hilo, programu inapendekeza mengine.</li>
+        </ul>
+        <p><strong>Kutoka kwenye tovuti, kwenye simu.</strong> Kwenye beanpool.org/global, <strong>Fungua katika programu ya BeanPool</strong> hufungua programu moja kwa moja kwenye njia hii ya kuingia: njia mbili zilizo hapo juu kwenye simu isiyo na akaunti bado, au <strong>Jiunge na jumuiya ya kimataifa</strong> ukiwa na akaunti ambayo simu tayari inayo (tazama &quot;Tayari una akaunti?&quot; hapa chini). Ikiwa akaunti hiyo tayari ni mwanachama huko, hufungua ukurasa wa <strong>BeanPool</strong> badala yake, ambapo <strong>Jumuiya ya kimataifa</strong> chini ya <strong>Your communities</strong> inahamia huko. Ikiwa jumuiya ya kimataifa ilifunga akaunti hiyo, programu inafunguka tu. Kwenye Android, ikiwa programu haijasakinishwa, Google Play inafunguka; baada ya kusakinisha, mara ya kwanza unapofungua BeanPool inakwenda moja kwa moja kwenye njia hii ya kuingia. Kwenye iPhone, App Store inafunguka; baada ya kusakinisha, gusa <strong>Gundua BeanPool duniani kote</strong>. Kiungo hufungua tu skrini: hakuna anayejiunga hadi uguse. Inapofungua ukurasa wa <strong>BeanPool</strong>, ukurasa unakagua, kama inavyofanya kila mara, ikiwa akaunti ya simu hii ni mwanachama wa kila jumuiya inayoorodhesha. Mwaliko huja kwanza: ikiwa ulitumiwa mmoja, programu hufungua mwaliko huo badala yake, na kama ulikuwa katikati ya kujiunga, inaendelea na hilo.</p>
+        <p>Ukiwa na maneno 12, simu yako pia hufanya kazi kidogo ya kuweka akaunti. Huanza mara tu njia hizo mbili zinapoonekana (wakati kiungo cha tovuti kilipozifungua, mara tu unapogusa moja), wakati unasoma na kuandika jina lako, kwa hivyo watu wengi hawaisubiri kamwe. Ukigusa <strong>Jiunge</strong> kabla haijakamilika, programu inasema <strong>Inasanidi akaunti yako…</strong> ikiwa na upau wa maendeleo, na <strong>← Rudi</strong> bado inafanya kazi. Wakati watu wengi wanajiunga kutoka kwenye mtandao wako, programu inasema hivyo, ikiwa na muda utakaotumika kwenye simu yako, na unaweza kuingia badala yake ili kujiunga mara moja. Kujiunga kwa kuingia huombwa kazi hii kwenye mtandao wenye shughuli nyingi sana pekee, na programu huifanya yenyewe. <strong>Chagua njia nyingine</strong> husimamisha kusubiri na kukurudisha kwenye zile njia mbili. Ukiingia badala yake, uwekaji wa maneno 12 unasimama ili kuokoa betri yako, na <strong>Chagua njia nyingine</strong> huuanzisha tena.</p>
+        <p>Ikiwa jumuiya inasema usubiri (watu wengi mno wanajiunga kutoka kwenye mtandao wako), programu inasema muda gani. Kugusa <strong>Jiunge</strong> kabla ya wakati huo kunasema tena tu, kukiwa na muda uliobaki; baada ya kusubiri, au baada ya dakika moja ikiwa muda wa kusubiri ni mrefu zaidi, <strong>Jiunge</strong> huuliza tena. Ikiwa tarehe na saa ya simu yako si sahihi, programu inasema <strong>Zikague katika mipangilio ya simu yako (ziweke ziwe za kiotomatiki)</strong>, kisha jaribu tena. Ikiwa jumuiya ilifunga akaunti yako (uliifuta, au uliondolewa), programu inasema <strong>Nafasi ya akaunti hii katika jumuiya ya kimataifa ilifungwa, kwa hivyo haiwezi kujiunga tena.</strong> na haitoi mlango wa kuingilia tena.</p>
+        <p>Ikiwa kujiunga kwa maneno 12, katika programu ya simu au kwenye kivinjari cha wavuti, kunasema jumuiya haikuweza kuikubali kwa sababu <strong>tarehe na saa yako zinaonekana si sahihi</strong>, saa kwenye simu au kompyuta hiyo imechelewa au imetangulia kwa zaidi ya dakika chache. Weka tarehe na saa yake kuwa ya kiotomatiki katika mipangilio yake, kisha jaribu tena. Hakuna kilichohifadhiwa, na kuingia tena hakutasaidia. Maneno yaleyale huonekana ikiwa kuongeza njia ya kuingia au kurejesha akaunti yako kwenye kivinjari kunakataliwa kwa sababu hiyohiyo.</p>
+        <p>Ukiingia, jumuiya huweka tu rejeleo lililochanganywa la akaunti yako ya kuingia, kamwe si barua pepe yako. Kuingia huko pia kunakuwa njia ya kurudi kwenye akaunti yako ukipoteza simu yako, kwa hivyo hauombwi kuingia tena kwenye <strong>Hifadhi salama</strong>. Kwa ajili hiyo, jumuiya huweka nakala iliyofungwa ya akaunti yako. Watu wanaoendesha seva yake wanaweza kufungua nakala hiyo: tazama &quot;Kurejesha akaunti yako&quot;. Baada ya kujiunga hauingii ili kufungua programu: akaunti yako ni ufunguo ulio kwenye simu yako, kama nyingine yoyote.</p>
+        <p>Ukijiunga na maneno 12, hakuna chochote kukuhusu kinachofika kwenye jumuiya isipokuwa ufunguo wako na jina lako, na maneno yako 12 ndiyo njia yako pekee ya kurudi: hakuna anayeweza kuyabadilisha au kuyaweka upya, si BeanPool wala jumuiya. <strong>Hifadhi salama</strong> inasema hivyo, na inatoa <strong>Ongeza kuingia kama njia ya pili ya kurudi</strong>. Baada ya kujiunga, kadi kwenye <strong>Nyumbani</strong> inasema <strong>Akaunti yako ina njia moja ya kurudi: maneno yako 12. Hakikisha bado unayo, au ongeza njia ya kuingia.</strong> Gusa <strong>✕</strong> ili kuiondoa: inarudi mara moja baada ya chapisho lako la kwanza na mara moja baada ya wiki moja, kisha inabaki katika <strong>Mipangilio</strong>, chini ya <strong>Ulinzi wa Akaunti</strong>, hadi utakapoongeza njia ya kuingia au kugusa <strong>Bado ninayo maneno yangu 12</strong>. Akaunti iliyotengenezwa kwa maneno 12 pia ina mipaka midogo zaidi kwa siku zake 7 za kwanza, na hadi machapisho yake 3 yawe yamebaki mtandaoni: machapisho 2, picha 4 na watu wapya 3 wa kuwatumia ujumbe kwa siku, na ripoti moja huficha chapisho lake likiwa jipya. Kuongeza njia ya kuingia, wakati wowote, huinua hadi kwenye mipaka ya kawaida ya akaunti mpya. Unaweza kuongeza moja kutoka kwa simu yoyote ambapo uko kwenye akaunti yako, si ile tu uliyojiunga kwayo. Ikiwa chumba cha funguo cha BeanPool tayari kina nakala ya akaunti yako, kadi hiyo haionyeshwi, na <strong>Mipangilio</strong> inatoa <strong>Ongeza njia ya kuingia</strong> kimya kimya.</p>
+        <p><strong>Tayari una akaunti?</strong> Jiunge na jumuiya ya kimataifa kwayo, si kwa ya pili. Gusa haragwe lililo juu kushoto na, chini ya <strong>Your communities</strong>, gusa <strong>Jumuiya ya kimataifa</strong>: ipo pale kila wakati, na unapoweza kujiunga nayo mstari wake wa pili unasema <strong>Jiunge na akaunti hii: maneno 12 au njia ya kuingia</strong> (au <strong>…: njia ya kuingia</strong>). Ikiwa unatembelea jumuiya ya kimataifa kama mgeni, gusa <strong>Jiunge</strong> juu, kando ya <strong>?</strong>, kisha <strong>Jiunge kwa maneno 12 au njia ya kuingia</strong> (<strong>Jiunge kwa njia ya kuingia</strong> mahali ambapo jumuiya hupokea njia za kuingia pekee). Ikiwa programu inasema <strong>Bado wewe si mwanachama hapa</strong> kuhusu jumuiya ya kimataifa, gusa <strong>Jiunge na akaunti hii</strong>. Kwenye simu, kiungo beanpool.org/global hufungua <strong>Jiunge na jumuiya ya kimataifa</strong> ukiwa na akaunti yako pia (tazama &quot;Kutoka kwenye tovuti, kwenye simu&quot;, hapo juu). Unajiunga na maneno yako 12 au unaiingia mara moja, unakagua jina lako na kugusa <strong>Jiunge</strong>. Ufunguo wako na maneno yako 12 yanabaki yaleyale, na hakuna kinachobadilika katika jumuiya zako nyingine. Tazama &quot;Zaidi ya jumuiya moja&quot;.</p>
+        <p><strong>Ulijiunga tayari, kwenye kivinjari cha wavuti au kwenye simu nyingine?</strong> Usijiunge tena kwenye simu isiyo na akaunti bado: hilo linatengeneza akaunti ya pili, na akaunti mbili haziwezi kamwe kuunganishwa kuwa moja. Leta ile uliyo nayo: kwenye skrini ya kwanza, gusa <strong>Tayari wewe ni mwanachama? Rejesha akaunti</strong>, kisha <strong>Rejesha kwa Maneno 12</strong>. Andika maneno yako 12 (ambayo ni maneno ya Kiingereza) na, chini ya <strong>Jumuiya gani?</strong>, gusa <strong>Jumuiya ya kimataifa</strong>. Ikiwa ulijiunga kwa kuingia, <strong>Recover with Social</strong> inafanya kazi pia. Tazama &quot;Kurejesha akaunti yako&quot;.</p>
+        <h2>Hatua</h2>
+        <p>Upau ulio juu unaonyesha <strong>Jina lako</strong>, <strong>Picha yako</strong>, <strong>Hifadhi salama</strong> na <strong>Jinsi Inavyofanya Kazi</strong>. Kwenye kivinjari cha wavuti kwenye jumuiya ya kimataifa kuna hatua moja zaidi, <strong>Eneo Lako</strong>, baada ya <strong>Picha yako</strong>. Programu ya simu inapojiunga mara ya kwanza na jumuiya ya kimataifa haina hatua ya eneo: iweke katika <strong>Mipangilio</strong>, chini ya <strong>Eneo lako</strong>.</p>
+        <ul>
+            <li><strong>Picha yako:</strong> chagua picha au moja ya picha zilizotengenezwa tayari, au iruke na uongeze moja baadaye kutoka kwenye wasifu wako. Baadhi ya jumuiya huomba picha kabla ya chapisho lako la kwanza. Watu hufanya biashara kwa urahisi zaidi wakiwa na uso au picha wanayoitambua.</li>
+            <li>Baada ya mwaliko, <strong>← Rudi</strong> kwenye <strong>Picha yako</strong> inakurudisha kwenye jina lako, ili kulibadilisha. Bado ni akaunti ileile: gusa <strong>Endelea</strong> na unaendelea hadi <strong>Picha yako</strong> na <strong>Hifadhi salama</strong> ukiwa na jina jipya. Ikiwa mtu tayari anatumia jina hilo, programu inapendekeza mengine. Kwenye jumuiya ya kimataifa hakuna <strong>← Rudi</strong> hapa: tayari umejiunga.</li>
+            <li><strong>Eneo Lako</strong> (kwenye kivinjari cha wavuti kwenye jumuiya ya kimataifa, na kwenye programu ya simu unapojiunga na jumuiya ya kimataifa ukiwa na akaunti uliyo nayo tayari): <strong>Uko wapi kwa makadirio?</strong> Jumuiya ya kimataifa inakuonyesha kilicho kwenye ofa karibu nawe: matangazo 500 yaliyo karibu zaidi ndani ya km 250. Gusa <strong>Tumia mahali nilipo</strong>, au <strong>Andika mji au mtaa</strong>. Eneo lako huwekwa kwa takriban km 10, si mahali pako kamili kamwe: simu au kivinjari chako hukadiria kabla ya kutumwa. Wanachama wengine huona umbali wako, na kura ya maoni unayotengeneza huonyeshwa katika eneo lako. <strong>Ruka kwa sasa</strong> haitumi chochote na haiombi chochote; bado unaingia, na unaona matangazo mapya zaidi ulimwenguni kote hadi utakapolieleza. Unaweza kulibadilisha au kuliondoa wakati wowote katika <strong>Mipangilio</strong>, chini ya <strong>Eneo lako</strong>.</li>
+            <li><strong>Hifadhi salama:</strong> programu huonyesha maneno yako 12 (maneno ya Kiingereza). Yaandike kwenye karatasi na uyaweke salama. Kisanduku cha kuteua <strong>Nimehifadhi maneno haya</strong> (kwenye kivinjari cha wavuti, <strong>Nimeandika maneno haya mahali salama</strong>) kipo pale kukukumbusha. Hakuna kinachokuzuia ukikiruka, lakini soma &quot;Maneno yako 12&quot; hivi karibuni. Ikiwa ulijiunga na jumuiya ya kimataifa kwa kuingia kwenye programu ya simu, hatua hii huonyesha kuingia kwako kukiilinda akaunti yako, na maneno yako yako umbali wa mguso mmoja chini ya <strong>Je, ungependelea kuandika maneno 12?</strong>. Ikiwa ulijiunga nayo kwa maneno 12, inasema kwanza kwamba maneno haya 12 ndiyo akaunti yako, na inatoa <strong>Ongeza kuingia kama njia ya pili ya kurudi</strong>: unaweza kuruka hiyo pia.</li>
+            <li><strong>Jinsi Inavyofanya Kazi:</strong> ziara fupi. Gusa <strong>Let's Begin!</strong> ili kuanza.</li>
+        </ul>
+        <p>Ukifunga programu katikati, inaendelea kutoka hatua ileile wakati ujao.</p>
+        <h2>Ikiwa mwaliko haufanyi kazi</h2>
+        <ul>
+            <li><strong>Imetumika tayari:</strong> kila mwaliko hufanya kazi mara moja tu kamili. Omba mpya. Ikiwa ulikuwa wako na tayari wewe ni mwanachama, tumia <strong>Rejesha akaunti uliyo nayo</strong> badala yake.</li>
+            <li><strong>Muda umekwisha:</strong> mialiko hudumu kwa siku 30. Omba mpya.</li>
+            <li><strong>Hautambuliwi:</strong> hakikisha umenakili wote, na kwamba jina la jumuiya au anwani ni sahihi.</li>
+            <li><strong>Umetengenezwa na mwanachama, na wasimamizi pekee ndio wanaoleta watu sasa:</strong> jumuiya imechagua kwamba wasimamizi wake pekee ndio wanaoalika, na tiketi ambayo mwanachama alitengeneza bila muunganisho haifanyi kazi tena. Mwombe msimamizi mwaliko mpya.</li>
+            <li><strong>Imeshindwa kusajili utambulisho</strong> (baada ya kugusa <strong>Endelea</strong>): kwa kawaida ni ukosefu wa muunganisho, au hakuna jibu kwa wakati. Angalia muunganisho wako na uguse <strong>Endelea</strong> tena. Ikiwa jaribio lako la kwanza lilifanikiwa, programu inaendelea hadi <strong>Picha yako</strong> na <strong>Hifadhi salama</strong> ikiwa na akaunti ileile.</li>
+        </ul>
+        <h2>Ikiwa kujiunga na jumuiya ya kimataifa hakufanyi kazi</h2>
+        <ul>
+            <li><strong>Haiwezekani kufikia jumuiya ya kimataifa sasa hivi</strong> (mstari ulio chini ya <strong>Gundua BeanPool duniani kote</strong>): angalia muunganisho wako, kisha uguse kitufe: kinauliza tena. Bado unaweza kujiunga na jumuiya ukiwa na mwaliko.</li>
+            <li><strong>Haiwezekani kufikia jumuiya ya kimataifa:</strong> angalia muunganisho wako na uguse <strong>Jaribu tena</strong>. Bado unaweza kujiunga na jumuiya ukiwa na mwaliko.</li>
+            <li><strong>Jumuiya ya kimataifa haikujibu kwa wakati</strong> (baada ya kugusa <strong>Jiunge</strong>): jina lako halikukaguliwa na hakuna kilichotumwa. Angalia muunganisho wako na uguse <strong>Jiunge</strong> tena, au rudi nyuma. Wakati programu inakagua jina lako, <strong>Chagua njia nyingine</strong> na <strong>← Rudi Mwanzo</strong> bado vinafanya kazi.</li>
+            <li><strong>Kuingia huku tayari kuna utambulisho wa BeanPool:</strong> ulijiunga hapo awali, labda kwenye simu nyingine. Gusa <strong>Rejesha akaunti yangu</strong>, kisha utumie maneno yako 12 au kuingia kulekule.</li>
+            <li><strong>Kuingia huku tayari kulijiunga na jumuiya ya kimataifa na akaunti tofauti ya BeanPool</strong> (kujiunga kutoka kwa akaunti iliyo kwenye simu yako): kuingia huko kuna akaunti yake yenyewe huko. Gusa <strong>Tumia kuingia tofauti</strong>.</li>
+            <li><strong>Jumuiya hii haiwezi kukagua kuingia sasa hivi:</strong> jumuiya ya kimataifa imehamia kwenye seva nyingine na bado haiwezi kutofautisha akaunti inayorudi kutoka mpya, kwa hivyo kwa sasa haichukui mtu mpya kwa njia hii. Hakuna kilichohifadhiwa. Jaribu tena baadaye.</li>
+            <li><strong>Akaunti mpya nyingi mno kutoka kwenye mtandao huu:</strong> kuna kikomo cha akaunti mpya kutoka kwa muunganisho mmoja wa intaneti. Kila mtu kwenye mtandao mmoja anahesabiwa pamoja, kwa hivyo chuoni, ofisini au kwenye mkusanyiko inaweza kuwa watu wengine wanaojiunga, si wewe. Jaribu tena baadaye.</li>
+            <li><strong>Haipokei wanachama wapya sasa hivi:</strong> jiunge na jumuiya kwa mwaliko badala yake.</li>
+        </ul>
+        <h2>Kualika mtu</h2>
+        <p>Mwanachama yeyote anaweza kualika watu, isipokuwa kama jumuiya imechagua kuwa wasimamizi wake pekee ndio wanaofanya hivyo (tazama hapa chini). Beji yako ya uaminifu haijalishi.</p>
+        <ul>
+            <li>Gusa aikoni ya mwaliko (mtu mwenye alama ya jumlisha) juu kulia mwa skrini. Hii inafungua <strong>Mialiko</strong>.</li>
+            <li>Ukipenda, andika mwaliko huo ni wa nani, kwa ajili ya kumbukumbu zako mwenyewe tu.</li>
+            <li>Gusa <strong>Tengeneza Tiketi</strong>. Bila muunganisho, kitufe kinasema <strong>Tengeneza Tiketi ya Nje ya Mtandao</strong>, na hiyo inafanya kazi pia.</li>
+            <li>Waonyeshe msimbo wa QR, au uguse <strong>Shiriki Mwaliko</strong> ili kutuma kiungo na msimbo.</li>
+            <li>Kwenye programu ya wavuti, fungua <strong>Watu</strong>, kisha <strong>Mialiko</strong>, na uguse <strong>Tengeneza Mwaliko Mpya</strong>. Kisha <strong>Nakili</strong> au <strong>Shiriki</strong>.</li>
+            <li>Mialiko ambayo bado hakuna aliyeitumia imeorodheshwa chini ya <strong>Inasubiri</strong>, kila mmoja ukiwa na <strong>Shiriki</strong> ili kuutuma tena.</li>
+            <li>Unaweza kutengeneza mialiko 20 kwa siku, na kuwa na 50 ambayo bado hakuna aliyeitumia. Mwaliko ambao hautumiwi na mtu yeyote hufutwa baada ya siku zake 30, na huondoka kwenye <strong>Inasubiri</strong>.</li>
+        </ul>
+        <p>Wasimamizi wa jumuiya wanaweza kuzima mialiko kwa jumuiya nzima.</p>
+        <p><strong>Mahali ambapo wasimamizi pekee ndio wanaoalika.</strong> Jumuiya inaweza kuchagua kwamba wamiliki na wasimamizi wake pekee ndio wanaoleta watu. Huko, ikiwa wewe si mmoja wao, <strong>Mialiko</strong> huonyesha <strong>Mlete mtu hapa</strong> badala ya <strong>Tengeneza Tiketi</strong>, na inasema umwombe msimamizi. Kwenye programu ya wavuti <strong>Mti</strong> unabaki, na ndivyo ilivyo kwa misimbo uliyotengeneza mapema: bado inafanya kazi hadi itakapokwisha muda wake. Mmiliki au msimamizi asiye na mtandao bado anaweza kutengeneza tiketi ya karatasi, kutoka kwa nafasi ya mwisho ambayo jumuiya ilimpa. Ikiwa jumuiya inapokea maombi ya kujiunga, <strong>Shiriki kiungo</strong> hutuma anwani yake: mtu anaifungua katika programu ya BeanPool, anaomba kujiunga, na msimamizi anajibu. Kuwa msimamizi ni kazi ambayo jumuiya inampa mtu, si beji ya uaminifu.</p>
+        <ul>
+            <li>Misimbo ya mwaliko uliyotengeneza kabla jumuiya haijachagua hili bado inafanya kazi hadi siku zao 30 zikamilike.</li>
+            <li>Tiketi uliyotengeneza bila muunganisho haifanyi kazi: yeyote aliye nayo anaombwa kupata mwaliko mpya kutoka kwa msimamizi.</li>
+        </ul>
+        <p>Jumuiya ya kimataifa haina mialiko: mtu yeyote hujiunga nayo katika programu ya BeanPool, akiwa na maneno 12 ya siri au kwa kuingia. Huko, aikoni ya mwaliko hufungua <strong>Mlete mtu hapa</strong>, ikiwa na <strong>Shiriki kiungo</strong> ili kutuma anwani ya jumuiya ya kimataifa. Hakuna cha kutengeneza, na msimbo wa mwaliko uliotengenezwa kwa ajili yake haufanyi kazi.</p>
+        <h2>Maombi ya kujiunga</h2>
+        <p>Watu wanaweza kuomba kujiunga na jumuiya yako kutoka kwa jumuiya ya kimataifa. Wakati mtu amefanya hivyo, <strong>Mialiko</strong> huonyesha hesabu, na maombi yameorodheshwa juu chini ya <strong>Inataka kujiunga</strong>. Maombi hujibiwa katika programu ya simu: programu ya wavuti haiyoorodheshi.</p>
+        <ul>
+            <li><strong>Alika</strong> hutengeneza mwaliko ambao akaunti yao pekee ndiyo inayoweza kuutumia. Programu yao huupata yenyewe, kwa hivyo huwatumii chochote, na wanajiunga kwa mguso mmoja.</li>
+            <li><strong>Si sasa</strong> haiwaambii chochote zaidi ya &quot;bado hakuna jibu&quot;.</li>
+        </ul>
+        <p>Mwanachama yeyote anaweza kujibu. Katika jumuiya ambayo wasimamizi pekee ndio wanaoalika, wamiliki na wasimamizi wake pekee ndio wanaoona maombi na kuyajibu. Tazama &quot;Kupata jumuiya iliyo karibu nawe&quot;.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="home.html"><strong>Nyumbani</strong><span>Nyumbani ni nini, kadi inazoonyesha kwenye simu na wavuti, jinsi ya kuongeza, kuhamisha au kuziondoa, kuchagua unachopenda, na faragha unapotoka.</span></a></li>
+            <li><a href="finding-a-community.html"><strong>Kupata jumuiya iliyo karibu nawe</strong><span>Kutoka jumuiya ya kimataifa, pata jumuiya iliyo karibu nawe na uombe kujiunga, pata taarifa mpya inapoanza, au anza yako mwenyewe.</span></a></li>
+            <li><a href="your-12-words.html"><strong>Maneno yako 12</strong><span>Maneno 12 ndio ufunguo wa akaunti yako. Umuhimu wake, mahali pa kuyapata, jinsi ya kuyaweka salama, na kuongeza njia ya kuingia kwa usalama.</span></a></li>
+            <li><a href="your-profile.html"><strong>Wasifu wako</strong><span>Jina lako, picha, maelezo machache kukuhusu, na nani anayeweza kuona mawasiliano yako.</span></a></li>
+            <li><a href="communities.html"><strong>Zaidi ya jumuiya moja</strong><span>Kuwa wa jumuiya kadhaa kwa akaunti moja, kubadili kati yao, kufuata jumuiya yako kwenye anwani mpya, na kuona kile jumuiya ya kimataifa inakuonyesha.</span></a></li>
+            <li><a href="how-it-works.html"><strong>Kazi ya BeanPool</strong><span>Maharagwe, biashara, ofa na mahitaji, na mikopo, kwa maneno rahisi.</span></a></li>
+            <li><a href="web-app.html"><strong>Kutumia BeanPool kwenye kivinjari</strong><span>Programu ya wavuti hufanya mengi sawa na ya simu. Kujiunga na jumuiya ya kimataifa kwenye kivinjari, kurejesha akaunti, kuiweka kwenye simu, na tofauti za majina ya vitufe.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

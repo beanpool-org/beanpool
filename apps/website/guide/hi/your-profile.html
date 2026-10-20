@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/hi by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>आपकी प्रोफ़ाइल — BeanPool members' guide</title>
+    <meta name="description" content="आपका नाम, फ़ोटो, आपके बारे में कुछ शब्द, और आपके संपर्क विवरण कौन देख सकता है।">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#getting-started">शुरुआत</a></p>
+        <h1>आपकी प्रोफ़ाइल</h1>
+        <p class="lede">आपका नाम, फ़ोटो, आपके बारे में कुछ शब्द, और आपके संपर्क विवरण कौन देख सकता है।</p>
+        <h2>Change your name, photo or bio</h2>
+        <ul>
+            <li>स्क्रीन के शीर्ष पर स्लाइडर बटन के साथ <strong>सेटिंग्स</strong> खोलें।</li>
+            <li>शीर्ष पर अपने कार्ड पर, <strong>संपादित करें</strong> पर टैप करें, या अपनी फ़ोटो पर टैप करें।</li>
+            <li>जो पसंद हो उसे बदलें:</li>
+            <li><strong>कॉलसाइन</strong> वह नाम है जिसे लोग देखते हैं।</li>
+            <li><strong>बायो</strong> आपके बारे में कुछ शब्द हैं, 200 वर्णों तक।</li>
+            <li>फ़ोटो बदलने के लिए उस पर टैप करें।</li>
+            <li><strong>प्रोफ़ाइल सहेजें</strong> पर टैप करें।</li>
+        </ul>
+        <p>वेब ऐप में, <strong>प्रोफ़ाइल संपादित करें</strong> पर टैप करें, <strong>कैमरा</strong> या <strong>गैलरी</strong> से फ़ोटो बदलें, और <strong>प्रोफ़ाइल परिवर्तन सहेजें</strong> पर टैप करें।</p>
+        <p>आप सेटिंग्स में <strong>सेटअप पुन: चलाएं</strong> पर भी टैप कर सकते हैं। यह आपको फिर से आपके नाम और फ़ोटो, आप लगभग कहाँ हैं (वैश्विक समुदाय पर, फ़ोन ऐप में), और BeanPool कैसे काम करता है इसके संक्षिप्त टूर के माध्यम से ले जाता है। एक वेब ब्राउज़र में, <strong>सेटिंग्स</strong> में, <strong>आपका क्षेत्र</strong> के तहत अपना क्षेत्र सेट करें।</p>
+        <h2>Before you post</h2>
+        <p>फलियों वाले समुदाय में पोस्ट करने या व्यापार स्वीकार करने से पहले आपको एक नाम और एक फ़ोटो की आवश्यकता होती है। जहाँ कोई फलियाँ नहीं हैं, जैसे कि वैश्विक समुदाय पर, एक नाम ही काफ़ी है। यदि कुछ छूट गया है, तो ऐप कहता है <strong>पहले अपनी प्रोफ़ाइल पूरी करें</strong>। इसे जोड़ने के लिए <strong>प्रोफ़ाइल सेट करें</strong> पर टैप करें।</p>
+        <h2>Contact details</h2>
+        <p><strong>संपर्क विवरण</strong> के अंतर्गत आप एक फ़ोन नंबर, एक ईमेल या एक WhatsApp नंबर जोड़ सकते हैं, 200 वर्णों तक। आपको ऐसा करने की आवश्यकता नहीं है।</p>
+        <p>एक बार जोड़ने के बाद, <strong>यह कौन देख सकता है?</strong> चुनें:</p>
+        <ul>
+            <li><strong>छिपा हुआ:</strong> कोई नहीं।</li>
+            <li><strong>व्यापार भागीदार:</strong> वे सदस्य जिनके साथ आपका कोई सौदा है। यह उस क्षण से गिना जाता है जब आपमें से कोई दूसरे की पोस्ट पर <strong>प्रस्ताव स्वीकार करें</strong> या <strong>पूरा करने की पेशकश करें</strong> पर टैप करता है, भले ही सौदा बाद में रद्द या अस्वीकार कर दिया गया हो। अपने दम पर फलियाँ भेजना कोई सौदा नहीं है।</li>
+            <li><strong>मित्र:</strong> वे लोग जिन्हें आपने मित्र के रूप में जोड़ा है।</li>
+            <li><strong>समुदाय:</strong> आपके समुदाय का प्रत्येक सदस्य।</li>
+        </ul>
+        <p>निलंबित सदस्य निलंबन रहने तक इनमें से किसी को भी नहीं देखता है। न ही कोई ऐसा व्यक्ति देखता है जो आपके समुदाय में शामिल नहीं हुआ है, यहाँ तक कि वह भी जिसे किसी सदस्य ने संदेश भेजा हो या फलियाँ भेजी हों।</p>
+        <p>आज वेब ऐप आपकी पोस्ट पर आपके संपर्क विवरण दिखा सकता है। फ़ोन ऐप अभी अन्य सदस्यों के संपर्क विवरण नहीं दिखाता है।</p>
+        <h2>What others see</h2>
+        <p>अपनी प्रोफ़ाइल देखने के लिए स्क्रीन के शीर्ष दाईं ओर गोल चित्र पर टैप करें। अन्य सदस्य भी लगभग यही देखते हैं:</p>
+        <ul>
+            <li>आपका नाम, आप कब जुड़े और आपका बायो;</li>
+            <li>जिन लोगों के साथ आपने व्यापार किया उनकी स्टार रेटिंग और समीक्षाएं (कोई अन्य यह नहीं देख सकता कि समीक्षा किसने लिखी);</li>
+            <li>आपकी पोस्ट।</li>
+        </ul>
+        <p>फ़ोन पर, फलियों वाले समुदाय में, वे आपका ट्रस्ट बैज भी देखते हैं, आपने कितने व्यापार किए हैं, कितने लोगों के साथ, और वह हिस्सा जो आपने पूरा किया (<strong>पूर्णता</strong>)। वेब ऐप किसी अन्य सदस्य की प्रोफ़ाइल पर इन्हें नहीं दिखाता है। वैश्विक समुदाय में कोई फलियाँ नहीं हैं, इसलिए यह इसमें से कुछ भी नहीं दिखाता है।</p>
+        <h2>Your working style</h2>
+        <p>आपकी प्रोफ़ाइल पर एक संक्षिप्त, वैकल्पिक क्विज़ है, <strong>60s क्विज़ लें</strong>। यह वर्णन करता है कि आप दूसरों के साथ कैसे काम करना पसंद करते हैं। किसी अन्य की प्रोफ़ाइल पर यह दिखाता है कि आपकी शैलियाँ कितनी अच्छी तरह मेल खाती हैं। यह और कुछ नहीं बदलता।</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="../privacy.html"><strong>Your privacy</strong><span>What others can see about you, and the settings that control it.</span></a></li>
+            <li><a href="../trust-badges.html"><strong>Trust badges</strong><span>Newcomer, Resident, Steward and Elder. What they mean, and why they unlock nothing.</span></a></li>
+            <li><a href="joining.html"><strong>BeanPool से जुड़ना</strong><span>जुड़ने के दो तरीके: किसी सदस्य के निमंत्रण से कोई समुदाय, या खुला होने पर वैश्विक समुदाय, 12 गुप्त शब्दों या एक साइन-इन के साथ। समुदाय में प्रवेश का अनुरोध, और दूसरों को आमंत्रित करना।</span></a></li>
+            <li><a href="../people.html"><strong>People and friends</strong><span>Find members of your community, add friends, and vouch for someone.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

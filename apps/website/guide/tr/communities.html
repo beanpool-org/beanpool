@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/tr by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Birden fazla topluluk — BeanPool members' guide</title>
+    <meta name="description" content="Tek bir hesapla birden fazla topluluğa üye olma, aralarında geçiş yapma, topluluğunuzu yeni bir adrese taşıma ve küresel topluluğun size neler gösterdiği.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#getting-started">Başlarken</a></p>
+        <h1>Birden fazla topluluk</h1>
+        <p class="lede">Tek bir hesapla birden fazla topluluğa üye olma, aralarında geçiş yapma, topluluğunuzu yeni bir adrese taşıma ve küresel topluluğun size neler gösterdiği.</p>
+        <h2>Tek hesap, birden fazla topluluk</h2>
+        <p>Telefonunuz tek bir hesap tutar: bir ad, bir anahtar, 12 kelimelik bir set (İngilizce kelimelerdir). Bunu birden fazla topluluğa katılmak için kullanabilirsiniz. Her topluluk kendi fasulyelerini, takaslarını ve gönderilerini tutar.</p>
+        <h2>Başka bir topluluğa katılma</h2>
+        <ul>
+            <li>Bir topluluk, üyelerinden birinin davetiyle sizi içeri alır. Davetiniz yok mu? Küresel topluluktan yakınınızdaki bir topluluktan sizi içeri almasını isteyebilirsiniz: &quot;Yakınınızda bir topluluk bulma&quot; bölümüne bakın.</li>
+            <li><strong>Davetler</strong>'i açmak için ekranın sağ üst köşesindeki davet simgesine (artı işaretli kişi) dokunun.</li>
+            <li><strong>Başka Bir Topluluğa Katıl</strong> altında davet bağlantısını veya kodunu yapıştırın. Yalnızca bir kodunuz varsa topluluğun adresini de doldurun.</li>
+            <li><strong>Topluluğa Katıl</strong>'a dokunun.</li>
+        </ul>
+        <p>Anahtarınız, 12 kelimeniz ve adınız sizinle gelir. Gönderileriniz, sohbetleriniz ve takaslarınız her toplulukta kalır. Ardından yeni topluluk için adınızı ve fotoğrafınızı kontrol edersiniz. Hesabınızı koruyan bir oturum açma yöntemi her topluluk tarafından tutulur, bu nedenle uygulama hesabınızı yenisinde de korumanızı ister: <strong>Hesabı koru</strong> veya <strong>Daha sonra</strong>'ya dokunun.</p>
+        <h2>Hesabınızdan küresel topluluğa katılma</h2>
+        <p>Küresel topluluk davet gerektirmez ve ona zaten sahip olduğunuz hesapla katılırsınız: aynı anahtar ve aynı 12 kelime. Küresel topluluk açık olduğunda ve uygulamaya bu hesabın orada zaten üye olduğunu bildirmediğinde uygulama bunu sunar.</p>
+        <p><strong>Topluluklarınız</strong> altında her zaman <strong>Küresel topluluk</strong> için bir satır bulunur. İkinci satırı durumunuzu belirtir: üye olduğunuzda adresi (geçiş yapmak için dokunun), katılabileceğinizde <strong>Bu hesapla katıl: 12 sözcük veya oturum açma</strong> (topluluğun 12 kelimeyi kabul etmediği yerlerde <strong>Bu hesapla katıl: oturum açma</strong>) ya da şu anda neden katılamadığınızı söyler: <strong>Kontrol ediliyor…</strong>, <strong>Şu anda ulaşılamıyor</strong> (bu telefon küresel topluluğu kaydetmemişken <strong>Yeniden denemek için dokunun.</strong> ile birlikte), <strong>Şu anda yeni üye almıyor.</strong>, <strong>Bu topluluk özel önizlemede. Sahibinden bir davet iste.</strong> veya <strong>Oradaki hesabınız kapatıldı.</strong> Küresel topluluğa ulaşılamadığında ve üyesi olduğunuz bir topluluğa bağlı olduğunuzda, altındaki bir satır <strong>Kendi topluluğun bundan etkilenmez.</strong> der. Telefondaki başka hiçbir şey buna bağlı değildir.</p>
+        <ul>
+            <li>Sol üstteki fasulyeye dokunun. <strong>BeanPool</strong> sayfasında, <strong>Topluluklarınız</strong> altında <strong>Küresel topluluk</strong>'a dokunun (ikinci satırında <strong>Bu hesapla katıl</strong> yazar). Ayrıca <strong>Ayarlar</strong>'da <strong>Gelişmiş / Alt Sistem</strong> altındadır. Küresel topluluğu misafir olarak ziyaret ediyorsanız, üstteki <strong>?</strong> işaretinin yanındaki <strong>Katıl</strong>'a dokunun, ardından <strong>12 kelime veya bir girişle katılın</strong> seçeneğine dokunun (bir topluluğun yalnızca girişleri kabul ettiği yerlerde <strong>Girişle katılın</strong>). Uygulama küresel topluluk için <strong>Henüz burada üye değilsin</strong> gösteriyorsa, <strong>Bu hesapla katıl</strong>'a dokunun.</li>
+            <li>Nasıl katılacağınızı seçin: hesabınızın halihazırda sahip olduğu 12 kelimeyi kullanan <strong>12 gizli kelimeyle hesap oluşturun</strong> (giriş yok, bu nedenle telefon kilidi yok) veya Google, Apple (iPhone'da) ya da Facebook ile bir kez <strong>Veya giriş yapın</strong>. Bir oturum açma yöntemi için uygulama önce telefonunuzun kilidini ister, çünkü bu oturum açma yöntemi hesabınıza bir geri dönüş yolu da olur.</li>
+            <li>Oradaki insanların göreceği adı kontrol edin ve <strong>Katıl</strong>'a dokunun. Birisi bu ada zaten sahipse uygulama başkalarını önerir.</li>
+            <li>Ardından herhangi bir yeni toplulukta olduğu gibi küresel topluluk için fotoğrafınızı seçin ve sonra kabaca nerede olduğunuzu belirleyin (<strong>Kabaca neredesiniz?</strong>; <strong>Şimdilik atla</strong>'ya dokunabilirsiniz): küresel topluluk size yakındaki ilanları gösterir. &quot;BeanPool'a katılma&quot; bölümüne bakın.</li>
+        </ul>
+        <p>Diğer topluluklarınızda hiçbir şey değişmez ve 12 kelimeniz aynı kalır. Bir oturum açma yöntemi aynı hesaba geri dönüş yolu da olur: bu oturum açma yöntemi için hesabın kilitli bir kopyası tutulur, bu nedenle telefonunuzu kaybederseniz yeni bir hesap değil, bu hesabı geri getirir. &quot;Hesabınızı geri alma&quot; bölümüne bakın. Hesabınıza daha önce bağladığınız bir oturum açma yöntemi çalışmaya devam eder. 12 kelimeyle katılırsanız ve hiçbir oturum açma yöntemi hesabınızın bir kopyasını tutmuyorsa, uygulama 12 kelimeyle katılan herkes için olduğu gibi <strong>Hesabınızın tek bir geri dönüş yolu var</strong> kartını gösterir (&quot;BeanPool'a katılma&quot; bölümüne bakın).</p>
+        <p>Uygulama <strong>Bu giriş bilgisi başka bir BeanPool hesabıyla zaten küresel topluluğa katılmış</strong> derse, o girişin orada kendi hesabı vardır. Farklı bir giriş kullanın: bir oturum açma hesabı, küresel toplulukta bir hesap oluşturur.</p>
+        <p>Henüz hesabı olmayan yeni bir telefonda bunun yerine ilk ekrandaki <strong>BeanPool'u dünya çapında keşfet</strong> seçeneğini kullanın. &quot;BeanPool'a katılma&quot; bölümüne bakın.</p>
+        <h2>Küresel topluluğun size gösterdikleri</h2>
+        <p>Küresel topluluk her yerden ilanlara sahiptir; bu bir telefonun tutması gerekenden çok daha fazlasıdır. Bu nedenle telefonunuz yakınınızdakileri tutar:</p>
+        <ul>
+            <li>katıldığınızda verdiğiniz yaklaşık konum olan bölgenizin 250 km yakınındaki en yakın 500 ilan. &quot;Bölgeniz&quot; bölümüne bakın;</li>
+            <li>nerede olurlarsa olsunlar kendi ilanlarınız ve devam eden bir anlaşmanız veya hakkında bir sohbetiniz olan tüm ilanlar.</li>
+        </ul>
+        <p>Telefonunuzdaki Pazar listesi ve Harita, telefonunuzun tuttuklarını gösterir. Bölgenizin yakınındaki yeni ilanlar paylaşıldıkça gelir. Bölgenizi değiştirirseniz telefonunuz yeni bölgenin yakınındaki ilanlarla değiştirir.</p>
+        <p>Uzaktaki hiçbir şey ulaşılamaz değildir:</p>
+        <ul>
+            <li>Pazar'daki <strong>Ara</strong>, topluluğa sorar; böylece yalnızca yakınınızdaki değil, her yerdeki ilanları bulur. Bağlantı olmadan yalnızca telefonunuzda bulunanları arar.</li>
+            <li>Bir mesajdan, bağlantıdan veya Ana Sayfa'dan <strong>açtığınız bir ilan</strong>, nerede olursa olsun topluluktan getirilir. Toplulukta artık yoksa <strong>İlan bulunamadı</strong> der.</li>
+            <li><strong>Harita</strong> yalnızca telefonunuzun tuttuklarını gösterir, bu nedenle bölgenizden uzakta çok az iğne bulunur veya hiç bulunmaz. Oradaki şeyleri bulmak için Pazar'da arama yapın.</li>
+        </ul>
+        <p>Bir bölge olmadan telefonunuz bunun yerine her yerden en yeni 100 ilanı tutar ve Pazar'ın üzerindeki bir satır <strong>Dünya çapındaki en yeni ilanları görüyorsunuz. Yakınınızda ne olduğunu görmek için bölgenizi belirleyin.</strong> der. Bir tane ayarlamak için dokunun. Yine de eskisi gibi gönderi paylaşabilir, mesaj atabilir ve arama yapabilirsiniz.</p>
+        <p>Bir anketin kendine ait bir yeri yoktur, bu nedenle onu oluşturan üyenin bölgesinde gösterilir: gördüğünüz anketler çoğunlukla yakınınızda yapılanlardır.</p>
+        <p>Web uygulamasında Pazar ve Harita her seferinde topluluğa sorar: bölgenizin veya seçtiğiniz bir yerin yakınındaki ilanlar ya da her yerden en yeniler için. &quot;Yakınınızdaki şeyleri bulma&quot; bölümüne bakın.</p>
+        <p>Diğer topluluklarınız eskisi gibi çalışır.</p>
+        <h2>Geçiş yapma</h2>
+        <ul>
+            <li>Sol üstteki fasulyeye dokunun. Üst kısma yakın yerde <strong>Topluluklarınız</strong> ile birlikte <strong>BeanPool</strong> sayfası açılır.</li>
+            <li>İstediğinize dokunun.</li>
+        </ul>
+        <p>Ayrıca <strong>Ayarlar</strong>'da <strong>Sistem</strong>, ardından <strong>Gelişmiş / Alt Sistem</strong> altında geçiş yapabilirsiniz. Topluluklarınız orada listelenir. Kullandığınız topluluk etkin olarak işaretlenir. Başka birine geçmek için üzerindeki <strong>Kasabaya Geç</strong> seçeneğine dokunun.</p>
+        <h2>Topluluğunuz yeni bir adrese taşındığında</h2>
+        <p>Bir topluluk yeni bir adrese taşınabilir: örneğin sunucusunun numarasından (203.0.113.5 gibi) bir ada. Telefonda Ana Sayfa en üstte bir kart gösterir: <strong>Bu topluluk artık beans.example.org adresinde de bulunuyor. Bundan sonra bu adres kullanılsın mı?</strong> Yalnızca telefonunuz topluluğun sunucusuyla yeni adresin aynı topluluk olduğunu kontrol ettikten sonra gösterilir.</p>
+        <ul>
+            <li><strong>Yeni adresi kullan</strong>'a dokunun. Telefonunuz mesajlarınız dahil o topluluk için tuttuklarıyla birlikte oraya taşınır ve geçiş yaptığınızdaki gibi topluluğu tekrar açar.</li>
+            <li><strong>Şimdi değil</strong>'e dokunun, kart 7 gün sonra tekrar sorar. Telefonunuz asla kendiliğinden taşınmaz.</li>
+            <li>Yeni adres farklı bir topluluk olarak yanıt verirse uygulama <strong>Bu telefon olduğu yerde kalır</strong> der ve sahip olduğu adresi korur. Kontrol yapılamıyorsa <strong>Hiçbir şey değişmedi. Kısa bir süre sonra tekrar deneyin.</strong> der.</li>
+            <li>Eski adres telefonunuz yenisini duymadan önce yanıt vermeyi durdurduysa hiçbir şey telefonunuza topluluğun nereye gittiğini söyleyemez. Sahiplerinden yeni adresi isteyin, ardından fasulyeye dokunun, sonra <strong>Topluluk ekle</strong>'ye dokunun ve oraya yazın.</li>
+        </ul>
+        <h2>Bu telefonda bir topluluğu unutma</h2>
+        <ul>
+            <li><strong>Gelişmiş / Alt Sistem</strong>'de şu anda kullanmadığınız bir toplulukta <strong>Unut</strong> seçeneğine dokunun. Bu, onu ve kayıtlı verilerini bu telefondan kaldırır.</li>
+            <li><strong>BeanPool</strong> sayfasında, <strong>Topluluklarınız</strong> altında bir topluluğa basılı tutup <strong>Kaldır</strong>'a dokunmak onu yalnızca listeden çıkarır. Verileri telefonda kalır.</li>
+        </ul>
+        <p>İkisi de oradaki hesabınızı silmez ve diğer topluluklarınız bundan etkilenmez.</p>
+        <p>Bir topluluktaki hesabınızı silmek için o topluluğu açın ve Ayarlar'da <strong>Hesabı Kalıcı Olarak Sil</strong> seçeneğini kullanın. Telefon diğer topluluklarınız için anahtarınızı tutar. &quot;Hesabınızdan ayrılma veya silme&quot; bölümüne bakın.</p>
+        <h2>Misafir olarak ziyaret etme</h2>
+        <p>Bir topluluğu davet olmadan eklerseniz orada misafir olursunuz. Üst kısımda <strong>?</strong> işaretinin yanında bir <strong>Katıl</strong> düğmesi görünür. Bir misafir, bir davetle kaydolana kadar çok az şey görür. Daveti olmayan küresel toplulukta bir misafir bunun yerine 12 kelimesiyle veya bir oturum açma yöntemiyle katılır: yukarıdaki &quot;Hesabınızdan küresel topluluğa katılma&quot; bölümüne bakın.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="joining.html"><strong>BeanPool'a katılma</strong><span>Giriş için iki yol: bir üyenin davetiyle yerel topluluğa katılmak veya açık olduğunda 12 gizli kelime ya da tek bir girişle küresel topluluğa katılmak. Katılım isteme ve başkalarını davet etme.</span></a></li>
+            <li><a href="finding-a-community.html"><strong>Yakınınızda bir topluluk bulma</strong><span>Küresel topluluktan yakınınızdaki bir topluluğu bulup katılma isteği gönderin, yakınınızda yeni bir topluluk başladığında bildirim alın veya kendiniz başlatın.</span></a></li>
+            <li><a href="../your-area.html"><strong>Your area</strong><span>The rough place the global community uses to show you the listings near you, and how to change or clear it.</span></a></li>
+            <li><a href="../leaving-or-deleting.html"><strong>Leaving or deleting your account</strong><span>Sign out of this phone, or delete your account for good, and what happens to your beans.</span></a></li>
+            <li><a href="your-12-words.html"><strong>12 kelimeniz</strong><span>12 kelime hesabınızın anahtarıdır. Neden önemli oldukları, nerede bulunacakları, nasıl güvende tutulacakları ve ikinci bir kurtarma yolu olarak giriş hesabı ekleme.</span></a></li>
+            <li><a href="faq.html"><strong>Sorular</strong><span>Üyelerin en çok sorduğu sorulara kısa ve net yanıtlar.</span></a></li>
+            <li><a href="the-top-bar.html"><strong>Üst çubuk</strong><span>Fasulye simgesi, dikkatiniz gerektiğinde beliren küçük simgeler ve sağ üstteki düğmeler.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

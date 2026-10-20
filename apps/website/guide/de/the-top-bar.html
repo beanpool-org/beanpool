@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/de by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Die Leiste oben — BeanPool members' guide</title>
+    <meta name="description" content="Die Bohne, kleine Symbole bei Handlungsbedarf und die Schaltflächen oben rechts.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#getting-started">Erste Schritte</a></p>
+        <h1>Die Leiste oben</h1>
+        <p class="lede">Die Bohne, kleine Symbole bei Handlungsbedarf und die Schaltflächen oben rechts.</p>
+        <h2>Was darin enthalten ist</h2>
+        <p>Auf dem Smartphone ist die Leiste am oberen Bildschirmrand auf jedem Tab gleich. Von links nach rechts:</p>
+        <ul>
+            <li><strong>Die Bohne:</strong> Deine Community und dieser Leitfaden.</li>
+            <li><strong>Die „Braucht dich“-Symbole:</strong> Nur solange etwas auf dich wartet.</li>
+            <li><strong>Das ?-Symbol, das Einladungssymbol, die Einstellungen und dein Foto.</strong></li>
+        </ul>
+        <p>In einem Webbrowser ist die obere Leiste einfacher gestaltet. Sie enthält den Verbindungsstatus links, den Namen der Seite sowie dein Profil, das <strong>?</strong> und die Einstellungen rechts. Sie hat kein Bohnen-Menüblatt, keine „Braucht dich“-Symbole und kein Einladungssymbol: <strong>Einladungen</strong> befindet sich unter <strong>Personen</strong>. Die Tabs befinden sich am unteren Rand oder auf einem breiten Bildschirm auf der linken Seite.</p>
+        <h2>Die Bohne</h2>
+        <p>Tippe oben links auf die Bohne, um die <strong>BeanPool</strong>-Ansicht zu öffnen. Sie zeigt:</p>
+        <ul>
+            <li><strong>Deine Community:</strong> Ihr Name oben und ob sie derzeit erreichbar ist.</li>
+            <li><strong>Deine Communitys:</strong> Tippe auf eine, um zu ihr zu wechseln, oder tippe auf <strong>Community hinzufügen</strong>. Die <strong>Globale Community</strong> ist immer eine davon: Ihre zweite Zeile gibt an, ob du ihr beitreten kannst.</li>
+            <li><strong>Im Leitfaden suchen</strong>, danach <strong>Leitfäden</strong> (wie BeanPool funktioniert, die Regeln, häufige Fragen), <strong>Bedienung der App</strong> (dieser Leitfaden, Abschnitt für Abschnitt) und <strong>Das BeanPool-Projekt</strong> mit <strong>What's new</strong>.</li>
+            <li><strong>beanpool.org:</strong> Die öffentliche Website, mit <strong>Teilen</strong>, um sie an Freunde zu senden.</li>
+        </ul>
+        <p>Der kleine Punkt auf der Bohne zeigt dir den aktuellen Status:</p>
+        <ul>
+            <li><strong>Grün:</strong> Verbunden, und du bist hier Mitglied.</li>
+            <li><strong>Bernsteinfarben:</strong> Du bist als Gast zu Besuch.</li>
+            <li><strong>Rot:</strong> Der Server deiner Community ist gerade nicht erreichbar oder dieses Smartphone ist noch mit keiner Community verbunden.</li>
+        </ul>
+        <p>Eine einzelne langsame Prüfung färbt den Punkt nicht rot. Er wird erst rot, wenn mehrere Prüfungen hintereinander fehlschlagen.</p>
+        <h2>Die „Braucht dich“-Symbole</h2>
+        <p>Zwischen der Bohne und den Schaltflächen rechts erscheinen kleine Symbole nur dann, wenn etwas deine Aufmerksamkeit braucht. Jedes steht für eine bestimmte Art von Vorgang. Tippe darauf, um direkt dorthin zu gelangen.</p>
+        <ul>
+            <li><strong>Ein Händedruck:</strong> Ein Deal wartet auf dich. Jemand wartet darauf, dass du seine Anfrage annimmst, oder ein Deal, an dem du beteiligt bist, ist noch nicht abgeschlossen. Gibt es einen solchen Deal, öffnet das Antippen diesen Deal. Gibt es mehrere, öffnet es <strong>Meine Deals</strong>.</li>
+            <li><strong>Eine Wahlurne:</strong> Eine Abstimmung, an der du noch nicht teilgenommen hast. Das Antippen öffnet das <strong>Gemeingut</strong> unter <strong>Entscheiden</strong>. Wenn die erste Abstimmung in einer Gruppe oder eine Verwalter-Abstimmung in einem Betrieb stattfindet, öffnet das Antippen stattdessen diese Gruppe oder diesen Betrieb. Eine Abstimmung, an der du noch nicht teilnehmen kannst, zählt hier nicht, beispielsweise wenn du zuerst ein Geschäft abschließen musst.</li>
+            <li><strong>Eine Sprechblase:</strong> Eine ungelesene Nachricht von einer Person. Stammt sie von einer einzelnen Person, öffnet das Antippen diesen Chat. Stammt sie von mehreren Personen, öffnet es <strong>Chat</strong> unter <strong>Nachrichten</strong> und zeigt nur die ungelesenen an.</li>
+            <li><strong>Eine Gruppe von Menschen:</strong> Neue Zeilen in deinen Gruppen, Betriebs-Chats oder Veranstaltungs-Chats. Chats, die du stummgeschaltet hast, bleiben hier unaufdringlich. Das Antippen öffnet den Chat, oder <strong>Chat</strong> unter <strong>Gruppen</strong>, wenn es mehrere sind.</li>
+            <li><strong>Ein Schild:</strong> Nur für Personen, die bei der Verwaltung deiner Community mithelfen. Es wird angezeigt, solange Verwaltungsarbeit wartet, wie etwa eine zu prüfende Meldung oder ein feststeckender Handel, der einer Schlichtung bedarf. Das Antippen fragt nach der Bildschirmsperre deines Telefons und öffnet dann die Einstellungen deiner Community bei dieser Aufgabe. Wenn die Einstellungen deiner Community einen Anmeldecode verwenden, wird auch dieser abgefragt.</li>
+        </ul>
+        <p>Die Symbole reihen sich von rechts her an. Das wichtigste sitzt direkt neben dem ?-Symbol und behält seinen Platz, während andere kommen und gehen.</p>
+        <h3>Die Zahl und die Farbe</h3>
+        <ul>
+            <li>Eine kleine Zahl auf einem Symbol bedeutet, dass mehr als ein Vorgang dieser Art vorliegt: beispielsweise 3 Personen, die dir geschrieben haben. Bei mehr als 9 wird <strong>9+</strong> angezeigt.</li>
+            <li>Ein Symbol färbt sich <strong>bernsteinfarben</strong>, wenn es dringlicher ist: Ein Deal, der auf deine Reaktion wartet, Verwaltungsarbeit oder eine Abstimmung, die innerhalb von 2 Tagen schließt. Nichts wird rot.</li>
+        </ul>
+        <h3>Auf einem kleinen Bildschirm</h3>
+        <p>Wenn nicht genug Platz für jedes Symbol vorhanden ist, zeigt der letzte Platz <strong>•••</strong>. Tippe darauf, um die gesamte Liste, <strong>Braucht dich</strong>, in Worten zu sehen. Tippe auf eine Zeile, um dorthin zu gelangen.</p>
+        <h3>Eine ruhige Leiste ist eine gute Nachricht</h3>
+        <p>Wenn nichts deine Aufmerksamkeit braucht, gibt es überhaupt keine Symbole. Du hast nichts verpasst. Die Symbole aktualisieren sich, während du dich durch die App bewegst und wenn du zu ihr zurückkehrst.</p>
+        <h2>Beitreten oder Verbinden</h2>
+        <p>Anstelle der Symbole siehst du möglicherweise eine Schaltfläche:</p>
+        <ul>
+            <li><strong>Teilnehmen</strong> (bernsteinfarben): Du bist als Gast zu Besuch. Tippe darauf, um <strong>Einladungen</strong> zu öffnen. In einer lokalen Community trittst du dort mit einer Einladung bei. In der globalen Community tippe auf <strong>Mit 12 Wörtern oder einer Anmeldung beitreten</strong> (<strong>Mit einer Anmeldung beitreten</strong>, wo eine Community nur Anmeldungen annimmt).</li>
+            <li><strong>Verbinden</strong> (rot): Dieses Smartphone ist mit keiner Community verbunden. Tippe darauf, um die <strong>Einstellungen</strong> zu öffnen, wo du eine hinzufügen kannst.</li>
+        </ul>
+        <p>Solange eine dieser Schaltflächen angezeigt wird, ist das Einladungssymbol ausgeblendet.</p>
+        <h2>Die Schaltflächen auf der rechten Seite</h2>
+        <ul>
+            <li><strong>Das ?-Symbol</strong> (ein Fragezeichen im Kreis): Hilfe für den aktuellen Bildschirm. Es öffnet ein kurzes Informationsblatt darüber, wofür dieser Bildschirm da ist, gefolgt von <strong>Leitfadenseite lesen</strong>, <strong>Im Leitfaden suchen</strong> und <strong>Tour erneut machen</strong>. Es befindet sich auf jedem Tab, für Mitglieder und Gäste. In der Web-App sitzt es oben zwischen deinem Foto und den Einstellungen und auf einem breiten Bildschirm am unteren Ende der Seitenleiste neben den Einstellungen.</li>
+            <li><strong>Das Einladungssymbol</strong> (eine Person mit einem Plus): Öffnet <strong>Einladungen</strong>, um jemanden einzuladen oder einer weiteren Community beizutreten. Siehe „BeanPool beitreten“.</li>
+            <li><strong>Einstellungen</strong> (die Schieberegler): Öffnet die <strong>Einstellungen</strong>. Tippe erneut darauf, um dorthin zurückzukehren, wo du zuvor warst.</li>
+            <li><strong>Dein Foto:</strong> Öffnet dein eigenes Profil, so wie andere es sehen.</li>
+        </ul>
+        <h2>Aktualisierungshinweise</h2>
+        <p>Manchmal erscheint ein grüner Balken unter der oberen Leiste:</p>
+        <ul>
+            <li><strong>Update verfügbar:</strong> Eine neuere Version der App ist verfügbar. Tippe auf <strong>Aktualisieren</strong>, um sie zu erhalten, oder auf das Kreuz, um den Hinweis zu schließen.</li>
+            <li><strong>Deine App ist zu alt für diese Community:</strong> Du musst die App aktualisieren, bevor sie hier ordnungsgemäß funktioniert. Dieser Hinweis kann nicht geschlossen werden. Tippe auf <strong>Aktualisieren</strong>.</li>
+        </ul>
+        <h2>Die Tabs</h2>
+        <p>Unter der oberen Leiste befinden sich die Tabs: <strong>Startseite</strong>, <strong>Markt</strong>, <strong>Karte</strong>, <strong>Chat</strong>, <strong>Gemeingut</strong> und <strong>Buch</strong>. Der Name jedes Tabs steht über seinem Symbol. Auf dem Smartphone zeigt eine lokale Community ohne Bohnen weder <strong>Gemeingut</strong> noch <strong>Buch</strong> an. Die globale Community zeigt beide, mit Beispielen aus einer lokalen Community. Siehe „Bohnen und die globale Community“.</p>
+        <p>Tippe auf einer langen Seite auf den Tab, auf dem du dich bereits befindest, um direkt wieder nach ganz oben zu springen. Dies funktioniert auf jedem Tab außer der <strong>Karte</strong>.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="home.html"><strong>Startseite</strong><span>Was die Startseite ist, welche Karten sie auf dem Smartphone und im Web zeigt, wie man sie anordnet oder entfernt, Interessen wählen und Datenschutz beim Abmelden.</span></a></li>
+            <li><a href="the-bean.html"><strong>Dieser Guide</strong><span>Wo du diesen Guide findest, wie du ihn durchsuchst und wie er aktuell bleibt.</span></a></li>
+            <li><a href="communities.html"><strong>Mehrere Communitys</strong><span>Mit einem Konto zu mehreren Communitys gehören, wechseln, einer Community zu einer neuen Adresse folgen und die globale Ansicht nutzen.</span></a></li>
+            <li><a href="../my-deals.html"><strong>My Deals</strong><span>One place for every trade you are in, every post you have up, and your past trades.</span></a></li>
+            <li><a href="../decisions.html"><strong>Voting on a Decision</strong><span>Find open Decisions, vote, change your vote, and see results.</span></a></li>
+            <li><a href="../messages.html"><strong>Messages</strong><span>Start a chat, send photos, reply, react, edit, delete, mute, and what is private.</span></a></li>
+            <li><a href="../notifications.html"><strong>Notifications</strong><span>Choose which alerts reach your phone, and when events remind you.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

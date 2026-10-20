@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/tr by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sorular — BeanPool members' guide</title>
+    <meta name="description" content="Üyelerin en çok sorduğu sorulara kısa ve net yanıtlar.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#about">BeanPool Hakkında</a></p>
+        <h1>Sorular</h1>
+        <p class="lede">Üyelerin en çok sorduğu sorulara kısa ve net yanıtlar.</p>
+        <h2>Topluluğumu kim yönetiyor?</h2>
+        <p>Topluluğunuz kendini yönetir. Sunucusu, topluluğunuzun seçtiği kişiler olan sahipleri ve yöneticileri tarafından gözetilir. Takaslarınız, gönderileriniz ve oylarınız bu sunucuda tutulur. BeanPool projesi uygulamayı yazar ve herkes bir topluluk başlatmak için uygulamayı kullanabilir.</p>
+        <h2>Borca faiz var mı?</h2>
+        <p>Hayır. Sıfırın altında olmak hiçbir masraf getirmez. Yalnızca 200'ün üzerinde elinizde tuttuğunuz fasulyeler küçük dolaşım ücretini öder.</p>
+        <h2>Parayla fasulye alıp satabilir miyim?</h2>
+        <p>Uygulamanın parayla fasulye almak veya satmak için hiçbir yolu yoktur. Fasulyeler insanlara yardım ederek kazanılır.</p>
+        <h2>Neden hediye gönderemiyorum?</h2>
+        <p>Bir hediye için iki şey gerekir. Pazar'da tamamlanmış bir takasınız olmalıdır (1 veya 2 fasulye sayılmayacak kadar küçüktür) ve yalnızca sahip olduğunuz fasulyeleri verebilirsiniz. Bir hediye sizi asla sıfırın altına düşüremez.</p>
+        <h2>Neden sıfırın altında harcama yapamıyorum?</h2>
+        <p>Sıfırın ne kadar altına inebileceğinizi iki şey belirler. Takaslardan kazandığınız güven, en fazla ne kadar inebileceğinizi belirler. Yayındaki Teklifleriniz ise şu anda bunun ne kadarını kullanabileceğinizi belirler. Yayında hiç Teklifiniz yoksa, sıfırın altına hiçbir şekilde inemezsiniz. Çoğu kişi satış yaparak başlar: bir Teklif paylaşın ve biri bunu kabul ettiğinde fasulye ile ilk güveninizi kazanın.</p>
+        <h2>Rozetimde Temsilci yazıyor. Neden bu kadar az harcayabiliyorum?</h2>
+        <p>Rozetiniz güveninizi gösterir. Şu anda ne kadar harcayabileceğiniz, aynı zamanda yayında kaç Teklifiniz olduğuna da bağlıdır. Rozetler kendi başlarına hiçbir şeyin kilidini açmaz.</p>
+        <h2>Oyumu değiştirebilir miyim?</h2>
+        <p>Bir Karar veya Anket üzerinde, oylama kapanana kadar evet. Bir sorumlular oylamasında, bir grubun kendi oylamasında veya yeni bir baş koordinatör oylamasında hayır.</p>
+        <h2>Nasıl oy verdiğimi kimse görebilir mi?</h2>
+        <p>Bir Karar'da uygulama yalnızca toplamları ve size kendi oyunuzu gösterir. Oyunuz topluluğunuzun sunucusunda saklanır. Sunucuyu yöneten sahipler ve yöneticiler sunucu dosyalarının bir kopyasını alabilir ve oradan bakabilir. Bir Anket de aynı şekilde anonimdir; ancak onu başlatan kişi anket için <strong>açık oylama</strong> seçmişse üyeler kimin neyi seçtiğini görebilir. Anket, oy vermeden önce hangisi olduğunu belirtir.</p>
+        <h2>Diğer üyeler bakiyemi görebilir mi?</h2>
+        <p>Hayır. Diğer üyeler bakiyenizi asla göremez. Telefonda, Fasulyeli bir toplulukta güven rozetinizi ve kaç takas yaptığınızı görürler. Bir takas yalnızca ilgili iki kişiyi gösterir. Topluluk sizin çıkarılmanız yönünde oy kullanırsa, yalnızca bu oylamada oy kullanabilen üyeler bakiyenizi ve varsa borcunuzu görür. Yöneticiler bazı durumlarda daha fazlasını görebilir ve bu görüntülemeler günlüğe kaydedilir: &quot;Yöneticilerin görebildikleri&quot; bölümüne bakın.</p>
+        <h2>Telefonumu kaybettim. Hesabım silindi mi?</h2>
+        <p>12 kelimelik kurtarma ifadenizi sakladıysanız hayır (bu kelimeler İngilizce kelimelerdir). Uygulamayı yükleyin ve bu 12 kelimeyle hesabınızı geri yükleyin. Hesap Koruması'nda bir oturum açma hesabı bağladıysanız onu da kullanabilirsiniz. 12 kelimenizi güvenli ve özel bir yerde saklayın. Onlara sahip olan herkes hesabınızı kullanabilir.</p>
+        <p>12 kelimenizi de mi kaybettiniz? Topluluğunuzun bir yöneticisi, hesabınızı yüz yüze görüşerek yeni bir telefona taşıyabilir: &quot;Hesabınızı geri alma&quot; altındaki &quot;Telefonunuzu ve 12 kelimenizi kaybettiyseniz&quot; bölümüne bakın.</p>
+        <h2>Google, Apple veya Facebook hesabına ihtiyacım var mı?</h2>
+        <p>Hayır. Yerel bir topluluk, üyelerinden birinin davetiyle girmenize izin verir. Küresel topluluk, 12 gizli kelimeyle (kelimeler İngilizce kelimelerdir) veya tercih ederseniz bir oturum açma yöntemiyle herkesin girmesine izin verir. Yalnızca 12 kelimeyle katılırsanız, hesabınıza geri dönmenin tek yolu onlar olur ve bu şekilde oluşturulan yeni bir hesap ilk haftasında daha yavaş başlar. Hesabınızda oturum açtığınız herhangi bir telefondan veya tarayıcıdan (hesabınız askıya alınmamışken) daha sonra bir oturum açma yöntemi ekleyebilirsiniz. &quot;BeanPool'a katılma&quot; ve &quot;12 kelimeniz&quot; bölümlerine bakın.</p>
+        <h2>Küresel toplulukta neden Fasulye yok?</h2>
+        <p>Fasulyeler, tekrar bulunabilecek insanlar arasındaki bir sözdür. Herkes 12 kelimeyle küresel topluluğa katılabilir, bu nedenle oradaki hiç kimse henüz kimin kim olduğuna kefil olamaz. Fasulyeler, anlaşmalar, girişimler ve Kararlar yerel topluluklarda yaşar. Küresel topluluk bunları <strong>🏘️ Yerel topluluk</strong> olarak işaretlenmiş örnek bir topluluk olan Example Valley'den gösterir. &quot;Fasulye ve küresel topluluk&quot; bölümüne bakın.</p>
+        <h2>Bir topluluğu nasıl başlatırım?</h2>
+        <p>Uygulamada <strong>Bir topluluk başlat</strong>'a dokunun. Bir topluluk kendi küçük sunucusunda çalışır: evde yedek bir bilgisayar veya ayda birkaç dolara kiralanan bir sunucu. Yazılım ücretsizdir ve topluluğun beanpool.org'a ihtiyacı yoktur. &quot;Fasulye ve küresel topluluk&quot; bölümüne bakın.</p>
+        <h2>Birden fazla topluluğa ait olabilir miyim?</h2>
+        <p>Evet. Telefonda her birinde aynı kimliği kullanarak birkaç topluluk kaydedebilir ve bunlar arasında geçiş yapabilirsiniz. Web uygulamasında her topluluk kendi adresinde açılır. Her topluluğun kendi fasulyeleri, kuralları ve üyeleri vardır.</p>
+        <h2>Herkesin katılabileceği başka bir topluluğa katılabilir miyim?</h2>
+        <p>Evet, sahip olduğunuz hesapla katılabilirsiniz. Bazı topluluklar, küresel topluluk gibi herkesin katılmasına izin verir ve bunları kendi insanları kendi adreslerinde çalıştırır. Telefonunuz henüz üye olmadığınız bir topluluğa ulaştığında <strong>Henüz burada üye değilsin</strong> der ve <strong>Bu hesapla ‹adı› topluluğuna katıl</strong> seçeneğini sunar. Oraya da tıpkı küresel toplulukta olduğu gibi katılırsınız: telefonunuzdaki mevcut 12 kelimeyle veya isterse bir oturum açma yöntemiyle. Topluluğun kendi adı altındadır ve adresi gösterilir, böylece nereye katıldığınızı görebilirsiniz. Anahtarınız ve 12 kelimeniz aynı kalır ve diğer topluluklarınızda hiçbir şey değişmez. Bir bağlantı yalnızca o ekranı açar ve siz dokunana kadar kimse katılmış olmaz. Bunu göstermek için telefonunuz o topluluğa adını ve insanların katılmasına izin verip vermediğini sorar; böylece o adresi çalıştıran kişi birinin bağlantıyı açtığını görebilir (hesabınız hakkında hiçbir şey gönderilmez).</p>
+        <h2>Bir yere gidiyorum. Ne yapmalıyım?</h2>
+        <p>Ayarlar'da Tatil Modu'nu açın. Teklifleriniz gizlenir ve hiç kimse size yeni istek gönderemez. Önce açık takasları tamamlayın veya iptal edin; çünkü bir takas açıkken Tatil Modu başlatılamaz.</p>
+        <h2>Nasıl ayrılırım?</h2>
+        <p>Hesabınızı Ayarlar'dan silebilirsiniz. Önce açık takasları tamamlayın veya iptal edin. Hesabınızı sildiğinizde elinizdeki tüm fasulyeler topluluğunuzun Ortak Alanı'na gider ve sıfırın altındaysanız Ortak Alan bunu karşılar. Bu işlem, 12 kelimenizle bile geri alınamaz. Hesabınızı yalnızca kullandığınız toplulukta siler. Telefondaki başka bir toplulukta hâlâ varsanız telefon onun için anahtarınızı tutar; anahtar yalnızca son topluluğunuzu sildiğinizde gider.</p>
+        <h2>Bir sorun var veya daha iyi olabilir. Kime söylemeliyim?</h2>
+        <p>Bir kişiyle veya bir takasla ilgili sorunlar için topluluğunuzun yöneticileriyle görüşün. Bir ilanı, bir etkinliği veya bir Nabız gönderisini bildirmek için <strong>🚩 Bildir</strong> bayrağına dokunun (telefonda bir ilanın düğmesinde <strong>İlanı Bildir</strong> yazar). Web uygulamasında tek bir kişiyle yapılan sohbette de bir <strong>Bildir</strong> düğmesi bulunur. Topluluğunuzun yöneticilerine haber verilir. Bir çocuk risk altında olabileceği durumlarda <strong>Çocuk güvenliği</strong> seçeneğini belirleyin. &quot;Sorun bildirme&quot; bölümüne bakın. Uygulamanın kendisiyle ilgili fikirler için beanpool.org adresini ziyaret edin.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="your-12-words.html"><strong>12 kelimeniz</strong><span>12 kelime hesabınızın anahtarıdır. Neden önemli oldukları, nerede bulunacakları, nasıl güvende tutulacakları ve ikinci bir kurtarma yolu olarak giriş hesabı ekleme.</span></a></li>
+            <li><a href="../recovery.html"><strong>Getting your account back</strong><span>Restore your account on a new phone, and protect it with a sign-in account.</span></a></li>
+            <li><a href="communities.html"><strong>Birden fazla topluluk</strong><span>Tek bir hesapla birden fazla topluluğa üye olma, aralarında geçiş yapma, topluluğunuzu yeni bir adrese taşıma ve küresel topluluğun size neler gösterdiği.</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>Fasulye ve küresel topluluk</strong><span>Küresel topluluğun amacı, birçok topluluktan biri olması, orada gördükleriniz: 🏘️ Yerel topluluk işareti, örnek topluluk Example Valley, Fasulyelerin neden beklediği ve yerel topluluk başlatma veya bulma.</span></a></li>
+            <li><a href="../holiday-mode.html"><strong>Going away</strong><span>Holiday Mode hides your Offers and pauses new requests while you are away.</span></a></li>
+            <li><a href="../leaving-or-deleting.html"><strong>Leaving or deleting your account</strong><span>Sign out of this phone, or delete your account for good, and what happens to your beans.</span></a></li>
+            <li><a href="getting-help.html"><strong>Yardım alma</strong><span>Takıldığınızda nereye bakacağınız ve kime soracağınız.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

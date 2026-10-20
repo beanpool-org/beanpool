@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/sw by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="sw">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nyumbani — BeanPool members' guide</title>
+    <meta name="description" content="Nyumbani ni nini, kadi inazoonyesha kwenye simu na wavuti, jinsi ya kuongeza, kuhamisha au kuziondoa, kuchagua unachopenda, na faragha unapotoka.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#getting-started">Kuanza</a></p>
+        <h1>Nyumbani</h1>
+        <p class="lede">Nyumbani ni nini, kadi inazoonyesha kwenye simu na wavuti, jinsi ya kuongeza, kuhamisha au kuziondoa, kuchagua unachopenda, na faragha unapotoka.</p>
+        <h2>Nyumbani ni nini</h2>
+        <p><strong>Nyumbani</strong> ni kichupo cha kwanza, na skrini ambayo programu hufungukia, kwenye simu na kwenye programu ya wavuti. Ni dashibodi ya kadi inayojibu kile kinachokuhitaji, kile kinachotokea karibu nawe, na kile unachoweza kufanya baadaye. Kila kadi ina mistari michache na mguso mmoja wa kuingia kwenye sehemu hiyo ya programu. Kadi isiyo na chochote cha kusema haichukui nafasi kwenye skrini.</p>
+        <p>Simu na programu ya wavuti huonyesha kadi zilezile, kukiwa na tofauti chache. Ukurasa huu unasema &quot;kwenye simu&quot; au &quot;kwenye programu ya wavuti&quot; mahali zinapotofautiana.</p>
+        <h2>Kuanza</h2>
+        <p>Nyumbani ya mwanachama mpya huanza ikiwa karibu tupu: kadi moja, <strong>Kuanza</strong>, kati ya <strong>Inakuhitaji</strong> na <strong>Jumuiya yako</strong> (kwenye jumuiya ya kimataifa, <strong>Tafuta jumuiya yako</strong> inabaki juu yake). Inasema &quot;Hapa ni Nyumbani yako. Unachagua kile kinachowekwa hapa. Kabla hujaanza, tazama vichupo vingine kwa dakika moja.&quot;</p>
+        <ul>
+            <li><strong>Look around</strong> huanzisha ziara fupi. Upau ulio chini ya skrini hupeleka programu kwenye kila kichupo kwa zamu na kueleza kusudi lake, sentensi moja au mbili kwa kila hatua, ukiwa na maelezo mafupi kama vile <strong>Hatua ya 2 kati ya 8</strong> juu (nambari inategemea programu na vichupo vya jumuiya yako). Gusa <strong>Endelea</strong> ili kuendelea, au <strong>Ruka</strong> ili kusimama. Kichupo kilicho nyuma ya upau hufanya kazi kama kawaida: gusa chochote, au gusa kichupo kingine na ziara itakufuata huko.</li>
+            <li>Hatua ya mwisho inarudi kwenye Nyumbani: <strong>Add your first cards</strong>. Gusa kadi ili kuiweka kwenye Nyumbani, au <strong>Kadi zaidi</strong> kwa orodha nzima. Gusa <strong>Imekamilika</strong>. Kama hukuchagua chochote, Nyumbani huanza na zile tano za kawaida (hapa chini).</li>
+            <li><strong>Ruka</strong>, kwenye kadi au upau, humaliza ziara. Ikiwa hujaweka kadi kwenye Nyumbani wewe mwenyewe, inakupa zile tano za kawaida. Ikiwa umeweka (kutoka <strong>Ongeza kadi</strong>, au chaguo kwenye hatua ya mwisho ya ziara), Nyumbani huweka kadi ulizochagua.</li>
+            <li>Ziara haianzi yenyewe kamwe. Ukifunga programu katikati, kadi inasema &quot;Endelea na ziara katika hatua ya 3&quot;.</li>
+            <li>Imekamilika au Ruka huhifadhiwa kwenye akaunti yako, kwa hivyo kadi hairudi kwenye simu au vivinjari vyako vingine. Ili kuona ziara tena, gusa <strong>?</strong> juu na <strong>Fanya ziara tena</strong>.</li>
+            <li>Ikiwa ulikuwa umeweka Nyumbani yako kabla ziara haijakuwepo, hakuna kinachobadilika kwako. <strong>Kuanza</strong> iko kwenye <strong>Ongeza kadi</strong>, chini ya <strong>Kuanza</strong>, ukiitaka.</li>
+        </ul>
+        <p>Baada ya kugusa <strong>Ruka</strong> kwenye ziara, kidokezo cha mstari mmoja huonekana chini ya kadi ya kwanza. Gusa <strong>✕</strong> ili kukiondoa. Baada ya <strong>Imekamilika</strong> hakionekani.</p>
+        <ul>
+            <li>Kwenye simu inasema &quot;Hapa ni Nyumbani yako. Ongeza kadi chini, au gusa … kwenye kadi ili kuihamisha au kuiondoa.&quot; Inaonyeshwa mara moja tu, na kamwe tena, iwe umegusa <strong>✕</strong> au la. Kuongeza au kuondoa kadi pia huiondoa.</li>
+            <li>Kwenye programu ya wavuti inasema maneno yaleyale. Inarudi kila wakati unapofungua Nyumbani, hadi utakapogusa <strong>✕</strong>.</li>
+        </ul>
+        <h2>Kadi zako</h2>
+        <p>Kwenye simu na kwenye programu ya wavuti, Nyumbani yako ni orodha ya kadi unazochagua. Baada ya ziara, zile tano za kawaida ni: <strong>Hatua za kwanza</strong>, <strong>Vidokezo</strong>, <strong>Vipya Sokoni</strong> (<strong>Karibu nawe</strong> kwenye jumuiya ya kimataifa), <strong>Zinazokuja</strong> na <strong>Kutoka kwa jumuiya yako</strong>. <strong>Unapenda nini?</strong> na <strong>Njia yako ya kurudi</strong> huja pia, na huonekana tu wakati zina kitu cha kusema. <strong>Inakuhitaji</strong> huwa juu kila wakati na <strong>Jumuiya yako</strong> huwa chini kila wakati.</p>
+        <ul>
+            <li><strong>Ongeza kadi</strong>, kwenye kadi ya jumuiya yako iliyo chini ya Nyumbani, hufungua orodha ya kila kadi ambayo jumuiya yako inaweza kuonyesha, katika makundi matatu: <strong>Kwa ajili yako</strong>, <strong>Karibu nawe</strong> na <strong>Kuanza</strong>. Gusa <strong>Ongeza</strong> kando ya kadi ili kuiweka kwenye Nyumbani. Inaenda juu kabisa, chini kidogo ya <strong>Inakuhitaji</strong>, na Nyumbani inasogea juu ili kuionyesha.</li>
+            <li>Kadi ambayo tayari ipo kwenye Nyumbani inasema <strong>Kwenye Nyumbani</strong> badala ya <strong>Ongeza</strong>. Kadi fulani zinaweza kuongezwa zaidi ya mara moja, kama vile <strong>Utafutaji uliohifadhiwa</strong>: zinasema unazo ngapi, kama vile &quot;2 kati ya 5 kwenye Nyumbani&quot;.</li>
+            <li><strong>Utafutaji uliohifadhiwa</strong> huuliza maneno ya kutafuta kabla ya kuongezwa, kama vile &quot;mayai&quot;. Unaweza pia kuchagua <strong>Ofa</strong>, <strong>Mahitaji</strong> au <strong>Zote mbili</strong>, kategoria, na umbali wa kutafuta: kilomita 1, 2, 5, 10 au 25. Umbali hutolewa pale tu ambapo jumuiya yako inajua eneo lako, au pale ambapo umeshiriki eneo lako; bila hiyo, utafutaji unatafuta kila mahali.</li>
+            <li><strong>Jua na mwezi</strong> huuliza eneo la nani litumike kabla ya kuongezwa: <strong>Jumuiya yako</strong> (chaguo la kawaida) au <strong>Eneo lako</strong>.</li>
+            <li>Nyumbani hubeba kadi 24 zaidi. Inapojaa, orodha inasema hivyo, na unaondoa kadi ili kuongeza nyingine.</li>
+            <li>Kadi zako huhifadhiwa kwenye akaunti yako, kwa hivyo zinakufuata kwenye simu na vivinjari vyako vingine. Ikiwa seva ya jumuiya yako bado haijasasishwa, zinabaki kwenye simu hii au kwenye kivinjari hiki, na <strong>Hariri nyumbani</strong> inasema &quot;Seva ya jumuiya yako inahitaji sasisho kabla kadi zako hazijakufuata kwenye vifaa vingine.&quot; Zinatumiwa tena kila wakati unapofungua Nyumbani.</li>
+            <li>Ikiwa ulikuwa tayari umehamisha au kuficha kadi kabla ya mabadiliko haya, Nyumbani yako inabaki na mpangilio wako, bila kadi ulizokuwa umezificha. Ikiwa hukuwa umefanya hivyo, unaona <strong>Kuanza</strong> peke yake, na <strong>Ruka</strong> au <strong>Imekamilika</strong> ya ziara inakupa zile tano, au kadi ulizochagua (hapo juu). Ikiwa ulijiunga zaidi ya wiki moja iliyopita, Nyumbani pia inakuambia mara moja, chini ya <strong>Kuanza</strong> mara ya kwanza inapofunguka: &quot;Nyumbani sasa inaanza na kadi chache. Ongeza kadi inarudisha zilizobaki.&quot;</li>
+        </ul>
+        <h2>Hifadhi utafutaji kutoka Sokoni</h2>
+        <p>Wakati kuna maneno kwenye utafutaji wa Soko, kitufe kilicho chini yake kinasema <strong>Hifadhi utafutaji huu kwenye Nyumbani</strong>. Hufungua Nyumbani ikiwa na utafutaji uliohifadhiwa tayari kuongezwa: maneno yako, <strong>Ofa</strong> au <strong>Mahitaji</strong> ikiwa ulikuwa unatazama moja tu, kategoria uliyochagua, na umbali uliouchagua (ulio karibu zaidi kati ya km 1, 2, 5, 10 au 25 unaofunika). Badilisha chochote unachopenda, kisha uguse <strong>Ongeza kwenye Nyumbani</strong>: kadi huenda juu. Inaonyesha matangazo mapya zaidi yanayolingana kwanza; kwenye jumuiya ya dunia nzima, yaliyo karibu zaidi kwanza, kama Soko lake linavyofanya. Ikiwa utafutaji uleule tayari uko kwenye Nyumbani, au una tano, Nyumbani inasema hivyo na haiongezi chochote. Chini ya <strong>Matukio</strong> na <strong>Kura za maoni</strong> hakuna kitufe: utafutaji uliohifadhiwa hutafuta Ofa na Mahitaji.</p>
+        <h2>Kadi</h2>
+        <p>Nyumbani huonyesha tu kadi zenye kitu cha kukuambia, kwa mpangilio wako mwenyewe. Kadi unayoongeza huenda juu, chini ya <strong>Inakuhitaji</strong>. Hizi ndizo kadi unazoweza kuwa nazo:</p>
+        <ul>
+            <li><strong>Inakuhitaji:</strong> wakati tu kuna kitu kinachokungoja: makubaliano yanayokungoja, jumbe ambazo hazijasomwa kutoka kwa watu, mistari mipya kwenye vikundi vyako, kura ambayo bado hujapiga (ya kahawia inapofungwa ndani ya siku mbili), na, kwa wamiliki, wasimamizi na wasimamizi wa maudhui, kazi ya usimamizi inayowangoja, kama vile ripoti za kukagua. Kwenye simu haya ni mambo yaleyale ambayo aikoni ndogo zilizo juu ya skrini huonyesha. Kadi hii inabaki ya kwanza na haiwezi kuhamishwa au kufichwa.</li>
+            <li><strong>Njia yako ya kurudi:</strong> ikiwa ulijiunga na maneno 12 na huna akaunti ya kuingia iliyounganishwa, kadi hii inakukumbusha kuyaweka salama au kuongeza akaunti ya kuingia. Gusa <strong>✕</strong> ili kuiondoa. Inarudi mara moja baada ya chapisho lako la kwanza na mara moja baada ya wiki moja, kisha huishi tu katika <strong>Mipangilio</strong>: chini ya <strong>Ulinzi wa Akaunti</strong> kwenye simu, na juu ya Mipangilio, ikiwa na kichwa <strong>Njia moja ya kurudi</strong>, kwenye programu ya wavuti. Haionekani mahali ambapo chumba cha funguo cha BeanPool tayari kinashikilia nakala ya ufunguo wako.</li>
+            <li><strong>Tafuta jumuiya yako:</strong> kwenye jumuiya ya kimataifa pekee. Inaonyesha jumuiya zilizo karibu nawe zaidi na inakuruhusu kuomba kujiunga nazo (tazama &quot;Kupata jumuiya iliyo karibu nawe&quot;). Kwenye simu ina <strong>Jumuiya zilizo karibu nawe</strong>, <strong>Anzisha jumuiya</strong> na <strong>Niambie pindi moja inapoanza hapa</strong>. Kwenye programu ya wavuti, kila jumuiya ni kiungo cha ukurasa wake yenyewe. Ikiwa haijui uko wapi, gusa <strong>au andika mji wako</strong> na uchague mji wako badala ya kushiriki eneo lako, kwenye simu na kwenye programu ya wavuti. Kadi ya programu ya wavuti pia ina <strong>Shiriki eneo langu</strong>. Mara tu unapochagua mji, kadi ya programu ya wavuti inasema &quot;Karibu na&quot; na mji huo, ikiwa na <strong>badilisha</strong>. Ikiwa kadi ya programu ya wavuti tayari ina mahali, <strong>Haupo hapa? Andika mji wako</strong> inafanya vivyo hivyo. Kwa siku zako 30 za kwanza kwenye jumuiya ya kimataifa inabaki juu, na haiwezi kuondolewa au kuhamishwa. Baada ya hapo ni kadi kama nyingine yoyote.</li>
+            <li><strong>Hatua za kwanza:</strong> orodha fupi ya ukaguzi. Kwenye jumuiya ya eneo lako: chapisha Ofa yako ya kwanza, ongeza picha ya wasifu, chagua vitu vichache unavyopenda, na, mara tu unapochapisha Ofa, mahali ambapo mialiko imewashwa, mwalike mtu. Mahali ambapo wasimamizi pekee ndio wanaoalika, simu huonyesha mstari huo wa mwisho kwa wamiliki na wasimamizi pekee. Programu ya wavuti huionyesha kwa kila mwanachama, na mstari ambao haujakamilika huiacha kadi. Kwenye simu kadi huondoka wakati kila mstari unapokamilika. Kwenye programu ya wavuti inabaki pia kwa siku zako 14 za kwanza.</li>
+            <li><strong>First steps on the global community:</strong> chapisha kitu bila malipo au cha kubadilishana, na, ikiwa jumuiya iliyo ndani ya km 250 kutoka kwako imeorodheshwa, pendekezo la kuiomba ikuruhusu kuingia (mstari huo hauwahi kuiacha kadi wazi). Inaweza pia kueleza mipaka ya akaunti mpya, kama vile idadi ya machapisho na soga mpya unazoweza kufanya kwa siku mwanzoni. Inabaki kwa siku zako 14 za kwanza, na baada ya hapo hadi chapisho likamilike na mipaka iishe.</li>
+            <li><strong>Vidokezo:</strong> kidokezo kimoja kifupi kwa wakati mmoja kuhusu jinsi BeanPool inavyofanya kazi, kwa ajili ya wanachama. Gusa <strong>Endelea</strong> kwa ajili ya kinachofuata, au <strong>Soma zaidi</strong> ili kufungua ukurasa wa mwongozo huu unaotoka. Kidokezo kipya pia huonekana kwenye ziara yako ya kwanza ya siku mpya. Kadi huondoka yenyewe mara tu unapoona kila kidokezo, au mara moja unapogusa <strong>Usionyeshe vidokezo tena</strong>. Kuiongeza tena kwa <strong>Ongeza kadi</strong> huanzisha vidokezo tena kutoka cha kwanza.</li>
+            <li><strong>Unapenda nini?:</strong> inakuruhusu kuweka nyota kwenye kategoria unazopenda. Wanachama pekee. Inaonekana wakati bado hujaweka nyota kwenye kategoria yoyote, au unapogusa <strong>Rekebisha</strong> kwenye kadi ya Soko, na inabaki kwenye skrini wakati unachagua.</li>
+            <li><strong>Makubaliano yako:</strong> huonyesha makubaliano yako yaliyo wazi na makubaliano yanayokungoja. Si kwenye jumuiya ya kimataifa: huko, <strong>Biashara Zangu</strong> katika Soko huonyesha mifano ya makubaliano kutoka jumuiya ya eneo badala yake.</li>
+            <li><strong>Mradi wako:</strong> huonyesha maombi yanayosubiri kuidhinishwa kwa biashara unazosimamia. Inaitwa <strong>Mradi wako</strong> wakati ile unayoisimamia ni mradi. Si kwenye jumuiya ya kimataifa: huko, <strong>Mali za Pamoja</strong> huonyesha mfano wa biashara kutoka jumuiya ya eneo badala yake.</li>
+            <li><strong>Zinazokuja:</strong> matukio yajayo karibu nawe, pamoja na jibu lako la mwaliko.</li>
+            <li><strong>Vipya Sokoni:</strong> matangazo mapya zaidi, kategoria zenye nyota zikiwa za kwanza. Kwenye jumuiya ya kimataifa inaitwa <strong>Karibu nawe</strong>, na matangazo yaliyo karibu zaidi huja kwanza. Ikiwa uliandika mji wako katika <strong>Tafuta jumuiya yako</strong>, simu huhesabu kuanzia mji huo. Gusa <strong>Rekebisha</strong> ili kuchagua mambo unayopenda, au <strong>Ona yote</strong> ili kufungua Soko. Wakati kuna matangazo machache tu, inaweza kuonyesha matangazo kadhaa ya mfano, yaliyowekwa alama kama mifano, ikiwa jumuiya yako imeyawasha.</li>
+            <li><strong>Amua:</strong> Maamuzi yaliyo wazi na kura za maoni zilizo wazi, kama mistari tofauti kwenye simu. Kwenye simu, Maamuzi hufungua <strong>Amua</strong> katika <strong>Mali za Pamoja</strong> na kura za maoni hufungua <strong>Kura za maoni</strong> katika Soko. Kwenye programu ya wavuti ni mstari mmoja, na kuugusa hufungua Mali za Pamoja. Si kwenye jumuiya ya kimataifa: kura za maoni huko ziko katika <strong>Kura za maoni</strong> za Soko, na <strong>Mali za Pamoja</strong> huonyesha mfano wa Uamuzi kutoka jumuiya ya eneo.</li>
+            <li><strong>Utafutaji uliohifadhiwa:</strong> matangazo yanayolingana na maneno unayochagua. Unaweza kuwa nazo hadi tano. Mstari wake wa kwanza ni maneno yako na umbali, kama vile &quot;mayai · ndani ya km 5&quot;. Kisha huja hadi matangazo manne, kila moja likifungua tangazo; <strong>Tazama zaidi</strong> hufungua Soko likiwa na maneno yako tayari kwenye utafutaji wake. Hupata kile ambacho utafutaji wa Soko hupata, kwa hivyo &quot;mayai&quot; hupata pia matangazo yenye maneno yenye maana inayofanana sana. Wakati hakuna kinacholingana inasema hivyo, kama vile &quot;Hakuna mayai ndani ya km 5 sasa hivi&quot;. Utafutaji ambao umrurongeza hivi karibuni au kuubadilisha bila muunganisho unasema &quot;Inaonyesha jumuiya yako inapojibu&quot; hadi seva ya jumuiya yako itakapojibu. Ili kubadilisha maneno, gusa <strong>…</strong> kisha <strong>Mipangilio…</strong>: kadi inabaki pale ilipo.</li>
+            <li><strong>Vikundi vyako:</strong> vikundi na soga zako, pamoja na idadi ya jumbe ambazo hazijasomwa.</li>
+            <li><strong>Waliojiunga:</strong> watu waliojiunga wiki hii. Kwenye jumuiya ya eneo huonyesha majina na picha za nyuso. Kwenye jumuiya ya kimataifa huonyesha idadi tu, kulingana na eneo, na bila majina.</li>
+            <li><strong>Mwenendo:</strong> machapisho yaliyoshirikiwa na majirani kutoka chaneli za nje kama YouTube na blogu, kategoria zenye nyota zikiwa za kwanza. Gusa <strong>Ona yote</strong> ili kufungua Pulse.</li>
+            <li><strong>Jua na mwezi:</strong> mwezi wa usiku wa leo na mawio na machweo ya leo, katika mstari mmoja, kama vile &quot;🌔 Waxing gibbous, 72% · Mawio 6:12 · Machweo 17:48&quot;. Simu au kivinjari chako hujihesabia chenyewe: kadi haiombi chochote kutoka kwa seva ya jumuiya yako. Inatumia eneo la jumuiya yako, lililokadiriwa hadi takriban kilomita moja, au eneo lako mahali ambapo jumuiya yako haina eneo (kwenye jumuiya ya kimataifa daima ni eneo lako). Kwenye jumuiya ya kimataifa, simu inaweza pia kutumia mahali ilipokuwa mara ya mwisho, lakini pale tu ambapo tayari umeruhusu programu kutumia eneo lako: haiombi kamwe. Ikiwa uliandika mji wako katika <strong>Tafuta jumuiya yako</strong>, simu hutumia huo badala yake. Ili kutumia eneo lako hata pale ambapo jumuiya yako ina eneo, gusa <strong>…</strong> kisha <strong>Mipangilio…</strong> na uchague <strong>Eneo lako</strong>. Saa ziko kwenye saa ya simu au ya kompyuta yako mwenyewe, kwa hivyo unaposafiri unaziona kwa saa za eneo lako. Mwezi unachorwa kama unavyoonekana kutoka upande huo wa ikweta. Mahali ambapo jua halichomozi au halitui leo, inasema hivyo, kama vile &quot;Jua linawaka siku nzima&quot; au &quot;Hakuna machweo leo&quot;. Ikiwa hakuna eneo linalojulikana, kadi haionekani, na <strong>Hariri nyumbani</strong> inasema &quot;Hakuna cha kuonyesha sasa: hakuna eneo linalojulikana.&quot; Kisomaji skrini hukisoma kwa maneno, kama vile &quot;Mwezi unaongezeka, asilimia 72 ya mwanga. Mawio saa 12:12 asubuhi. Machweo saa 11:48 jioni.&quot;</li>
+            <li><strong>Maharagwe yako:</strong> salio lako na kikomo cha mkopo (nafasi ya kutumia). Si kwenye jumuiya ya kimataifa. Huko simu huonyesha kadi ya mfano badala yake: kile Maharagwe hufanya katika jumuiya ya eneo, na <strong>Ona mfano wa leja</strong>. Inakuja mara tu ziara inapokamilika au kurukwa (wakati <strong>Kuanza</strong> bado ipo, hatua ya Leja ya ziara huonyesha mfano huo), na inabaki hadi uguse <strong>Ficha kadi hii</strong>, hata baada ya <strong>Hatua za kwanza</strong> kuondoka.</li>
+            <li><strong>Kutoka kwa jumuiya yako:</strong> matangazo na taarifa kutoka kwa wasimamizi wa jumuiya yako.</li>
+            <li><strong>Kuza jumuiya yako:</strong> inakuruhusu kualika wanachama wapya baada ya Ofa yako ya kwanza, mahali ambapo mialiko imewashwa. Si kwenye jumuiya ya kimataifa. Kwenye simu, mahali ambapo wasimamizi pekee ndio wanaoalika, huonekana tu kwa mmiliki au msimamizi. Kwenye programu ya wavuti haionekani huko kabisa.</li>
+            <li><strong>Jumuiya yako:</strong> kadi ya mwisho, ikiwa na jina la jumuiya yako kama kichwa (<strong>Jumuiya ya kimataifa</strong> kwenye jumuiya ya kimataifa). Inaonyesha idadi ya wanachama na biashara mwezi huu; kwenye jumuiya ya kimataifa, wanachama na idadi ya jumuiya zilizoorodheshwa. Ina <strong>Ongeza kadi</strong> na <strong>Hariri nyumbani</strong>. Kadi hii inabaki chini kabisa na haiwezi kuhamishwa au kuondolewa.</li>
+        </ul>
+        <p>Kwenye simu, wakati jumuiya yako imehamia anwani mpya, kadi iliyo juu ya hizi zote huuliza ikiwa itumike: tazama &quot;Jumuiya yako inapohamia anwani mpya&quot; katika &quot;Zaidi ya jumuiya moja&quot;.</p>
+        <h2>Menyu ya &quot;…&quot;</h2>
+        <p>Kadi nyingi zina kitufe cha <strong>…</strong> upande wa juu kulia. Hizi hazina:</p>
+        <ul>
+            <li><strong>Inakuhitaji</strong>, <strong>Kuanza</strong> na <strong>Jumuiya yako</strong>. <strong>Kuanza</strong> ina <strong>Ruka</strong> badala yake.</li>
+            <li><strong>Njia yako ya kurudi</strong>, kwenye simu. Ina <strong>✕</strong> yake yenyewe.</li>
+            <li><strong>Tafuta jumuiya yako</strong>, wakati wa siku zako 30 za kwanza kwenye jumuiya ya kimataifa.</li>
+        </ul>
+        <p>Gusa <strong>…</strong> ili:</p>
+        <ul>
+            <li><strong>Mipangilio…:</strong> kwenye kadi iliyo na mipangilio pekee, kama vile <strong>Utafutaji uliohifadhiwa</strong> au <strong>Jua na mwezi</strong>. Hubadilisha kadi pale ilipo.</li>
+            <li><strong>Sogeza juu:</strong> hubadilishana nafasi ya kadi na kadi iliyo juu yake.</li>
+            <li><strong>Sogeza chini:</strong> hubadilishana nafasi ya kadi na kadi iliyo chini yake.</li>
+            <li><strong>Ondoa:</strong> huondoa kadi kutoka Nyumbani, pamoja na mipangilio yake. <strong>Ongeza kadi</strong> huirudisha. Hakuna kinachokuomba uthibitishe. Kuondoa <strong>Vidokezo</strong> ni sawa na <strong>Usionyeshe vidokezo tena</strong>.</li>
+        </ul>
+        <p>Kwenye programu ya wavuti, <strong>Njia yako ya kurudi</strong> ina <strong>…</strong> pia, ikiwa na <strong>Sogeza juu</strong>, <strong>Sogeza chini</strong> na <strong>Ondoa</strong>.</p>
+        <p>Uhamishaji hufifishwa wakati hakuna pa kwenda: juu au chini ya kadi unazoweza kuhamisha. Kadi ya kwanza chini ya <strong>Inakuhitaji</strong> haiwezi kusogea juu, na kadi ya mwisho juu ya <strong>Jumuiya yako</strong> haiwezi kusogea chini.</p>
+        <h2>Hariri nyumbani</h2>
+        <p>Chini ya Nyumbani, kwenye kadi ya jumuiya yako, gusa <strong>Hariri nyumbani</strong>.</p>
+        <ul>
+            <li><strong>＋ Ongeza kadi</strong> huja kwanza. Hufungua orodha ileile kama <strong>Ongeza kadi</strong> kwenye Nyumbani.</li>
+            <li>Kisha hufuata kadi zilizo kwenye Nyumbani yako, kwa mpangilio wako. Kila moja ina mishale ya juu na chini na <strong>…</strong> yake yenyewe (Mipangilio…, Sogeza juu, Sogeza chini, Ondoa). Utafutaji uliohifadhiwa huorodheshwa kwa maneno yake, na kwa <strong>Ofa</strong> au <strong>Mahitaji</strong> unapotafuta moja tu, kama vile &quot;mayai&quot; au &quot;Mahitaji · mayai&quot;, kwa hivyo utafutaji miwili ni safu mbili tofauti.</li>
+            <li>Kadi isiyo na chochote cha kuonyesha hivi sasa inasema <strong>Hakuna cha kuonyesha sasa</strong>. <strong>Vidokezo</strong> inasema <strong>Vidokezo vyote vimeonekana</strong> mara tu unapoona kila kidokezo, na <strong>Jua na mwezi</strong> inasema <strong>Hakuna cha kuonyesha sasa: hakuna eneo linalojulikana.</strong> wakati hakuna eneo la kuanzia kufanya kazi.</li>
+            <li>Gusa <strong>Rudisha ya kawaida</strong> ili kurudi kwenye kadi tano za kawaida.</li>
+            <li>Hakuna swichi na hakuna orodha iliyofichwa: kadi uliyoiondoa iko kwenye <strong>Ongeza kadi</strong>.</li>
+            <li>Kadi ambazo jumuiya yako inaweza kuonyesha pekee ndizo zilizoorodheshwa, kwenye simu na kwenye programu ya wavuti. Kwa mfano, orodha ya jumuiya ya kimataifa haina <strong>Maharagwe yako</strong> au <strong>Makubaliano yako</strong>: huko, Leja na <strong>Biashara Zangu</strong> huonyesha mifano kutoka jumuiya ya eneo badala yake.</li>
+            <li><strong>Inakuhitaji</strong> daima inabaki juu, na <strong>Jumuiya yako</strong> daima inabaki chini.</li>
+            <li><strong>Tafuta jumuiya yako</strong>, katika siku zako 30 za kwanza kwenye jumuiya ya kimataifa, haijaorodheshwa. Inabaki karibu na juu kwa sasa.</li>
+            <li><strong>Njia yako ya kurudi</strong> imeorodheshwa, ikiwa na mishale yake na <strong>…</strong>, wakati ipo kwenye Nyumbani yako.</li>
+        </ul>
+        <h2>Unapenda nini?</h2>
+        <p>Gusa kategoria unazopenda (Chakula, Vifaa, Huduma, Bustani na nyinginezo) ili kuziwekea nyota:</p>
+        <ul>
+            <li>Kategoria zenye nyota huja kwanza kwenye Nyumbani katika <strong>Vipya Sokoni</strong> na <strong>Mwenendo</strong>.</li>
+            <li>Kategoria zenye nyota hazifichi chochote kamwe: matangazo na machapisho mengine hufuata mara tu baada yake.</li>
+            <li>Nyota unazochagua kwenye Nyumbani ni nyota zilezile kamili zinazotumiwa chini ya <strong>★ Kwako</strong> katika kichupo cha Soko.</li>
+            <li>Gusa <strong>Rekebisha</strong> kwenye kadi ya Soko wakati wowote ili kubadilisha nyota zako.</li>
+        </ul>
+        <h2>Kwenye ukumbi wa wavuti</h2>
+        <p>Kwenye tovuti ya jumuiya ya kimataifa, kabla hujaungana au kuingia, mgeni huona Nyumbani iliyo rahisi zaidi (tovuti ya jumuiya ya eneo huonyesha ukurasa wake wa kukaribisha badala yake):</p>
+        <ul>
+            <li>Kadi ya <strong>Jiunge</strong> juu.</li>
+            <li>Kadi za umma pekee: kadi ya jumuiya zilizo karibu nawe, <strong>Zinazokuja</strong>, <strong>What people post</strong> (matangazo yenye picha na kategoria lakini bila majina ya wanachama au nyuso), na <strong>Jumuiya yako</strong>.</li>
+            <li>Wageni hawana menyu ya <strong>…</strong>, hawana <strong>Hariri nyumbani</strong>, na hawana kadi za faragha kama <strong>Inakuhitaji</strong> au <strong>Maharagwe yako</strong>.</li>
+        </ul>
+        <h2>Faragha na kuondoka</h2>
+        <ul>
+            <li>Unapoondoka kwenye kifaa (kwenye programu ya wavuti, <strong>Ondoka (Kifaa Hiki Tu)</strong>, pia ikiwa na lebo ya <strong>Ondoa kwenye Kifaa Hiki Tu</strong>), nakala za Nyumbani yako ambazo kifaa hicho kilihifadhi huondolewa kutoka kwake: jibu lake la mwisho, mpangilio wako na nyota zako. Kwenye programu ya wavuti, <strong>Force Clear &amp; Re-Sync</strong> na kufuta akaunti yako hufuta nakala hizohizo.</li>
+            <li>Mpangilio wako na kategoria zenye nyota pia huhifadhiwa kwenye akaunti yako kwenye jumuiya yako. Ingia tena, kwenye kifaa hiki au kingine, na unazipata tena. Akaunti tofauti huanza na mpangilio na nyota zake yenyewe.</li>
+            <li>Kwenye programu ya wavuti, kuondoka kwenye kichupo kingine hufuta Nyumbani mara moja kutoka kwenye kivinjari.</li>
+        </ul>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="the-top-bar.html"><strong>Upau wa juu</strong><span>Haragwe, aikoni ndogo zinazoonyesha jambo linapokuhitaji, na vitufe vilivyo juu kulia.</span></a></li>
+            <li><a href="../browsing-the-market.html"><strong>Browsing the market</strong><span>Find Offers and Needs with search, filters and distance.</span></a></li>
+            <li><a href="your-profile.html"><strong>Wasifu wako</strong><span>Jina lako, picha, maelezo machache kukuhusu, na nani anayeweza kuona mawasiliano yako.</span></a></li>
+            <li><a href="finding-a-community.html"><strong>Kupata jumuiya iliyo karibu nawe</strong><span>Kutoka jumuiya ya kimataifa, pata jumuiya iliyo karibu nawe na uombe kujiunga, pata taarifa mpya inapoanza, au anza yako mwenyewe.</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>Maharagwe na jumuiya ya kimataifa</strong><span>Lengo la jumuiya ya kimataifa, jumuiya moja kati ya nyingi, na unachokiona hapo: alama ya 🏘️ Jamii ya eneo, jumuiya ya mfano ya Example Valley, kwa nini Maharagwe husubiri hapo, na jinsi ya kuanza au kupata jumuiya ya ndani.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

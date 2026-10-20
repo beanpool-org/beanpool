@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/es by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cómo funciona BeanPool — BeanPool members' guide</title>
+    <meta name="description" content="Frijoles, intercambios, ofertas y necesidades, y crédito, en palabras sencillas.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#about">Acerca de BeanPool</a></p>
+        <h1>Cómo funciona BeanPool</h1>
+        <p class="lede">Frijoles, intercambios, ofertas y necesidades, y crédito, en palabras sencillas.</p>
+        <h2>Frijoles</h2>
+        <p>Tu comunidad comercia con <strong>frijoles</strong>. Los frijoles no son dinero de un banco. Son un registro de quién ha ayudado a quién.</p>
+        <p>Todos comienzan en cero. Cuando ayudas a alguien, ganas frijoles. Cuando alguien te ayuda, gastas frijoles.</p>
+        <p>Una guía aproximada: 40 frijoles equivalen aproximadamente a una hora del tiempo de alguien. Tú y la otra persona acuerdan el precio real.</p>
+        <h2>Ofertas y Necesidades</h2>
+        <p>Una <strong>Oferta</strong> es algo que puedes hacer o dar: pan, un viaje, una hora de jardinería, una reparación.</p>
+        <p>Una <strong>Necesidad</strong> es algo que estás buscando.</p>
+        <p>En una comunidad con Frijoles, antes de que puedas publicar una Necesidad, o pedir la Oferta de otra persona, debes haber publicado al menos una Oferta propia. Todos aportan algo. Donde no hay Frijoles, como en la comunidad global, tu primera publicación puede ser una Necesidad.</p>
+        <h2>Cómo funciona un trato</h2>
+        <ul>
+            <li>Encuentras una Oferta que deseas y la pides, o alguien acepta tu Necesidad.</li>
+            <li>Cuando se acuerda el trato, los frijoles del comprador se retienen de forma segura. Nadie puede gastarlos mientras el trato está en curso.</li>
+            <li>El trabajo se realiza.</li>
+            <li>El comprador confirma que está terminado. Luego, los frijoles van al vendedor.</li>
+        </ul>
+        <p>Si un trato se queda atascado, un administrador de tu comunidad puede intervenir. Puede pagar al vendedor, devolver los frijoles al comprador o dividirlos. Un administrador no puede decidir sobre un trato del que forme parte.</p>
+        <h2>Regalos</h2>
+        <p>También puedes enviar frijoles a alguien como un regalo, sin ningún trato.</p>
+        <ul>
+            <li>Un regalo solo puede provenir de los frijoles que tienes. Nunca puede dejarte por debajo de cero.</li>
+            <li>Puedes enviar regalos una vez que hayas completado un trato en el mercado. Un trato de solo 1 o 2 frijoles es demasiado pequeño para contar.</li>
+            <li>Los regalos no tienen comisión.</li>
+        </ul>
+        <h2>Saldo negativo: tu línea de crédito</h2>
+        <p>Puedes gastar un poco más de lo que tienes y tener un saldo negativo. Esta es tu <strong>línea de crédito</strong>. Es una promesa de ayudar a otros más adelante.</p>
+        <p>Tu línea de crédito comienza en cero. Se habilita cuando completas tu primer trato en el mercado (un trato de solo 1 o 2 frijoles es demasiado pequeño para contar). Alguien a quien tu comunidad haya elegido para dar la bienvenida a los recién llegados también puede darte un pequeño comienzo al avalarte: 25, 50 o 100 frijoles.</p>
+        <p>Tu línea de crédito crece con tu <strong>confianza</strong>:</p>
+        <ul>
+            <li>Ganas confianza completando tratos en el mercado. Los regalos no generan confianza.</li>
+            <li>Comerciar con muchas personas diferentes genera más confianza. El comercio con una sola persona cuenta hasta 500 frijoles.</li>
+            <li>La confianza crece rápido al principio, luego más lentamente.</li>
+            <li>Las valoraciones con estrellas importan. Si la gente te califica, tu valoración promedio ajusta la confianza que generan tus tratos: 5 estrellas conserva todo, 1 estrella conserva el 60%.</li>
+            <li>Lo máximo que puede llegar cualquier línea de crédito es 2,000 frijoles por debajo de cero. Una comunidad que confirma a sus miembros puede permitir más (ver más abajo).</li>
+        </ul>
+        <h2>Tus Ofertas habilitan tu crédito</h2>
+        <p>La confianza establece qué tan negativo <strong>podrías</strong> llegar a estar. Tus Ofertas activas establecen qué tan negativo <strong>puedes</strong> llegar a estar en este momento. Obtienes el menor de los dos.</p>
+        <ul>
+            <li>Sin Ofertas activas: no puedes tener un saldo negativo.</li>
+            <li>1 Oferta: hasta 200 por debajo de cero.</li>
+            <li>2 Ofertas: hasta 500.</li>
+            <li>3 Ofertas: hasta 1,000.</li>
+            <li>4 Ofertas: hasta 1,500.</li>
+            <li>5 Ofertas: hasta 2,000.</li>
+        </ul>
+        <p>Si retiras Ofertas mientras estás por debajo de cero, es posible que debas más de lo que tus Ofertas cubren ahora. En ese caso, no podrás gastar más hasta que vuelvas a estar dentro de tu límite. Aún puedes ganar frijoles y no se te quita nada.</p>
+        <p>Algunas comunidades confirman quiénes son sus miembros. Allí, un miembro confirmado obtiene una línea de crédito de inmediato: 1,000 frijoles, a menos que la comunidad haya elegido otra cantidad. Una sola Oferta activa la habilita por completo. La línea más amplia allí puede ser de hasta 5,000. Consulta &quot;Tu línea de crédito&quot;.</p>
+        <h2>Insignias de confianza</h2>
+        <p>Tu confianza se muestra como una insignia. Las insignias son Recién llegado, Residente, Cuidador y Anciano. La confianza detrás de tu insignia suma tres cosas: el inicio que te dio un aval, la confianza que ganaste comerciando y cualquier confianza que te haya otorgado un administrador. Un administrador puede darle a un miembro una insignia directamente, sin tratos. En una comunidad que confirma a sus miembros, la línea de crédito que obtiene un miembro confirmado también cuenta.</p>
+        <ul>
+            <li>Residente a partir de 200 de confianza.</li>
+            <li>Cuidador a partir de 600 de confianza.</li>
+            <li>Anciano a partir de 1,400 de confianza.</li>
+        </ul>
+        <p>Una insignia es un reconocimiento, nada más. No habilita nada adicional. Todos pueden comerciar, invitar y votar, cualquiera que sea su insignia.</p>
+        <h2>Comisiones y los Bienes comunes</h2>
+        <p>Tu comunidad tiene un fondo compartido de frijoles llamado <strong>Bienes comunes</strong>. Las comisiones van a él. Los miembros deciden juntos cómo se gasta.</p>
+        <ul>
+            <li><strong>Comisión de mercado:</strong> el 1.5% de cada pago del mercado va a los Bienes comunes. Se deduce de lo que recibe el vendedor.</li>
+            <li><strong>Comisión de circulación:</strong> los frijoles están hechos para moverse, no para quedarse quietos. Los primeros 200 frijoles que tienes siempre están libres de comisión. Por encima de eso, una pequeña comisión mensual va a los Bienes comunes: 1% al mes sobre los frijoles entre 200 y 500, 1.5% entre 500 y 1,000, 2% entre 1,000 y 2,000, y 2.5% por encima de 2,000.</li>
+            <li>Los saldos por debajo de cero nunca pagan la comisión de circulación. Los regalos nunca pagan comisión.</li>
+        </ul>
+        <h2>Emprendimientos y grupos</h2>
+        <p>Un <strong>emprendimiento</strong> se mantiene activo y comercia a su propio nombre: una panadería, una biblioteca de herramientas, un puesto en el mercado. Es administrado por <strong>custodios</strong>, encabezados por un <strong>custodio principal</strong>. Los custodios pueden comprometer parte de su propia confianza para darle al emprendimiento una línea de crédito.</p>
+        <p>Un <strong>grupo</strong> es un círculo de miembros con su propio chat y publicaciones, gestionado por uno o más <strong>convocantes</strong>. Uno de ellos es su <strong>convocante principal</strong> —quien creó el grupo, para empezar.</p>
+        <p>Puedes leer cómo se eligen los custodios y convocantes en &quot;Reglas y cómo decidir&quot;.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="../posting.html"><strong>Posting an Offer or a Need</strong><span>Put up something you can do or give, or something you are looking for.</span></a></li>
+            <li><a href="../a-deal-step-by-step.html"><strong>A deal, step by step</strong><span>From asking to getting paid, for an Offer and for a Need, and leaving a review.</span></a></li>
+            <li><a href="../credit-line.html"><strong>Your credit line</strong><span>How far below zero you can go, and how it grows.</span></a></li>
+            <li><a href="../gifts.html"><strong>Sending a gift</strong><span>Send beans to someone, with no trade.</span></a></li>
+            <li><a href="../circulation-fee.html"><strong>The circulation fee</strong><span>A small monthly fee on large balances, so beans keep moving. The first 200 are free.</span></a></li>
+            <li><a href="../trust-badges.html"><strong>Trust badges</strong><span>Newcomer, Resident, Steward and Elder. What they mean, and why they unlock nothing.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

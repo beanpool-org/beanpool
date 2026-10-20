@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ja by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>豆とグローバルコミュニティ — BeanPool members' guide</title>
+    <meta name="description" content="グローバルコミュニティの目的、多数のコミュニティの1つとしての位置付け、表示内容（🏘️ コミュニティマーカー、サンプルコミュニティExample Valley、豆がそこで待機する理由、ローカルコミュニティの探し方や立ち上げ方）を説明します。">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#getting-started">はじめに</a></p>
+        <h1>豆とグローバルコミュニティ</h1>
+        <p class="lede">グローバルコミュニティの目的、多数のコミュニティの1つとしての位置付け、表示内容（🏘️ コミュニティマーカー、サンプルコミュニティExample Valley、豆がそこで待機する理由、ローカルコミュニティの探し方や立ち上げ方）を説明します。</p>
+        <h2>グローバルコミュニティの目的</h2>
+        <p>グローバルコミュニティは、多くの人が初めてBeanPoolと出会う場所です。どこからでも、12個の単語またはサインインを使って誰でも参加できます。</p>
+        <p>ここはBeanPoolがどのようなものかを体験し、近くで地域のローカルコミュニティを立ち上げたり、既存のコミュニティに参加したりするための場所です。</p>
+        <p>グローバルコミュニティは、数あるコミュニティの中の1つに過ぎません。あなた自身のコミュニティは独自のサーバーで稼働しており、グローバルコミュニティを必要としません。BeanPoolがグローバルコミュニティを運営しています。各ローカルコミュニティには独自のサーバーとオーナーが存在し、仮にグローバルコミュニティがなくなったとしても完全に機能し続けます。グローバルコミュニティには、あなたのコミュニティが「近くのコミュニティ」一覧に表示することを選んだ情報以外、あなたのコミュニティのデータは一切保持されません。</p>
+        <h2>助け合いが第一</h2>
+        <p>BeanPoolはご近所同士が助け合うための仕組みです。自分ができることや余っているものを<strong>提供</strong>し、必要なものを<strong>求め</strong>ます。</p>
+        <p>これは今日でもグローバルコミュニティで実践できます。</p>
+        <ul>
+            <li>無料または交換の品を投稿したり、助けを求めたりする</li>
+            <li>メッセージを送り合い、グループやイベントに参加する</li>
+            <li>投票を開始して、みんなの意見を聞く</li>
+        </ul>
+        <p>ローカルコミュニティでは、誰が誰を助けたかの記録が<strong>豆</strong>として加わります。助けると豆を獲得し、助けてもらうと豆を消費します。これにより、助け合いが循環します。ある隣人を助け、別の隣人から助けてもらうことができ、同じ相手に直接返済する必要はありません。</p>
+        <h2>🏘️ ローカルコミュニティのマーク</h2>
+        <p>BeanPoolの一部の機能は、ローカルコミュニティの中に存在します。</p>
+        <ul>
+            <li>豆と<strong>台帳</strong></li>
+            <li>取引（仕事が完了するまで豆が安全に預かられます）</li>
+            <li>事業体、およびコモンズの共有の豆</li>
+            <li><strong>決定</strong>（コミュニティを拘束する投票）</li>
+            <li>招待</li>
+        </ul>
+        <p>グローバルコミュニティでは、これらは隠されていません。<strong>🏘️ ローカルコミュニティ</strong>という1つの目印（マーク）を付けて表示されます。これは「この機能は地域のローカルコミュニティで現在機能しており、実際の見え方はこのようになります」ということを示しています。</p>
+        <p>このマークは決して制限やロックを意味するものではありません。アカウントに問題があるわけでも、使用するために何かを獲得したり支払ったりする必要もありません。</p>
+        <p>このマークはいくつかの形で目にするでしょう。</p>
+        <ul>
+            <li>画面やカードに付いている小さなラベル</li>
+            <li>サンプル画面の最上部に表示される枠</li>
+            <li>出品上の<strong>リクエスト · 豆は安全に保管されています 🏘️</strong>のように、機能を保持するボタン</li>
+            <li>「🏘️ ローカルコミュニティでは、これは豆での価格になります ›」のような、ローカルコミュニティとの違いを説明する1行</li>
+        </ul>
+        <p>いずれかをタップすると、<strong>これがローカルコミュニティにある理由</strong>が開きます。1〜2文でその理由が説明され、<strong>コミュニティを立ち上げる</strong>、そして可能であれば<strong>近くのコミュニティ</strong>や<strong>仕組み</strong>が案内されます。</p>
+        <h2>サンプルバレー</h2>
+        <p>マークの付いた画面には<strong>サンプルバレー</strong>が表示されます。ローカルコミュニティの画面に実際にデータが入った状態を確認できるように用意された架空のコミュニティです。</p>
+        <ul>
+            <li><strong>台帳:</strong> 85豆を持ち、−200豆まで使える枠（信用枠）があり、トラストバッジを持ち、パン、1時間の庭仕事、苗木などの最近の取引があるサンプルメンバーが表示されます。</li>
+            <li><strong>コモンズ:</strong> メンバーが運営する事業体「サンプルバレーベーカリー」と、1つの決定事項（コモンズの共有の豆から費用を賄う堆肥場）が表示されます。</li>
+            <li>マーケットの<strong>自分の取引:</strong> 3つのサンプル取引（あなたの対応待ちの取引、豆が安全に保管されている取引、完了した取引）が表示されます。</li>
+        </ul>
+        <p>サンプルバレーには実在の人物の名前はありません。「近隣のメンバー」、「コモンズ」、「サンプルバレーベーカリー」と表示されます。実在するものではなく、あなたのものでもありません。</p>
+        <p>これらの画面にある<strong>ⓘ</strong>ボタンやガイドページは本物であり、ローカルコミュニティでどのように機能するかを説明しています。</p>
+        <p>豆を送る、取引を行う、投票する、プレッジする、招待を発行するなどのボタンをタップすると、代わりに<strong>これがローカルコミュニティにある理由</strong>が開きます。何も送信されず、何も変更されません。</p>
+        <p>サンプル画面の上部にある枠には<strong>✕</strong>があります。タップすると枠は「🏘️ サンプル · 理由 ›」という1行に縮小されます。スマートフォンやブラウザは、そのコミュニティについてその設定を記憶します。スマートフォンでは、その行をタップすると枠が再び開きます。Webアプリでは、その行をタップして理由を確認するか、<strong>▾</strong>をタップして枠を再表示します。</p>
+        <p>Webブラウザでは、参加する前にサンプルの台帳を見ることができます。ホーム、マーケット、地図の横にあるタブです。</p>
+        <h2>グローバルコミュニティで豆が待機状態にある理由</h2>
+        <p>豆は、再び出会うことができる人々の間の約束です。獲得した豆は、コミュニティがあなたに助けを返す義務があることを示しています。</p>
+        <p>これが機能するのは、誰が誰であるかを互いに確認できる環境に限られます。グローバルコミュニティでは12個の単語を使えば誰でも参加できるため、身元を互いに保証することがまだできません。一人の人間が複数のアカウントを作り、自分自身に豆を与えて、そのまま行方をくらますこともできてしまいます。</p>
+        <p>そのため、グローバルコミュニティには豆、取引、事業体、決定事項がありません。そこで何を行っても豆を獲得したり消費したりすることはなく、誰かが誰かに借りを作ることもありません。</p>
+        <p>投票はグローバルコミュニティでも機能します。人々の考えを可視化するためのものであり、何かを決定することはありません。</p>
+        <p>グローバルコミュニティでは招待機能はオフのままです。誰でも入れるオープンな扉が参加方法となります。</p>
+        <p>グローバルコミュニティでいつか本人確認が可能になれば、これらの機能が1つずつ有効化されるかもしれません。それまでは、どのローカルコミュニティでも今日から実際に利用できます。</p>
+        <h2>コミュニティを立ち上げる</h2>
+        <p>ローカルコミュニティは、地元の誰かが管理する独自の小さなサーバーで稼働します。その管理者はあなた自身になることができます。</p>
+        <ul>
+            <li><strong>費用:</strong> 自宅でつけっぱなしにできる予備のパソコン、または月額数百円程度の小規模なレンタルサーバーです。ソフトウェアは無料です。</li>
+            <li><strong>運営者:</strong> あなた自身が、自分のマシンまたはレンタルしたサーバー上で運営します。beanpool.org は不要で、独自のウェブアドレスを持つことができます。</li>
+            <li><strong>引き受ける役割:</strong> メンバーからの通報があなたに届きます。リカバリーコードを使ってコミュニティのデータをバックアップするのはあなたの役目です。オーナーを2名体制にし、サーバーの稼働と更新を維持してください。</li>
+            <li><strong>決して見ることができないもの:</strong> メンバー同士の1対1のチャットです。サーバーが読み取れないよう暗号化されています。</li>
+            <li><strong>所要時間:</strong> 手順に従うことができる人なら、約30分で完了します。</li>
+        </ul>
+        <p>始めるには、<strong>これがローカルコミュニティにある理由</strong>シート内、またはスマートフォンのホームにある<strong>コミュニティを見つける</strong>カードで、<strong>コミュニティを立ち上げる</strong>をタップします。自宅の予備パソコン、小規模なレンタルサーバー、またはグローバルコミュニティで協力を募るという3つの運営方法が表示されます。<strong>コミュニティの情報をコピー</strong>をタップすると、コミュニティの名前、場所、連絡方法がコピーされ、新しいサーバーの設定に貼り付けることができます。</p>
+        <p>手順は beanpool.org のコミュニティ運営者向けガイドの「初期設定」に記載されています。サーバーが立ち上がったら、スマートフォンを使って登録します。サーバーに表示されるQRコードにスマートフォンのカメラを向けるか、BeanPoolアプリ内で<strong>新しいコミュニティサーバーを立ち上げる</strong>（<strong>コミュニティを見つける</strong>または<strong>コミュニティを立ち上げる</strong>内）をタップし、<strong>コードをスキャン</strong>を選びます。その後、設定画面の案内に従ってコミュニティに名前を付け、2人目のオーナーを追加し、最初の招待状を作成します。近くの人が見つけられるように、設定画面でコミュニティの場所も登録してください。</p>
+        <h2>近くのコミュニティに参加する</h2>
+        <p>スマートフォンアプリの場合：</p>
+        <ul>
+            <li><strong>近くのコミュニティ</strong>に、掲載を希望した最寄りのコミュニティが一覧表示されます。</li>
+            <li><strong>参加を申請</strong>をタップします。そのコミュニティのメンバーが招き入れてくれます。管理者のみが招待できるコミュニティでは、オーナーまたは管理者が対応します。</li>
+            <li>近くにまだありませんか？<strong>ここで始まったら通知する</strong>を設定しておけば、新しく始まったときに通知が届きます。</li>
+        </ul>
+        <p>Webアプリでは、ホームの<strong>コミュニティを見つける</strong>カードから、近くの各コミュニティの専用ページへのリンクが表示されます。</p>
+        <p>あなたのアカウントは同じ12個の単語のまま引き継がれ、グローバルコミュニティのメンバーとしても残ります。「近くのコミュニティを見つける」を参照してください。</p>
+        <h2>ローカルコミュニティでは</h2>
+        <p>マークで示されていたすべての機能が、そこでは本物になります。台帳にはゼロから始まるあなた自身の残高が表示されます。取引では仕事が完了するまで豆が安全に預かられ、決定事項には拘束力が生じます。</p>
+        <p>そこには🏘️マークはなく、サンプルバレーのデータが持ち込まれることもありません。</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="finding-a-community.html"><strong>近くのコミュニティを探す</strong><span>グローバルコミュニティから近くのコミュニティを探して参加申請したり、近隣で新しいコミュニティが始まった際に通知を受け取ったり、自分で立ち上げることができます。</span></a></li>
+            <li><a href="how-it-works.html"><strong>BeanPoolの仕組み</strong><span>豆、取引、提供と求め、そしてクレジットについてわかりやすく説明します。</span></a></li>
+            <li><a href="joining.html"><strong>BeanPoolへの参加</strong><span>参加方法は2つあります。メンバーからの招待によるコミュニティ参加、または公開されているグローバルコミュニティへの12個の秘密の単語か1つのサインインによる参加です。参加申請や他者の招待方法も説明します。</span></a></li>
+            <li><a href="communities.html"><strong>複数のコミュニティ</strong><span>1つのアカウントで複数のコミュニティに参加し、切り替えたり、コミュニティの移転先に追従したり、グローバルコミュニティの表示内容を確認する方法を説明します。</span></a></li>
+            <li><a href="../your-balance.html"><strong>Your balance and history</strong><span>How many beans you have, what is held, and every trade and gift.</span></a></li>
+            <li><a href="../decisions.html"><strong>Voting on a Decision</strong><span>Find open Decisions, vote, change your vote, and see results.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

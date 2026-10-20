@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/vi by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hồ sơ của bạn — BeanPool members' guide</title>
+    <meta name="description" content="Tên, ảnh đại diện, vài dòng giới thiệu về bạn và ai có thể xem thông tin liên hệ của bạn.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#getting-started">Bắt đầu</a></p>
+        <h1>Hồ sơ của bạn</h1>
+        <p class="lede">Tên, ảnh đại diện, vài dòng giới thiệu về bạn và ai có thể xem thông tin liên hệ của bạn.</p>
+        <h2>Thay đổi tên, ảnh hoặc phần giới thiệu</h2>
+        <ul>
+            <li>Mở <strong>Cài đặt</strong> bằng nút có biểu tượng thanh trượt ở trên cùng màn hình.</li>
+            <li>Trên thẻ của bạn ở trên cùng, nhấn <strong>Chỉnh sửa</strong>, hoặc nhấn vào ảnh của bạn.</li>
+            <li>Thay đổi bất kỳ điều gì bạn muốn:</li>
+            <li><strong>Bí danh</strong> là tên mà mọi người nhìn thấy.</li>
+            <li><strong>Tiểu sử</strong> là vài dòng giới thiệu về bạn, tối đa 200 ký tự.</li>
+            <li>Nhấn vào ảnh để thay đổi ảnh.</li>
+            <li>Nhấn <strong>Lưu hồ sơ</strong>.</li>
+        </ul>
+        <p>Trong ứng dụng web, nhấn <strong>Chỉnh sửa hồ sơ</strong>, thay đổi ảnh bằng <strong>Máy ảnh</strong> hoặc <strong>Thư viện ảnh</strong>, rồi nhấn <strong>Lưu thay đổi hồ sơ</strong>.</p>
+        <p>Bạn cũng có thể nhấn <strong>Chạy lại thiết lập</strong> trong Cài đặt. Ứng dụng sẽ hướng dẫn lại bạn qua các bước đặt tên và chọn ảnh, ước chừng vị trí của bạn (trên cộng đồng toàn cầu, trong ứng dụng điện thoại), và chuyến tham quan ngắn về cách thức hoạt động của BeanPool. Trong trình duyệt web, hãy đặt khu vực của bạn trong <strong>Cài đặt</strong>, dưới mục <strong>Khu vực bạn</strong>.</p>
+        <h2>Trước khi bạn đăng bài</h2>
+        <p>Trong một cộng đồng có Đậu, bạn cần có tên và ảnh đại diện trước khi có thể đăng bài hoặc chấp nhận một giao dịch. Ở nơi không có Đậu, chẳng hạn như trên cộng đồng toàn cầu, chỉ cần có tên là đủ. Nếu còn thiếu thông tin, ứng dụng sẽ báo <strong>Hãy hoàn thiện hồ sơ của bạn trước</strong>. Nhấn <strong>Thiết lập hồ sơ</strong> để bổ sung.</p>
+        <h2>Thông tin liên hệ</h2>
+        <p>Dưới mục <strong>Thông tin liên hệ</strong>, bạn có thể thêm số điện thoại, email hoặc số WhatsApp, tối đa 200 ký tự. Bạn không bắt buộc phải thêm.</p>
+        <p>Khi bạn đã thêm, hãy chọn <strong>Ai có thể thấy thông tin này?</strong>:</p>
+        <ul>
+            <li><strong>Ẩn:</strong> không ai cả.</li>
+            <li><strong>Đối tác trao đổi:</strong> những thành viên bạn đang có thỏa thuận giao dịch cùng. Thông tin được tính từ thời điểm một trong hai người nhấn <strong>Accept Offer</strong> hoặc <strong>Offer to Fulfill</strong> trên bài đăng của người kia, ngay cả khi thỏa thuận sau đó bị hủy hoặc bị từ chối. Việc chỉ gửi riêng Đậu không được tính là một thỏa thuận.</li>
+            <li><strong>Bạn bè:</strong> những người bạn đã thêm vào danh sách bạn bè.</li>
+            <li><strong>Cộng đồng:</strong> mọi thành viên trong cộng đồng của bạn.</li>
+        </ul>
+        <p>Một thành viên đang bị đình chỉ sẽ không thấy bất kỳ thông tin nào trong số đó trong thời gian bị đình chỉ. Bất kỳ ai chưa tham gia cộng đồng của bạn cũng không thể thấy, ngay cả người đã được thành viên nhắn tin hoặc gửi Đậu.</p>
+        <p>Hiện nay ứng dụng web có thể hiển thị thông tin liên hệ của bạn trên các bài đăng của bạn. Ứng dụng điện thoại hiện chưa hiển thị thông tin liên hệ của các thành viên khác.</p>
+        <h2>Những gì người khác nhìn thấy</h2>
+        <p>Nhấn vào ảnh tròn ở góc trên cùng bên phải màn hình để xem hồ sơ của chính bạn. Các thành viên khác cũng thấy gần như tương tự:</p>
+        <ul>
+            <li>tên của bạn, thời điểm bạn tham gia và tiểu sử của bạn;</li>
+            <li>đánh giá bằng sao và nhận xét từ những người bạn đã giao dịch cùng (không ai khác có thể thấy ai đã viết nhận xét);</li>
+            <li>các bài đăng của bạn.</li>
+        </ul>
+        <p>Trên điện thoại, trong một cộng đồng có Đậu, họ cũng thấy huy hiệu tin cậy của bạn, bạn đã thực hiện bao nhiêu giao dịch, với bao nhiêu người, và tỷ lệ hoàn tất giao dịch (<strong>Hoàn thành</strong>). Ứng dụng web không hiển thị những thông tin này trên hồ sơ của thành viên khác. Cộng đồng toàn cầu không có Đậu, vì vậy nó không hiển thị bất kỳ thông tin nào trong số đó.</p>
+        <h2>Phong cách làm việc của bạn</h2>
+        <p>Trên hồ sơ của bạn có một bài trắc nghiệm ngắn tùy chọn, <strong>Take 60s Quiz</strong>. Bài trắc nghiệm mô tả cách bạn thích làm việc với người khác. Trên hồ sơ của người khác, nó cho biết phong cách làm việc của hai người phù hợp với nhau như thế nào. Nó không thay đổi bất cứ điều gì khác.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="../privacy.html"><strong>Your privacy</strong><span>What others can see about you, and the settings that control it.</span></a></li>
+            <li><a href="../trust-badges.html"><strong>Trust badges</strong><span>Newcomer, Resident, Steward and Elder. What they mean, and why they unlock nothing.</span></a></li>
+            <li><a href="joining.html"><strong>Tham gia BeanPool</strong><span>Hai cách tham gia: cộng đồng qua lời mời từ thành viên, hoặc cộng đồng toàn cầu khi mở, bằng 12 từ bí mật hoặc đăng nhập. Xin gia nhập và mời người khác.</span></a></li>
+            <li><a href="../people.html"><strong>People and friends</strong><span>Find members of your community, add friends, and vouch for someone.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

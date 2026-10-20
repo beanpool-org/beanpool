@@ -152,7 +152,7 @@ import { TOOL_APPS, phoneTools, type PhoneTool } from '../../tools/index';
 import { TOOL_DOCS_TABLE, TOOL_SETTINGS_PREFIX } from '../../tools/schema';
 import {
     readToolDoc, wipeToolDataOnThisPhone, writeToolDoc, writeToolSettings, ToolDocTooBigError,
-    removeToolDataHere, removeCommunityToolData,
+    removeToolDataHere, removeCommunityToolData, readToolSettings, reminderOn, settingsKey,
 } from '../../tools/store';
 import { communityKey } from '../../tools/community';
 import { keepToolPhoto, toolPhotoUri } from '../../tools/photos';
@@ -410,7 +410,8 @@ describe('every tool, drawn through the host route at 320 dp × 1.3 in xx', asyn
             expect(byTestId('tool-examples')).not.toBeNull();
             expect(bypassing(true)).toEqual([]);
             expect(tooWide()).toEqual([]);
-            expect(JSON.parse(store.map.get(`${TOOL_SETTINGS_PREFIX}${ME.publicKey}:${id}`) ?? '{}').door).toBe('starting');
+            const comm = communityKey(store.map.get('beanpool_anchor_url'));
+            expect(JSON.parse(store.map.get(settingsKey(comm, ME.publicKey, id)) ?? '{}').door).toBe('starting');
         });
 
         for (const which of ['small', 'full'] as const) {
@@ -600,7 +601,8 @@ describe('the route around a tool', () => {
             await click(byTestId('tool-menu'), 'the "…"');
             await click(byTestId('tool-menu-settings'), 'Settings');
             await click(byTestId('tool-settings-reminder-weekly'), 'the other reminder\'s switch');
-            expect(JSON.parse(store.map.get(`${TOOL_SETTINGS_PREFIX}${ME.publicKey}:two-screens`) ?? '{}').reminders).toEqual({ back: false, weekly: true });
+            const comm = communityKey(store.map.get('beanpool_anchor_url'));
+            expect(JSON.parse(store.map.get(settingsKey(comm, ME.publicKey, 'two-screens')) ?? '{}').reminders).toEqual({ back: false, weekly: true });
         } finally {
             act(() => overRoot.unmount());
             over.remove();
@@ -733,12 +735,18 @@ describe('the one store', () => {
             { identifier: `bp-tool:${commB}:fixture-kit:back:200` },
         );
 
+        // Settings per community: turn a reminder off at B, write A's settings
+        await writeToolSettings(ME.publicKey, 'fixture-kit', { reminders: { back: false } }, urlB);
+        await writeToolSettings(ME.publicKey, 'fixture-kit', { reminders: { back: true } }, urlA);
+
         await removeToolDataHere(ME.publicKey, 'fixture-kit', urlA, n);
 
         expect(fs.existsSync(fileA)).toBe(false);
         expect(n.scheduled.some((s) => s.identifier.includes(commA))).toBe(false);
         expect(fs.existsSync(fileB)).toBe(true);
         expect(n.scheduled.some((s) => s.identifier === `bp-tool:${commB}:fixture-kit:back:200`)).toBe(true);
+        const settingsB = await readToolSettings(ME.publicKey, 'fixture-kit', urlB);
+        expect(reminderOn(settingsB, { id: 'back', defaultOn: true })).toBe(false);
     });
 
     it("leaving a community removes that community's photos and reminders", async () => {
@@ -765,10 +773,17 @@ describe('the one store', () => {
             { identifier: `bp-tool:${commStay}:fixture-kit:back:200` },
         );
 
+        await writeToolSettings(ME.publicKey, 'fixture-kit', { reminders: { back: false } }, urlStay);
+        await writeToolSettings(ME.publicKey, 'fixture-kit', { door: 'starting' }, urlLeave);
+
         await removeCommunityToolData(urlLeave, n);
 
         expect(fs.existsSync(fileA)).toBe(false);
         expect(fs.existsSync(fileB)).toBe(true);
+        const settingsStay = await readToolSettings(ME.publicKey, 'fixture-kit', urlStay);
+        expect(reminderOn(settingsStay, { id: 'back', defaultOn: true })).toBe(false);
+        const settingsLeave = await readToolSettings(ME.publicKey, 'fixture-kit', urlLeave);
+        expect(settingsLeave).toEqual({});
         expect(n.scheduled.map((s) => s.identifier)).toEqual([`bp-tool:${commStay}:fixture-kit:back:200`]);
     });
 
@@ -860,9 +875,46 @@ describe("reminders: due() becomes the phone's own date-trigger notifications", 
         n.scheduled.push(
             { identifier: 'bp-tool:comm:other-tool:due:1000' },
             { identifier: 'bp-tool:comm:due:item:2000' },
+            { identifier: 'bp-tool:other-tool:due:3000' },
         );
+        // Cancelling tool "due" should not match reminders of other-tool whose reminder name is "due",
+        // nor should it match 5-part reminders by community identifier.
         await cancelToolReminders({ tool: 'due' }, n);
-        expect(n.scheduled.map((s) => s.identifier)).toEqual(['bp-tool:comm:other-tool:due:1000']);
+        expect(n.scheduled.map((s) => s.identifier)).toEqual([
+            'bp-tool:comm:other-tool:due:1000',
+            'bp-tool:other-tool:due:3000',
+        ]);
+
+        // Calling cancelToolReminders with community name as tool should not wipe other tools in that community
+        await cancelToolReminders('comm', n);
+        expect(n.scheduled.map((s) => s.identifier)).toEqual([
+            'bp-tool:comm:other-tool:due:1000',
+            'bp-tool:other-tool:due:3000',
+        ]);
+
+        // Cancelling by tool name cancels both anchored and legacy reminders for that tool
+        await cancelToolReminders('other-tool', n);
+        expect(n.scheduled.map((s) => s.identifier)).toEqual([]);
+    });
+
+    it('cancelToolReminders matches anchored prefix and cancels multi-part reminder ids', async () => {
+        const n = fakeNotifications();
+        n.scheduled.push(
+            { identifier: 'bp-tool:mullum_key:kit:due:back:1700000000000' },
+            { identifier: 'bp-tool:mullum_key:other:item:1700000000000' },
+            { identifier: 'bp-tool:bellingen_key:kit:due:back:1700000000000' },
+        );
+        // Cancel kit in mullum_key
+        await cancelToolReminders({ community: 'mullum_key', tool: 'kit' }, n);
+        expect(n.scheduled.map((s) => s.identifier)).toEqual([
+            'bp-tool:mullum_key:other:item:1700000000000',
+            'bp-tool:bellingen_key:kit:due:back:1700000000000',
+        ]);
+        // Cancel whole mullum_key community
+        await cancelToolReminders({ community: 'mullum_key' }, n);
+        expect(n.scheduled.map((s) => s.identifier)).toEqual([
+            'bp-tool:bellingen_key:kit:due:back:1700000000000',
+        ]);
     });
 
     it("serializes reschedules so an older write cannot survive two quick writes", async () => {

@@ -90,26 +90,26 @@ export async function cancelToolReminders(
     n: ToolNotifications | null = deviceNotifications(),
 ): Promise<void> {
     if (!n) return;
+    const matchTool = (tool: string) => (id: string) => {
+        if (!id.startsWith(TOOL_REMINDER_PREFIX)) return false;
+        const parts = id.split(':');
+        return (parts.length >= 5 && parts[2] === tool) || (parts.length === 4 && parts[1] === tool);
+    };
     let match: (id: string) => boolean = (id) => id.startsWith(TOOL_REMINDER_PREFIX);
     if (typeof target === 'string') {
-        const tool = target;
-        match = (id) => {
-            const parts = id.split(':');
-            return (parts.length === 5 && parts[2] === tool) || (parts.length === 4 && parts[1] === tool);
-        };
+        match = matchTool(target);
     } else if (target) {
         const { community, tool } = target;
-        match = (id) => {
-            const parts = id.split(':');
-            if (parts[0] !== 'bp-tool') return false;
-            if (parts.length === 5) {
-                return (!community || parts[1] === community) && (!tool || parts[2] === tool);
-            }
-            if (parts.length === 4) {
-                return Boolean(tool && parts[1] === tool);
-            }
-            return false;
-        };
+        if (community && tool) {
+            const prefix = `${TOOL_REMINDER_PREFIX}${community}:${tool}:`;
+            const legacyPrefix = `${TOOL_REMINDER_PREFIX}${tool}:`;
+            match = (id) => id.startsWith(prefix) || (id.startsWith(legacyPrefix) && id.split(':').length === 4);
+        } else if (community) {
+            const prefix = `${TOOL_REMINDER_PREFIX}${community}:`;
+            match = (id) => id.startsWith(prefix);
+        } else if (tool) {
+            match = matchTool(tool);
+        }
     }
     try {
         for (const s of await n.getAllScheduledNotificationsAsync()) {
@@ -188,6 +188,9 @@ export function resetRemindersForTest(): void {
  * Where a tap on a tool's reminder opens: the tool, at the screen due() named when this build has it, else its first.
  * Null for anything else: a push from outside (only the app posts a local notification), a tool this build doesn't have,
  * or a reminder belonging to a community other than the currently active one.
+ * Only what {@link scheduleToolReminders} posted is one: `remote` is inferred from the trigger, which a platform may leave
+ * unset on a push, so the `bpLocal: 1` it writes must be there too, or an unsigned push naming a tool is never routed
+ * here past the signed-tap check (PR #2267 review 4326931551).
  */
 export function toolReminderRoute(n: { remote: boolean; data: unknown }, activeCommunity?: string | null): string | null {
     if (n.remote || !n.data || typeof n.data !== 'object') return null;

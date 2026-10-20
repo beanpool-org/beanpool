@@ -282,6 +282,8 @@ export function deleteFailedLine(reason: string, hasWords: boolean): string {
  * - Its cached copy goes (community-cache.ts, which closes the open copy first).
  * - The phone is set to `next`, then `here` leaves the saved list and the guest markers. In that order: the saved list,
  *   read through nodes.ts `getSavedNodes`, puts the community the phone is set to back into it.
+ * - Its tool data (photos, reminders, settings) goes, notifying Home only once the anchor is at `next` so a card's
+ *   re-read never reopens or re-creates the deleted community.
  *
  * The key, its 12 words and the rest of the account's app storage stay. The caller opens `next`'s copy (db.ts `initDB`)
  * and moves the screen. Throws, before anything changes, for a `next` whose address isn't plain (node-url.ts; the plan
@@ -295,12 +297,6 @@ export async function leaveThisCommunity(here: string, next: string, storage: St
         await removeCommunityCaches([here]);
     } catch (e) {
         console.warn('[Account] The cached copy of the community left could not be removed', e);
-    }
-    try {
-        const { removeCommunityToolData } = await import('../tools/store');
-        await removeCommunityToolData(here);
-    } catch (e) {
-        console.warn('[Account] The tool data of the community left could not be removed', e);
     }
     await storage.setItem(ANCHOR_STORE_KEY, next);
 
@@ -324,6 +320,12 @@ export async function leaveThisCommunity(here: string, next: string, storage: St
         }
     } catch (e) {
         console.warn('[Account] The guest marker of the community left could not be removed', e);
+    }
+    try {
+        const { removeCommunityToolData } = await import('../tools/store');
+        await removeCommunityToolData(here);
+    } catch (e) {
+        console.warn('[Account] The tool data of the community left could not be removed', e);
     }
 }
 

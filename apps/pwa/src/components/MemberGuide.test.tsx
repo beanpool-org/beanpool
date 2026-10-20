@@ -368,6 +368,30 @@ describe("the three page states on web: current, behind with toggle, missing, an
         expect(document.querySelector('article [lang="en"]')).not.toBeNull();
     });
 
+    it('missing state without translated title has no draft line', async () => {
+        addGuideTitles('pt', { sections: {}, pages: {} });
+        const ptGuide: Guide = {
+            schema: getBundledGuide().schema,
+            version: 1,
+            language: 'pt',
+            hash: '1234567890abcdef',
+            sections: [{ id: section.id, title: 'Secção traduzida', summary: 'Resumo.', slugs: [page.slug] }],
+            guides: [{
+                slug: page.slug,
+                title: 'Página traduzida',
+                summary: 'Resumo da página.',
+                section: section.id,
+                related: [],
+                sourceHash: currentHash,
+                blocks: [{ type: 'p', text: 'Corpo traduzido atual na web.' }],
+            }],
+        };
+        vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, text: async () => JSON.stringify(ptGuide) })));
+        await act(async () => { await showLanguage('pt'); });
+        render(<MemberGuide onBack={() => {}} feedbackLive={false} initialPage={related.slug} />);
+        expect(screen.queryByTestId('guide-draft-note')).toBeNull();
+    });
+
     it('offline fallback: fetch failure falls back to cached guide or English without error', async () => {
         vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('offline'); }));
         const ptGuide: Guide = {

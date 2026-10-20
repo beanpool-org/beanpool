@@ -231,7 +231,8 @@ function GuidePageView({ slug, openPage, openSection }: { slug: string; openPage
     const englishShown = showEnglish && newerInEnglish && !!page.englishBlocks;
     const blocksToRender = englishShown ? page.englishBlocks! : page.blocks;
     const currentLang = (englishShown || bodyInEnglish) ? 'en' : undefined;
-    const showDraftNote = !bodyInEnglish && !englishShown && isMachineDraft();
+    const isTranslatedBody = page.bodyState === 'current' || page.bodyState === 'behind';
+    const showDraftNote = isTranslatedBody && !englishShown && isMachineDraft();
 
     return (
         <article className="text-nature-800 dark:text-nature-200 text-base leading-relaxed">

@@ -1,4 +1,754 @@
 {
-  "sections": {},
-  "pages": {}
+  "sections": {
+    "about": {
+      "title": {
+        "text": "About BeanPool",
+        "sourceHash": "2d9dd281fa519636"
+      },
+      "summary": {
+        "text": "BeanPool 작동 원리, 규칙과 의사결정 방식, 자주 묻는 질문 및 새로운 소식을 안내해요.",
+        "sourceHash": "003302493f5fd51a"
+      }
+    },
+    "getting-started": {
+      "title": {
+        "text": "시작하기",
+        "sourceHash": "831d0f72d242b7d1"
+      },
+      "summary": {
+        "text": "홈, 가입, 내 주변 커뮤니티 찾기, 콩과 글로벌 커뮤니티 및 제한, 내 12개 단어, 프로필, 상단 바, 가이드, 도움받기, 여러 커뮤니티 이용과 웹 앱 안내예요.",
+        "sourceHash": "63d6211469096565"
+      }
+    },
+    "market": {
+      "title": {
+        "text": "장터",
+        "sourceHash": "5238d9bd03d543e6"
+      },
+      "summary": {
+        "text": "제공과 요청 찾기 및 등록하기, 처음부터 끝까지의 거래 진행 방식이에요.",
+        "sourceHash": "6008ab9bf397a83a"
+      }
+    },
+    "map": {
+      "title": {
+        "text": "지도",
+        "sourceHash": "be176b0015c424b7"
+      },
+      "summary": {
+        "text": "지도의 핀 의미, 내 핀 위치 설정, 주변 소식 찾는 방법이에요.",
+        "sourceHash": "b4e17982e037f558"
+      }
+    },
+    "talk": {
+      "title": {
+        "text": "대화",
+        "sourceHash": "449f5a775762cdc5"
+      },
+      "summary": {
+        "text": "메시지, 모임과 그룹 대화, 이웃과 친구, 행사 대화, 알림 끄기, 멘션과 키 변경 안내예요.",
+        "sourceHash": "e680a96492c72e47"
+      }
+    },
+    "pulse": {
+      "title": {
+        "text": "동향",
+        "sourceHash": "f7a403c6cdf31e72"
+      },
+      "summary": {
+        "text": "이웃이 공유한 소식, 배움 영상, 내 채널 추가 방법이에요.",
+        "sourceHash": "9ab06ad52ef86462"
+      }
+    },
+    "commons": {
+      "title": {
+        "text": "공유지",
+        "sourceHash": "6aa9f1a43424d37b"
+      },
+      "summary": {
+        "text": "의사결정과 투표, 공유 콩, 모임, 기업 및 운영자 안내예요. 설문과 행사도 장터에서 찾을 수 있어요.",
+        "sourceHash": "bd9454f4374e35ae"
+      }
+    },
+    "ledger": {
+      "title": {
+        "text": "장부",
+        "sourceHash": "ee69eb4afc76aae0"
+      },
+      "summary": {
+        "text": "잔액, 신용 한도, 선물, 신뢰 배지, 파트너별 거래 한도 및 유통 수수료 안내예요.",
+        "sourceHash": "99d7457bf048947c"
+      }
+    },
+    "settings": {
+      "title": {
+        "text": "설정 및 안전",
+        "sourceHash": "8ee717d56a807cd5"
+      },
+      "summary": {
+        "text": "개인정보와 관리자 및 AI 어시스턴트가 볼 수 있는 항목, 내 지역, 차단과 신고, 알림, 테마, 휴가 모드, 탈퇴, 계정 복구, 소유자의 내 12개 단어 확인 안내예요.",
+        "sourceHash": "767b3834909fa76c"
+      }
+    }
+  },
+  "pages": {
+    "how-it-works": {
+      "title": {
+        "text": "BeanPool 작동 원리",
+        "sourceHash": "8ee2145ba2a47e77"
+      },
+      "summary": {
+        "text": "콩, 거래, 제공과 요청, 신용 한도를 알기 쉽게 설명해요.",
+        "sourceHash": "921252df227ae544"
+      }
+    },
+    "rules": {
+      "title": {
+        "text": "규칙 및 의사결정 방식",
+        "sourceHash": "482819c153332e58"
+      },
+      "summary": {
+        "text": "투표, 참여율, 비밀 투표, 투표 자격, 활동 정지, 멤버 제명, 운영자 및 소집자와 대표 소집자 안내예요.",
+        "sourceHash": "b111b31338cdd2a3"
+      }
+    },
+    "faq": {
+      "title": {
+        "text": "자주 묻는 질문",
+        "sourceHash": "9a72221a27476f3e"
+      },
+      "summary": {
+        "text": "멤버들이 가장 자주 묻는 질문에 대한 간단한 답변이에요.",
+        "sourceHash": "8feb7069cb08f93d"
+      }
+    },
+    "whats-new": {
+      "title": {
+        "text": "새로운 소식",
+        "sourceHash": "135e912e89054ffa"
+      },
+      "summary": {
+        "text": "앱에 추가되거나 변경된 기능을 쉽게 설명해요.",
+        "sourceHash": "e1f96938296c5950"
+      }
+    },
+    "home": {
+      "title": {
+        "text": "홈",
+        "sourceHash": "3a78695388b38b5c"
+      },
+      "summary": {
+        "text": "홈의 구성, 휴대폰과 웹 앱에 표시되는 카드, 카드 추가·이동·삭제, 관심사 선택, 로그아웃 시 개인정보 보호 안내예요.",
+        "sourceHash": "a1c1ff42cd312dd2"
+      },
+      "help": {
+        "text": "홈 화면이에요. 내 도움이 필요한 일과 근처 소식 카드가 표시돼요. 아래에서 카드를 추가하거나, 카드의 …을 눌러 이동하거나 삭제할 수 있어요.",
+        "sourceHash": "3842000d41b06fa3"
+      }
+    },
+    "joining": {
+      "title": {
+        "text": "BeanPool 가입하기",
+        "sourceHash": "4a4fa8d50d056023"
+      },
+      "summary": {
+        "text": "가입 방법 2가지: 멤버의 초대를 통한 커뮤니티 가입, 개방 시 12개 비밀 단어 또는 간편 로그인으로 글로벌 커뮤니티 가입. 가입 요청과 다른 사람 초대 방법이에요.",
+        "sourceHash": "bfa09f20fea858c6"
+      },
+      "help": {
+        "text": "멤버의 초대로 커뮤니티에 가입하거나, 12개 비밀 단어 또는 간편 로그인으로 글로벌 커뮤니티에 가입하세요.",
+        "sourceHash": "288300534966c3d2"
+      }
+    },
+    "finding-a-community": {
+      "title": {
+        "text": "내 주변 커뮤니티 찾기",
+        "sourceHash": "dbb0b4170f999d18"
+      },
+      "summary": {
+        "text": "글로벌 커뮤니티에서 주변 커뮤니티를 찾아 가입을 요청하거나, 근처에 새 커뮤니티가 생길 때 알림을 받거나, 직접 커뮤니티를 시작해 보세요.",
+        "sourceHash": "d7fada0c8e749ecf"
+      }
+    },
+    "beans-and-the-global-community": {
+      "title": {
+        "text": "콩과 글로벌 커뮤니티",
+        "sourceHash": "e44e1649e26e9122"
+      },
+      "summary": {
+        "text": "글로벌 커뮤니티의 목적, 여러 커뮤니티와의 관계, 🏘️ 지역 커뮤니티 표시, 샘플 커뮤니티 Example Valley, 콩이 대기하는 이유와 로컬 커뮤니티 시작·찾기 안내예요.",
+        "sourceHash": "f91dcd042d53fdfb"
+      }
+    },
+    "global-community-limits": {
+      "title": {
+        "text": "글로벌 커뮤니티의 제한",
+        "sourceHash": "79186984a4ee4919"
+      },
+      "summary": {
+        "text": "글로벌 커뮤니티는 무료이며 유지 비용을 줄이기 위한 몇 가지 제한이 있어요. 게시글은 마지막 수정 후 90일 뒤 보관돼요. 사진은 최대 5장, 휴대폰에는 가장 가까운 게시글 500개가 보관되며, 관심 장소는 3곳까지 지정할 수 있어요.",
+        "sourceHash": "feba3e6c852b6d3b"
+      }
+    },
+    "your-12-words": {
+      "title": {
+        "text": "내 12개 단어",
+        "sourceHash": "dd2264b1e132960b"
+      },
+      "summary": {
+        "text": "12개 단어는 계정의 열쇠예요. 중요한 이유, 확인 위치, 안전하게 보관하는 법, 보조 복구 수단으로 간편 로그인을 추가하는 방법이에요.",
+        "sourceHash": "7033308ae096c586"
+      }
+    },
+    "your-profile": {
+      "title": {
+        "text": "내 프로필",
+        "sourceHash": "528d89ad72cba22e"
+      },
+      "summary": {
+        "text": "이름, 사진, 간단한 소개와 내 연락처를 볼 수 있는 사람 설정 안내예요.",
+        "sourceHash": "f405b4421669fcdb"
+      }
+    },
+    "the-top-bar": {
+      "title": {
+        "text": "상단 바",
+        "sourceHash": "67f6e62947dde848"
+      },
+      "summary": {
+        "text": "콩 표시, 확인이 필요한 알림 아이콘, 오른쪽 상단의 버튼 안내예요.",
+        "sourceHash": "19dc6a309244ae90"
+      }
+    },
+    "the-bean": {
+      "title": {
+        "text": "가이드 안내",
+        "sourceHash": "1d8917503dda7b5f"
+      },
+      "summary": {
+        "text": "가이드를 찾는 곳, 검색하는 방법, 항상 최신 상태로 유지되는 방식이에요.",
+        "sourceHash": "7e694a121aa2314d"
+      }
+    },
+    "getting-help": {
+      "title": {
+        "text": "도움받기",
+        "sourceHash": "418313b75b185ab8"
+      },
+      "summary": {
+        "text": "문제가 생겼을 때 확인할 곳과 문의할 사람 안내예요.",
+        "sourceHash": "8d12d16dc2217232"
+      }
+    },
+    "communities": {
+      "title": {
+        "text": "여러 커뮤니티 이용하기",
+        "sourceHash": "b753dd3e548b2230"
+      },
+      "summary": {
+        "text": "하나의 계정으로 여러 커뮤니티에 참여하고 전환하는 법, 새 주소로 이전한 커뮤니티를 따라가는 법과 글로벌 커뮤니티 표시 내용 안내예요.",
+        "sourceHash": "71e99c6bbffadcbe"
+      }
+    },
+    "web-app": {
+      "title": {
+        "text": "웹 브라우저에서 BeanPool 사용하기",
+        "sourceHash": "1daaa01a91ba4b17"
+      },
+      "summary": {
+        "text": "웹 앱에서도 휴대폰 앱의 대부분 기능을 사용할 수 있어요. 브라우저에서 글로벌 커뮤니티 가입, 로그인으로 계정 복구, 휴대폰에 동일 계정 연결, 웹 앱의 다른 버튼 명칭 안내예요.",
+        "sourceHash": "8afd3ad2f9117fd5"
+      }
+    },
+    "browsing-the-market": {
+      "title": {
+        "text": "장터 둘러보기",
+        "sourceHash": "ab1b6bf5f734c023"
+      },
+      "summary": {
+        "text": "검색, 필터, 거리 설정을 통해 제공과 요청을 찾아보세요.",
+        "sourceHash": "e73e882abbebfa8d"
+      },
+      "help": {
+        "text": "이웃들의 제공과 요청이에요. 검색하거나 카테고리·거리별로 필터링하고, ‘+ 글쓰기’를 눌러 직접 글을 올려보세요.",
+        "sourceHash": "0bc8b01c4d9effb6"
+      }
+    },
+    "posting": {
+      "title": {
+        "text": "제공 또는 요청 등록하기",
+        "sourceHash": "e218de31c1bbad00"
+      },
+      "summary": {
+        "text": "내가 해줄 수 있거나 나눌 수 있는 것, 또는 구하는 것을 등록해 보세요.",
+        "sourceHash": "9ffa9b1e66834bc0"
+      }
+    },
+    "my-deals": {
+      "title": {
+        "text": "내 거래",
+        "sourceHash": "bfad6bb30e1876c5"
+      },
+      "summary": {
+        "text": "진행 중인 모든 거래, 내가 올린 게시글, 지난 거래 내역을 한곳에서 확인하세요.",
+        "sourceHash": "8772e2ee242712d3"
+      },
+      "help": {
+        "text": "진행 중인 거래와 내가 올린 게시글이에요. 내 응답을 기다리는 거래가 맨 위에 표시돼요.",
+        "sourceHash": "3ec4be8c87368ed9"
+      }
+    },
+    "a-deal-step-by-step": {
+      "title": {
+        "text": "단계별 거래 진행 방식",
+        "sourceHash": "d2b29952cde1ab00"
+      },
+      "summary": {
+        "text": "제공과 요청에서 요청부터 지급 완료까지의 과정, 후기 작성 안내예요.",
+        "sourceHash": "88d4362d08a13bc5"
+      }
+    },
+    "when-a-deal-goes-wrong": {
+      "title": {
+        "text": "거래에 문제가 생겼을 때",
+        "sourceHash": "190bfad1746f9e84"
+      },
+      "summary": {
+        "text": "거래 취소 방법과 서로 합의되지 않을 때 진행되는 절차예요.",
+        "sourceHash": "a68c0d7af60988b4"
+      }
+    },
+    "map-pins": {
+      "title": {
+        "text": "지도에 표시되는 항목",
+        "sourceHash": "dbd1bae516674246"
+      },
+      "summary": {
+        "text": "지도의 핀과 색상별 의미, 주변 버튼 안내예요.",
+        "sourceHash": "79dec90cc1871495"
+      },
+      "help": {
+        "text": "내 주변 소식이에요. 초록 핀은 제공, 주황 핀은 요청, 보라 핀은 행사예요. 핀을 눌러 상세 정보를 확인하세요.",
+        "sourceHash": "0dae9edef568b7cd"
+      }
+    },
+    "pin-locations": {
+      "title": {
+        "text": "내 핀 위치 설정",
+        "sourceHash": "271264e11ffa7eaf"
+      },
+      "summary": {
+        "text": "내 게시글과 행사의 위치를 볼 수 있는 사람과 집 주소를 안전하게 지키는 방법이에요.",
+        "sourceHash": "a6ef3083e3ca4bfc"
+      }
+    },
+    "near-you": {
+      "title": {
+        "text": "내 주변 항목 찾기",
+        "sourceHash": "21bac241e8aef2ca"
+      },
+      "summary": {
+        "text": "내 위치나 직접 선택한 장소의 일정 거리 내에 있는 게시글만 모아보세요.",
+        "sourceHash": "5158de7099e0e89b"
+      }
+    },
+    "messages": {
+      "title": {
+        "text": "메시지",
+        "sourceHash": "04d7b48339271ea6"
+      },
+      "summary": {
+        "text": "대화 시작, 사진 전송, 답장, 반응, 수정, 삭제, 알림 끄기와 대화 보호 안내예요.",
+        "sourceHash": "d97a6ef5d498fdde"
+      },
+      "help": {
+        "text": "내 대화 목록이에요. 1:1 대화는 종단간 암호화로 보호돼요. 대화를 눌러 열거나, 게시글 또는 친구 목록에서 대화를 시작해 보세요.",
+        "sourceHash": "bb7067d935067660"
+      }
+    },
+    "groups": {
+      "title": {
+        "text": "모임",
+        "sourceHash": "39bbb719fa2b9d22"
+      },
+      "summary": {
+        "text": "모임과 그룹 대화, 대화 나누기, 모임 개설, 멤버 초대, 초대로 가입 및 모임 자체 투표 안내예요.",
+        "sourceHash": "4fa880d88c4b646f"
+      },
+      "help": {
+        "text": "내 모임과 그룹 대화 목록이에요. 모임을 시작하고 사람들을 초대하거나, 모임에서 함께 대화하고 투표해 보세요.",
+        "sourceHash": "ae3496f349eba2b3"
+      }
+    },
+    "people": {
+      "title": {
+        "text": "이웃과 친구",
+        "sourceHash": "99d59d29a0f3c756"
+      },
+      "summary": {
+        "text": "커뮤니티 멤버 찾기, 친구 추가, 멤버 보증 방법이에요.",
+        "sourceHash": "4be4971d826d83fe"
+      },
+      "help": {
+        "text": "커뮤니티 멤버와 친구 목록이에요. 멤버를 눌러 프로필을 보거나 친구 옆의 💬를 눌러 메시지를 보내보세요.",
+        "sourceHash": "d90b46866bc2bb6f"
+      }
+    },
+    "event-chat": {
+      "title": {
+        "text": "행사 대화",
+        "sourceHash": "9c298662a4d6fc3e"
+      },
+      "summary": {
+        "text": "주최자 및 행사 참여자들과 함께 대화를 나눠보세요.",
+        "sourceHash": "ae8ca7988e16e019"
+      }
+    },
+    "mute": {
+      "title": {
+        "text": "대화 알림 끄기",
+        "sourceHash": "8a491f4109c925c7"
+      },
+      "summary": {
+        "text": "1:1 대화, 모임 대화, 기업 대화의 알림을 8시간, 1주일 또는 영구적으로 끌 수 있어요.",
+        "sourceHash": "ce143abea39ce423"
+      }
+    },
+    "mentions": {
+      "title": {
+        "text": "멘션 (@이름)",
+        "sourceHash": "2e133ecc601b188f"
+      },
+      "summary": {
+        "text": "그룹 대화에서 @ 뒤에 이름을 입력하여 특정 멤버에게 알림을 보내보세요.",
+        "sourceHash": "265d8fd594c5af23"
+      }
+    },
+    "key-changed": {
+      "title": {
+        "text": "대화에서 상대방의 키가 변경되었다고 뜰 때",
+        "sourceHash": "79c7dc48aa148094"
+      },
+      "summary": {
+        "text": "메시지 전송이 중단되는 이유, 상대방과 키 코드를 대조 확인하는 법, 안전하게 대화를 재개하는 방법이에요.",
+        "sourceHash": "c7a3e58ca019f963"
+      }
+    },
+    "the-pulse": {
+      "title": {
+        "text": "동향 둘러보기",
+        "sourceHash": "a974f2e05f105a24"
+      },
+      "summary": {
+        "text": "이웃들이 다른 곳에서 만들고 공유한 소식을 피드 하나로 모아보세요.",
+        "sourceHash": "999659aebbfe69d2"
+      },
+      "help": {
+        "text": "이웃들이 다른 곳에서 작성하거나 공유한 링크 피드예요. 항목을 눌러 열어보세요.",
+        "sourceHash": "1d19387da6116082"
+      }
+    },
+    "learn": {
+      "title": {
+        "text": "배움 영상",
+        "sourceHash": "498e66e5947ca0c3"
+      },
+      "summary": {
+        "text": "BeanPool에 관한 짧은 영상과 해당 안내 가이드 페이지예요.",
+        "sourceHash": "4d2fdf4c850fe47f"
+      }
+    },
+    "your-channels": {
+      "title": {
+        "text": "내 채널 공유하기",
+        "sourceHash": "e47ac70a91b21162"
+      },
+      "summary": {
+        "text": "YouTube, 블로그, Instagram 등 내 채널을 동향 피드에 공유해 보세요.",
+        "sourceHash": "bc9819c938b91f04"
+      }
+    },
+    "decisions": {
+      "title": {
+        "text": "의사결정 투표",
+        "sourceHash": "67b17269f83d1030"
+      },
+      "summary": {
+        "text": "진행 중인 의사결정을 찾고, 투표하고, 투표를 변경하고, 결과를 확인하세요.",
+        "sourceHash": "fc4b9c95d8478a91"
+      }
+    },
+    "proposing-a-decision": {
+      "title": {
+        "text": "의사결정 제안하기",
+        "sourceHash": "3a20703895de04dc"
+      },
+      "summary": {
+        "text": "커뮤니티에 구속력 있는 결정을 제안해 보세요.",
+        "sourceHash": "69756653393ec8b4"
+      }
+    },
+    "polls": {
+      "title": {
+        "text": "설문",
+        "sourceHash": "996729458535904a"
+      },
+      "summary": {
+        "text": "커뮤니티에 간단한 질문을 올려보세요. 설문은 의견을 모으는 용도이며 그 자체로 결정을 바꾸지는 않아요.",
+        "sourceHash": "d7fadda691d8879b"
+      },
+      "help": {
+        "text": "커뮤니티에 간단한 질문을 올려 의견을 묻는 기능이에요. 사람들의 생각을 보여주며, 그 자체로 결정을 바꾸지는 않아요.",
+        "sourceHash": "99dfd4781ce0785d"
+      }
+    },
+    "events": {
+      "title": {
+        "text": "행사",
+        "sourceHash": "8d14f6e72de8f18a"
+      },
+      "summary": {
+        "text": "오프라인이나 온라인에서 일회성 또는 반복 행사를 만들고, 참석 여부 표시, 알림 받기, 공유 및 주최자 운영 안내예요.",
+        "sourceHash": "29e8adc52f9b6df9"
+      }
+    },
+    "enterprises": {
+      "title": {
+        "text": "프로젝트 및 기업",
+        "sourceHash": "e1ccbac49d2ba550"
+      },
+      "summary": {
+        "text": "자체 콩을 보유한 공동 사업: 프로젝트나 기업을 찾고, 후원하거나, 직접 시작해 보세요.",
+        "sourceHash": "8302886bb796749e"
+      }
+    },
+    "keepers": {
+      "title": {
+        "text": "운영자",
+        "sourceHash": "ffc8948f6b16666e"
+      },
+      "summary": {
+        "text": "기업을 함께 이끌고 책임을 맡는 운영자예요. 참여 신청, 이의 제기 및 사임 방법 안내예요.",
+        "sourceHash": "cbe734a215f75289"
+      }
+    },
+    "commons-fund": {
+      "title": {
+        "text": "공유지 기금",
+        "sourceHash": "b1b09e953a4dd7c0"
+      },
+      "summary": {
+        "text": "커뮤니티의 공유 콩: 기금의 출처와 사용 방법 안내예요.",
+        "sourceHash": "aaf9158560e5d6aa"
+      }
+    },
+    "your-balance": {
+      "title": {
+        "text": "내 잔액 및 거래 내역",
+        "sourceHash": "fb3a96eb2bfcd2a8"
+      },
+      "summary": {
+        "text": "보유 콩 수량, 거래 대기 중인 수량, 모든 거래와 선물 내역이에요.",
+        "sourceHash": "61df521108b36035"
+      },
+      "help": {
+        "text": "내 콩 현황이에요. 보유 수량, 거래 중 묶여 있는 수량, 모든 거래와 선물 내역이 표시돼요. 모두 0에서 시작해요.",
+        "sourceHash": "a40a5f9fef426c85"
+      }
+    },
+    "credit-line": {
+      "title": {
+        "text": "내 신용 한도",
+        "sourceHash": "dd11b44ecc1037c9"
+      },
+      "summary": {
+        "text": "잔액이 마이너스로 내려갈 수 있는 범위와 한도 상향 방식이에요.",
+        "sourceHash": "18b609abc63667e7"
+      }
+    },
+    "gifts": {
+      "title": {
+        "text": "선물 보내기",
+        "sourceHash": "5440f4f6ef954605"
+      },
+      "summary": {
+        "text": "거래 없이 다른 멤버에게 콩을 선물해 보세요.",
+        "sourceHash": "7eaddf0c6cd54a04"
+      }
+    },
+    "trust-badges": {
+      "title": {
+        "text": "신뢰 배지",
+        "sourceHash": "a1d8765277383923"
+      },
+      "summary": {
+        "text": "새내기, 주민, 지기, 어르신 배지의 의미와 배지가 특정 권한을 잠금 해제하는 것이 아닌 이유를 안내해요.",
+        "sourceHash": "90926482e87ba9fa"
+      }
+    },
+    "trading-partner-limit": {
+      "title": {
+        "text": "500콩 거래 상대 한도",
+        "sourceHash": "c40110de7df3670c"
+      },
+      "summary": {
+        "text": "한 사람과 많이 거래하는 것보다 여러 이웃과 거래할 때 신뢰가 더 쌓이는 이유예요.",
+        "sourceHash": "ce231d025501d5bc"
+      }
+    },
+    "circulation-fee": {
+      "title": {
+        "text": "유통 수수료",
+        "sourceHash": "e237d280aa62b186"
+      },
+      "summary": {
+        "text": "콩의 활발한 유통을 위해 큰 잔액에 부과되는 소액의 월간 수수료예요. 처음 200콩까지는 무료예요.",
+        "sourceHash": "c9efbe6aa5cb9873"
+      }
+    },
+    "privacy": {
+      "title": {
+        "text": "개인정보 보호",
+        "sourceHash": "d2a7115d0455956b"
+      },
+      "summary": {
+        "text": "다른 멤버에게 공개되는 내 정보와 이를 설정하는 방법이에요.",
+        "sourceHash": "e4a23a87e82cf7a6"
+      },
+      "help": {
+        "text": "다른 멤버가 볼 수 있는 내 정보와 이를 조절하는 설정 스위치예요.",
+        "sourceHash": "0a1a1831174d443b"
+      }
+    },
+    "your-area": {
+      "title": {
+        "text": "내 지역",
+        "sourceHash": "b0adfdbb4ce55184"
+      },
+      "summary": {
+        "text": "글로벌 커뮤니티에서 주변 게시글을 보여주기 위해 사용하는 대략적인 위치 및 변경·삭제 방법이에요.",
+        "sourceHash": "de4a8af84def7d30"
+      },
+      "help": {
+        "text": "주변 게시글을 표시하기 위한 대략적인 위치예요. 여기서 변경하거나 지울 수 있으며, 정확한 주소는 결코 아니에요.",
+        "sourceHash": "f3099801c4d773a5"
+      }
+    },
+    "what-the-admins-can-see": {
+      "title": {
+        "text": "관리자가 볼 수 있는 정보",
+        "sourceHash": "261de35d8123a845"
+      },
+      "summary": {
+        "text": "관리자가 명단을 관리하는 커뮤니티에서: 나에 대해 보관되는 정보, 열람 권한자, 서버 보관 내용 및 확인 완료의 의미예요.",
+        "sourceHash": "5960a4392bb32b4b"
+      }
+    },
+    "admins-ai-assistants": {
+      "title": {
+        "text": "관리자가 AI 어시스턴트를 사용할 때",
+        "sourceHash": "9180d368e5d11c1e"
+      },
+      "summary": {
+        "text": "소유자나 관리자의 AI 어시스턴트가 읽을 수 있는 정보, 절대 볼 수 없는 정보, 수신자 안내예요.",
+        "sourceHash": "d693c47b7b2cbfef"
+      }
+    },
+    "blocking": {
+      "title": {
+        "text": "멤버 차단하기",
+        "sourceHash": "f2ddac8bd6e31ad5"
+      },
+      "summary": {
+        "text": "특정 멤버의 게시글과 메시지를 숨기고, 나중에 차단을 해제하는 방법이에요.",
+        "sourceHash": "9e63d5d87e52a1b9"
+      },
+      "help": {
+        "text": "내가 차단한 멤버 목록이에요. 이들의 게시글과 메시지는 표시되지 않으며, 여기서 차단을 해제할 수 있어요.",
+        "sourceHash": "baecf7f0bec3735c"
+      }
+    },
+    "reporting": {
+      "title": {
+        "text": "문제 신고하기",
+        "sourceHash": "59274c49ac87bb2f"
+      },
+      "summary": {
+        "text": "게시글, 행사, 동향 게시물, 프로젝트나 기업에 관해 커뮤니티 중재자에게 알리세요.",
+        "sourceHash": "4b773ef8eef237fa"
+      }
+    },
+    "notifications": {
+      "title": {
+        "text": "알림",
+        "sourceHash": "788011833a5a0f22"
+      },
+      "summary": {
+        "text": "휴대폰으로 받을 알림과 행사 미리림 시점을 선택하세요.",
+        "sourceHash": "70c8aa586befc843"
+      },
+      "help": {
+        "text": "받을 알림과 행사 미리림 시점을 선택하세요.",
+        "sourceHash": "7f7ecf01321aba59"
+      }
+    },
+    "appearance": {
+      "title": {
+        "text": "라이트 및 다크 모드",
+        "sourceHash": "596443341c105af1"
+      },
+      "summary": {
+        "text": "휴대폰 앱은 라이트 모드로, 웹 앱은 다크 모드로 시작해요. 직접 변경하거나 기기 설정을 따를 수 있어요.",
+        "sourceHash": "31cf0aeff28a2052"
+      },
+      "help": {
+        "text": "앱을 라이트 모드나 다크 모드로 설정하거나 휴대폰 설정을 따르도록 지정하세요.",
+        "sourceHash": "1ef643d6832c782a"
+      }
+    },
+    "holiday-mode": {
+      "title": {
+        "text": "휴가 모드",
+        "sourceHash": "03098a2ccb21c3c2"
+      },
+      "summary": {
+        "text": "자리를 비울 때 휴가 모드를 켜면 제공 게시글이 숨겨지고 새 요청이 일시 중지돼요.",
+        "sourceHash": "53d1ceef93b0a7a1"
+      }
+    },
+    "leaving-or-deleting": {
+      "title": {
+        "text": "로그아웃 또는 계정 삭제",
+        "sourceHash": "6128699c3d7f036a"
+      },
+      "summary": {
+        "text": "이 휴대폰에서 로그아웃하거나 계정을 영구 삭제하는 방법과 보유 콩의 처리 안내예요.",
+        "sourceHash": "d28cb71428dd6615"
+      }
+    },
+    "recovery": {
+      "title": {
+        "text": "계정 복구하기",
+        "sourceHash": "7a6a763f943871ce"
+      },
+      "summary": {
+        "text": "새 휴대폰에서 계정을 복원하고, 간편 로그인 계정을 연결해 보호하세요.",
+        "sourceHash": "5235d9f9073b2e63"
+      },
+      "help": {
+        "text": "새 휴대폰에서 계정을 복구하는 방법이에요: 내 12개 단어 또는 연결해 둔 간편 로그인 계정을 사용하세요.",
+        "sourceHash": "05fba497e5466e59"
+      }
+    },
+    "check-your-12-words": {
+      "title": {
+        "text": "내 12개 단어와 서버 키 (소유자)",
+        "sourceHash": "0a24c7fe8ed3b0a4"
+      },
+      "summary": {
+        "text": "커뮤니티 소유자 안내예요. 내 12개 단어 확인, 휴대폰으로 서버 인계 또는 복원, 휴대폰이 스스로 수행하는 자동 확인 기능이에요.",
+        "sourceHash": "c3a1b3cdc4e7d8df"
+      }
+    }
+  }
 }

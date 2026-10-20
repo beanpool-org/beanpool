@@ -37,4 +37,4 @@ Bản hướng dẫn tương tự cũng có trên trang web tại beanpool.org/g
 
 ## Video
 
-Một số trang có thể hiển thị **Watch:** và tên video. Liên kết đó chỉ xuất hiện khi BeanPool đã tạo một video cho trang đó và cộng đồng của bạn có video đó trong Nhịp đập, dưới mục **Tìm hiểu** (**Cách thức hoạt động** trong ứng dụng web). Các video do thành viên thêm vào Tìm hiểu không bao giờ hiển thị trên một trang hướng dẫn. Mỗi trang đều đầy đủ nội dung ngay cả khi không có video.
+Một số trang có thể hiển thị **Watch:** và tên video. Liên kết đó chỉ xuất hiện khi BeanPool đã tạo một video cho trang đó và cộng đồng của bạn có video đó trong Nhịp đập, dưới mục **Tìm hiểu** (**How it works** trong ứng dụng web). Các video do thành viên thêm vào Tìm hiểu không bao giờ hiển thị trên một trang hướng dẫn. Mỗi trang đều đầy đủ nội dung ngay cả khi không có video.

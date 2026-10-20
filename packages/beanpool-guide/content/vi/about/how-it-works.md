@@ -16,7 +16,7 @@ Một gợi ý ước chừng: 40 Đậu tương đương khoảng một giờ t
 
 ## Lời đề nghị và Nhu cầu
 
-Một **Chia sẻ** là thứ bạn có thể làm hoặc trao tặng: ổ bánh mì, một chuyến đi nhờ, một giờ làm vườn, một công việc sửa chữa.
+Một **Lời đề nghị** là thứ bạn có thể làm hoặc trao tặng: ổ bánh mì, một chuyến đi nhờ, một giờ làm vườn, một công việc sửa chữa.
 
 Một **Nhu cầu** là thứ bạn đang tìm kiếm.
 
@@ -80,7 +80,7 @@ Huy hiệu chỉ là sự công nhận, không hơn. Huy hiệu không khóa hay
 
 ## Phí và Commons
 
-Cộng đồng của bạn có một quỹ Đậu chung gọi là **Chung**. Các khoản phí sẽ được chuyển vào quỹ này. Các thành viên cùng nhau quyết định cách chi tiêu quỹ.
+Cộng đồng của bạn có một quỹ Đậu chung gọi là **Commons**. Các khoản phí sẽ được chuyển vào quỹ này. Các thành viên cùng nhau quyết định cách chi tiêu quỹ.
 
 - **Phí thị trường:** 1,5% của mỗi khoản thanh toán trên chợ được chuyển vào Commons. Khoản phí này được trừ từ số Đậu người bán nhận được.
 - **Phí lưu thông:** Đậu sinh ra là để luân chuyển, không phải để nằm yên. 200 Đậu đầu tiên bạn nắm giữ luôn hoàn toàn miễn phí. Trên mức đó, một khoản phí nhỏ hàng tháng sẽ được chuyển vào Commons: 1% mỗi tháng cho số Đậu từ 200 đến 500, 1,5% từ 500 đến 1.000, 2% từ 1.000 đến 2.000, và 2,5% trên 2.000.
@@ -88,7 +88,7 @@ Cộng đồng của bạn có một quỹ Đậu chung gọi là **Chung**. Cá
 
 ## Doanh nghiệp và nhóm
 
-Một **dự án cộng đồng** hoạt động liên tục và giao dịch dưới tên riêng của nó: một tiệm bánh, một thư viện mượn đồ dùng, một quầy hàng ở chợ. Doanh nghiệp được điều hành bởi những **người quản lý**, đứng đầu là một **người quản lý chính**. Những người quản lý có thể cam kết một phần uy tín của chính mình để cấp cho doanh nghiệp một hạn mức tín dụng.
+Một **doanh nghiệp** hoạt động liên tục và giao dịch dưới tên riêng của nó: một tiệm bánh, một thư viện mượn đồ dùng, một quầy hàng ở chợ. Doanh nghiệp được điều hành bởi những **người quản lý**, đứng đầu là một **người quản lý chính**. Những người quản lý có thể cam kết một phần uy tín của chính mình để cấp cho doanh nghiệp một hạn mức tín dụng.
 
 Một **nhóm** là một tập hợp các thành viên có phần chat và bài đăng riêng, được điều hành bởi một hoặc nhiều **điều hành viên**. Một trong số họ là **trưởng ban điều hành** — ban đầu là người đã tạo ra nhóm.
 

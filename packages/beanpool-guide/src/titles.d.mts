@@ -27,3 +27,4 @@ export function checkGuideTitles(guide: GuideCollection, read: { files: Record<s
     counts: Record<string, { translated: number; stale: number; missing: number; total: number }>;
 };
 export function draftGuideTitles(guide: GuideCollection, file: unknown): TitlesFile;
+export function draftGuidePage(contentDir: string, lang: string, slug: string): string;

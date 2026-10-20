@@ -12,7 +12,7 @@ import path from 'node:path';
 import process from 'node:process';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { contentHash, renderWebsite, serializeGuide } from '../src/guide.mjs';
+import { contentHash, renderWebsite, serializeGuide, guideBodyHash } from '../src/guide.mjs';
 
 const pkgDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const repoRoot = path.resolve(pkgDir, '../..');
@@ -497,6 +497,63 @@ test("the director's publish command: nothing to do on a published main; otherwi
         assert.equal(git(cwd, 'rev-parse', `origin/${branch}~1`), git(cwd, 'rev-parse', 'origin/main'), 'one commit on top of origin/main');
         assert.equal(git(cwd, 'worktree', 'list').split('\n').length, 1, 'its worktree is gone');
         assert.equal(git(cwd, 'branch', '--list', 'guide/*'), '', 'and so is its local branch');
+    } finally {
+        repo.cleanup();
+    }
+});
+
+test('version isolation: a language publish raises that language version and leaves English untouched', () => {
+    const repo = makeRepo();
+    try {
+        const cwd = repo.work;
+        const enBefore = versions(cwd);
+        const enJsonBefore = read(cwd, GUIDE_JSON);
+        const enGuide = JSON.parse(enJsonBefore);
+        const homePage = enGuide.guides.find(g => g.slug === 'home');
+        const homeHash = guideBodyHash(homePage);
+
+        // Add a translated page for Russian
+        const ruDir = path.join(cwd, PKG, 'content/ru/getting-started');
+        fs.mkdirSync(ruDir, { recursive: true });
+        const page = [
+            '---',
+            'slug: home',
+            'title: Главная',
+            'summary: Описание.',
+            'related: rules',
+            `source-hash: ${homeHash}`,
+            '---',
+            '',
+            'Текст на русском.',
+        ].join('\n');
+        write(cwd, `${PKG}/content/ru/getting-started/home.md`, page);
+        git(cwd, 'add', `${PKG}/content/ru/getting-started/home.md`);
+        git(cwd, 'commit', '-q', '-m', 'add ru home page');
+        git(cwd, 'push', '-q', 'origin', 'main');
+
+        // Publish
+        const pub = publishCommand(cwd, '--no-pr');
+        assert.equal(pub.status, 0, said(pub));
+        assert.match(pub.stdout, /ru guide vnone → v1/);
+
+        // Check English is completely untouched
+        git(cwd, 'fetch', '-q', 'origin');
+        const branch = /Pushed (\S+)/.exec(pub.stdout)[1];
+        assert.equal(branch, `guide/publish-members-v${enBefore.guide}-manual-v${enBefore.manual}-ru-v1`);
+
+        const diffFiles = git(cwd, 'diff', '--name-only', 'origin/main', `origin/${branch}`).split('\n');
+        assert.ok(diffFiles.includes('packages/beanpool-guide/generated/guide.ru.json'));
+        assert.ok(diffFiles.includes('apps/website/guide/ru/guide.json'));
+        assert.ok(diffFiles.includes('apps/website/guide/ru/home.html'));
+        assert.ok(!diffFiles.includes('packages/beanpool-guide/generated/guide.json'), 'English guide.json untouched');
+        assert.ok(!diffFiles.includes('apps/website/guide/guide.json'), 'English website guide.json untouched');
+
+        // Publishing again without changes does nothing
+        git(cwd, 'merge', '-q', `origin/${branch}`);
+        git(cwd, 'push', '-q', 'origin', 'main');
+        const pub2 = publishCommand(cwd, '--no-pr');
+        assert.equal(pub2.status, 0, said(pub2));
+        assert.match(pub2.stdout, /Nothing to publish/);
     } finally {
         repo.cleanup();
     }

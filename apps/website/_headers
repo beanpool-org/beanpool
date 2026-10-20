@@ -5,3 +5,103 @@
 /guide/guide.json
   Access-Control-Allow-Origin: *
   Cache-Control: public, max-age=600
+
+/guide/*/guide.json
+  Access-Control-Allow-Origin: *
+  Cache-Control: public, max-age=600
+
+/guide/es/guide.json
+  Access-Control-Allow-Origin: *
+  Cache-Control: public, max-age=600
+
+/guide/pt/guide.json
+  Access-Control-Allow-Origin: *
+  Cache-Control: public, max-age=600
+
+/guide/hi/guide.json
+  Access-Control-Allow-Origin: *
+  Cache-Control: public, max-age=600
+
+/guide/bn/guide.json
+  Access-Control-Allow-Origin: *
+  Cache-Control: public, max-age=600
+
+/guide/fr/guide.json
+  Access-Control-Allow-Origin: *
+  Cache-Control: public, max-age=600
+
+/guide/ar/guide.json
+  Access-Control-Allow-Origin: *
+  Cache-Control: public, max-age=600
+
+/guide/id/guide.json
+  Access-Control-Allow-Origin: *
+  Cache-Control: public, max-age=600
+
+/guide/ru/guide.json
+  Access-Control-Allow-Origin: *
+  Cache-Control: public, max-age=600
+
+/guide/zh-Hans/guide.json
+  Access-Control-Allow-Origin: *
+  Cache-Control: public, max-age=600
+
+/guide/zh-Hant/guide.json
+  Access-Control-Allow-Origin: *
+  Cache-Control: public, max-age=600
+
+/guide/it/guide.json
+  Access-Control-Allow-Origin: *
+  Cache-Control: public, max-age=600
+
+/guide/de/guide.json
+  Access-Control-Allow-Origin: *
+  Cache-Control: public, max-age=600
+
+/guide/tr/guide.json
+  Access-Control-Allow-Origin: *
+  Cache-Control: public, max-age=600
+
+/guide/sw/guide.json
+  Access-Control-Allow-Origin: *
+  Cache-Control: public, max-age=600
+
+/guide/ml/guide.json
+  Access-Control-Allow-Origin: *
+  Cache-Control: public, max-age=600
+
+/guide/ta/guide.json
+  Access-Control-Allow-Origin: *
+  Cache-Control: public, max-age=600
+
+/guide/uk/guide.json
+  Access-Control-Allow-Origin: *
+  Cache-Control: public, max-age=600
+
+/guide/ur/guide.json
+  Access-Control-Allow-Origin: *
+  Cache-Control: public, max-age=600
+
+/guide/fa/guide.json
+  Access-Control-Allow-Origin: *
+  Cache-Control: public, max-age=600
+
+/guide/vi/guide.json
+  Access-Control-Allow-Origin: *
+  Cache-Control: public, max-age=600
+
+/guide/el/guide.json
+  Access-Control-Allow-Origin: *
+  Cache-Control: public, max-age=600
+
+/guide/fil/guide.json
+  Access-Control-Allow-Origin: *
+  Cache-Control: public, max-age=600
+
+/guide/ja/guide.json
+  Access-Control-Allow-Origin: *
+  Cache-Control: public, max-age=600
+
+/guide/ko/guide.json
+  Access-Control-Allow-Origin: *
+  Cache-Control: public, max-age=600

@@ -101,3 +101,19 @@ English stays the source (each page's front matter and `content/manifest.json`).
 * **Not published**: the apps bundle these files from the pages, so they carry no version and need no `pnpm guide:publish`. The website stays English.
 * **Checked** by `node scripts/build.mjs --check` (so `pnpm test` and CI): every key a real section or page, every field one the English has, no `{placeholder}` and no markup beyond `**bold**`, the apps' length limits, and a per-language cap on titles: 35 % over the English in display columns (a Chinese, Japanese or Korean character counts two), never under 14.
 * **The drafting round**: `pnpm --filter @beanpool/guide titles` lists, per language, the lines translated, stale and missing, then every stale line; `node packages/beanpool-guide/scripts/titles.mjs --draft <lang> > draft.json` (from the repository root) prints what `<lang>` lacks in the file's own shape, with the English as `text` and today's `sourceHash`: translate each `text` and merge the entries into the language's file. Run the draft with `node`, not `pnpm --filter`: pnpm prints its own banner before the JSON, even with `-s`.
+
+## 6. The guide in other languages: full pages (slice S5b)
+
+While titles and summaries (S5a) are bundled offline in the apps, translated page bodies are fetched per language on demand and cached locally.
+
+* **Where a translated page lives**: `content/<lang>/<section>/<slug>.md`, using the same section IDs, slugs, and front-matter fields as the English page (`slug`, `title`, `summary`, `related`, optional `video`, `help`), plus `source-hash: <16 hex digits>`.
+* **The hash rule**: `source-hash` is the first 16 hex digits of the sha256 of the English page body's canonical JSON blocks (`guideBodyHash`). When the English page changes, the app compares the translated page's `source-hash` with the English body's hash:
+  - If equal (`current`): displays the translated page body.
+  - If different (`behind`): displays the translated page body with a note at the top ("This page is newer in English.") and an option to read the current English version.
+  - If missing or offline before initial fetch: displays the English page with "This page is in English for now."
+* **How the director drafts them**:
+  Run `node packages/beanpool-guide/scripts/titles.mjs --draft-page <lang> <slug>` (e.g. `node packages/beanpool-guide/scripts/titles.mjs --draft-page es home > packages/beanpool-guide/content/es/getting-started/home.md`).
+  This prints the page front matter (prefilled with translated title/summary/help from `manifest.json` if available, and today's `source-hash`) followed by the English body, ready for translation.
+* **Publish is per (collection, language)**:
+  `build.mjs` emits `generated/guide.<lang>.json` and `apps/website/guide/<lang>/guide.json` (+ `<lang>/<slug>.html`) only for languages that have at least one translated page.
+  Each language has its own version counter: publishing a Russian update never conflicts with, bumps, or alters English. The director's `pnpm guide:publish --merge` manages per-language publishing.

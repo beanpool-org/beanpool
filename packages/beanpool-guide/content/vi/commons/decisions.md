@@ -8,13 +8,13 @@ source-hash: a2937dfa6289a2e7
 
 ## Nơi tìm
 
-Nhấn **Commons**, sau đó nhấn **Quyết định**. Các Quyết định đang mở nằm trong mục **Quyết định đang mở**.
+Nhấn **Chung**, sau đó nhấn **Quyết định**. Các Quyết định đang mở nằm trong mục **Quyết định đang mở**.
 
 Một Quyết định có tính ràng buộc: nếu được thông qua, máy chủ của cộng đồng bạn sẽ tự động thực thi. Quản trị viên chỉ có thể dừng một quyết định bằng cách đưa ra lý do bằng văn bản để các thành viên có thể đọc. Các quy tắc về việc ai có thể bỏ phiếu, cần tỷ lệ tham gia bao nhiêu và cần bao nhiêu phiếu Đồng ý nằm trong mục "Quy tắc và cách quyết định vận hành".
 
 Cộng đồng toàn cầu không có Quyết định. Bất kỳ ai cũng có thể tham gia bằng 12 từ hoặc phương thức đăng nhập, vì vậy một người có nhiều tài khoản có thể làm sai lệch kết quả bỏ phiếu ở đó. Thay vào đó, những người điều hành sẽ phụ trách việc này: xem "Báo cáo vấn đề". Quyết định thuộc về các cộng đồng địa phương. Các cuộc thăm dò ý kiến vẫn hoạt động ở mọi nơi.
 
-Trên cộng đồng toàn cầu, **Commons** hiển thị một Quyết định ví dụ từ một cộng đồng địa phương, được đánh dấu **🏘️ Cộng đồng địa phương**, để bạn có thể xem cách hoạt động. Các nút **Bỏ phiếu ĐỒNG Ý** và **Bỏ phiếu KHÔNG ĐỒNG Ý** của nó giải thích lý do tại sao việc bỏ phiếu diễn ra trong cộng đồng địa phương, và không ghi nhận phiếu bầu nào. Xem "Đậu và cộng đồng toàn cầu".
+Trên cộng đồng toàn cầu, **Chung** hiển thị một Quyết định ví dụ từ một cộng đồng địa phương, được đánh dấu **🏘️ Cộng đồng địa phương**, để bạn có thể xem cách hoạt động. Các nút **Bỏ phiếu ĐỒNG Ý** và **Bỏ phiếu KHÔNG ĐỒNG Ý** của nó giải thích lý do tại sao việc bỏ phiếu diễn ra trong cộng đồng địa phương, và không ghi nhận phiếu bầu nào. Xem "Đậu và cộng đồng toàn cầu".
 
 ## Đọc một Quyết định
 

@@ -18,7 +18,7 @@ Sổ cái có hai tab: **Cấp bậc** (mức độ tin cậy của bạn, xem "
 ## Tab Ví
 
 - **Số dư của bạn**, và tương đương khoảng bao nhiêu giờ giúp đỡ, với tỷ lệ 40 đậu một giờ.
-- **Commons:** quỹ chung của cộng đồng bạn.
+- **Chung:** quỹ chung của cộng đồng bạn.
 - **SÀN TÍN DỤNG:** bạn có thể xuống sâu đến mức nào dưới 0.
 - Số đậu của bạn đang bị giữ trong các giao dịch đang thực hiện, nếu có.
 - **Luân chuyển cộng đồng:** hiển thị khi bạn đang nắm giữ đậu. Xem "Phí lưu thông".
@@ -29,7 +29,7 @@ Trong ứng dụng web, tab Ví ngắn gọn hơn: **Mức sàn thấu chi**, **
 
 ## Giao dịch gần đây
 
-Mọi giao dịch, quà tặng và khoản phí, mới nhất hiển thị trước, kèm theo ghi chú, thời gian và dấu cộng hoặc trừ. Trên điện thoại, mỗi dòng cũng cho biết bạn đã giao dịch với ai; trong ứng dụng web, dòng đó ghi **Sent** hoặc **Đã nhận**. Nếu một ghi chú đề cập đến một bài đăng, hãy nhấn **Xem ưu đãi** để mở bài đăng đó.
+Mọi giao dịch, quà tặng và khoản phí, mới nhất hiển thị trước, kèm theo ghi chú, thời gian và dấu cộng hoặc trừ. Trên điện thoại, mỗi dòng cũng cho biết bạn đã giao dịch với ai; trong ứng dụng web, dòng đó ghi **Đã gửi** hoặc **Đã nhận**. Nếu một ghi chú đề cập đến một bài đăng, hãy nhấn **Xem ưu đãi** để mở bài đăng đó.
 
 Chỉ bạn mới có thể thấy số dư và các giao dịch này của mình. Không ai khác trong cộng đồng của bạn có thể đọc được chúng. **Xuất CSV** (**Xuất dữ liệu của tôi** trong ứng dụng web) lưu các giao dịch của riêng bạn dưới dạng tệp.
 

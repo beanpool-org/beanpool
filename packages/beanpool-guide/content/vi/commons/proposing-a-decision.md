@@ -16,7 +16,7 @@ source-hash: c5e90863bc9ac1f1
 
 ## Đề xuất
 
-- Nhấn **Commons**, sau đó nhấn **Quyết định**, rồi nhấn **+ Đề xuất một quyết định**.
+- Nhấn **Chung**, sau đó nhấn **Quyết định**, rồi nhấn **+ Đề xuất một quyết định**.
 - Chọn đối tượng của quyết định: **Thành viên** hoặc **Quỹ Commons**.
 - **Tiêu đề:** một dòng, chẳng hạn như "Tài trợ 200 đậu cho Thư viện công cụ".
 - **Mô tả & Lý do:** giải thích lý do, với ít nhất 10 ký tự. Hãy diễn đạt rõ ràng. Mọi người sẽ bỏ phiếu dựa trên những gì họ đọc ở đây.

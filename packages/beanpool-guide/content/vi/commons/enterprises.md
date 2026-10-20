@@ -10,7 +10,7 @@ source-hash: dc5682efde441276
 
 Dự án và doanh nghiệp là các nhóm có nắm giữ Đậu. Mỗi nhóm đều có số đậu riêng, các Lời đề nghị và Nhu cầu riêng, cùng hạn mức tín dụng riêng.
 
-Trên cộng đồng toàn cầu không có doanh nghiệp, do đó **Commons** hiển thị một ví dụ từ cộng đồng địa phương, Tiệm bánh Example Valley, được đánh dấu **🏘️ Cộng đồng địa phương**. Các nút của nó, chẳng hạn như **Cam kết đóng góp** và **Tạm dừng**, giải thích lý do tại sao các doanh nghiệp hoạt động trong cộng đồng địa phương, và không làm thay đổi điều gì. Xem "Đậu và cộng đồng toàn cầu".
+Trên cộng đồng toàn cầu không có doanh nghiệp, do đó **Chung** hiển thị một ví dụ từ cộng đồng địa phương, Tiệm bánh Example Valley, được đánh dấu **🏘️ Cộng đồng địa phương**. Các nút của nó, chẳng hạn như **Cam kết đóng góp** và **Tạm dừng**, giải thích lý do tại sao các doanh nghiệp hoạt động trong cộng đồng địa phương, và không làm thay đổi điều gì. Xem "Đậu và cộng đồng toàn cầu".
 
 - Một **dự án** có người phụ trách, mục tiêu tính bằng Đậu và thường có ngày kết thúc: quyên góp 500 Đậu để làm mái che mới, xây dựng nhà lưới trước tháng 11. **Người phụ trách** điều hành dự án; **người cộng tác** hỗ trợ. Khi đạt được mục tiêu, các khoản cam kết đóng góp sẽ được chuyển vào tài khoản của dự án và dự án không nhận thêm nữa. Khi công việc hoàn tất, người phụ trách sẽ tiến hành giải thể. Sau 7 ngày, người phụ trách hoàn tất việc này, và số đậu còn lại sẽ được chuyển về Commons.
 - Một **doanh nghiệp** hoạt động liên tục và giao dịch: một thư viện công cụ, đàn gà lấy trứng, một quầy hàng ở chợ. Các **người quản lý** cùng nhau điều hành và bảo đảm cho doanh nghiệp. Một trong số họ là **người quản lý chính**.
@@ -19,7 +19,7 @@ Một doanh nghiệp có các giới hạn hàng ngày riêng, gấp mười l�
 
 ## Cách tìm kiếm
 
-Nhấn **Commons**, sau đó nhấn **Nhóm**, và chọn **Dự án** hoặc **Doanh nghiệp**. Mỗi mục hiển thị trạng thái, mục đích và số dư của nó. Trên điện thoại, các nhóm bạn quản lý nằm trong mục **Nhóm của bạn**. Nhấn vào một nhóm để mở nhóm đó.
+Nhấn **Chung**, sau đó nhấn **Nhóm**, và chọn **Dự án** hoặc **Doanh nghiệp**. Mỗi mục hiển thị trạng thái, mục đích và số dư của nó. Trên điện thoại, các nhóm bạn quản lý nằm trong mục **Nhóm của bạn**. Nhấn vào một nhóm để mở nhóm đó.
 
 ## Trang doanh nghiệp hiển thị những gì
 
@@ -57,7 +57,7 @@ Trước khi một dự án đạt được mục tiêu, người phụ trách c
 
 ## Khởi tạo dự án hoặc doanh nghiệp
 
-- Trên web, nhấn **Commons**, sau đó nhấn **+ Tạo nhóm**, rồi nhấn **Bắt đầu dự án hoặc dự án cộng đồng →** hoặc **+ Bắt đầu một doanh nghiệp**. Trong ứng dụng điện thoại, nhấn **Commons**, sau đó nhấn **Nhóm**, chọn **Dự án** hoặc **Doanh nghiệp**, rồi nhấn nút tròn **+**.
+- Trên web, nhấn **Chung**, sau đó nhấn **+ Tạo nhóm**, rồi nhấn **Bắt đầu dự án hoặc dự án cộng đồng →** hoặc **+ Bắt đầu một doanh nghiệp**. Trong ứng dụng điện thoại, nhấn **Chung**, sau đó nhấn **Nhóm**, chọn **Dự án** hoặc **Doanh nghiệp**, rồi nhấn nút tròn **+**.
 - Chọn **Dự án** hoặc **Doanh nghiệp**.
 - Đặt cho nó một **Tên** và một **Mục đích**.
 - Đối với dự án, đặt **Mục tiêu gây quỹ** (**Số tiền mục tiêu gây quỹ** trong ứng dụng web) và thời hạn chót nếu bạn muốn.

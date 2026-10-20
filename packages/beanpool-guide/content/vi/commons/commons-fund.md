@@ -8,7 +8,7 @@ source-hash: 8c87826df2ea323a
 
 ## Quỹ Commons là gì
 
-**Commons** là quỹ đậu chung của cộng đồng bạn. Quỹ thuộc về tất cả mọi người.
+**Chung** là quỹ đậu chung của cộng đồng bạn. Quỹ thuộc về tất cả mọi người.
 
 Đậu được chuyển vào quỹ từ:
 
@@ -18,9 +18,9 @@ source-hash: 8c87826df2ea323a
 
 ## Xem quỹ Commons
 
-Nhấn **Commons**. Ở trên cùng, **Quỹ Commons** hiển thị số đậu mà quỹ đang nắm giữ. Trên điện thoại, nhấn vào biểu tượng **ⓘ** bên cạnh tiêu đề Commons. Trong ứng dụng web, mở **Sổ cái**, nhấn **Ví**, sau đó nhấn **Quỹ Commons ⓘ**. Cả hai cách đều mở ra bảng điều khiển với **Cách hoạt động**, **Phí lưu thông** và **Bỏ phiếu**.
+Nhấn **Chung**. Ở trên cùng, **Quỹ Commons** hiển thị số đậu mà quỹ đang nắm giữ. Trên điện thoại, nhấn vào biểu tượng **ⓘ** bên cạnh tiêu đề Commons. Trong ứng dụng web, mở **Sổ cái**, nhấn **Ví**, sau đó nhấn **Quỹ Commons ⓘ**. Cả hai cách đều mở ra bảng điều khiển với **Cách hoạt động**, **Phí lưu thông** và **Bỏ phiếu**.
 
-Các doanh nghiệp, bao gồm cả những doanh nghiệp hoạt động vì Commons, được liệt kê trong **Commons**, dưới mục **Nhóm**. Nhấn vào một doanh nghiệp để xem số dư và từng hạt đậu ra vào. Mọi thành viên đều thấy các số tiền; ai đã trả hoặc được trả, và phần ghi chú, thì chỉ người quản lý của doanh nghiệp đó và thành viên liên quan mới nhìn thấy.
+Các doanh nghiệp, bao gồm cả những doanh nghiệp hoạt động vì Commons, được liệt kê trong **Chung**, dưới mục **Nhóm**. Nhấn vào một doanh nghiệp để xem số dư và từng hạt đậu ra vào. Mọi thành viên đều thấy các số tiền; ai đã trả hoặc được trả, và phần ghi chú, thì chỉ người quản lý của doanh nghiệp đó và thành viên liên quan mới nhìn thấy.
 
 ## Cách chi tiêu
 

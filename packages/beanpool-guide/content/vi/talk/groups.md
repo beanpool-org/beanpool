@@ -21,12 +21,12 @@ Nhấn **Trò chuyện**, sau đó chọn **Nhóm**. Mọi nhóm bạn tham gia 
 - Nhấn vào một nhóm để mở cuộc trò chuyện của nhóm đó. Thao tác này sẽ đánh dấu nhóm là đã đọc.
 - Kéo danh sách xuống để làm mới.
 
-Trên điện thoại, danh sách tương tự nằm trong **Commons**, dưới mục **Nhóm**, với tên **Nhóm của bạn**, không có các số lượng tin nhắn chưa đọc. Nó sẽ mở các cuộc trò chuyện tương tự.
+Trên điện thoại, danh sách tương tự nằm trong **Chung**, dưới mục **Nhóm**, với tên **Nhóm của bạn**, không có các số lượng tin nhắn chưa đọc. Nó sẽ mở các cuộc trò chuyện tương tự.
 
 ## Bắt đầu một nhóm
 
-- Trên điện thoại, trong **Trò chuyện**, dưới mục **Nhóm**, nhấn **Nhóm mới**. Hoặc trong **Commons**, dưới mục **Nhóm**, nhấn nút tròn **+**. Cả hai đều mở cùng một biểu mẫu **Tạo nhóm**. (Trên thẻ phân loại **Dự án** hoặc **Doanh nghiệp**, nút **+** sẽ bắt đầu một dự án hoặc doanh nghiệp thay thế.)
-- Trong ứng dụng web, mở **Commons**, sau đó chọn **Nhóm**, và nhấn **+ Tạo nhóm**. Bạn sẽ ở lại trang **Commons** sau đó. Để mời mọi người, hãy mở nhóm và nhấn **Mời mọi người**. Bạn cũng có thể mở **Trò chuyện**, nhấn **Nhóm**, sau đó chọn **Nhóm mới**: thao tác đó sẽ đưa bạn thẳng vào cuộc trò chuyện của nhóm mới.
+- Trên điện thoại, trong **Trò chuyện**, dưới mục **Nhóm**, nhấn **Nhóm mới**. Hoặc trong **Chung**, dưới mục **Nhóm**, nhấn nút tròn **+**. Cả hai đều mở cùng một biểu mẫu **Tạo nhóm**. (Trên thẻ phân loại **Dự án** hoặc **Doanh nghiệp**, nút **+** sẽ bắt đầu một dự án hoặc doanh nghiệp thay thế.)
+- Trong ứng dụng web, mở **Chung**, sau đó chọn **Nhóm**, và nhấn **+ Tạo nhóm**. Bạn sẽ ở lại trang **Chung** sau đó. Để mời mọi người, hãy mở nhóm và nhấn **Mời mọi người**. Bạn cũng có thể mở **Trò chuyện**, nhấn **Nhóm**, sau đó chọn **Nhóm mới**: thao tác đó sẽ đưa bạn thẳng vào cuộc trò chuyện của nhóm mới.
 - Đặt **Tên nhóm**, tối đa 60 ký tự, và nếu muốn, nhập **Mục đích / Mô tả**, tối đa 300 ký tự: nhóm dùng để làm gì và dành cho ai.
 - Chọn một **Danh mục**: **Nhóm giao lưu**, **Chung**, **Nhóm làm việc** hoặc **Hội nghề**. Trên điện thoại, **Nhóm giao lưu** được chọn sẵn cho bạn. Trong ứng dụng web, **Nhóm làm việc** được chọn sẵn.
 - Chọn một **Chính sách tham gia**: **Mở**, **Yêu cầu tham gia** hoặc **Chỉ theo lời mời**.
@@ -43,11 +43,11 @@ Bạn có thể mời mọi người trên điện thoại và trong ứng dụn
 - Nhấn **Mời mọi người**, tích chọn những người bạn muốn mời, và nhấn nút ở dưới cùng (ví dụ **Mời 2 người**).
 - Hoặc nhấn **Không phải bây giờ** để bỏ qua bước này.
 
-Sau đó, một điều hành viên có thể mời mọi người từ menu **⋮** của cuộc trò chuyện, chọn **Mời mọi người**. Trong ứng dụng web, một điều hành viên mở nhóm và nhấn **Mời mọi người**, tích chọn mọi người và nhấn nút ở dưới cùng theo cách tương tự. Mỗi người bạn mời sẽ thấy nhóm trong **Commons**, dưới mục **Nhóm**, được đánh dấu **ĐÃ MỜI** trong ứng dụng điện thoại (trên điện thoại, trong cộng đồng không có tab **Commons**, mục này nằm dưới **Tìm nhóm** trong **Trò chuyện**). Ứng dụng web chưa đánh dấu lời mời: ở đó, họ mở nhóm và nhấn **Chấp nhận lời mời**. Khi họ tham gia, cuộc trò chuyện sẽ thông báo điều đó.
+Sau đó, một điều hành viên có thể mời mọi người từ menu **⋮** của cuộc trò chuyện, chọn **Mời mọi người**. Trong ứng dụng web, một điều hành viên mở nhóm và nhấn **Mời mọi người**, tích chọn mọi người và nhấn nút ở dưới cùng theo cách tương tự. Mỗi người bạn mời sẽ thấy nhóm trong **Chung**, dưới mục **Nhóm**, được đánh dấu **ĐÃ MỜI** trong ứng dụng điện thoại (trên điện thoại, trong cộng đồng không có tab **Chung**, mục này nằm dưới **Tìm nhóm** trong **Trò chuyện**). Ứng dụng web chưa đánh dấu lời mời: ở đó, họ mở nhóm và nhấn **Chấp nhận lời mời**. Khi họ tham gia, cuộc trò chuyện sẽ thông báo điều đó.
 
 ## Cuộc trò chuyện của nhóm
 
-- Trên điện thoại, nhấn vào tên nhóm ở trên cùng của cuộc trò chuyện để xem nhóm: các thành viên, **Rời nhóm**, và đối với điều hành viên là **Công cụ cho điều hành viên**. Trong ứng dụng web, nhấn vào tên nhóm ở trên cùng của cuộc trò chuyện, hoặc mở nhóm từ **Commons**, dưới mục **Nhóm**.
+- Trên điện thoại, nhấn vào tên nhóm ở trên cùng của cuộc trò chuyện để xem nhóm: các thành viên, **Rời nhóm**, và đối với điều hành viên là **Công cụ cho điều hành viên**. Trong ứng dụng web, nhấn vào tên nhóm ở trên cùng của cuộc trò chuyện, hoặc mở nhóm từ **Chung**, dưới mục **Nhóm**.
 - Menu **⋮** có các mục **Mời mọi người** (cho điều hành viên), **Tắt thông báo** (hoặc **Bật thông báo**), **Tìm kiếm trong đoạn chat này**, **Xác nhận điện thoại mới** và **Thông tin nhóm**. Việc tìm kiếm chạy trên điện thoại của bạn, không phải trên máy chủ cộng đồng.
 - Việc tham gia, rời đi và thay đổi vai trò hiển thị trong cuộc trò chuyện dưới dạng các dòng chữ nhỏ màu xám.
 - Viết **@** cùng tên của ai đó để thông báo cho họ. Xem "Lượt nhắc".
@@ -99,7 +99,7 @@ Khi kết thúc, điện thoại của bạn cho biết điều gì đã xảy r
 
 ## Tham gia một nhóm
 
-Trên điện thoại, trong **Commons**, dưới mục **Nhóm**, phần **Các nhóm bạn có thể tham gia** liệt kê các nhóm mà bạn chưa tham gia. Lọc các nhóm theo loại bằng các nút phía trên danh sách. Trong ứng dụng web, **Nhóm** liệt kê mọi nhóm bạn có thể thấy, các nhóm của bạn được đánh dấu kèm vai trò của bạn; **Nhóm của tôi** chỉ hiển thị các nhóm của bạn. Mỗi nhóm hiển thị phần đầu của phần mô tả. Mở một nhóm để đọc toàn bộ mô tả, sau đó:
+Trên điện thoại, trong **Chung**, dưới mục **Nhóm**, phần **Các nhóm bạn có thể tham gia** liệt kê các nhóm mà bạn chưa tham gia. Lọc các nhóm theo loại bằng các nút phía trên danh sách. Trong ứng dụng web, **Nhóm** liệt kê mọi nhóm bạn có thể thấy, các nhóm của bạn được đánh dấu kèm vai trò của bạn; **Nhóm của tôi** chỉ hiển thị các nhóm của bạn. Mỗi nhóm hiển thị phần đầu của phần mô tả. Mở một nhóm để đọc toàn bộ mô tả, sau đó:
 
 - **Tham gia nhóm** nếu nhóm mở cho bất kỳ ai;
 - **Yêu cầu tham gia** nếu điều hành viên là người phê duyệt thành viên. Bạn sẽ thấy **Yêu cầu đang chờ phê duyệt** cho đến khi họ duyệt.
@@ -108,7 +108,7 @@ Trên điện thoại, một nhóm bạn đã yêu cầu tham gia sẽ không n�
 
 Một nhóm **Chỉ theo lời mời** sẽ bị ẩn khỏi tất cả những ai không ở trong nhóm hoặc không được mời vào nhóm.
 
-Trên điện thoại, một cộng đồng địa phương không có Đậu sẽ không có tab **Commons**. Ở đó, hãy nhấn **Trò chuyện**, sau đó chọn **Nhóm**, rồi chọn **Tìm nhóm**: thao tác này mở cùng danh sách đó. Trước khi bạn ở trong bất kỳ nhóm nào, liên kết sẽ là **Tìm một nhóm để tham gia**. Cộng đồng toàn cầu có tab **Commons**: các nhóm của nó nằm ở đó, bên dưới một ví dụ từ một cộng đồng địa phương (xem "Đậu và cộng đồng toàn cầu").
+Trên điện thoại, một cộng đồng địa phương không có Đậu sẽ không có tab **Chung**. Ở đó, hãy nhấn **Trò chuyện**, sau đó chọn **Nhóm**, rồi chọn **Tìm nhóm**: thao tác này mở cùng danh sách đó. Trước khi bạn ở trong bất kỳ nhóm nào, liên kết sẽ là **Tìm một nhóm để tham gia**. Cộng đồng toàn cầu có tab **Chung**: các nhóm của nó nằm ở đó, bên dưới một ví dụ từ một cộng đồng địa phương (xem "Đậu và cộng đồng toàn cầu").
 
 Nếu một điều hành viên đã gỡ bạn khỏi một nhóm, bạn không thể tự mình tham gia lại nhóm đó.
 
@@ -116,18 +116,18 @@ Trong khi tài khoản của bạn bị đình chỉ, bạn không thể bắt �
 
 ## Tham gia theo lời mời
 
-Một nhóm bạn được mời tham gia hiển thị trong **Commons**, dưới mục **Nhóm**, được đánh dấu **ĐÃ MỜI** trong ứng dụng điện thoại. Trên điện thoại, trong cộng đồng không có tab **Commons**, mục này nằm dưới **Tìm nhóm** trong **Trò chuyện**. Nhấn vào nhóm để xem lời mời: ai đã mời bạn, nhóm là gì, ai ở trong nhóm (đối với nhóm chỉ theo lời mời, có bao nhiêu người), và ai có thể đọc cuộc trò chuyện của nhóm. Trên điện thoại:
+Một nhóm bạn được mời tham gia hiển thị trong **Chung**, dưới mục **Nhóm**, được đánh dấu **ĐÃ MỜI** trong ứng dụng điện thoại. Trên điện thoại, trong cộng đồng không có tab **Chung**, mục này nằm dưới **Tìm nhóm** trong **Trò chuyện**. Nhấn vào nhóm để xem lời mời: ai đã mời bạn, nhóm là gì, ai ở trong nhóm (đối với nhóm chỉ theo lời mời, có bao nhiêu người), và ai có thể đọc cuộc trò chuyện của nhóm. Trên điện thoại:
 
 - Nhấn **Tham gia nhóm**. Bạn sẽ vào thẳng cuộc trò chuyện của nhóm.
 - Nhấn **Không phải bây giờ** để quyết định sau. Lời mời vẫn còn đó.
 - Nếu thông báo ghi **Lời mời này không còn mở nữa**, lời mời đã bị thu hồi. Hãy nhờ người đã mời bạn gửi lại lời mời.
 - Nếu thông báo ghi **Không thể mở nhóm này**, điện thoại của bạn không thể kết nối tới máy chủ cộng đồng. Nhấn **Thử lại**.
 
-Ứng dụng web chưa đánh dấu lời mời. Hãy mở nhóm trong **Commons**, dưới mục **Nhóm**, và nhấn **Chấp nhận lời mời**. Bạn tham gia nhóm và ở lại trang của nhóm.
+Ứng dụng web chưa đánh dấu lời mời. Hãy mở nhóm trong **Chung**, dưới mục **Nhóm**, và nhấn **Chấp nhận lời mời**. Bạn tham gia nhóm và ở lại trang của nhóm.
 
 ## Đăng bài vào một nhóm
 
-Trên web, hãy mở nhóm trong **Commons**, dưới mục **Nhóm**, và nhấn **Đăng vào** cùng tên của nhóm. Ứng dụng điện thoại hiện chưa thể đăng bài vào một nhóm bạn đã tham gia. Chỉ các thành viên của nhóm mới thấy bài đăng. Bài đăng hiển thị trên Chợ kèm biểu tượng ổ khóa và tên của nhóm.
+Trên web, hãy mở nhóm trong **Chung**, dưới mục **Nhóm**, và nhấn **Đăng vào** cùng tên của nhóm. Ứng dụng điện thoại hiện chưa thể đăng bài vào một nhóm bạn đã tham gia. Chỉ các thành viên của nhóm mới thấy bài đăng. Bài đăng hiển thị trên Chợ kèm biểu tượng ổ khóa và tên của nhóm.
 
 ## Điều hành viên và trưởng ban điều hành
 
@@ -169,7 +169,7 @@ Toàn bộ quy tắc có trong "Quy tắc và cách quyết định vận hành"
 
 ## Bỏ phiếu trong nhóm
 
-Các thành viên của nhóm có thể cùng nhau bỏ phiếu về các vấn đề riêng của nhóm. Mở nhóm (trên điện thoại, nhấn vào tên nhóm ở trên cùng của cuộc trò chuyện; trên web, mở nhóm trong **Commons**, dưới mục **Nhóm**): các cuộc bỏ phiếu của nhóm nằm dưới mục **Quyết định**, ở phía trên của trang. Chỉ những người trong nhóm mới thấy chúng.
+Các thành viên của nhóm có thể cùng nhau bỏ phiếu về các vấn đề riêng của nhóm. Mở nhóm (trên điện thoại, nhấn vào tên nhóm ở trên cùng của cuộc trò chuyện; trên web, mở nhóm trong **Chung**, dưới mục **Nhóm**): các cuộc bỏ phiếu của nhóm nằm dưới mục **Quyết định**, ở phía trên của trang. Chỉ những người trong nhóm mới thấy chúng.
 
 Trên cộng đồng toàn cầu, một nhóm không có các cuộc bỏ phiếu riêng và không có nút **Đề xuất một cuộc biểu quyết**; chỉ có cuộc bỏ phiếu khi trưởng ban im lặng là hoạt động ở đó.
 

@@ -9,7 +9,7 @@ source-hash: 5a5a0ba505806e0a
 
 ## Nhịp đập là gì
 
-Mở Nhịp đập từ thẻ **Nhịp đập** trên **Trang chủ**: nhấn vào một bài đăng, hoặc nhấn **Xem tất cả**. Nếu thẻ không có trên Trang chủ của bạn, hãy đưa nó trở lại bằng **Thêm thẻ** trên điện thoại, hoặc **Chỉnh sửa trang chủ** trong ứng dụng web. Trên điện thoại, bạn cũng có thể mở mục này từ **Cài đặt**, dưới mục **The Pulse**.
+Mở Nhịp đập từ thẻ **Nhịp đập** trên **Trang chủ**: nhấn vào một bài đăng, hoặc nhấn **Xem tất cả**. Nếu thẻ không có trên Trang chủ của bạn, hãy đưa nó trở lại bằng **Thêm thẻ** trên điện thoại, hoặc **Chỉnh sửa trang chủ** trong ứng dụng web. Trên điện thoại, bạn cũng có thể mở mục này từ **Cài đặt**, dưới mục **Nhịp đập**.
 
 Nhịp đập tập hợp những gì các thành viên trong cộng đồng của bạn đăng trên các trang web khác: video, âm nhạc, blog, ảnh. Đây là một cách để tìm hiểu những gì hàng xóm của bạn sáng tạo và thực hiện.
 

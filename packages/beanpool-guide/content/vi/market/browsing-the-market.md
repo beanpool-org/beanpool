@@ -56,7 +56,7 @@ Nút bên cạnh **Giao dịch của tôi** thay đổi cách hiển thị danh 
 
 - một bức ảnh, hoặc hình ảnh của danh mục;
 - **ĐỀ NGHỊ** hoặc **CẦN**;
-- giá tính bằng đậu, kèm theo **/Hr** nếu tính giá theo giờ;
+- giá tính bằng đậu, kèm theo **/giờ** nếu tính giá theo giờ;
 - **Định kỳ** nếu bài đăng vẫn mở sau mỗi giao dịch;
 - **💸 KÈM TIỀN MẶT** nếu người đăng cũng cần thêm một ít tiền mặt, để trả tiền xăng hoặc nguyên vật liệu;
 - biểu tượng ổ khóa và tên nhóm nếu chỉ nhóm đó mới có thể nhìn thấy;
@@ -71,7 +71,7 @@ Nhấn vào bài đăng để mở bài đó.
 - **Báo cáo bài đăng** nếu bài đăng là lừa đảo, xúc phạm, gây hiểu lầm hoặc gây nguy hiểm cho trẻ em (**An toàn cho trẻ em**).
 - **Chặn người dùng** để ẩn các bài đăng và đoạn chat của họ trên điện thoại của bạn. Thao tác này cũng thông báo cho quản trị viên của bạn. Xem "Chặn một người".
 
-Trong ứng dụng web, các nút trên bài đăng là **💬 Message** và **🚩 Báo cáo**. Chặn một người từ hồ sơ của họ.
+Trong ứng dụng web, các nút trên bài đăng là **💬 Nhắn tin** và **🚩 Báo cáo**. Chặn một người từ hồ sơ của họ.
 
 Trên cộng đồng toàn cầu, một bài đăng không có giá tính bằng Đậu: nó nêu những gì người đăng mong muốn nhận lại. Tại vị trí thường hiển thị giá, bài đăng sẽ ghi "🏘️ Trong cộng đồng địa phương, đây là giá tính bằng đậu ›". Thay vì yêu cầu giao dịch, bài đăng hiển thị **Yêu cầu · Đậu được giữ an toàn 🏘️**: hãy nhấn vào đó để xem cách một giao dịch vận hành trong cộng đồng địa phương. Việc nhắn tin cho người đó vẫn hoạt động như ở mọi nơi. Xem "Đậu và cộng đồng toàn cầu".
 

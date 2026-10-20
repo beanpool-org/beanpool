@@ -26,7 +26,7 @@ Mỗi trang web hoạt động hơi khác nhau một chút. Màn hình sẽ cho 
 ## Tài khoản đã xác minh
 
 - Khi bạn nhấn **Connect TikTok** hoặc **Connect Instagram**, máy chủ cộng đồng của bạn sẽ hỏi Instagram hoặc TikTok xem bạn đã đăng nhập vào tài khoản nào. Kênh chỉ được đánh dấu là đã xác minh khi đó chính là tài khoản trên kênh.
-- Đã đăng nhập vào một tài khoản khác? Màn hình sẽ thông báo điều đó. Hãy đăng nhập vào đúng tài khoản và nhấn lại vào cùng nút **Connect** đó.
+- Đã đăng nhập vào một tài khoản khác? Màn hình sẽ thông báo điều đó. Hãy đăng nhập vào đúng tài khoản và nhấn lại vào cùng nút **Kết nối** đó.
 - Hãy thêm kênh dưới dạng **@handle** của bạn để có thể được kiểm tra. Một liên kết rút gọn thì không thể.
 - Kênh Facebook không bao giờ được đánh dấu là đã xác minh.
 - Nếu một kênh thông báo **Kết nối lại để khôi phục huy hiệu đã xác minh của bạn**, hãy nhấn **Reconnect TikTok** hoặc **Reconnect Instagram**.

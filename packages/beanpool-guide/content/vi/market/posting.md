@@ -25,7 +25,7 @@ Trong một cộng đồng có sử dụng Đậu, bạn cần có tên và ản
 - **Mô tả:** cái gì, khi nào, ở đâu, bất cứ điều gì mọi người nên biết.
 - **Ảnh:** ít nhất một ảnh, tối đa năm ảnh. Nhấn **Máy ảnh** hoặc **Bộ sưu tập**. Ở nơi không có Đậu, ảnh cho Nhu cầu là tùy chọn.
 - **Vị trí:** nhấn **Vị trí của tôi**, hoặc **Thả ghim** và nhấn lên bản đồ, sau đó nhấn **Xác nhận ghim**. Mọi thành viên trong cộng đồng của bạn đều có thể thấy ghim, vì vậy hãy thả ghim gần chỗ bạn thay vì ngay cửa nhà nếu bạn muốn. Xem "Vị trí ghim của bạn".
-- **Giá:** một số lượng đậu. Nhấn nút đơn vị để chọn **Tổng cộng** hoặc **/ Hr**. Nhấn **MIỄN PHÍ** để trao tặng miễn phí. Nút này cũng cung cấp tùy chọn **/ Dy**, **/ Wk** và **/ Mo**, nhưng bài đăng mới chưa lưu các tùy chọn đó: nó được lưu dưới dạng tổng giá. Hãy chọn **Tổng cộng** và nêu rõ khoảng thời gian trong phần mô tả.
+- **Giá:** một số lượng đậu. Nhấn nút đơn vị để chọn **Tổng cộng** hoặc **/giờ**. Nhấn **MIỄN PHÍ** để trao tặng miễn phí. Nút này cũng cung cấp tùy chọn **/ngày**, **/tuần** và **/tháng**, nhưng bài đăng mới chưa lưu các tùy chọn đó: nó được lưu dưới dạng tổng giá. Hãy chọn **Tổng cộng** và nêu rõ khoảng thời gian trong phần mô tả.
 - Nhấn **Đăng lời đề nghị** hoặc **Đăng nhu cầu**.
 
 Cho đến khi mọi thông tin cần thiết được điền đầy đủ, nút sẽ cho bạn biết còn thiếu những gì, chẳng hạn như **Thêm ảnh** hoặc **💰 Đặt giá**.
@@ -61,7 +61,7 @@ Trên điện thoại, ứng dụng lưu bản nháp khi bạn nhập. Nếu b�
 
 ## Chỉ đăng cho một nhóm
 
-Mở **Commons**, sau đó nhấn **Nhóm**, rồi chọn nhóm của bạn, và nhấn **Đăng vào** cùng tên nhóm. Chỉ nhóm đó mới nhìn thấy bài đăng. Trên điện thoại, biểu mẫu ngắn hơn này không có ảnh và không có vị trí. Trong ứng dụng web, nó mở biểu mẫu thông thường trên Bản đồ, được thiết lập cho nhóm đó.
+Mở **Chung**, sau đó nhấn **Nhóm**, rồi chọn nhóm của bạn, và nhấn **Đăng vào** cùng tên nhóm. Chỉ nhóm đó mới nhìn thấy bài đăng. Trên điện thoại, biểu mẫu ngắn hơn này không có ảnh và không có vị trí. Trong ứng dụng web, nó mở biểu mẫu thông thường trên Bản đồ, được thiết lập cho nhóm đó.
 
 ## Thay đổi hoặc xóa bài đăng
 

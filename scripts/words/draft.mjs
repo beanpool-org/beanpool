@@ -380,6 +380,14 @@ export async function writeBriefs({ root = ROOT, dir, langs = null, maxKeys = nu
         return 2;
     }
 
+    if (langs) {
+        for (const l of langs) {
+            if (!/^[a-z]{2,3}(-[A-Za-z0-9]+)?$/.test(l)) {
+                throw new Error(`Invalid language code for brief generation: "${l}"`);
+            }
+        }
+    }
+
     const outDir = path.resolve(root, dir);
     fs.mkdirSync(outDir, { recursive: true });
 
@@ -515,7 +523,13 @@ export async function writeBriefs({ root = ROOT, dir, langs = null, maxKeys = nu
         briefLines.push('');
 
         const briefContent = briefLines.join('\n');
+        if (!/^[a-z]{2,3}(-[A-Za-z0-9]+)?$/.test(lang)) {
+            throw new Error(`Invalid language code for brief generation: "${lang}"`);
+        }
         const briefPath = path.join(outDir, `brief-${lang}.md`);
+        if (!path.resolve(briefPath).startsWith(path.resolve(outDir) + path.sep)) {
+            throw new Error(`Path traversal detected for brief: "${briefPath}"`);
+        }
         fs.writeFileSync(briefPath, briefContent);
         written.push(briefPath);
     }

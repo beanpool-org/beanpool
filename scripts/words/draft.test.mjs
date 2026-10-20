@@ -412,3 +412,17 @@ test('draftCli with empty --langs falls back to scanning all catalog languages i
         console.log = origLog;
     }
 });
+
+test('writeBriefs rejects invalid language codes with path traversal', async () => {
+    const tmp = makeTempDir();
+    try {
+        await assert.rejects(
+            async () => {
+                await writeBriefs({ root: tmp, dir: path.join(tmp, 'briefs'), langs: ['../../exploit'] });
+            },
+            /Invalid language code/,
+        );
+    } finally {
+        fs.rmSync(tmp, { recursive: true, force: true });
+    }
+});

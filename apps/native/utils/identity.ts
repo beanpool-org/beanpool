@@ -16,6 +16,7 @@ import {
 import { Platform } from 'react-native';
 import { communitySwitched } from './community-switch';
 import { namesPinSecretName } from './names-list';
+import { TOOL_SETTINGS_PREFIX } from '../tools/schema';
 
 const isWeb = Platform.OS === 'web';
 const onIPhone = Platform.OS === 'ios';
@@ -553,7 +554,9 @@ export async function wipeIdentityScopedStorage(storage: WipeableStorage, secret
     }
     // Home's copies hold the account's own Beans, deals and who wrote to it (utils/home-store.ts).
     const accountKeys = allKeys.filter((k: string) =>
-        k.startsWith('pillar_sync_') || k.startsWith('pillar:') || k.startsWith('beanpool:names-') || k.startsWith('bp_offline_invites_') || k.startsWith(HOME_STORE_PREFIX));
+        k.startsWith('pillar_sync_') || k.startsWith('pillar:') || k.startsWith('beanpool:names-') || k.startsWith('bp_offline_invites_') || k.startsWith(HOME_STORE_PREFIX)
+        // Each tool's settings (tools/store.ts): which reminders are on, which door was taken.
+        || k.startsWith(TOOL_SETTINGS_PREFIX));
     if (accountKeys.length > 0) {
         await storage.multiRemove(accountKeys);
     }
@@ -592,5 +595,13 @@ export async function wipeIdentity(): Promise<void> {
         }
     } catch (e) {
         console.error('Failed to fully wipe native identity state', e);
+    }
+    // Every tool's documents, photos, reminders and settings (tools/store.ts): no row and no file is left, and no
+    // reminder fires for an account that has gone. On its own, so nothing above failing keeps any of it.
+    try {
+        const { wipeToolDataOnThisPhone } = require('../tools/store');
+        await wipeToolDataOnThisPhone();
+    } catch (e) {
+        console.error('Failed to wipe the tools\' data on this phone', e);
     }
 }

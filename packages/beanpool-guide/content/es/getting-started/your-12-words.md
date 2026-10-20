@@ -37,7 +37,7 @@ El kit de recuperación es una página imprimible: tus 12 palabras en orden, el 
 
 Abre **Ajustes** con el botón de controles deslizantes en la parte superior de la pantalla. Luego:
 
-- Bajo **Cuenta e identidad**, toca **Ver frase de recuperación**. Escribe **CONFIRMAR**, toca **Mostrar frase de recuperación** y pasa la comprobación de bloqueo de pantalla de tu teléfono.
+- Bajo **Cuenta e identidad**, toca **Ver frase de recuperación**. Escribe **CONFIRM**, toca **Mostrar frase de recuperación** y pasa la comprobación de bloqueo de pantalla de tu teléfono.
 - O toca **Protección de la cuenta**, luego **Mostrar mis 12 palabras de recuperación** y pasa la comprobación de bloqueo de pantalla de tu teléfono. Toca **Ocultar** cuando hayas terminado.
 
 De cualquier forma, las palabras también se ocultan cuando sales de esa pantalla o sales de la app durante 15 segundos o más, y el teléfono vuelve a preguntar la próxima vez. Una comprobación de pantalla de bloqueo que tarde más de dos minutos no muestra nada: toca nuevamente.

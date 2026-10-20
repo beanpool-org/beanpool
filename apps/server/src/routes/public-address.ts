@@ -453,10 +453,15 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
         // Moving the community's live own address to another IP, or another domain, changes where newcomers and the directory
         // are sent: the fresh proof, as the claim route asks over a live name (design case 18, B3; S2 review 4305409734).
         if (replacesLiveOwnAddress(given) && !(await requireFreshProof(ctx, b.code, 'replace this community\'s live address'))) return;
-        const got = storeOwnAddress(given, `Settings (${(ctx.state as any)?.actor || 'the admin password'})`);
-        if (!got.ok) { ctx.status = 400; ctx.body = { error: got.error }; return; }
-        ctx.set('Cache-Control', 'no-store');
-        ctx.body = { success: true, address: got.host, kind: got.kind, communityAddress: got.communityAddress, addresses: publishedAddresses(), primaryAddress: primaryAddress() };
+        try {
+            const got = storeOwnAddress(given, `Settings (${(ctx.state as any)?.actor || 'the admin password'})`);
+            if (!got.ok) { ctx.status = 400; ctx.body = { error: got.error }; return; }
+            ctx.set('Cache-Control', 'no-store');
+            ctx.body = { success: true, address: got.host, kind: got.kind, communityAddress: got.communityAddress, addresses: publishedAddresses(), primaryAddress: primaryAddress() };
+        } catch (e: any) {
+            ctx.status = 400;
+            ctx.body = { error: e?.message || 'Failed to set own address' };
+        }
     });
 
     // This server's certificates, per identifier (services/acme/status.ts), for the card "Your own address". Owner-only, as

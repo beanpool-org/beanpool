@@ -154,7 +154,10 @@ function requestedNeedWords(unit: DealQuantityUnit | null, hours: number, credit
             { credits, net }
         );
     }
-    return t('You have requested to earn {credits} credits ({hours} hours) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.', { credits, hours, net });
+    if (unit === 'hour') {
+        return t('You have requested to earn {credits} credits ({hours} hours) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.', { credits, hours, net });
+    }
+    return t('You have requested to earn {credits} credits ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.', { credits, net });
 }
 
 /** Lines kept as word() elsewhere (utils/market-global.ts, core), shown here in the member's language. */

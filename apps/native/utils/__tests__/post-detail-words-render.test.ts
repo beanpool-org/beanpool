@@ -329,6 +329,16 @@ describe("a listing's page in the pseudo-locale: every word on it came through t
         expect(host.textContent).not.toContain('estimated');
         expect(bypassing(), 'fixed non-loan requests').toEqual([]);
 
+        // Fixed non-loan need commitment: no hours in commitment sentence
+        act(() => root.unmount());
+        root = createRoot(host);
+        const OTHER_FIXED_NEED = { ...NEED, id: 'p-other-fixed-need', author_pubkey: KOFI.pubkey, author_callsign: KOFI.callsign, price_type: 'fixed' };
+        const MY_FIXED_NEED_REQUEST = [{ id: 'tx-req-fixed', post_id: 'p-other-fixed-need', status: 'requested', buyer_pubkey: KOFI.pubkey, seller_pubkey: ME.publicKey, seller_callsign: ME.callsign, credits: 20, hours: 2 }];
+        await open(OTHER_FIXED_NEED, 'xx', { all: (sql) => (sql.includes("status='requested'") ? MY_FIXED_NEED_REQUEST : []) });
+        expect(host.textContent).toContain(pseudoLocalise('Deal Established'));
+        expect(host.textContent).not.toContain(pseudoLocalise('{hours} hours').replace('{hours}', '2'));
+        expect(bypassing(), 'fixed need commitment').toEqual([]);
+
         // In English: words read as expected
         act(() => root.unmount());
         root = createRoot(host);
@@ -349,6 +359,13 @@ describe("a listing's page in the pseudo-locale: every word on it came through t
         root = createRoot(host);
         await open(WEEKLY_LENDABLE_OFFER, 'en', { all: (sql) => (sql.includes("status='requested'") ? WEEKLY_LOAN_REQUESTS : []) });
         expect(host.textContent).toContain('for 2 weeks');
+
+        act(() => root.unmount());
+        root = createRoot(host);
+        await open(OTHER_FIXED_NEED, 'en', { all: (sql) => (sql.includes("status='requested'") ? MY_FIXED_NEED_REQUEST : []) });
+        expect(host.textContent).toContain('Deal Established');
+        expect(host.textContent).toContain('You have requested to earn 20 credits (19.70 net after 1.5% transaction fee)');
+        expect(host.textContent).not.toContain('hours');
     });
 
     it('a deal held in trust: the one who pays, releasing the credits by the hour', async () => {

@@ -71,7 +71,7 @@ Se alguém iniciar a recuperação da sua conta, as Configurações exibem **Alg
 
 Restaurar uma conta diferente substitui a que está neste celular, quer você restaure com suas 12 palavras ou com uma conta de login. O app pergunta primeiro, em **Substituir a conta deste celular?** (com uma conta de login, depois que você entrar). Nada é alterado até que você digite **WIPE**, toque em **Substituir conta** e passe pela verificação da tela de bloqueio do seu celular. Toque em **Manter**, depois no nome da conta, **voltar** para deixar tudo como estava.
 
-Certifique-se de que você tem as 12 palavras da conta que está substituindo. Se este celular as possuir, essa tela as exibirá quando você tocar em **Mostrar 12 palavras** (do nome da conta) e passar pela verificação da tela de bloqueio do celular. Se este celular não tiver as 12 palavras dessa conta (as Configurações informam isso), sem uma conta de login vinculada você não conseguirá recuperá-la.
+Certifique-se de que você tem as 12 palavras da conta que está substituindo. Se este celular as possuir, essa tela as exibirá quando você tocar em **Mostrar as 12 palavras de (nome da conta)** e passar pela verificação da tela de bloqueio do celular. Se este celular não tiver as 12 palavras dessa conta (as Configurações informam isso), sem uma conta de login vinculada você não conseguirá recuperá-la.
 
 ## Se perdeu o celular e as 12 palavras
 

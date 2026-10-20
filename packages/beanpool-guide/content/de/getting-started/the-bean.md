@@ -17,9 +17,9 @@ In der Web-App befindet er sich an derselben Stelle: **Einstellungen**, dann **H
 
 ## Was darin enthalten ist
 
-- **Deine Community:** Ihr Name (ihre Adresse in der Web-App) und ob ihr Server derzeit erreichbar ist. Auf dem Smartphone darunter **Deine Communitys**: Tippe auf eine, um zu ihr zu wechseln, oder tippe auf **Community hinzufügen**. Die **Globale Gemeinschaft** ist immer eine der Zeilen, mit einer zweiten Zeile, die angibt, ob du Mitglied bist, beitreten kannst oder warum sie gerade nicht genutzt werden kann. Siehe „Mehr als eine Community“.
+- **Deine Community:** Ihr Name (ihre Adresse in der Web-App) und ob ihr Server derzeit erreichbar ist. Auf dem Smartphone darunter **Deine Communitys**: Tippe auf eine, um zu ihr zu wechseln, oder tippe auf **Community hinzufügen**. Die **Globale Community** ist immer eine der Zeilen, mit einer zweiten Zeile, die angibt, ob du Mitglied bist, beitreten kannst oder warum sie gerade nicht genutzt werden kann. Siehe „Mehr als eine Community“.
 - **Leitfäden:** Wie BeanPool funktioniert, die Regeln, wie Entscheidungen getroffen werden und häufige Fragen.
-- **So nutzt du die App:** Eine kurze Seite für jede Aufgabe, gegliedert wie die App selbst: Erste Schritte, Markt, Karte, Chat, Pulse, Gemeingut, Buch sowie Einstellungen und Sicherheit.
+- **Bedienung der App:** Eine kurze Seite für jede Aufgabe, gegliedert wie die App selbst: Erste Schritte, Markt, Karte, Chat, Pulse, Gemeingut, Buch sowie Einstellungen und Sicherheit.
 - **Das BeanPool-Projekt:** Was neu in dieser Version ist, und ein Link zur Website beanpool.org (auf dem Smartphone mit einer **Teilen**-Schaltfläche, um ihn an Freunde zu senden).
 
 ## Suchen
@@ -37,4 +37,4 @@ Derselbe Leitfaden ist auf der Website unter beanpool.org/guide verfügbar.
 
 ## Videos
 
-Einige Seiten zeigen möglicherweise **Ansehen:** und den Namen eines Videos. Dieser Link erscheint nur, wenn BeanPool ein Video für diese Seite erstellt hat und deine Community es im Pulse unter **Lernen** (**So funktioniert es** in der Web-App) bereithält. Videos, die Mitglieder zu „Lernen“ hinzufügen, erscheinen niemals auf einer Leitfadenseite. Jede Seite ist auch ohne das Video vollständig.
+Einige Seiten zeigen möglicherweise **Ansehen:** und den Namen eines Videos. Dieser Link erscheint nur, wenn BeanPool ein Video für diese Seite erstellt hat und deine Community es im Pulse unter **Lernen** (**So funktioniert's** in der Web-App) bereithält. Videos, die Mitglieder zu „Lernen“ hinzufügen, erscheinen niemals auf einer Leitfadenseite. Jede Seite ist auch ohne das Video vollständig.

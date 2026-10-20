@@ -42,7 +42,7 @@ Ekranın üst kısmındaki kaydırıcı düğmesiyle **Ayarlar**'ı açın. Ard�
 
 Her iki durumda da o ekrandan ayrıldığınızda veya uygulamadan 15 saniye ya da daha uzun süre ayrıldığınızda kelimeler gizlenir ve telefon bir sonraki sefer tekrar sorar. İki dakikadan uzun süren bir kilit ekranı kontrolü hiçbir şey göstermez: tekrar dokunun.
 
-Web uygulamasında, **Hesap ve Kimlik** altındaki **Kurtarma İfadesini Görüntüle** onları doğrudan gösterir.
+Web uygulamasında, **Kurtarma İfadesini Görüntüle** altındaki **Kurtarma İfadesini Görüntüle** onları doğrudan gösterir.
 
 Bir oturum açma hesabıyla geri yüklenen bir telefon, 12 kelimenizi yalnızca o oturum açma hesabı, güncel bir uygulamada bu kelimelere sahip bir telefondan bağlanmışsa geri alır. Aksi takdirde telefonun bunlara dair bir kopyası olmaz: bir oturum açma hesabından yeniden oluşturulamazlar. **Kurtarma İfadesini Görüntüle** hâlâ oradadır ve **Bu telefonda henüz bir kopya yok** der. O telefonda bağlantılı bir oturum açma hesabı geri dönme yolunuzdur, bu nedenle **Hesap Koruması** altında bir tanesini bağlı tutun.
 
@@ -66,7 +66,7 @@ Uygulama **Yedek** adımında bunu söyler. Katıldıktan sonra telefonda ve web
 - **12 kelimemi göster**, onları tekrar görebileceğiniz **Hesap Koruması**'nı açar.
 - **Hesap Koruması**'nda, **12 kelimem hâlâ duruyor** kartı temelli olarak kapatır. **Oturum açma yöntemi ekle** orada kalır.
 
-Web uygulamasında kart **Tek bir geri dönüş yolu** başlığını taşır ve **12 kelimemi gör** ile **Oturum açma yöntemi ekle** seçeneklerini içerir. **✕** onu kapatır: gönderilerinizden biri yayında kaldıktan sonra bir kez ve ilk haftanız bittiğinde bir kez tekrar gelir. **Ana Sayfa** kartında **12 kelimemi gör**'e dokunmak onları gösterir ve kart artık orada tekrar görünmez. Bir oturum açma yöntemi ekleyene kadar **Ayarlar**'ın en üstünde kalır.
+Web uygulamasında kart **Tek bir geri dönüş yolu** başlığını taşır ve **12 kelimemi gör** ile **Oturum açma yöntemi ekle** seçeneklerini içerir. **✕** onu kapatır: gönderilerinizden biri yayında kaldıktan sonra bir kez ve ilk haftanız bittiğinde bir kez tekrar gelir. **12 kelimemi gör** kartında **Ana Sayfa**'e dokunmak onları gösterir ve kart artık orada tekrar görünmez. Bir oturum açma yöntemi ekleyene kadar **Ayarlar**'ın en üstünde kalır.
 
 12 kelimeyle oluşturulan bir hesap ilk haftasında bir girişle oluşturulan hesaba göre daha yavaş başlar. Sınırları ve nedenleri için "Sorun bildirme" bölümüne bakın.
 
@@ -74,7 +74,7 @@ Web uygulamasında kart **Tek bir geri dönüş yolu** başlığını taşır ve
 
 Yalnızca katıldığınız telefondan değil, hesabınızda olduğunuz herhangi bir telefondan veya tarayıcıdan daha sonra bir oturum açma yöntemi ekleyebilirsiniz. Hesabınızı 12 kelimenizle geri yüklediğiniz bir telefonda, uygulamada küresel topluluğu açın: topluluk hesabınızın yalnızca 12 kelimesi olduğunu söyler ve kart ile **Oturum açma yöntemi ekle** görünür (biraz zaman alabilir). Hesabınız askıya alınmışken veya topluluk hesabınızı kapatmışsa ekleyemezsiniz (uygulama bunu belirtir ve hiçbir şey değişmez). İkinci bir geri dönüş yolu haline gelir ve 12 kelimelik sınırları hemen kaldırır.
 
-BeanPool'un anahtar kasası hesabınızın bir kopyasını zaten tutuyorsa bu kopya da bir geri dönüş yoludur. Uygulama bu durumda tek geri dönüş yolu kartını göstermez. 12 kelimelik sınırları kaldırdığı için **Ayarlar**'daki **Hesap Koruması** altında sessizce **Oturum açma yöntemi ekle** yine de sunulur.
+BeanPool'un anahtar kasası hesabınızın bir kopyasını zaten tutuyorsa bu kopya da bir geri dönüş yoludur. Uygulama bu durumda tek geri dönüş yolu kartını göstermez. 12 kelimelik sınırları kaldırdığı için **Oturum açma yöntemi ekle**'daki **Hesap Koruması** altında sessizce **Ayarlar** yine de sunulur.
 
 - **Oturum açma yöntemi ekle**'ye dokunun: kartta veya **Ayarlar**'da **Hesap Koruması** altında. **Yedek** adımında düğmede **Geri dönmek için ikinci bir yol olarak giriş ekleyin** yazar.
 - **Google ile devam et**, **Facebook ile devam et** veya bir iPhone'da **Apple ile devam et**'e dokunun ve bir kez giriş yapın. Uygulama önce telefonunuzun kilidini isteyebilir.
@@ -82,7 +82,7 @@ BeanPool'un anahtar kasası hesabınızın bir kopyasını zaten tutuyorsa bu ko
 
 Hesabınızın kopyası o anda tutulamıyorsa oturum açma yöntemi yine de eklenir ve sınırlarınız yine de kalkar, ancak 12 kelimeniz geri dönüş yolunuz olarak kalır. Uygulama bunu belirtir. Küresel toplulukta zaten başka bir BeanPool hesabına sahip olan veya topluluğun kaldırdığı bir hesaba ait olan bir oturum açma hesabı eklenemez ve hiçbir şey değişmez.
 
-**Hesap Koruması**'nda daha aşağıda **Oturum Açma Kurtarma Sağlayıcıları** altındaki **İle koru** da bir oturum açma yöntemini geri dönüş yolu olarak bağlar, ancak 12 kelimelik sınırları ve kartı olduğu gibi bırakır. İkisi için de **Oturum açma yöntemi ekle**'yi kullanın.
+**Hesap Koruması**'nda daha aşağıda **Hesap Koruması** altındaki **İle koru** da bir oturum açma yöntemini geri dönüş yolu olarak bağlar, ancak 12 kelimelik sınırları ve kartı olduğu gibi bırakır. İkisi için de **Oturum açma yöntemi ekle**'yi kullanın.
 
 ## İkinci bir geri dönüş yolu: bir oturum açma hesabı
 

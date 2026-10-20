@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isLendablePriceType, lendBackAroundOf, loanDays } from '../lending.js';
+import { dealQuantityUnit, isLendablePriceType, lendBackAroundOf, loanDays } from '../lending.js';
 
 describe('loanDays', () => {
     it('counts days for one fee or a fee per day, and seven a week', () => {
@@ -32,5 +32,36 @@ describe('isLendablePriceType', () => {
     it('takes one fee, per day and per week', () => {
         expect(['fixed', 'daily', 'weekly', undefined].map(isLendablePriceType)).toEqual([true, true, true, true]);
         expect(['hourly', 'monthly', 'other', 7].map(isLendablePriceType)).toEqual([false, false, false, false]);
+    });
+});
+
+describe('dealQuantityUnit', () => {
+    it('names the price’s unit for variable prices: hourly -> hour, daily -> day, weekly -> week, monthly -> month', () => {
+        expect(dealQuantityUnit('hourly')).toBe('hour');
+        expect(dealQuantityUnit('hourly', false)).toBe('hour');
+        expect(dealQuantityUnit('daily')).toBe('day');
+        expect(dealQuantityUnit('daily', true)).toBe('day');
+        expect(dealQuantityUnit('weekly')).toBe('week');
+        expect(dealQuantityUnit('weekly', false)).toBe('week');
+        expect(dealQuantityUnit('monthly')).toBe('month');
+    });
+
+    it('counts days for a lendable Offer on one fee (fixed, Free included)', () => {
+        expect(dealQuantityUnit('fixed', true)).toBe('day');
+        expect(dealQuantityUnit('fixed', 1)).toBe('day');
+        expect(dealQuantityUnit('fixed', 'true')).toBe('day');
+        expect(dealQuantityUnit(undefined, true)).toBe('day');
+        expect(dealQuantityUnit(null, 1)).toBe('day');
+    });
+
+    it('names no quantity line for fixed listings that are not loans, or unknown prices', () => {
+        expect(dealQuantityUnit('fixed')).toBe(null);
+        expect(dealQuantityUnit('fixed', false)).toBe(null);
+        expect(dealQuantityUnit('fixed', 0)).toBe(null);
+        expect(dealQuantityUnit('fixed', null)).toBe(null);
+        expect(dealQuantityUnit(undefined, false)).toBe(null);
+        expect(dealQuantityUnit(null, null)).toBe(null);
+        expect(dealQuantityUnit('other')).toBe(null);
+        expect(dealQuantityUnit('other', true)).toBe(null);
     });
 });

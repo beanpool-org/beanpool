@@ -31,7 +31,7 @@ Your badge shows your trust. What you can spend right now also depends on how ma
 
 ## Can I change my vote?
 
-On a Decision or a Poll, yes, until the vote closes. On a keepers' vote or a group's own vote, no.
+On a Decision or a Poll, yes, until the vote closes. On a keepers' vote, a group's own vote, or a vote for a new lead convenor, no.
 
 ## Can anyone see how I voted?
 

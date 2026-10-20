@@ -16,7 +16,7 @@ import {
     START_COMMUNITY_COPY as COPY, START_COMMUNITY_KNOW as KNOW, SETUP_CHAPTER_URL, canCopyDetails, communityDetailsText,
 } from '../lib/start-community';
 
-const FIELD = 'w-full rounded-xl border border-nature-300 dark:border-nature-600 bg-white dark:bg-nature-900 px-3 py-2.5 text-[15px] text-nature-900 dark:text-nature-50 placeholder:text-nature-400 dark:placeholder:text-nature-500 focus:outline-none focus:ring-2 focus:ring-terra-500';
+const FIELD = 'w-full rounded-xl border border-nature-300 dark:border-nature-600 bg-white dark:bg-nature-900 px-3 py-2.5 text-[15px] text-nature-900 dark:text-nature-50 placeholder:text-nature-400 dark:placeholder:text-nature-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terra-500';
 
 export function StartCommunityScreen({
     onClose,
@@ -63,7 +63,7 @@ export function StartCommunityScreen({
             <div className="mx-auto max-w-2xl px-4 pb-10 pt-4">
                 <div className="mb-4 flex items-center gap-2">
                     <button ref={backRef} type="button" onClick={onClose} aria-label={t('Back')}
-                        className="-ml-2 shrink-0 rounded-lg px-2 py-1 text-xl text-nature-600 dark:text-nature-300 hover:bg-nature-100 dark:hover:bg-nature-800">←</button>
+                        className="-ml-2 shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg text-xl text-nature-600 dark:text-nature-300 hover:bg-nature-100 dark:hover:bg-nature-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terra-500">←</button>
                     <h1 id="start-community-title" className="min-w-0 text-2xl font-extrabold text-nature-900 dark:text-nature-50">{t(COPY.title)}</h1>
                 </div>
                 <p className="mb-5 text-[15px] leading-relaxed text-nature-700 dark:text-nature-200">{t(COPY.intro)}</p>
@@ -93,9 +93,9 @@ export function StartCommunityScreen({
                     <p className="mt-3 text-sm text-nature-700 dark:text-nature-200">{t(KNOW.steps)}</p>
                     <div className="mt-4 flex flex-col gap-2">
                         <a href={startCommunityUrl(info)} target="_blank" rel="noopener noreferrer" data-testid="start-community-run-a-node"
-                            className="w-full rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover px-4 py-3 text-center font-bold text-bp-cta-on">{t(COPY.website)}<span aria-hidden="true"> ↗</span></a>
+                            className="w-full rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover px-4 py-3 text-center font-bold text-bp-cta-on focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terra-500">{t(COPY.website)}<span aria-hidden="true"> ↗</span></a>
                         <a href={SETUP_CHAPTER_URL} target="_blank" rel="noopener noreferrer" data-testid="start-community-setup"
-                            className="w-full rounded-xl border border-nature-300 dark:border-nature-600 px-4 py-3 text-center font-bold text-nature-800 dark:text-nature-100 hover:bg-nature-50 dark:hover:bg-nature-800">{t(KNOW.setupChapter)}<span aria-hidden="true"> ↗</span></a>
+                            className="w-full rounded-xl border border-nature-300 dark:border-nature-600 px-4 py-3 text-center font-bold text-nature-800 dark:text-nature-100 hover:bg-nature-50 dark:hover:bg-nature-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terra-500">{t(KNOW.setupChapter)}<span aria-hidden="true"> ↗</span></a>
                     </div>
                 </section>
 
@@ -114,7 +114,7 @@ export function StartCommunityScreen({
                         </label>
                     </div>
                     <button type="button" onClick={copy} disabled={!canCopyDetails(details)} data-testid="start-community-copy"
-                        className="mt-3 w-full rounded-xl border border-nature-300 dark:border-nature-600 px-4 py-3 font-bold text-nature-800 dark:text-nature-100 hover:bg-nature-50 dark:hover:bg-nature-800 disabled:cursor-not-allowed">
+                        className="mt-3 w-full rounded-xl border border-nature-300 dark:border-nature-600 px-4 py-3 font-bold text-nature-800 dark:text-nature-100 hover:bg-nature-50 dark:hover:bg-nature-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terra-500 disabled:cursor-not-allowed">
                         <span aria-hidden="true">📋 </span>{t(COPY.copyButton)}
                     </button>
                     {copied === 'yes' && <p className="mt-2 text-sm font-semibold text-emerald-700 dark:text-emerald-400" role="status">{t(COPY.copied)}</p>}
@@ -123,7 +123,7 @@ export function StartCommunityScreen({
 
                 {onNearYou && (
                     <button type="button" onClick={() => { onClose(); onNearYou(); }}
-                        className="w-full rounded-xl px-4 py-3 font-bold text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-950/50">
+                        className="w-full rounded-xl px-4 py-3 font-bold text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-950/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">
                         {t('Or find a community near you ›')}
                     </button>
                 )}

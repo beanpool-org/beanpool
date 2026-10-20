@@ -59,6 +59,21 @@ describe('Start a community (web)', () => {
         expect(calls).toEqual([{ path: '/api/community/info', method: 'GET' }]);
     });
 
+    it('has accessible touch targets and focus ring styling on interactive elements', async () => {
+        render(<StartCommunityScreen onClose={() => {}} onNearYou={() => {}} />);
+        const backButton = screen.getByRole('button', { name: 'Back' });
+        expect(backButton).toHaveClass('min-w-[44px]', 'min-h-[44px]', 'focus-visible:ring-2');
+
+        const runNodeLink = screen.getByTestId('start-community-run-a-node');
+        expect(runNodeLink).toHaveClass('focus-visible:ring-2');
+
+        const copyButton = screen.getByTestId('start-community-copy');
+        expect(copyButton).toHaveClass('focus-visible:ring-2');
+
+        const nearYouButton = screen.getByRole('button', { name: 'Or find a community near you ›' });
+        expect(nearYouButton).toHaveClass('focus-visible:ring-2');
+    });
+
     it('a node that names no start link: beanpool.org\'s', async () => {
         info = { profile: 'global', features: { beans: false, showcase: true } };
         render(<StartCommunityScreen onClose={() => {}} />);

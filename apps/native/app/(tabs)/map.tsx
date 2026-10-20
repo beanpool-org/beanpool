@@ -880,9 +880,11 @@ export default function MapScreen() {
                 const d = JSON.parse(raw);
                 const decision = decideDraftOpen(d, anchorUrl);
                 if (decision === 'open-tool') {
-                    await AsyncStorage.setItem(OFFER_DRAFT_KEY, JSON.stringify(clearDraftToolMarker(d)));
                     restoreDraft(d);
                     setShowNewPost(true);
+                    try {
+                        await AsyncStorage.setItem(OFFER_DRAFT_KEY, JSON.stringify(clearDraftToolMarker(d)));
+                    } catch { /* clearing tool marker from storage is best-effort */ }
                     return;
                 }
                 if (decision === 'ask-unfinished') {

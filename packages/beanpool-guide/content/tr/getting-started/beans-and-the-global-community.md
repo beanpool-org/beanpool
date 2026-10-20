@@ -44,10 +44,10 @@ Bununla birkaç şekilde karşılaşırsınız:
 
 - bir ekranda veya kartta küçük bir etiket;
 - örnek bir ekranın üst kısmında boydan boya bir kutu;
-- bir ilanda **Talep · Fasulyeler güvende tutulur 🏘️** gibi yerini koruyan bir düğme;
+- bir ilanda **Talep et · Fasulyeler güvende tutulur 🏘️** gibi yerini koruyan bir düğme;
 - "🏘️ Yerel bir toplulukta bu, Fasulye cinsinden bir fiyattır ›" gibi yerel bir topluluğun farklı olduğu tek bir satır.
 
-**Bunun neden yerel bir toplulukta yer aldığı** ekranını açmak için bunlardan herhangi birine dokunun. Bir veya iki cümleyle nedenini söyler, ardından **Topluluk başlat** ve yapabildiği durumlarda **Yakınındaki topluluklar** ile **Nasıl çalışır** seçeneklerini sunar.
+**Bunun neden yerel bir toplulukta yaşadığı** ekranını açmak için bunlardan herhangi birine dokunun. Bir veya iki cümleyle nedenini söyler, ardından **Bir topluluk başlat** ve yapabildiği durumlarda **Yakınındaki topluluklar** ile **Nasıl işler** seçeneklerini sunar.
 
 ## Example Valley
 
@@ -61,7 +61,7 @@ Example Valley'deki hiç kimsenin adı yoktur. "Bir komşu", "Ortak Alan" veya "
 
 Bu ekranlardaki **ⓘ** düğmeleri ve kılavuz sayfaları gerçektir: yerel bir toplulukta nasıl çalıştığını anlatırlar.
 
-Fasulye gönderecek, bir anlaşma yapacak, oy verecek, taahhütte bulunacak veya davet edecek bir düğme bunun yerine **Bunun neden yerel bir toplulukta yer aldığı** ekranını açar. Hiçbir şey göndermez ve hiçbir şeyi değiştirmez.
+Fasulye gönderecek, bir anlaşma yapacak, oy verecek, taahhütte bulunacak veya davet edecek bir düğme bunun yerine **Bunun neden yerel bir toplulukta yaşadığı** ekranını açar. Hiçbir şey göndermez ve hiçbir şeyi değiştirmez.
 
 Örnek bir ekranın üst kısmındaki kutuda bir **✕** bulunur. Ona dokunduğunuzda kutu tek bir satıra küçülür: "🏘️ Bir örnek · Neden? ›". Telefonunuz veya tarayıcınız bu topluluk için bunu hatırlar. Telefonda kutuyu tekrar açmak için satıra dokunun. Web uygulamasında nedenini görmek için satıra veya kutuyu tekrar açmak için **▾** simgesine dokunun.
 
@@ -91,16 +91,16 @@ Yerel bir topluluk, yöreden birinin ilgilendiği kendi küçük sunucusunda ça
 - **Neleri asla görmezsiniz:** üyelerinizin bir kişiyle yaptığı sohbetleri. Sunucunun bunları okuyamaması için kilitlenmiştir.
 - **Ne kadar sürer:** bir tarifi uygulayabilen biri için yaklaşık yarım saat.
 
-Başlamak için herhangi bir **Topluluk başlat** sayfasında veya telefonda Ana Sayfa'nın **Bunun neden yerel bir toplulukta yer aldığı** kartında **Topluluğunu bul**'a dokunun. Bir topluluk çalıştırmanın üç yolunu gösterir: evde yedek bir bilgisayar, küçük bir kiralık sunucu veya küresel toplulukta yardım istemek. **Topluluğumun ayrıntılarını kopyala**, yeni sunucunuzun ayarlarına yapıştırmak için topluluğunuzun adını, yerini ve insanların size nasıl ulaşabileceğini kopyalar.
+Başlamak için herhangi bir **Bunun neden yerel bir toplulukta yaşadığı** sayfasında veya telefonda Ana Sayfa'nın **Topluluğunu bul** kartında **Bir topluluk başlat**'a dokunun. Bir topluluk çalıştırmanın üç yolunu gösterir: evde yedek bir bilgisayar, küçük bir kiralık sunucu veya küresel toplulukta yardım istemek. **Topluluğumun ayrıntılarını kopyala**, yeni sunucunuzun ayarlarına yapıştırmak için topluluğunuzun adını, yerini ve insanların size nasıl ulaşabileceğini kopyalar.
 
-Adımlar beanpool.org adresinde bir topluluk işleten kişiler için hazırlanan kılavuzdaki "İlk kurulum" bölümündedir. Sunucunuz hazır olduğunda telefonunuzla sahipliğini alırsınız: telefonun kamerasını sunucunuzun gösterdiği QR koduna doğrultun veya BeanPool'da **Yeni bir topluluk sunucusu kur**'a (**Bir topluluk bulun** veya **Topluluk başlat** içinde), ardından **Kodu tara** seçeneğine dokunun. Ayarlar daha sonra topluluğunuzu adlandırmanıza, ikinci bir sahip eklemenize ve ilk davetlerinizi oluşturmanıza yardımcı olur. Yakınınızdaki kişilerin bulabilmesi için Ayarlar'da topluluğunuzun yerini de belirleyin.
+Adımlar beanpool.org adresinde bir topluluk işleten kişiler için hazırlanan kılavuzdaki "İlk kurulum" bölümündedir. Sunucunuz hazır olduğunda telefonunuzla sahipliğini alırsınız: telefonun kamerasını sunucunuzun gösterdiği QR koduna doğrultun veya BeanPool'da **Yeni bir topluluk sunucusu kur**'a (**Bir topluluk bul** veya **Bir topluluk başlat** içinde), ardından **Kodu tara** seçeneğine dokunun. Ayarlar daha sonra topluluğunuzu adlandırmanıza, ikinci bir sahip eklemenize ve ilk davetlerinizi oluşturmanıza yardımcı olur. Yakınınızdaki kişilerin bulabilmesi için Ayarlar'da topluluğunuzun yerini de belirleyin.
 
 ## Yakınınızdaki birine katılın
 
 Telefonda:
 
 - **Yakınındaki topluluklar**, listelenmeyi seçen ve size en yakın olan toplulukları listeler.
-- **Katılmak için sor** seçeneğine dokunun: oradaki bir üye sizi içeri alabilir. Topluluğun yalnızca yöneticilerinin davet etmesine izin verdiği yerlerde, bunu bir sahip veya yönetici yapar.
+- **Katılmak iste** seçeneğine dokunun: oradaki bir üye sizi içeri alabilir. Topluluğun yalnızca yöneticilerinin davet etmesine izin verdiği yerlerde, bunu bir sahip veya yönetici yapar.
 - Yakınınızda henüz hiçbir şey yok mu? **Burada bir topluluk başladığında bana haber ver**, bir topluluk başladığında size haber verir.
 
 Web uygulamasında Ana Sayfa'nın **Topluluğunu bul** kartı, yakınınızdaki her topluluğu kendi sayfasına bağlar.

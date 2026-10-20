@@ -58,7 +58,7 @@ Fasulyeler, tekrar bulunabilecek insanlar arasındaki bir sözdür. Herkes 12 ke
 
 ## Bir topluluğu nasıl başlatırım?
 
-Uygulamada **Topluluk başlat**'a dokunun. Bir topluluk kendi küçük sunucusunda çalışır: evde yedek bir bilgisayar veya ayda birkaç dolara kiralanan bir sunucu. Yazılım ücretsizdir ve topluluğun beanpool.org'a ihtiyacı yoktur. "Fasulye ve küresel topluluk" bölümüne bakın.
+Uygulamada **Bir topluluk başlat**'a dokunun. Bir topluluk kendi küçük sunucusunda çalışır: evde yedek bir bilgisayar veya ayda birkaç dolara kiralanan bir sunucu. Yazılım ücretsizdir ve topluluğun beanpool.org'a ihtiyacı yoktur. "Fasulye ve küresel topluluk" bölümüne bakın.
 
 ## Birden fazla topluluğa ait olabilir miyim?
 

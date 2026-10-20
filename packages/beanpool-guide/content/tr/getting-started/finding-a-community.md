@@ -16,7 +16,7 @@ Yakınınızda henüz bir topluluk yok mu? Bir tane başlatabilirsiniz: aşağı
 
 ## Yakınınızdaki topluluklar
 
-Küresel toplulukta, **Topluluğunu bul**'daki **Ana Sayfa** kartı size en yakın toplulukları gösterir. İlk 30 gününüz boyunca Ana Sayfa'nın üst kısmına yakın durur ve kaldırılamaz veya taşınamaz; bundan sonra diğer kartlar gibi kaldırabilirsiniz. Web uygulamasında karttaki her topluluk kendi sayfasına bir bağlantıdır. Nerede olduğunuzu bilmiyorsa **Bölgemi paylaş**'a veya **veya kasabanı yaz**'a dokunup kasabanızı seçin. Aşağıdaki adımlar telefon uygulaması içindir.
+Küresel toplulukta, **Ana Sayfa**'daki **Topluluğunu bul** kartı size en yakın toplulukları gösterir. İlk 30 gününüz boyunca Ana Sayfa'nın üst kısmına yakın durur ve kaldırılamaz veya taşınamaz; bundan sonra diğer kartlar gibi kaldırabilirsiniz. Web uygulamasında karttaki her topluluk kendi sayfasına bir bağlantıdır. Nerede olduğunuzu bilmiyorsa **Bölgemi paylaş**'a veya **veya kasabanı yaz**'a dokunup kasabanızı seçin. Aşağıdaki adımlar telefon uygulaması içindir.
 
 Henüz küresel toplulukta değil misiniz? Sol üstteki fasulyeye dokunun ve **Topluluklarınız** altında **Küresel topluluk**'a dokunun, ardından sahip olduğunuz hesapla katılın: "Birden fazla topluluk" bölümüne bakın. Henüz bir hesabınız yoksa uygulamanın ilk ekranında **BeanPool'u dünya çapında keşfet** seçeneğine dokunun: "BeanPool'a katılma" bölümüne bakın.
 
@@ -29,7 +29,7 @@ Adresini yayınlamayan bir topluluk listelenir ancak buradan henüz katılım is
 
 ## Katılma isteği gönderme
 
-- Bir topluluk üzerinde **Katılmak için sor** seçeneğine dokunun.
+- Bir topluluk üzerinde **Katılmak iste** seçeneğine dokunun.
 - Adınızı kontrol edin ve kendiniz hakkında 280 karaktere kadar birkaç kelime yazın: nerede yaşadığınız, ne paylaşmak veya öğrenmek istediğiniz.
 - **Gönder**'e dokunun.
 
@@ -55,7 +55,7 @@ Küresel topluluğun bir üyesi olarak kalırsınız ve aralarında geçiş yapa
 ## Yakınınızda hiçbir şey yoksa
 
 - **Burada bir topluluk başladığında bana haber ver:** bulunduğunuz yere yakın bir topluluk başladığında bir bildirim alırsınız. Yalnızca yaklaşık 10 km genişliğindeki bölge tutulur, tam olarak nerede olduğunuz asla tutulmaz. En fazla 3 yeri izleyebilir ve birini izlemeyi **Durdur** ile durdurabilirsiniz.
-- **Topluluk başlat:** her topluluğun yöreden birinin ilgilendiği kendi küçük sunucusu vardır. Evde yedek bir bilgisayar veya ayda birkaç dolar ve yaklaşık yarım saat sürer: "Fasulye ve küresel topluluk" bölümüne bakın. Uygulama bir topluluk çalıştırmanın üç yolunu gösterir: evde yedek bir bilgisayar, küçük bir kiralık sunucu veya yardım istemek. Adı, yeri ve insanların size nasıl ulaşabileceğini doldurun ve yeni sunucunuzun ayarlarına yapıştırmak için **Topluluğumun ayrıntılarını kopyala** seçeneğine dokunun. İnsanların size nasıl ulaşabileceği, orada açmadığınız sürece genel dizinin dışında kalır.
+- **Bir topluluk başlat:** her topluluğun yöreden birinin ilgilendiği kendi küçük sunucusu vardır. Evde yedek bir bilgisayar veya ayda birkaç dolar ve yaklaşık yarım saat sürer: "Fasulye ve küresel topluluk" bölümüne bakın. Uygulama bir topluluk çalıştırmanın üç yolunu gösterir: evde yedek bir bilgisayar, küçük bir kiralık sunucu veya yardım istemek. Adı, yeri ve insanların size nasıl ulaşabileceğini doldurun ve yeni sunucunuzun ayarlarına yapıştırmak için **Topluluğumun ayrıntılarını kopyala** seçeneğine dokunun. İnsanların size nasıl ulaşabileceği, orada açmadığınız sürece genel dizinin dışında kalır.
 
 ## Yerel bir topluluğun üyesiyseniz
 

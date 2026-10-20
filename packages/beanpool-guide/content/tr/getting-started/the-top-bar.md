@@ -22,7 +22,7 @@ Bir web tarayıcısında üst çubuk daha sadedir. Solda bağlantı durumu, sayf
 
 - **Topluluğun:** en üstte adı ve şu anda ulaşılıp ulaşılamadığı.
 - **Topluluklarınız:** geçiş yapmak için birine dokunun veya **Topluluk ekle** seçeneğine dokunun. **Küresel topluluk** her zaman bunlardan biridir: ikinci satırı katılıp katılamayacağınızı belirtir.
-- **Rehberde ara**, ardından **Rehberler** (BeanPool nasıl çalışır, kurallar, sık sorulan sorular), **Uygulama nasıl kullanılır** (bölüm bölüm bu kılavuz) ve **BeanPool projesi** ile birlikte **BeanPool projesi**.
+- **Rehberde ara**, ardından **Kılavuzlar** (BeanPool nasıl çalışır, kurallar, sık sorulan sorular), **Uygulama nasıl kullanılır** (bölüm bölüm bu kılavuz) ve **Yenilikler** ile birlikte **BeanPool projesi**.
 - **beanpool.org:** bir arkadaşa göndermek için **Paylaş** seçeneğiyle birlikte herkese açık web sitesi.
 
 Fasulyenin üzerindeki küçük nokta durumun nasıl olduğunu anlatır:
@@ -38,7 +38,7 @@ Tek bir yavaş kontrol noktayı kırmızıya çevirmez. Yalnızca art arda birde
 Fasulye ile sağdaki düğmeler arasında küçük simgeler yalnızca size ihtiyaç duyan bir şey varken görünür. Her biri bir tür durumu ifade eder. Doğrudan oraya gitmek için dokunun.
 
 - **Bir el sıkışma:** bir anlaşma sizi bekliyor. Birisi isteğini kabul etmenizi bekliyor veya içinde olduğunuz bir anlaşma henüz tamamlanmadı. Bir tane varsa dokunmak o anlaşmayı açar. Daha fazlası varsa **Takaslarım**'ı açar.
-- **Bir oy sandığı:** henüz kullanmadığınız bir oy. Dokunmak, **Ortak**'ı **Karar ver** bölümünde açar. İlk oy bir gruptaki oylama veya bir girişimdeki sorumluların oyu ise dokunmak bunun yerine o grubu veya girişimi açar. Henüz kullanamayacağınız bir oy burada sayılmaz; örneğin önce bir takası tamamlamanızı gerektiren bir oy gibi.
+- **Bir oy sandığı:** henüz kullanmadığınız bir oy. Dokunmak, **Ortak**'ı **Karar Al** bölümünde açar. İlk oy bir gruptaki oylama veya bir girişimdeki sorumluların oyu ise dokunmak bunun yerine o grubu veya girişimi açar. Henüz kullanamayacağınız bir oy burada sayılmaz; örneğin önce bir takası tamamlamanızı gerektiren bir oy gibi.
 - **Bir konuşma balonu:** bir kişiden gelen okunmamış mesaj. Bir kişidense dokunmak o sohbeti açar. Birkaç kişidense **Sohbet**'i yalnızca okunmamış olanları göstererek **Mesajlar** bölümünde açar.
 - **Bir grup insan:** gruplarınızda, girişim sohbetlerinde veya etkinlik sohbetlerinde yeni satırlar. Sessize aldığınız sohbetler burada sessiz kalır. Dokunmak o sohbeti veya birkaç tane varsa **Sohbet**'i **Gruplar** bölümünde açar.
 - **Bir kalkan:** yalnızca topluluğunuzun yönetilmesine yardımcı olan kişiler içindir. İncelenecek bir şikayet veya karar verilmesi gereken duraksamış bir takas gibi bekleyen yönetici işi varken gösterilir. Dokunmak telefonunuzun ekran kilidini ister, ardından topluluğunuzun ayarlarını o işte açar. Topluluğunuzun ayarları bir giriş kodu kullanıyorsa onu da ister.
@@ -52,7 +52,7 @@ Simgeler sağdan itibaren dizilir. En önemlisi ? simgesinin yanında durur ve d
 
 ### Küçük bir ekranda
 
-Her simge için yer yoksa son alanda **•••** gösterilir. Tüm listeyi, **Sana ihtiyaç var**, kelimelerle görmek için ona dokunun. Oraya gitmek için bir satıra dokunun.
+Her simge için yer yoksa son alanda **•••** gösterilir. Tüm listeyi, **Sana ihtiyacı var**, kelimelerle görmek için ona dokunun. Oraya gitmek için bir satıra dokunun.
 
 ### Sakin bir çubuk iyi haberdir
 

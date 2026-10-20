@@ -16,8 +16,8 @@ export { ErrorBoundary };
 // Related pages. The words come from packages/beanpool-guide/content — the same text as beanpool.org/guide/.
 // A "Watch" link shows only when this community's Pulse → Learn lane has a matching video (findGuideVideo in
 // @beanpool/core says how they match); the page is complete without it. The title, summary and section are in the
-// member's language where the guide's titles file has them (useGuide); the body is English until slice S5b, and then the
-// page says so in one line at its top.
+// member's language where the guide's titles file has them (useGuide). The body stays English until slice S5b; under a
+// translated title the page says so in one line at its top.
 export default function GuideScreen() {
     const { theme, colors } = useTheme();
     const insets = useSafeAreaInsets();

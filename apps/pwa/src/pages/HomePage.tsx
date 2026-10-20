@@ -72,6 +72,8 @@ import { CardMenu, HomeCard, HomeLine, HomeMore } from '../components/HomeCard';
 import { EditHomeDialog, type EditHomeRow } from '../components/EditHomeDialog';
 import { AddCardDialog, CardSettingsDialog } from '../components/AddCardDialog';
 import { OneWayBackCard } from '../components/OneWayBack';
+import { ToolHomeCard } from '../tools/home-card';
+import { toolOfCard } from '../tools/cards';
 import { AddressSearch } from '../components/AddressSearch';
 import { FIND_TOWN_SEARCH_WORDS, NOT_HERE_TYPE_YOUR_TOWN, PLACE_WATCH_LIMIT_CODE, TYPE_YOUR_TOWN, placeWatchLimitLine, type AddressResult } from '@beanpool/core';
 
@@ -183,9 +185,15 @@ interface Props {
      */
     saveSearch?: HomeSearchSettings | null;
     onSaveSearchTaken?: () => void;
+    /**
+     * A tool's Home card (`tool-<id>`), from the one offer its empty state makes (DESIGN-tool-template-fable.md §0, T0.3):
+     * added as Add a card adds it, once Home knows the member's list; then `onAddCardTaken`. Never added by itself.
+     */
+    addCardType?: string | null;
+    onAddCardTaken?: () => void;
 }
 
-export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch, onSaveSearchTaken }: Props) {
+export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch, onSaveSearchTaken, addCardType, onAddCardTaken }: Props) {
     const publicKey = visitor ? null : identity?.publicKey ?? null;
     // Moves on when a clear (here or in another tab) has this page land again: the community may have changed with it.
     const [landing, setLanding] = useState(0);
@@ -703,6 +711,20 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
         pageRef.current?.scrollIntoView?.({ block: 'start' });
         setAddSearch(saveSearch);
     }, [saveSearch, status, answer]);
+
+    // ── A tool's Home card, from its one offer inside the tool (T0.3) ──
+    // Taken once, as the saved search is; added as the picker adds (first, under Needs you, said). A card already on Home,
+    // or one Home can't take, is left as it is.
+    const takenCardType = useRef<string | null>(null);
+    useEffect(() => {
+        if (!addCardType) { takenCardType.current = null; return; }
+        if (status === 'loading' || !answer || takenCardType.current === addCardType) return;
+        takenCardType.current = addCardType;
+        onAddCardTaken?.();
+        if (answer.welcome || !answer.me || visitor) return;
+        if (drawnBase()?.cards.some(c => c.type === addCardType)) return;
+        addToHome(addCardType);
+    }, [addCardType, status, answer]);
 
     // ── The tour's Home side (DESIGN-getting-started-fable.md §2–§3) ──
     // The bar is App's (lib/tour-store.ts); Home lends it the chips (Add's own path) and applies the end as it opens: one
@@ -1524,7 +1546,11 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                 );
             }
             default:
-                return null;
+                // A tool's card (`tool-<id>`): its lines worked out on this device from the tool's own document, never
+                // asked of the node (tools/home-card.tsx). Any other type this build doesn't draw is kept and not drawn.
+                return toolOfCard(card.type)
+                    ? <ToolHomeCard key={card.id} {...common} type={card.type} publicKey={publicKey} now={now} onNavigate={onNavigate} />
+                    : null;
         }
     }
 

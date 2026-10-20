@@ -168,7 +168,14 @@ export async function purgeHere(
  * drops what it holds and reads the page's own community's afresh; the page's own Home is read again.
  */
 export async function leaveThisCommunity(): Promise<void> {
+    const node = getNodeApiUrl();
     setNodeApiUrl(null);
+    if (node) {
+        try {
+            const { clearToolRecordsFor } = await import('../tools/store');
+            await clearToolRecordsFor(node);
+        } catch { /* best effort */ }
+    }
     await clearHomeCache('cleared');
 }
 

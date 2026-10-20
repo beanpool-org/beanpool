@@ -9,7 +9,7 @@ source-hash: 5a5a0ba505806e0a
 
 ## Che cos'è
 
-Apri il Polso dalla scheda **Il Polso** su **Home**: tocca un post, oppure tocca **Vedi tutti**. Se non è presente sulla tua Home, ripristinalo con **Aggiungi una scheda** sul telefono, o **Modifica home** nell'app web. Sul telefono puoi aprirlo anche da **Impostazioni**, sotto **Il Polso**.
+Apri il Polso dalla scheda **Il Polso** su **Inizio**: tocca un post, oppure tocca **Vedi tutti**. Se non è presente sulla tua Home, ripristinalo con **Aggiungi una scheda** sul telefono, o **Modifica home** nell'app web. Sul telefono puoi aprirlo anche da **Impostazioni**, sotto **Il Polso**.
 
 Il Polso raccoglie ciò che i membri della tua comunità pubblicano su altri siti: video, musica, blog, foto. È un modo per scoprire cosa creano e fanno i tuoi vicini.
 

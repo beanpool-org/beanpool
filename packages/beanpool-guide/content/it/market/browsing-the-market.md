@@ -25,7 +25,7 @@ Sul telefono, la ricerca e i filtri scorrono via man mano che scorri verso il ba
 
 Digita in **Cerca nel mercato...** in alto. Su un telefono piccolo potrebbe semplicemente dire **Cerca**. La ricerca trova anche parole correlate: "frutta" trova "limone". Trova parole anche in cinese, giapponese e thailandese, ed esclude i post delle persone che hai bloccato. Senza connessione, cerca tra i contenuti già presenti sul telefono.
 
-Mentre ci sono parole nella ricerca, compare il pulsante **Salva questa ricerca nella Home**. Apre la Home con una ricerca salvata pronta da aggiungere: le tue parole, **Offerte** o **Richieste** se ne stavi consultando solo una, la categoria e la distanza. Non è presente alcun pulsante sotto **Eventi** o **Sondaggi**. Vedi "Home".
+Mentre ci sono parole nella ricerca, compare il pulsante **Salva questa ricerca nella Home**. Apre la Home con una ricerca salvata pronta da aggiungere: le tue parole, **Offerte** o **Richieste** se ne stavi consultando solo una, la categoria e la distanza. Non è presente alcun pulsante sotto **Eventi** o **Sondaggi**. Vedi "Inizio".
 
 ## Filtri
 

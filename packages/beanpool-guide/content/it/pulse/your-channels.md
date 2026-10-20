@@ -18,7 +18,7 @@ source-hash: bc8099cfeda70bea
 Ogni sito funziona in modo leggermente diverso. La schermata indica quale modalità si applica:
 
 - **Si aggiorna automaticamente** (YouTube, SoundCloud, un blog): i nuovi post compaiono sul Polso da soli.
-- **Un tocco per post** (Instagram, TikTok, Facebook): condividi ciascun post manualmente. Dove la schermata propone **Connect TikTok** o **Connect Instagram**, puoi invece collegare l'account. I tuoi post arriveranno quando ti colleghi e ogni volta che tocchi **↻ Sincronizza video**. Il server della tua comunità non li recupera da solo. Il collegamento è conservato solo su questo telefono. Disconnettersi dal telefono lo rimuove. Quando ritorni, il canale mantiene il suo badge, ma per importare nuovamente i post tocca **Disconnect**, poi di nuovo **Connect TikTok** o **Connect Instagram**.
+- **Un tocco per post** (Instagram, TikTok, Facebook): condividi ciascun post manualmente. Dove la schermata propone **Connect TikTok** o **Connect Instagram**, puoi invece collegare l'account. I tuoi post arriveranno quando ti colleghi e ogni volta che tocchi **↻ Sincronizza video**. Il server della tua comunità non li recupera da solo. Il collegamento è conservato solo su questo telefono. Disconnettersi dal telefono lo rimuove. Quando ritorni, il canale mantiene il suo badge, ma per importare nuovamente i post tocca **Disconnetti**, poi di nuovo **Connect TikTok** o **Connect Instagram**.
 - **Compare come scheda** (un sito web).
 
 **Connect TikTok** e **Connect Instagram** sono disponibili solo nell'app per telefono. Nell'app web, condividi ogni post con **+ Condividi post**.
@@ -26,7 +26,7 @@ Ogni sito funziona in modo leggermente diverso. La schermata indica quale modali
 ## Account verificati
 
 - Quando tocchi **Connect TikTok** o **Connect Instagram**, il server della tua comunità chiede a Instagram o TikTok a quale account hai effettuato l'accesso. Il canale viene contrassegnato come verificato solo quando corrisponde all'account presente sul canale.
-- Hai effettuato l'accesso con un account diverso? La schermata lo segnala. Accedi con l'account corretto e tocca di nuovo lo stesso pulsante **Connect**.
+- Hai effettuato l'accesso con un account diverso? La schermata lo segnala. Accedi con l'account corretto e tocca di nuovo lo stesso pulsante **Connetti**.
 - Aggiungi il canale come tuo **@nomeutente** affinché possa essere verificato. Un link breve non può esserlo.
 - I canali Facebook non vengono mai contrassegnati come verificati.
 - Se un canale riporta **Riconnetti per ripristinare il tuo badge verificato**, tocca **Reconnect TikTok** o **Reconnect Instagram**.

@@ -57,7 +57,7 @@ Questo richiede unicamente il server della tua comunità, quindi funziona anche 
 
 ## Promemoria eventi
 
-Sotto gli interruttori, **Promemoria eventi** imposta con quanto anticipo rispetto all'inizio di un evento a cui hai indicato **Partecipo** o **Interessato** riceverai l'avviso. Seleziona **1 settimana prima**, **1 giorno prima**, **2 ore prima**, **1 ora prima** o **30 minuti prima** — puoi selezionarne più di uno — oppure seleziona **Off** per non riceverne alcuno.
+Sotto gli interruttori, **Promemoria eventi** imposta con quanto anticipo rispetto all'inizio di un evento a cui hai indicato **Partecipo** o **Interessato** riceverai l'avviso. Seleziona **1 settimana prima**, **1 giorno prima**, **2 ore prima**, **1 ora prima** o **30 minuti prima** — puoi selezionarne più di uno — oppure seleziona **Disattivati** per non riceverne alcuno.
 
 L'impostazione iniziale per tutti è **1 giorno** prima. Questa è la scelta generale predefinita; ogni singolo evento può essere impostato diversamente sulla pagina dell'evento stesso. Vedi "Eventi".
 

@@ -158,6 +158,7 @@ import { communityKey } from '../../tools/community';
 import { keepToolPhoto, toolPhotoUri } from '../../tools/photos';
 import { hostFor, phoneHost, ungrantedPermissions, type PhoneHostContext } from '../../tools/builder';
 import { composerDraft, openNeedComposer, OFFER_DRAFT_KEY } from '../../tools/doors';
+import { decideDraftOpen } from '../compose-options';
 import { remindersToSchedule, scheduleToolReminders, toolReminderRoute, cancelToolReminders, TOOL_REMINDER_CHANNEL } from '../../tools/reminders';
 import { ToolButton, ToolButtons, ToolChips, ToolEmpty, ToolField, ToolNote, ToolRow, ToolScreen, ToolSection } from '../../tools/ui';
 import { ToolHomeBody, afterModal } from '../../tools/frame';
@@ -924,13 +925,17 @@ describe("the doors write the map composer's own draft (app/(tabs)/map.tsx, read
         await answer('Cancel');
         expect([store.map.get(OFFER_DRAFT_KEY), nav.pushed]).toEqual([unfinished, []]);
         await answer('Go on');
-        expect(JSON.parse(store.map.get(OFFER_DRAFT_KEY)!)).toMatchObject({ postType: 'need', postTitle: 'A ladder for a day' });
+        const writtenDraft = JSON.parse(store.map.get(OFFER_DRAFT_KEY)!);
+        expect(writtenDraft).toMatchObject({ postType: 'need', postTitle: 'A ladder for a day', source: 'tool', tool: 'fixture-kit' });
+        expect(decideDraftOpen(writtenDraft, 'https://mullum.example')).toBe('open-tool');
         expect(nav.pushed).toEqual(['/(tabs)/map?newPost=need']);
         // Nothing unfinished: straight to the composer, nothing asked.
         alerts.said.length = 0;
         store.map.delete(OFFER_DRAFT_KEY);
         await openNeedComposer(ME.publicKey, 'fixture-kit', { title: 'A tent' });
         expect(alerts.said).toEqual([]);
+        expect(JSON.parse(store.map.get(OFFER_DRAFT_KEY)!)).toMatchObject({ postType: 'need', postTitle: 'A tent', source: 'tool', tool: 'fixture-kit' });
+        expect(decideDraftOpen(JSON.parse(store.map.get(OFFER_DRAFT_KEY)!), 'https://mullum.example')).toBe('open-tool');
         expect(nav.pushed).toHaveLength(2);
     });
 });

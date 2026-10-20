@@ -33,7 +33,7 @@ import {
     mapSecondRow, visibleMarketPins, visibleEventPins, mapFiltersActive, categoryChipLabel, categoryPanelReducer,
     eventFitCoordinates, eventFitPadding, type MapTypeFilter,
 } from '../../utils/map-filters';
-import { composeCarriesPin, composeTargetFor, parseNewPostParam, type ComposePostType } from '../../utils/compose-options';
+import { composeCarriesPin, composeTargetFor, parseNewPostParam, type ComposePostType, clearDraftToolMarker, decideDraftOpen } from '../../utils/compose-options';
 import { palette } from '../../constants/colors';
 import { HAS_MAPS_KEY } from '../../utils/maps';
 import { POST_CATEGORIES, categoryEmoji, categoryLabel, normalizeCategory } from '../../constants/categories';
@@ -878,8 +878,16 @@ export default function MapScreen() {
             const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
             if (raw) {
                 const d = JSON.parse(raw);
-                const restorable = d && d.anchorUrl === anchorUrl && (d.postTitle?.trim() || d.postDescription?.trim() || (d.postPhotos?.length));
-                if (restorable) {
+                const decision = decideDraftOpen(d, anchorUrl);
+                if (decision === 'open-tool') {
+                    restoreDraft(d);
+                    setShowNewPost(true);
+                    try {
+                        await AsyncStorage.setItem(OFFER_DRAFT_KEY, JSON.stringify(clearDraftToolMarker(d)));
+                    } catch { /* clearing tool marker from storage is best-effort */ }
+                    return;
+                }
+                if (decision === 'ask-unfinished') {
                     Alert.alert(t('Unfinished post'), t('You started a post earlier. Continue it, or start fresh?'), [
                         // Start fresh honours the type just chosen in the chooser; Continue keeps the
                         // draft's own type, because that is the post the member asked to go back to.

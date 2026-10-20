@@ -43,6 +43,7 @@ export interface ToolListFee {
  */
 export function composerDraft(
     type: 'offer' | 'need', draft: ToolOfferDraft | ToolNeedDraft, anchorUrl: string | null, photos: readonly string[], fee: ToolListFee | null, now: number,
+    tool?: string,
 ): Record<string, unknown> {
     const offer = type === 'offer' ? draft as ToolOfferDraft : null;
     const beans = fee && fee.kind !== 'free' ? Math.max(0, Math.floor(fee.beans)) : 0;
@@ -62,6 +63,7 @@ export function composerDraft(
         postReach: 'local',
         postReachPeers: [],
         savedAt: now,
+        ...(tool ? { source: 'tool', tool } : {}),
     };
 }
 
@@ -81,7 +83,7 @@ async function writeDraftAndOpen(type: 'offer' | 'need', owner: string, tool: st
     const community = communityKey(anchorUrl);
     const refs = type === 'offer' ? ((draft as ToolOfferDraft).photos ?? []) : [];
     const photos = (await Promise.all(refs.slice(0, DRAFT_PHOTOS).map((ref) => toolPhotoDataUri(community, owner, tool, ref)))).filter((p): p is string => !!p);
-    await AsyncStorage.setItem(OFFER_DRAFT_KEY, JSON.stringify(composerDraft(type, draft, anchorUrl, photos, fee, Date.now())));
+    await AsyncStorage.setItem(OFFER_DRAFT_KEY, JSON.stringify(composerDraft(type, draft, anchorUrl, photos, fee, Date.now(), tool)));
     router.push(`/(tabs)/map?newPost=${type}`);
 }
 

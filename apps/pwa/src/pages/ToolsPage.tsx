@@ -73,7 +73,7 @@ function PageBar({ onBack, title, icon, line, end }: { onBack: () => void; title
     return (
         <div className="sticky top-0 z-10 bg-nature-100 dark:bg-nature-950 border-b border-nature-200 dark:border-nature-800 px-2 py-1 flex items-center gap-1 min-w-0">
             <button type="button" onClick={onBack} data-testid="tools-back"
-                className="shrink-0 min-h-[48px] min-w-[48px] px-2 flex items-center gap-1 bg-transparent border-0 cursor-pointer font-bold text-nature-700 dark:text-nature-200 hover:text-nature-900 dark:hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-ink-brand rounded-lg">
+                className="shrink-0 max-w-[40%] min-h-[48px] min-w-[48px] px-2 flex items-center gap-1 break-words text-left bg-transparent border-0 cursor-pointer font-bold text-nature-700 dark:text-nature-200 hover:text-nature-900 dark:hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-ink-brand rounded-lg">
                 <span aria-hidden="true">‹</span>{t('Back')}
             </button>
             <div className="flex-1 min-w-0 flex items-center gap-2">
@@ -252,7 +252,7 @@ function ToolView({ id, open, identity, onBack, onComposer, onGuide, onAddHomeCa
                 {panel === 'settings' && <ToolSettings manifest={manifest} onRemove={store.remove} />}
                 {panel === 'about' && <ToolAbout manifest={manifest} onGuide={onGuide} />}
                 {panel === 'tool' && !ready && (
-                    <p className="m-0 text-sm text-nature-600 dark:text-nature-300" role="status">{t('Loading...')}</p>
+                    <p className="m-0 text-sm text-nature-600 dark:text-nature-300 break-words" role="status">{t('Loading...')}</p>
                 )}
                 {panel === 'tool' && ready && empty && !pastDoors && step.screen === 'main' && (
                     <EmptyDoors manifest={manifest} owner={owner} onIn={() => setPastDoors(true)} onGuide={onGuide} onAddHomeCard={onAddHomeCard} />

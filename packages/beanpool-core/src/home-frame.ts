@@ -17,6 +17,7 @@
  */
 import { PRICING_CATEGORIES } from './pricing-catalog.js';
 import { readSkySettings } from './sky.js';
+import { toolHomeCardTypes } from './tools/index.js';
 import { word, type WordKey } from './words.js';
 
 // ── The shape ─────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -200,6 +201,8 @@ export const HOME_CARD_TYPES: readonly HomeCardType[] = [
         id: 'invite', name: word('Grow your community'), line: word('Ways to invite people you know.'), group: 'start', asks: 'none',
         onNode: (a, role) => notGlobal(a) && homeInvitesForReader(a.features, role),
     },
+    // Each tool's card, worked out on the device from its document (tools/index.ts): one spread, so a tool needs no line here.
+    ...toolHomeCardTypes(),
     { id: 'community', name: word('Your community'), line: word('Your community at a glance.'), group: 'you', fixed: true, asks: 'node', onNode: everywhere },
 ];
 

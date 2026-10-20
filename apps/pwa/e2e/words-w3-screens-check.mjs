@@ -110,7 +110,8 @@ const SCREENS = [
         await openGuideSection(page, lang);
         await guideRow(page, lang, GUIDE_PAGE.title).click();
         await guideHeading(page, lang, GUIDE_PAGE.title).waitFor();
-        if (lang !== 'en') await page.locator('[data-testid="guide-english-note"]').waitFor();
+        // The note shows only over a translated title or summary: every line in xx, none yet in a real language.
+        if (lang === 'xx') await page.locator('[data-testid="guide-english-note"]').waitFor();
     } },
     { name: 'profile-peer', ready: 'text=Fixes bikes on Sundays' },
     { name: 'profile-self', ready: 'text=Bakes on Fridays' },

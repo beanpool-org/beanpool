@@ -37,7 +37,9 @@ import {
     formatEnglishPage,
     extractLegalDate,
     buildHreflangTags,
-    buildFooterLanguagesRow
+    buildFooterLanguagesRow,
+    draftLanguage,
+    extractSourceHash
 } from './website-build.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -192,6 +194,51 @@ test('outdated translation displays "This page is newer in English." banner link
     const rendered = renderTranslatedPage('es', 'rules.html', sampleStaleContent, sampleEnglishRules);
     assert.ok(rendered.includes('website-stale-banner'), 'stale translation includes website-stale-banner');
     assert.ok(rendered.includes('href="../rules.html"'), 'stale banner links to English rules.html');
+});
+
+test('pageContentHash ignores asset queries and script injections, but changes on text edits', () => {
+    const sampleEnglish = fs.readFileSync(path.join(WEBSITE_DIR, 'rules.html'), 'utf8');
+    const baseHash = pageContentHash(sampleEnglish);
+
+    // Bump ?v= query string
+    const bumpedV = sampleEnglish.replace(/style\.css\?v=[0-9.]+/g, 'style.css?v=999.0');
+    assert.equal(pageContentHash(bumpedV), baseHash, 'bumping ?v= asset query string does not change hash');
+
+    // Injected script tag
+    const injectedScript = sampleEnglish.replace('</body>', '    <script src="main.js"></script>\n</body>');
+    assert.equal(pageContentHash(injectedScript), baseHash, 'injected script tag does not change hash');
+
+    // Change a sentence of visible text
+    const changedText = sampleEnglish.replace('The simple rules of BeanPool', 'The completely altered rules of BeanPool');
+    assert.notEqual(pageContentHash(changedText), baseHash, 'modifying text content changes hash');
+
+    // Verify when text changes, that page goes stale in every language
+    for (const lang of GUIDE_LANGS) {
+        const langContent = fs.readFileSync(path.join(CONTENT_DIR, lang, 'rules.html'), 'utf8');
+        const rendered = renderTranslatedPage(lang, 'rules.html', langContent, changedText);
+        assert.ok(rendered.includes('website-stale-banner'), `changing sentence makes rules.html stale in ${lang}`);
+    }
+});
+
+test('--draft <lang> never re-stamps an existing file hash without writing new text', () => {
+    const testLang = 'es';
+    const testPage = 'rules.html';
+    const filePath = path.join(CONTENT_DIR, testLang, testPage);
+    const originalContent = fs.readFileSync(filePath, 'utf8');
+    const staleHash = '12345678abcdef01';
+    const fakeStaleContent = originalContent.replace(/<!--\s*source-hash:\s*[0-9a-f]{16}\s*-->/i, `<!-- source-hash: ${staleHash} -->`);
+
+    try {
+        fs.writeFileSync(filePath, fakeStaleContent, 'utf8');
+        // Run draftLanguage('es')
+        draftLanguage(testLang);
+
+        const contentAfterDraft = fs.readFileSync(filePath, 'utf8');
+        assert.equal(extractSourceHash(contentAfterDraft), staleHash, 'existing file source-hash was NOT overwritten by --draft');
+        assert.equal(contentAfterDraft, fakeStaleContent, 'existing file content was preserved untouched by --draft');
+    } finally {
+        fs.writeFileSync(filePath, originalContent, 'utf8');
+    }
 });
 
 test('main.js WORDS dictionary translates strings by document.documentElement.lang', () => {

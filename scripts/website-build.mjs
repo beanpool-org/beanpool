@@ -137,9 +137,11 @@ export const LEGAL_BANNER_WORDS = Object.freeze({
  */
 export function pageContentHash(html) {
     const canonical = html
-        .replace(/<link\s+rel="alternate"\s+hreflang="[^"]*"\s+href="[^"]*"\s*\/?>/gi, '')
+        .replace(/<link\b[^>]*\/?>/gi, '')
+        .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
         .replace(/<div\s+class="footer-languages"[\s\S]*?<\/div>/gi, '')
         .replace(/<!--[\s\S]*?-->/g, '')
+        .replace(/\?v=[^"'\s>]+/gi, '')
         .replace(/\r\n/g, '\n')
         .replace(/\s+/g, ' ')
         .trim();
@@ -386,19 +388,13 @@ export function draftLanguage(lang) {
         const hash = pageContentHash(enHtml);
         const destPath = path.join(langDir, page);
 
-        let contentToWrite;
         if (fs.existsSync(destPath)) {
-            // Update source-hash header if already exists
-            const existing = fs.readFileSync(destPath, 'utf8');
-            if (extractSourceHash(existing)) {
-                contentToWrite = existing.replace(/<!--\s*source-hash:\s*[0-9a-f]{16}\s*-->/i, `<!-- source-hash: ${hash} -->`);
-            } else {
-                contentToWrite = `<!-- source-hash: ${hash} -->\n${existing}`;
-            }
-        } else {
-            // Fresh draft initialized from English
-            contentToWrite = `<!-- source-hash: ${hash} -->\n${enHtml}`;
+            // Never re-stamp an existing file's hash without writing new text (that hides staleness)
+            continue;
         }
+
+        // Fresh draft initialized from English
+        const contentToWrite = `<!-- source-hash: ${hash} -->\n${enHtml}`;
         fs.writeFileSync(destPath, contentToWrite, 'utf8');
     }
 }
@@ -563,6 +559,45 @@ export function checkWebsite() {
     return errors;
 }
 
+/** Counts the number of translated content files that are behind (stale) relative to English source. */
+export function countStalePages() {
+    let stale = 0;
+    for (const lang of GUIDE_LANGS) {
+        const contentLangDir = path.join(CONTENT_DIR, lang);
+        if (!fs.existsSync(contentLangDir)) continue;
+        for (const page of TRANSLATED_PAGES) {
+            const srcPath = path.join(contentLangDir, page);
+            const enPath = path.join(WEBSITE_DIR, page);
+            if (!fs.existsSync(srcPath) || !fs.existsSync(enPath)) continue;
+            const srcContent = fs.readFileSync(srcPath, 'utf8');
+            const enHtml = fs.readFileSync(enPath, 'utf8');
+            const sourceHash = extractSourceHash(srcContent);
+            const enHash = pageContentHash(enHtml);
+            if (sourceHash && sourceHash !== enHash) {
+                stale++;
+            }
+        }
+    }
+    return stale;
+}
+
+/** One-time re-stamp of verbatim content files with the corrected text-only content hash. */
+export function restampContentHashes() {
+    for (const page of TRANSLATED_PAGES) {
+        const enPath = path.join(WEBSITE_DIR, page);
+        if (!fs.existsSync(enPath)) continue;
+        const enHtml = fs.readFileSync(enPath, 'utf8');
+        const hash = pageContentHash(enHtml);
+        for (const lang of GUIDE_LANGS) {
+            const destPath = path.join(CONTENT_DIR, lang, page);
+            if (!fs.existsSync(destPath)) continue;
+            const existing = fs.readFileSync(destPath, 'utf8');
+            const updated = existing.replace(/<!--\s*source-hash:\s*[0-9a-f]{16}\s*-->/i, `<!-- source-hash: ${hash} -->`);
+            fs.writeFileSync(destPath, updated, 'utf8');
+        }
+    }
+}
+
 // ── CLI Execution ─────────────────────────────────────────────────────────────
 if (process.argv[1] === __filename) {
     const args = process.argv.slice(2);
@@ -573,7 +608,8 @@ if (process.argv[1] === __filename) {
             for (const err of errors) console.error(`  ✗ ${err}`);
             process.exit(1);
         }
-        console.log('✓ Website translation check passed.');
+        const stale = countStalePages();
+        console.log(`✓ Website translation check passed (${stale} stale).`);
         process.exit(0);
     } else if (args[0] === '--draft') {
         const lang = args[1];

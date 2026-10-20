@@ -51,7 +51,7 @@ Touchez l'un d'eux pour ouvrir **Pourquoi cela vit dans une communauté locale**
 
 ## Example Valley
 
-Les écrans comportant le repère affichent **Example Valley** : une communauté fictive, afin que vous puissiez voir les écrans d'une communauté locale avec du contenu.
+Les écrans comportant le repère affichent **Vallée d'Exemple** : une communauté fictive, afin que vous puissiez voir les écrans d'une communauté locale avec du contenu.
 
 - **Registre :** un membre d'exemple avec 85 haricots, une marge de dépense jusqu'à −200, un badge de confiance, et quelques échanges récents, comme du pain, une heure de jardinage et quelques semis.
 - **Communs :** l'Example Valley Bakery, une entreprise dont les membres sont gestionnaires, et une Décision : un bac à compost, financé par les haricots partagés des Communs.

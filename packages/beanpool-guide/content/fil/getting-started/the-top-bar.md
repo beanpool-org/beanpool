@@ -83,6 +83,6 @@ Kung minsan may berdeng bar na lumalabas sa ilalim ng bar sa itaas:
 
 ## Ang mga tab
 
-Sa ilalim ng bar sa itaas ay ang mga tab: **Home**, **Merkado**, **Map**, **Usapan**, **Komun** at **Talaan**. Ang pangalan ng bawat tab ay nakalagay sa itaas ng icon nito. Sa telepono, ang isang lokal na komunidad na walang Munggo ay hindi nagpapakita ng **Komun** o **Talaan**. Ipinapakita ng pandaigdigang komunidad ang pareho, na may mga halimbawa mula sa isang lokal na komunidad. Tingnan ang "Munggo at ang pandaigdigang komunidad".
+Sa ilalim ng bar sa itaas ay ang mga tab: **Home**, **Merkado**, **Mapa**, **Usapan**, **Komun** at **Talaan**. Ang pangalan ng bawat tab ay nakalagay sa itaas ng icon nito. Sa telepono, ang isang lokal na komunidad na walang Munggo ay hindi nagpapakita ng **Komun** o **Talaan**. Ipinapakita ng pandaigdigang komunidad ang pareho, na may mga halimbawa mula sa isang lokal na komunidad. Tingnan ang "Munggo at ang pandaigdigang komunidad".
 
-Sa isang mahabang pahina, i-tap ang tab kung nasaan ka na upang tumalon pabalik sa itaas. Gumagana ito sa bawat tab maliban sa **Map**.
+Sa isang mahabang pahina, i-tap ang tab kung nasaan ka na upang tumalon pabalik sa itaas. Gumagana ito sa bawat tab maliban sa **Mapa**.

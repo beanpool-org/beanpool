@@ -15,7 +15,7 @@ source-hash: c2f55bbef94860d8
 
 ## Magtanong sa isang tao
 
-- **Tungkol sa isang kalakalan:** magpadala muna ng mensahe sa kabilang tao. Karamihan sa mga problema ay hindi pagkakaunawaan. Sa post, i-tap ang **Message**.
+- **Tungkol sa isang kalakalan:** magpadala muna ng mensahe sa kabilang tao. Karamihan sa mga problema ay hindi pagkakaunawaan. Sa post, i-tap ang **Mensahe**.
 - **Tungkol sa isang tao o kalakalan na nagkaroon ng problema:** makipag-usap sa mga admin ng iyong komunidad. Sila ang nag-aalaga sa server nito, at maaari silang mamagitan sa isang naipit na kalakalan.
 - **Wala pang komunidad:** sumali sa pandaigdigang komunidad at magtanong doon: mga tao mula sa lahat ng dako, at isang paraan upang makahanap ng komunidad na malapit sa iyo. Sa telepono, binubuksan ng beanpool.org/global ang BeanPool app sa mismong paraan para makapasok, o ang iyong app store muna kung wala ka pang app. Tingnan ang "Pagsali sa BeanPool".
 - **Tungkol sa app mismo:** bisitahin ang beanpool.org. Maaari mo itong buksan mula sa **Mga Setting**, sa ilalim ng **BeanPool**.

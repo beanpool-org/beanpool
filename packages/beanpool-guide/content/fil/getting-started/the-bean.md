@@ -37,4 +37,4 @@ Ang parehong gabay ay nasa website sa beanpool.org/guide.
 
 ## Mga Video
 
-Maaaring magpakita ang ilang pahina ng **Panoorin:** at ang pangalan ng isang video. Lumalabas lamang ang link na iyon kapag gumawa ang BeanPool ng video para sa pahinang iyon at mayroon nito ang iyong komunidad sa Balita, sa ilalim ng **Alamin** (**How it works** sa web app). Ang mga video na idinaragdag ng mga miyembro sa Alamin ay hindi kailanman lumalabas sa isang pahina ng gabay. Kumpleto ang bawat pahina kahit walang video.
+Maaaring magpakita ang ilang pahina ng **Panoorin:** at ang pangalan ng isang video. Lumalabas lamang ang link na iyon kapag gumawa ang BeanPool ng video para sa pahinang iyon at mayroon nito ang iyong komunidad sa Balita, sa ilalim ng **Alamin** (**Paano ito gumagana** sa web app). Ang mga video na idinaragdag ng mga miyembro sa Alamin ay hindi kailanman lumalabas sa isang pahina ng gabay. Kumpleto ang bawat pahina kahit walang video.

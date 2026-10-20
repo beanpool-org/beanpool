@@ -44,14 +44,14 @@ Makikilala mo ito sa ilang anyo:
 
 - isang maliit na label sa isang screen o isang card;
 - isang kahon sa itaas ng isang halimbawang screen;
-- isang button na nagpapanatili sa pwesto nito, tulad ng **Request · Beans held safely 🏘️** sa isang listing;
-- isang linya kung saan iba ang lokal na komunidad, tulad ng "🏘️ In a local community this is a price in Beans ›".
+- isang button na nagpapanatili sa pwesto nito, tulad ng **Kahilingan · Ligtas na hawak ang mga munggo 🏘️** sa isang listing;
+- isang linya kung saan iba ang lokal na komunidad, tulad ng "🏘️ Sa lokal na komunidad ito ay presyo sa munggo ›".
 
-I-tap ang alinman sa mga ito upang buksan ang **Why this lives in a local community**. Sinasabi nito kung bakit sa isa o dalawang pangungusap, pagkatapos ay nag-aalok ng **Magsimula ng komunidad** at, kung saan kaya nito, **Mga komunidad na malapit sa iyo** at **How it works**.
+I-tap ang alinman sa mga ito upang buksan ang **Bakit ito nasa lokal na komunidad**. Sinasabi nito kung bakit sa isa o dalawang pangungusap, pagkatapos ay nag-aalok ng **Magsimula ng komunidad** at, kung saan kaya nito, **Mga komunidad na malapit sa iyo** at **Paano ito gumagana**.
 
 ## Example Valley
 
-Ipinapakita ng mga screen na may marker ang **Example Valley**: isang kathang-isip na komunidad, upang makita mo ang mga screen ng isang lokal na komunidad na may laman.
+Ipinapakita ng mga screen na may marker ang **Lambak ng Halimbawa**: isang kathang-isip na komunidad, upang makita mo ang mga screen ng isang lokal na komunidad na may laman.
 
 - **Talaan:** isang halimbawang miyembro na may 85 munggo, puwang para gumastos hanggang sa −200, isang trust badge, at ilang kamakailang kalakalan, tulad ng tinapay, isang oras ng paghahalaman at ilang punla.
 - **Komun:** ang Example Valley Bakery, isang negosyo na pinangangalagaan ng mga miyembro nito, at isang Desisyon: isang compost bay, na binayaran mula sa pinagsasaluhang munggo ng Komun.
@@ -61,7 +61,7 @@ Walang sinuman sa Example Valley ang may pangalan. Makikita mo ang "isang kapitb
 
 Ang mga button na **ⓘ** at ang mga pahina ng gabay sa mga screen na ito ang mga totoo: sinasabi ng mga ito kung paano ito gumagana sa isang lokal na komunidad.
 
-Ang isang button na magpapadala sana ng munggo, gagawa ng deal, boboto, mangangako o mag-iimbita ay nagbubukas sa halip ng **Why this lives in a local community**. Wala itong ipinapadala at walang binabago.
+Ang isang button na magpapadala sana ng munggo, gagawa ng deal, boboto, mangangako o mag-iimbita ay nagbubukas sa halip ng **Bakit ito nasa lokal na komunidad**. Wala itong ipinapadala at walang binabago.
 
 Ang kahon sa itaas ng isang halimbawang screen ay may **✕**. I-tap ito at ang kahon ay liliit sa isang linya, "🏘️ Isang halimbawa · Bakit? ›". Naaalaala iyon ng iyong telepono o browser, para sa komunidad na ito. Sa telepono, i-tap ang linya upang buksan muli ang kahon. Sa web app, i-tap ang linya upang makita kung bakit, o **▾** upang buksan muli ang kahon.
 
@@ -91,7 +91,7 @@ Tumatakbo ang isang lokal na komunidad sa sarili nitong maliit na server, na ina
 - **Kung ano ang hindi mo kailanman nakikita:** ang mga chat ng iyong mga miyembro sa isang tao. Naka-lock ang mga ito upang hindi mabasa ng server ang mga ito.
 - **Gaano katagal:** mga kalahating oras, para sa isang taong marunong sumunod sa mga tagubilin.
 
-Upang magsimula, i-tap ang **Magsimula ng komunidad** sa anumang sheet ng **Why this lives in a local community**, o, sa telepono, sa card ng **Find your community** sa Home. Nagpapakita ito ng tatlong paraan upang magpatakbo ng isa: isang reserbang computer sa bahay, isang maliit na inupahang server, o paghingi ng tulong sa pandaigdigang komunidad. Kinokopya ng **Kopyahin ang mga detalye ng aking komunidad** ang pangalan ng iyong komunidad, lokasyon at kung paano ka maaabot ng mga tao, upang i-paste sa mga setting ng iyong bagong server.
+Upang magsimula, i-tap ang **Magsimula ng komunidad** sa anumang sheet ng **Bakit ito nasa lokal na komunidad**, o, sa telepono, sa card ng **Hanapin ang iyong komunidad** sa Home. Nagpapakita ito ng tatlong paraan upang magpatakbo ng isa: isang reserbang computer sa bahay, isang maliit na inupahang server, o paghingi ng tulong sa pandaigdigang komunidad. Kinokopya ng **Kopyahin ang mga detalye ng aking komunidad** ang pangalan ng iyong komunidad, lokasyon at kung paano ka maaabot ng mga tao, upang i-paste sa mga setting ng iyong bagong server.
 
 Ang mga hakbang ay nasa "Unang beses na pag-setup", sa gabay para sa mga taong nagpapatakbo ng komunidad, sa beanpool.org. Kapag bukas na ang iyong server, iki-claim mo ito gamit ang iyong telepono: itapat ang camera ng telepono sa QR code na ipinapakita ng iyong server, o sa BeanPool i-tap ang **Mag-set up ng bagong server ng komunidad** (sa **Maghanap ng komunidad** o **Magsimula ng komunidad**), pagkatapos ay **I-scan ang code**. Tutulungan ka ng Mga Setting na pangalanan ang iyong komunidad, magdagdag ng pangalawang may-ari at gawin ang iyong mga unang imbitasyon. Itakda rin ang lokasyon ng iyong komunidad sa Mga Setting, upang mahanap ito ng mga taong malapit sa iyo.
 
@@ -103,7 +103,7 @@ Sa telepono:
 - I-tap ang **Humiling na sumali**: maaaring papasukin ka ng isang miyembro roon. Kung saan pinapayagan lamang ng komunidad ang mga admin nito na mag-imbita, isang may-ari o admin ang gagawa nito.
 - Wala pa bang malapit sa iyo? Sinasabi sa iyo ng **Sabihan ako kapag may nagsimula rito** kapag may nagsimula na.
 
-Sa web app, inili-link ng card ng **Find your community** sa Home ang bawat komunidad na malapit sa iyo sa sarili nitong pahina.
+Sa web app, inili-link ng card ng **Hanapin ang iyong komunidad** sa Home ang bawat komunidad na malapit sa iyo sa sarili nitong pahina.
 
 Kasama mo ang iyong account, gamit ang parehong 12 salita sa Ingles, at mananatili kang miyembro ng pandaigdigang komunidad. Tingnan ang "Paghahanap ng kalapit na komunidad".
 

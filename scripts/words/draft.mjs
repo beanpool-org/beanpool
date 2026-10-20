@@ -420,7 +420,7 @@ export async function writeBriefs({ root = ROOT, dir, langs = null, maxKeys = nu
         // App Words
         let keysRemaining = maxKeys !== null && maxKeys > 0 ? maxKeys : Infinity;
         briefLines.push('### 1. App Words');
-        for (const def of APP_CATALOG_DEFS) {
+        for (const def of catalogDefs) {
             const cat = l.appWords.byCatalog[def.name];
             const missing = cat?.missingKeys ?? [];
             briefLines.push(`\n#### Catalog: ${def.folder}/${lang}.json (${missing.length} missing)\n`);

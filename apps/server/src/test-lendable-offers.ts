@@ -22,7 +22,9 @@
  *      heal (apps/native utils/db.ts) keeps a returned loan on its board.
  *  11. The loan's nudge words, and the other deals' unchanged.
  *  12. The visitor's shape: the terms, never when it's due back.
- *  13. A standby copy carries the four columns, by plain assignment.
+ *  13. A lendable out on loan is still one of its lender's live Offers (the offer covenant): a lender whose only Offer is
+ *      out keeps their credit line and can spend within it; a one-off Offer taken by its deal stops counting, as before.
+ *  14. A standby copy carries the four columns, by plain assignment.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-lendable-offers.ts
  */
@@ -36,7 +38,7 @@ import { initAdminPassword } from './config/local-config.js';
 import { ownerTokenHeaders } from './admin-auth-test-harness.js';
 import { db } from './db/db.js';
 import {
-    initStateEngine, transfer, createPost, runLedgerAudit, getCommonsBalanceExact, registerPushToken,
+    initStateEngine, transfer, createPost, runLedgerAudit, getCommonsBalanceExact, registerPushToken, getBalance, hasLiveOffer,
     runMarketplaceHygiene, adminPruneUser, exportSyncState, importRemoteState, setNodeRole, signSyncPayload, getPosts,
 } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
@@ -80,15 +82,18 @@ function keypair(callsign: string): Id {
     return { pk: publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex'), privateKey, callsign };
 }
 
-/** A member who can sign, trade (a photo, a name, an Offer listed), pay, and be told (a phone registered). */
-function makeMember(callsign: string, beans: number): Id {
+/**
+ * A member who can sign, trade (a photo, a name, an Offer listed), pay, and be told (a phone registered). `oddJobs: false`
+ * lists no Offer: the member lists their own.
+ */
+function makeMember(callsign: string, beans: number, oddJobs = true): Id {
     const id = keypair(callsign);
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, updated_at)
                 VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(id.pk, callsign);
     setMemberPhoto(db, id.pk, AVATAR);
     db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, ?)').run(id.pk, EPOCH_NOW);
     if (beans > 0) transfer('genesis', id.pk, beans, `seed ${callsign}`, 'direct', true);
-    createPost('offer', 'general', `${callsign} odd jobs`, 'Help around the place', 5, 'fixed', id.pk, undefined, undefined, undefined, true);
+    if (oddJobs) createPost('offer', 'general', `${callsign} odd jobs`, 'Help around the place', 5, 'fixed', id.pk, undefined, undefined, undefined, true);
     registerPushToken(id.pk, `ExponentPushToken[lend-${callsign}-${id.pk.slice(0, 6)}]`, 'android');
     return id;
 }
@@ -583,8 +588,38 @@ async function main(): Promise<void> {
         'a visitor reads the terms and that it is out, never when it is due back; a member who isn\'t a party reads the date');
     await returned(cy, outAgain);
 
-    // ── 13. A standby copy ───────────────────────────────────────────────────────────────────────────────────────────
-    console.log('\n— 13. A standby copy');
+    // ── 13. The offer covenant ───────────────────────────────────────────────────────────────────────────────────────
+    console.log('\n— 13. The offer covenant');
+    const fen = makeMember('Fen', 0, false);
+    db.prepare('UPDATE members SET earned_credit = 100 WHERE public_key = ?').run(fen.pk); // a granted line of 100, metered by the offer bands
+    const fenLadder = (await offer(fen, { title: 'Step ladder', lendable: true })).body?.post?.id as string;
+    const listed = getBalance(fen.pk);
+    assert(postRow(fenLadder)?.lendable === 1 && listed.liveOffers === 1 && listed.usableFloor === -100 && hasLiveOffer(fen.pk),
+        `Fen's only Offer is a Free ladder to lend: one live Offer, a credit line of 100 (${JSON.stringify({ live: listed.liveOffers, usable: listed.usableFloor })})`);
+    const fenLoan = await take(cy, fenLadder);
+    const lent = getBalance(fen.pk);
+    assert(fenLoan.status === 200 && postRow(fenLadder).status === 'pending' && lent.liveOffers === 1 && lent.usableFloor === -100 && hasLiveOffer(fen.pk),
+        `Cy takes the ladder in one step: it is out, and still Fen's live Offer, so Fen keeps the line (${brief(fenLoan)}; ${JSON.stringify({ live: lent.liveOffers, usable: lent.usableFloor })})`);
+    const hedge = (await offer(alice, { title: 'Hedge trimming', credits: 5 })).body?.post?.id as string;
+    const spent = await take(fen, hedge);
+    assert(spent.status === 200 && bal(fen.pk) === -5,
+        `while it is out, Fen spends within the line: 5 Beans held for Alice's hedge trimming (${brief(spent)}; balance ${bal(fen.pk)})`);
+    ledgerAddsUp('a lender spending on credit while their only Offer is out');
+    const fenBack = await returned(cy, fenLoan.body?.transaction?.id);
+    assert(fenBack.status === 200 && backOnBoard(fenLadder) && getBalance(fen.pk).liveOffers === 1,
+        `Cy returns it: back on the board, still one live Offer (${brief(fenBack)})`);
+    await callOff(fen, spent.body?.transaction?.id);
+    const bobLive = getBalance(bob.pk).liveOffers;
+    const bike = (await offer(bob, { title: 'Old bike', credits: 2 })).body?.post?.id as string;
+    const bikeListed = getBalance(bob.pk).liveOffers;
+    const bikeTaken = await take(cy, bike);
+    assert(bikeListed === bobLive + 1 && bikeTaken.status === 200 && postRow(bike).status === 'pending' && getBalance(bob.pk).liveOffers === bobLive,
+        `a one-off Offer taken by its deal stops counting, as before (${bobLive} → ${bikeListed} → ${getBalance(bob.pk).liveOffers}; ${brief(bikeTaken)})`);
+    await callOff(cy, bikeTaken.body?.transaction?.id);
+    ledgerAddsUp('the offer covenant');
+
+    // ── 14. A standby copy ───────────────────────────────────────────────────────────────────────────────────────────
+    console.log('\n— 14. A standby copy');
     const p2p = await startP2P(0, 0);
     const nodeId = p2p.peerId.toString();
     pinMainServerForTests(`/ip4/127.0.0.1/tcp/4043/p2p/${nodeId}`);

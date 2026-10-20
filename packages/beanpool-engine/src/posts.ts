@@ -982,13 +982,20 @@ export function hasListedOffer(db: Db, publicKey: string): boolean {
     return !!row;
 }
 
+/**
+ * A live Offer for the offer covenant: one on the board, or a lendable Offer out on loan, which is still the lender's
+ * listed Offer and comes back to the board when the loan ends (apps/server engine/escrow.ts). A loan, which any member
+ * can start with a one-step accept, never takes away the lender's credit line.
+ */
+const LIVE_OFFER_WHERE = "author_pubkey = ? AND type = 'offer' AND active = 1 AND (status = 'active' OR (status = 'pending' AND lendable = 1))";
+
 export function hasLiveOffer(db: Db, publicKey: string): boolean {
-    const row = db.prepare("SELECT 1 FROM posts WHERE author_pubkey = ? AND type = 'offer' AND active = 1 AND status = 'active' LIMIT 1").get(publicKey);
+    const row = db.prepare(`SELECT 1 FROM posts WHERE ${LIVE_OFFER_WHERE} LIMIT 1`).get(publicKey);
     return !!row;
 }
 
 export function liveOfferCount(db: Db, publicKey: string): number {
-    const row = db.prepare("SELECT COUNT(*) as c FROM posts WHERE author_pubkey = ? AND type = 'offer' AND active = 1 AND status = 'active'").get(publicKey) as any;
+    const row = db.prepare(`SELECT COUNT(*) as c FROM posts WHERE ${LIVE_OFFER_WHERE}`).get(publicKey) as any;
     return row?.c || 0;
 }
 

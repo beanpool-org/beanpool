@@ -1,4 +1,754 @@
 {
-  "sections": {},
-  "pages": {}
+  "sections": {
+    "about": {
+      "title": {
+        "text": "Découvrir BeanPool",
+        "sourceHash": "2d9dd281fa519636"
+      },
+      "summary": {
+        "text": "Le fonctionnement de BeanPool, les règles et la prise de décision, les questions fréquentes et les nouveautés.",
+        "sourceHash": "003302493f5fd51a"
+      }
+    },
+    "getting-started": {
+      "title": {
+        "text": "Premiers pas",
+        "sourceHash": "831d0f72d242b7d1"
+      },
+      "summary": {
+        "text": "Accueil, rejoindre, trouver une communauté proche, les haricots et la communauté globale, ses limites, vos 12 mots, votre profil, la barre du haut, ce guide, obtenir de l'aide, utiliser plusieurs communautés et l'application web.",
+        "sourceHash": "63d6211469096565"
+      }
+    },
+    "market": {
+      "title": {
+        "text": "Marché",
+        "sourceHash": "5238d9bd03d543e6"
+      },
+      "summary": {
+        "text": "Trouver et publier des Offres et Demandes, et le déroulement d'un accord du début à la fin.",
+        "sourceHash": "6008ab9bf397a83a"
+      }
+    },
+    "map": {
+      "title": {
+        "text": "Carte",
+        "sourceHash": "be176b0015c424b7"
+      },
+      "summary": {
+        "text": "Ce que sont les repères, où se trouve le vôtre et comment trouver ce qui vous entoure.",
+        "sourceHash": "b4e17982e037f558"
+      }
+    },
+    "talk": {
+      "title": {
+        "text": "Échanges",
+        "sourceHash": "449f5a775762cdc5"
+      },
+      "summary": {
+        "text": "Messages, groupes et leurs discussions, contacts et amis, échanges d'événements, mise en sourdine, mentions et changement de clé.",
+        "sourceHash": "e680a96492c72e47"
+      }
+    },
+    "pulse": {
+      "title": {
+        "text": "Pouls",
+        "sourceHash": "f7a403c6cdf31e72"
+      },
+      "summary": {
+        "text": "Ce que partagent vos voisins, les vidéos Découvrir et l'ajout de vos propres canaux.",
+        "sourceHash": "9ab06ad52ef86462"
+      }
+    },
+    "commons": {
+      "title": {
+        "text": "Communs",
+        "sourceHash": "6aa9f1a43424d37b"
+      },
+      "summary": {
+        "text": "Décisions et votes, les haricots partagés, vos groupes, entreprises et gestionnaires. Les sondages et événements sont ici aussi ; retrouvez-les sur le Marché.",
+        "sourceHash": "bd9454f4374e35ae"
+      }
+    },
+    "ledger": {
+      "title": {
+        "text": "Registre",
+        "sourceHash": "ee69eb4afc76aae0"
+      },
+      "summary": {
+        "text": "Votre solde, votre ligne de crédit, dons, badges de mérite, la limite par partenaire d'échange et les frais de circulation.",
+        "sourceHash": "99d7457bf048947c"
+      }
+    },
+    "settings": {
+      "title": {
+        "text": "Paramètres et sécurité",
+        "sourceHash": "8ee717d56a807cd5"
+      },
+      "summary": {
+        "text": "Confidentialité et ce que voient les administrateurs et leurs assistants IA, votre zone, blocage et signalement, alertes, mode clair et sombre, Mode vacances en cas d'absence, départ, récupération de compte et vérification de vos 12 mots en tant que propriétaire.",
+        "sourceHash": "767b3834909fa76c"
+      }
+    }
+  },
+  "pages": {
+    "how-it-works": {
+      "title": {
+        "text": "Comment marche BeanPool",
+        "sourceHash": "8ee2145ba2a47e77"
+      },
+      "summary": {
+        "text": "Haricots, échanges, offres et demandes, et crédit, en mots simples.",
+        "sourceHash": "921252df227ae544"
+      }
+    },
+    "rules": {
+      "title": {
+        "text": "Règles et décisions",
+        "sourceHash": "482819c153332e58"
+      },
+      "summary": {
+        "text": "Vote, participation, vote secret, qui peut voter, suspension, exclusion d'un membre, gestionnaires, coordinateurs et coordinateurs principaux.",
+        "sourceHash": "b111b31338cdd2a3"
+      }
+    },
+    "faq": {
+      "title": {
+        "text": "Questions",
+        "sourceHash": "9a72221a27476f3e"
+      },
+      "summary": {
+        "text": "Réponses courtes aux questions les plus posées par les membres.",
+        "sourceHash": "8feb7069cb08f93d"
+      }
+    },
+    "whats-new": {
+      "title": {
+        "text": "Nouveautés",
+        "sourceHash": "135e912e89054ffa"
+      },
+      "summary": {
+        "text": "Les changements dans l'application, en mots simples.",
+        "sourceHash": "e1f96938296c5950"
+      }
+    },
+    "home": {
+      "title": {
+        "text": "Accueil",
+        "sourceHash": "3a78695388b38b5c"
+      },
+      "summary": {
+        "text": "Ce qu'est l'Accueil, les cartes sur téléphone et sur le web, comment les ajouter, déplacer ou retirer, choisir vos centres d'intérêt et confidentialité à la déconnexion.",
+        "sourceHash": "a1c1ff42cd312dd2"
+      },
+      "help": {
+        "text": "Voici votre Accueil : des cartes sur ce qui vous attend et ce qui se passe près d'ici. Ajoutez une carte en bas ou touchez … pour la déplacer ou la retirer.",
+        "sourceHash": "3842000d41b06fa3"
+      }
+    },
+    "joining": {
+      "title": {
+        "text": "Rejoindre BeanPool",
+        "sourceHash": "4a4fa8d50d056023"
+      },
+      "summary": {
+        "text": "Deux façons d'entrer : une communauté sur invitation d'un membre, ou la communauté globale si elle est ouverte, avec 12 mots secrets ou un compte. Demander l'accès et inviter d'autres personnes.",
+        "sourceHash": "bfa09f20fea858c6"
+      },
+      "help": {
+        "text": "Rejoignez une communauté sur invitation d'un membre, ou la communauté globale avec 12 mots secrets ou un compte.",
+        "sourceHash": "288300534966c3d2"
+      }
+    },
+    "finding-a-community": {
+      "title": {
+        "text": "Trouver une communauté proche",
+        "sourceHash": "dbb0b4170f999d18"
+      },
+      "summary": {
+        "text": "Depuis la communauté globale, trouvez une communauté près de chez vous et demandez à la rejoindre, soyez prévenu quand une se crée ou lancez la vôtre.",
+        "sourceHash": "d7fada0c8e749ecf"
+      }
+    },
+    "beans-and-the-global-community": {
+      "title": {
+        "text": "Haricots et communauté globale",
+        "sourceHash": "e44e1649e26e9122"
+      },
+      "summary": {
+        "text": "Le rôle de la communauté globale, une communauté parmi d'autres, et ce que vous y voyez : le repère 🏘️ Communauté locale, la communauté exemple Example Valley, l'attente des haricots et comment lancer ou trouver une communauté locale.",
+        "sourceHash": "f91dcd042d53fdfb"
+      }
+    },
+    "global-community-limits": {
+      "title": {
+        "text": "Limites de communauté globale",
+        "sourceHash": "79186984a4ee4919"
+      },
+      "summary": {
+        "text": "La communauté globale est gratuite, avec quelques limites pour maîtriser les coûts. Une annonce est archivée 90 jours après sa dernière modification. Elle compte jusqu'à 5 photos, votre téléphone garde les 500 annonces les plus proches et vous pouvez suivre 3 lieux.",
+        "sourceHash": "feba3e6c852b6d3b"
+      }
+    },
+    "your-12-words": {
+      "title": {
+        "text": "Vos 12 mots",
+        "sourceHash": "dd2264b1e132960b"
+      },
+      "summary": {
+        "text": "Les 12 mots sont la clé de votre compte. Leur importance, où les trouver, comment les garder en sûreté et associer un compte de connexion en secours.",
+        "sourceHash": "7033308ae096c586"
+      }
+    },
+    "your-profile": {
+      "title": {
+        "text": "Votre profil",
+        "sourceHash": "528d89ad72cba22e"
+      },
+      "summary": {
+        "text": "Votre nom, photo, quelques mots sur vous et qui peut voir vos coordonnées.",
+        "sourceHash": "f405b4421669fcdb"
+      }
+    },
+    "the-top-bar": {
+      "title": {
+        "text": "Barre du haut",
+        "sourceHash": "67f6e62947dde848"
+      },
+      "summary": {
+        "text": "Le haricot, les petites icônes signalant ce qui vous attend et les boutons en haut à droite.",
+        "sourceHash": "19dc6a309244ae90"
+      }
+    },
+    "the-bean": {
+      "title": {
+        "text": "Ce guide",
+        "sourceHash": "1d8917503dda7b5f"
+      },
+      "summary": {
+        "text": "Où trouver ce guide, comment y chercher et comment il reste à jour.",
+        "sourceHash": "7e694a121aa2314d"
+      }
+    },
+    "getting-help": {
+      "title": {
+        "text": "Besoin d'aide",
+        "sourceHash": "418313b75b185ab8"
+      },
+      "summary": {
+        "text": "Où chercher en cas de doute et à qui vous adresser.",
+        "sourceHash": "8d12d16dc2217232"
+      }
+    },
+    "communities": {
+      "title": {
+        "text": "Plusieurs communautés",
+        "sourceHash": "b753dd3e548b2230"
+      },
+      "summary": {
+        "text": "Appartenir à plusieurs communautés avec un seul compte, basculer entre elles, suivre votre communauté vers une nouvelle adresse et voir ce que montre la communauté globale.",
+        "sourceHash": "71e99c6bbffadcbe"
+      }
+    },
+    "web-app": {
+      "title": {
+        "text": "BeanPool sur le web",
+        "sourceHash": "1daaa01a91ba4b17"
+      },
+      "summary": {
+        "text": "L'application web propose l'essentiel de l'application mobile. Rejoindre la communauté globale sur navigateur, y récupérer votre compte avec votre connexion, utiliser le compte sur téléphone et différences de noms des boutons.",
+        "sourceHash": "8afd3ad2f9117fd5"
+      }
+    },
+    "browsing-the-market": {
+      "title": {
+        "text": "Explorer le Marché",
+        "sourceHash": "ab1b6bf5f734c023"
+      },
+      "summary": {
+        "text": "Trouver des Offres et Demandes grâce à la recherche, aux filtres et à la distance.",
+        "sourceHash": "e73e882abbebfa8d"
+      },
+      "help": {
+        "text": "Offres et Demandes des personnes près de chez vous. Cherchez, filtrez par catégorie ou distance, ou touchez + PUBLIER pour créer la vôtre.",
+        "sourceHash": "0bc8b01c4d9effb6"
+      }
+    },
+    "posting": {
+      "title": {
+        "text": "Publier Offre ou Demande",
+        "sourceHash": "e218de31c1bbad00"
+      },
+      "summary": {
+        "text": "Proposez un service ou un bien, ou exprimez un besoin que vous recherchez.",
+        "sourceHash": "9ffa9b1e66834bc0"
+      }
+    },
+    "my-deals": {
+      "title": {
+        "text": "Mes accords",
+        "sourceHash": "bfad6bb30e1876c5"
+      },
+      "summary": {
+        "text": "Un seul endroit pour chaque accord en cours, chaque annonce active et vos échanges passés.",
+        "sourceHash": "8772e2ee242712d3"
+      },
+      "help": {
+        "text": "Chaque accord en cours et chaque annonce active. Les accords qui vous attendent sont en haut.",
+        "sourceHash": "3ec4be8c87368ed9"
+      }
+    },
+    "a-deal-step-by-step": {
+      "title": {
+        "text": "Un accord pas à pas",
+        "sourceHash": "d2b29952cde1ab00"
+      },
+      "summary": {
+        "text": "De la demande au règlement, pour une Offre et une Demande, et laisser une évaluation.",
+        "sourceHash": "88d4362d08a13bc5"
+      }
+    },
+    "when-a-deal-goes-wrong": {
+      "title": {
+        "text": "Si un accord tourne mal",
+        "sourceHash": "190bfad1746f9e84"
+      },
+      "summary": {
+        "text": "Annuler un accord et que faire en cas de désaccord persistant.",
+        "sourceHash": "a68c0d7af60988b4"
+      }
+    },
+    "map-pins": {
+      "title": {
+        "text": "Ce que montre la Carte",
+        "sourceHash": "dbd1bae516674246"
+      },
+      "summary": {
+        "text": "Les repères sur la Carte, la signification de leurs couleurs et les boutons autour.",
+        "sourceHash": "79dec90cc1871495"
+      },
+      "help": {
+        "text": "Ce qui vous entoure : vert pour les Offres, orange pour les Demandes, violet pour les événements. Touchez un repère pour le voir.",
+        "sourceHash": "0dae9edef568b7cd"
+      }
+    },
+    "pin-locations": {
+      "title": {
+        "text": "Emplacement du repère",
+        "sourceHash": "271264e11ffa7eaf"
+      },
+      "summary": {
+        "text": "Qui voit l'emplacement de vos annonces et événements, et comment préserver l'intimité de votre domicile.",
+        "sourceHash": "a6ef3083e3ca4bfc"
+      }
+    },
+    "near-you": {
+      "title": {
+        "text": "Trouver près de chez vous",
+        "sourceHash": "21bac241e8aef2ca"
+      },
+      "summary": {
+        "text": "Afficher uniquement les annonces à une certaine distance de vous ou d'un lieu choisi.",
+        "sourceHash": "5158de7099e0e89b"
+      }
+    },
+    "messages": {
+      "title": {
+        "text": "Messages",
+        "sourceHash": "04d7b48339271ea6"
+      },
+      "summary": {
+        "text": "Lancer une discussion, envoyer des photos, répondre, réagir, modifier, supprimer, mettre en sourdine et ce qui reste privé.",
+        "sourceHash": "d97a6ef5d498fdde"
+      },
+      "help": {
+        "text": "Vos discussions. Un échange individuel est chiffré de bout en bout. Touchez un échange pour l'ouvrir ou démarrez-en un depuis une annonce ou vos amis.",
+        "sourceHash": "bb7067d935067660"
+      }
+    },
+    "groups": {
+      "title": {
+        "text": "Groupes",
+        "sourceHash": "39bbb719fa2b9d22"
+      },
+      "summary": {
+        "text": "Vos groupes et leurs discussions, y échanger, créer un groupe, inviter des personnes, rejoindre sur invitation et les votes internes au groupe.",
+        "sourceHash": "4fa880d88c4b646f"
+      },
+      "help": {
+        "text": "Vos groupes et leurs échanges. Créez un groupe, invitez des personnes ou ouvrez-en un pour échanger et voter ensemble.",
+        "sourceHash": "ae3496f349eba2b3"
+      }
+    },
+    "people": {
+      "title": {
+        "text": "Membres et amis",
+        "sourceHash": "99d59d29a0f3c756"
+      },
+      "summary": {
+        "text": "Trouver des membres de votre communauté, ajouter des amis et parrainer quelqu'un.",
+        "sourceHash": "4be4971d826d83fe"
+      },
+      "help": {
+        "text": "Les membres de votre communauté et vos amis. Touchez une personne pour voir son profil ou touchez 💬 près d'un ami pour lui écrire.",
+        "sourceHash": "d90b46866bc2bb6f"
+      }
+    },
+    "event-chat": {
+      "title": {
+        "text": "Chat événement",
+        "sourceHash": "9c298662a4d6fc3e"
+      },
+      "summary": {
+        "text": "Échanger avec l'hôte et tous les participants à un événement.",
+        "sourceHash": "ae8ca7988e16e019"
+      }
+    },
+    "mute": {
+      "title": {
+        "text": "Mettre en sourdine",
+        "sourceHash": "8a491f4109c925c7"
+      },
+      "summary": {
+        "text": "Couper le son d'un échange — individuel, de groupe ou d'entreprise — pendant 8 heures, une semaine ou pour toujours.",
+        "sourceHash": "ce143abea39ce423"
+      }
+    },
+    "mentions": {
+      "title": {
+        "text": "Mentions (@nom)",
+        "sourceHash": "2e133ecc601b188f"
+      },
+      "summary": {
+        "text": "Alerter une personne dans un groupe en écrivant @ suivi de son nom.",
+        "sourceHash": "265d8fd594c5af23"
+      }
+    },
+    "key-changed": {
+      "title": {
+        "text": "Si la clé d'un contact change",
+        "sourceHash": "79c7dc48aa148094"
+      },
+      "summary": {
+        "text": "Pourquoi les messages cessent d'arriver, comment vérifier le code de clé avec la personne et quand reprendre.",
+        "sourceHash": "c7a3e58ca019f963"
+      }
+    },
+    "the-pulse": {
+      "title": {
+        "text": "Le Pouls",
+        "sourceHash": "a974f2e05f105a24"
+      },
+      "summary": {
+        "text": "Ce que vos voisins créent et partagent ailleurs, réuni dans un seul flux.",
+        "sourceHash": "999659aebbfe69d2"
+      },
+      "help": {
+        "text": "Liens partagés ou créés par vos voisins sur le web, dans un seul flux. Touchez un lien pour l'ouvrir.",
+        "sourceHash": "1d19387da6116082"
+      }
+    },
+    "learn": {
+      "title": {
+        "text": "L'espace Découvrir",
+        "sourceHash": "498e66e5947ca0c3"
+      },
+      "summary": {
+        "text": "Courtes vidéos sur BeanPool et pages du guide correspondantes.",
+        "sourceHash": "4d2fdf4c850fe47f"
+      }
+    },
+    "your-channels": {
+      "title": {
+        "text": "Partager vos canaux",
+        "sourceHash": "e47ac70a91b21162"
+      },
+      "summary": {
+        "text": "Diffusez vos canaux YouTube, blog, Instagram et autres sur le Pouls.",
+        "sourceHash": "bc9819c938b91f04"
+      }
+    },
+    "decisions": {
+      "title": {
+        "text": "Voter une Décision",
+        "sourceHash": "67b17269f83d1030"
+      },
+      "summary": {
+        "text": "Trouver les Décisions ouvertes, voter, modifier votre vote et voir les résultats.",
+        "sourceHash": "fc4b9c95d8478a91"
+      }
+    },
+    "proposing-a-decision": {
+      "title": {
+        "text": "Proposer une Décision",
+        "sourceHash": "3a20703895de04dc"
+      },
+      "summary": {
+        "text": "Demander à la communauté de voter une décision contraignante.",
+        "sourceHash": "69756653393ec8b4"
+      }
+    },
+    "polls": {
+      "title": {
+        "text": "Sondages",
+        "sourceHash": "996729458535904a"
+      },
+      "summary": {
+        "text": "Poser une question rapide à la communauté. Les sondages reflètent des avis ; ils ne changent rien à eux seuls.",
+        "sourceHash": "d7fadda691d8879b"
+      },
+      "help": {
+        "text": "Un sondage pose une question rapide à la communauté. Il donne une tendance ; il ne change rien par lui-même.",
+        "sourceHash": "99dfd4781ce0785d"
+      }
+    },
+    "events": {
+      "title": {
+        "text": "Événements",
+        "sourceHash": "8d14f6e72de8f18a"
+      },
+      "summary": {
+        "text": "Créer un événement, sur place ou en ligne, unique ou récurrent ; s'inscrire, recevoir un rappel, le partager et le gérer en tant qu'hôte.",
+        "sourceHash": "29e8adc52f9b6df9"
+      }
+    },
+    "enterprises": {
+      "title": {
+        "text": "Projets et entreprises",
+        "sourceHash": "e1ccbac49d2ba550"
+      },
+      "summary": {
+        "text": "Initiatives partagées avec leurs propres haricots : en trouver une, en soutenir une ou en lancer une.",
+        "sourceHash": "8302886bb796749e"
+      }
+    },
+    "keepers": {
+      "title": {
+        "text": "Gestionnaires",
+        "sourceHash": "ffc8948f6b16666e"
+      },
+      "summary": {
+        "text": "Les personnes qui font vivre une entreprise et s'engagent pour elle. Comment rejoindre, s'opposer et se retirer.",
+        "sourceHash": "cbe734a215f75289"
+      }
+    },
+    "commons-fund": {
+      "title": {
+        "text": "Les Communs",
+        "sourceHash": "b1b09e953a4dd7c0"
+      },
+      "summary": {
+        "text": "Les haricots partagés de votre communauté : d'où ils viennent et comment ils sont utilisés.",
+        "sourceHash": "aaf9158560e5d6aa"
+      }
+    },
+    "your-balance": {
+      "title": {
+        "text": "Votre solde et historique",
+        "sourceHash": "fb3a96eb2bfcd2a8"
+      },
+      "summary": {
+        "text": "Combien de haricots vous possédez, ce qui est retenu, et chaque échange ou don.",
+        "sourceHash": "61df521108b36035"
+      },
+      "help": {
+        "text": "Vos haricots : ce que vous possédez, ce qui est retenu lors d'un accord, et chaque échange ou don. Tout le monde commence à zéro.",
+        "sourceHash": "a40a5f9fef426c85"
+      }
+    },
+    "credit-line": {
+      "title": {
+        "text": "Votre ligne de crédit",
+        "sourceHash": "dd11b44ecc1037c9"
+      },
+      "summary": {
+        "text": "Jusqu'où descendre sous zéro et comment elle augmente.",
+        "sourceHash": "18b609abc63667e7"
+      }
+    },
+    "gifts": {
+      "title": {
+        "text": "Envoyer un don",
+        "sourceHash": "5440f4f6ef954605"
+      },
+      "summary": {
+        "text": "Envoyer des haricots à quelqu'un, sans aucun échange en retour.",
+        "sourceHash": "7eaddf0c6cd54a04"
+      }
+    },
+    "trust-badges": {
+      "title": {
+        "text": "Badges de mérite",
+        "sourceHash": "a1d8765277383923"
+      },
+      "summary": {
+        "text": "Arrivant, Résident, Pilier et Doyen. Leur signification et pourquoi ils ne débloquent rien.",
+        "sourceHash": "90926482e87ba9fa"
+      }
+    },
+    "trading-partner-limit": {
+      "title": {
+        "text": "Limite de 500 haricots",
+        "sourceHash": "c40110de7df3670c"
+      },
+      "summary": {
+        "text": "Pourquoi échanger avec de nombreuses personnes crée plus de confiance qu'échanger beaucoup avec une seule.",
+        "sourceHash": "ce231d025501d5bc"
+      }
+    },
+    "circulation-fee": {
+      "title": {
+        "text": "Frais de circulation",
+        "sourceHash": "e237d280aa62b186"
+      },
+      "summary": {
+        "text": "Une petite contribution mensuelle sur les soldes élevés pour faire circuler les haricots. Les 200 premiers sont exemptés.",
+        "sourceHash": "c9efbe6aa5cb9873"
+      }
+    },
+    "privacy": {
+      "title": {
+        "text": "Confidentialité",
+        "sourceHash": "d2a7115d0455956b"
+      },
+      "summary": {
+        "text": "Ce que les autres voient de vous et les réglages qui le contrôlent.",
+        "sourceHash": "e4a23a87e82cf7a6"
+      },
+      "help": {
+        "text": "Ce que les autres membres voient de vous et les interrupteurs qui le contrôlent.",
+        "sourceHash": "0a1a1831174d443b"
+      }
+    },
+    "your-area": {
+      "title": {
+        "text": "Votre zone",
+        "sourceHash": "b0adfdbb4ce55184"
+      },
+      "summary": {
+        "text": "La zone approximative utilisée par la communauté globale pour afficher les annonces proches, et comment la modifier ou l'effacer.",
+        "sourceHash": "de4a8af84def7d30"
+      },
+      "help": {
+        "text": "La zone approximative servant à afficher les annonces près de chez vous. Modifiez-la ou effacez-la ici ; ce n'est jamais votre adresse exacte.",
+        "sourceHash": "f3099801c4d773a5"
+      }
+    },
+    "what-the-admins-can-see": {
+      "title": {
+        "text": "Ce que voient les admins",
+        "sourceHash": "261de35d8123a845"
+      },
+      "summary": {
+        "text": "Dans une communauté où les administrateurs tiennent un registre de noms : ce qu'il contient sur vous, qui peut le lire, ce que garde le serveur et ce que signifie être confirmé.",
+        "sourceHash": "5960a4392bb32b4b"
+      }
+    },
+    "admins-ai-assistants": {
+      "title": {
+        "text": "Assistant IA d'un admin",
+        "sourceHash": "9180d368e5d11c1e"
+      },
+      "summary": {
+        "text": "Ce que l'assistant IA d'un propriétaire ou administrateur peut lire sur vous, ce qu'il ne voit jamais et qui le reçoit.",
+        "sourceHash": "d693c47b7b2cbfef"
+      }
+    },
+    "blocking": {
+      "title": {
+        "text": "Bloquer quelqu'un",
+        "sourceHash": "f2ddac8bd6e31ad5"
+      },
+      "summary": {
+        "text": "Masquer les publications et messages d'une personne, et annuler ce blocage plus tard.",
+        "sourceHash": "9e63d5d87e52a1b9"
+      },
+      "help": {
+        "text": "Personnes que vous avez bloquées. Leurs annonces et messages vous sont masqués ; débloquez une personne ici.",
+        "sourceHash": "baecf7f0bec3735c"
+      }
+    },
+    "reporting": {
+      "title": {
+        "text": "Signaler un problème",
+        "sourceHash": "59274c49ac87bb2f"
+      },
+      "summary": {
+        "text": "Alerter les modérateurs de votre communauté à propos d'une annonce, d'un événement, d'une publication du Pouls, d'un projet ou d'une entreprise.",
+        "sourceHash": "4b773ef8eef237fa"
+      }
+    },
+    "notifications": {
+      "title": {
+        "text": "Notifications",
+        "sourceHash": "788011833a5a0f22"
+      },
+      "summary": {
+        "text": "Choisir les alertes reçues sur votre téléphone et le moment où les événements vous sont rappelés.",
+        "sourceHash": "70c8aa586befc843"
+      },
+      "help": {
+        "text": "Choisissez les alertes que vous recevez et le moment où les événements vous sont rappelés.",
+        "sourceHash": "7f7ecf01321aba59"
+      }
+    },
+    "appearance": {
+      "title": {
+        "text": "Clair et sombre",
+        "sourceHash": "596443341c105af1"
+      },
+      "summary": {
+        "text": "L'application mobile démarre en mode clair et le web en mode sombre. Changez-le ou suivez les réglages de votre appareil.",
+        "sourceHash": "31cf0aeff28a2052"
+      },
+      "help": {
+        "text": "Passez l'application en mode clair ou sombre, ou suivez votre téléphone.",
+        "sourceHash": "1ef643d6832c782a"
+      }
+    },
+    "holiday-mode": {
+      "title": {
+        "text": "En vacances",
+        "sourceHash": "03098a2ccb21c3c2"
+      },
+      "summary": {
+        "text": "Le Mode vacances masque vos Offres et met en pause les nouvelles demandes pendant votre absence.",
+        "sourceHash": "53d1ceef93b0a7a1"
+      }
+    },
+    "leaving-or-deleting": {
+      "title": {
+        "text": "Quitter ou supprimer le compte",
+        "sourceHash": "6128699c3d7f036a"
+      },
+      "summary": {
+        "text": "Déconnectez-vous de ce téléphone ou supprimez définitivement votre compte, et découvrez ce que deviennent vos haricots.",
+        "sourceHash": "d28cb71428dd6615"
+      }
+    },
+    "recovery": {
+      "title": {
+        "text": "Récupérer votre compte",
+        "sourceHash": "7a6a763f943871ce"
+      },
+      "summary": {
+        "text": "Restaurez votre compte sur un nouveau téléphone et protégez-le en associant un compte de connexion.",
+        "sourceHash": "5235d9f9073b2e63"
+      },
+      "help": {
+        "text": "Comment récupérer votre compte sur un nouveau téléphone : vos 12 mots ou un compte de connexion associé.",
+        "sourceHash": "05fba497e5466e59"
+      }
+    },
+    "check-your-12-words": {
+      "title": {
+        "text": "Vos 12 mots et clés (gestion)",
+        "sourceHash": "0a24c7fe8ed3b0a4"
+      },
+      "summary": {
+        "text": "Pour les propriétaires d'une communauté. Vérifier vos 12 mots, reprendre la main ou restaurer le serveur avec votre téléphone, et vérification automatique par le téléphone.",
+        "sourceHash": "c3a1b3cdc4e7d8df"
+      }
+    }
+  }
 }

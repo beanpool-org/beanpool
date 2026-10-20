@@ -1,8 +1,9 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import {
-    findGuidePage, findGuideSection, findGuideVideo, guideInLanguage, guidePageBodyInEnglish, guideSourceHash, searchGuide,
-    type Guide, type GuideTitles,
+    findGuidePage, findGuideSection, findGuideVideo, guideInLanguage, guidePageBodyInEnglish, guidePageNewerInEnglish,
+    guideSourceHash, guideBodyHash, searchGuide, refreshLanguageGuideFromWebsite, loadCachedLanguageGuide,
+    type Guide, type GuideTitles, type GuideStorage,
 } from '../member-guide.js';
 import { helpSheetFor } from '../help-map.js';
 import { pseudoLocalise } from '../words.js';
@@ -134,5 +135,90 @@ describe('search and videos on a guide in another language', () => {
         const video = { title: 'Browsing the Market', url: 'https://www.youtube.com/watch?v=abcdefghijk', source: 'curated' };
         expect(findGuideVideo(page, [video])).toBe(video);
         expect(findGuideVideo(page, [{ ...video, title: 'Explorar o Mercado' }])).toBeNull();
+    });
+});
+
+describe('guideInLanguage with translated page bodies (slice S5b)', () => {
+    const market = GUIDE.guides.find(p => p.slug === 'browsing-the-market')!;
+    const marketBodyHash = guideBodyHash(market);
+
+    const translatedGuide: Guide = {
+        schema: 2, version: 1, hash: 'pthash', language: 'pt',
+        sections: [{ id: 'market', title: 'Mercado', summary: 'Encontrar e publicar.', slugs: ['browsing-the-market'] }],
+        guides: [
+            {
+                slug: 'browsing-the-market',
+                title: 'Explorar o Mercado',
+                summary: 'Encontrar o que os vizinhos oferecem.',
+                section: 'market',
+                related: ['how-it-works'],
+                sourceHash: marketBodyHash,
+                blocks: [{ type: 'h2', text: 'Filtros' }, { type: 'p', text: 'Escolha uma categoria.' }],
+            },
+        ],
+    };
+
+    it('current state: source-hash matches English body -> shows translated body, neither note', () => {
+        const pt = guideInLanguage(GUIDE, 'pt', PT, translatedGuide);
+        const page = findGuidePage(pt, 'browsing-the-market')!;
+        expect(page.title).toBe('Explorar o Mercado');
+        expect(page.blocks).toEqual(translatedGuide.guides[0].blocks);
+        expect(page.bodyState).toBe('current');
+        expect(guidePageBodyInEnglish(page)).toBe(false);
+        expect(guidePageNewerInEnglish(page)).toBe(false);
+    });
+
+    it('behind state: source-hash differs from English body -> shows translated body with newer in English', () => {
+        const staleGuide: Guide = {
+            ...translatedGuide,
+            guides: [{ ...translatedGuide.guides[0], sourceHash: '0000000000000000' }],
+        };
+        const pt = guideInLanguage(GUIDE, 'pt', PT, staleGuide);
+        const page = findGuidePage(pt, 'browsing-the-market')!;
+        expect(page.title).toBe('Explorar o Mercado');
+        expect(page.blocks).toEqual(staleGuide.guides[0].blocks);
+        expect(page.bodyState).toBe('behind');
+        expect(guidePageBodyInEnglish(page)).toBe(false);
+        expect(guidePageNewerInEnglish(page)).toBe(true);
+        expect(page.englishBlocks).toEqual(market.blocks);
+    });
+
+    it('missing state: page not in translated guide -> shows English body', () => {
+        const pt = guideInLanguage(GUIDE, 'pt', PT, translatedGuide);
+        const how = findGuidePage(pt, 'how-it-works')!;
+        expect(how.blocks).toEqual(GUIDE.guides[0].blocks);
+        expect(how.bodyState).toBe('missing');
+        expect(guidePageNewerInEnglish(how)).toBe(false);
+    });
+
+    it('search finds page by translated body words and English body words', () => {
+        const pt = guideInLanguage(GUIDE, 'pt', PT, translatedGuide);
+        // Translated body word
+        expect(searchGuide(pt, 'categoria').map(r => r.page.slug)).toEqual(['browsing-the-market']);
+        expect(searchGuide(pt, 'filtros').map(r => r.page.slug)).toEqual(['browsing-the-market']);
+        // English body word from original blocks
+        expect(searchGuide(pt, 'filters').map(r => r.page.slug)).toEqual(['browsing-the-market']);
+    });
+
+    it('caching and fetching language guide per language', async () => {
+        const storage: Record<string, string> = {};
+        const mockStorage: GuideStorage = {
+            getItem: (k) => storage[k] ?? null,
+            setItem: (k, v) => { storage[k] = v; },
+        };
+        expect(await loadCachedLanguageGuide(mockStorage, 'pt')).toBeNull();
+
+        const fetched = await refreshLanguageGuideFromWebsite(
+            null,
+            mockStorage,
+            async () => ({ ok: true, text: async () => JSON.stringify(translatedGuide) }),
+            'pt',
+        );
+        expect(fetched?.version).toBe(1);
+        expect(storage['beanpool_member_guide_v2:pt']).toBeTruthy();
+
+        const cached = await loadCachedLanguageGuide(mockStorage, 'pt');
+        expect(cached?.version).toBe(1);
+        expect(cached?.guides[0].slug).toBe('browsing-the-market');
     });
 });

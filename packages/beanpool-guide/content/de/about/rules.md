@@ -57,7 +57,7 @@ Umfragen sind ebenfalls anonym, es sei denn, die Person, die sie startet, macht 
 
 Jede Entscheidung läuft genau 7 Tage lang. Die Abstimmung beginnt sofort. Nach Ablauf der 7 Tage zählt der Server deiner Community die Stimmen und setzt das Ergebnis um.
 
-## Beteiligung (Quorum)
+## Beteiligung
 
 Eine Abstimmung zählt nur, wenn genügend Personen teilnehmen.
 

@@ -431,3 +431,20 @@ test('writeBriefs rejects invalid language codes with path traversal', async () 
         fs.rmSync(tmp, { recursive: true, force: true });
     }
 });
+
+test('reportDraft exits 0 even on scan errors', async () => {
+    const tmp = makeTempDir();
+    try {
+        const origErr = console.error;
+        console.error = () => {};
+        try {
+            // Point root to an empty temp dir that lacks guide manifest
+            const rc = await reportDraft({ root: tmp });
+            assert.equal(rc, 0);
+        } finally {
+            console.error = origErr;
+        }
+    } finally {
+        fs.rmSync(tmp, { recursive: true, force: true });
+    }
+});

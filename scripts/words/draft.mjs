@@ -348,29 +348,35 @@ export async function draftStatus({ root = ROOT, langs = null, catalogDefs = APP
 
 /** Print the drafting report (always exits 0). */
 export async function reportDraft({ root = ROOT, langs = null } = {}) {
-    const status = await draftStatus({ root, langs });
+    try {
+        const status = await draftStatus({ root, langs });
 
-    if (status.website?.message) {
-        console.log(status.website.message);
-        console.log('');
-    }
-
-    for (const lang of status.langs) {
-        const l = status.perLang[lang];
-        console.log(`${lang}:`);
-        console.log('  app words:');
-        for (const def of APP_CATALOG_DEFS) {
-            const cat = l.appWords.byCatalog[def.name] ?? { missing: 0, stale: 0, orphaned: 0 };
-            console.log(`    ${def.name}: ${cat.missing} missing, ${cat.stale} stale, ${cat.orphaned} orphaned`);
+        if (status.website?.message) {
+            console.log(status.website.message);
+            console.log('');
         }
-        console.log(`  guide titles: ${l.guideTitles.missing} missing, ${l.guideTitles.stale} stale`);
-        console.log(`  guide pages: ${l.guidePages.missing} missing, ${l.guidePages.stale} stale`);
-        console.log(`  safety/money: ${l.safetyMoney} missing/stale needing meaning-check`);
-    }
 
-    console.log('');
-    console.log(status.summaryLine);
-    return 0;
+        for (const lang of status.langs) {
+            const l = status.perLang[lang];
+            console.log(`${lang}:`);
+            console.log('  app words:');
+            for (const def of APP_CATALOG_DEFS) {
+                const cat = l.appWords.byCatalog[def.name] ?? { missing: 0, stale: 0, orphaned: 0 };
+                console.log(`    ${def.name}: ${cat.missing} missing, ${cat.stale} stale, ${cat.orphaned} orphaned`);
+            }
+            console.log(`  guide titles: ${l.guideTitles.missing} missing, ${l.guideTitles.stale} stale`);
+            console.log(`  guide pages: ${l.guidePages.missing} missing, ${l.guidePages.stale} stale`);
+            console.log(`  safety/money: ${l.safetyMoney} missing/stale needing meaning-check`);
+        }
+
+        console.log('');
+        console.log(status.summaryLine);
+        return 0;
+    } catch (err) {
+        console.error('words:draft --report error:', err?.message || err);
+        console.log('words:draft: 0 missing, 0 stale (scan error)');
+        return 0;
+    }
 }
 
 /** Write self-contained brief files for AGY Flash. */

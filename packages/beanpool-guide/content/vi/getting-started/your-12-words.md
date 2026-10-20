@@ -60,7 +60,7 @@ Nếu chiếc điện thoại này không có bản sao 12 từ của bạn, và
 
 Bạn có thể tham gia cộng đồng toàn cầu chỉ bằng 12 từ bí mật tiếng Anh, mà không cần tài khoản Google, Apple hay Facebook (xem "Tham gia BeanPool"). Nếu cách đó tạo cho bạn một tài khoản mới, 12 từ của bạn là cách duy nhất để vào lại. Không có bản sao nào của tài khoản bạn được lưu giữ ở bất kỳ đâu ngoài điện thoại của bạn, và không ai có thể đặt lại chúng: cả BeanPool và cộng đồng đều không thể. Nếu bạn mất chúng và mất điện thoại, tài khoản sẽ mất vĩnh viễn. (Nếu bạn tham gia bằng tài khoản bạn đã có sẵn, một phương thức đăng nhập bạn đã liên kết ở cộng đồng khác vẫn giúp lấy lại tài khoản ở đó.)
 
-Ứng dụng sẽ giải thích điều đó tại bước **Sao lưu**. Sau khi bạn tham gia, một thẻ trên **Trang chủ** sẽ nhắc lại điều này, trên điện thoại và trong ứng dụng web: **Tài khoản của bạn có một cách để vào lại: 12 từ của bạn. Hãy kiểm tra xem bạn còn giữ chúng không, hoặc thêm một phương thức đăng nhập.** Thẻ không bao giờ ngăn cản bạn làm bất cứ điều gì. Trên điện thoại:
+Ứng dụng sẽ giải thích điều đó tại bước **Sao lưu**. Sau khi bạn tham gia, một thẻ trên **Trang chủ** sẽ nhắc lại điều này, trên điện thoại và trong ứng dụng web: **Tài khoản của bạn chỉ có một lối vào lại: 12 từ của bạn. Hãy kiểm tra xem bạn còn giữ chúng không, hoặc thêm một cách đăng nhập.** Thẻ không bao giờ ngăn cản bạn làm bất cứ điều gì. Trên điện thoại:
 
 - **✕** đóng thẻ lại. Thẻ sẽ xuất hiện lại một lần sau bài đăng đầu tiên của bạn và một lần sau một tuần, sau đó chỉ ở trong **Cài đặt**, dưới mục **Bảo vệ tài khoản**.
 - **Hiện 12 từ của tôi** mở **Bảo vệ tài khoản**, nơi bạn có thể xem lại chúng.

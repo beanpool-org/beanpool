@@ -44,26 +44,26 @@ Bạn sẽ bắt gặp dấu hiệu này ở một vài dạng:
 
 - một nhãn nhỏ trên màn hình hoặc thẻ;
 - một khung thông báo ngang trên đầu màn hình mẫu;
-- một nút giữ nguyên vị trí, chẳng hạn như **Request · Beans held safely 🏘️** trên một tin đăng;
-- một dòng cho biết điểm khác biệt của cộng đồng địa phương, chẳng hạn như "🏘️ In a local community this is a price in Beans ›".
+- một nút giữ nguyên vị trí, chẳng hạn như **Yêu cầu · Đậu được giữ an toàn 🏘️** trên một tin đăng;
+- một dòng cho biết điểm khác biệt của cộng đồng địa phương, chẳng hạn như "🏘️ Trong cộng đồng địa phương, đây là giá tính bằng đậu ›".
 
-Nhấn vào bất kỳ mục nào trong số đó để mở phần **Why this lives in a local community**. Phần này sẽ giải thích lý do trong một hoặc hai câu, sau đó đưa ra tùy chọn **Tạo một cộng đồng** và khi có thể, các mục **Cộng đồng gần bạn** và **Cách hoạt động**.
+Nhấn vào bất kỳ mục nào trong số đó để mở phần **Vì sao tính năng này thuộc về cộng đồng địa phương**. Phần này sẽ giải thích lý do trong một hoặc hai câu, sau đó đưa ra tùy chọn **Bắt đầu một cộng đồng** và khi có thể, các mục **Cộng đồng gần bạn** và **Cách thức hoạt động**.
 
 ## Example Valley
 
-Các màn hình có dấu hiệu này sẽ hiển thị **Example Valley**: một cộng đồng giả lập, để bạn có thể thấy các màn hình của một cộng đồng địa phương trông như thế nào khi có dữ liệu.
+Các màn hình có dấu hiệu này sẽ hiển thị **Thung lũng Mẫu**: một cộng đồng giả lập, để bạn có thể thấy các màn hình của một cộng đồng địa phương trông như thế nào khi có dữ liệu.
 
 - **Sổ cái:** một thành viên mẫu có 85 Đậu, hạn mức chi tiêu xuống đến −200, một huy hiệu tin cậy, và một vài giao dịch gần đây, chẳng hạn như bánh mì, một giờ làm vườn và một số cây giống.
-- **Commons:** tiệm bánh Example Valley Bakery, một doanh nghiệp do các thành viên cùng quản lý, và một Quyết định: khu ủ phân hữu cơ, được chi trả từ số Đậu chung của Commons.
+- **Chung:** tiệm bánh Example Valley Bakery, một doanh nghiệp do các thành viên cùng quản lý, và một Quyết định: khu ủ phân hữu cơ, được chi trả từ số Đậu chung của Commons.
 - **Giao dịch của tôi,** trong Chợ: ba thỏa thuận mẫu: một thỏa thuận đang chờ bạn xử lý, một thỏa thuận có Đậu được giữ an toàn, và một thỏa thuận đã hoàn tất.
 
-Không ai trong Example Valley có tên thật. Bạn sẽ thấy "một người hàng xóm", "Commons" hoặc "Example Valley Bakery". Không có gì trong số đó là thật, và không có gì là của bạn.
+Không ai trong Example Valley có tên thật. Bạn sẽ thấy "một người hàng xóm", "Chung" hoặc "Tiệm bánh Thung lũng Mẫu". Không có gì trong số đó là thật, và không có gì là của bạn.
 
 Các nút **ⓘ** và các trang hướng dẫn trên những màn hình này là thật: chúng giải thích cách thức hoạt động trong một cộng đồng địa phương.
 
-Một nút dùng để gửi Đậu, tạo thỏa thuận, bỏ phiếu, cam kết hoặc mời sẽ mở **Why this lives in a local community** thay thế. Nút này không gửi gì và không thay đổi gì cả.
+Một nút dùng để gửi Đậu, tạo thỏa thuận, bỏ phiếu, cam kết hoặc mời sẽ mở **Vì sao tính năng này thuộc về cộng đồng địa phương** thay thế. Nút này không gửi gì và không thay đổi gì cả.
 
-Khung thông báo ở đầu màn hình mẫu có nút **✕**. Nhấn vào đó và khung sẽ thu nhỏ thành một dòng, "🏘️ An example · Why? ›". Điện thoại hoặc trình duyệt của bạn sẽ ghi nhớ điều đó cho cộng đồng này. Trên điện thoại, nhấn vào dòng đó để mở lại khung. Trong ứng dụng web, nhấn vào dòng đó để xem lý do, hoặc nhấn **▾** để mở lại khung.
+Khung thông báo ở đầu màn hình mẫu có nút **✕**. Nhấn vào đó và khung sẽ thu nhỏ thành một dòng, "🏘️ Một ví dụ · Tại sao? ›". Điện thoại hoặc trình duyệt của bạn sẽ ghi nhớ điều đó cho cộng đồng này. Trên điện thoại, nhấn vào dòng đó để mở lại khung. Trong ứng dụng web, nhấn vào dòng đó để xem lý do, hoặc nhấn **▾** để mở lại khung.
 
 Trên trình duyệt web, bạn có thể xem Sổ cái mẫu trước khi tham gia: đó là một tab bên cạnh Trang chủ, Chợ và Bản đồ.
 
@@ -87,23 +87,23 @@ Một cộng đồng địa phương vận hành trên một máy chủ nhỏ ri
 
 - **Chi phí:** một chiếc máy tính dư để ở nhà luôn bật, hoặc một máy chủ thuê nhỏ với giá vài đô la một tháng. Phần mềm hoàn toàn miễn phí.
 - **Ai vận hành:** chính bạn, trên máy của riêng bạn hoặc máy bạn thuê. Máy chủ không cần đến beanpool.org: nó có thể có địa chỉ web riêng.
-- **Những gì bạn tiếp nhận:** các báo cáo từ thành viên sẽ được gửi đến bạn. Dữ liệu của cộng đồng do bạn tự sao lưu, bằng một mã khôi phục. Hãy duy trì hai chủ sở hữu, đồng thời giữ cho máy chủ luôn bật và được cập nhật.
+- **Trách nhiệm của bạn:** các báo cáo từ thành viên sẽ được gửi đến bạn. Dữ liệu của cộng đồng do bạn tự sao lưu, bằng một mã khôi phục. Hãy duy trì hai chủ sở hữu, đồng thời giữ cho máy chủ luôn bật và được cập nhật.
 - **Những gì bạn không bao giờ thấy:** các đoạn chat riêng giữa hai thành viên với nhau. Chúng được mã hóa khóa chặt để máy chủ không thể đọc được.
 - **Mất bao lâu:** khoảng nửa giờ, cho một người có thể làm theo hướng dẫn từng bước.
 
-Để bắt đầu, nhấn **Tạo một cộng đồng** trong bất kỳ bảng **Why this lives in a local community** nào, hoặc trên điện thoại, trên thẻ **Find your community** của Trang chủ. Màn hình sẽ hiển thị ba cách để vận hành: một máy tính dư ở nhà, một máy chủ thuê nhỏ, hoặc nhờ trợ giúp trên cộng đồng toàn cầu. Nút **Sao chép thông tin cộng đồng của tôi** sẽ sao chép tên, địa điểm của cộng đồng và cách mọi người có thể liên hệ với bạn, để dán vào phần cài đặt của máy chủ mới.
+Để bắt đầu, nhấn **Bắt đầu một cộng đồng** trong bất kỳ bảng **Vì sao tính năng này thuộc về cộng đồng địa phương** nào, hoặc trên điện thoại, trên thẻ **Tìm cộng đồng của bạn** của Trang chủ. Màn hình sẽ hiển thị ba cách để vận hành: một máy tính dư ở nhà, một máy chủ thuê nhỏ, hoặc nhờ trợ giúp trên cộng đồng toàn cầu. Nút **Sao chép thông tin cộng đồng của tôi** sẽ sao chép tên, địa điểm của cộng đồng và cách mọi người có thể liên hệ với bạn, để dán vào phần cài đặt của máy chủ mới.
 
-Các bước thực hiện nằm trong "Thiết lập lần đầu", trong hướng dẫn dành cho người vận hành cộng đồng trên beanpool.org. Khi máy chủ của bạn đã hoạt động, bạn xác nhận quyền sở hữu bằng điện thoại của mình: hướng máy ảnh của điện thoại vào mã QR mà máy chủ của bạn hiển thị, hoặc trong BeanPool nhấn **Thiết lập máy chủ cộng đồng mới** (trong **Tìm cộng đồng** hoặc **Tạo một cộng đồng**), sau đó chọn **Quét mã**. Cài đặt sau đó sẽ hướng dẫn bạn đặt tên cho cộng đồng, thêm chủ sở hữu thứ hai và tạo những lời mời đầu tiên. Hãy đặt cả vị trí của cộng đồng trong Cài đặt, để mọi người ở gần có thể tìm thấy.
+Các bước thực hiện nằm trong "Thiết lập lần đầu", trong hướng dẫn dành cho người vận hành cộng đồng trên beanpool.org. Khi máy chủ của bạn đã hoạt động, bạn xác nhận quyền sở hữu bằng điện thoại của mình: hướng máy ảnh của điện thoại vào mã QR mà máy chủ của bạn hiển thị, hoặc trong BeanPool nhấn **Thiết lập máy chủ cộng đồng mới** (trong **Tìm cộng đồng** hoặc **Bắt đầu một cộng đồng**), sau đó chọn **Quét mã**. Cài đặt sau đó sẽ hướng dẫn bạn đặt tên cho cộng đồng, thêm chủ sở hữu thứ hai và tạo những lời mời đầu tiên. Hãy đặt cả vị trí của cộng đồng trong Cài đặt, để mọi người ở gần có thể tìm thấy.
 
 ## Tham gia một cộng đồng gần bạn
 
 Trên điện thoại:
 
 - **Cộng đồng gần bạn** liệt kê các cộng đồng ở gần bạn nhất đã chọn hiển thị trong danh sách.
-- Nhấn **Xin tham gia**: một thành viên ở đó có thể cho bạn vào. Ở nơi cộng đồng chỉ cho phép quản trị viên mời, một chủ sở hữu hoặc quản trị viên sẽ thực hiện việc đó.
+- Nhấn **Yêu cầu tham gia**: một thành viên ở đó có thể cho bạn vào. Ở nơi cộng đồng chỉ cho phép quản trị viên mời, một chủ sở hữu hoặc quản trị viên sẽ thực hiện việc đó.
 - Chưa có cộng đồng nào ở gần bạn? Nút **Báo cho tôi khi có cộng đồng ở đây** sẽ thông báo cho bạn khi có cộng đồng xuất hiện.
 
-Trong ứng dụng web, thẻ **Find your community** trên Trang chủ liên kết từng cộng đồng gần bạn đến trang riêng của cộng đồng đó.
+Trong ứng dụng web, thẻ **Tìm cộng đồng của bạn** trên Trang chủ liên kết từng cộng đồng gần bạn đến trang riêng của cộng đồng đó.
 
 Tài khoản của bạn sẽ đi cùng bạn, với 12 từ tiếng Anh giữ nguyên, và bạn vẫn là thành viên của cộng đồng toàn cầu. Xem "Tìm một cộng đồng gần bạn".
 

@@ -18,7 +18,7 @@ source-hash: 7adea0e9b76c043c
 
 Trong ứng dụng web, nhấn **Chỉnh sửa hồ sơ**, thay đổi ảnh bằng **Máy ảnh** hoặc **Thư viện ảnh**, rồi nhấn **Lưu thay đổi hồ sơ**.
 
-Bạn cũng có thể nhấn **Chạy lại thiết lập** trong Cài đặt. Ứng dụng sẽ hướng dẫn lại bạn qua các bước đặt tên và chọn ảnh, ước chừng vị trí của bạn (trên cộng đồng toàn cầu, trong ứng dụng điện thoại), và chuyến tham quan ngắn về cách thức hoạt động của BeanPool. Trong trình duyệt web, hãy đặt khu vực của bạn trong **Cài đặt**, dưới mục **Khu vực bạn**.
+Bạn cũng có thể nhấn **Chạy lại thiết lập** trong Cài đặt. Ứng dụng sẽ hướng dẫn lại bạn qua các bước đặt tên và chọn ảnh, ước chừng vị trí của bạn (trên cộng đồng toàn cầu, trong ứng dụng điện thoại), và chuyến tham quan ngắn về cách thức hoạt động của BeanPool. Trong trình duyệt web, hãy đặt khu vực của bạn trong **Cài đặt**, dưới mục **Khu vực của bạn**.
 
 ## Trước khi bạn đăng bài
 
@@ -30,7 +30,7 @@ Dưới mục **Thông tin liên hệ**, bạn có thể thêm số điện tho�
 
 Khi bạn đã thêm, hãy chọn **Ai có thể thấy thông tin này?**:
 
-- **Hidden:** không ai cả.
+- **Ẩn:** không ai cả.
 - **Đối tác trao đổi:** những thành viên bạn đang có thỏa thuận giao dịch cùng. Thông tin được tính từ thời điểm một trong hai người nhấn **Accept Offer** hoặc **Offer to Fulfill** trên bài đăng của người kia, ngay cả khi thỏa thuận sau đó bị hủy hoặc bị từ chối. Việc chỉ gửi riêng Đậu không được tính là một thỏa thuận.
 - **Bạn bè:** những người bạn đã thêm vào danh sách bạn bè.
 - **Cộng đồng:** mọi thành viên trong cộng đồng của bạn.

@@ -58,7 +58,7 @@ Không cần. Một cộng đồng địa phương cho phép bạn vào thông q
 
 ## Làm thế nào để tôi bắt đầu một cộng đồng?
 
-Nhấn **Tạo một cộng đồng** trong ứng dụng. Một cộng đồng vận hành trên máy chủ nhỏ riêng: một chiếc máy tính dư ở nhà, hoặc một máy chủ thuê với giá vài đô la một tháng. Phần mềm hoàn toàn miễn phí, và cộng đồng không cần đến beanpool.org. Xem "Đậu và cộng đồng toàn cầu".
+Nhấn **Bắt đầu một cộng đồng** trong ứng dụng. Một cộng đồng vận hành trên máy chủ nhỏ riêng: một chiếc máy tính dư ở nhà, hoặc một máy chủ thuê với giá vài đô la một tháng. Phần mềm hoàn toàn miễn phí, và cộng đồng không cần đến beanpool.org. Xem "Đậu và cộng đồng toàn cầu".
 
 ## Tôi có thể thuộc về nhiều hơn một cộng đồng không?
 

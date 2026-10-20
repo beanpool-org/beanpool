@@ -80,7 +80,7 @@ Una insignia es un reconocimiento, nada más. No habilita nada adicional. Todos 
 
 ## Comisiones y los Bienes comunes
 
-Tu comunidad tiene un fondo compartido de frijoles llamado **Bienes comunes**. Las comisiones van a él. Los miembros deciden juntos cómo se gasta.
+Tu comunidad tiene un fondo compartido de frijoles llamado **Comunes**. Las comisiones van a él. Los miembros deciden juntos cómo se gasta.
 
 - **Comisión de mercado:** el 1.5% de cada pago del mercado va a los Bienes comunes. Se deduce de lo que recibe el vendedor.
 - **Comisión de circulación:** los frijoles están hechos para moverse, no para quedarse quietos. Los primeros 200 frijoles que tienes siempre están libres de comisión. Por encima de eso, una pequeña comisión mensual va a los Bienes comunes: 1% al mes sobre los frijoles entre 200 y 500, 1.5% entre 500 y 1,000, 2% entre 1,000 y 2,000, y 2.5% por encima de 2,000.
@@ -90,6 +90,6 @@ Tu comunidad tiene un fondo compartido de frijoles llamado **Bienes comunes**. L
 
 Un **emprendimiento** se mantiene activo y comercia a su propio nombre: una panadería, una biblioteca de herramientas, un puesto en el mercado. Es administrado por **custodios**, encabezados por un **custodio principal**. Los custodios pueden comprometer parte de su propia confianza para darle al emprendimiento una línea de crédito.
 
-Un **grupo** es un círculo de miembros con su propio chat y publicaciones, gestionado por uno o más **convocantes**. Uno de ellos es su **convocante principal** —quien creó el grupo, para empezar.
+Un **grupo** es un círculo de miembros con su propio chat y publicaciones, gestionado por uno o más **convocantes**. Uno de ellos es su **coordinador principal** —quien creó el grupo, para empezar.
 
 Puedes leer cómo se eligen los custodios y convocantes en "Reglas y cómo decidir".

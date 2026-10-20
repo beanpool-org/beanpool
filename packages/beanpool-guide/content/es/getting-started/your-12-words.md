@@ -66,7 +66,7 @@ La app lo indica en **Respaldo seguro**. Después de unirte, una tarjeta en **In
 - **Mostrar mis 12 palabras** abre **Protección de la cuenta**, donde puedes verlas nuevamente.
 - En **Protección de la cuenta**, **Aún tengo mis 12 palabras** descarta la tarjeta definitivamente. **Añadir un inicio de sesión** permanece allí.
 
-En la app web la tarjeta tiene el encabezado **Una forma de volver**, con **Ver mis 12 palabras** y **Añadir un inicio de sesión**. **✕** la descarta: regresa una vez después de que una de tus publicaciones haya permanecido activa, y una vez que termine tu primera semana. Al tocar **Ver mis 12 palabras** en la tarjeta de **Inicio**, se muestran y la tarjeta ya no vuelve a aparecer allí. Permanece en la parte superior de **Configuración** hasta que añadas un inicio de sesión.
+En la app web la tarjeta tiene el encabezado **Una forma de volver**, con **Ver mis 12 palabras** y **Añadir un inicio de sesión**. **✕** la descarta: regresa una vez después de que una de tus publicaciones haya permanecido activa, y una vez que termine tu primera semana. Al tocar **Ver mis 12 palabras** en la tarjeta de **Inicio**, se muestran y la tarjeta ya no vuelve a aparecer allí. Permanece en la parte superior de **Ajustes** hasta que añadas un inicio de sesión.
 
 Una cuenta creada con 12 palabras también comienza más lento que una creada con un inicio de sesión, durante su primera semana. Consulta "Reportar un problema" para conocer sus límites y por qué.
 

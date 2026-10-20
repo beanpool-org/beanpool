@@ -16,7 +16,7 @@ La comunidad global es una comunidad entre muchas. Tu propia comunidad funciona 
 
 ## Comunidades cerca de ti
 
-En la comunidad global, la tarjeta **Find your community** en **Inicio** muestra las comunidades más cercanas a ti. Durante tus primeros 30 días permanece cerca de la parte superior de Inicio y no se puede quitar ni mover; después de eso puedes quitarla como cualquier otra tarjeta. En la app web, cada comunidad en la tarjeta es un enlace a su propia página. Si no sabe dónde estás, toca **Compartir mi zona**, o **o escribe tu localidad** y elige tu localidad. Los siguientes pasos son para la app del teléfono.
+En la comunidad global, la tarjeta **Encuentra tu comunidad** en **Inicio** muestra las comunidades más cercanas a ti. Durante tus primeros 30 días permanece cerca de la parte superior de Inicio y no se puede quitar ni mover; después de eso puedes quitarla como cualquier otra tarjeta. En la app web, cada comunidad en la tarjeta es un enlace a su propia página. Si no sabe dónde estás, toca **Compartir mi zona**, o **o escribe tu localidad** y elige tu localidad. Los siguientes pasos son para la app del teléfono.
 
 ¿Aún no estás en la comunidad global? Toca el frijol en la parte superior izquierda y, bajo **Tus comunidades**, toca **Comunidad global**, luego únete a ella con la cuenta que tienes: consulta "Más de una comunidad". Sin una cuenta aún, toca **Explorar BeanPool en todo el mundo** en la primera pantalla de la app: consulta "Unirse a BeanPool".
 
@@ -29,7 +29,7 @@ Una comunidad que no haya publicado su dirección aparece en la lista, pero aún
 
 ## Pedir unirte
 
-- Toca **Pedir unirme** en una comunidad.
+- Toca **Solicitar unirse** en una comunidad.
 - Revisa tu nombre y escribe unas palabras sobre ti, hasta 280 caracteres: dónde vives, qué te gustaría compartir o aprender.
 - Toca **Enviar**.
 

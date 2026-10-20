@@ -38,7 +38,7 @@ Una sola verificación lenta no pone el punto rojo. Solo se pone rojo después d
 Entre el frijol y los botones de la derecha, aparecen pequeños íconos solo mientras algo te necesita. Cada uno representa un tipo de asunto. Tócalo para ir directamente allí.
 
 - **Un apretón de manos:** un trato te está esperando. Alguien espera que aceptes su solicitud, o un trato en el que participas aún no ha terminado. Si hay uno, al tocarlo se abre ese trato. Si hay más, abre **Mis tratos**.
-- **Una urna de votación:** un voto que aún no has emitido. Al tocarlo se abre **Bienes comunes**, en **Decidir**. Si el primer voto es en un grupo o una votación de custodios en un emprendimiento, al tocarlo se abre ese grupo o emprendimiento en su lugar. Un voto que aún no puedes emitir no cuenta aquí, por ejemplo uno que requiere que completes un intercambio primero.
+- **Una urna de votación:** un voto que aún no has emitido. Al tocarlo se abre **Comunes**, en **Decidir**. Si el primer voto es en un grupo o una votación de custodios en un emprendimiento, al tocarlo se abre ese grupo o emprendimiento en su lugar. Un voto que aún no puedes emitir no cuenta aquí, por ejemplo uno que requiere que completes un intercambio primero.
 - **Una burbuja de diálogo:** un mensaje no leído de una persona. Si es de una sola persona, al tocarlo se abre ese chat. Si es de varias personas, abre **Charlas**, en **Mensajes**, mostrando solo los no leídos.
 - **Un grupo de personas:** nuevas líneas en tus grupos, chats de emprendimientos o chats de eventos. Los chats que has silenciado permanecen en silencio aquí. Al tocarlo se abre el chat, o **Charlas**, en **Grupos**, si hay varios.
 - **Un escudo:** solo para personas que ayudan a administrar tu comunidad. Se muestra mientras hay trabajo administrativo esperando, como un reporte para revisar o un trato estancado que necesita una resolución. Al tocarlo se pide el bloqueo de pantalla de tu teléfono y luego se abren los ajustes de tu comunidad en esa tarea. Si los ajustes de tu comunidad usan un código de inicio de sesión, también lo pide.
@@ -83,6 +83,6 @@ A veces aparece una barra verde debajo de la barra superior:
 
 ## Las pestañas
 
-Debajo de la barra superior están las pestañas: **Inicio**, **Mercado**, **Mapa**, **Charlas**, **Bienes comunes** y **Registro**. El nombre de cada pestaña se encuentra encima de su ícono. En el teléfono, una comunidad local sin frijoles no muestra **Bienes comunes** ni **Registro**. La comunidad global muestra ambas, con ejemplos de una comunidad local. Consulta "Frijoles y la comunidad global".
+Debajo de la barra superior están las pestañas: **Inicio**, **Mercado**, **Mapa**, **Charlas**, **Comunes** y **Registro**. El nombre de cada pestaña se encuentra encima de su ícono. En el teléfono, una comunidad local sin frijoles no muestra **Comunes** ni **Registro**. La comunidad global muestra ambas, con ejemplos de una comunidad local. Consulta "Frijoles y la comunidad global".
 
 En una página larga, toca la pestaña en la que ya estás para volver rápidamente a la parte superior. Esto funciona en todas las pestañas excepto en **Mapa**.

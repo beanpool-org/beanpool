@@ -18,7 +18,7 @@ source-hash: 7adea0e9b76c043c
 
 En la app web, toca **Editar perfil**, cambia la foto con **Cámara** o **Galería**, y toca **Guardar cambios del perfil**.
 
-También puedes tocar **Repetir configuración** en Ajustes. Te guía a través de tu nombre y foto nuevamente, aproximadamente dónde estás (en la comunidad global, en la app para teléfono), y el breve recorrido sobre cómo funciona BeanPool. En un navegador web, configura tu zona en **Configuración**, bajo **Tu zona**.
+También puedes tocar **Repetir configuración** en Ajustes. Te guía a través de tu nombre y foto nuevamente, aproximadamente dónde estás (en la comunidad global, en la app para teléfono), y el breve recorrido sobre cómo funciona BeanPool. En un navegador web, configura tu zona en **Ajustes**, bajo **Tu zona**.
 
 ## Antes de publicar
 

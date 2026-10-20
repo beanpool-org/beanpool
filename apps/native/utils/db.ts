@@ -25,6 +25,7 @@ import { getCachedNodeProfile, membersByKey, noteMembersOnDemand } from './node-
 import { isMembersOnDemandRefusal } from './members-on-demand';
 import { communityCachesRenamed } from './cache-file-migration';
 import { isPlainNodeAddress } from './node-url';
+import { TOOL_DOCS_TABLE } from '../tools/schema';
 import { getCanonicalProfile, saveCanonicalProfile } from './canonical-profile';
 import { isPortableAvatarValue, resolveProfilePublishAvatar, retireParkedPickAfterPublish } from './avatar-value';
 import { emitAppEvent } from './app-events';
@@ -574,6 +575,10 @@ ${GROUP_KEY_TABLES_SQL}
             status TEXT DEFAULT 'ACTIVE',
             created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
         );
+
+        -- 8. Tools: each tool's one document per owner, kept on this phone (tools/schema.ts; not a cache, so a re-sync's
+        -- clearDB keeps it and only an account leaving the phone drops it).
+${TOOL_DOCS_TABLE}
     `;
 
     try {
@@ -756,6 +761,8 @@ ${GROUP_KEY_TABLES_SQL}
         } catch (e) {}
         // Another member's reviews as the node last answered (getMemberRatings), for a phone whose schema ran before it.
         try { await database.execAsync(`CREATE TABLE IF NOT EXISTS member_reviews_read (target_pubkey TEXT PRIMARY KEY, answer TEXT NOT NULL, read_at TEXT NOT NULL);`); } catch (e) {}
+        // The tools' documents (tools/schema.ts), for a phone whose schema ran before them.
+        try { await database.execAsync(TOOL_DOCS_TABLE); } catch (e) {}
 
         // Force full synchronization once to populate new columns
         AsyncStorage.getItem('bp_trust_sync_v3').then(async (val) => {
@@ -859,7 +866,8 @@ export async function clearDB(opts: { identityLeaves?: boolean } = {}) {
         // cursor and row count; it must store nothing either (#1719 confirmation 2, P1).
         newCopyGeneration();
         await database.execAsync('DROP TABLE IF EXISTS messages; DROP TABLE IF EXISTS conversation_participants; DROP TABLE IF EXISTS conversations; DROP TABLE IF EXISTS posts; DROP TABLE IF EXISTS marketplace_transactions; DROP TABLE IF EXISTS transactions; DROP TABLE IF EXISTS accounts; DROP TABLE IF EXISTS members; DROP TABLE IF EXISTS projects; DROP TABLE IF EXISTS friends; DROP TABLE IF EXISTS ratings; DROP TABLE IF EXISTS member_reviews_read; DROP TABLE IF EXISTS poll_votes; DROP TABLE IF EXISTS event_rsvps; DROP TABLE IF EXISTS nearby_tied; DROP TABLE IF EXISTS nearby_held;'
-            + (opts.identityLeaves ? ' DROP TABLE IF EXISTS group_chat_epochs; DROP TABLE IF EXISTS group_chat_key_state; DROP TABLE IF EXISTS group_line_verdicts; DROP TABLE IF EXISTS group_line_signers;' : ''));
+            // The tools' documents are the account's own, not a copy of the node's: kept by a re-sync, gone as it leaves.
+            + (opts.identityLeaves ? ' DROP TABLE IF EXISTS group_chat_epochs; DROP TABLE IF EXISTS group_chat_key_state; DROP TABLE IF EXISTS group_line_verdicts; DROP TABLE IF EXISTS group_line_signers; DROP TABLE IF EXISTS tool_docs;' : ''));
     } finally {
         releaseSyncLock();
     }

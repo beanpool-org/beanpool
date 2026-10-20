@@ -249,12 +249,29 @@ async function removeEveryCommunityCopy(communities: readonly string[], keepDmMe
 
 /**
  * An account leaves this phone (Sign Out, the self-delete purge at its last community, Replace): its push alerts stop,
- * then its communities and their cached copies go. `account` is the leaving account, whose key is still on the phone;
- * with none, only the communities go. The caller then wipes the key and the rest of the account's app storage.
+ * every tool's data goes ({@link wipeToolData}), then its communities and their cached copies go. `account` is the
+ * leaving account, whose key is still on the phone; with none, only the tools' data and the communities go. The caller
+ * then wipes the key and the rest of the account's app storage.
  */
 export async function releaseAccountFromPhone(account: LeavingAccount | null, storage: Storage = AsyncStorage, opts: LeaveOptions = {}): Promise<void> {
     await stopPushAlerts(account, storage);
+    await wipeToolData();
     await forgetCommunities(await communitiesOnThisPhone(storage), storage, opts);
+}
+
+/**
+ * Every tool's documents, photos, reminders and settings (tools/store.ts `wipeToolDataOnThisPhone`): no row, no file,
+ * and no reminder that fires for an account that has gone. Here for Replace, which never reaches identity.ts
+ * `wipeIdentity` (Sign Out does that too, and a second time finds nothing). Before the communities, whose removal can
+ * throw. Never throws.
+ */
+async function wipeToolData(): Promise<void> {
+    try {
+        const { wipeToolDataOnThisPhone } = await import('../tools/store');
+        await wipeToolDataOnThisPhone();
+    } catch (e) {
+        console.error('Failed to wipe the tools\' data on this phone', e);
+    }
 }
 
 /**

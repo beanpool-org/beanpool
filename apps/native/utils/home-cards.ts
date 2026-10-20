@@ -29,6 +29,7 @@ import {
     currentLanguage, formatCount, formatNumber, tn, word, type WordKey,
 } from '@beanpool/core';
 import { communityOrigin } from './community-origin';
+import { toolHomeCardIds } from '../tools/index';
 import { eventHomeWhen } from './events';
 import {
     NEEDS_YOU_PRIORITY, buildNeedsYou, closesInWords,
@@ -51,12 +52,16 @@ const FIXED: ReadonlySet<HomeCardId> = new Set([FIXED_FIRST, FIXED_LAST]);
 
 /**
  * The types this build has a body for (app/(tabs)/index.tsx `card`). A type in the registry but not here is listed
- * nowhere and drawn nowhere; a type in neither is a newer app's, kept and not drawn.
+ * nowhere and drawn nowhere; a type in neither is a newer app's, kept and not drawn. A tool's card (`tool-<id>`) is here
+ * for every tool this build has with a Home card (tools/index.ts toolHomeCardIds), drawn by Home's `default:` branch.
  */
 export const HOME_DRAWN: ReadonlySet<HomeCardId> = new Set([
     'needs', 'safety', 'find', 'start', 'steps', 'tips', 'interests', 'deals', 'enterprise', 'events', 'market', 'search', 'decide', 'groups',
     'joined', 'pulse', 'sky', 'beans', 'notices', 'invite', 'community',
+    ...toolHomeCardIds(),
 ]);
+/** A tool's card this build draws: worked out on the phone from the tool's document, so the node sends nothing for it. */
+export const isToolHomeCard = (type: HomeCardId): boolean => type.startsWith('tool-') && HOME_DRAWN.has(type);
 
 /** Find your community is pinned for a member's first 30 days on the global node, then it can be removed (§4.1, §7, §13 Q5). */
 export const FIND_PINNED_DAYS = 30;
@@ -893,7 +898,8 @@ export function cardsToDraw(answer: HomeAnswer, layout: HomeLayout | null, ctx: 
             // Worked out on the phone; drawn only where a place is known (CARD-FRAME §4).
             case 'sky': return skyOf(answer, { settings }, ctx.place) !== null;
             case 'community': return true;
-            default: return c[id] !== undefined;
+            // A tool's card: a member's, worked out on the phone (asks: 'none'), so drawn whenever it is on their Home.
+            default: return isToolHomeCard(type) ? !!answer.me : c[id] !== undefined;
         }
     };
     // No saved layout: Getting started until the tour ends, then the starter set (a Done whose write is still out).

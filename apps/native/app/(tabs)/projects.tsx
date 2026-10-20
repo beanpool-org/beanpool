@@ -25,6 +25,8 @@ import { sampleDecisions, samplePoolVoting } from '../../components/showcase/sam
 import { LocalCommunitySheet } from '../../components/showcase/LocalCommunityMark';
 import { Sentence } from '../../components/Sentence';
 import { formatNumber, inCapitalsOf, t, tn, word, type WordKey } from '@beanpool/core';
+import { memberShelves, phoneTools } from '../../tools/index';
+import { ToolRow } from '../../tools/ui';
 
 /** A group's own role, kind and join policy as the node names them: word() keys, shown through t(). Any other name is
  *  shown as the node wrote it. The tables' own names only (a "constructor" is not one). */
@@ -73,6 +75,10 @@ export default function ProjectsScreen() {
     // The reader's own features (the node's, narrowed by this account's on /api/community/me: design §4).
     const reader = useReaderFeatures();
     const showsBeans = beansOn(reader.effective);
+    // Commons → Tools (DESIGN-tool-template-fable.md §1.5): drawn only where this build has a tool this community can
+    // have, so the row never leads to an empty screen. From the reader's features this screen already has: no read of its
+    // own (the Tools screen asks each tool with the community's profile too).
+    const toolsHere = memberShelves({ features: (reader.effective ?? {}) as Record<string, unknown> }, phoneTools().map(x => x.manifest)).length > 0;
     // Enterprises and Decide previewed from Example Valley where the node shows its switched-off features (§1 row 6).
     const enterprisesPreview = showcaseMode('enterprises', reader.node, reader.reader) === 'preview';
     // What the screen asks the node for, per feature: nothing until the phone's copy of the node's profile is read (a
@@ -145,6 +151,7 @@ export default function ProjectsScreen() {
         headerInfo: { marginBottom: 16 },
         headerDesc: { fontSize: 14, color: colors.text.secondary, lineHeight: 20 },
         infoBtn: { padding: 4 },
+        toolsCard: { backgroundColor: colors.surface.card, borderRadius: 14, borderWidth: 1, borderColor: colors.border.default, paddingHorizontal: 12, marginBottom: 16 },
 
         // Labels in capitals are written so by inCapitalsOf (the language's way), never a textTransform (the phone's).
         statCardRow: { flexDirection: 'row', gap: 10, marginBottom: 12 },
@@ -453,6 +460,13 @@ export default function ProjectsScreen() {
                             they line up with the groups below rather than sitting 32 dp in. Drawn only on Groups (where
                             enterprises live on a local node), so Decide opens at its own content. */}
                         {enterprisesPreview && activeSection === 'groups' && <View style={{ marginHorizontal: -16 }}><CommonsPreview /></View>}
+
+                        {/* Commons → Tools (DESIGN-tool-template-fable.md §1.5): above the pool and the Decide · Groups pills. */}
+                        {toolsHere ? (
+                            <View style={styles.toolsCard}>
+                                <ToolRow icon="🧰" title={t('Tools')} state={t('Things you can do on your own')} onPress={() => router.push('/tools')} testID="commons-tools-row" />
+                            </View>
+                        ) : null}
 
                         {/* Commons Pool + My Governance Credits */}
                         {showsBeans && (

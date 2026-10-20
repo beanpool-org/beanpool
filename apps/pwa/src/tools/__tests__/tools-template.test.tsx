@@ -21,6 +21,7 @@ import type { ComponentType } from 'react';
 import { TOOLS, TOOL_PERMISSIONS, type AnyToolScreenProps, type ToolApp, type ToolManifest } from '@beanpool/core';
 import { ToolsPage, type ToolsPageProps } from '../../pages/ToolsPage';
 import { TOOL_APPS } from '../index';
+import { ToolHomeCard } from '../home-card';
 import { writeToolRecord, readToolRecord, resetToolStoreForTest } from '../store';
 import type { ComposerDraft } from '../host';
 import { memoryIndexedDB } from '../../lib/memory-indexeddb';
@@ -310,6 +311,32 @@ describe('the host: only what the manifest declared', () => {
         expect(props.onComposer).toHaveBeenCalledTimes(1);
         expect(props.onComposer).toHaveBeenCalledWith(draft);
         expect(fetchSpy).not.toHaveBeenCalled();
+    });
+});
+
+describe("a tool's card on Home (Home's default branch)", () => {
+    it("its lines from the tool's kept document, worked out here, each opening the tool; with nothing kept, one line that opens it", async () => {
+        const onNavigate = vi.fn();
+        const card = (now: number) => (
+            <ToolHomeCard id="c1" title="New tool" type="tool-scaffold" publicKey={OWNER} now={now} onNavigate={onNavigate}
+                tools={[scaffold.manifest]} apps={{ scaffold: scaffold.loader }} />
+        );
+        const empty = render(card(0));
+        fireEvent.click(await screen.findByTestId('home-tool-open'));
+        expect(onNavigate).toHaveBeenCalledWith('tool', 'scaffold');
+        expect(screen.getByTestId('home-tool-open')).toHaveTextContent('Open New tool');
+        empty.unmount();
+
+        await keep('scaffold', scaffold.fixtures.docs.small);
+        render(card(0));
+        expect(await screen.findByTestId('home-tool-line-0')).toHaveTextContent('Latest: Tent');
+        expect(screen.queryByTestId('home-tool-line-1')).toBeNull();
+    });
+
+    it('a card type this build has no tool for draws nothing (kept, not drawn)', () => {
+        const { container } = render(<ToolHomeCard id="c1" title="x" type="tool-garden" publicKey={OWNER} now={0} onNavigate={vi.fn()}
+            tools={[scaffold.manifest]} apps={{ scaffold: scaffold.loader }} />);
+        expect(container.innerHTML).toBe('');
     });
 });
 

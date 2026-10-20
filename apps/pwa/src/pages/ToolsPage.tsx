@@ -129,7 +129,7 @@ function useToolRows(list: readonly ToolManifest[], owner: string, now: () => nu
         let cancelled = false;
         Promise.all(list.map(async (m) => {
             const doc = readDoc(m, (await readToolRecord(owner, m.id))?.body ?? null);
-            let line: ToolLine | null = null;
+            let line: ToolLine | null;
             try { line = m.row(doc, now()); } catch { line = null; }
             return [m.id, lineText(line)] as const;
         })).then((pairs) => { if (!cancelled) setRows(Object.fromEntries(pairs)); });

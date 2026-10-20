@@ -54,14 +54,15 @@ function wordsChunk(id: string): string | undefined {
 }
 
 /**
- * One chunk per tool, `tool-<id>` (scratch/tools/DESIGN-tool-template-fable.md §2.3 step 6, §2.4): every file of a tool's
- * web folder, src/tools/<id>/, which src/tools/index.ts loads on first open, so a member who never opens a tool never
- * fetches it. The template's own files (host, ui, store, the registry) sit beside the folders and are not a tool's.
+ * One chunk per tool, `tool-<id>` (scratch/tools/DESIGN-tool-template-fable.md §2.3 step 6, §2.4): src/tools/index.ts
+ * loads each tool's folder by `import('./<id>')` on first open, so Rollup already makes it a chunk of its own, holding
+ * what only that tool uses; this only names it. Not a manualChunks rule: a manual chunk takes every dependency of its
+ * modules with it (React, core, the primitives), and the first chunk would then import the tool's chunk at start.
  * e2e/tool-chunks-check.mjs proves it on a build with the scaffold registered.
  */
-export function toolChunk(id: string): string | undefined {
-    const m = /apps[\\/]pwa[\\/]src[\\/]tools[\\/]([a-z]+(?:-[a-z]+)*)[\\/]/.exec(id);
-    return m ? `tool-${m[1]}` : undefined;
+export function toolChunkFileName(chunk: { facadeModuleId: string | null }): string {
+    const m = chunk.facadeModuleId && /apps[\\/]pwa[\\/]src[\\/]tools[\\/]([a-z]+(?:-[a-z]+)*)[\\/]index\.tsx?$/.exec(chunk.facadeModuleId);
+    return m ? `assets/tool-${m[1]}-[hash].js` : 'assets/[name]-[hash].js';
 }
 
 export default defineConfig({
@@ -119,7 +120,7 @@ export default defineConfig({
     build: {
         outDir: path.resolve(__dirname, '../server/public'),
         emptyOutDir: false,
-        rollupOptions: { output: { manualChunks: (id) => wordsChunk(id) ?? toolChunk(id) } },
+        rollupOptions: { output: { manualChunks: wordsChunk, chunkFileNames: toolChunkFileName } },
     },
     test: {
         globals: true,

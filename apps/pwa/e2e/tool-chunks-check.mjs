@@ -6,8 +6,10 @@
  * tool under TOOL_ID, as `node scripts/tools/new-tool.mjs <id>` would write it, without touching the tree: a plugin
  * serves the scaffold's web half at apps/pwa/src/tools/<id>/ and src/tools/index.ts with its one line added
  * (scripts/tools/registry.mjs registerIn). Then it reads what came out:
- *   - exactly one `tool-<id>` chunk, holding the tool's screens (a sentence only they draw);
- *   - no other file holds that sentence: the first chunk, and the ToolsPage chunk, load the tool only when opened;
+ *   - exactly one `tool-<id>` chunk, holding the tool's screens (a sentence only they draw), and only what is the tool's
+ *     own (a few KB for the scaffold: React, core and the primitives stay where the app has them);
+ *   - no other file holds that sentence, and none imports the tool's chunk statically: the first chunk and the Tools
+ *     page load the tool only when it is opened (`import()`);
  *   - the Tools page is its own chunk too, and the first chunk holds none of its sentences.
  * It prints the sizes: the first chunk (raw and gzipped), the Tools page chunk and the tool's chunk.
  *
@@ -79,6 +81,16 @@ if (mine.length !== 1) problems.push(`${mine.length} tool-${ID} chunks (${mine.j
 for (const f of toolChunks) if (!mine.includes(f)) problems.push(`${f}: a tool chunk for a tool that isn't registered`);
 if (mine.length === 1 && !read(mine[0]).includes(MARK)) problems.push(`${mine[0]}: the tool's screens are not in its chunk`);
 for (const f of js) if (!mine.includes(f) && read(f).includes(MARK)) problems.push(`${f}: holds the tool's screens, outside its chunk`);
+// Loaded only when opened: no chunk imports the tool's statically (`from"./tool-…"`, `import"./tool-…"`); only `import("./tool-…")`.
+for (const f of js) {
+    for (const t of mine) {
+        if (f === t) continue;
+        const name = t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        if (new RegExp(`(?:from|import)\\s*["']\\./${name}["']`).test(read(f))) problems.push(`${f}: imports ${t} statically, so it loads at start`);
+    }
+}
+// What the tool's chunk holds is the tool's own: React, core and the template's primitives stay where the app has them.
+if (mine.length === 1 && size(mine[0]) > 20_000) problems.push(`${mine[0]}: ${size(mine[0])} bytes for the scaffold's one screen: shared code was pulled into it`);
 
 // The first chunk is the one index.html loads.
 const html = fs.readFileSync(path.join(out, 'index.html'), 'utf8');

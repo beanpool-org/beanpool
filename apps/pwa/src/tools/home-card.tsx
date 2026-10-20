@@ -39,7 +39,7 @@ export function ToolHomeCard({ id, title, menu, style, type, publicKey, now, onN
         readToolRecord(publicKey, tool.id).then((rec) => {
             if (cancelled) return;
             const doc = readDoc(tool, rec?.body ?? null);
-            let out: ToolLine[] = [];
+            let out: ToolLine[];
             try { out = tool.homeCard!.lines(doc, now).slice(0, TOOL_LIMITS.homeLines); } catch { out = []; }
             setLines(out);
         });

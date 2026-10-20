@@ -2,7 +2,7 @@
   "_meta": {
     "language": "bn",
     "name": "Bengali",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-19",
@@ -672,5 +672,14 @@
   "I thrive in spontaneous, novel settings": "স্বতঃস্ফূর্ত ও নতুন পরিবেশে আমি দারুণ কাজ করি",
   "I am patient with different paces and value keeping the community atmosphere harmonious.": "কাজের ভিন্ন গতির প্রতি আমি ধৈর্যশীল এবং কমিউনিটির পরিবেশ সুন্দর রাখাকে গুরুত্ব দিই।",
   "I push for faster progress when needed": "প্রয়োজনে আমি দ্রুত কাজের অগ্রগতির জন্য তাগিদ দিই",
-  "I push for higher standards when needed": "প্রয়োজনে আমি কাজের আরও উচ্চমানের জন্য জোর দিই"
+  "I push for higher standards when needed": "প্রয়োজনে আমি কাজের আরও উচ্চমানের জন্য জোর দিই",
+  "Type an amount.": "একটি পরিমাণ লিখুন।",
+  "The amount can’t be below 0.": "পরিমাণটি 0-এর কম হতে পারে না।",
+  "Type the amount without thousands separators, like {example}.": "হাজারের বিভাজক ছাড়া পরিমাণটি লিখুন, যেমন {example}।",
+  "Type one decimal mark at most, like {example}.": "সর্বোচ্চ একটি দশমিক বিন্দু লিখুন, যেমন {example}।",
+  "Type at most {n} decimal, like {example}.|Type at most {n} decimals, like {example}.": {
+    "one": "সর্বোচ্চ {n}টি দশমিক স্থান লিখুন, যেমন {example}।",
+    "other": "সর্বোচ্চ {n}টি দশমিক স্থান লিখুন, যেমন {example}।"
+  },
+  "Type the amount as a number, like {example}.": "পরিমাণটি সংখ্যা হিসেবে লিখুন, যেমন {example}।"
 }

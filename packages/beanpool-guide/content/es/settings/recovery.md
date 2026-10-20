@@ -35,7 +35,7 @@ Si la cuenta de inicio de sesión se vinculó desde un teléfono que tenía tus 
 ## Proteger tu cuenta ahora
 
 - Abre **Ajustes** y toca **Protección de la cuenta**.
-- En **Proveedores de recuperación por inicio de sesión (1-de-N)**, toca **Proteger con** y elige una cuenta.
+- En **Proveedores de recuperación por inicio de sesión (1 de N)**, toca **Proteger con** y elige una cuenta.
 - Supera la comprobación de la pantalla de bloqueo de tu teléfono. La cuenta vinculada puede recuperar tu cuenta, por lo que la app lo solicita primero.
 - Con Google en un iPhone, se abre una página web de Google. Inicia sesión allí y elige tu cuenta, y volverás a BeanPool.
 

@@ -286,7 +286,7 @@ export async function loadCachedLanguageGuide(
     storage: GuideStorage,
     lang: string,
 ): Promise<Guide | null> {
-    if (lang === 'en' || !isLang(lang)) return null;
+    if (lang === 'en' || (!isLang(lang) && lang !== 'xx')) return null;
     try {
         const raw = await storage.getItem(guideCacheKey(lang));
         if (!raw) return null;
@@ -308,7 +308,7 @@ export async function refreshLanguageGuideFromWebsite(
     lang: string,
     timeoutMs = 8000,
 ): Promise<Guide | null> {
-    if (lang === 'en' || !isLang(lang)) return null;
+    if (lang === 'en' || (!isLang(lang) && lang !== 'xx')) return null;
     const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
     const timer = setTimeout(() => controller?.abort(), timeoutMs);
     try {
@@ -625,9 +625,9 @@ export function guideInLanguage<P extends GuidePage<OperatorGuideBlock>>(
             const help = p.help !== undefined ? line(e.help, p.help, 160) : null;
             let blocks = p.blocks;
             let englishBlocks: typeof p.blocks | undefined = undefined;
-            let bodyState: 'current' | 'behind' | 'missing' = 'missing';
-            let newerInEnglish = false;
-            let bodyInEnglish = false;
+            let bodyState: 'current' | 'behind' | 'missing';
+            let newerInEnglish: boolean;
+            let bodyInEnglish: boolean;
             let sourceHash = p.sourceHash;
 
             if (tp) {

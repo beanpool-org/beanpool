@@ -72,7 +72,7 @@ A group's chat works exactly like a chat with one person. Tap a message and smal
 - **Delete**, on your own messages, at any time. It asks **Delete for everyone?** once, and the message then reads **This message was deleted** to everyone in the group.
 - **Remove**, for convenors, on anybody else's message. It asks once, and the message then reads **Removed by a convenor**. Your own message is a **Delete**, not a **Remove**.
 
-Two or more deleted or removed messages in a row show as one line, such as **3 messages were deleted**.
+Two or more messages in a row that their authors deleted show as one line, such as **3 messages were deleted**. Two or more that a convenor removed show as **3 messages removed by a convenor**.
 
 Under your own message: a clock while it is sending, a tick once the group's server has it, or **! not delivered** if it could not be sent — tap that to **Resend** or **Discard** it. There are no blue double ticks in a group: a group has no single reader.
 

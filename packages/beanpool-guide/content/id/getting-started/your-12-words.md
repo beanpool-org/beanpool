@@ -37,7 +37,7 @@ Kit pemulihan adalah satu halaman yang dapat dicetak: 12 katamu secara berurutan
 
 Buka **Pengaturan** dengan tombol bilah geser di bagian atas layar. Kemudian salah satu dari:
 
-- Di bawah **AKUN & IDENTITAS**, ketuk **Lihat Frasa Pemulihan**. Ketik **Konfirmasi**, ketuk **Tampilkan Frasa Pemulihan**, dan lewati pemeriksaan layar kunci ponselmu.
+- Di bawah **AKUN & IDENTITAS**, ketuk **Lihat Frasa Pemulihan**. Ketik **CONFIRM**, ketuk **Tampilkan Frasa Pemulihan**, dan lewati pemeriksaan layar kunci ponselmu.
 - Atau ketuk **Perlindungan Akun**, lalu **Tampilkan 12 Kata Pemulihanku**, dan lewati pemeriksaan layar kunci ponselmu. Ketuk **Sembunyikan** setelah selesai.
 
 Apa pun pilihannya, kata-kata tersebut juga akan disembunyikan saat kamu meninggalkan layar itu, atau meninggalkan aplikasi selama 15 detik atau lebih, dan ponsel akan meminta verifikasi lagi lain kali. Pemeriksaan layar kunci yang memakan waktu lebih dari dua menit tidak akan menampilkan apa pun: ketuk lagi.

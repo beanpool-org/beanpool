@@ -21,7 +21,7 @@ import { MyDealsModal } from '../components/MyDealsModal';
 import { LocalCommunityAction, LocalCommunityLine } from '../components/LocalCommunityMark';
 import {
     LOCAL_COMMUNITY_EMOJI, LOCAL_COMMUNITY_LINES, placeShownRoughly, PLACE_WORDS, formatNumber, t, tn, word, type WordKey,
-    amountRefusalWords, ANY_DECIMALS, isAmbiguousAmount, parseAmount,
+    amountRefusalWords, ANY_DECIMALS, isAmbiguousAmount, parseAmount, dealQuantityUnit, type DealQuantityUnit,
 } from '@beanpool/core';
 import { Sentence } from '../components/Sentence';
 import { marked, readsOwn, treasuriesFallback, useFeatureMode, useReadsOwn } from '../lib/features';
@@ -211,6 +211,15 @@ function estimateLength(priceType: string | undefined, n: number): string | null
     if (priceType === 'weekly') return t('{n} w', { n }, 'a number of weeks');
     if (priceType === 'monthly') return t('{n} m', { n }, 'a number of months');
     return null;
+}
+
+/** A request's estimated length, in the listing price's own unit ("for {n} days" for a loan). */
+function requestQuantityWords(unit: DealQuantityUnit | null, isLoan: boolean, n: number): string {
+    if (isLoan) return tn(n, 'for {n} day', 'for {n} days');
+    if (unit === 'day') return tn(n, '{n} day', '{n} days');
+    if (unit === 'week') return tn(n, '{n} week', '{n} weeks');
+    if (unit === 'month') return tn(n, '{n} month', '{n} months');
+    return tn(n, '{n} hours estimated', '{n} hours estimated');
 }
 
 /** Why the profile gate stops an accept: the whole sentence for what is missing (lib/profile-status describeMissing). */
@@ -1672,7 +1681,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 : t('☆☆☆☆☆ No ratings yet')}
                                         </span>
                                         <span className="text-xs text-nature-500 dark:text-nature-400 mt-1">
-                                            {req.hours ? tn(req.hours, '{n} hours estimated', '{n} hours estimated') : t('Offered to fulfill')}
+                                            {req.hours ? requestQuantityWords(dealQuantityUnit(selectedPost.priceType, selectedPost.lendable), Boolean(selectedPost.lendable), req.hours) : t('Offered to fulfill')}
                                         </span>
                                     </div>
                                     <div className="flex gap-2">

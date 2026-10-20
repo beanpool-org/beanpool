@@ -146,6 +146,7 @@ import { createGlobalDirectoryRoutes } from './routes/global-directory.js';
 import { createKnockRoutes } from './routes/knocks.js';
 import { createNoticeRoutes } from './routes/notices.js';
 import { createBlockRoutes } from './routes/blocks.js';
+import { createToolRoutes } from './routes/tools.js';
 import { startTidyingKnocks } from './engine/knocks.js';
 import { startForgettingJoinAddresses } from './engine/open-join.js';
 import { startForgettingOldAddresses } from './services/address-retention.js';
@@ -1849,6 +1850,7 @@ export async function startHttpsServer(port: number): Promise<number> {
         createKnockRoutes(deps),
         createNoticeRoutes(deps),
         createBlockRoutes(deps),
+        createToolRoutes(deps),
         createAppleReturnRoutes(),
         createChannelRoutes(deps),
         createNodeAdminRoutes(deps),
@@ -2040,6 +2042,9 @@ const ROUTE_BODY_LIMITS: Array<[RegExp, number]> = [
     // A claim is a key, a callsign, a code id, a host, a proof and a signature: under 1 KiB. No limiter runs before it
     // (isClaimRoute), so it reads no more than this.
     [/^\/api\/local\/claim$/, 4 * 1024],
+    // A tool's copy is at most 64 KB as stored (engine/tool-state.ts TOOL_STATE_MAX_BYTES), which the route refuses in a
+    // sentence; the room past it is for a body's escapes, so only a body far over it is refused here, unread.
+    [/^\/api\/(?:treasury\/[^/]+\/)?tools\/[^/]+\/?$/, 256 * 1024],
 ];
 
 function routeBodyLimit(path: string): number {

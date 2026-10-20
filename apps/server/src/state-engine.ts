@@ -57,6 +57,7 @@ import { scrubKnocksOf } from './engine/knocks.js';
 import { dropKeptNoticesOf, tidyKeptNotices } from './engine/kept-notices.js';
 import { newPushNotice, keepPushNotices, tidyPushNotices, dropPushNoticesOf, neutralisePushNoticesNaming, type PushNoticeRow } from './engine/push-notices.js';
 import { dropBlocksOf, blockersOf, blockersOfKept, hasBlocked } from './engine/member-blocks.js';
+import { dropToolStateOf } from './engine/tool-state.js';
 import { dropWithheldOf } from './engine/withheld-lines.js';
 import { repaymentOf, assertPayableDebt, countDebtPayment, PAID_TO_COMMONS_MEMO } from './engine/names-debts.js';
 import { moneyRequestOf, priorAnswer, recordAnswer } from './engine/money-requests.js';
@@ -8280,6 +8281,8 @@ export function adminPruneUser(publicKey: string, actor: string) {
         // Their block list: nobody can read it or change it now (engine/member-blocks.ts). The lists that block them are
         // their owners' and stay.
         dropBlocksOf(publicKey);
+        // Their tools' private copies, tombstoned: nobody can read them now (engine/tool-state.ts). Their phone keeps its own.
+        dropToolStateOf(publicKey);
         // The lines and conversations kept for them alone (engine/withheld-lines.ts): nobody can read them now.
         dropWithheldOf(publicKey);
         // And the notes on Beans they sent to someone who had blocked them (engine/withheld-notes.ts). Their rows stay.
@@ -8457,6 +8460,8 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         dropPushNoticesOf(publicKey);
         // Their block list goes with the profile, under one tombstone for the list, so a standby deletes it too (engine/member-blocks.ts).
         dropBlocksOf(publicKey);
+        // And their tools' private copies, a tombstone each (engine/tool-state.ts).
+        dropToolStateOf(publicKey);
         // And what they sent to someone who had blocked them, kept for them alone (engine/withheld-lines.ts). Never copied.
         dropWithheldOf(publicKey);
         // And the notes on Beans they sent to such a person (engine/withheld-notes.ts). Never copied either.

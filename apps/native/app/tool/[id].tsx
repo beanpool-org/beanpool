@@ -122,10 +122,10 @@ function ToolHostScreen({ manifest, screenName, Screen, params }: {
         if (!owner) return;
         let gone = false;
         (async () => {
-            const [read, s, u] = await Promise.all([
+            const u = await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null);
+            const [read, s] = await Promise.all([
                 readToolDoc(owner, manifest).catch(() => ({ doc: manifest.doc.empty(), stored: false })),
-                readToolSettings(owner, manifest.id),
-                AsyncStorage.getItem('beanpool_anchor_url').catch(() => null),
+                readToolSettings(owner, manifest.id, u),
             ]);
             if (gone) return;
             docRef.current = read.doc;
@@ -144,9 +144,9 @@ function ToolHostScreen({ manifest, screenName, Screen, params }: {
         settingsRef.current = next;
         setSettings(next);
         tellOpenScreens(shareKey, hear, { settings: next });
-        await writeToolSettings(owner, manifest.id, next).catch(() => {});
+        await writeToolSettings(owner, manifest.id, next, url).catch(() => {});
         reschedule(docRef.current, next);
-    }, [owner, manifest.id, reschedule, shareKey, hear]);
+    }, [owner, manifest.id, reschedule, shareKey, hear, url]);
 
     const openListSheet = useCallback((draft: ToolOfferDraft) => {
         void (async () => {

@@ -6,8 +6,8 @@
  * which door the member took, whether the Home card was offered) in app storage under `beanpool_tool:`.
  *
  * All data is kept per community, owner and tool (PR #2267 findings 2 + 3). "Remove my data" in one community removes only
- * that community's document, photos and reminders. Leaving or deleting at a community removes all its documents, photos
- * and reminders. An account leaving the phone takes all of it (wipeToolDataOnThisPhone).
+ * that community's document, photos, reminders and settings. Leaving or deleting at a community removes all its documents, photos,
+ * reminders and settings. An account leaving the phone takes all of it (wipeToolDataOnThisPhone).
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { TOOL_LIMITS, toolDocBytes, type ToolManifest } from '@beanpool/core';
@@ -41,11 +41,13 @@ export class ToolDocTooBigError extends Error {
     }
 }
 
-const settingsKey = (owner: string, tool: string) => `${TOOL_SETTINGS_PREFIX}${owner}:${tool}`;
+export const settingsKey = (community: string, owner: string, tool: string) => `${TOOL_SETTINGS_PREFIX}${community}:${owner}:${tool}`;
 
-export async function readToolSettings(owner: string, tool: string): Promise<ToolSettings> {
+export async function readToolSettings(owner: string, tool: string, url?: string | null): Promise<ToolSettings> {
     try {
-        const raw = await AsyncStorage.getItem(settingsKey(owner, tool));
+        const anchorUrl = url ?? await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null);
+        const community = communityKey(anchorUrl);
+        const raw = await AsyncStorage.getItem(settingsKey(community, owner, tool));
         const v = raw ? JSON.parse(raw) : null;
         return v && typeof v === 'object' && !Array.isArray(v) ? v as ToolSettings : {};
     } catch {
@@ -53,8 +55,10 @@ export async function readToolSettings(owner: string, tool: string): Promise<Too
     }
 }
 
-export async function writeToolSettings(owner: string, tool: string, next: ToolSettings): Promise<void> {
-    await AsyncStorage.setItem(settingsKey(owner, tool), JSON.stringify(next));
+export async function writeToolSettings(owner: string, tool: string, next: ToolSettings, url?: string | null): Promise<void> {
+    const anchorUrl = url ?? await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null);
+    const community = communityKey(anchorUrl);
+    await AsyncStorage.setItem(settingsKey(community, owner, tool), JSON.stringify(next));
 }
 
 /** Whether a reminder is on: the member's switch, else the manifest's default. */
@@ -129,12 +133,12 @@ export async function removeToolDataHere(owner: string, tool: string, url?: stri
     const community = communityKey(anchorUrl);
     await (await import('./photos')).removeToolFolder(community, owner, tool);
     await cancelToolReminders({ community, tool }, notifications);
-    await AsyncStorage.removeItem(settingsKey(owner, tool));
+    await AsyncStorage.removeItem(settingsKey(community, owner, tool));
     notifyToolStore(owner, tool);
 }
 
 /**
- * A community is left or deleted: removes all photos and cancels all reminders for this community.
+ * A community is left or deleted: removes all photos, settings and cancels all reminders for this community.
  * (The SQLite file containing tool_docs is removed by community-cache.ts removeCommunityCaches).
  */
 export async function removeCommunityToolData(url: string | null, notifications?: ToolNotifications | null): Promise<void> {
@@ -148,6 +152,13 @@ export async function removeCommunityToolData(url: string | null, notifications?
         await cancelToolReminders({ community }, notifications);
     } catch (e) {
         console.warn('[Tools] Could not cancel community reminders', e);
+    }
+    try {
+        const prefix = `${TOOL_SETTINGS_PREFIX}${community}:`;
+        const keys = (await AsyncStorage.getAllKeys()).filter((k) => k.startsWith(prefix));
+        if (keys.length) await AsyncStorage.multiRemove(keys);
+    } catch (e) {
+        console.warn('[Tools] Could not remove community tool settings', e);
     }
     notifyToolStore('*', '*');
 }

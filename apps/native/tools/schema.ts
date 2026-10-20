@@ -17,5 +17,5 @@ export const TOOL_DOCS_TABLE = `
             PRIMARY KEY (owner, tool)
         );`;
 
-/** App storage keys of the host's settings for a tool: `beanpool_tool:<owner>:<tool>`. Sign Out removes the prefix. */
+/** App storage keys of the host's settings for a tool: `beanpool_tool:<community>:<owner>:<tool>`. Sign Out removes the prefix. */
 export const TOOL_SETTINGS_PREFIX = 'beanpool_tool:';

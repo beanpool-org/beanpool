@@ -144,7 +144,7 @@ export function AreaPicker({ url, identity, features, onSaved, onSkip, skipLabel
                 disabled={busy !== null}
                 onPress={useMyLocation}
                 accessibilityRole="button"
-                accessibilityLabel={t(AREA_WORDS.useLocation)}
+                accessibilityLabel={busy === 'location' ? t('Finding your location...') : t(AREA_WORDS.useLocation)}
                 accessibilityState={{ disabled: busy !== null, busy: busy === 'location' }}
                 testID="area-use-location"
             >
@@ -158,7 +158,7 @@ export function AreaPicker({ url, identity, features, onSaved, onSkip, skipLabel
                 disabled={busy !== null}
                 onPress={() => { setError(null); setShowTown((v) => !v); }}
                 accessibilityRole="button"
-                accessibilityLabel={t(AREA_WORDS.typeTown)}
+                accessibilityLabel={busy === 'town' ? t('Saving town area...') : t(AREA_WORDS.typeTown)}
                 accessibilityState={{ disabled: busy !== null, expanded: showTown }}
                 testID="area-type-town"
             >

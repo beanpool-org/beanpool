@@ -198,3 +198,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/a11y insight specific to thi
 ## 2027-01-02 - Add dynamic accessibilityLabel and busy state to report price submit button
 **Learning:** Submit buttons in report modals whose text child is conditionally replaced by an `ActivityIndicator` during submission leave screen reader users without feedback unless provided with a dynamic `accessibilityLabel` (`reportSubmitting ? 'Submitting feedback...' : 'Submit Feedback'`) and `accessibilityState={{ disabled: reportSubmitting, busy: reportSubmitting }}`.
 **Action:** Supply dynamic `accessibilityLabel` and `accessibilityState={{ disabled, busy }}` on pricing report submit buttons rendering `ActivityIndicator` when submitting.
+
+## 2027-01-09 - Add dynamic accessibilityLabel to AreaPicker action buttons
+**Learning:** Action buttons in location/area selection flows whose visible text is conditionally replaced by an `ActivityIndicator` during async operations leave screen reader users without feedback during loading states unless provided with dynamic `accessibilityLabel` attributes (`busy === 'location' ? t('Finding your location...') : t(AREA_WORDS.useLocation)`).
+**Action:** Always supply dynamic `accessibilityLabel` attributes on area picker action buttons that render an `ActivityIndicator` when busy.

@@ -42,11 +42,11 @@ const toolFenceRules = (regex, native) => ({
   ],
   // The network and the browser's stores are the host's (its one store, its node copy), never a tool's own: shut as a
   // global and as a member of anything (`window.fetch`, `globalThis.localStorage`, `const w = self; w.fetch`,
-  // `const { fetch } = window`), with the beacon and the cookie jar.
+  // `const { fetch } = window`), with the beacon and the cookie jar (`.cookie` on any object: `window.document.cookie`,
+  // `const d = document; d.cookie`).
   'no-restricted-globals': ['error', ...TOOL_NO_NETWORK.map((name) => ({ name, message: TOOL_FENCE_MESSAGE }))],
   'no-restricted-properties': ['error',
-    ...[...TOOL_NO_NETWORK, 'sendBeacon'].map((property) => ({ property, message: TOOL_FENCE_MESSAGE })),
-    { object: 'document', property: 'cookie', message: TOOL_FENCE_MESSAGE },
+    ...[...TOOL_NO_NETWORK, 'sendBeacon', 'cookie'].map((property) => ({ property, message: TOOL_FENCE_MESSAGE })),
   ],
 });
 const TOOL_SOURCES = '*.{ts,tsx,js,jsx,mjs}';

@@ -83,6 +83,10 @@ test('a web tool: the same doors', async () => {
         "caches.open('x');",
         "window.caches.open('x');",
         "document.cookie = 'a=b';",
+        "window.document.cookie = 'a=b';",
+        "globalThis.document.cookie = 'a=b';",
+        "const d = document; d.cookie = 'a=b';",
+        "const { cookie } = document;",
     ]) await shut(top, code);
 });
 

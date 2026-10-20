@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/zh-Hant by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>個人隱私 — BeanPool members' guide</title>
+    <meta name="description" content="他人能看到的關於你的資訊，以及控制這些資訊的設定項。">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">設定與安全</a></p>
+        <h1>個人隱私</h1>
+        <p class="lede">他人能看到的關於你的資訊，以及控制這些資訊的設定項。</p>
+        <h2>開啟設定</h2>
+        <p>點選螢幕右上角的滑桿按鈕。在寬螢幕電腦的網頁版應用程式中，則是左側邊欄底部的齒輪圖示。「設定」不是分頁標籤之一。</p>
+        <h2>你的社群成員能看到的內容</h2>
+        <ul>
+            <li>你的姓名、照片、個人簡介、加入時間以及上次活動時間。</li>
+            <li>你的信任徽章、你的評價（其他人無法看見誰寫了評價），以及你的信任檔案：已完成與已取消的交易數量、完成交易的比例、你向成員發送或接收的豆子付款次數加上已完成的交易次數、你曾付款、收款或交易過的相異成員數量、你與當前查看你檔案的成員進行過的付款和交易次數，以及你的信任積分。管理員與一般成員看到的內容相同，且不會記錄日誌。</li>
+            <li>你的貼文以及圖釘所在的位置。請參閱「你的圖釘位置」。</li>
+            <li>你在投票中的投票情況，但僅限於發起人設為<strong>公開投票</strong>的投票。否則投票一律為匿名，且針對<strong>決策</strong>的投票始終是保密的。</li>
+            <li>誰邀請了你。在手機上，你的個人檔案會顯示<strong>由 {name} 擔保加入</strong>與其姓名。如果你是以創始成員身分加入，或由系統管理員直接邀請，則會顯示<strong>創始成員</strong>或<strong>由系統管理員直接邀請</strong>。如果有成員為你的信用額度提供擔保，在手機應用程式和網頁版應用程式中，你的個人檔案都會顯示<strong>由 {name} 擔保</strong>與其姓名。</li>
+        </ul>
+        <h2>僅你自己能看到的內容</h2>
+        <ul>
+            <li><strong>你的餘額與交易。</strong>社群中的任何其他人都無法在應用程式中或從社群伺服器讀取它們。每筆交易僅向兩個人顯示：你和對方。</li>
+            <li><strong>你的好友名單、你的通訊對象以及你發出的邀請。</strong>只有你可以在應用程式中或從社群伺服器讀取它們。其他人只能看到你與他們共有的共同好友。</li>
+            <li>如果社群就移除你的帳號進行表決，所有有權投票的人都會看到你的餘額和欠額，但僅限於該次表決。無權投票的管理員或擁有者在那裡看不到這些資訊。這些檢視不會記錄日誌。</li>
+            <li>如果管理員移除你的帳號，發起該操作的管理員會看到你的餘額，以便結清你的持有額或欠額。其他管理員和擁有者可以看到誰在何時查看過。</li>
+            <li>在熟人社群中，如果你在加入時同意且管理員已確認你的身分，當你的餘額超過社群設定的額度時，管理員可以看到你的餘額。你可以隨時在「設定」中撤銷該權限。在任何社群中，任何管理員也可以查看你的某些交易：尚未完成的交易或由管理員調解結清的交易、在舊版伺服器上因成員被移除而卡住豆子的交易、詐欺警報，以及在設定的天數內你的帳號沒有豆子進出時的警報。每次檢視這些交易都會記錄日誌，而檢視指名你的警報時，每位管理員在 24 小時內首次開啟時會記錄日誌。擁有者和管理員可以看到該日誌。管理員還可以看到你發布了多少貼文以及發送了多少訊息，對於交易，他們只能看到整個社群的總額，而不是你的總額；並且與每位成員一樣，可以未經日誌記錄查看你的信任檔案。運行社群伺服器的人持有其完整資料庫，包含其備份、快照和待命複本。請參閱「管理員可見內容」。</li>
+        </ul>
+        <p>經營社群伺服器的擁有者和管理員仍然可以看到該處儲存的內容。請參閱「還有誰能看到資訊」。</p>
+        <h2>尚未加入的人</h2>
+        <ul>
+            <li><strong>在你的社群上：</strong>看不到你的任何貼文。其刊登商品和照片僅供成員查看，你的個人檔案照片也是如此。每張照片只能透過其刊登商品隨附的連結或應用程式中你的姓名開啟，因此外部人員只有在成員轉發該連結時才能看到。直接開啟社群網址而未加入的人，會被引導至全球社群。</li>
+            <li><strong>在全球社群上：</strong>任何人都可以在加入前瀏覽其刊登商品，但他們只能看到文字、照片和大略位置，絕不會看到你的姓名、頭像或確切位置。</li>
+            <li><strong>你的 Pulse 動態貼文：</strong>什麼都看不到。Pulse 動態僅供成員瀏覽。影片或貼文本身保留在其自身網站（YouTube、Instagram 等）上，維持與該處相同的公開程度。請參閱「分享你的頻道」。</li>
+        </ul>
+        <h2>你所掌控的設定</h2>
+        <ul>
+            <li><strong>聯絡方式：</strong>在你的個人檔案中，選擇<strong>誰能看見？</strong>：<strong>隱藏</strong>、<strong>交易夥伴</strong>、<strong>好友</strong>或<strong>社群</strong>。請參閱「個人檔案」。</li>
+            <li><strong>共同好友：</strong>當你與另外兩人互為好友時，雙方均可在對方的個人檔案中看到你的名字，作為可以諮詢的對象。在「設定」的<strong>法律與隱私</strong>下，關閉<strong>將我顯示為共同好友</strong>，就沒有人能在該處看到你的名字。此功能預設開啟，直到你將其關閉。請參閱「成員與好友」。</li>
+            <li><strong>誰新增了你：</strong>當你新增某人時，他們的「成員」分頁會顯示一行說明你已新增他們，以便他們將你加回。他們不會收到通知。</li>
+            <li><strong>位置（手機）：</strong>在「設定」的<strong>應用程式設定</strong>下，開啟<strong>位置</strong>以在查看地圖和附近貼文時使用你的位置。若要關閉，請在手機本身的設定中進行變更；應用程式會向你示範操作方式。在網頁瀏覽器中沒有此類開關：瀏覽器會詢問你，並記住你的選擇。</li>
+            <li><strong>你的區域</strong>（在全球社群上）：在「設定」的<strong>你的區域</strong>下，查看你設定的區域（以城鎮為中心約 10 公里範圍，或兩個數字座標），或顯示<strong>未設定</strong>。點選<strong>清除</strong>可將其移除。在其下方，<strong>你大概在哪裡?</strong>可透過<strong>使用我的位置</strong>或<strong>輸入城鎮或區域</strong>設定新區域，點選<strong>取消</strong>（在瀏覽器中為<strong>← 返回設定</strong>）可維持原狀。系統只會發送模糊化處理後的區域。其他成員會看到你相距多遠，且你發起的投票會顯示在你的區域中。若未設定，你將看到全球最新的刊登商品，且附近的成員不會在其清單中看到你發起的投票，但他們仍可透過搜尋找到。請參閱「你的區域」。</li>
+            <li><strong>應用程式鎖：</strong>在應用程式開啟時，以及離開 15 秒或更長時間返回時，要求驗證手機的螢幕鎖定（PIN 碼、圖形、密碼、指紋或臉部辨識）。鎖定會保護應用程式的畫面與彈出視窗。在 iPhone 上，它還會關閉應用程式開啟的網頁，例如從<strong>管理</strong>開啟的社群「設定」。它無法涵蓋在 Android 手機上應用程式開啟的網頁（該網頁會在應用程式外部開啟），也無法涵蓋任一手機上的分享面板：請在放下手機前將其關閉。從<strong>管理</strong>開啟的社群「設定」，在閒置 15 分鐘後會將你登出。當「應用程式鎖」開啟時，離開時應用程式畫面會變為空白，返回時會恢復。這需要手機已設定螢幕鎖定：如果沒有螢幕鎖定，它就無法進行驗證。</li>
+            <li><strong>頻道：</strong>你分享到 Pulse 動態的任何內容都會附帶你的姓名，向社群中的每個人顯示。請參閱「分享你的頻道」。</li>
+        </ul>
+        <h2>還有誰能看到資訊</h2>
+        <ul>
+            <li>兩人之間的私聊採用端對端加密：無法加密的訊息將不會被發送。BeanPool 在聊天室中新增的關於交易的通知（例如交易金額）未經加密。請參閱「訊息」。</li>
+            <li>在手機上，群組聊天也是端對端加密的（在伺服器已更新支援鎖定群組聊天的社群中）：伺服器只保留加密擾亂後的文字。伺服器仍然能看到發言者、發言時間、提及了誰、每行回覆了哪則訊息，以及表情符號回應。聊天室會顯示其是否已加密鎖定。在尚未更新的伺服器上，伺服器仍可讀取群組聊天內容。</li>
+            <li>在 Pulse 動態中播放 YouTube 影片會告知 YouTube 你觀看了該影片，這與在 YouTube 應用程式中開啟相同。在點選 ▶ 之前，不會向 YouTube 發送任何內容，直接滑過影片完全不會發送任何資料。請參閱「社群動態」。</li>
+            <li>你社群的伺服器會保留你的交易、貼文、投票，以及你在網頁版應用程式中封鎖的對象。經營該伺服器的擁有者和管理員可以看到儲存在該處的內容，包括活動聊天、在地事業聊天，以及尚未更新加密鎖定的伺服器上的群組聊天。請選擇由你信任的人所運作的社群。</li>
+            <li>如果你刪除帳號，你撰寫的每則訊息都會顯示為<strong>此訊息已被刪除</strong>，且你發送的照片會被刪除。在此之前製作的伺服器每日複本會將它們保留最多 14 天。如果你社群的伺服器將備份傳送到其他地方儲存，在此之前製作的每份備份會將它們保留最多 30 天。擁有者下載的備份會保留它們，直到擁有者將其刪除。請參閱「離開或刪除帳號」。</li>
+            <li>如果你連結了登入帳號、使用登入帳號加入，或日後新增了登入帳號，你社群的伺服器會為其保留一份加密鎖定的帳號複本。運行該伺服器的人可以開啟它。只有你的 12 個助記詞不需要依賴任何人。請參閱「找回你的帳號」。</li>
+            <li>在全球社群上，其版主可以看到哪些帳號在一天之內從相同的網際網路連線加入，但絕不會看到連線本身，以便他們能夠一次處理大量湧入的虛假帳號。請參閱「檢舉問題」。</li>
+            <li>當你加入全球社群時，它會將你加入時所使用網際網路連線的混淆參考值保留一天，絕不會保留位址本身。藉此，當有許多帳號從同一連線建立時，該處的每個新帳號都需要稍微繁瑣的設定步驟，且該連線只能建立有限數量的帳號。如果社群在帳號加入後一天內將其移除，該參考值將自加入起保留 7 天，因此該週內來自同一連線的新 12 個助記詞帳號將需要更長時間進行設定。對於自行刪除帳號的人，絕不會延長保留時間。</li>
+            <li>如果你使用 12 個助記詞加入全球社群，除了該參考值之外，它在門口獲取的資訊僅有你選擇的姓名和帳號金鑰：沒有電子郵件、沒有電話號碼，也沒有其他帳號。</li>
+        </ul>
+        <h2>深入閱讀</h2>
+        <p>在「設定」的<strong>法律與隱私</strong>下，點選<strong>隱私權政策</strong>。</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="your-profile.html"><strong>個人檔案</strong><span>你的暱稱、相片、個人簡述以及誰可以查看你的聯絡方式。</span></a></li>
+            <li><a href="your-area.html"><strong>所在地區</strong><span>全球社群向你展示附近刊登所使用的大致位置，以及如何更改或清除該位置。</span></a></li>
+            <li><a href="pin-locations.html"><strong>你的圖釘位置</strong><span>誰能看到你的刊登和活動所在位置，以及如何保護住家地址隱私。</span></a></li>
+            <li><a href="blocking.html"><strong>封鎖成員</strong><span>向自己隱藏某人的刊登和訊息，並可在日後取消封鎖。</span></a></li>
+            <li><a href="messages.html"><strong>訊息</strong><span>發起聊天、傳送相片、回覆、表情回應、編輯、刪除、靜音以及隱私說明。</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

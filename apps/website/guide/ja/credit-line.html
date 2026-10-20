@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ja by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>信用枠 — BeanPool members' guide</title>
+    <meta name="description" content="残高をどこまでマイナスにできるか、またその枠がどのように増えるかを説明します。">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#ledger">台帳</a></p>
+        <h1>信用枠</h1>
+        <p class="lede">残高をどこまでマイナスにできるか、またその枠がどのように増えるかを説明します。</p>
+        <h2>信用枠とは</h2>
+        <p>信用枠を使用すると、手持ちの豆以上の豆を使い、残高をゼロ未満（マイナス）にすることができます。これは、後で他の人を助けるという約束です。残高がゼロ未満であっても費用はかかりません。利息はありません。</p>
+        <h2>確認できる場所</h2>
+        <p><strong>台帳</strong>の残高の下にあるバーに、現在の状況が表示されます：</p>
+        <ul>
+            <li>中央がゼロです。</li>
+            <li>左端が<strong>利用限度額</strong>であり、使える最低の残高です。</li>
+            <li>左側の目盛りは、提供によってどこまで使えるかを示します。</li>
+            <li>右側の<strong>+200</strong>を超えた部分から流通手数料が始まります。</li>
+        </ul>
+        <p>スマートフォンでは、バーをタップすると各部分を説明する<strong>信用スライダー情報</strong>が表示されます。</p>
+        <h2>信用枠の開始方法</h2>
+        <p>信用枠はゼロから始まります。マーケットで最初の取引を完了するか（1〜2豆のみの取引は小さすぎるためカウントされません）、新規メンバーの歓迎役に選ばれた人が推薦を行うと枠が開きます。それまでは台帳に<strong>信用枠はまだありません</strong>と表示されます。手持ちの豆を使った取引は引き続き行えます。</p>
+        <h2>信用枠の増やし方</h2>
+        <ul>
+            <li><strong>信頼：</strong> 取引を完了すると信頼が築かれます。特に多くの異なる相手との取引が効果的です。「取引相手ごとの500豆制限」を参照してください。</li>
+            <li><strong>評価：</strong> 星評価は獲得した信頼を下げる方向にのみ働きます。平均5つ星であればすべて維持されますが、平均が下がると一部が差し引かれます。</li>
+            <li>信用枠の最大の下限は2,000豆です。メンバー確認を実施しているコミュニティでは、最大5,000豆まで高い上限を設定できます（下記参照）。</li>
+        </ul>
+        <h2>提供による利用可能額の設定</h2>
+        <p>公開中の提供が認める範囲内でのみ、信用枠を利用できます：</p>
+        <ul>
+            <li>提供なし：利用不可</li>
+            <li>提供1件：−200まで</li>
+            <li>2件：−500まで</li>
+            <li>3件：−1,000まで</li>
+            <li>4件：−1,500まで</li>
+            <li>5件：−2,000まで</li>
+        </ul>
+        <p>バーの下の行に、例えば「提供を投稿して信用枠を開いてください」のように表示されます。</p>
+        <h2>メンバー確認のあるコミュニティ</h2>
+        <p>一部のコミュニティには、すべてのメンバーを名前で把握している管理者がいます。コミュニティで<strong>既知の下限</strong>が有効になっている場合、管理者が確認したメンバーにはすぐに信用枠が付与されます（コミュニティが別の金額を設定している場合を除き1,000豆）。これはコミュニティがあなたを信頼している約25時間の労働に相当します。</p>
+        <ul>
+            <li>公開中の提供が1件あれば、そのすべてを利用できます。提供がない場合は利用できません。</li>
+            <li>取引によって獲得した信頼がそこに加算され、コミュニティの上限（より高い額を設定していない限り2,000豆、最大5,000豆）まで拡大します。</li>
+            <li>管理者は、あなたが新規メンバーである間など、より小さな制限枠を設定できます。それによって豆が奪われることは決してありません。すでにそれを下回っている場合は、再びそれを上回るまで利用が一時停止されます。</li>
+            <li>過去のアカウントからの負債を返済している場合、負債が完済されるまで、0を超えて受け取った豆はコモンズに送られます。台帳に残高が表示されます。また、<strong>台帳 → コモンズに支払う</strong>で、自分で負債の一部または全額を支払うこともできます。そこには返済コードがあらかじめ入力されています（または管理者が提供したコードを入力します）。コードを使って支払った分は直ちに負債から差し引かれ、残債がなくなると負債は清算されます。以降は支払いからも受け取りからもそれ以上差し引かれることはありません。コードなしの支払いはコモンズに送られますが負債からは差し引かれず、アプリにもその旨が表示されます。負債に算入してもらうには、参照番号を伝えて管理者に依頼してください。管理者が処理するまでは負債の返済が継続し、次回豆を受け取った際に0を超えて保有している分から残債が差し引かれます。管理者のメッセージに記載された金額は共有時の残額です。現在それより少ない場合は、サーバーが過大な支払いを拒否して現在の残額を表示し、何も支払われません。支払いが完了した可能性があるとアプリに表示された場合は、同じ画面で<strong>再試行</strong>をタップしてください。同じ支払いが二重に支払われることはありません。その画面を離れた場合は、再支払いする前に台帳を確認してください。</li>
+        </ul>
+        <h2>管理者による凍結</h2>
+        <p>コミュニティの管理者は、メンバーの信用枠を凍結できます（全額、またはメンバー確認のあるコミュニティでは確認済みメンバーとして付与された部分）。</p>
+        <ul>
+            <li>全額が凍結された場合、または確認済みの部分が持っている信用枠のすべてである場合、台帳には<strong>信用枠が凍結されています</strong>と表示されます。凍結中はマイナス残高での利用はできませんが、豆の販売や受け取り、およびゼロを超える保有分の利用は引き続き可能です。凍結された時点でマイナス残高であった場合、台帳にはマイナスになっている豆の数も表示されます。豆を販売または受け取ることで残高が戻り、ゼロを超えると保有分を利用できるようになります。</li>
+            <li>確認済みの部分が凍結され、推薦、取引、または助成金による信用枠もある場合、バーは維持され、確認済みの部分が凍結されて残りは以前と同様に機能する旨のメモが下に表示されます。残りの枠を下回っている場合は、台帳に<strong>利用の一時停止</strong>（下記）も表示されます。</li>
+        </ul>
+        <p>あなたのレベルは変わりません。プロフィールや出品のいずれにおいても、たとえ管理者があなたの枠をコミュニティのものより低く、または高く設定していたとしても、凍結されていない場合に信用枠から得られるレベルのままとなります。理由の確認や再開の依頼は管理者にお問い合わせください。</p>
+        <h2>利用の一時停止</h2>
+        <p>提供を取り下げたことなどにより、提供が認める範囲を下回った場合、台帳に<strong>利用の一時停止</strong>と表示されます。獲得や販売は引き続き可能です。提供を投稿するか、取引で稼いで戻せば解除されます。何かを奪われることはありません。</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="trust-badges.html"><strong>信頼バッジ</strong><span>新規、住民、世話人、長老。それぞれの意味と、特権が付与されるわけではない理由を説明します。</span></a></li>
+            <li><a href="trading-partner-limit.html"><strong>取引相手ごとの500豆制限</strong><span>特定の人と多額の取引をするより、多くの人と取引する方が信頼を築ける理由を説明します。</span></a></li>
+            <li><a href="how-it-works.html"><strong>BeanPoolの仕組み</strong><span>豆、取引、提供と求め、そしてクレジットについてわかりやすく説明します。</span></a></li>
+            <li><a href="posting.html"><strong>提供や求めの投稿</strong><span>自分ができること・提供できるもの、または探しているものを投稿します。</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

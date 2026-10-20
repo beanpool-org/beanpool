@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ja by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>鍵や名前が変更されたとき — BeanPool members' guide</title>
+    <meta name="description" content="チャットが送信停止する理由、相手とキーコードを確認する方法、再開のタイミングについて説明します。">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#talk">トーク</a></p>
+        <h1>鍵や名前が変更されたとき</h1>
+        <p class="lede">チャットが送信停止する理由、相手とキーコードを確認する方法、再開のタイミングについて説明します。</p>
+        <h2>どういう意味か</h2>
+        <p>2者間のメッセージはすべて、相手のスマートフォンだけが開くことができるように暗号化されてロックされます。相手の名前ではなく、相手の<strong>鍵</strong>に対してロックされます。スマートフォンは、チャットをどの鍵に対してロックしてきたかを記憶しています。</p>
+        <p>コミュニティがその人物に対して別の鍵を指定した場合、スマートフォンは新しい鍵宛てに黙って送信するのをやめ、停止してあなたに通知します。チャットの上部に<strong>「Ben」の鍵が変更されました。</strong>と表示されます。メッセージ入力欄はグレーアウトし、送信が一時停止中であることが表示されます。</p>
+        <p>相手との過去のメッセージは、通常はこれまで通り読むことができます。復元したばかりの端末や新しくセットアップした端末では、あなたが判断するまで、新しい鍵からのメッセージには<strong>新しい鍵から送信されました。続行すると表示されます。</strong>と表示されます。</p>
+        <p>これはスマートフォンアプリでの動作です。Webアプリは鍵をまだ記憶しません。</p>
+        <h2>発生する理由</h2>
+        <ul>
+            <li><strong>相手が機種変更して鍵を再設定した。</strong>これが通常の理由です。古い鍵がなくなったため、新しい鍵を持っています。</li>
+            <li><strong>何らかの異常が発生している。</strong>コミュニティのサーバーは、各チャットに誰がいるかを管理しています。あなたのメッセージを盗み見ようとするサーバーがあれば、あなたの友達の名前に別人の鍵を割り当てることができます。名前は正しく見えても、鍵が異なります。</li>
+        </ul>
+        <p>スマートフォンはこれらを自分自身で区別することはできません。キーコードを使うことで、あなたが区別できます。</p>
+        <h2>相手とキーコードを確認する</h2>
+        <ul>
+            <li>バナーにコードが表示されます：4桁が5組、計20桁の数字です。</li>
+            <li>相手に<strong>設定</strong>を開き、<strong>アカウント保護</strong>を開いて、<strong>マイキーコード</strong>を読み上げてもらいます。</li>
+            <li><strong>マイキーコード</strong>はスマートフォンアプリでのみ確認できます。相手がWebアプリしか使っていない場合は、まだ読み上げることができません：相手がスマートフォンアプリを開けるようになるまで、<strong>今はしない</strong>をタップしてください。</li>
+            <li>コードの確認は<strong>対面、または本人であることが確認できる通話やビデオ通話</strong>で行ってください。BeanPool内のメッセージで確認してはいけません：鍵が不正な場合、返信してくる相手も不正だからです。</li>
+            <li>すべての数字が一致したら、<strong>Benに確認しました。相手の「設定」にあるキーコードがこれと一致しています。</strong>にチェックを入れ、<strong>新しい鍵で続行する</strong>をタップします。</li>
+        </ul>
+        <p>以降、あなたのメッセージは新しい鍵宛てに送信されます。バナーと、<strong>トーク</strong>内のチャットに付いていた<strong>鍵が変更されました</strong>タグは消え、過去のメッセージも引き続き読めます。</p>
+        <p>コードは秘密情報ではありません。声に出して読み上げても安全です。</p>
+        <h2>コードが一致しない場合、または確認できない場合</h2>
+        <p><strong>今はしない</strong>をタップします。何も送信されず、何も変更されません。後からチャットに戻ることができます。</p>
+        <p>一時停止されたチャットは、あなたが続行するまで停止したままになる場合があります。会話を続ける方法は他にありません：コミュニティは2人のために1つのチャットのみを保持するため、同じ相手と新しくチャットを始めても同じチャットが開きます。</p>
+        <p>コードが一致しない場合は、続行しないでください。相手とコミュニティの管理者に伝えてください：誰かがあなたのメッセージを読もうとしている可能性があります。</p>
+        <h2>バナーに続行するための鍵が提示されない場合</h2>
+        <p>2者間のチャットにおいて、コミュニティがその人物に対して単一の鍵を提示せず、複数の鍵や鍵なしとして提示することがあります。その場合、続行するための鍵が存在しないため、バナーはその旨を表示し、<strong>今はしない</strong>のみを提示します。何も送信されません。相手と対面または通話で話してください。コミュニティのリストが更新されると、スマートフォンは自動的にチャットを再確認します。同じ相手との新しいチャットを開いても、この同じチャットが開きます。</p>
+        <h2>バナーに「端末がこのチャットを最初から確認しています」と表示される場合</h2>
+        <p>12個の単語から端末を復元した後、またはアプリを更新した後、スマートフォンは各チャットを自身の過去のメッセージと照合して確認します。それらが、コミュニティが現在提示している鍵とは異なる鍵から届いていた場合、バナーは<strong>復元後やアプリ更新時と同様に、端末がこのチャットを最初から確認しています。</strong>から始まります。上記の手順で相手とコードを確認してください。コミュニティのチャットの記憶をリセットした後は、代わりに<strong>このコミュニティのチャットの記憶がリセットされたため、端末がこのチャットを最初から確認しています。</strong>から始まります。</p>
+        <h2>チャットの記憶</h2>
+        <p>スマートフォンはコミュニティごとに小さな記憶を保持しています：各チャットがどの鍵とのものであるか、およびどのチャットが非公開であるかです。これは端末内に保持されており、コミュニティのサーバーが勝手にチャットを別の鍵に移動させることはできません：バナー上であなただけが移動できます。サインアウトしても端末内に残るため、サインアウトして再度サインインしても消去されません。スマートフォンが勝手にリセットすることも決してありません。</p>
+        <p>特定のコミュニティに対して記憶をリセットすることができます：<strong>設定</strong>を開き、<strong>アカウントとID</strong>の下にある<strong>チャットの記憶</strong>をタップし、コミュニティの横にある<strong>リセット</strong>をタップして警告を読み、再度<strong>リセット</strong>をタップします。アプリがここに誘導するのは、記憶を読み取れず再試行しても解決しなかった場合のみです。</p>
+        <p>リセット後、スマートフォンは保持しているメッセージをもとに、そのコミュニティのすべてのチャットを最初から再確認します。メッセージの送信元がコミュニティの現在の鍵と異なるチャットには、再びバナーが表示され、<strong>このコミュニティのチャットの記憶がリセットされたため、端末がこのチャットを最初から確認しています。</strong>から始まります。上記の手順で相手とコードを確認してください。</p>
+        <p>リセットによって2つの変化が起こる可能性があり、確認前に警告が表示されます：鍵が変更されたために一時停止していたチャットが新しい鍵で開く場合があること、および「トーク」から消えていたプライベートチャットが、コミュニティ全体に公開されたグループチャットとして再表示される場合があることです。送信前にキーコードや参加者を確認してください。</p>
+        <p>スマートフォンが1つの鍵に関連付けることができないチャットに対しては、リセットしても効果はありません：再度確認されて再び停止します。代わりに上記の手順で相手とコードを確認してください。</p>
+        <p>これはスマートフォンアプリでのみ機能します。Webアプリにはチャットの記憶はありません。</p>
+        <h2>バナーに「この端末はこのチャットを1つの鍵に関連付けることができません」と表示される場合</h2>
+        <p>チャット内の過去のメッセージが、スマートフォンが1人の人物に関連付けることができない鍵に対してロックされていることがあります。メッセージ入力欄の上に<strong>この端末はこのチャットを1つの鍵に関連付けることができないため、送信が無効になっています。</strong>と表示され、バナーにはコミュニティがその人物に対して現在提示している鍵のコードが表示されます。</p>
+        <p>一部のメッセージは引き続き表示される場合があります。それらはチャットの名前になっている人物からのものではない可能性があります：相手自身の過去のメッセージが、<strong>このメッセージは検証できなかったため表示されません。</strong>と表示されている側のメッセージである可能性があります。これらは続行した後もその状態のまま残ります。</p>
+        <p>上記の手順に従い、対面または通話で相手とコードを確認してください。一致した場合はチェックボックスにチェックを入れて<strong>新しい鍵で続行する</strong>をタップします：以降、あなたのメッセージはその鍵に送信されます。一致しない場合、または確認できない場合は、<strong>今はしない</strong>をタップしてください。同じ相手との新しいチャットを開いてもこの同じチャットが開くため、他に試す方法はありません。コミュニティが相手に対して単一の鍵を提示していない場合、バナーには<strong>今はしない</strong>のみが表示され、コミュニティのリストが変更された際にスマートフォンが自動的に再確認します。</p>
+        <h2>スマートフォンが確認できることと、できないこと</h2>
+        <p>スマートフォンは、すでに保持しているメッセージと照らし合わせてチャットを確認します。復元された端末や更新時点での既存の端末は、送信内容においてチャットの最も古い部分を保留したり偽装したりするサーバーの挙動に影響を受ける可能性があります。更新前にすでにその最も古い部分を保持していた端末は、サーバーが更新後に送信するいかなる情報にも惑わされません。</p>
+        <p>そのため、復元したばかりの端末や更新したばかりの端末は、チャットの鍵について誤認させられる可能性があります。バナーだけでその可能性を完全に排除することはできません。<strong>変更された鍵は、対面</strong>、または本人であることが確認できる通話で<strong>確認してください</strong>。</p>
+        <h2>コミュニティが日付を提示している場合</h2>
+        <p>アカウントの鍵が再設定されたことをコミュニティが証明できる場合、バナーにその旨が表示されます（例：<strong>コミュニティによると、このアカウントは2026年10月3日に鍵が更新されました。</strong>）。これは何が起きたかを把握する助けになりますが、コードの確認の代わりにはなりません：悪意あるサーバーも同様にその日付を主張できるからです。</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="messages.html"><strong>メッセージ</strong><span>チャットの開始、写真の送信、返信、リアクション、編集、削除、ミュート、公開範囲について説明します。</span></a></li>
+            <li><a href="your-12-words.html"><strong>あなたの12個の単語</strong><span>12個の単語はアカウントの鍵です。その重要性、確認場所、安全な保管方法、復元のバックアップ手段としてサインインを追加する方法を説明します。</span></a></li>
+            <li><a href="people.html"><strong>メンバーと友達</strong><span>コミュニティメンバーの検索、プロフィールと信頼バッジ、誰かが退会したときに気付ける友達機能について説明します。</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

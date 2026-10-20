@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ru by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Обзор Рынка — BeanPool members' guide</title>
+    <meta name="description" content="Поиск Предложений и Спроса с фильтрами по категориям и расстоянию.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#market">Рынок</a></p>
+        <h1>Обзор Рынка</h1>
+        <p class="lede">Поиск Предложений и Спроса с фильтрами по категориям и расстоянию.</p>
+        <h2>Вкладка «Рынок»</h2>
+        <p>Нажмите <strong>Рынок</strong> в ряду вкладок. Вы увидите, что предлагают и ищут участники вашего сообщества, начиная с самых свежих объявлений, сгруппированных по дням публикации.</p>
+        <p>На телефоне первыми идут события. Если вы уже разрешили приложению использовать вашу геопозицию, в списках и компактном виде объявления показываются начиная с ближайших в блоке <strong>Сначала ближайшие</strong>, а опросы — в блоке <strong>Опросы</strong>. Раздел <strong>Для вас</strong> сохраняет собственный порядок. Потяните список вниз, чтобы обновить его.</p>
+        <p>В веб-приложении Рынок открывается в виде карточек. В обычном и компактном виде события отображаются под тем днём, в который они были опубликованы. В местном сообществе веб-приложение не сортирует объявления от ближайших.</p>
+        <p>В глобальном сообществе веб-приложение сначала показывает публикации поблизости от вас: ближайшие в пределах заданного <strong>Расстояния</strong> или в радиусе 250 км от вашего района (приблизительного места, указанного при вступлении или в <strong>Настройках</strong>), с указанием расстояния до каждого. Строка над списком подсказывает, какой режим включён. Для показа рядом с вашим районом есть кнопка <strong>Показывать отовсюду</strong>, выводящая самые свежие публикации со всего мира. При активном фильтре <strong>Расстояние</strong> откройте <strong>Расстояние</strong> и нажмите <strong>Сбросить</strong>, чтобы вернуться к показу по вашему району, а затем нажмите <strong>Показывать отовсюду</strong>. На телефоне глобальное сообщество сохраняет объявления, ближайшие к вашему району, поэтому именно они и отображаются на Рынке. См. «Поиск поблизости».</p>
+        <p>В глобальном сообществе, пока реальных объявлений мало, на Рынке также отображается несколько карточек с пометкой <strong>Пример</strong>. Они вымышлены, чтобы показать примеры публикаций, и их нельзя открыть или отправить по ним отклик. Они исчезнут, как только появится достаточно настоящих объявлений.</p>
+        <p>На телефоне поиск и фильтры скрываются при прокрутке вниз, освобождая место для объявлений. При небольшой прокрутке вверх они возвращаются. Чтобы быстро вернуться на самый верх, нажмите <strong>Рынок</strong> ещё раз.</p>
+        <h2>Поиск</h2>
+        <p>Введите запрос в поле <strong>Поиск на рынке...</strong> вверху. На телефонах с небольшим экраном там может быть написано просто <strong>Поиск</strong>. Поиск находит и родственные слова: по запросу «фрукты» найдётся «лимон». Он также находит слова на китайском, японском и тайском языках и исключает публикации заблокированных вами участников. Без подключения к сети поиск выполняется по данным, уже загруженным на ваш телефон.</p>
+        <p>Пока в строке поиска есть текст, появляется кнопка <strong>Сохранить этот поиск на Главную</strong>. Она открывает Главную с готовым сохранённым поиском: ваш текст, <strong>Предложения</strong> или <strong>Спрос</strong> (если был выбран только один тип), категория и расстояние. Во вкладках <strong>События</strong> и <strong>Опросы</strong> этой кнопки нет. См. «Главная».</p>
+        <h2>Фильтры</h2>
+        <p>Ряд кнопок под поиском определяет состав отображаемого:</p>
+        <ul>
+            <li><strong>Все</strong>, <strong>Предложения</strong> или <strong>Спрос</strong>.</li>
+            <li><strong>Для вас:</strong> объявления в категориях, отмеченных звёздочкой в меню <strong>Настроить интересы</strong> (те же звёздочки, что и на Главной), и ваши предстоящие события — те, где вы отметились вариантами «Пойду» или «Интересно».</li>
+            <li><strong>События</strong> и <strong>Опросы</strong>.</li>
+        </ul>
+        <p>Второй ряд уточняет выборку. На телефоне:</p>
+        <ul>
+            <li><strong>Все категории:</strong> выбор одной категории, например «Еда», «Инструменты» или «Сад».</li>
+            <li><strong>Расстояние:</strong> только публикации в пределах заданного радиуса от выбранной точки. См. «Поиск поблизости».</li>
+            <li><strong>Доверие:</strong> только публикации участников, ещё не совершавших сделок (<strong>Основатели</strong>), <strong>Новичков</strong> или участников с определённым значком доверия и выше.</li>
+            <li><strong>Только бобы:</strong> скрывает публикации, где автор также просит доплату обычными деньгами.</li>
+        </ul>
+        <p>В веб-приложении эти кнопки называются <strong>Категория</strong>, <strong>Расстояние</strong>, <strong>🌱 Новые участники</strong> (участники без сделок) и <strong>🫘 Только бобы</strong>. Фильтра по доверию там нет.</p>
+        <p>Если вы состоите в группах, появляется также ряд кнопок групп. Кнопка <strong>👥 Все группы и открытые</strong> показывает всё; кнопка конкретной группы показывает публикации только для неё. В веб-приложении группы выбираются в выпадающем списке, а не в ряду кнопок.</p>
+        <p>На телефоне, если ничего не найдено, нажмите <strong>Сбросить все фильтры</strong>. В веб-приложении при пустом списке появляется надпись <strong>Объявления не найдены</strong>, а отдельной кнопки сброса нет.</p>
+        <p>На телефоне, если вы прокрутили список вниз при активном поиске или фильтре, вверху появляется небольшая плашка с указанием текущего фильтра. Нажмите на плашку, чтобы изменить его. Нажмите на ней <strong>✕</strong>, чтобы сбросить поиск и все фильтры.</p>
+        <p>Кнопка рядом с <strong>Мои сделки</strong> переключает вид списка: обычный список, сетка или компактный вид.</p>
+        <h2>Что показано в объявлении</h2>
+        <ul>
+            <li>фотография или значок категории;</li>
+            <li><strong>ПРЕДЛОЖЕНИЕ</strong> или <strong>СПРОС</strong>;</li>
+            <li>цена в бобах, с пометкой <strong>/ч</strong>, если оплата почасовая;</li>
+            <li><strong>Повторяющееся</strong>, если объявление остаётся открытым после каждой сделки;</li>
+            <li><strong>💸 ТАКЖЕ ДЕНЬГИ</strong>, если участнику также требуются обычные деньги на бензин или материалы;</li>
+            <li>значок замка и название группы, если объявление видно только участникам этой группы;</li>
+            <li>имя автора с его значком доверия и звёздами. У участника, ещё не совершавшего сделок, отображается отметка <strong>Основатели</strong>.</li>
+        </ul>
+        <p>Нажмите на публикацию, чтобы открыть её.</p>
+        <h2>На странице объявления</h2>
+        <ul>
+            <li>Кнопка <strong>Сообщение</strong> и имя автора: задайте вопрос, прежде чем договариваться о сделке.</li>
+            <li>Нажмите на имя автора, чтобы посмотреть его профиль, отзывы и уровень доверия.</li>
+            <li><strong>Пожаловаться на объявление</strong>, если это мошенничество, оскорбление, введение в заблуждение или публикация угрожает ребёнку (<strong>Безопасность детей</strong>).</li>
+            <li><strong>Заблокировать пользователя</strong>, чтобы скрыть его объявления и чаты на своём телефоне. При этом администраторы получат уведомление. См. «Блокировка участников».</li>
+        </ul>
+        <p>В веб-приложении на карточке объявления находятся кнопки <strong>💬 Написать</strong> и <strong>🚩 Пожаловаться</strong>. Заблокировать участника можно из его профиля.</p>
+        <p>В глобальном сообществе в объявлениях нет цены в бобах: там написано, что участник хотел бы получить взамен. На месте цены указано: «🏘️ В местном сообществе это цена в бобах ›». Вместо запроса на сделку отображается кнопка <strong>Запрос · Бобы надёжно удержаны 🏘️</strong>: нажмите её, чтобы узнать, как работает сделка в местном сообществе. Отправка сообщений автору работает как обычно. См. «Бобы и глобальное сообщество».</p>
+        <p>Сохранять публикации в закладки или делиться ими пока нельзя.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="home.html"><strong>Главная</strong><span>Что такое Главная, какие карточки есть на телефоне и в вебе, как их менять или удалять, выбор интересов и приватность при выходе.</span></a></li>
+            <li><a href="posting.html"><strong>Публикация объявления</strong><span>Предложите то, что умеете или готовы отдать, или опубликуйте то, что ищете.</span></a></li>
+            <li><a href="a-deal-step-by-step.html"><strong>Сделка шаг за шагом</strong><span>От первого вопроса до оплаты, для Предложения и для Спроса, и написание отзыва.</span></a></li>
+            <li><a href="near-you.html"><strong>Поиск поблизости</strong><span>Показ объявлений только в пределах выбранного расстояния от вас или любой указанной точки.</span></a></li>
+            <li><a href="trust-badges.html"><strong>Значки доверия</strong><span>Новичок, Житель, Хранитель и Старейшина. Что они значат и почему ничего не блокируют.</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>Бобы и глобальное сообщество</strong><span>Зачем нужно глобальное сообщество, одно из многих, и что в нём есть: метка 🏘️ Местное сообщество, пример сообщества Example Valley, ожидание бобов и создание сообществ.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

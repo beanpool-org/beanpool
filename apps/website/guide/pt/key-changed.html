@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/pt by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Se a chave do chat mudou — BeanPool members' guide</title>
+    <meta name="description" content="Por que uma conversa para de enviar, como checar o código de chave com a pessoa e quando continuar.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#talk">Conversas</a></p>
+        <h1>Se a chave do chat mudou</h1>
+        <p class="lede">Por que uma conversa para de enviar, como checar o código de chave com a pessoa e quando continuar.</p>
+        <h2>O que isso significa</h2>
+        <p>Toda mensagem entre duas pessoas é protegida para que apenas o celular da outra pessoa possa abri-la. Ela é protegida pela <strong>chave</strong> dessa pessoa, não pelo nome dela. Seu celular se lembra a qual chave ele tem protegido sua conversa.</p>
+        <p>Se a sua comunidade agora indicar uma chave diferente para a pessoa, o seu celular para e avisa você, em vez de enviar discretamente para a nova chave. No topo da conversa, você vê <strong>A chave de “Ben” mudou.</strong> A caixa de mensagem fica esmaecida e informa que o envio está pausado.</p>
+        <p>Suas mensagens anteriores com a pessoa geralmente continuam legíveis como antes. Em um celular que você acabou de restaurar ou configurar novamente, as mensagens da nova chave dizem <strong>Enviada da nova chave. Exibida após você continuar.</strong> até que você tome uma decisão.</p>
+        <p>Isso ocorre no aplicativo para celular. O app web ainda não memoriza chaves.</p>
+        <h2>Por que isso pode acontecer</h2>
+        <ul>
+            <li><strong>A pessoa trocou de celular e renovou a chave.</strong> Esse é o motivo mais comum. A chave antiga dela se perdeu, então ela tem uma nova.</li>
+            <li><strong>Algo está errado.</strong> O servidor de uma comunidade lista quem está em cada conversa. Um servidor que quisesse ler suas mensagens poderia colocar a chave de outra pessoa por trás do nome do seu amigo. O nome parece correto, mas a chave não.</li>
+        </ul>
+        <p>Seu celular não consegue distinguir esses casos sozinho. Você consegue, usando o código de chave.</p>
+        <h2>Conferir o código de chave com a pessoa</h2>
+        <ul>
+            <li>O aviso exibe um código: 20 dígitos divididos em cinco grupos de quatro.</li>
+            <li>Peça para a pessoa abrir as <strong>Configurações</strong>, depois <strong>Proteção da conta</strong> e ler para você o <strong>Meu código de chave</strong>.</li>
+            <li>O <strong>Meu código de chave</strong> existe apenas no app para celular. Se a pessoa usa apenas o app web, ela ainda não pode ler isso para você: toque em <strong>Agora não</strong> até que ela consiga abrir o app no celular.</li>
+            <li>Confira o código <strong>pessoalmente ou por chamada de áudio ou vídeo</strong> em que você tenha certeza de que é ela. Não confira por mensagem no BeanPool: se a chave estiver errada, quem responde também estará.</li>
+            <li>Se todos os dígitos coincidirem, marque a opção <strong>Conferi com Ben: o código de chave nas Configurações dele coincide com este</strong> e depois toque em <strong>Continuar com a nova chave</strong>.</li>
+        </ul>
+        <p>A partir desse momento, suas mensagens irão para a nova chave. O aviso e a etiqueta de <strong>chave alterada</strong> na conversa em <strong>Conversas</strong> desaparecem, e suas mensagens anteriores continuam legíveis.</p>
+        <p>O código não é segredo. É seguro lê-lo em voz alta.</p>
+        <h2>Se o código não coincidir ou se você não puder conferir</h2>
+        <p>Toque em <strong>Agora não</strong>. Nada é enviado e nada muda. Você pode voltar à conversa mais tarde.</p>
+        <p>Uma conversa pausada pode permanecer pausada até que você continue. Não há outra forma de continuar conversando nela: sua comunidade mantém uma única conversa para vocês dois; portanto, iniciar uma nova conversa com a mesma pessoa abrirá esta mesma conversa.</p>
+        <p>Se o código não coincidir, não continue. Avise a pessoa e os administradores da sua comunidade: alguém pode estar tentando ler suas mensagens.</p>
+        <h2>Se o aviso não oferecer nenhuma chave para continuar</h2>
+        <p>Às vezes a comunidade não lista uma única chave para a pessoa em uma conversa entre duas pessoas: ela lista várias, ou nenhuma. Não há então nenhuma chave para continuar, por isso o aviso informa isso e oferece apenas a opção <strong>Agora não</strong>. Nada é enviado. Fale com a pessoa pessoalmente ou por chamada. O celular verifica a conversa novamente por conta própria quando a lista da comunidade mudar, e uma nova conversa com a mesma pessoa é esta mesma conversa.</p>
+        <h2>Se o aviso disser que o celular está verificando a conversa do início</h2>
+        <p>Depois de restaurar o celular a partir das suas 12 palavras ou de atualizar o app, seu celular verifica cada conversa em relação às próprias mensagens anteriores. Se essas mensagens tiverem vindo de uma chave diferente daquela que a comunidade informa agora para a pessoa, o aviso começa com <strong>Este celular está verificando este bate-papo do início, como faz após você restaurar ou atualizar o app.</strong> Confira o código com a pessoa como descrito acima. Se você tiver redefinido a memória do bate-papo da comunidade, ele começará com <strong>A memória de bate-papo desta comunidade foi redefinida, por isso este celular está verificando esta conversa do início.</strong> em vez disso.</p>
+        <h2>Memória do bate-papo</h2>
+        <p>Seu celular guarda uma pequena memória para cada comunidade: com qual chave cada uma das suas conversas é realizada e quais conversas são privadas. Isso fica guardado no aparelho, e o servidor da comunidade não pode mudar uma conversa para outra chave por conta própria: apenas você pode, no aviso. Essa memória permanece no aparelho quando você sai da conta, portanto sair e entrar de novo não a apaga. O celular nunca a redefine sozinho.</p>
+        <p>Você pode redefini-la para uma comunidade: abra <strong>Configurações</strong>, toque em <strong>Memória do bate-papo</strong> em <strong>Conta e identidade</strong>, toque em <strong>Redefinir</strong> ao lado da comunidade, leia o aviso e toque em <strong>Redefinir</strong> novamente. O app direciona você para cá apenas quando informa que não conseguiu ler essa memória e tentar de novo não resolveu.</p>
+        <p>Após a redefinição, seu celular verifica todas as conversas daquela comunidade novamente desde o início, a partir das mensagens que armazena. Uma conversa cujas mensagens vieram de uma chave diferente daquela informada atualmente pela comunidade exibirá o aviso novamente, começando com <strong>A memória de bate-papo desta comunidade foi redefinida, por isso este celular está verificando esta conversa do início.</strong> Confira o código com a pessoa como descrito acima.</p>
+        <p>Duas coisas podem mudar após uma redefinição, e o aviso destaca isso antes de você confirmar: uma conversa que estava pausada por troca de chave pode se abrir com a nova chave, e uma conversa privada que havia sumido de Conversas pode retornar como uma conversa em grupo legível pela comunidade. Confira o código de chave, ou quem participa da conversa, antes de enviar.</p>
+        <p>Uma redefinição não resolve uma conversa que o celular não consegue associar a uma chave única: ela é verificada novamente e para de novo. Confira o código com a pessoa (acima).</p>
+        <p>Isso ocorre no aplicativo para celular. O app web não tem memória de bate-papo.</p>
+        <h2>Se o aviso disser que o celular não consegue associar a conversa a uma chave única</h2>
+        <p>Às vezes, as mensagens anteriores em uma conversa foram protegidas com chaves que seu celular não consegue associar a uma única pessoa. Acima da caixa de mensagem, o app exibe <strong>Este celular não consegue associar este bate-papo a uma chave única, então o envio está desativado.</strong> e o aviso mostra o código da chave que a sua comunidade agora lista para a pessoa.</p>
+        <p>Algumas mensagens ainda podem aparecer. Elas podem não ser da pessoa cujo nome está na conversa: as mensagens anteriores da própria pessoa podem ser as que exibem <strong>Esta mensagem não pôde ser verificada, então não é exibida.</strong> Essas continuam assim, mesmo depois que você continuar.</p>
+        <p>Confira o código com a pessoa como descrito acima, pessoalmente ou em uma chamada. Se coincidir, marque a caixa e toque em <strong>Continuar com a nova chave</strong>: a partir de então, suas mensagens irão para essa chave. Se não coincidir ou se você não puder checar, toque em <strong>Agora não</strong>. Uma nova conversa com a mesma pessoa é esta mesma conversa, portanto não há mais nada a tentar. Se a comunidade não listar uma única chave para ela, o aviso oferecerá apenas <strong>Agora não</strong>, e o celular verificará a conversa novamente por conta própria quando a lista da comunidade for alterada.</p>
+        <h2>O que o seu celular pode verificar e o que ele não pode</h2>
+        <p>Seu celular verifica uma conversa em relação às mensagens que já armazena. Um celular restaurado ou um celular existente no momento da atualização só pode ser induzido ao erro por um servidor que oculte ou modifique a parte mais antiga da conversa no que ele envia. Um celular que já continha essa parte mais antiga não é influenciado por nada que o servidor envie após a atualização.</p>
+        <p>Por isso, um celular que você acabou de restaurar ou de atualizar pode ser enganado quanto à chave de uma conversa. Um aviso não pode descartar essa hipótese. <strong>Confirme uma chave alterada pessoalmente</strong>, ou em uma chamada em que você tenha certeza de que é a pessoa.</p>
+        <h2>Se a comunidade informar uma data</h2>
+        <p>Quando a comunidade pode comprovar que a conta teve sua chave alterada, o aviso informa isso, por exemplo: <strong>Esta comunidade informa que a conta foi reconfigurada com nova chave em 3 de out de 2026.</strong> Isso ajuda a entender o que aconteceu, mas não substitui conferir o código: um servidor também poderia dizer isso.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="messages.html"><strong>Mensagens</strong><span>Iniciar uma conversa, enviar fotos, responder, reagir, editar, apagar, silenciar e o que é privado.</span></a></li>
+            <li><a href="your-12-words.html"><strong>Suas 12 palavras</strong><span>As 12 palavras são a chave da sua conta. Por que importam, onde encontrá-las, como mantê-las seguras e como adicionar um login como alternativa.</span></a></li>
+            <li><a href="people.html"><strong>Pessoas e amigos</strong><span>Encontre membros da sua comunidade, adicione amigos e apoie alguém.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ta by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ta">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>பரிமாற்றம் படிநிலைகள் — BeanPool members' guide</title>
+    <meta name="description" content="கேட்பது முதல் பணம் பெறுவது வரை, உதவி மற்றும் தேவைக்கான நடைமுறைகள், மற்றும் மதிப்பாய்வு இடுதல்.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#market">சந்தை</a></p>
+        <h1>பரிமாற்றம் படிநிலைகள்</h1>
+        <p class="lede">கேட்பது முதல் பணம் பெறுவது வரை, உதவி மற்றும் தேவைக்கான நடைமுறைகள், மற்றும் மதிப்பாய்வு இடுதல்.</p>
+        <h2>அடிப்படை யோசனை</h2>
+        <p>ஒரு வர்த்தகம் தொடங்கும் போது, பணம் செலுத்துபவரின் பயறுகள் <strong>நம்பக வைப்பில் வைக்கப்படுகின்றன</strong>. வைப்பில் உள்ள பயறுகளை யாரும் செலவழிக்க முடியாது. வேலை முடிந்ததும், பணம் செலுத்துபவர் அவற்றை விடுவிக்கிறார் மற்றும் மற்ற நபருக்குப் பணம் செலுத்தப்படுகிறது. திரைகள் சில இடங்களில் பயறுகளை &quot;வரவுகள்&quot; என்று அழைக்கின்றன; இரண்டும் ஒரே பொருளையே தருகின்றன.</p>
+        <p>ஏதேனும் 24 மணி நேரத்தில் 100 வர்த்தகங்கள் வரை நீங்கள் கேட்கலாம், ஏற்கலாம் அல்லது அங்கீகரிக்கலாம். நீங்கள் பணம் செலுத்தும் ஒரு வர்த்தகம் ஒரு நாளில் உங்களின் 100 கொடுப்பனவுகளில் ஒன்றாகக் கணக்கிடப்படும் (&quot;பரிசு அனுப்புதல்&quot; என்பதைப் பார்க்கவும்). பயறுகளை விடுவிப்பது, ரத்து செய்வது மற்றும் பணம் பெறுவது ஆகியவை ஒருபோதும் மட்டுப்படுத்தப்படுவதில்லை.</p>
+        <h2>ஒருவரின் உதவியை ஏற்றுக்கொள்வது</h2>
+        <ul>
+            <li>உதவியைத் திறந்து <strong>சலுகையை ஏற்றுக்கொள்</strong> என்பதைத் தட்டவும்.</li>
+            <li>அது மணிநேர அடிப்படையில் விலை நிர்ணயிக்கப்பட்டிருந்தால், எத்தனை மணிநேரம் என்று குறிப்பிடவும்.</li>
+            <li><strong>உறுதிப்படுத்து</strong> என்பதைத் தட்டவும். உங்கள் பயறுகள் உடனடியாக வைப்பில் வைக்கப்படும், மேலும் விற்பனையாளருக்குத் தெரிவிக்கப்படும். விற்பனையாளர் ஆம் என்று கூறுவதற்காகக் காத்திருக்க வேண்டியதில்லை.</li>
+            <li>விற்பனையாளருடன் ஓர் அரட்டை திறக்கும். எப்போது மற்றும் எங்கே என்பதை ஒப்புக்கொள்ளுங்கள்.</li>
+        </ul>
+        <p>நீங்கள் முதலில் உங்கள் சொந்த உதவி ஒன்றைப் பதிவிட்டிருக்க வேண்டும். நீங்கள் பதிவிடவில்லை என்றால், செயலி <strong>சலுகையை உருவாக்கு</strong> என்பதை வழங்கும்.</p>
+        <h2>ஒருவரின் தேவைக்கு உதவுவது</h2>
+        <ul>
+            <li>தேவையைத் திறந்து <strong>நிறைவேற்ற முன்வாருங்கள்</strong> என்பதைத் தட்டவும், பின்னர் <strong>உறுதிப்படுத்து</strong> என்பதைத் தட்டவும்.</li>
+            <li>அதைப் பதிவிட்ட நபர் முடிவு செய்கிறார். அதுவரை நீங்கள் <strong>கோரிக்கையைத் திரும்பப் பெறு</strong> என்பதைத் தட்டலாம். அவர்கள் 7 நாட்களில் பதிலளிக்கவில்லை என்றால், கோரிக்கை தானாகவே முடிவடையும் மற்றும் உங்கள் இருவருக்கும் தெரிவிக்கப்படும்.</li>
+            <li>அவர்கள் உங்கள் கோரிக்கையை <strong>நிறைவேற்றல் கோரிக்கைகள்</strong> என்பதன் கீழ் காண்பார்கள், மேலும் உங்களுக்கு <strong>செய்தி</strong> அனுப்பலாம், அதை <strong>மறு</strong> செய்யலாம் அல்லது <strong>ஒப்புதல் அளித்து ஒதுக்கு</strong> செய்யலாம்.</li>
+            <li>அவர்கள் அங்கீகரிக்கும் போது, அவர்களின் பயறுகள் வைப்பில் வைக்கப்படும். பதிவு Repeatable ஆக இல்லாத வரை, உதவி செய்ய முன்வந்த மற்ற எவரும் தங்கள் கோரிக்கை நிராகரிக்கப்பட்டதாகக் குறிக்கப்பட்டதைக் காண்பார்கள்.</li>
+        </ul>
+        <p>இணைய செயலியில், <strong>கோரிக்கையைத் திரும்பப் பெறு</strong> என்பது <strong>சலுகையை ரத்துசெய்</strong> ஆகவும், <strong>ஒப்புதல் அளித்து ஒதுக்கு</strong> என்பது <strong>அங்கீகரித்து நம்பக வைப்பில் வை</strong> ஆகவும் இருக்கும். தேவையைப் பதிவிட்ட நபர் அங்கே <strong>மறு</strong> அல்லது அங்கீகரிக்க மட்டுமே முடியும்: ஒரு கோரிக்கையில் <strong>செய்தி</strong> பொத்தான் இல்லை.</p>
+        <h2>பயறுகள் வைப்பில் இருக்கும் போது</h2>
+        <p>இருவரும் பேச <strong>செய்தி</strong> பொத்தானையும், அதை ரத்து செய்ய <strong>பொறுப்புடைமைப் பிடிப்பை ரத்து செய்</strong> என்பதையும் காண்பார்கள். இணைய செயலியில், பட்டியலைப் பதிவிடாத நபர் மட்டுமே <strong>செய்தி</strong> பொத்தானைக் காண்பார், மேலும் அதை ரத்து செய்வதற்கான பொத்தான் <strong>வைப்பை ரத்துசெய்</strong> ஆகும்.</p>
+        <ul>
+            <li>வேலையைச் செய்யுங்கள், அல்லது பொருளை ஒப்படையுங்கள்.</li>
+            <li>பணம் செலுத்துபவர் <strong>வரவுகளை விடுவிக்கவும்</strong> என்பதைத் தட்டுகிறார், பின்னர் உறுதிப்படுத்த மீண்டும் <strong>வரவுகளை விடுவிக்கவும்</strong> என்பதைத் தட்டுகிறார். மணிநேர வேலைக்கு அவர்கள் முதலில் உண்மையாக வேலை செய்த மணிநேரத்தை உள்ளிடுகிறார்கள். அது குறைவாக இருந்தால், மீதமுள்ளவை அவர்களுக்குத் திரும்பச் செல்லும். அது அதிகமாக இருந்தால், கூடுதல் தொகை அவர்களிடம் இருந்து எடுக்கப்படும். ஒவ்வொரு மணிநேரமும் ஒப்பந்தம் செய்யப்பட்ட விகிதத்திலேயே செலுத்தப்படும்.</li>
+            <li>விற்பனையாளருக்கு உடனடியாகப் பணம் செலுத்தப்படுகிறது, 1.5% சந்தைக் கட்டணம் கழிக்கப்பட்டு, உங்கள் சமூகத்தின் பொது நிதிக்குச் செல்லும்.</li>
+        </ul>
+        <p>பணம் செலுத்துபவர் மட்டுமே பயறுகளை விடுவிக்க முடியும். நேர வரம்பு எதுவும் இல்லை: பயறுகள் விடுவிக்கப்படும் வரை அல்லது வர்த்தகம் ரத்து செய்யப்படும் வரை வைப்பில் இருக்கும். ஒரு வாரத்திற்குப் பிறகு, அதன் பிறகு ஒவ்வொரு வாரமும், பணம் செலுத்துபவருக்கு ஒரு நினைவூட்டல் வரும்.</p>
+        <p>யாராவது அதைக் கேட்கும் போதோ அல்லது அவர்களின் பயறுகள் வைப்பில் இருக்கும் போதோ பதிவின் விலையை மாற்ற முடியாது. வர்த்தகம் அது செய்யப்பட்ட விலையையே வைத்திருக்கும். விலையை மாற்ற, அதைப் பதிவிட்ட நபர் முதலில் ஒப்பந்தத்தை நிராகரிக்கிறார் அல்லது ரத்து செய்கிறார்.</p>
+        <h2>ஒரு Repeatable பதிவு</h2>
+        <p>ஒரு Repeatable பதிவு ஒவ்வொரு வர்த்தகத்திற்குப் பிறகும் மீண்டும் மேலே செல்லும், மேலும் ஒரே நேரத்தில் பல நபர்கள் அதில் வர்த்தகத்தில் ஈடுபடலாம். மற்ற எந்தப் பதிவும் முடிவடைந்ததாகக் குறிக்கப்படும்.</p>
+        <h2>மதிப்புரைகள்</h2>
+        <p>விடுவித்த பிறகு, வர்த்தகத்தை மதிப்பிடுமாறு பணம் செலுத்துபவர் கேட்கப்படுகிறார்: 1 முதல் 5 நட்சத்திரங்கள் மற்றும் ஒரு சிறிய விருப்பக் கருத்து. <strong>மதிப்பீட்டைச் சமர்ப்பி</strong> என்பதைத் தட்டவும், அல்லது <strong>இப்போதைக்குத் தவிர்</strong> என்பதைத் தட்டவும்.</p>
+        <p>இருவரும் பின்னர் மதிப்பிடலாம்: முடிவடைந்த பதிவில் <strong>Rate</strong> மற்றும் பெயரைத் தட்டவும் (மீண்டும் மேலே செல்லும் Repeatable பதிவில் அல்ல), அல்லது எனது ஒப்பந்தங்கள், வரலாறு என்பதில் <strong>மதிப்பாய்வு செய்</strong> (இணைய செயலியில் <strong>மதிப்புரையை எழுதவும்</strong>) என்பதைத் தட்டவும். உங்கள் மதிப்பீட்டை நீங்கள் மாற்றலாம்; புதிய ஒன்று பழையதை மாற்றும்.</p>
+        <p>உங்கள் சமூகத்தில் உள்ள அனைவரும் ஒரு மதிப்பாய்வின் நட்சத்திரங்களையும் சொற்களையும் படிக்கலாம். வர்த்தகத்தில் உள்ள இருவர் மட்டுமே அதை யார் எழுதினார்கள், எந்த வர்த்தகத்தைப் பற்றியது என்பதைப் பார்க்க முடியும்.</p>
+        <p>நட்சத்திரங்கள் முக்கியமானவை. குறைந்த சராசரியானது மற்ற நபர் தங்கள் வர்த்தகத்திலிருந்து பெறும் நம்பிக்கையைக் குறைக்கிறது. நியாயமாக இருங்கள்.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="my-deals.html"><strong>என் பரிமாற்றங்கள்</strong><span>நீங்கள் ஈடுபட்டுள்ள ஒவ்வொரு பரிமாற்றம், பதிவிட்டவை மற்றும் கடந்தகாலப் பரிமாற்றங்களுக்கான ஒரே இடம்.</span></a></li>
+            <li><a href="when-a-deal-goes-wrong.html"><strong>பரிமாற்றத்தில் சிக்கல் எழும்போது</strong><span>பரிமாற்றத்தை ரத்துசெய்தல் மற்றும் உடன்பாடு எட்டப்படாதபோது என்ன நடக்கும் என்பது.</span></a></li>
+            <li><a href="posting.html"><strong>உதவி அல்லது தேவையைப் பதிவிடுதல்</strong><span>நீங்கள் செய்யக்கூடிய அல்லது கொடுக்கக்கூடிய ஒன்றை, அல்லது நீங்கள் தேடும் ஒன்றைப் பதிவிடுங்கள்.</span></a></li>
+            <li><a href="how-it-works.html"><strong>BeanPool செயல்படும் விதம்</strong><span>பயறுகள், பரிமாற்றம், உதவிகள் மற்றும் தேவைகள், மற்றும் கடன் பற்றி எளிய சொற்களில்.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

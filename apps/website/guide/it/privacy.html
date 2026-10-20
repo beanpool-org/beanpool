@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/it by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>La tua privacy — BeanPool members' guide</title>
+    <meta name="description" content="Cosa possono vedere gli altri su di te e le impostazioni per controllarlo.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">Impostazioni e sicurezza</a></p>
+        <h1>La tua privacy</h1>
+        <p class="lede">Cosa possono vedere gli altri su di te e le impostazioni per controllarlo.</p>
+        <h2>Aprire le Impostazioni</h2>
+        <p>Tocca il pulsante con i cursori in alto a destra dello schermo. Nella web app su uno schermo ampio di computer, è invece un ingranaggio in fondo alla barra laterale sinistra. Le Impostazioni non sono una delle schede principali.</p>
+        <h2>Cosa possono vedere i membri della tua comunità</h2>
+        <ul>
+            <li>Il tuo nome, la foto, la biografia, quando ti sei unito e quando sei stato attivo l'ultima volta.</li>
+            <li>Il tuo badge di affidabilità, le tue recensioni (nessun altro può vedere chi ha scritto una recensione) e il tuo profilo di affidabilità: quanti dei tuoi scambi sono stati completati e quanti annullati, e la percentuale di completamento, quanti pagamenti in Bean hai inviato o ricevuto dai membri oltre agli scambi completati, con quanti membri diversi hai effettuato pagamenti, ricevuto pagamenti o scambiato, quanti pagamenti e scambi hai effettuato con il membro che sta guardando e i tuoi Punti affidabilità. Gli amministratori vedono queste informazioni come qualsiasi altro membro, e la consultazione non viene registrata.</li>
+            <li>I tuoi annunci e dove si trovano i relativi segnaposto. Vedi &quot;Dove va a finire il tuo segnaposto&quot;.</li>
+            <li>Come hai votato in un sondaggio, ma solo se l'autore ha impostato il sondaggio come <strong>voto palese</strong>. Altrimenti i sondaggi sono anonimi, e le votazioni sulle <strong>Decisioni</strong> sono sempre segrete.</li>
+            <li>Chi ti ha invitato. Sul telefono il tuo profilo riporta <strong>Garantito da</strong> e il suo nome. Se sei entrato come membro fondatore o sei stato invitato direttamente dall'amministratore di sistema, indica invece <strong>Membro fondatore</strong> o <strong>Invitato direttamente dall'amministratore di sistema</strong>. Se un membro ha fatto da garante per la tua linea di credito, il tuo profilo riporta <strong>Garantito da</strong> e il suo nome, sia nell'app per telefono sia nella web app.</li>
+        </ul>
+        <h2>Cosa puoi vedere solo tu</h2>
+        <ul>
+            <li><strong>Il tuo saldo e i tuoi scambi.</strong> Nessun altro nella tua comunità può leggerli, né nell'app né dal server della comunità. Uno scambio mostra solo le due persone coinvolte: tu e l'altra persona.</li>
+            <li><strong>Il tuo elenco degli amici, con chi chatti e gli inviti che hai creato.</strong> Solo tu puoi leggerli, nell'app o dal server della tua comunità. Gli altri vedono solo i collegamenti in comune che condividi con loro.</li>
+            <li>Se la comunità vota per rimuoverti, chiunque abbia diritto di voto vede il tuo saldo e l'eventuale debito, ma esclusivamente in quella votazione. Un amministratore o un proprietario che non può votare non li vede in quel contesto. Queste consultazioni non vengono registrate.</li>
+            <li>Se un amministratore rimuove il tuo account, l'amministratore che avvia la procedura vede il tuo saldo, in modo da poter saldare quanto possiedi o devi. Gli altri amministratori e il proprietario possono vedere chi ha controllato e quando.</li>
+            <li>In una comunità conosciuta, se hai acconsentito al momento dell'adesione e un amministratore ti ha confermato, gli amministratori possono vedere il tuo saldo una volta superata una delle soglie stabilite dalla comunità. Puoi revocare questo consenso in qualsiasi momento nelle Impostazioni. In qualsiasi comunità, ogni amministratore può anche vedere alcuni dei tuoi scambi: uno scambio non ancora completato o risolto da un amministratore, uno scambio i cui Bean sono rimasti bloccati quando un membro è stato rimosso su un server precedente, avvisi di frode e un avviso se nessun Bean è entrato o uscito dal tuo account per un determinato numero di giorni. Ogni consultazione di uno di questi scambi viene registrata, e la consultazione degli avvisi che ti nominano viene registrata la prima volta che ciascun amministratore li apre nell'arco di 24 ore. Il proprietario e gli amministratori possono visualizzare quel registro. Gli amministratori vedono anche quanti post hai pubblicato e quanti messaggi hai inviato, e per quanto riguarda gli scambi solo i totali dell'intera comunità, non i tuoi; e, come ogni membro, il tuo profilo di affidabilità, senza alcuna registrazione. Chiunque gestisca il server della tua comunità possiede l'intero database, con i relativi backup, istantanee e copie di riserva. Vedi &quot;Cosa possono vedere gli amministratori&quot;.</li>
+        </ul>
+        <p>I proprietari e gli amministratori che gestiscono il server della tua comunità possono comunque vedere ciò che vi è memorizzato. Vedi &quot;Chi altro può vedere le informazioni&quot;.</p>
+        <h2>Persone che non si sono unite</h2>
+        <ul>
+            <li><strong>Nella tua comunità:</strong> nulla dei tuoi post. I suoi annunci e le relative foto sono riservati ai membri, così come la foto del tuo profilo. Ciascuna foto si apre solo dal link fornito con il suo annuncio o con il tuo nome nell'app, quindi chi è all'esterno la vede solo se un membro inoltra quel link. Chi apre l'indirizzo della tua comunità senza essersi unito viene invece indirizzato alla comunità globale.</li>
+            <li><strong>Nella comunità globale:</strong> chiunque può consultare gli annunci prima di unirsi, ma vede solo il testo, le foto e approssimativamente dove si trova ciascun annuncio, mai il tuo nome, il tuo volto o il punto esatto.</li>
+            <li><strong>I tuoi post nel Pulse:</strong> nulla. Il Pulse è riservato ai membri. Il video o il post in sé rimane sul proprio sito (YouTube, Instagram e così via), pubblico quanto lo è lì. Vedi &quot;Condividere i tuoi canali&quot;.</li>
+        </ul>
+        <h2>Cosa controlli tu</h2>
+        <ul>
+            <li><strong>Dettagli di contatto:</strong> nel tuo profilo, scegli <strong>Chi può vedere questo?</strong>: <strong>Nascosto</strong>, <strong>Partner di scambio</strong>, <strong>Amici</strong> o <strong>Comunità</strong>. Vedi &quot;Il tuo profilo&quot;.</li>
+            <li><strong>Collegamenti in comune:</strong> quando tu e altre due persone vi siete aggiunti a vicenda, ciascuna di loro può vedere il tuo nome sul profilo dell'altra, come persona a cui chiedere informazioni. Nelle Impostazioni, sotto <strong>NOTE LEGALI E PRIVACY</strong>, disattiva <strong>Mostrami come collegamento in comune</strong> e nessuno vedrà il tuo nome lì. L'opzione è attiva finché non la disattivi. Vedi &quot;Persone e amici&quot;.</li>
+            <li><strong>Chi ti ha aggiunto:</strong> quando aggiungi qualcuno, vede una riga nella scheda Persone che segnala che l'hai aggiunto, così può ricambiare. Non gli viene inviata alcuna notifica.</li>
+            <li><strong>Posizione (telefono):</strong> nelle Impostazioni, sotto <strong>IMPOSTAZIONI APP</strong>, attiva <strong>Posizione</strong> per usare la tua posizione per la mappa e i post vicini. Per disattivarla, modificala nelle impostazioni del tuo telefono; l'app ti mostra come fare. In un browser web non c'è tale interruttore: il browser ti chiede il permesso e ricorda la tua risposta.</li>
+            <li><strong>La tua zona</strong> (nella comunità globale): nelle Impostazioni, sotto <strong>La tua zona</strong>, visualizzi la zona che hai indicato, circa 10 km attorno a un comune o due coordinate numeriche, oppure <strong>Non impostata</strong>. <strong>Cancella</strong> la rimuove. Sotto, <strong>Più o meno dove sei?</strong> ne imposta una nuova con <strong>Usa la mia posizione</strong> o <strong>Scrivi una città o un quartiere</strong>, e <strong>Annulla</strong> (in un browser, <strong>← Torna alle Impostazioni</strong>) la lascia invariata. Viene inviata sempre e solo la zona arrotondata. Gli altri membri vedono quanto sei distante, e un sondaggio creato da te viene mostrato nella tua zona. Senza averla impostata, vedrai gli annunci più recenti a livello globale, e i membri vicini non vedranno un tuo sondaggio nel loro elenco, anche se potranno comunque trovarlo cercandolo. Vedi &quot;La tua zona&quot;.</li>
+            <li><strong>Blocco app:</strong> richiede il blocco schermo del telefono (PIN, sequenza, password, impronta digitale o volto) all'apertura dell'app e al ritorno dopo 15 secondi o più di assenza. Il blocco protegge le schermate dell'app e i popup. Su un iPhone chiude anche le pagine web aperte dall'app, come le Impostazioni della comunità aperte da <strong>Gestisci</strong>. Non può coprire le pagine web aperte dall'app su un telefono Android, che si aprono all'esterno dell'app, né il pannello di condivisione su entrambi i telefoni: chiudili prima di posare il telefono. Le Impostazioni della tua comunità, aperte da <strong>Gestisci</strong>, ti disconnettono dopo 15 minuti di inattività. Quando Blocco app è attivo, la schermata dell'app diventa vuota non appena la lasci e torna visibile al tuo ritorno. Richiede un blocco schermo sul telefono: senza di esso non c'è nulla da richiedere.</li>
+            <li><strong>Canali:</strong> tutto ciò che condividi nel Pulse viene mostrato con il tuo nome a tutti i membri della tua comunità. Vedi &quot;Condividere i tuoi canali&quot;.</li>
+        </ul>
+        <h2>Chi altro può vedere le informazioni</h2>
+        <ul>
+            <li>Le chat tra due persone sono crittografate end-to-end: un messaggio che non può essere protetto non viene inviato. Gli avvisi che BeanPool aggiunge a una chat su uno scambio, come il relativo importo, non sono crittografati. Vedi &quot;Messaggi&quot;.</li>
+            <li>Sul telefono, anche la chat di gruppo è crittografata end-to-end su una comunità il cui server è stato aggiornato per bloccare le chat di gruppo: il server conserva parole cifrate. Vede comunque chi ha scritto, quando, chi è stato menzionato, a quale messaggio risponde ciascuna riga e le reazioni emoji. La chat indica se è bloccata. Su un server non aggiornato, il server può ancora leggere la chat di gruppo.</li>
+            <li>Guardare un video di YouTube nel Pulse segnala a YouTube che l'hai guardato, esattamente come aprendolo nell'app YouTube. Nulla viene inviato a YouTube finché non tocchi ▶, e scorrere oltre un video non invia alcunché. Vedi &quot;Il Pulse&quot;.</li>
+            <li>Il server della tua comunità conserva i tuoi scambi, i post e i voti, e chi hai bloccato nella web app. I proprietari e gli amministratori che lo gestiscono possono vedere ciò che vi è memorizzato, incluse le chat degli eventi, le chat delle imprese e le chat di gruppo su un server non aggiornato per proteggerle. Scegli una comunità le cui persone godono della tua fiducia.</li>
+            <li>Se elimini il tuo account, ogni messaggio scritto da te riporterà <strong>Questo messaggio è stato eliminato</strong> e le foto inviate verranno eliminate. Le copie giornaliere del server effettuate prima di quel momento le conservano fino a 14 giorni. Se il server della tua comunità invia i propri backup a un archivio esterno, ciascun backup precedente le conserva fino a 30 giorni. Un backup scaricato da un proprietario le conserva fino a quando il proprietario non lo cancella. Vedi &quot;Lasciare o eliminare l'account&quot;.</li>
+            <li>Se hai collegato un account di accesso, ti sei unito con uno di essi o ne hai aggiunto uno in seguito, il server della tua comunità ne conserva una copia protetta. Le persone che gestiscono quel server possono aprirla. Solo le tue 12 parole non dipendono da nessuno. Vedi &quot;Recuperare l'account&quot;.</li>
+            <li>Nella comunità globale, i moderatori possono vedere quali account si sono uniti dalla stessa connessione Internet nell'arco di una giornata, ma mai la connessione stessa, in modo da poter gestire un'ondata improvvisa di account falsi in un colpo solo. Vedi &quot;Segnalare un problema&quot;.</li>
+            <li>Quando ti unisci alla comunità globale, questa conserva per un giorno un riferimento cifrato della connessione Internet da cui ti sei unito, mai l'indirizzo stesso. Grazie ad esso, quando vengono creati molti account dalla stessa connessione, ogni nuovo account richiede una configurazione leggermente più laboriosa e solo un numero limitato può provenire da essa. Se la comunità rimuove un account entro un giorno dalla sua creazione, quel riferimento viene conservato per 7 giorni dall'adesione, rendendo più lunga la creazione di nuovi account con 12 parole dalla stessa connessione durante quella settimana. Non viene mai conservato più a lungo per chi ha eliminato autonomamente il proprio account.</li>
+            <li>Se ti unisci alla comunità globale con le 12 parole, tutto ciò che essa apprende all'ingresso, oltre a quel riferimento, sono il nome scelto e la chiave del tuo account: niente email, niente numero di telefono, nessun altro account.</li>
+        </ul>
+        <h2>Per saperne di più</h2>
+        <p>Nelle Impostazioni, sotto <strong>NOTE LEGALI E PRIVACY</strong>, tocca <strong>Informativa sulla privacy</strong>.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="your-profile.html"><strong>Il tuo profilo</strong><span>Il tuo nome, la foto, qualche parola su di te e chi può vedere i tuoi dettagli di contatto.</span></a></li>
+            <li><a href="your-area.html"><strong>La tua zona</strong><span>L'area approssimativa che la comunità globale usa per mostrarti annunci vicini, e come cambiarla o rimuoverla.</span></a></li>
+            <li><a href="pin-locations.html"><strong>Dove va il tuo pin</strong><span>Chi può vedere la posizione dei tuoi annunci ed eventi e come proteggere la privacy della tua abitazione.</span></a></li>
+            <li><a href="blocking.html"><strong>Bloccare qualcuno</strong><span>Nascondi i post e i messaggi di qualcuno e ripristinali in seguito se lo desideri.</span></a></li>
+            <li><a href="messages.html"><strong>Messaggi</strong><span>Avvia una chat, invia foto, rispondi, invia reazioni, modifica, elimina, silenzia e gestisci la privacy.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

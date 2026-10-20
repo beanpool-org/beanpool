@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/id by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kesepakatanku — BeanPool members' guide</title>
+    <meta name="description" content="Satu tempat untuk setiap transaksi yang sedang berlangsung, semua kirimanmu, dan riwayat transaksimu.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#market">Pasar</a></p>
+        <h1>Kesepakatanku</h1>
+        <p class="lede">Satu tempat untuk setiap transaksi yang sedang berlangsung, semua kirimanmu, dan riwayat transaksimu.</p>
+        <h2>Membukanya</h2>
+        <p>Ketuk <strong>Kesepakatan Saya</strong> di bagian atas tab Pasar. Angka merah di atasnya menghitung kesepakatanmu yang sedang berlangsung.</p>
+        <p>Di komunitas global tidak ada kesepakatan, sehingga <strong>Kesepakatan Saya</strong> menampilkan tiga contoh kesepakatan dari komunitas lokal, Example Valley, yang ditandai <strong>🏘️ Komunitas lokal</strong>: satu menunggu tindakanmu, satu dengan Kacang tersimpan aman, dan satu telah selesai. Tombol-tombolnya menjelaskan mengapa kesepakatan berada di komunitas lokal, dan tidak mengubah apa pun. Lihat &quot;Kacang dan komunitas global&quot;.</p>
+        <h2>Tiga tab</h2>
+        <ul>
+            <li><strong>Sedang Berlangsung:</strong> kesepakatan yang sedang berjalan, dan permintaan yang menunggu jawaban. Masing-masing menampilkan statusnya: <strong>Disimpan dalam Jaminan</strong> (kacang sedang ditahan), <strong>Tindakan Diperlukan</strong> (seseorang telah meminta dan kamu perlu menjawab), atau <strong>Menunggu Persetujuan</strong> (kamu yang meminta dan sedang menunggu mereka).</li>
+            <li><strong>Postingan Saya:</strong> Penawaran dan Permintaan milikmu yang sedang aktif, atau <strong>DIJEDA</strong>. Postingan yang diminta seseorang menampilkan <strong>Tindakan Diperlukan</strong>.</li>
+            <li><strong>Riwayat:</strong> kesepakatan yang selesai, dibatalkan, dan ditolak. Pilih <strong>Semua</strong>, <strong>Diterima</strong>, atau <strong>Diberikan</strong>. Masing-masing menampilkan tanggal, jumlah, dan pihak lain yang terlibat.</li>
+        </ul>
+        <p>Di web app, <strong>Sedang Berlangsung</strong> hanya mencantumkan kesepakatan dengan kacang yang ditahan, sehingga permintaan yang menunggu jawaban tidak ada di sana. <strong>Postingan Saya</strong> hanya menampilkan postingan aktifmu, masing-masing ditandai <strong>Aktif</strong>: postingan yang dijeda tidak dicantumkan.</p>
+        <p>Ketuk kesepakatan di <strong>Sedang Berlangsung</strong> atau <strong>Postingan Saya</strong> untuk membuka postingan tersebut. Di situlah kamu menerima, menyelesaikan, atau membatalkan kesepakatan. Permintaan yang tidak dijawab siapa pun akan berakhir dengan sendirinya setelah 7 hari.</p>
+        <h2>Ulasan</h2>
+        <p>Transaksi yang telah selesai di <strong>Riwayat</strong> memiliki tombol <strong>Ulasan</strong>. Setelah kamu memberikan ulasan, tombolnya bertuliskan <strong>Edit</strong>, dan kamu dapat mengubah bintangmu.</p>
+        <p>Di web app tombol tersebut bertuliskan <strong>Beri Ulasan</strong>, dan hanya muncul sampai kamu telah mengulas transaksi tersebut. Untuk mengubah ulasan di sana, buka postingannya.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="a-deal-step-by-step.html"><strong>Tahapan kesepakatan</strong><span>Dari permintaan hingga pembayaran, untuk Penawaran maupun Permintaan, serta memberikan ulasan.</span></a></li>
+            <li><a href="posting.html"><strong>Memasang Penawaran atau Permintaan</strong><span>Tawarkan keahlian atau barang yang bisa kamu berikan, atau tulis hal yang kamu butuhkan.</span></a></li>
+            <li><a href="your-balance.html"><strong>Saldo dan riwayatmu</strong><span>Berapa banyak kacang milikmu, apa yang ditahan, dan setiap transaksi serta hadiah.</span></a></li>
+            <li><a href="when-a-deal-goes-wrong.html"><strong>Jika kesepakatan bermasalah</strong><span>Membatalkan kesepakatan, dan apa yang terjadi jika tidak ada kata sepakat.</span></a></li>
+            <li><a href="the-top-bar.html"><strong>Bilah atas</strong><span>Ikon kacang, ikon kecil saat ada hal penting, dan tombol di kanan atas.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

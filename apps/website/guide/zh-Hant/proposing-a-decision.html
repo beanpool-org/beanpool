@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/zh-Hant by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>發起決策提案 — BeanPool members' guide</title>
+    <meta name="description" content="提請社群共同做出具約束力的決定。">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#commons">公共板塊</a></p>
+        <h1>發起決策提案</h1>
+        <p class="lede">提請社群共同做出具約束力的決定。</p>
+        <h2>開始之前</h2>
+        <ul>
+            <li>決策適用於你所在社群伺服器能夠自動執行的事項：移除或暫停成員資格、凍結或解凍某人的信用額度、選擇誰可以進行擔保，或從公共板塊支出豆子。對於任何其他事項，請改為發起民意調查。</li>
+            <li>決策無法移除或暫停你所在社群伺服器的所有者或管理員。參見「規則與決策機制」。</li>
+            <li>一旦完成一筆交易，或管理員授予你信任徽章，你便可以發起決策提案。你所在社群的管理員隨時可以發起。單純獲得他人擔保是不夠的。</li>
+            <li>你一次只能發起一項進行中的決策提案。</li>
+            <li>全球社群沒有決策機制，因此在該處無法發起任何提案。參見「參與決策投票」。</li>
+        </ul>
+        <h2>提出提案</h2>
+        <ul>
+            <li>點擊<strong>公共板塊</strong>，然後點擊<strong>決策</strong>，接著點擊 <strong>+ 發起決策提案</strong>。</li>
+            <li>選擇提案主題：<strong>成員</strong>或<strong>公共資金池</strong>。</li>
+            <li><strong>標題：</strong>一行簡述，例如「撥款 200 顆豆子給工具圖書館」。</li>
+            <li><strong>說明與理由：</strong>說明提案理由，至少 10 個字元。請清楚陳述。成員將依據此處閱讀到的內容進行投票。</li>
+            <li>從下方的清單中，明確選擇應執行的操作。例如針對成員：移除成員、暫停成員資格或凍結信用額度。針對公共板塊：撥款給專案或事業、急難救助補助，或償還專案或事業的債務。</li>
+            <li>填寫對象，若涉及豆子則填寫豆子數量。若要撥款給專案或事業，你需要輸入其金鑰（一串長代碼）：兩款應用程式均未提供下拉清單供選取。若要償還債務或更換負責人，請在清單中點擊該專案或事業，或輸入其金鑰。</li>
+            <li>點擊<strong>提交社群決策提案</strong>。</li>
+        </ul>
+        <p>在網頁版應用程式中，按鈕文字為 <strong>+ 發起決策</strong>（或在開啟「決策」時位於公共板塊頂端的 <strong>+ 發起</strong>）與 <strong>提交決策</strong>，文字方塊為 <strong>說明與立論依據</strong>。</p>
+        <p>投票立即開放，為期 7 天。</p>
+        <h2>撥款金額上限</h2>
+        <p>對事業的撥款或急難救助補助金額不得超出公共板塊能夠支付的範圍。你最多可以申請的金額為：</p>
+        <ul>
+            <li>公共板塊目前的持有量，</li>
+            <li>加上過去 30 天內流入公共板塊的每一顆豆子：包括市集手續費、流通費以及存入的任何其他豆子。</li>
+        </ul>
+        <p>在這 30 天內從公共板塊支出的豆子不會被扣除。如果你申請的金額超出此限額，應用程式會在任何人投票前予以拒絕，並告知你目前最多可以申請的金額。隨著豆子流入公共板塊，該金額會隨之增加。</p>
+        <p>這能保持等待隊列的暢通。如果一項撥款在公共板塊資金不足時通過，它會等待豆子流入，且一次只能有一項撥款處於等待狀態。參見「規則與決策機制」。</p>
+        <h2>如果應用程式顯示拒絕</h2>
+        <ul>
+            <li><strong>請先完成一筆交易</strong>（在手機上）：你目前尚無法發起提案。在網頁版應用程式中，<strong>+ 發起決策</strong> 按鈕會顯示為灰色，上方會有一行說明原因。</li>
+            <li><strong>已達上限</strong>（在手機上）：你已經有一項進行中的決策提案。請等待其結束。在網頁版應用程式中，此時按鈕亦會顯示為灰色，並附有一行說明原因。</li>
+            <li><strong>社群投票無法移除或暫停此社群伺服器的所有者或管理員：</strong>你選擇的對象是伺服器的經營者。所有者可以先解除其管理角色。</li>
+            <li><strong>此撥款金額超出公共板塊所能支付的上限：</strong>申請金額不得超出其提示的數字，或等待更多豆子流入。</li>
+            <li><strong>金額無效</strong>（在網頁版應用程式中為「請輸入大於零且有效的豆子資助金額」）：請填寫豆子數量。</li>
+            <li><strong>錯誤：</strong>請檢查你的說明是否至少達到 10 個字元。</li>
+        </ul>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="decisions.html"><strong>參與決策投票</strong><span>尋找進行中的決策、投票、更改你的投票並查看投票結果。</span></a></li>
+            <li><a href="rules.html"><strong>規則與決策機制</strong><span>投票、投票率、無記名投票、投票資格、暫停資格、移除成員、管理人以及召集人和主召集人。</span></a></li>
+            <li><a href="polls.html"><strong>投票</strong><span>向社群提出簡短問題。民意投票僅反映大家的看法，其本身不產生任何變更。</span></a></li>
+            <li><a href="enterprises.html"><strong>專案與事業</strong><span>擁有獨立豆子帳目的共同事業：尋找、支持或自己發起一個專案或事業。</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

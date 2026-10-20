@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/fr by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Votre zone — BeanPool members' guide</title>
+    <meta name="description" content="La zone approximative utilisée par la communauté globale pour afficher les annonces proches, et comment la modifier ou l'effacer.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">Paramètres et sécurité</a></p>
+        <h1>Votre zone</h1>
+        <p class="lede">La zone approximative utilisée par la communauté globale pour afficher les annonces proches, et comment la modifier ou l'effacer.</p>
+        <h2>Ce qu'est votre zone</h2>
+        <p>Sur la communauté globale, votre zone correspond approximativement à votre situation géographique : environ 10 km autour d'une ville ou d'un point, jamais votre adresse exacte. La communauté globale l'utilise pour vous présenter les offres à proximité : les 500 annonces les plus proches dans un rayon de 250 km. Voir « Plus d'une communauté ».</p>
+        <p>Vous la renseignez lors de votre inscription, à l'étape <strong>Où êtes-vous à peu près ?</strong>, que vous pouvez passer avec <strong>Ignorer pour l'instant</strong>. Vous pouvez la modifier ou l'effacer à tout moment. Elle est rattachée à votre compte dans la communauté globale, votre téléphone et l'application web utilisent donc la même.</p>
+        <p>Vos autres communautés ne la demandent pas. Une communauté dont le serveur est configuré pour fonctionner de la même façon affiche également <strong>Votre zone</strong> dans ses Paramètres.</p>
+        <h2>Voir votre zone</h2>
+        <ul>
+            <li>Ouvrez les Paramètres : touchez le bouton des curseurs en haut à droite de l'écran (sur un écran d'ordinateur large, l'engrenage dans la barre latérale gauche).</li>
+            <li>Sous <strong>Paramètres de l'application</strong>, touchez <strong>Votre zone</strong>. Sur le téléphone, elle se trouve juste en dessous de <strong>Localisation</strong>.</li>
+        </ul>
+        <p>Elle indique <strong>Environ 10 km autour de</strong> suivi de la ville que vous avez saisie, ou deux coordonnées si vous avez utilisé votre position, ou encore <strong>Non définie</strong>. Le nom de la ville n'est conservé que sur le téléphone ou dans le navigateur où vous l'avez saisi ; ailleurs, vous voyez donc les deux coordonnées. Si l'application ne parvient pas à joindre la communauté, la ligne indique <strong>Impossible de vérifier pour le moment.</strong></p>
+        <h2>La modifier</h2>
+        <ul>
+            <li>Dans <strong>Votre zone</strong>, sous <strong>Où êtes-vous à peu près ?</strong>, touchez <strong>Utiliser ma position</strong>, ou <strong>Saisissez une ville ou un quartier</strong> et choisissez votre ville dans la liste.</li>
+            <li>Dès qu'elle est enregistrée, vous revenez dans les Paramètres.</li>
+            <li><strong>Annuler</strong> (dans un navigateur, <strong>← Retour aux Paramètres</strong>) laisse la valeur telle quelle.</li>
+        </ul>
+        <p>Votre téléphone ou votre navigateur arrondit le lieu à environ 10 km avant son envoi, et la communauté l'arrondit à nouveau, de sorte que votre emplacement exact n'est jamais transmis ni conservé. <strong>Utiliser ma position</strong> effectue un seul relevé de votre position. Pour trouver une ville, ce que vous tapez est envoyé à OpenStreetMap, d'où provient la liste des lieux.</p>
+        <p>Lorsque votre zone change, votre téléphone remplace les annonces qu'il conserve par celles proches de la nouvelle zone lors de sa synchronisation suivante. Si vous la modifiez dans l'application web ou sur un autre téléphone, votre téléphone l'actualise dans un délai d'environ une heure.</p>
+        <h2>L'effacer</h2>
+        <ul>
+            <li>Dans <strong>Votre zone</strong>, touchez <strong>Effacer</strong>. Ce bouton n'apparaît que si une zone est définie.</li>
+        </ul>
+        <p>Sans zone définie, vous utilisez toujours la communauté globale comme avant. Votre téléphone conserve les 100 annonces les plus récentes de partout au lieu de celles proches de chez vous, et une ligne au-dessus du Marché indique <strong>Vous voyez les annonces les plus récentes dans le monde entier. Définissez votre zone pour voir ce qui est proche de vous.</strong> Touchez-la pour en définir une. Dans l'application web, le Marché et la Carte affichent les annonces les plus récentes de partout : voir « Trouver près de chez vous ».</p>
+        <h2>Qui voit quoi</h2>
+        <ul>
+            <li>Les autres membres voient à quelle distance vous vous trouvez, et un sondage que vous créez apparaît dans votre zone. Voir « Confidentialité ».</li>
+            <li>Sans zone définie, les membres à proximité ne verront pas un sondage créé par vous dans leur liste, bien qu'ils puissent toujours le trouver via la recherche.</li>
+        </ul>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="communities.html"><strong>Plusieurs communautés</strong><span>Appartenir à plusieurs communautés avec un seul compte, basculer entre elles, suivre votre communauté vers une nouvelle adresse et voir ce que montre la communauté globale.</span></a></li>
+            <li><a href="privacy.html"><strong>Confidentialité</strong><span>Ce que les autres voient de vous et les réglages qui le contrôlent.</span></a></li>
+            <li><a href="near-you.html"><strong>Trouver près de chez vous</strong><span>Afficher uniquement les annonces à une certaine distance de vous ou d'un lieu choisi.</span></a></li>
+            <li><a href="joining.html"><strong>Rejoindre BeanPool</strong><span>Deux façons d'entrer : une communauté sur invitation d'un membre, ou la communauté globale si elle est ouverte, avec 12 mots secrets ou un compte. Demander l'accès et inviter d'autres personnes.</span></a></li>
+            <li><a href="browsing-the-market.html"><strong>Explorer le Marché</strong><span>Trouver des Offres et Demandes grâce à la recherche, aux filtres et à la distance.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

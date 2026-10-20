@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/uk by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ваші 12 слів і ключі сервера (для власників) — BeanPool members' guide</title>
+    <meta name="description" content="Для власників спільноти. Перевірка 12 слів, керування або відновлення сервера за допомогою телефону та автоперевірка телефоном.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">Налаштування й безпека</a></p>
+        <h1>Ваші 12 слів і ключі сервера (для власників)</h1>
+        <p class="lede">Для власників спільноти. Перевірка 12 слів, керування або відновлення сервера за допомогою телефону та автоперевірка телефоном.</p>
+        <h2>Для кого це</h2>
+        <p>Лише для <strong>власників</strong> спільноти. Якщо ви не є власником, ви нічого з цього не побачите.</p>
+        <h2>Чому запитують власників</h2>
+        <p>Сервер вашої спільноти зберігає закриту замком копію своїх ключів для перенесення спільноти на інший сервер у разі втрати основного, і його резервні копії також закриті замком. Вони замкнені на облікові записи власників: будь-який один власник може відкрити їх за допомогою свого телефона (дивіться «Перейняття керування або відновлення за допомогою телефона» нижче). Якщо ви втратите свій телефон, ваші 12 слів повертають ваш обліковий запис, а разом із ним — і ваш ключ до замка сервера та його резервних копій. Це має найбільше значення в день, коли сам сервер буде втрачено.</p>
+        <p>Тому додаток час від часу просить кожного власника перевірити, чи все ще він має правильні 12 слів. Ви можете вибрати <strong>Пізніше</strong>. Ніщо ніколи не блокується, і ви можете продовжувати робити все, що робить власник.</p>
+        <h2>Коли додаток запитує</h2>
+        <ul>
+            <li>Один раз невдовзі після того, як ви стаєте власником.</li>
+            <li>Знову через 12 місяців після вашої останньої перевірки.</li>
+        </ul>
+        <p>Він показує картку у верхній частині Ринку (у вебдодатку — у верхній частині кожного екрана, крім Карти): <strong>Перевірити зараз</strong> або <strong>Пізніше</strong>. Кнопка <strong>Пізніше</strong> прибирає картку до настання наступного терміну. Ви можете виконати перевірку в будь-який час у меню <strong>Налаштування</strong>: у розділі <strong>Ключі спільноти</strong> торкніться <strong>Перевірте свої 12 слів</strong> (у вебдодатку — <strong>Перевірити зараз</strong>).</p>
+        <h2>Як перевірити</h2>
+        <ul>
+            <li>Візьміть свій аркуш із 12 словами (вони є англійськими словами).</li>
+            <li>Вводьте їх по порядку, розділяючи пробілами. Великі літери та зайві пробіли не мають значення.</li>
+            <li>Торкніться <strong>Перевірити мої слова</strong>.</li>
+        </ul>
+        <p>Якщо вони правильні, додаток повідомляє <strong>Це правильні слова</strong>. Якщо ні: <strong>Це не слова для цього облікового запису.</strong> Він не вказує, яке саме слово неправильне, тому перевірте аркуш і введіть їх усі знову.</p>
+        <p>На телефоні без копії ваших 12 слів (відновленому за допомогою облікового запису для входу) правильні слова також викликають кнопку <strong>Зберегти їх на цьому телефоні</strong>. Торкніться її, і відтоді пункт <strong>Переглянути фразу відновлення</strong> показуватиме їх. Це та сама перевірка й те саме збереження, що й <strong>Додати ваші 12 слів на цей телефон</strong> (дивіться «Ваші 12 слів»).</p>
+        <p>Не можете знайти їх? Якщо цей телефон усе ще зберігає їх, пункт <strong>Налаштування</strong>, а потім <strong>Переглянути фразу відновлення</strong> покаже їх. Запишіть їх знову, а потім перевірте. На телефоні без копії додаток прямо про це повідомить: коли знайдете їх, перевірте їх тут, а потім збережіть.</p>
+        <h2>Що надсилається, а що ні</h2>
+        <ul>
+            <li>Перевірка відбувається на вашому телефоні (або у вашому браузері у вебдодатку). Ваші слова нікуди не надсилаються. Поле очищається, щойно перевірка дає відповідь, а також коли ви залишаєте екран. Вони зберігаються лише в разі, якщо ви торкнетеся <strong>Зберегти їх на цьому телефоні</strong>, і лише на цьому телефоні.</li>
+            <li>Коли слова правильні, ваш телефон повідомляє серверу вашої спільноти лише про те, що ви виконали перевірку, і коли саме, підписавши це вашим обліковим записом.</li>
+            <li>Власники та адміністратори бачать у налаштуваннях сервера (Settings) дату «12 words checked» кожного власника або «not yet». Це ваше власне свідчення: сервер не може бачити чи перевіряти ваші слова.</li>
+        </ul>
+        <h2>Перейняття керування або відновлення за допомогою телефона</h2>
+        <p>Якщо сервер вашої спільноти втрачено, той, хто обслуговує його резервний сервер (або новий сервер, що відновлює резервну копію), може попросити власника відкрити заблоковані ключі. Достатньо будь-якого одного власника. Вам потрібна найновіша версія додатка BeanPool. Вебдодаток також працює, якщо він усе ще відкривається, але він розташований за власною вебадресою спільноти, яка може бути недоступною разом із сервером: варто покладатися саме на додаток на телефоні.</p>
+        <ul>
+            <li>У налаштуваннях сервера (Settings) вони вибирають <strong>Take over as the main server</strong>, потім <strong>I understand: use an owner's phone</strong>, або <strong>Open with an owner's phone</strong> під час відновлення резервної копії. На їхньому екрані з'явиться код.</li>
+            <li>У додатку: відкрийте <strong>Налаштування</strong>, у розділі <strong>Ключі спільноти</strong> торкніться <strong>Перейняти керування або відновити за допомогою цього телефона</strong> та наведіть камеру на код. Якщо сторінка сервера відкрита на вашому власному телефоні, натискання на її посилання робить те саме. У вебдодатку скопіюйте посилання з їхнього екрана та вставте його в розділ <strong>Перейняти керування або відновити через цей браузер</strong> у меню <strong>Налаштування</strong>.</li>
+            <li>Додаток показує, яка спільнота, який сервер і що відбудеться. Якщо ваш основний сервер усе ще відповідає, додаток повідомляє про це червоним кольором: перейняття керування призначене лише для сервера, який дійсно втрачено.</li>
+            <li>Торкніться <strong>Розблокувати для перейняття керування</strong> (або <strong>Розблокувати резервну копію</strong>). Телефон спочатку попросить власного розблокування: відбиток пальця, обличчя або PIN-код. У вебдодатку такого кроку немає, ось чому додаток на телефоні є безпечнішим місцем для ключа власника.</li>
+            <li>Ваш телефон відкриває власну частину замка й передає ключ цьому серверу, зашифрованим так, що лише цей сервер може прочитати його. Ваш телефон ніколи не бачить ключів сервера або резервної копії.</li>
+            <li>У разі перейняття керування людина біля сервера потім підтверджує це на своєму екрані. Спільнота отримує повідомлення про те, що вона перемістилася, і що ви відкрили ключі.</li>
+        </ul>
+        <p>Додаток відмовляє та пояснює причину, якщо замок належить іншій спільноті, якщо він не закритий на ваш акаунт, якщо термін дії коду сервера закінчився (він діє 10 хвилин і спрацьовує один раз) або якщо ключі не були закриті замком власного сервера вашої спільноти.</p>
+        <h2>Ваш телефон перевіряє замок самостійно</h2>
+        <p>Щоразу, коли замок вашої спільноти змінюється (додається або вилучається власник, створюється новий код відновлення), ваш додаток тихо перевіряє, чи може він усе ще відкрити свою частину. Він відкриває її, одразу викидає ключ і повідомляє серверу, чи спрацювало це. Від вас нічого не вимагається.</p>
+        <p>Власники та адміністратори бачать це в налаштуваннях сервера (Settings) поруч із датою ваших 12 слів: <strong>their phone opened the current lock</strong> із зазначенням дати або що він востаннє відкривав старіший замок. Якщо там зазначено, що ваш телефон <strong>could NOT open</strong> замок, перевірте свої 12 слів і попросіть іншого власника подивитися в налаштування сервера.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="your-12-words.html"><strong>Ваші 12 слів</strong><span>12 слів — це ключ до вашого облікового запису. Чому вони важливі, де їх знайти, як надійно зберігати та додавання входу як резервного способу відновлення.</span></a></li>
+            <li><a href="recovery.html"><strong>Відновлення облікового запису</strong><span>Відновіть обліковий запис на новому телефоні та захистіть його підключеним входом.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

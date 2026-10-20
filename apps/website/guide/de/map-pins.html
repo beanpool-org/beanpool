@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/de by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Was die Karte zeigt — BeanPool members' guide</title>
+    <meta name="description" content="Die Pins auf der Karte, was ihre Farben bedeuten und die Symbole drumherum.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#map">Karte</a></p>
+        <h1>Was die Karte zeigt</h1>
+        <p class="lede">Die Pins auf der Karte, was ihre Farben bedeuten und die Symbole drumherum.</p>
+        <h2>Stecknadeln</h2>
+        <p>Tippe in der Tab-Leiste auf <strong>Karte</strong>. Die Karte zeigt die Beiträge deiner Community:</p>
+        <ul>
+            <li><strong>Grüne Stecknadeln:</strong> Angebote.</li>
+            <li><strong>Orangefarbene Stecknadeln:</strong> Gesuche.</li>
+            <li><strong>Lila Stecknadeln mit einem Kalender:</strong> Veranstaltungen, die noch nicht beendet sind.</li>
+        </ul>
+        <p>Eine Stecknadel zeigt das Kategoriebild des Beitrags. Wo viele Angebote und Gesuche nah beieinander liegen, schließen sie sich zu einem Kreis mit einer Zahl zusammen. Der Kreis ist auf dem Smartphone blau und in der Web-App dunkelgrau. Zoome hinein, um sie einzeln zu sehen. Veranstaltungen werden immer einzeln dargestellt.</p>
+        <p>Personen und Gruppen befinden sich nicht auf der Karte. In der Web-App wird ein Betrieb, der einen Ort festgelegt hat, als quadratische Stecknadel mit seinem Bild angezeigt. Tippe darauf, um den Betrieb zu öffnen.</p>
+        <p>Umfragen befinden sich ebenfalls nicht auf der Karte. Die einzige Ausnahme gibt es auf dem Smartphone in der globalen Community, wo eine Umfrage als Stecknadel im Gebiet des Erstellers erscheinen kann. Sie sieht aus wie eine orangefarbene Gesuch-Stecknadel und wird nur unter <strong>Alle</strong> angezeigt.</p>
+        <h2>Eine Stecknadel antippen</h2>
+        <ul>
+            <li><strong>Ein Angebot oder ein Gesuch:</strong> Eine Karte zeigt den Titel und wer es veröffentlicht hat. Tippe auf <strong>Details ansehen</strong>, um den Eintrag zu öffnen. Tippe auf dem Smartphone auf den Namen der Person, um ihr Profil zu sehen. Tippe auf die Karte oder auf <strong>✕</strong>, um die Karte zu schließen.</li>
+            <li><strong>Eine Veranstaltung:</strong> Eine Karte zeigt Wann und Wo sowie wie viele Personen teilnehmen. Tippe auf <strong>Veranstaltung anzeigen</strong>. In der Web-App heißt die Schaltfläche <strong>Details ansehen</strong>, und du kannst auf der Karte auch direkt auf <strong>Dabei</strong> oder <strong>Interessiert</strong> tippen.</li>
+        </ul>
+        <h2>Filter</h2>
+        <p>Auf dem Smartphone oben auf der Karte:</p>
+        <ul>
+            <li><strong>Alle</strong>, <strong>Angebote</strong>, <strong>Gesuche</strong> oder <strong>Veranstaltungen</strong>. Tippe auf <strong>✕</strong>, um den Filter zurückzusetzen.</li>
+            <li><strong>Alle Kategorien</strong>, um eine einzelne Kategorie anzuzeigen.</li>
+            <li>Für Veranstaltungen: <strong>Alle</strong>, <strong>Heute</strong>, <strong>Dieses Wochenende</strong> oder <strong>Nächste 7 Tage</strong>. Die Karte verschiebt sich passend.</li>
+        </ul>
+        <p>In der Web-App enthält die Karte lediglich die Datums-Filter für Veranstaltungen: <strong>Heute</strong>, <strong>Dieses Wochenende</strong>, <strong>Nächste 7 Tage</strong> und <strong>Alle Veranstaltungen</strong>. Sie werden nur angezeigt, solange in deiner Community eine Veranstaltung ansteht.</p>
+        <h2>Schaltflächen auf der linken Seite</h2>
+        <ul>
+            <li>Auf dem Smartphone Mond oder Sonne: eine dunkle oder helle Karte.</li>
+            <li>Die Zielscheibe: zeigt deinen Standort an. Beim ersten Mal bittet die App um Erlaubnis zur Standortnutzung.</li>
+            <li><strong>+</strong> und <strong>−</strong>: Zoom.</li>
+        </ul>
+        <p>Der bernsteinfarbene Kreis zeigt das von deiner Community abgedeckte Gebiet.</p>
+        <h2>Einen Beitrag von der Karte aus hinzufügen</h2>
+        <p>Tippe auf <strong>+ BEITRAG ERSTELLEN</strong>. Tippe in der Web-App auf das runde <strong>+</strong> unten rechts. Siehe „Angebot oder Gesuch aufgeben“.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="pin-locations.html"><strong>Wo dein Pin steht</strong><span>Wer sieht, wo deine Beiträge und Events sind, und wie dein Zuhause privat bleibt.</span></a></li>
+            <li><a href="near-you.html"><strong>Dinge in der Nähe finden</strong><span>Nur Beiträge in einem bestimmten Umkreis um dich oder einen gewählten Ort anzeigen.</span></a></li>
+            <li><a href="events.html"><strong>Veranstaltung</strong><span>Events vor Ort oder online erstellen, einmalig oder wiederkehrend; Teilnahme zusagen, Erinnerungen erhalten, teilen und leiten.</span></a></li>
+            <li><a href="posting.html"><strong>Angebot oder Gesuch aufgeben</strong><span>Stelle etwas ein, das du tun oder geben kannst, oder etwas, das du suchst.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

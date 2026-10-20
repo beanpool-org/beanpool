@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/id by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mengajukan Keputusan — BeanPool members' guide</title>
+    <meta name="description" content="Minta komunitas mengambil keputusan yang mengikat.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#commons">Sarana Bersama</a></p>
+        <h1>Mengajukan Keputusan</h1>
+        <p class="lede">Minta komunitas mengambil keputusan yang mengikat.</p>
+        <h2>Sebelum memulai</h2>
+        <ul>
+            <li>Sebuah Keputusan ditujukan untuk sesuatu yang dapat dijalankan oleh server komunitasmu: menghapus atau menangguhkan anggota, membekukan atau mencabut pembekuan kredit seseorang, memilih siapa yang boleh memberikan jaminan, atau membayarkan kacang dari Sarana Bersama. Untuk hal lainnya, mulailah Jajak Pendapat sebagai gantinya.</li>
+            <li>Keputusan tidak dapat menghapus atau menangguhkan pemilik atau admin dari server komunitasmu. Lihat &quot;Aturan dan cara kerja keputusan&quot;.</li>
+            <li>Kamu dapat mengajukan usulan setelah kamu menyelesaikan transaksi, atau admin telah memberimu lencana percaya. Admin komunitasmu selalu dapat mengajukan usulan. Jaminan saja tidak cukup.</li>
+            <li>Kamu dapat memiliki satu Keputusan terbuka pada satu waktu.</li>
+            <li>Komunitas global tidak memiliki Keputusan, jadi tidak ada yang dapat diajukan di sana. Lihat &quot;Memilih dalam Keputusan&quot;.</li>
+        </ul>
+        <h2>Mengajukan usulan</h2>
+        <ul>
+            <li>Ketuk <strong>Sarana Bersama</strong>, lalu <strong>Keputusan</strong>, kemudian <strong>+ Ajukan Keputusan</strong>.</li>
+            <li>Pilih tentang apa keputusan tersebut: <strong>Anggota</strong> atau <strong>Pool Bersama</strong>.</li>
+            <li><strong>Judul:</strong> satu baris, seperti &quot;Berikan hibah 200 kacang ke Perpustakaan Perkakas&quot;.</li>
+            <li><strong>Deskripsi &amp; Alasan:</strong> jelaskan alasannya, setidaknya dalam 10 karakter. Sampaikan dengan jelas. Orang-orang memilih berdasarkan apa yang mereka baca di sini.</li>
+            <li>Dari daftar di bawahnya, pilih persis apa yang seharusnya terjadi. Misalnya, untuk anggota: Hapus Anggota, Tangguhkan Anggota, atau Bekukan Kredit. Untuk Sarana Bersama: Berikan Kacang ke proyek atau usaha, Bantuan Kesulitan, atau Lunasi utang proyek atau usaha.</li>
+            <li>Isi untuk siapa hal tersebut ditujukan, dan berapa banyak kacang jika ada. Untuk hibah ke suatu proyek atau usaha, kamu mengetikkan kuncinya, yaitu sebuah kode panjang: kedua aplikasi tidak memiliki daftar untuk memilihnya. Untuk melunasi utang atau mengganti pemimpin, ketuk proyek atau usaha tersebut di dalam daftar, atau ketik kuncinya.</li>
+            <li>Ketuk <strong>Kirim Keputusan Komunitas</strong>.</li>
+        </ul>
+        <p>Di web app tombol-tombolnya tertulis <strong>+ Usulkan Keputusan</strong> (atau <strong>+ Usulkan</strong> di bagian atas Sarana Bersama, saat <strong>Keputusan</strong> terbuka) dan <strong>Ajukan Keputusan</strong>, dan kotaknya adalah <strong>Deskripsi &amp; Alasan</strong>.</p>
+        <p>Pemungutan suara langsung dibuka seketika dan berlangsung selama 7 hari.</p>
+        <h2>Berapa besar hibah yang dapat diajukan</h2>
+        <p>Hibah untuk usaha atau bantuan kesulitan tidak boleh lebih besar dari yang dapat dibayarkan oleh Sarana Bersama. Jumlah terbanyak yang dapat kamu minta adalah:</p>
+        <ul>
+            <li>apa yang disimpan Sarana Bersama saat ini,</li>
+            <li>ditambah setiap kacang yang masuk ke dalamnya selama 30 hari terakhir: biaya pasar, biaya peredaran, dan kacang lainnya yang disetorkan.</li>
+        </ul>
+        <p>Kacang yang dibayarkan keluar dari Sarana Bersama dalam 30 hari tersebut tidak dikurangkan. Jika kamu meminta lebih, aplikasi akan menolak sebelum ada yang memilih, dan memberi tahu jumlah terbanyak yang dapat kamu minta saat ini. Jumlah tersebut akan bertambah seiring masuknya kacang ke Sarana Bersama.</p>
+        <p>Ini menjaga antrean tetap lancar. Jika suatu hibah disetujui saat dana Sarana Bersama kurang, hibah tersebut menunggu kacang terkumpul, dan hanya satu hibah yang dapat menunggu pada satu waktu. Lihat &quot;Aturan dan cara kerja keputusan&quot;.</p>
+        <h2>Jika aplikasi menolak</h2>
+        <ul>
+            <li><strong>Selesaikan Transaksi Dulu</strong> (di ponsel): kamu belum dapat mengajukan usulan. Di web app tombol <strong>+ Usulkan Keputusan</strong> berwarna abu-abu, dan sebuah baris di atasnya menjelaskan alasannya.</li>
+            <li><strong>Batas Tercapai</strong> (di ponsel): kamu sudah memiliki Keputusan yang sedang terbuka. Tunggu sampai ditutup. Di web app tombolnya juga berwarna abu-abu di sini, dengan baris yang menjelaskan alasannya.</li>
+            <li><strong>A community vote can't remove or suspend an owner or admin of this community's server:</strong> orang yang kamu pilih mengelola server. Seorang pemilik dapat mencabut peran mereka terlebih dahulu.</li>
+            <li><strong>This grant is bigger than the Commons could pay:</strong> jangan meminta lebih dari jumlah yang disebutkan, atau tunggu sampai lebih banyak kacang masuk.</li>
+            <li><strong>Jumlah Tidak Valid</strong> (di web app, &quot;Masukkan jumlah hibah positif yang valid dalam kacang&quot;): isi berapa banyak kacang.</li>
+            <li><strong>Kesalahan:</strong> periksa apakah deskripsimu memiliki panjang setidaknya 10 karakter.</li>
+        </ul>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="decisions.html"><strong>Memilih dalam Keputusan</strong><span>Temukan Keputusan yang terbuka, berikan suara, ubah pilihanmu, dan lihat hasilnya.</span></a></li>
+            <li><a href="rules.html"><strong>Aturan dan cara kerja keputusan</strong><span>Pemungutan suara, partisipasi, suara rahasia, siapa yang berhak memilih, penangguhan, mengeluarkan anggota, pengurus, serta koordinator dan koordinator utama.</span></a></li>
+            <li><a href="polls.html"><strong>Jajak pendapat</strong><span>Ajukan pertanyaan cepat ke komunitas. Jajak pendapat melihat opini; tidak mengubah aturan apa pun secara langsung.</span></a></li>
+            <li><a href="enterprises.html"><strong>Proyek dan usaha</strong><span>Inisiatif bersama dengan kacang mandiri: cari, dukung, atau mulai sendiri.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

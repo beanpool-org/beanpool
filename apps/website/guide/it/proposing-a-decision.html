@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/it by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Proporre una Decisione — BeanPool members' guide</title>
+    <meta name="description" content="Chiedi alla comunità di prendere una decisione vincolante.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#commons">Beni comuni</a></p>
+        <h1>Proporre una Decisione</h1>
+        <p class="lede">Chiedi alla comunità di prendere una decisione vincolante.</p>
+        <h2>Prima di iniziare</h2>
+        <ul>
+            <li>Una Decisione serve per qualcosa che il server della tua comunità può eseguire: rimuovere o sospendere un membro, congelare o scongelare il credito di qualcuno, scegliere chi può fare da garante, o pagare fagioli dai Beni comuni. Per qualsiasi altra cosa, avvia invece un Sondaggio.</li>
+            <li>Una Decisione non può rimuovere o sospendere un proprietario o un amministratore del server della tua comunità. Vedi &quot;Regole e decisioni&quot;.</li>
+            <li>Puoi proporre una decisione dopo aver completato uno scambio, o se un amministratore ti ha assegnato un badge di fiducia. Gli amministratori della tua comunità possono sempre proporre. Una garanzia da sola non è sufficiente.</li>
+            <li>Puoi avere una sola Decisione aperta alla volta.</li>
+            <li>La comunità globale non ha Decisioni, quindi non c'è nulla da proporre lì. Vedi &quot;Votare una Decisione&quot;.</li>
+        </ul>
+        <h2>Come proporre</h2>
+        <ul>
+            <li>Tocca <strong>Beni comuni</strong>, poi <strong>Decisioni</strong>, quindi <strong>+ Proponi una decisione</strong>.</li>
+            <li>Scegli l'oggetto: <strong>Membro</strong> o <strong>Fondo Comune</strong>.</li>
+            <li><strong>Titolo:</strong> una sola riga, come &quot;Assegna 200 fagioli alla Biblioteca degli attrezzi&quot;.</li>
+            <li><strong>Descrizione e motivazione:</strong> spiega il perché, in almeno 10 caratteri. Spiegalo in modo chiaro. Le persone votano su ciò che leggono qui.</li>
+            <li>Dall'elenco sottostante, scegli esattamente cosa dovrebbe accadere. Ad esempio, per un membro: Rimuovi membro, Sospendi membro o Congela credito. Per i Beni comuni: Assegna fagioli a un progetto o a un'impresa, Contributo di solidarietà, oppure Salda il debito di un progetto o di un'impresa.</li>
+            <li>Inserisci a chi è destinato e quanti fagioli se previsti. Per un contributo a un progetto o a un'impresa devi digitare la sua chiave, un lungo codice: nessuna delle due app ha un elenco da cui selezionarla. Per saldare un debito o sostituire un responsabile, tocca il progetto o l'impresa nell'elenco oppure digitane la chiave.</li>
+            <li>Tocca <strong>Invia decisione della comunità</strong>.</li>
+        </ul>
+        <p>Nell'app web i pulsanti riportano <strong>+ Proponi decisione</strong> (o <strong>+ Proponi</strong> in cima ai Beni comuni, quando <strong>Decisioni</strong> è aperto) e <strong>Invia decisione</strong>, e la casella è <strong>Descrizione e motivazione</strong>.</p>
+        <p>La votazione si apre immediatamente e dura 7 giorni.</p>
+        <h2>Quanto può essere grande un contributo</h2>
+        <p>Un contributo a un'impresa o un contributo di solidarietà non può superare quanto i Beni comuni potrebbero pagare. Il massimo che puoi richiedere è:</p>
+        <ul>
+            <li>quanto i Beni comuni contengono attualmente,</li>
+            <li>più ogni fagiolo confluito al loro interno negli ultimi 30 giorni: la commissione di mercato, la tassa di circolazione e qualsiasi altro fagiolo versato.</li>
+        </ul>
+        <p>I fagioli erogati dai Beni comuni in quei 30 giorni non vengono sottratti. Se chiedi di più, l'app rifiuta prima che chiunque voti e ti indica l'importo massimo richiedibile in quel momento. Tale importo aumenta man mano che i fagioli affluiscono ai Beni comuni.</p>
+        <p>Questo mantiene libera la coda. Se un contributo viene approvato quando i Beni comuni sono a corto di fondi, attende l'arrivo dei fagioli, e solo un contributo alla volta può rimanere in attesa. Vedi &quot;Regole e decisioni&quot;.</p>
+        <h2>Se l'app dice di no</h2>
+        <ul>
+            <li><strong>Completa prima uno scambio</strong> (sul telefono): non puoi ancora proporre una decisione. Nell'app web il pulsante <strong>+ Proponi decisione</strong> è disattivato, e una riga sopra spiega il motivo.</li>
+            <li><strong>Limite raggiunto</strong> (sul telefono): hai già una Decisione aperta. Attendi che si chiuda. Anche nell'app web il pulsante è disattivato, con una riga che spiega il motivo.</li>
+            <li><strong>Un voto della comunità non può rimuovere o sospendere un proprietario o amministratore del server di questa comunità:</strong> la persona che hai scelto gestisce il server. Un proprietario può revocarne il ruolo prima.</li>
+            <li><strong>Questo contributo è più grande di quanto i Beni comuni possano pagare:</strong> richiedi un importo non superiore a quello indicato, oppure attendi l'arrivo di altri fagioli.</li>
+            <li><strong>Importo non valido</strong> (nell'app web, &quot;Inserisci un importo positivo valido in fagioli per il sussidio&quot;): inserisci quanti fagioli.</li>
+            <li><strong>Errore:</strong> verifica che la descrizione sia lunga almeno 10 caratteri.</li>
+        </ul>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="decisions.html"><strong>Votare una Decisione</strong><span>Trova le Decisioni aperte, vota, modifica il tuo voto e guarda i risultati.</span></a></li>
+            <li><a href="rules.html"><strong>Regole e decisioni</strong><span>Votazioni, partecipazione, voto segreto, chi può votare, sospensione, rimozione di un membro, custodi, coordinatori e coordinatori principali.</span></a></li>
+            <li><a href="polls.html"><strong>Sondaggi</strong><span>Fai una domanda veloce alla comunità. I sondaggi rilevano le opinioni; non cambiano nulla di per sé.</span></a></li>
+            <li><a href="enterprises.html"><strong>Progetti e imprese</strong><span>Iniziative condivise con i propri fagioli: cercane una, sostienila o avviane una nuova.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

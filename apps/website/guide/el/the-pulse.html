@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/el by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="el">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ο Παλμός — BeanPool members' guide</title>
+    <meta name="description" content="Τι δημιουργούν και μοιράζονται οι γείτονές σας αλλού, σε μία ροή.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#pulse">Παλμός</a></p>
+        <h1>Ο Παλμός</h1>
+        <p class="lede">Τι δημιουργούν και μοιράζονται οι γείτονές σας αλλού, σε μία ροή.</p>
+        <h2>Τι είναι</h2>
+        <p>Ανοίξτε τον Παλμό από την κάρτα <strong>Ο Παλμός</strong> στην <strong>Αρχική</strong>: πατήστε μια ανάρτηση, ή πατήστε <strong>Εμφάνιση όλων</strong>. Αν δεν βρίσκεται στην Αρχική σας, επαναφέρετέ την με το <strong>Προσθήκη κάρτας</strong> στο τηλέφωνο, ή <strong>Επεξεργασία Αρχικής</strong> στην εφαρμογή ιστού. Στο τηλέφωνο μπορείτε επίσης να τον ανοίξετε από τις <strong>Ρυθμίσεις</strong>, κάτω από το <strong>Ο Παλμός</strong>.</p>
+        <p>Ο Παλμός συγκεντρώνει όσα αναρτούν τα μέλη της κοινότητάς σας σε άλλους ιστότοπους: βίντεο, μουσική, ιστολόγια, φωτογραφίες. Είναι ένας τρόπος να ανακαλύψετε τι δημιουργούν και τι κάνουν οι γείτονές σας.</p>
+        <ul>
+            <li><strong>Γείτονες:</strong> αναρτήσεις από τα κανάλια των μελών. Τα κουμπιά κατά μήκος της κορυφής επιλέγουν ένα θέμα, όπως Τρόφιμα &amp; καλλιέργεια ή Επισκευή &amp; επαναχρησιμοποίηση. Το <strong>Όλα</strong> εμφανίζει τα πάντα.</li>
+            <li><strong>Μάθηση</strong> (εφαρμογή τηλεφώνου): βίντεο σχετικά με το πώς λειτουργεί το BeanPool, και ένας σύντομος καθημερινός στοχασμός. Βλέπε «Η ροή μάθησης». Στην εφαρμογή ιστού βρίσκονται στη ροή, και το <strong>Πώς λειτουργεί</strong> κατά μήκος της κορυφής εμφανίζει μόνο αυτά.</li>
+        </ul>
+        <p>Σύρετε προς τα κάτω για ανανέωση. Στην εφαρμογή ιστού, πατήστε 🔄 στην κορυφή αντ' αυτού.</p>
+        <p>Στο τηλέφωνο, τα κουμπιά κατά μήκος της κορυφής αποκρύπτονται καθώς μετακινείστε προς τα κάτω. Μετακινηθείτε λίγο προς τα πάνω και επανέρχονται.</p>
+        <h2>Άνοιγμα ανάρτησης</h2>
+        <p><strong>Ένα βίντεο YouTube:</strong> στο τηλέφωνο, πατήστε την εικόνα, με το ▶ επάνω της, και το βίντεο αναπαράγεται εκεί μέσα στην κάρτα. Τίποτα δεν φορτώνεται από το YouTube μέχρι να πατήσετε — η κύλιση δίπλα από ένα βίντεο δεν στέλνει τίποτα σε κανέναν. Πατήστε το κουμπί στη γωνία του βίντεο για πλήρη οθόνη.</p>
+        <p>Το βίντεο σταματά όταν το μετακινήσετε εκτός οθόνης, όταν αποχωρήσετε από τον Παλμό και όταν ξεκινήσετε ένα άλλο. Μόνο ένα αναπαράγεται τη φορά.</p>
+        <p>Στην εφαρμογή ιστού ένα βίντεο δεν αναπαράγεται μέσα στην κάρτα. Πατήστε την εικόνα ή τον τίτλο και ανοίγει στο YouTube σε νέα καρτέλα.</p>
+        <p><strong>Όλα τα άλλα</strong> — TikTok, Instagram, ένα ιστολόγιο, ένας ιστότοπος: πατήστε την εικόνα ή τον τίτλο και ανοίγει στο πρόγραμμα περιήγησής σας ή στην εφαρμογή του ίδιου του ιστότοπου.</p>
+        <p>Μπορείτε πάντα να ανοίξετε ένα βίντεο στο YouTube αντ' αυτού: πατήστε τον τίτλο, ή <strong>Άνοιγμα στο YouTube ↗</strong> από κάτω του. Αν ένα βίντεο δεν αναπαράγεται εδώ — κάποιοι άνθρωποι δεν επιτρέπουν την αναπαραγωγή των βίντεό τους εκτός YouTube, και ορισμένα τηλέφωνα δεν μπορούν — η κάρτα το αναφέρει και σας προσφέρει αυτό το κουμπί.</p>
+        <h2>Κάτι δεν πάει καλά με μια ανάρτηση</h2>
+        <ul>
+            <li><strong>Ανάρτηση κάποιου άλλου:</strong> πατήστε τη σημαία, επιλέξτε τον λόγο (<strong>Spam ή απάτη</strong>, <strong>Προσβλητικό περιεχόμενο</strong>, <strong>Παραπλανητική ανάρτηση</strong>, <strong>Παιδική ασφάλεια</strong> ή <strong>Άλλο</strong>) και πατήστε <strong>Υποβολή αναφοράς</strong>. Οι άνθρωποι που λειτουργούν τον διακομιστή της κοινότητάς σας το εξετάζουν.</li>
+            <li><strong>Δική σας ανάρτηση:</strong> πατήστε <strong>Απόκρυψη</strong>, και στη συνέχεια <strong>Απόκρυψη από τη ροή</strong>. Απομακρύνεται από τον Παλμό για όλους. Μια κρυμμένη ανάρτηση δεν μπορεί να επανέλθει. Στην εφαρμογή ιστού μπορείτε επίσης να πατήσετε <strong>Διαγραφή</strong>, και στη συνέχεια <strong>Οριστική διαγραφή</strong>, για να αφαιρέσετε οριστικά την ανάρτησή σας.</li>
+        </ul>
+        <p>Δεν μπορείτε να αποκρύψετε την ανάρτηση κάποιου άλλου μόνο για εσάς.</p>
+        <h2>Προσθήκη δικών σας καναλιών</h2>
+        <p>Πατήστε <strong>+ Κανάλια</strong> στην κορυφή. Βλέπε «Κοινοποίηση καναλιών».</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="home.html"><strong>Αρχική</strong><span>Τι είναι η Αρχική, ποιες κάρτες δείχνει στο τηλέφωνο και στον ιστό, πώς τις προσθέτετε, μετακινείτε ή αφαιρείτε, επιλογή ενδιαφερόντων και απόρρητο κατά την αποσύνδεση.</span></a></li>
+            <li><a href="learn.html"><strong>Η ροή μάθησης</strong><span>Σύντομα βίντεο για το BeanPool και οι αντίστοιχες σελίδες του οδηγού.</span></a></li>
+            <li><a href="your-channels.html"><strong>Κοινοποίηση καναλιών</strong><span>Βάλτε τα κανάλια σας στο YouTube, ιστολόγιο, Instagram και άλλα στον Παλμό.</span></a></li>
+            <li><a href="reporting.html"><strong>Αναφορά προβλήματος</strong><span>Ενημερώστε τους συντονιστές της κοινότητάς σας για μια ανάρτηση, εκδήλωση, ανάρτηση Παλμού, έργο ή εγχείρημα.</span></a></li>
+            <li><a href="the-bean.html"><strong>Αυτός ο οδηγός</strong><span>Πού θα βρείτε αυτόν τον οδηγό, πώς να κάνετε αναζήτηση σε αυτόν και πώς παραμένει ενημερωμένος.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

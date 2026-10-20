@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ru by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Опросы — BeanPool members' guide</title>
+    <meta name="description" content="Быстрый вопрос сообществу. Опросы показывают мнение людей и сами по себе ничего не меняют.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#commons">Общие проекты</a></p>
+        <h1>Опросы</h1>
+        <p class="lede">Быстрый вопрос сообществу. Опросы показывают мнение людей и сами по себе ничего не меняют.</p>
+        <h2>Опрос или Решение?</h2>
+        <p><strong>Опрос</strong> спрашивает мнение участников: «Ярмарка в субботу или в воскресенье?». Сам по себе он ничего не меняет. Чтобы принять обязательное решение, внесите Решение.</p>
+        <p>В глобальном сообществе в каждом опросе указано: <strong>Неформальный опрос; он ничего не решает</strong>. В него может вступить любой, по 12 словам или через сторонний вход, поэтому один человек с несколькими аккаунтами мог бы повлиять на подсчёт голосов, и Решений там нет. Строка под ним «🏘️ В местном сообществе решение обязательно к исполнению ›» объясняет, почему голосование имеет юридическую силу только в местном сообществе.</p>
+        <p>После закрытия анонимного опроса там также сообщается, сколько голосов было получено от <strong>новых аккаунтов или аккаунтов по 12 словам</strong>, например «5 из 12 голосов отданы с новых аккаунтов или аккаунтов только по 12 словам». Каждый голос учитывается по статусу аккаунта на момент голосования: новый аккаунт — это аккаунт, у которого ещё действовали ограничения для новых участников, а аккаунт по 12 словам — созданный по 12 словам без привязки стороннего входа. Если не менее 3 голосов поступило от новых или 12-словных аккаунтов, а остальных голосов либо нет вовсе, либо не менее 3, в каждом варианте ответа также указывается количество таких голосов. При этом учитывается абсолютно каждый голос, и никто не может увидеть, кто именно голосовал.</p>
+        <p>Пока опрос открыт, эта информация не отображается. Если бы она показывалась сразу, любой следящий за опросом после каждого нового ответа мог бы понять, с какого типа аккаунта поступил голос и какой вариант был выбран. В открытом голосовании эти данные не выводятся вовсе — ни во время опроса, ни после его закрытия: в нём и так видно, кто голосовал, поэтому такой подсчёт раскрыл бы тип аккаунта каждого участника. В опросах групп и местных сообществ такая разбивка также не используется.</p>
+        <h2>Как создать опрос</h2>
+        <ul>
+            <li>Нажмите <strong>+ ОБЪЯВЛЕНИЕ</strong> на вкладке Рынка или Карты.</li>
+            <li>Выберите <strong>Опрос сообщества</strong>.</li>
+            <li>Напишите <strong>Вопрос</strong>.</li>
+            <li>Добавьте поле <strong>КОНТЕКСТ / ПРИМЕЧАНИЯ (НЕОБЯЗАТЕЛЬНО)</strong>, если это необходимо.</li>
+            <li>Напишите от 2 до 4 <strong>Вариантов</strong>. Нажмите <strong>+ Добавить вариант</strong>, чтобы добавить ещё.</li>
+            <li>Выберите срок проведения: <strong>3 дня</strong>, <strong>7 дней</strong> или <strong>14 дней</strong>.</li>
+            <li>Решите, будет ли это <strong>Открытое голосование</strong>, прежде чем нажать <strong>Создать</strong>. Если переключатель выключен, опрос останется анонимным. Если включён — участники увидят, кто какой вариант выбрал. Изменить эту настройку после публикации опроса невозможно.</li>
+            <li>Нажмите <strong>Создать</strong>.</li>
+        </ul>
+        <p>В веб-приложении тип называется <strong>🗳️ ОПРОС</strong>, примечания — <strong>Background / Context</strong>, кнопка добавления варианта — <strong>+ Add option</strong>, а кнопка создания — <strong>🗳️ Create Poll</strong>. На Карте в веб-приложении нажмите круглую кнопку <strong>+</strong>.</p>
+        <p>У вас может быть открыт только один опрос одновременно, а во всём сообществе — не более 5 активных опросов одновременно. Чтобы создать опрос или проголосовать в нём, ваш кредит не должен быть заморожен.</p>
+        <h2>Поиск и участие в опросах</h2>
+        <p>Опросы размещаются на Рынке. Нажмите <strong>Опросы</strong> в верхнем ряду, чтобы просматривать только их.</p>
+        <ul>
+            <li>Нажмите на вариант ответа, чтобы проголосовать. Нажмите на другой вариант, чтобы изменить выбор, пока опрос не закрыт.</li>
+            <li>В карточке отображается, сколько людей выбрали каждый из вариантов.</li>
+        </ul>
+        <h2>Кто видит, как вы проголосовали</h2>
+        <p>В каждом опросе над явкой указан его тип:</p>
+        <ul>
+            <li><strong>Анонимно</strong> (обычный тип): все видят только количество проголосовавших за каждый вариант. Никто не видит, кто какой вариант выбрал, включая создателя опроса.</li>
+            <li><strong>Открытое голосование:</strong> создатель опроса решил сделать участников открытыми. Участники могут нажать <strong>Показать голосовавших</strong> (или <strong>Показать участников</strong>), чтобы увидеть, кто какой вариант выбрал. Участник с приостановленным аккаунтом видит только общие итоги, пока приостановка не закончится.</li>
+        </ul>
+        <p>Владельцы и администраторы, обслуживающие сервер вашего сообщества, по-прежнему могут видеть каждый сохранённый там голос.</p>
+        <h2>Досрочное закрытие опроса</h2>
+        <p>Если вы создали опрос, нажмите <strong>Закрыть опрос</strong>, затем снова <strong>Закрыть опрос</strong> для подтверждения (<strong>ОК</strong> в веб-приложении).</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="decisions.html"><strong>Голосование за Решение</strong><span>Поиск открытых Решений, голосование, смена выбора и просмотр результатов.</span></a></li>
+            <li><a href="proposing-a-decision.html"><strong>Внесение Решения</strong><span>Предложите сообществу принять обязательное общее решение.</span></a></li>
+            <li><a href="events.html"><strong>События</strong><span>Создание событий очно или онлайн, разовых или регулярных; отметка участия, напоминания, репосты и проведение в роли ведущего.</span></a></li>
+            <li><a href="rules.html"><strong>Правила и решения</strong><span>Голосование, явка, тайное голосование, кто голосует, приостановка, исключение участника, хранители, координаторы и старшие координаторы.</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>Бобы и глобальное сообщество</strong><span>Зачем нужно глобальное сообщество, одно из многих, и что в нём есть: метка 🏘️ Местное сообщество, пример сообщества Example Valley, ожидание бобов и создание сообществ.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/fr by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bloquer quelqu'un — BeanPool members' guide</title>
+    <meta name="description" content="Masquer les publications et messages d'une personne, et annuler ce blocage plus tard.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">Paramètres et sécurité</a></p>
+        <h1>Bloquer quelqu'un</h1>
+        <p class="lede">Masquer les publications et messages d'une personne, et annuler ce blocage plus tard.</p>
+        <h2>Bloquer</h2>
+        <ul>
+            <li>Sur son profil : touchez <strong>Bloquer</strong>, ou <strong>Bloquer</strong> suivi de son nom plus bas.</li>
+            <li>Sur l'une de ses annonces (application mobile) : touchez <strong>Bloquer l'utilisateur</strong>. Une annonce dans l'application web ne comporte pas de bouton de blocage.</li>
+            <li>Depuis une discussion : touchez son nom en haut pour ouvrir son profil, puis <strong>Bloquer</strong>. Dans l'application web, une discussion avec une personne comporte également le bouton <strong>Bloquer</strong> en haut.</li>
+        </ul>
+        <p>Dans l'application mobile, confirmez avec <strong>Bloquer l'utilisateur</strong>. Dans l'application web, votre navigateur vous demande de confirmer : touchez <strong>OK</strong>.</p>
+        <h2>Ce que cela fait</h2>
+        <ul>
+            <li>Ses annonces sur le Marché vous sont masquées.</li>
+            <li>Elle disparaît de vos discussions et de la liste des Membres, et vous ne pouvez plus vous envoyer de messages. Dans l'application mobile, une personne que vous aviez ajoutée apparaît toujours dans votre onglet <strong>Amis</strong> : voir « Ce que cela ne fait pas » ci-dessous. L'application web la masque de toutes les listes.</li>
+            <li>Ses publications sur le Pouls continuent de s'afficher. Sur le téléphone, ses repères sur la Carte continuent également d'apparaître. La Carte de l'application web les masque.</li>
+            <li>Sur votre Registre, les haricots provenant de cette personne indiquent « Haricots d'un membre que vous avez bloqué » au lieu de la note qu'elle avait saisie.</li>
+            <li>Un signalement est transmis aux modérateurs de votre communauté, qui peuvent l'examiner.</li>
+        </ul>
+        <h2>Ce que fait votre communauté</h2>
+        <p>Votre communauté applique ces mesures pour les blocages qu'elle conserve pour vous. Aujourd'hui, il s'agit des blocages effectués dans l'application web. Un blocage effectué dans l'application mobile reste sur ce téléphone, et votre communauté n'en a pas connaissance.</p>
+        <ul>
+            <li>Ses messages directs ne vous parviennent jamais. Votre communauté ne vous les distribue pas, que ce soit sur téléphone ou sur ordinateur, et vous ne recevez aucune notification ni aucun décompte de non lus à leur sujet.</li>
+            <li>Si cette personne ouvre une nouvelle discussion avec vous, celle-ci n'apparaît pas dans vos échanges.</li>
+            <li>Si vous la débloquez, rien de ce qu'elle a envoyé pendant qu'elle était bloquée ne vous parvient. Seuls les messages envoyés après le déblocage vous sont remis.</li>
+            <li>Si elle réagit à l'un de vos messages ou modifie l'un de ses anciens messages, vous ne le voyez pas.</li>
+            <li>Vous ne recevez aucune notification lorsqu'elle écrit dans une discussion de groupe, même si elle vous mentionne avec @.</li>
+            <li>Si elle sollicite un accord sur l'une de vos annonces, la demande reste en attente dans vos accords sans notification. Si vous ne la traitez pas, elle expire au bout de 7 jours, également sans notification.</li>
+            <li>Si elle accepte l'une de vos Offres directement, vous ne recevez aucune notification, et aucune non plus si elle annule ensuite cet accord. L'accord apparaît tout de même dans vos accords, et ses messages dans votre discussion avec elle, comme avec n'importe qui. Ses haricots sont mis en fiducie et restitués comme d'habitude.</li>
+            <li>Elle ne peut pas créer d'annonce qui vous serait exclusivement destinée.</li>
+            <li>Vous ne pouvez pas l'ajouter. Si elle vous ajoute, vous n'en êtes pas informé. Si elle vous avait ajouté, la mention « vous a ajouté » disparaît de votre onglet Membres. Vos amis ne vous voient plus comme relation commune sur le profil de la personne que vous avez bloquée.</li>
+            <li>Si elle vous envoie des haricots avec une note, les haricots arrivent en totalité mais pas la note. Vous voyez à la place « Haricots d'un membre que vous avez bloqué », et cette mention reste même après l'avoir débloquée.</li>
+        </ul>
+        <h2>Ce que cela ne fait pas</h2>
+        <ul>
+            <li>La personne n'en est pas informée. Pour elle, ses messages semblent envoyés, tout comme les notes accompagnant ses haricots.</li>
+            <li>Cela ne met pas fin à l'amitié : si vous l'aviez ajoutée, elle reste votre amie, et si vos coordonnées sont réglées sur Amis, elle continue de les voir. Pour y mettre fin également, ouvrez <strong>Gérer les utilisateurs bloqués</strong> (sur le web, <strong>Gérer les membres bloqués</strong> ; voir « Débloquer » ci-dessous) et touchez <strong>Retirer également des amis</strong> sous son nom. Cette option n'apparaît que pour une personne que vous avez ajoutée. Elle reste bloquée. La personne peut remarquer un retrait de ses amis.</li>
+            <li>Les discussions de groupe, les discussions d'événements et les discussions de projets et d'entreprises sont partagées : chaque participant y voit les mêmes messages. Ses messages continuent d'y apparaître, pour vous comme pour les autres.</li>
+            <li>Un accord déjà en cours avec elle se poursuit comme auparavant, avec ses avis et ses notifications.</li>
+            <li>Si vous avez déjà échangé avec elle auparavant, elle peut toujours vous envoyer des haricots. Chaque haricot arrive, sans notification.</li>
+            <li>Les avis de votre communauté continuent de vous parvenir, même s'ils ont été initiés par elle. Par exemple, vous êtes averti si quelqu'un ouvre un vote pour vous remplacer comme coordinateur principal d'un groupe, et vous recevez les messages des administrateurs de votre communauté.</li>
+            <li>Elle peut toujours voir vos annonces.</li>
+            <li>Dans l'application mobile, le blocage est conservé sur ce téléphone, pour votre compte uniquement. Un autre compte sur ce même téléphone ne reçoit pas vos blocages.</li>
+            <li>Dans l'application mobile, si vous vous déconnectez ou remplacez le compte de ce téléphone par un autre, vos blocages restent sur le téléphone. Revenez avec le même compte et ils sont toujours là.</li>
+            <li>Dans l'application mobile, si vous réinstallez l'application ou changez de téléphone, bloquez-la à nouveau.</li>
+            <li>Dans l'application web, votre communauté associe vos blocages à votre compte. Connectez-vous sur n'importe quel navigateur et ils reviennent. Vous déconnecter ne laisse aucune trace d'eux sur cet ordinateur. Voir « BeanPool sur le web ».</li>
+            <li>Les personnes qui gèrent le serveur de votre communauté peuvent voir qui vous avez bloqué dans l'application web, tout comme elles ont accès aux signalements.</li>
+            <li>L'application mobile et l'application web conservent des listes distinctes. Un blocage effectué sur l'une n'apparaît pas sur l'autre.</li>
+        </ul>
+        <h2>Débloquer</h2>
+        <ul>
+            <li>Ouvrez les <strong>Paramètres</strong>. Sous <strong>Mentions légales et confidentialité</strong>, touchez <strong>Gérer les utilisateurs bloqués</strong>.</li>
+            <li>Touchez <strong>Débloquer</strong> à côté d'un nom, ou <strong>Tout débloquer</strong>.</li>
+        </ul>
+        <p>Dans l'application web, bloquer et débloquer nécessitent une connexion à votre communauté. Sans connexion, l'application vous l'indique et rien ne change. Réessayez dès que vous êtes de nouveau en ligne.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="reporting.html"><strong>Signaler un problème</strong><span>Alerter les modérateurs de votre communauté à propos d'une annonce, d'un événement, d'une publication du Pouls, d'un projet ou d'une entreprise.</span></a></li>
+            <li><a href="messages.html"><strong>Messages</strong><span>Lancer une discussion, envoyer des photos, répondre, réagir, modifier, supprimer, mettre en sourdine et ce qui reste privé.</span></a></li>
+            <li><a href="privacy.html"><strong>Confidentialité</strong><span>Ce que les autres voient de vous et les réglages qui le contrôlent.</span></a></li>
+            <li><a href="getting-help.html"><strong>Besoin d'aide</strong><span>Où chercher en cas de doute et à qui vous adresser.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

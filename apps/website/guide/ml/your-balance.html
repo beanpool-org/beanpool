@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ml by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ml">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ബാലൻസും ചരിത്രവും — BeanPool members' guide</title>
+    <meta name="description" content="നിങ്ങളുടെ പക്കലുള്ള പയറുകൾ, പിടിച്ചുവെച്ചിട്ടുള്ളവ, എല്ലാ ഇടപാടുകളും സമ്മാനങ്ങളും.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#ledger">ലെഡ്ജർ</a></p>
+        <h1>ബാലൻസും ചരിത്രവും</h1>
+        <p class="lede">നിങ്ങളുടെ പക്കലുള്ള പയറുകൾ, പിടിച്ചുവെച്ചിട്ടുള്ളവ, എല്ലാ ഇടപാടുകളും സമ്മാനങ്ങളും.</p>
+        <h2>ഇത് തുറക്കുന്നത് എങ്ങനെ</h2>
+        <p>ടാബുകളുടെ വരിയിൽ <strong>ലെഡ്ജർ</strong> ടാപ്പ് ചെയ്യുക. നിങ്ങളുടെ ബാലൻസ് മുകളിൽ വലതുവശത്ത്, <strong>പയർ</strong> എന്നതിൽ കാണാം. ഇത് പൂജ്യത്തിന് താഴെയാകാം; &quot;നിങ്ങളുടെ ക്രെഡിറ്റ് ലൈൻ&quot; കാണുക.</p>
+        <p>ആഗോള കമ്മ്യൂണിറ്റിയിൽ പയറുകൾ ഇല്ല, അതിനാൽ ലെഡ്ജർ ഒരു പ്രാദേശിക കമ്മ്യൂണിറ്റിയായ Example Valley-ൽ നിന്നുള്ള ഒരു മാതൃകാ അംഗത്തെ <strong>🏘️ Local community</strong> എന്ന് അടയാളപ്പെടുത്തി കാണിക്കുന്നു. അതിന്റെ ബട്ടണുകൾ എന്തുകൊണ്ടാണ് പയർ ഒരു പ്രാദേശിക കമ്മ്യൂണിറ്റിയിൽ നിലനിൽക്കുന്നത് എന്ന് വ്യക്തമാക്കുന്നു, അവ ഒന്നും അയയ്ക്കുന്നില്ല. &quot;പയറും ഗ്ലോബൽ കമ്മ്യൂണിറ്റിയും&quot; കാണുക.</p>
+        <p>ലെഡ്ജറിന് രണ്ട് ടാബുകൾ ഉണ്ട്: <strong>ലെവലുകൾ</strong> (നിങ്ങളുടെ വിശ്വാസ്യത, &quot;ട്രസ്റ്റ് ബാഡ്ജുകൾ&quot; കാണുക), <strong>വാലറ്റ്</strong>. ഫോണിൽ, വാലറ്റിലേക്ക് നേരിട്ട് പോകാൻ നിങ്ങളുടെ ബാലൻസിൽ ടാപ്പ് ചെയ്യുക.</p>
+        <h2>വാലറ്റ് ടാബ്</h2>
+        <ul>
+            <li><strong>നിങ്ങളുടെ ബാലൻസ്</strong>, കൂടാതെ മണിക്കൂറിൽ 40 പയർ എന്ന നിരക്കിൽ ഏകദേശം എത്ര മണിക്കൂർ സഹായത്തിന് ഇത് തുല്യമാണ് എന്നതും.</li>
+            <li><strong>കോമൺസ്:</strong> നിങ്ങളുടെ കമ്മ്യൂണിറ്റിയുടെ പങ്കിട്ട പൂൾ.</li>
+            <li><strong>ക്രെഡിറ്റ് പരിധി:</strong> നിങ്ങൾക്ക് പൂജ്യത്തിന് താഴെ എത്രത്തോളം പോകാം.</li>
+            <li>നടന്നുകൊണ്ടിരിക്കുന്ന ഇടപാടുകളിൽ നിങ്ങളുടെ പയറുകൾ എന്തെങ്കിലും ഉണ്ടെങ്കിൽ, അവയിൽ എത്രയെണ്ണം തടഞ്ഞുവെച്ചിരിക്കുന്നു എന്നത്.</li>
+            <li><strong>കമ്മ്യൂണിറ്റി പ്രചാരം:</strong> നിങ്ങളുടെ പക്കൽ പയർ ഉള്ളപ്പോൾ കാണിക്കുന്നു. &quot;സർക്കുലേഷൻ ഫീസ്&quot; കാണുക.</li>
+            <li><strong>പ്രോജക്റ്റ് വാഗ്ദാനങ്ങൾ:</strong> പ്രോജക്റ്റുകളിലേക്ക് നിങ്ങൾ വാഗ്ദാനം ചെയ്തിട്ടുള്ള പയർ, ഉണ്ടെങ്കിൽ.</li>
+            <li><strong>പയർ അയയ്ക്കുക:</strong> ഒരു സമ്മാനം അയയ്ക്കുക. &quot;സമ്മാനം അയയ്ക്കൽ&quot; കാണുക.</li>
+        </ul>
+        <p>വെബ് ആപ്പിൽ വാലറ്റ് ടാബ് ചെറുതാണ്: <strong>ഓവർഡ്രാഫ്റ്റ് പരിധി</strong>, <strong>കോമൺസ് പൂൾ</strong>, <strong>പയർ അയയ്ക്കുക</strong>, <strong>കമ്മ്യൂണിറ്റി പ്രചാരം</strong>. നിങ്ങളുടെ ബാലൻസ് ലെഡ്ജറിന്റെ മുകളിലാണ്.</p>
+        <h2>സമീപകാല ഇടപാടുകൾ</h2>
+        <p>ഓരോ വ്യാപാരവും സമ്മാനവും ഫീസും, പുതിയത് ആദ്യം എന്ന ക്രമത്തിൽ, ഒരു കുറിപ്പ്, സമയം, പ്ലസ് അല്ലെങ്കിൽ മൈനസ് എന്നിവയോടെ കാണിക്കുന്നു. ഫോണിൽ ഓരോ വരിയിലും ഇത് ആരുമായാണ് എന്നും പറയുന്നു; വെബ് ആപ്പിൽ ഇത് <strong>അയച്ചവ</strong> അല്ലെങ്കിൽ <strong>ലഭിച്ചവ</strong> എന്ന് പറയുന്നു. ഒരു കുറിപ്പിൽ ഒരു പോസ്റ്റ് പരാമർശിക്കുന്നുണ്ടെങ്കിൽ, അത് തുറക്കാൻ <strong>ഓഫർ കാണുക</strong> ടാപ്പ് ചെയ്യുക.</p>
+        <p>നിങ്ങൾക്ക് മാത്രമേ നിങ്ങളുടെ ബാലൻസും ഈ ഇടപാടുകളും കാണാൻ കഴിയൂ. നിങ്ങളുടെ കമ്മ്യൂണിറ്റിയിലെ മറ്റാർക്കും ഇവ വായിക്കാൻ കഴിയില്ല. <strong>CSV എക്‌സ്‌പോർട്ട് ചെയ്യുക</strong> (വെബ് ആപ്പിൽ <strong>എന്റേത് കയറ്റുമതി ചെയ്യുക</strong>) നിങ്ങളുടെ സ്വന്തം ഇടപാടുകൾ ഒരു ഫയലായി സംരക്ഷിക്കുന്നു.</p>
+        <p>പട്ടികയിൽ ഇതുവരെ തിരയലോ ഫിൽട്ടറുകളോ ഇല്ല.</p>
+        <h2>ⓘ ബട്ടണുകൾ</h2>
+        <p>നിങ്ങളുടെ ബാലൻസിനെയും നിങ്ങളുടെ പരിധിയെയും കുറിച്ചുള്ള ഒരു ചെറിയ വിശദീകരണത്തിനായി ഫോണിൽ, നിങ്ങളുടെ ബാലൻസിന് അടുത്തുള്ള <strong>ⓘ</strong> ടാപ്പ് ചെയ്യുക.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="credit-line.html"><strong>നിങ്ങളുടെ ക്രെഡിറ്റ് ലൈൻ</strong><span>പൂജ്യത്തിന് താഴേക്ക് എത്രത്തോളം പോകാം, ഇത് എങ്ങനെ വർദ്ധിക്കുന്നു.</span></a></li>
+            <li><a href="gifts.html"><strong>സമ്മാനം അയയ്ക്കൽ</strong><span>ഇടപാടുകളില്ലാതെ മറ്റൊരാൾക്ക് പയർ സമ്മാനമായി അയയ്ക്കുക.</span></a></li>
+            <li><a href="circulation-fee.html"><strong>സർക്കുലേഷൻ ഫീസ്</strong><span>പയറുകൾ വിനിമയത്തിൽ തുടരാൻ വലിയ ബാലൻസുകൾക്ക് ചെറിയൊരു പ്രതിമാസ ഫീസ്. ആദ്യത്തെ 200 സൗജന്യമാണ്.</span></a></li>
+            <li><a href="my-deals.html"><strong>എന്റെ ഇടപാടുകൾ</strong><span>നിങ്ങൾ ഉൾപ്പെട്ടിട്ടുള്ള എല്ലാ ഇടപാടുകൾക്കും നിങ്ങൾ പോസ്റ്റ് ചെയ്തതിനും മുൻ ഇടപാടുകൾക്കും ഒരു സ്ഥലം.</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>പയറും ഗ്ലോബൽ കമ്മ്യൂണിറ്റിയും</strong><span>ഗ്ലോബൽ കമ്മ്യൂണിറ്റിയുടെ ലക്ഷ്യം, പലതിൽ ഒരു കമ്മ്യൂണിറ്റി, അവിടെ കാണുന്ന കാര്യങ്ങൾ: 🏘️ പ്രാദേശിക കമ്മ്യൂണിറ്റി അടയാളം, മാതൃകാ കമ്മ്യൂണിറ്റിയായ Example Valley, പയർ അവിടെ കാത്തിരിക്കുന്നതിന്റെ കാരണം, പ്രാദേശിക കമ്മ്യൂണിറ്റി ആരംഭിക്കുന്നതോ കണ്ടെത്തുന്നതോ എങ്ങനെ.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/fil by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="fil">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pag-browse sa merkado — BeanPool members' guide</title>
+    <meta name="description" content="Maghanap ng Mga Alok at Mga Kahilingan gamit ang paghahanap, mga filter at distansya.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#market">Merkado</a></p>
+        <h1>Pag-browse sa merkado</h1>
+        <p class="lede">Maghanap ng Mga Alok at Mga Kahilingan gamit ang paghahanap, mga filter at distansya.</p>
+        <h2>Ang tab ng Merkado</h2>
+        <p>I-tap ang <strong>Merkado</strong> sa hanay ng mga tab. Makikita mo kung ano ang iniaalok at hinahanap ng mga tao sa iyong komunidad, pinakabago muna, na nakapangkat ayon sa araw na na-post ang mga ito.</p>
+        <p>Sa telepono, nauuna ang mga event. Kung pinayagan mo na ang app na gamitin ang iyong lokasyon, ipinapakita ng listahan at ng mga compact view ang mga listing na pinakamalapit muna sa halip, sa ilalim ng <strong>Pinakamalapit muna</strong>, na may mga botohan sa ilalim ng <strong>Mga Poll</strong>. Pinapanatili ng <strong>Para sa Iyo</strong> ang sarili nitong pagkakasunod-sunod. Hilahin pababa ang listahan upang i-refresh ito.</p>
+        <p>Sa web app nagbubukas ang Merkado bilang mga card. Sa listahan at mga compact view, ang mga event ay nasa ilalim ng araw kung kailan na-post ang mga ito. Sa isang lokal na komunidad hindi inilalagay ng web app ang pinakamalapit muna.</p>
+        <p>Sa pandaigdigang komunidad, ipinapakita muna ng web app ang mga listing na malapit sa iyo: ang pinakamalapit sa loob ng iyong <strong>Distansya</strong>, o sa loob ng 250 km ng iyong lugar (ang tinatayang lugar na ibinigay mo sa komunidad noong sumali ka, o sa <strong>Mga Setting</strong>), bawat isa ay may layo nito. Sinasabi ng isang linya sa itaas ng listahan kung alin. Malapit sa iyong lugar mayroon itong <strong>Ipakita kahit saan</strong> para sa pinakabago mula sa lahat ng dako. Kapag may <strong>Distansya</strong>, buksan ang <strong>Distansya</strong> at i-tap ang <strong>I-reset</strong> upang bumalik sa iyong lugar, pagkatapos ay i-tap ang <strong>Ipakita kahit saan</strong>. Sa telepono, itinatago ng pandaigdigang komunidad ang mga listing na pinakamalapit sa iyong lugar, kaya ang mga iyon ang ipinapakita ng Merkado. Tingnan ang &quot;Paghahanap ng bagay sa malapit&quot;.</p>
+        <p>Sa pandaigdigang komunidad, habang may iilan lamang na mga listing, nagpapakita rin ang Merkado ng ilang card na may markang <strong>Halimbawa</strong>. Ginawa ang mga ito upang ipakita kung ano ang ipinopost ng mga tao, at hindi mabubuksan o masasagot. Mawawala ang mga ito kapag may sapat nang totoong mga listing.</p>
+        <p>Sa telepono, dumadausdos palayo ang paghahanap at mga filter habang nag-i-scroll ka pababa, upang makakita ka ng higit pang mga post. Mag-scroll pataas nang kaunti at babalik ang mga ito. Upang tumalon pabalik sa itaas, i-tap ang <strong>Merkado</strong> muli.</p>
+        <h2>Paghahanap</h2>
+        <p>I-type sa <strong>Maghanap sa merkado...</strong> sa itaas. Sa isang maliit na telepono maaari lamang itong magsabing <strong>Maghanap</strong>. Nakakahanap din ang paghahanap ng mga kaugnay na salita: ang &quot;prutas&quot; ay nakakahanap ng &quot;lemon&quot;. Nakakahanap din ito ng mga salita sa Chinese, Japanese at Thai, at iniiwan ang mga post ng mga taong na-block mo. Nang walang koneksyon, hinahanap nito kung ano ang nasa telepono mo na.</p>
+        <p>Habang may mga salita sa paghahanap, lalabas ang button na <strong>I-save ang paghahanap na ito sa Home</strong>. Binubuksan nito ang Home na may naka-save na paghahanap na handang idagdag: ang iyong mga salita, <strong>Mga Alok</strong> o <strong>Mga Kahilingan</strong> kung isa lamang ang tinitingnan mo, ang kategorya at ang distansya. Walang button sa ilalim ng <strong>Mga Event</strong> o <strong>Mga Poll</strong>. Tingnan ang &quot;Home&quot;.</p>
+        <h2>Mga Filter</h2>
+        <p>Pinipili ng hanay ng mga button sa ilalim ng paghahanap kung ano ang iyong makikita:</p>
+        <ul>
+            <li><strong>Lahat</strong>, <strong>Mga Alok</strong> o <strong>Mga Kahilingan</strong>.</li>
+            <li><strong>Para sa Iyo:</strong> mga post sa mga kategoryang nilagyan mo ng bituin sa ilalim ng <strong>I-customize ang Mga Interes</strong> (ang parehong mga bituin na itinakda mo sa Home), at ang iyong mga paparating na event, ang mga sinabi mong ikaw ay pupunta o interesado.</li>
+            <li><strong>Mga Event</strong> at <strong>Mga Poll</strong>.</li>
+        </ul>
+        <p>Pinapakipot ito ng ikalawang hanay. Sa telepono:</p>
+        <ul>
+            <li><strong>Lahat ng Kategorya:</strong> pumili ng isang kategorya, tulad ng Pagkain, Mga Gamit o Hardin.</li>
+            <li><strong>Distansya:</strong> mga post lamang sa loob ng distansya mula sa isang punto. Tingnan ang &quot;Paghahanap ng bagay sa malapit&quot;.</li>
+            <li><strong>Tiwala:</strong> mga post lamang ng mga miyembrong hindi pa nakikipagkalakalan (<strong>Tagapagtatag</strong>), ng <strong>Mga Baguhan</strong>, o ng mga miyembrong mayroong kahit man lamang partikular na trust badge.</li>
+            <li><strong>Munggo lang:</strong> itinatago ang mga post na humihingi rin ng kaunting cash.</li>
+        </ul>
+        <p>Sa web app ang mga button ay <strong>Kategorya</strong>, <strong>Distansya</strong>, <strong>🌱 Mga bagong miyembro</strong> (mga miyembrong hindi pa nakikipagkalakalan) at <strong>🫘 Munggo lang</strong>. Walang filter ng Tiwala.</p>
+        <p>Kung nabibilang ka sa mga grupo, lalabas din ang isang hanay ng mga button ng grupo. Ipinapakita ng <strong>Lahat ng Grupo at Pampubliko</strong> ang lahat; ang button ng isang grupo ay nagpapakita lamang ng mga post para sa grupong iyon. Sa web app ang mga grupo ay nasa dropdown sa halip na isang hanay.</p>
+        <p>Sa telepono, kung walang tumugma, i-tap ang <strong>I-clear ang Lahat ng Filter</strong>. Sa web app ang walang lamang listahan ay nagsasabing <strong>Walang nahanap na item</strong>, at walang ganoong button.</p>
+        <p>Sa telepono, kapag nag-scroll ka pababa at may naka-on na paghahanap o filter, isang maliit na chip sa itaas ang nagpapakita kung ano ito. I-tap ang chip upang baguhin ito. I-tap ang <strong>✕</strong> dito upang i-clear ang paghahanap at bawat filter.</p>
+        <p>Binabago ng button sa tabi ng <strong>Aking mga Deal</strong> kung paano lumalabas ang listahan: isang listahan, isang grid, o compact.</p>
+        <h2>Kung ano ang ipinapakita ng isang post</h2>
+        <ul>
+            <li>isang larawan, o ang larawan ng kategorya;</li>
+            <li><strong>ALOK</strong> o <strong>KAHILINGAN</strong>;</li>
+            <li>ang presyo sa munggo, na may <strong>/oras</strong> kung ito ay may presyo bawat oras;</li>
+            <li><strong>UMUULIT</strong> kung nananatili itong bukas pagkatapos ng bawat deal;</li>
+            <li><strong>MAY CASH DIN</strong> kung kailangan din ng tao ng kaunting pera, para sa gasolina o mga materyales;</li>
+            <li>isang kandado at pangalan ng grupo kung ang grupong iyon lamang ang makakakita nito;</li>
+            <li>kung sino ang nag-post nito, kasama ang kanilang trust badge at mga bituin. Ang isang miyembro na hindi pa nakikipagkalakalan ay nagpapakita ng <strong>TAGAPAGTATAG</strong>.</li>
+        </ul>
+        <p>I-tap ang isang post upang buksan ito.</p>
+        <h2>Sa isang post</h2>
+        <ul>
+            <li><strong>Mensahe</strong> at ang kanilang pangalan: magtanong bago ka mangako.</li>
+            <li>I-tap ang kanilang pangalan upang makita ang kanilang profile, mga review at tiwala.</li>
+            <li><strong>I-report ang Post</strong> kung ito ay panloloko, nakakasakit, mapanlinlang, o naglalagay sa bata sa panganib (<strong>Kaligtasan ng bata</strong>).</li>
+            <li><strong>I-block ang User</strong> upang itago ang kanilang mga post at chat sa iyong telepono. Sinasabi rin nito sa iyong mga admin. Tingnan ang &quot;Pag-block sa isang tao&quot;.</li>
+        </ul>
+        <p>Sa web app ang mga button sa isang post ay <strong>💬 Mensahe</strong> at <strong>🚩 I-ulat</strong>. Mag-block ng isang tao mula sa kanilang profile.</p>
+        <p>Sa pandaigdigang komunidad ang isang post ay walang presyo sa Munggo: sinasabi nito kung ano ang gustong matanggap ng tao bilang kapalit. Kung saan naroon sana ang presyo, sinasabi nito ang &quot;🏘️ Sa lokal na komunidad ito ay presyo sa munggo ›&quot;. Sa halip na humiling para dito, ipinapakita ng post ang <strong>Kahilingan · Ligtas na hawak ang mga munggo 🏘️</strong>: i-tap ito upang makita kung paano gumagana ang deal sa isang lokal na komunidad. Ang pagpapadala ng mensahe sa tao ay gumagana tulad ng kahit saan. Tingnan ang &quot;Munggo at pandaigdigang komunidad&quot;.</p>
+        <p>Hindi mo pa mai-save o maibahagi ang isang post sa ngayon.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="home.html"><strong>Home</strong><span>Ano ang Home, aling card ang ipinapakita sa telepono at web app, paano magdagdag, maglipat o mag-alis ng mga ito, pagpili ng iyong hilig, at privacy kapag nag-sign out ka.</span></a></li>
+            <li><a href="posting.html"><strong>Pag-post ng Alok o Kahilingan</strong><span>Maglagay ng bagay na kaya mong gawin o ibigay, o bagay na hinahanap mo.</span></a></li>
+            <li><a href="a-deal-step-by-step.html"><strong>Ang deal, hakbang-hakbang</strong><span>Mula paghingi hanggang sa mabayaran, para sa Alok at para sa Kahilingan, at pag-iwan ng review.</span></a></li>
+            <li><a href="near-you.html"><strong>Paghahanap ng bagay sa malapit</strong><span>Ipakita lamang ang mga post sa loob ng partikular na distansya mula sa iyo, o sa anumang lugar na piliin mo.</span></a></li>
+            <li><a href="trust-badges.html"><strong>Mga trust badge</strong><span>Baguhan, Residente, Pangasiwa at Pinuno. Ano ang kahulugan ng mga ito, at bakit wala itong ina-unlock.</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>Munggo at pandaigdigang komunidad</strong><span>Para saan ang pandaigdigang komunidad, isang komunidad sa marami, at ano ang makikita roon: ang marker na 🏘️ Komunidad, ang halimbawang komunidad na Example Valley, bakit naghihintay ang Munggo roon, at paano magsimula o humanap ng lokal na komunidad.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

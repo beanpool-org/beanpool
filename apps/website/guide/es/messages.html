@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/es by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mensajes — BeanPool members' guide</title>
+    <meta name="description" content="Iniciar un chat, enviar fotos, responder, reaccionar, editar, eliminar, silenciar y qué es privado.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#talk">Charlas</a></p>
+        <h1>Mensajes</h1>
+        <p class="lede">Iniciar un chat, enviar fotos, responder, reaccionar, editar, eliminar, silenciar y qué es privado.</p>
+        <h2>Tus chats</h2>
+        <p><strong>Charlas</strong> tiene tres botones en la parte superior: <strong>Mensajes</strong>, <strong>Grupos</strong> y <strong>Personas</strong>.</p>
+        <p>Toca <strong>Charlas</strong> en la fila de pestañas, luego <strong>Mensajes</strong>. Tus chats con personas se enumeran allí. Los tratos que requieren tu atención están en la parte superior, bajo <strong>Acción requerida</strong>.</p>
+        <p>Los chats que pertenecen a un grupo, un emprendimiento o un evento están bajo <strong>Grupos</strong>, no aquí. Consulta «Grupos».</p>
+        <ul>
+            <li>Busca con <strong>Buscar chats, publicaciones, colaboradores...</strong>.</li>
+            <li>El botón de filtro ordena por <strong>Reciente</strong> o <strong>No leído</strong> (y, donde tu comunidad usa frijoles, por los frijoles en cada trato, de mayor a menor o de menor a mayor), y puede mostrar <strong>Solo no leídos</strong> o <strong>Solo amigos</strong>.</li>
+            <li>En el teléfono, el botón de búsqueda y filtro se oculta al desplazarte hacia abajo. Desplázate un poco hacia arriba y vuelve a aparecer. Toca <strong>Charlas</strong> de nuevo para saltar a la parte superior.</li>
+        </ul>
+        <p>En la aplicación web esta es la pestaña <strong>Chat</strong>. Enumera todos tus chats, incluidos los de grupos y eventos, con <strong>Todo</strong>, <strong>Transacciones</strong>, <strong>Directo</strong> y <strong>Grupos</strong> en la parte superior, y no tiene búsqueda ni filtro.</p>
+        <h2>Iniciar un chat</h2>
+        <ul>
+            <li>Desde una publicación: toca <strong>Mensaje</strong> y el nombre de la persona.</li>
+            <li>Desde <strong>Charlas</strong>: toca el botón del lápiz, luego busca a la persona por su nombre. En la comunidad mundial, Mensaje nuevo enumera a las personas con las que has comerciado y a tus amigos. Para encontrar a cualquier otra persona, escribe al menos 2 letras de su nombre.</li>
+            <li>Desde tus amigos: <strong>Charlas</strong>, luego <strong>Personas</strong>, luego <strong>Amigos</strong>, y toca el botón de mensaje junto a un nombre.</li>
+        </ul>
+        <p>En la aplicación web, usa <strong>✉️ Nuevo mensaje directo</strong>, o el botón <strong>💬 Mensaje</strong> en una publicación. Tus amigos están bajo la pestaña <strong>Personas</strong>.</p>
+        <h2>Enviar</h2>
+        <ul>
+            <li>Escribe en <strong>Mensaje...</strong> y toca el botón de enviar.</li>
+            <li>Para enviar una foto, toca <strong>+</strong>, luego <strong>Cámara</strong> o <strong>Galería</strong>. En la aplicación web, usa el botón <strong>📎</strong>, o pega o arrastra una imagen directamente en el chat —te muestra la imagen primero, y cualquier cosa que ya hayas escrito acompaña a la imagen como pie de foto. Las fotos solo se pueden enviar en chats entre dos personas.</li>
+        </ul>
+        <p>Las marcas de verificación debajo de tu mensaje:</p>
+        <ul>
+            <li>una marca: enviado;</li>
+            <li>dos marcas azules: leído;</li>
+            <li>un reloj: enviándose aún;</li>
+            <li><strong>no entregado</strong>: falló. Tócalo para <strong>Reenviar</strong> o <strong>Descartar</strong>.</li>
+        </ul>
+        <p>El reloj y <strong>no entregado</strong> están en el teléfono. En la aplicación web, un mensaje que falla permanece en el cuadro de texto y la aplicación te lo indica.</p>
+        <h2>Responder, reaccionar, editar, eliminar</h2>
+        <p>En el teléfono, toca un mensaje. Aparecen pequeños botones redondos junto a él:</p>
+        <ul>
+            <li><strong>Responder</strong> lo cita encima de lo que escribas a continuación. Toca la cita en un mensaje enviado para saltar a lo que responde.</li>
+            <li><strong>Reaccionar</strong> abre siete emojis. Toca uno para añadirlo, tócalo de nuevo para quitarlo. Una reacción por persona; tocar una diferente la reemplaza. Las reacciones se muestran como una pequeña insignia debajo del mensaje.</li>
+            <li><strong>Editar</strong>, en tus propios mensajes, durante 15 minutos después de haberlo enviado. El mensaje muestra entonces <strong>editado</strong>. Las fotos no se pueden editar.</li>
+            <li><strong>Eliminar</strong>, en tus propios mensajes, en cualquier momento —no hay límite de tiempo. Pregunta <strong>¿Eliminar para todos?</strong> una vez. El mensaje pasa a mostrar <strong>Este mensaje fue eliminado</strong> para ambos, y nadie puede reaccionar a él ni responderle.</li>
+        </ul>
+        <p>Los mismos botones están en el chat de un grupo. Consulta «Grupos».</p>
+        <p>En la aplicación web, <strong>Responder</strong>, <strong>Reaccionar</strong> y <strong>Editar</strong> son pequeñas palabras en cada mensaje, y no hay <strong>Eliminar</strong>: elimina un mensaje desde la app del teléfono.</p>
+        <p>Eliminar quita las palabras también del servidor de tu comunidad, por lo que un teléfono nuevo que inicie sesión más tarde nunca las verá.</p>
+        <h2>Silenciar un chat</h2>
+        <p>Toca <strong>⋯</strong> en la esquina superior derecha (<strong>⋮</strong> en el chat de un grupo), luego <strong>Silenciar notificaciones</strong>: <strong>Por 8 horas</strong>, <strong>Por una semana</strong> o <strong>Siempre</strong>. Toca el mismo botón y <strong>Reactivar sonido</strong> para deshacerlo. La aplicación web todavía no puede silenciar un chat. Consulta «Silenciar un chat».</p>
+        <h2>Qué es privado</h2>
+        <ul>
+            <li>Un chat entre dos personas está <strong>cifrado de extremo a extremo</strong>: se bloquea en tu teléfono y se desbloquea en el de la otra persona, por lo que el servidor de tu comunidad no puede leerlo. En el teléfono, el chat muestra <strong>Cifrado de extremo a extremo</strong> en la parte superior. Las fotos en él también están cifradas, al igual que tus ediciones.</li>
+            <li>Cada mensaje también está vinculado a quién lo envió, a ese mensaje en particular, a su chat y, si es una respuesta, al mensaje al que responde. De este modo, el servidor no puede mostrar tu mensaje como si fuera de la otra persona, enviarlo de nuevo como un mensaje nuevo ni vincular tu respuesta a un mensaje diferente. Donde lo intente, la app muestra <strong>Este mensaje no se pudo verificar, por lo que no se muestra.</strong> en medio del chat, como de nadie, en lugar de las palabras. Una foto que el servidor sustituya por otra muestra <strong>Imagen no disponible</strong>.</li>
+            <li>Si el servidor coloca un mensaje en otro chat, la app lo rechaza allí. Cuando dos de tus chats con la misma persona se unen en uno solo, cada mensaje lleva el chat del que provino. Uno enviado desde esta actualización se muestra entonces con <strong>Movido aquí desde otra conversación.</strong> debajo. Uno enviado antes muestra en su lugar la línea de versión anterior (ver más abajo).</li>
+            <li>Cada mensaje también recuerda el mensaje más reciente que su autor tenía cuando lo escribió. Si el servidor lo muestra antes de ese, dice <strong>Mostrado fuera del orden en que se escribió.</strong> debajo. Dos mensajes escritos en el mismo instante, ninguno después del otro, pueden aparecer en cualquier orden sin ese aviso.</li>
+            <li>Cualquier contenido en un chat entre dos personas que no esté cifrado nunca se muestra como palabras de ninguna de las dos personas: dice <strong>Este mensaje no estaba cifrado, por lo que BeanPool no puede confirmar quién lo escribió.</strong> en medio del chat, y sus palabras no se muestran. Tu lista de chats muestra la misma línea.</li>
+            <li>Un mensaje que los administradores de tu comunidad te envían desde la página de administración del servidor no está cifrado y no es un mensaje privado. Se muestra en medio del chat, nunca como un mensaje propio de alguien, con <strong>De los administradores de tu comunidad. No es un mensaje privado: el servidor de la comunidad puede leerlo.</strong> debajo.</li>
+            <li>Los mensajes enviados antes de esta actualización, por cualquier app, estaban protegidos sin estas comprobaciones: el servidor podría haber cambiado de quién parecían provenir o haber enviado uno de nuevo. Aún se abren, y cada uno dice <strong>Enviado desde una versión anterior de la aplicación: BeanPool no puede confirmar quién lo escribió.</strong> debajo, en cualquier lugar donde esté en el chat. Alguien que todavía use una app anterior no puede leer mensajes de una actualizada hasta que actualice.</li>
+            <li>Una respuesta muestra el mensaje al que responde de la misma manera en que se muestra ese mensaje. Nombra al autor solo cuando su mensaje se pudo abrir, y lleva la línea de ese mensaje debajo, como la de versión anterior. Nombra <strong>Aviso</strong> para uno de los avisos del servidor y <strong>Administradores de tu comunidad</strong> para el mensaje de los administradores. Cualquier contenido que no se haya abierto o no estuviera cifrado se cita como <strong>No confirmado</strong>, con la línea que sustituye a sus palabras.</li>
+            <li>Por lo tanto, el servidor por sí solo no puede hacer que ninguno de ustedes parezca escribir palabras que no escribió. Aún puede retener un mensaje, entregarlo tarde o hacer que muestre <strong>Este mensaje fue eliminado</strong>. Puede mostrar las palabras anteriores de un mensaje editado en lugar de las nuevas: ambas son realmente del remitente. Ve qué mensaje responde cada mensaje, pero no puede cambiar eso sin que se note. Puede añadir o quitar una reacción emoji en nombre de cualquiera de las dos personas: las reacciones no están cifradas. Y puede añadir sus propios avisos a un chat. Un aviso se muestra como un aviso, se cita como <strong>Aviso</strong> y dice <strong>Aviso:</strong> en tu lista de chats, nunca como de ninguno de ustedes.</li>
+            <li>El cifrado demuestra que un mensaje provino de uno de ustedes dos, no de cuál de los dos: la otra persona, con la ayuda de quienes gestionan tu servidor, podría poner palabras a tu nombre.</li>
+            <li>Todo esto depende de que tu app tenga la clave real de la otra persona, que obtiene del servidor de tu comunidad, tal como lo hace el cifrado en sí. En la aplicación web también depende de la propia aplicación, que el servidor de tu comunidad envía a tu navegador. La app del teléfono proviene de la tienda de aplicaciones.</li>
+            <li>Un mensaje que no se puede cifrar no se envía. Si la app aún no puede encontrar la clave de la otra persona, o si el cifrado falla, tus palabras permanecen en el cuadro de mensajes con una línea que lo indica. Envía de nuevo en un momento. El servidor de tu comunidad también rechaza un mensaje entre dos personas que no esté cifrado.</li>
+            <li>Los avisos que BeanPool añade a un chat sobre un trato no están cifrados: frijoles retenidos para el intercambio, pagados o devueltos cuando se cancela, el monto y cómo y por qué un administrador resolvió un trato atascado. Las personas que gestionan el servidor de tu comunidad pueden leerlos.</li>
+            <li>El servidor también sabe quién envió mensajes a quién y cuándo, a qué mensaje responde cada uno, y ve las reacciones con emojis. Un mensaje que una versión anterior de la app envió sin el cifrado permanece legible en el servidor.</li>
+            <li>El chat de un grupo también está <strong>cifrado de extremo a extremo</strong>, en el teléfono y en la aplicación web: solo los miembros del grupo pueden leerlo y las personas que gestionan el servidor de tu comunidad no pueden. Encima del cuadro de mensajes dice que está <strong>Cifrado de extremo a extremo</strong>. El servidor de tu comunidad aún ve quién escribió, cuándo, quién fue mencionado, a qué mensaje responde cada línea y las reacciones con emojis. Ves el chat de un grupo solo desde el día en que te uniste: nada de lo escrito antes se muestra, y tu teléfono nunca guarda la clave correspondiente. Un mensaje que no se puede cifrar no se envía. Una línea que no se puede verificar como escrita por un miembro dice <strong>Este mensaje no se pudo verificar.</strong>, como de nadie. Si el servidor de tu comunidad es anterior y aún no puede cifrar los chats grupales, el chat lo indica y el servidor puede leerlo. Cuando el servidor se actualiza, esos mensajes anteriores se eliminan y una línea en el chat así lo indica. Consulta «Grupos».</li>
+            <li>En la aplicación web, el chat de un grupo funciona de la misma manera, pero no puedes enviar fotos en él.</li>
+            <li>Los chats de emprendimientos y eventos no están cifrados. Las personas que gestionan el servidor de tu comunidad pueden leerlos y el servidor podría escribir en ellos en nombre de cualquiera.</li>
+            <li>Un chat entre dos personas nunca se puede transformar en uno de esos. Una vez que tu app ha reconocido un chat como un chat entre dos personas, o que contiene un mensaje cifrado, permanece así, diga lo que diga el servidor: solo se abre como ese chat, con todas las comprobaciones anteriores, y lo que envías en él siempre está cifrado. Un teléfono o navegador que nunca ha visto el chat y al que no se le da ninguno de sus mensajes cifrados no puede saberlo: para él, dicho chat se ve como cualquier otro chat de grupo, legible por el servidor. En la aplicación web eso también se aplica a un navegador en el que se ha cerrado sesión desde entonces, a una ventana privada o a uno cuyos datos de sitio se hayan borrado: la aplicación web olvida qué chats eran entre dos personas. La app del teléfono conserva esa lista.</li>
+            <li>Eliminar un mensaje le pide al servidor de tu comunidad que lo reemplace. No puede alcanzar una copia que alguien ya haya leído ni una captura de pantalla.</li>
+            <li>Eliminar tu cuenta hace lo mismo con cada mensaje que escribiste, en cada tipo de chat, y elimina las fotos que enviaste. Consulta «Dejar la comunidad o eliminar tu cuenta».</li>
+            <li>El chat de un evento también puede ser leído por el anfitrión y todos los asistentes (donde el anfitrión da acceso, a quienes el anfitrión ha dado acceso).</li>
+            <li>El chat de un emprendimiento puede ser leído por cualquier miembro de tu comunidad. Es la conversación pública del emprendimiento, la misma que muestra su página, y cualquiera en la comunidad también puede escribir en él. No es un chat privado para sus custodios.</li>
+        </ul>
+        <h2>Bloquear a alguien desde un chat</h2>
+        <p>Toca su nombre en la parte superior del chat. Se abre su perfil. Toca <strong>Bloquear</strong>, luego <strong>Bloquear usuario</strong>. En la aplicación web, toca <strong>Bloquear</strong> en la parte superior del chat, luego <strong>Aceptar</strong>. Consulta «Bloquear a alguien».</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="people.html"><strong>Personas y amistades</strong><span>Encuentra miembros de tu comunidad, agrega amistades y avala a alguien.</span></a></li>
+            <li><a href="blocking.html"><strong>Bloquear a alguien</strong><span>Oculta las publicaciones y mensajes de alguien para no verlos, y reviértelo cuando quieras.</span></a></li>
+            <li><a href="event-chat.html"><strong>Chat de evento</strong><span>Conversa con el anfitrión y todos los asistentes al evento.</span></a></li>
+            <li><a href="groups.html"><strong>Grupos</strong><span>Tus grupos y sus chats, conversar en ellos, crear un grupo, invitar personas, unirse con invitación y las votaciones propias del grupo.</span></a></li>
+            <li><a href="mute.html"><strong>Silenciar un chat</strong><span>Silencia un chat —personal, de grupo o de emprendimiento— por 8 horas, una semana o indefinidamente.</span></a></li>
+            <li><a href="the-top-bar.html"><strong>Barra superior</strong><span>El frijol, los pequeños íconos que avisan si algo te necesita y los botones arriba a la derecha.</span></a></li>
+            <li><a href="key-changed.html"><strong>Si la clave de un contacto cambió</strong><span>Por qué un chat deja de enviar, cómo verificar el código de clave con la persona y cuándo continuar.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

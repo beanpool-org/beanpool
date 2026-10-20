@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ko by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>내 주변 항목 찾기 — BeanPool members' guide</title>
+    <meta name="description" content="내 위치나 직접 선택한 장소의 일정 거리 내에 있는 게시글만 모아보세요.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#map">지도</a></p>
+        <h1>내 주변 항목 찾기</h1>
+        <p class="lede">내 위치나 직접 선택한 장소의 일정 거리 내에 있는 게시글만 모아보세요.</p>
+        <h2>장터 탭에서</h2>
+        <ul>
+            <li><strong>장터</strong>를 탭한 다음 두 번째 필터 행에서 <strong>거리</strong>를 탭하세요. <strong>행사</strong>를 선택한 상태에서는 표시되지 않아요.</li>
+            <li><strong>위치 및 반경</strong>(웹 앱에서는 <strong>위치 및 반경 설정</strong>)이 열려요. 현재 위치를 사용하려면 과녁 버튼을 탭하세요. 또는 지도를 탭하거나 핀을 드래그하여 다른 중심 위치를 선택하세요.</li>
+            <li><strong>검색 반경</strong>을 사용하여 100미터부터 50킬로미터까지 거리를 선택하세요.</li>
+            <li><strong>적용</strong>을 탭하세요. 그러면 버튼에 <strong>5km</strong>와 같이 거리가 표시돼요.</li>
+            <li>전체 항목으로 돌아가려면 다시 열어서 <strong>초기화</strong>를 탭하세요. 웹 앱에서는 <strong>거리</strong> 옆의 <strong>✕</strong>를 탭할 수도 있어요.</li>
+        </ul>
+        <p>휴대폰에서는 위치가 없는 게시물이 항상 표시돼요. 웹 앱에서는 설문을 제외하고 <strong>거리</strong>가 설정되면 위치가 없는 게시물은 숨겨져요. 글로벌 커뮤니티의 웹 앱에서도 목록이 내 주변으로 설정되어 있는 동안에는 위치 없는 게시물이 제외돼요(아래 참조).</p>
+        <p>브라우저가 이미 BeanPool의 위치 정보 사용을 허용하고 있다면, 선택 창이 현재 위치에서 열릴 수 있어요. 그렇지 않다면 고정된 위치에서 열려요. <strong>적용</strong>을 탭하기 전에 핀을 확인하거나 과녁 버튼 또는 지도를 탭하세요. 글로벌 커뮤니티의 웹 앱은 선택한 중심 위치를 약 11미터 단위로 반올림하여 커뮤니티로 전송해요.</p>
+        <p>휴대폰에서는 선택 창이 마지막으로 선택한 중심 위치나 고정된 위치에서 열리므로, 먼저 과녁 버튼을 탭하세요.</p>
+        <h2>지도에서</h2>
+        <p>지도에는 자체적인 거리 필터가 없어요. 왼쪽에 있는 과녁 버튼을 탭하여 내 현재 위치를 확인한 다음, 둘러보고 확대/축소하세요.</p>
+        <h2>글로벌 커뮤니티의 웹 앱에서</h2>
+        <p>글로벌 커뮤니티에는 전 세계의 게시물이 있으므로, 웹 앱의 <strong>장터</strong>와 <strong>지도</strong>는 내 주변부터 시작해요:</p>
+        <ul>
+            <li>장터에서 <strong>거리</strong>를 선택하면 둘 다 해당 거리 내에서 가장 가까운 게시물을 가까운 순서대로 보여줘요. 지도는 최대 200개의 핀을 표시해요.</li>
+            <li>거리를 선택하지 않으면 내 지역(가입할 때 입력한 대략적인 위치 또는 나중에 <strong>설정</strong>의 <strong>내 지역</strong>에서 설정한 위치) 기준 250km 이내의 가장 가까운 게시물을 보여줘요. 장터 목록 위의 줄에 <strong>250km 이내, 내 지역에서 가장 가까운 순.</strong>이라고 표시돼요. 전 세계의 최신 게시물을 보려면 <strong>모든 지역 표시</strong>를 탭하고, 다시 돌아오려면 <strong>내 지역 주변</strong>을 탭하세요.</li>
+            <li>둘 다 설정되어 있지 않으면 전 세계의 최신 게시물이 표시되며, <strong>내 주변 항목 보기</strong>를 누르면 거리 선택 창이 열려요. 장터 목록 위의 줄에 현재 어떤 기준으로 보고 있는지가 나와요. <strong>거리</strong>가 설정되어 있을 때는 버튼이 없어요: <strong>거리</strong>를 열고 <strong>초기화</strong>를 탭하세요. 그러면 다시 내 지역 주변으로 돌아오거나, 설정된 지역이 없다면 전 세계의 최신 항목을 보게 돼요.</li>
+            <li>각 게시물에는 <strong>📍 12 km</strong>와 같이 얼마나 떨어져 있는지가 표시돼요. 내가 올린 게시물은 어디에 있든 지도와 내 지역 주변 장터에 항상 표시돼요. <strong>거리</strong>가 설정되어 있으면 장터에는 내 게시물을 포함하여 해당 거리 내의 게시물만 표시돼요.</li>
+            <li>목록이 내 주변으로 설정되어 있는 동안에는 위치가 없는 게시물이 제외돼요. 지역을 설정하지 않은 사람이 올린 설문도 여기에 해당돼요. 이를 보려면 설정한 <strong>거리</strong>를 초기화한 다음 <strong>모든 지역 표시</strong>를 탭하세요.</li>
+            <li><strong>행사</strong> 탭 아래에서는 이전과 마찬가지로 내 지역이나 <strong>거리</strong>로 목록이 제한되지 않아요.</li>
+            <li>주변에 아무것도 없다면 지도에 <strong>모든 지역 표시</strong> 버튼과 함께 안내가 나와요. 그런 다음 <strong>내 지역 주변</strong>(또는 <strong>입력한 장소 근처</strong>)을 누르면 가장 가까운 게시물이 다시 나타나요.</li>
+        </ul>
+        <p>웹 앱의 검색은 화면에 표시된 게시물 내에서만 검색해요. <strong>모든 지역 표시</strong>는 모든 게시물이 아니라 전 세계의 최신 게시물만 보여주므로, 멀리 있고 최신이 아닌 게시물은 검색 결과에 나오지 않아요. 다른 모든 커뮤니티에서는 웹 앱이 내 지역으로 장터나 지도를 제한하지 않아요. 가장 최근에 변경된 게시물 50개와 내가 올린 게시물을 보여주며, 검색은 해당 게시물들만 대상으로 해요.</p>
+        <h2>글로벌 커뮤니티의 휴대폰 앱에서</h2>
+        <p>휴대폰은 내 지역에서 가장 가까운 게시물(250km 이내 최대 500개)을 보관해요. 내가 올린 게시물, 거래나 대화 또는 답변이 있는 게시물도 함께 보관해요. 장터와 지도는 휴대폰이 보관하고 있는 항목을 보여줘요. 지역이 설정되어 있지 않으면 최신 게시물을 대신 보관하며, 장터 위의 줄에 그렇게 안내돼요. &quot;내 지역&quot;을 참조하세요.</p>
+        <h2>내 주변 행사</h2>
+        <p>휴대폰에서 앱의 위치 정보 사용을 허용하면 행사 카드에 거리가 얼마나 떨어져 있는지가 표시돼요. 웹 앱에서는 <strong>거리</strong>에서 선택한 중심 위치로부터의 거리를 보여줘요. 글로벌 커뮤니티에서 중심 위치를 선택하지 않았다면 내 지역으로부터의 거리를 보여줘요(<strong>행사</strong> 목록 제외). 지도에서 웹 앱은 과녁을 탭한 후 내 위치로부터의 거리를 표시해요.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="browsing-the-market.html"><strong>장터 둘러보기</strong><span>검색, 필터, 거리 설정을 통해 제공과 요청을 찾아보세요.</span></a></li>
+            <li><a href="map-pins.html"><strong>지도에 표시되는 항목</strong><span>지도의 핀과 색상별 의미, 주변 버튼 안내예요.</span></a></li>
+            <li><a href="pin-locations.html"><strong>내 핀 위치 설정</strong><span>내 게시글과 행사의 위치를 볼 수 있는 사람과 집 주소를 안전하게 지키는 방법이에요.</span></a></li>
+            <li><a href="events.html"><strong>행사</strong><span>오프라인이나 온라인에서 일회성 또는 반복 행사를 만들고, 참석 여부 표시, 알림 받기, 공유 및 주최자 운영 안내예요.</span></a></li>
+            <li><a href="your-area.html"><strong>내 지역</strong><span>글로벌 커뮤니티에서 주변 게시글을 보여주기 위해 사용하는 대략적인 위치 및 변경·삭제 방법이에요.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

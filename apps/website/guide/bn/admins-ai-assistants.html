@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/bn by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>অ্যাডমিন এআই সহকারী ব্যবহার করলে — BeanPool members' guide</title>
+    <meta name="description" content="মালিক বা অ্যাডমিনের এআই সহকারী আপনার সম্পর্কে কী পড়তে পারে, এটি কখনই কী দেখে না এবং কারা এটি গ্রহণ করে।">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">সেটিংস ও নিরাপত্তা</a></p>
+        <h1>অ্যাডমিন এআই সহকারী ব্যবহার করলে</h1>
+        <p class="lede">মালিক বা অ্যাডমিনের এআই সহকারী আপনার সম্পর্কে কী পড়তে পারে, এটি কখনই কী দেখে না এবং কারা এটি গ্রহণ করে।</p>
+        <p>আপনার সম্প্রদায়ের মালিকরা তাদের নিজস্ব এআই সহকারীকে (উদাহরণস্বরূপ Claude বা ChatGPT) আপনার সম্প্রদায়ের সার্ভারের সাথে সংযুক্ত করতে পারেন, যাতে এটি পরিচালনায় সাহায্য পাওয়া যায়: কী কী মনোযোগ দাবি করছে তা জানতে বা উন্মুক্ত রিপোর্টগুলো সংক্ষেপ করতে। অ্যাডমিনরাও তা করতে পারেন: তারা তাদের সহকারীটিতে আপনার সম্প্রদায়ের ঠিকানা যোগ করেন এবং তাদের ফোনে এটি অনুমোদন করেন। তারা নিজেরাই এটি সংযুক্ত করেন এবং যেকোনো সময় সংযোগ বিচ্ছিন্ন করতে পারেন। যখন কোনো সহকারী সংযুক্ত হয় তখন অন্যান্য মালিকদের জানানো হয়।</p>
+        <h2>এটি আপনার সম্পর্কে কী পড়তে পারে</h2>
+        <p>একজন অ্যাডমিন <strong>সেটিংস</strong>-এ যা দেখেন তার চেয়ে একজন সহকারী অনেক কম দেখতে পায়। সহকারী নয়, বরং আপনার সম্প্রদায়ের সার্ভার ঠিক করে এটি কী পাবে।</p>
+        <ul>
+            <li><strong>কেউ যদি আপনাকে বা আপনার পোস্ট রিপোর্ট করে</strong>, এবং অ্যাডমিন রিপোর্টের কথাগুলো জানতে চান: প্রদত্ত কারণ, আপনার পোস্টের শিরোনাম ও বিবরণ এবং আপনার BeanPool নাম। যিনি রিপোর্ট করেছেন তিনি কখনই নন।</li>
+            <li><strong>আপনি যদি যোগদানের অনুরোধ জানান</strong>, এবং অ্যাডমিন বার্তাগুলো জানতে চান: আপনার অনুরোধের সাথে পাঠানো নাম ও বার্তা এবং আপনি যে সম্প্রদায় থেকে এসেছেন বলে জানিয়েছেন। কখনই আপনার ছবি বা আপনার চাবি নয়।</li>
+            <li><strong>পুরো সম্প্রদায়ের জন্য মোট পরিমাণ</strong>, যেমন কতজন সদস্য আছেন এবং প্রচলনে কতগুলো শিম রয়েছে। কখনই আপনার ব্যালেন্স নয়।</li>
+        </ul>
+        <h2>এটি কখনই যা দেখে না</h2>
+        <p>আপনার বার্তা এবং চ্যাট, আপনার ব্যালেন্স ও লেনদেন, আপনার চাবি, আপনার ঠিকানা, আপনার ছবি, নামের তালিকা এবং কে কাকে রিপোর্ট করেছে। এটি আপনার সম্পর্কে কোনো কিছু পরিবর্তন করতে পারে না: এটি আপনাকে সরাতে পারে না, মিউট করতে পারে না, আপনার পোস্ট নামিয়ে দিতে পারে না বা আপনার যোগদানের অনুরোধের উত্তর দিতে পারে না। এগুলো মানুষের দ্বারা করা হয়। একজন অ্যাডমিন <strong>সেটিংস</strong>-এ বা তাদের ফোনে তা করেন, এবং যোগদানের অনুরোধের উত্তর অ্যাপে এমন যেকোনো সদস্য দিতে পারেন যিনি আমন্ত্রণ জানানোর অধিকারী।</p>
+        <p>একজন সহকারী কোনো রিপোর্টের বিষয়ে কী করা যেতে পারে তা পরামর্শ দিতে পারে, যেমন আপনার পোস্ট রাখা হবে নাকি নামিয়ে দেওয়া হবে। যে অ্যাডমিনের জন্য এটি কাজ করে তিনি রিপোর্টটি পড়ে অনুমোদন না করা পর্যন্ত কিছুই ঘটে না; এ সম্পর্কে আপনি যা শোনেন তা বরাবরের মতোই আপনার সম্প্রদায়ের মডারেটরদের কাছ থেকে আসে।</p>
+        <h2>কারা এটি গ্রহণ করে</h2>
+        <p>সহকারী যা পড়ে তা সেই কোম্পানির কাছে যায় যেটি এটি পরিচালনা করে, যেমনটি আপনি নিজে কোনো এআই চ্যাটে কিছু পেস্ট করলে ঘটে। অ্যাডমিনের সহকারী যখনই কেবল রিপোর্টের কথা বা যোগদানের বার্তা জানতে চায় তখনই সার্ভার তা পাঠায়, যা কোনো নির্দেশনা হিসেবে নয় বরং সদস্যের পাঠানো কথা হিসেবে চিহ্নিত থাকে।</p>
+        <p>আপনি যদি চান যে আপনার রিপোর্ট বা আপনার যোগদানের বার্তা কোনো এআই যাতে না পড়ে, তবে আপনার অ্যাডমিনদের জিজ্ঞাসা করুন তারা কীভাবে তাদের সহকারী ব্যবহার করেন।</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="what-the-admins-can-see.html"><strong>অ্যাডমিনরা যা দেখতে পান</strong><span>যে কমিউনিটির অ্যাডমিনরা নামের তালিকা রাখেন: সেখানে আপনার সম্পর্কে কী থাকে, কে পড়তে পারে, সার্ভার কী রাখে এবং নিশ্চিত হওয়ার অর্থ কী।</span></a></li>
+            <li><a href="reporting.html"><strong>সমস্যার রিপোর্ট করা</strong><span>একটি পোস্ট, ইভেন্ট, পালস পোস্ট, প্রকল্প বা উদ্যোগ সম্পর্কে আপনার কমিউনিটির মডারেটরদের জানান।</span></a></li>
+            <li><a href="privacy.html"><strong>আপনার গোপনীয়তা</strong><span>অন্যরা আপনার সম্পর্কে কী দেখতে পারে এবং সেটিংস যা এটি নিয়ন্ত্রণ করে।</span></a></li>
+            <li><a href="joining.html"><strong>BeanPool-এ যোগ দেওয়া</strong><span>যুক্ত হওয়ার দুটি উপায়: একজন সদস্যের আমন্ত্রণে একটি কমিউনিটি, অথবা বিশ্বব্যাপী কমিউনিটি খোলা থাকলে 12টি গোপন শব্দ বা একটি সাইন-ইন দিয়ে। কোনো কমিউনিটিতে প্রবেশের অনুরোধ করা এবং অন্যকে আমন্ত্রণ জানানো।</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

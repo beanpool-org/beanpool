@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ml by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ml">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ഇടപാടിൽ പ്രശ്നമുണ്ടാകുമ്പോൾ — BeanPool members' guide</title>
+    <meta name="description" content="ഇടപാട് റദ്ദാക്കലും, യോജിപ്പിലെത്താൻ കഴിയാതെ വരുമ്പോൾ എന്ത് സംഭവിക്കുമെന്നതും.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#market">മാർക്കറ്റ്</a></p>
+        <h1>ഇടപാടിൽ പ്രശ്നമുണ്ടാകുമ്പോൾ</h1>
+        <p class="lede">ഇടപാട് റദ്ദാക്കലും, യോജിപ്പിലെത്താൻ കഴിയാതെ വരുമ്പോൾ എന്ത് സംഭവിക്കുമെന്നതും.</p>
+        <h2>ആദ്യം സംസാരിക്കുക</h2>
+        <p>ഭൂരിഭാഗം പ്രശ്നങ്ങളും ഒരു തെറ്റിദ്ധാരണ മാത്രമാണ്. പോസ്റ്റിലെ <strong>സന്ദേശം അയക്കുക</strong> ടാപ്പ് ചെയ്ത് സംസാരിച്ച് തീർക്കുക.</p>
+        <h2>റദ്ദാക്കൽ</h2>
+        <ul>
+            <li><strong>ഇടപാട് സമ്മതിക്കുന്നതിന് മുമ്പ്:</strong> ആവശ്യപ്പെട്ട വ്യക്തി <strong>അഭ്യർത്ഥന പിൻവലിക്കുക</strong> ടാപ്പ് ചെയ്യുന്നു. ഒരു ആവശ്യം പോസ്റ്റ് ചെയ്ത വ്യക്തി <strong>നിരസിക്കുക</strong>, തുടർന്ന് <strong>നിരസിക്കുക</strong> ടാപ്പ് ചെയ്യുകയും ഒരു ചെറിയ സന്ദേശം ചേർക്കുകയും ചെയ്യാം. ആരും ഉത്തരം നൽകാത്ത ഒരു അഭ്യർത്ഥന 7 ദിവസത്തിന് ശേഷം സ്വയം അവസാനിക്കും.</li>
+            <li><strong>പയർ തടഞ്ഞുവെച്ചിരിക്കുന്ന സമയത്ത്:</strong> നിങ്ങളിൽ ആർക്കെങ്കിലും <strong>ട്രസ്റ്റ് ഹോൾഡ് റദ്ദാക്കുക</strong>, തുടർന്ന് <strong>അതെ, റദ്ദാക്കുക</strong> ടാപ്പ് ചെയ്യാം. തടഞ്ഞുവെച്ച എല്ലാ പയറുകളും പണം നൽകുന്ന വ്യക്തിക്ക് തിരികെ ലഭിക്കുകയും പോസ്റ്റ് വീണ്ടും മാർക്കറ്റിലേക്ക് മടങ്ങുകയും ചെയ്യും. മറ്റേ വ്യക്തിയെ അറിയിക്കുകയും ചെയ്യും.</li>
+        </ul>
+        <p>വെബ് ആപ്പിൽ, <strong>അഭ്യർത്ഥന പിൻവലിക്കുക</strong> എന്നത് <strong>ഓഫർ റദ്ദാക്കുക</strong> എന്നും, <strong>നിരസിക്കുക</strong> എന്നത് സന്ദേശമൊന്നുമില്ലാതെ ഉടനടി നിരസിക്കുകയുമാണ് ചെയ്യുന്നത്. അവിടെ തടഞ്ഞുവെച്ച ഒരു ഇടപാട് റദ്ദാക്കാൻ, <strong>ഹോൾഡ് റദ്ദാക്കുക</strong>, തുടർന്ന് <strong>ശരി</strong> ടാപ്പ് ചെയ്യുക.</p>
+        <p>പയർ വിട്ടുനൽകുന്നതിന് മുമ്പ് ഏത് സമയത്തും ഏത് വ്യക്തിക്കും ഒറ്റയ്ക്ക് റദ്ദാക്കാം. ജോലി പൂർത്തിയായ ശേഷവും ഇതിൽ ഉൾപ്പെടുന്നു. നിങ്ങൾക്ക് അങ്ങനെ സംഭവിച്ചാൽ, അവരോട് സംസാരിക്കുക, തുടർന്ന് നിങ്ങളുടെ കമ്മ്യൂണിറ്റിയുടെ അഡ്മിൻമാരോട് സംസാരിക്കുക.</p>
+        <h2>നിങ്ങൾക്ക് യോജിപ്പിലെത്താൻ കഴിയാതെ വരുമ്പോൾ</h2>
+        <p>ആപ്പിൽ &quot;തർക്കം&quot; എന്നൊരു ബട്ടണില്ല. നിങ്ങളുടെ കമ്മ്യൂണിറ്റിയുടെ അഡ്മിൻമാരോട് സഹായം ചോദിക്കുക. അവർ അതിന്റെ സെർവർ നോക്കിനടത്തുന്നു, കൂടാതെ കുടുങ്ങിക്കിടക്കുന്ന ഒരു ഇടപാട് മൂന്ന് വഴികളിലൊന്നിലൂടെ അവർക്ക് തീർപ്പാക്കാൻ കഴിയും:</p>
+        <ul>
+            <li>വിൽപ്പനക്കാരന് പണം നൽകുക (സാധാരണ 1.5% ഫീസ് ബാധകമാണ്);</li>
+            <li>എല്ലാ പയറുകളും വാങ്ങുന്നയാൾക്ക് തിരികെ നൽകുക;</li>
+            <li>അവ പകുതിയായി വിഭജിക്കുക.</li>
+        </ul>
+        <p>ഒരു അഡ്മിന് അവർ ഉൾപ്പെട്ടിട്ടുള്ളതോ, അല്ലെങ്കിൽ അവർ നടത്തുന്ന ഒരു സംരംഭം ഉൾപ്പെട്ടിട്ടുള്ളതോ ആയ ഒരു ഇടപാട് തീർപ്പാക്കാൻ കഴിയില്ല.</p>
+        <p>നിങ്ങൾ രണ്ടുപേർക്കും ഒരു അലേർട്ടും (&quot;There is news on one of your trades.&quot;) അത് എങ്ങനെ തീർപ്പാക്കി എന്ന് പറയുന്ന ഒരു വരി നിങ്ങളുടെ ചാറ്റിലും ലഭിക്കും. ചാറ്റിലെ വരി അഡ്മിന്റെ പേര് അവരുടെ കോൾസൈൻ വഴി നൽകുന്നു, അല്ലെങ്കിൽ &quot;a community admin&quot; എന്ന് പറയുന്നു. അലേർട്ടിൽ ആരുടേയും പേര് ഉണ്ടാകില്ല.</p>
+        <h2>ആരെങ്കിലും സത്യസന്ധരല്ലെങ്കിൽ</h2>
+        <ul>
+            <li>ന്യായമായ ഒരു അവലോകനം നൽകുക. കുറഞ്ഞ നക്ഷത്രങ്ങൾ അവർ നേടുന്ന വിശ്വാസ്യത കുറയ്ക്കുന്നു.</li>
+            <li>അവരുടെ പോസ്റ്റ് റിപ്പോർട്ട് ചെയ്യുക, അല്ലെങ്കിൽ അവരെ ബ്ലോക്ക് ചെയ്യുക. &quot;പ്രശ്നം റിപ്പോർട്ട് ചെയ്യൽ&quot;, &quot;ഒരാളെ ബ്ലോക്ക് ചെയ്യൽ&quot; എന്നിവ കാണുക.</li>
+        </ul>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="a-deal-step-by-step.html"><strong>ഒരു ഇടപാട്, ഘട്ടം ഘട്ടമായി</strong><span>ചോദിക്കുന്നത് മുതൽ പണം ലഭിക്കുന്നത് വരെ, ഓഫറുകൾക്കും ആവശ്യങ്ങൾക്കും, അവലോകനം നൽകുന്നതും.</span></a></li>
+            <li><a href="getting-help.html"><strong>സഹായം നേടൽ</strong><span>സംശയങ്ങളുണ്ടാകുമ്പോൾ എവിടെ നോക്കണം, ആരോട് ചോദിക്കണം.</span></a></li>
+            <li><a href="reporting.html"><strong>പ്രശ്നം റിപ്പോർട്ട് ചെയ്യൽ</strong><span>ഒരു പോസ്റ്റ്, ഇവന്റ്, പൾസ് പോസ്റ്റ്, പ്രോജക്റ്റ് അല്ലെങ്കിൽ സംരംഭത്തെക്കുറിച്ച് മോഡറേറ്റർമാരെ അറിയിക്കുക.</span></a></li>
+            <li><a href="rules.html"><strong>നിയമങ്ങളും തീരുമാനങ്ങൾ എടുക്കുന്ന രീതിയും</strong><span>വോട്ടിംഗ്, പങ്കാളിത്തം, രഹസ്യ ബാലറ്റ്, ആർക്കൊക്കെ വോട്ട് ചെയ്യാം, സസ്പെൻഷൻ, അംഗത്തെ നീക്കം ചെയ്യൽ, സൂക്ഷിപ്പുകാർ, കൺവീനർമാരും മുഖ്യ കൺവീനർമാരും.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

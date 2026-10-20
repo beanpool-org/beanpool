@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ru by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Внесение Решения — BeanPool members' guide</title>
+    <meta name="description" content="Предложите сообществу принять обязательное общее решение.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#commons">Общие проекты</a></p>
+        <h1>Внесение Решения</h1>
+        <p class="lede">Предложите сообществу принять обязательное общее решение.</p>
+        <h2>Перед началом</h2>
+        <ul>
+            <li>Решение предназначено для действий, которые сервер вашего сообщества может исполнить автоматически: исключение или приостановка участника, заморозка или разморозка кредита, определение права поручительства или выплата бобов из Фонда общих проектов. Для всего остального создайте Опрос.</li>
+            <li>Решение не может исключить или приостановить владельца или администратора сервера вашего сообщества. См. «Правила и решения».</li>
+            <li>Вы можете предложить Решение, как только совершите хотя бы одну сделку или если администратор выдаст вам значок доверия. Администраторы вашего сообщества могут вносить Решения всегда. Одного поручительства недостаточно.</li>
+            <li>Одновременно у вас может быть только одно открытое Решение.</li>
+            <li>В глобальном сообществе Решений нет, поэтому предложить Решение там нельзя. См. «Голосование за Решение».</li>
+        </ul>
+        <h2>Внесение предложения</h2>
+        <ul>
+            <li>Нажмите <strong>Общие проекты</strong>, затем <strong>Решения</strong>, затем <strong>+ Предложить решение</strong>.</li>
+            <li>Выберите, к чему оно относится: <strong>Участник</strong> или <strong>Фонд общих проектов</strong>.</li>
+            <li><strong>Заголовок:</strong> одна строка, например «Выделить 200 бобов Библиотеке инструментов».</li>
+            <li><strong>Описание и обоснование:</strong> объясните причину (не менее 10 символов). Пишите простыми словами. Люди голосуют на основе написанного здесь.</li>
+            <li>В списке ниже выберите точное действие. Например, для участника: Исключить участника, Приостановить участие или Заморозить кредит. Для Фонда общих проектов: Выделить бобы проекту или предприятию, Экстренная помощь или Погасить долг проекта или предприятия.</li>
+            <li>Укажите, для кого предназначено решение, и количество бобов (если применимо). При выделении гранта проекту или предприятию вводится его ключ — длинный код: ни в одном приложении нет выпадающего списка для его выбора. Для погашения долга или смены старшего хранителя нажмите на проект или предприятие в списке либо введите его ключ.</li>
+            <li>Нажмите <strong>Опубликовать решение сообщества</strong>.</li>
+        </ul>
+        <p>В веб-приложении кнопки называются <strong>+ Предложить Решение</strong> (или <strong>+ Предложить</strong> в верхней части раздела «Общие проекты» при открытой вкладке <strong>Решения</strong>) и <strong>Внести Решение</strong>, а поле ввода — <strong>Описание и обоснование</strong>.</p>
+        <p>Голосование открывается сразу же и длится 7 дней.</p>
+        <h2>Каким может быть размер гранта</h2>
+        <p>Грант предприятию или экстренная помощь не могут превышать сумму, которую Фонд общих проектов в состоянии выплатить. Максимум, который можно запросить:</p>
+        <ul>
+            <li>сумма, хранящаяся в Фонде общих проектов прямо сейчас,</li>
+            <li>плюс все бобы, поступившие в него за последние 30 дней: комиссия Рынка, плата за обращение и любые другие внесённые бобы.</li>
+        </ul>
+        <p>Бобы, выплаченные из Фонда общих проектов за эти 30 дней, не вычитаются. Если вы запросите больше, приложение отклонит запрос ещё до начала голосования и покажет максимальную сумму, доступную на данный момент. Эта сумма увеличивается по мере поступления бобов в Фонд общих проектов.</p>
+        <p>Это позволяет избежать блокировки очереди. Если решение о гранте принято при нехватке бобов в Фонде, оно ожидает поступления средств, причём одновременно в очереди может находиться только один грант. См. «Правила и решения».</p>
+        <h2>Если приложение сообщает об ошибке</h2>
+        <ul>
+            <li><strong>Сначала совершите сделку</strong> (на телефоне): вы пока не можете вносить предложения. В веб-приложении кнопка <strong>+ Предложить Решение</strong> неактивна, а строка над ней объясняет причину.</li>
+            <li><strong>Достигнут лимит</strong> (на телефоне): у вас уже есть открытое Решение. Дождитесь его завершения. В веб-приложении кнопка также становится неактивной с поясняющей строкой.</li>
+            <li><strong>Голосование сообщества не может исключить или приостановить владельца или администратора сервера этого сообщества:</strong> выбранный человек управляет сервером. Владелец может сначала снять с него эту роль.</li>
+            <li><strong>Размер гранта превышает возможности Фонда общих проектов:</strong> запросите сумму не больше указанной или подождите, пока в Фонд поступит больше бобов.</li>
+            <li><strong>Недопустимая сумма</strong> (в веб-приложении: «Укажите корректную положительную сумму гранта в бобах»): укажите количество бобов.</li>
+            <li><strong>Ошибка:</strong> убедитесь, что ваше описание содержит не менее 10 символов.</li>
+        </ul>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="decisions.html"><strong>Голосование за Решение</strong><span>Поиск открытых Решений, голосование, смена выбора и просмотр результатов.</span></a></li>
+            <li><a href="rules.html"><strong>Правила и решения</strong><span>Голосование, явка, тайное голосование, кто голосует, приостановка, исключение участника, хранители, координаторы и старшие координаторы.</span></a></li>
+            <li><a href="polls.html"><strong>Опросы</strong><span>Быстрый вопрос сообществу. Опросы показывают мнение людей и сами по себе ничего не меняют.</span></a></li>
+            <li><a href="enterprises.html"><strong>Проекты и предприятия</strong><span>Совместные дела с отдельным балансом бобов: находите, поддерживайте или запускайте свои.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

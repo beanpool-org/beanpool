@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/bn by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ইভেন্ট চ্যাট — BeanPool members' guide</title>
+    <meta name="description" content="যারা যাচ্ছেন তাদের সকলের জন্য একটি গ্রুপ চ্যাট এবং এটি কীভাবে অন্যান্য চ্যাটের থেকে আলাদা।">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#talk">কথা</a></p>
+        <h1>ইভেন্ট চ্যাট</h1>
+        <p class="lede">যারা যাচ্ছেন তাদের সকলের জন্য একটি গ্রুপ চ্যাট এবং এটি কীভাবে অন্যান্য চ্যাটের থেকে আলাদা।</p>
+        <h2>এতে কারা আছেন</h2>
+        <p>প্রতিটি ইভেন্টের নিজস্ব চ্যাট রয়েছে। হোস্ট এবং <strong>যাচ্ছি</strong>-তে ট্যাপ করেছেন এমন প্রত্যেকে এটি পড়তে এবং এতে লিখতে পারেন। যেখানে হোস্ট মানুষকে প্রবেশের অনুমতি দেন, সেখানে হোস্ট প্রবেশের অনুমতি দিয়েছেন এমন অংশগ্রহণকারী ব্যক্তিরা থাকেন: ততক্ষণ পর্যন্ত চ্যাটে লেখা থাকে <strong>হোস্ট অনুমতি দিলে চ্যাট খুলবে।</strong> আপনি যদি <strong>আগ্রহী</strong>-তে পরিবর্তন করেন বা এটি সাফ করতে আবার <strong>যাচ্ছি</strong>-তে ট্যাপ করেন, তবে আপনি চ্যাটটি ত্যাগ করেন। হোস্ট সর্বদা এতে থাকেন।</p>
+        <h2>এটি খোলা</h2>
+        <ul>
+            <li>ইভেন্টটি খুলুন এবং <strong>ইভেন্ট চ্যাট খুলুন</strong>-এ ট্যাপ করুন।</li>
+            <li>অথবা <strong>আলাপ</strong>-এ, <strong>গ্রুপ</strong>-এর অধীনে এটি খুঁজুন, যাতে 📅 <strong>ইভেন্ট</strong> চিহ্নিত থাকে। ওয়েব অ্যাপে এটি আপনার অন্যান্য চ্যাটের সাথে <strong>চ্যাট</strong> ট্যাবে থাকে।</li>
+        </ul>
+        <p>শীর্ষে, একটি পিন করা বাক্সে হোস্টের <strong>যাঁরা যাচ্ছেন তাঁদের জন্য নোট</strong> প্রদর্শিত হয়, যেমন সঠিক ঠিকানা। ইভেন্টে ফিরে যেতে একদম উপরে ইভেন্টের নামে ট্যাপ করুন (ওয়েব অ্যাপে, <strong>ইভেন্ট দেখুন</strong>)।</p>
+        <h2>লেখা</h2>
+        <p><strong>যাঁরা যাচ্ছেন সবাইকে বার্তা পাঠান…</strong>-এ টাইপ করুন এবং পাঠাতে সেন্ড বোতামে ট্যাপ করুন। আপনি মিনিটে সর্বোচ্চ ৩০টি বার্তা পাঠাতে পারেন। সর্বশেষ বার্তাটি মেসেজ বক্সের ঠিক উপরে থাকে এবং কীবোর্ড খুললেও সেখানে থেকে যায়।</p>
+        <h2>জেনে রাখা ভালো</h2>
+        <ul>
+            <li>ইভেন্ট চ্যাটগুলো এন্ড-টু-এন্ড এনক্রিপ্ট করা নয়। হোস্ট, অংশগ্রহণকারী প্রত্যেকে (যেখানে হোস্ট মানুষকে প্রবেশের অনুমতি দেন, সেখানে যাদের হোস্ট প্রবেশের অনুমতি দিয়েছেন তারা) এবং আপনার সম্প্রদায়ের সার্ভার পরিচালনাকারীরা সেগুলো পড়তে পারেন। চ্যাটে মেসেজ বক্সের উপরে তা বলা থাকে।</li>
+            <li>হোস্ট যেকোনো বার্তা সরিয়ে দিতে পারেন। এতে ট্যাপ করুন, তারপর <strong>সরান</strong>-এ। এটি তখন বলে &quot;হোস্ট দ্বারা সরানো হয়েছে&quot;।</li>
+            <li>ইভেন্ট চ্যাটে কোনো উত্তর দেওয়া, প্রতিক্রিয়া জানানো, সম্পাদনা করা বা নিজের বার্তা মুছে ফেলার ব্যবস্থা নেই — কোনো ব্যক্তির সাথে চ্যাট বা গ্রুপের চ্যাটের মতো নয়। আপনার করা কোনো ভুলের জন্য কিছু সরাতে হোস্টকে অনুরোধ করুন। আপনি আপনার অ্যাকাউন্ট মুছে ফেললে, এখানে আপনার লেখা প্রতিটি বার্তার স্থলে <strong>এই বার্তাটি মুছে ফেলা হয়েছে</strong> প্রদর্শিত হয়।</li>
+            <li>ইভেন্ট শেষ হলে বা বাতিল হলে চ্যাটটি কেবল পড়ার উপযোগী (রিড-অনলি) হয়ে যায়। পুনরাবৃত্তিমূলক কোনো ইভেন্টের চ্যাট তারিখগুলোর মধ্যবর্তী সময়ে খোলা থাকে: হোস্ট কোনো <strong>পর্যন্ত</strong> নির্ধারণ করে থাকলে এর শেষ তারিখ পর্যন্ত, আর না করে থাকলে হোস্ট ইভেন্টটি বাতিল না করা পর্যন্ত। শেষ হওয়ার ত্রিশ দিন পর এটি মুছে যায়।</li>
+        </ul>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="events.html"><strong>ইভেন্টসমূহ</strong><span>একটি নির্দিষ্ট স্থানে বা অনলাইনে, একবার বা পুনরাবৃত্তিমূলক ইভেন্ট তৈরি করুন; যাচ্ছেন জানান, রিমাইন্ডার পান, শেয়ার করুন এবং হোস্ট হিসেবে পরিচালনা করুন।</span></a></li>
+            <li><a href="messages.html"><strong>বার্তাসমূহ</strong><span>একটি চ্যাট শুরু করুন, ছবি পাঠান, উত্তর দিন, প্রতিক্রিয়া দিন, সম্পাদনা করুন, মুছুন, মিউট করুন এবং কী গোপনীয়।</span></a></li>
+            <li><a href="pin-locations.html"><strong>আপনার পিন যেখানে থাকে</strong><span>কে আপনার পোস্ট এবং ইভেন্টের অবস্থান দেখতে পারে, এবং আপনার বাড়ি কীভাবে ব্যক্তিগত রাখবেন।</span></a></li>
+            <li><a href="reporting.html"><strong>সমস্যার রিপোর্ট করা</strong><span>একটি পোস্ট, ইভেন্ট, পালস পোস্ট, প্রকল্প বা উদ্যোগ সম্পর্কে আপনার কমিউনিটির মডারেটরদের জানান।</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

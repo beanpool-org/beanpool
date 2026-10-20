@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/fa by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="fa">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>نظرسنجی‌ها — BeanPool members' guide</title>
+    <meta name="description" content="یک پرسش سریع از جامعه. نظرسنجی‌ها افکار را نشان می‌دهند؛ خودبه‌خود تغییری نمی‌دهند.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#commons">مشاع</a></p>
+        <h1>نظرسنجی‌ها</h1>
+        <p class="lede">یک پرسش سریع از جامعه. نظرسنجی‌ها افکار را نشان می‌دهند؛ خودبه‌خود تغییری نمی‌دهند.</p>
+        <h2>نظرسنجی یا تصمیم؟</h2>
+        <p>یک <strong>نظرسنجی</strong> نظر مردم را جویا می‌شود: «بازار در یکشنبه یا شنبه؟». به خودی خود چیزی را تغییر نمی‌دهد. برای مواردی که الزام‌آور هستند، یک تصمیم پیشنهاد دهید.</p>
+        <p>در جامعه جهانی هر نظرسنجی می‌گوید <strong>یک نظرسنجی غیررسمی؛ تصمیمی نمی‌گیرد</strong>. هر کسی می‌تواند با ۱۲ کلمه یا یک ورود به حساب به آن بپیوندد، بنابراین یک نفر با چندین حساب می‌تواند نتیجه آرا را تغییر دهد، و هیچ تصمیمی در آنجا وجود ندارد. در زیر آن، «🏘️ در یک جامعه محلی یک تصمیم الزام‌آور است ›» توضیح می‌دهد که چرا یک رأی فقط در یک جامعه محلی الزام‌آور است.</p>
+        <p>هنگامی که یک نظرسنجی ناشناس در آنجا بسته شد، همچنین بیان می‌کند که چه تعداد از آرای آن از <strong>حساب‌های جدید یا ۱۲ کلمه‌ای</strong> بوده است، برای مثال «۵ رأی از ۱۲ رأی از حساب‌های جدید یا ۱۲ کلمه‌ای بود». هر رأی بر اساس وضعیت حساب در زمان رأی دادن محاسبه می‌شود: یک حساب جدید حسابی است که هنوز محدودیت‌های حساب جدید را داشته است، و یک حساب ۱۲ کلمه‌ای حسابی است که با ۱۲ کلمه ساخته شده و ورودی اضافه نکرده است. هنگامی که حداقل ۳ رأی از حساب‌های جدید یا ۱۲ کلمه‌ای باشد، و سایر آرا صفر یا حداقل ۳ باشند، هر پاسخ نیز مشخص می‌کند که چه تعداد از آرای خودش از این حساب‌ها بوده است. هر رأی همچنان شمرده می‌شود، و هیچ چیز نشان نمی‌دهد چه کسی رأی داده است.</p>
+        <p>در حالی که یک نظرسنجی باز است، هیچ چیز در این باره نمی‌گوید. اگر می‌گفت، کسی که پس از هر رأی نظرسنجی را بررسی می‌کرد می‌توانست بفهمد هر رأی از چه نوع حسابی آمده و چه گزینه‌ای را انتخاب کرده است. یک رأی‌گیری علنی، چه باز یا بسته، هرگز این موضوع را نمی‌گوید: نشان می‌دهد چه کسی رأی داده است، بنابراین شمارش مشخص می‌کرد هر رأی‌دهنده چه نوع حسابی دارد. نظرسنجی یک گروه نیز این را نمی‌گوید، و همین‌طور یک نظرسنجی در یک جامعه محلی.</p>
+        <h2>شروع یک نظرسنجی</h2>
+        <ul>
+            <li>روی <strong>+ ثبت پست</strong> در برگه بازار یا نقشه بزنید.</li>
+            <li><strong>نظرسنجی جامعه</strong> را انتخاب کنید.</li>
+            <li><strong>سؤال</strong> را بنویسید.</li>
+            <li>اگر کمکی می‌کند <strong>زمینه / یادداشت‌ها</strong> را اضافه کنید. این اختیاری است.</li>
+            <li>بین ۲ تا ۴ <strong>گزینه</strong> بنویسید. برای گزینه‌های بیشتر روی <strong>+ افزودن گزینه</strong> بزنید.</li>
+            <li>مدت زمان اجرای آن را انتخاب کنید: <strong>۳ روز</strong>، <strong>۷ روز</strong> یا <strong>۱۴ روز</strong>.</li>
+            <li>قبل از زدن روی <strong>ایجاد</strong>، انتخاب کنید که آیا یک <strong>رأی‌گیری علنی</strong> باشد یا خیر. آن را خاموش بگذارید تا نظرسنجی ناشناس باشد. آن را علامت بزنید تا اعضا بتوانند ببینند چه کسی چه انتخابی کرده است. پس از ارسال نظرسنجی نمی‌توانید آن را تغییر دهید.</li>
+            <li>روی <strong>ایجاد</strong> بزنید.</li>
+        </ul>
+        <p>در برنامه تحت وب نوع نظرسنجی <strong>🗳️ نظرسنجی</strong> است، یادداشت‌ها <strong>پیش‌زمینه / بافتار</strong> هستند، دکمه گزینه <strong>+ افزودن گزینه</strong> است و دکمه آخر <strong>🗳️ ایجاد نظرسنجی</strong> است. در نقشه وب، روی دکمه دایره‌ای <strong>+</strong> بزنید.</p>
+        <p>می‌توانید هم‌زمان یک نظرسنجی باز داشته باشید، و یک جامعه می‌تواند هم‌زمان ۵ نظرسنجی باز داشته باشد. برای شروع یا پاسخ به یک نظرسنجی به اعتباری نیاز دارید که مسدود نشده باشد.</p>
+        <h2>یافتن و پاسخ به نظرسنجی‌ها</h2>
+        <p>نظرسنجی‌ها در بازار هستند. روی <strong>نظرسنجی‌ها</strong> در ردیف بالا بزنید تا فقط نظرسنجی‌ها را ببینید.</p>
+        <ul>
+            <li>روی یک پاسخ بزنید تا آن را انتخاب کنید. برای تغییر نظر خود، تا قبل از بسته شدن نظرسنجی روی پاسخ دیگری بزنید.</li>
+            <li>کارت نشان می‌دهد چه تعداد هر پاسخ را انتخاب کرده‌اند.</li>
+        </ul>
+        <h2>چه کسی می‌تواند ببیند چگونه رأی داده‌اید</h2>
+        <p>هر نظرسنجی نوع خود را در بالای میزان مشارکت مشخص می‌کند:</p>
+        <ul>
+            <li><strong>ناشناس</strong> (نوع معمول): همه فقط می‌بینند چه تعداد هر پاسخ را انتخاب کرده‌اند. هیچ‌کس نمی‌بیند چه کسی چه چیزی را انتخاب کرده است، از جمله شخصی که آن را شروع کرده است.</li>
+            <li><strong>رأی‌گیری علنی:</strong> شخصی که آن را شروع کرده ترجیح داده رأی‌دهندگان نشان داده شوند. اعضا می‌توانند روی <strong>مشاهده رأی‌دهندگان</strong> (<strong>نمایش رأی‌دهندگان</strong> در برنامه تحت وب) بزنند تا ببینند چه کسی چه چیزی را انتخاب کرده است. عضوی که تعلیق شده است فقط مجموع آرا را می‌بینند، تا زمانی که تعلیق به پایان برسد.</li>
+        </ul>
+        <p>مالکان و مدیرانی که سرور جامعه شما را اداره می‌کنند همچنان می‌توانند هر رأی ذخیره‌شده در آنجا را ببینند.</p>
+        <h2>بستن زودهنگام یک نظرسنجی</h2>
+        <p>اگر شما آن را شروع کرده‌اید، روی <strong>بستن نظرسنجی</strong> بزنید، سپس برای تأیید دوباره روی <strong>بستن نظرسنجی</strong> بزنید (<strong>تأیید</strong> در برنامه تحت وب).</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="decisions.html"><strong>رأی‌گیری در تصمیمات</strong><span>یافتن تصمیمات باز، رأی دادن، تغییر رأی و مشاهده نتایج.</span></a></li>
+            <li><a href="proposing-a-decision.html"><strong>پیشنهاد یک تصمیم</strong><span>از جامعه بخواهید تصمیمی الزام‌آور بگیرد.</span></a></li>
+            <li><a href="events.html"><strong>رویدادها</strong><span>رویدادی حضوری یا آنلاین، یک‌باره یا تکرارشونده بسازید؛ اعلام حضور کنید، یادآوری دریافت کنید و مدیریت کنید.</span></a></li>
+            <li><a href="rules.html"><strong>قوانین و نحوه تصمیم‌گیری</strong><span>رأی‌گیری، مشارکت، آرای مخفی، واجدین شرایط رأی، تعلیق، حذف عضو، مدیران و هماهنگ‌کنندگان و هماهنگ‌کنندگان ارشد.</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>لوبیا و جامعه جهانی</strong><span>کاربرد جامعه جهانی، جامعه‌ای در میان بسیار، و آنچه می‌بینید: علامت 🏘️ جامعه محلی، جامعه نمونه دره نمونه، دلیل انتظار لوبیا در آنجا و نحوه شروع یا یافتن جامعه محلی.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ru by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Метки на Карте — BeanPool members' guide</title>
+    <meta name="description" content="Метки на Карте, значение цветов и кнопки управления вокруг них.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#map">Карта</a></p>
+        <h1>Метки на Карте</h1>
+        <p class="lede">Метки на Карте, значение цветов и кнопки управления вокруг них.</p>
+        <h2>Метки</h2>
+        <p>Нажмите <strong>Карта</strong> в ряду вкладок. На карте показаны публикации вашего сообщества:</p>
+        <ul>
+            <li><strong>Зелёные метки:</strong> Предложения.</li>
+            <li><strong>Оранжевые метки:</strong> Спрос.</li>
+            <li><strong>Фиолетовые метки с календарём:</strong> ещё не завершившиеся события.</li>
+        </ul>
+        <p>На метке отображается значок категории объявления. В местах, где близко друг к другу находится много Предложений и Спроса, они объединяются в круг с числом. Этот круг синий на телефоне и тёмно-серый в веб-приложении. Увеличьте масштаб карты, чтобы увидеть каждое объявление по отдельности. События всегда отображаются отдельно.</p>
+        <p>Участники и группы на карте не показываются. В веб-приложении предприятие, указавшее своё местоположение, отображается квадратной меткой со своим изображением. Нажмите на неё, чтобы открыть предприятие.</p>
+        <p>Опросы на карте также не отображаются. Единственное исключение — на телефоне в глобальном сообществе опрос может отображаться меткой в районе его автора. Он выглядит как оранжевая метка Спроса и показывается только при выборе фильтра <strong>Все</strong>.</p>
+        <h2>Нажатие на метку</h2>
+        <ul>
+            <li><strong>Предложение или Спрос:</strong> на карточке показаны заголовок и автор публикации. Нажмите <strong>Подробнее</strong>, чтобы открыть её. На телефоне нажмите на имя автора, чтобы посмотреть его профиль. Нажмите на свободное место карты или на <strong>✕</strong>, чтобы закрыть карточку.</li>
+            <li><strong>Событие:</strong> на карточке показаны время, место проведения и количество участников. Нажмите <strong>Посмотреть событие</strong>. В веб-приложении эта кнопка называется <strong>Подробнее</strong>, и прямо на карточке можно также нажать <strong>Пойду</strong> или <strong>Интересно</strong>.</li>
+        </ul>
+        <h2>Фильтры</h2>
+        <p>На телефоне в верхней части карты доступны:</p>
+        <ul>
+            <li><strong>Все</strong>, <strong>Предложения</strong>, <strong>Спрос</strong> или <strong>События</strong>. Нажмите <strong>✕</strong>, чтобы сбросить фильтр.</li>
+            <li><strong>Все категории</strong>, чтобы выбрать одну категорию.</li>
+            <li>Для событий: <strong>Все</strong>, <strong>Сегодня</strong>, <strong>В эти выходные</strong> или <strong>Ближайшие 7 дней</strong>. Карта переместится так, чтобы вместить их.</li>
+        </ul>
+        <p>В веб-приложении на карте есть только кнопки выбора дат событий: <strong>Сегодня</strong>, <strong>В эти выходные</strong>, <strong>Ближайшие 7 дней</strong> и <strong>Все события</strong>. Они отображаются только тогда, когда в вашем сообществе есть предстоящие события.</p>
+        <h2>Кнопки слева</h2>
+        <ul>
+            <li>На телефоне значок луны или солнца переключает тёмную и светлую тему карты.</li>
+            <li>Прицел: показывает, где вы находитесь. При первом нажатии приложение запросит разрешение на доступ к вашей геопозиции.</li>
+            <li><strong>+</strong> и <strong>−</strong>: масштаб.</li>
+        </ul>
+        <p>Янтарный круг показывает зону действия вашего сообщества.</p>
+        <h2>Добавление публикации с карты</h2>
+        <p>Нажмите <strong>+ ОБЪЯВЛЕНИЕ</strong>. В веб-приложении нажмите круглую кнопку <strong>+</strong> в правом нижнем углу. См. «Публикация объявления».</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="pin-locations.html"><strong>Местоположение метки</strong><span>Кто видит координаты ваших объявлений и событий, и как сохранить домашний адрес в тайне.</span></a></li>
+            <li><a href="near-you.html"><strong>Поиск поблизости</strong><span>Показ объявлений только в пределах выбранного расстояния от вас или любой указанной точки.</span></a></li>
+            <li><a href="events.html"><strong>События</strong><span>Создание событий очно или онлайн, разовых или регулярных; отметка участия, напоминания, репосты и проведение в роли ведущего.</span></a></li>
+            <li><a href="posting.html"><strong>Публикация объявления</strong><span>Предложите то, что умеете или готовы отдать, или опубликуйте то, что ищете.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

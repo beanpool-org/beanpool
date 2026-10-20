@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/tr by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Takaslarım — BeanPool members' guide</title>
+    <meta name="description" content="Dahil olduğunuz her takas, yayındaki her ilanınız ve geçmiş takaslarınız için tek bir yer.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#market">Pazar</a></p>
+        <h1>Takaslarım</h1>
+        <p class="lede">Dahil olduğunuz her takas, yayındaki her ilanınız ve geçmiş takaslarınız için tek bir yer.</p>
+        <h2>Açma</h2>
+        <p>Pazar sekmesinin üst kısmında <strong>Takaslarım</strong>'a dokunun. Üzerindeki kırmızı bir sayı devam eden takaslarınızı sayar.</p>
+        <p>Küresel toplulukta takaslar yoktur, bu nedenle <strong>Takaslarım</strong>, yerel bir topluluk olan Example Valley'den <strong>🏘️ Yerel topluluk</strong> olarak işaretlenmiş üç örnek takas gösterir: biri sizi bekleyen, biri Fasulyeleri güvende tutulan ve biri tamamlanmış. Düğmeleri, takasların neden yerel bir toplulukta yaşadığını açıklar ve hiçbir şeyi değiştirmez. &quot;Fasulye ve küresel topluluk&quot; bölümüne bakın.</p>
+        <h2>Üç sekme</h2>
+        <ul>
+            <li><strong>Devam Ediyor:</strong> sürmekte olan takaslar ve yanıt bekleyen talepler. Her biri ne durumda olduğunu gösterir: <strong>Güvencede tutuluyor</strong> (fasulyeler emanettedir), <strong>Eylem Gerekli</strong> (biri talepte bulundu ve yanıt vermeniz gerekir) veya <strong>Onay Bekleniyor</strong> (siz talepte bulundunuz ve onları bekliyorsunuz).</li>
+            <li><strong>İlanlarım:</strong> yayında olan veya <strong>DURAKLATILDI</strong> durumundaki Teklif ve İhtiyaçlarınız. Birinin talepte bulunduğu bir gönderi <strong>Eylem Gerekli</strong> gösterir.</li>
+            <li><strong>Geçmiş:</strong> tamamlanan, iptal edilen ve reddedilen takaslar. <strong>Tümü</strong>, <strong>Alınan</strong> veya <strong>Verilen</strong> seçeneklerinden birini belirleyin. Her biri tarihi, tutarı ve diğer kişiyi gösterir.</li>
+        </ul>
+        <p>Web uygulamasında <strong>Devam Ediyor</strong> yalnızca fasulyeleri tutulan takasları listeler, bu nedenle yanıt bekleyen bir talep orada yer almaz. <strong>İlanlarım</strong> yalnızca her biri <strong>Aktif</strong> olarak işaretlenmiş yayındaki gönderilerinizi gösterir: duraklatılmış gönderiler listelenmez.</p>
+        <p>Gönderiyi açmak için <strong>Devam Ediyor</strong> veya <strong>İlanlarım</strong> bölümündeki bir takasa dokunun. Bir takası kabul ettiğiniz, tamamladığınız veya iptal ettiğiniz yer burasıdır. Kimsenin yanıt vermediği bir talep 7 gün sonra kendiliğinden sona erer.</p>
+        <h2>Değerlendirmeler</h2>
+        <p><strong>Geçmiş</strong>'teki tamamlanmış bir takasın bir <strong>Değerlendirme</strong> düğmesi vardır. Değerlendirme yaptıktan sonra <strong>Düzenle</strong> yazar ve yıldızlarınızı değiştirebilirsiniz.</p>
+        <p>Web uygulamasında düğme <strong>Yorum Bırak</strong> der ve yalnızca o takası değerlendirene kadar görünür. Orada bir değerlendirmeyi değiştirmek için ilanı açın.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="a-deal-step-by-step.html"><strong>Adım adım bir takas</strong><span>Teklif ve İhtiyaç için sormaktan ödeme almaya kadar tüm aşamalar ve değerlendirme bırakma.</span></a></li>
+            <li><a href="posting.html"><strong>Teklif veya İhtiyaç paylaşma</strong><span>Yapabileceğiniz, verebileceğiniz bir şey veya aradığınız bir şeyi paylaşın.</span></a></li>
+            <li><a href="your-balance.html"><strong>Bakiyeniz ve geçmişiniz</strong><span>Kaç fasulyeniz var, ne kadarı işlemde ve her bir takas ile hediye.</span></a></li>
+            <li><a href="when-a-deal-goes-wrong.html"><strong>Takasta sorun çıktığında</strong><span>Bir takası iptal etme ve anlaşmazlık durumunda neler olacağı.</span></a></li>
+            <li><a href="the-top-bar.html"><strong>Üst çubuk</strong><span>Fasulye simgesi, dikkatiniz gerektiğinde beliren küçük simgeler ve sağ üstteki düğmeler.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

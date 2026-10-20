@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/fr by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Votre solde et historique — BeanPool members' guide</title>
+    <meta name="description" content="Combien de haricots vous possédez, ce qui est retenu, et chaque échange ou don.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#ledger">Registre</a></p>
+        <h1>Votre solde et historique</h1>
+        <p class="lede">Combien de haricots vous possédez, ce qui est retenu, et chaque échange ou don.</p>
+        <h2>L'ouvrir</h2>
+        <p>Touchez <strong>Registre</strong> dans la barre des onglets. Votre solde s'affiche en haut à droite, en <strong>HARICOTS</strong>. Il peut être négatif ; voir « Votre ligne de crédit ».</p>
+        <p>Sur la communauté globale, il n'y a pas de haricots, le Registre présente donc un membre d'exemple d'une communauté locale, Example Valley, signalé par <strong>🏘️ Communauté locale</strong>. Ses boutons expliquent pourquoi les haricots vivent dans une communauté locale et n'envoient rien. Voir « Haricots et communauté globale ».</p>
+        <p>Le Registre comporte deux onglets : <strong>Niveaux</strong> (votre confiance, voir « Badges de mérite ») et <strong>Portefeuille</strong>. Sur le téléphone, touchez votre solde pour accéder directement à Portefeuille.</p>
+        <h2>L'onglet Portefeuille</h2>
+        <ul>
+            <li><strong>Votre solde</strong>, et approximativement le nombre d'heures d'aide qu'il représente, sur la base de 40 haricots de l'heure.</li>
+            <li><strong>Communs :</strong> la réserve partagée de votre communauté.</li>
+            <li><strong>Plancher de crédit :</strong> jusqu'où vous pouvez descendre sous zéro.</li>
+            <li>La part de vos haricots retenue dans des accords en cours, lorsqu'il y en a.</li>
+            <li><strong>Circulation communautaire :</strong> apparaît dès que vous détenez des haricots. Voir « Frais de circulation ».</li>
+            <li><strong>Engagements de projets :</strong> les haricots engagés sur des projets, le cas échéant.</li>
+            <li><strong>Envoyer des haricots :</strong> envoyer un don. Voir « Envoyer un don ».</li>
+        </ul>
+        <p>Dans l'application web, l'onglet Portefeuille est plus concis : <strong>Plafond de découvert</strong>, <strong>Fonds des Communs</strong>, <strong>Envoyer des haricots</strong> et <strong>Circulation communautaire</strong>. Votre solde figure en haut du Registre.</p>
+        <h2>Transactions récentes</h2>
+        <p>Chaque échange, don ou prélèvement de frais, du plus récent au plus ancien, avec une note, l'heure et un signe plus ou moins. Sur le téléphone, chaque ligne précise également avec qui la transaction a eu lieu ; dans l'application web, elle indique <strong>Envoyé</strong> ou <strong>Reçu</strong>. Si une note mentionne une publication, touchez <strong>Voir l'offre</strong> pour l'ouvrir.</p>
+        <p>Vous êtes la seule personne à pouvoir voir votre solde et ces transactions. Personne d'autre dans votre communauté ne peut les consulter. <strong>Exporter en CSV</strong> (<strong>Exporter mes données</strong> dans l'application web) enregistre vos transactions dans un fichier.</p>
+        <p>La liste ne dispose pas encore de recherche ni de filtres.</p>
+        <h2>Boutons ⓘ</h2>
+        <p>Sur le téléphone, touchez le <strong>ⓘ</strong> à côté de Votre solde pour obtenir une brève explication sur votre solde et votre plancher.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="credit-line.html"><strong>Votre ligne de crédit</strong><span>Jusqu'où descendre sous zéro et comment elle augmente.</span></a></li>
+            <li><a href="gifts.html"><strong>Envoyer un don</strong><span>Envoyer des haricots à quelqu'un, sans aucun échange en retour.</span></a></li>
+            <li><a href="circulation-fee.html"><strong>Frais de circulation</strong><span>Une petite contribution mensuelle sur les soldes élevés pour faire circuler les haricots. Les 200 premiers sont exemptés.</span></a></li>
+            <li><a href="my-deals.html"><strong>Mes accords</strong><span>Un seul endroit pour chaque accord en cours, chaque annonce active et vos échanges passés.</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>Haricots et communauté globale</strong><span>Le rôle de la communauté globale, une communauté parmi d'autres, et ce que vous y voyez : le repère 🏘️ Communauté locale, la communauté exemple Example Valley, l'attente des haricots et comment lancer ou trouver une communauté locale.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

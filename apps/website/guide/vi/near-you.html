@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/vi by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tìm kiếm thứ ở gần bạn — BeanPool members' guide</title>
+    <meta name="description" content="Chỉ hiển thị các bài đăng trong phạm vi khoảng cách từ bạn hoặc từ bất kỳ nơi nào bạn chọn.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#map">Bản đồ</a></p>
+        <h1>Tìm kiếm thứ ở gần bạn</h1>
+        <p class="lede">Chỉ hiển thị các bài đăng trong phạm vi khoảng cách từ bạn hoặc từ bất kỳ nơi nào bạn chọn.</p>
+        <h2>Trên tab Chợ</h2>
+        <ul>
+            <li>Nhấn <strong>Chợ</strong>, sau đó nhấn <strong>Khoảng cách</strong> ở hàng bộ lọc thứ hai. Tùy chọn này không hiển thị khi <strong>Sự kiện</strong> đang được chọn.</li>
+            <li>Hộp thoại <strong>📍 Vị trí &amp; Bán kính</strong> sẽ mở ra (<strong>📍 Đặt vị trí &amp; Bán kính</strong> trong ứng dụng web). Để dùng vị trí hiện tại của bạn, hãy nhấn vào nút hồng tâm. Hoặc nhấn vào bản đồ, hay kéo ghim để chọn một điểm trung tâm khác.</li>
+            <li>Chọn khoảng cách mong muốn với thanh <strong>Bán kính tìm kiếm</strong>: từ 100 mét đến 50 kilômét.</li>
+            <li>Nhấn <strong>Áp dụng</strong>. Sau đó, nút sẽ hiển thị khoảng cách đã chọn, chẳng hạn như <strong>5km</strong>.</li>
+            <li>Để quay lại xem tất cả, hãy mở lại và nhấn <strong>Đặt lại</strong>. Trong ứng dụng web, bạn cũng có thể nhấn vào biểu tượng <strong>✕</strong> trên nút <strong>Khoảng cách</strong>.</li>
+        </ul>
+        <p>Trên điện thoại, các bài đăng không có vị trí luôn luôn được hiển thị. Trong ứng dụng web, việc chọn <strong>Khoảng cách</strong> sẽ ẩn các bài này đi, ngoại trừ các cuộc thăm dò ý kiến. Trên cộng đồng toàn cầu, ứng dụng web cũng ẩn chúng khi danh sách đang hiển thị các mục ở gần bạn (xem bên dưới).</p>
+        <p>Nếu trình duyệt của bạn đã cho phép BeanPool sử dụng thông tin vị trí của bạn, bộ chọn vị trí có thể mở ngay tại nơi bạn đang đứng. Nếu chưa, nó sẽ mở tại một điểm cố định. Hãy kiểm tra ghim, hoặc nhấn nút hồng tâm hay nhấn lên bản đồ trước khi bạn nhấn <strong>Áp dụng</strong>. Trên cộng đồng toàn cầu, ứng dụng web sẽ gửi điểm trung tâm bạn đã chọn đến máy chủ cộng đồng, được làm tròn trong phạm vi khoảng 11 mét.</p>
+        <p>Trên điện thoại, bộ chọn vị trí mở ra tại điểm trung tâm gần nhất bạn đã chọn, hoặc tại một điểm cố định, vì vậy hãy nhấn nút hồng tâm trước.</p>
+        <h2>Trên Bản đồ</h2>
+        <p>Bản đồ không có bộ lọc khoảng cách riêng. Hãy nhấn vào nút hồng tâm ở bên trái để xem vị trí của bạn, sau đó di chuyển xung quanh và phóng to thu nhỏ.</p>
+        <h2>Trên cộng đồng toàn cầu, trong ứng dụng web</h2>
+        <p>Cộng đồng toàn cầu có các tin đăng từ khắp mọi nơi, vì vậy các tab <strong>Chợ</strong> và <strong>Bản đồ</strong> của ứng dụng web sẽ bắt đầu bằng những bài đăng ở gần bạn:</p>
+        <ul>
+            <li>Khi đã chọn một <strong>Khoảng cách</strong> trên Chợ, cả hai màn hình sẽ hiển thị các tin đăng gần nhất trong phạm vi đó, gần nhất xếp trước. Bản đồ hiển thị tối đa 200 ghim.</li>
+            <li>Khi không chọn khoảng cách, chúng sẽ hiển thị các tin đăng gần nhất trong phạm vi 250 km tính từ khu vực của bạn: vị trí gần đúng mà bạn cung cấp cho cộng đồng khi tham gia, hoặc thiết lập sau này trong <strong>Cài đặt</strong>, dưới mục <strong>Khu vực bạn</strong>. Một dòng chữ phía trên danh sách của Chợ ghi <strong>Nearest to your area first, within 250 km.</strong> Nhấn <strong>Hiện tất cả mọi nơi</strong> để xem những tin mới nhất từ mọi nơi, và nhấn <strong>Gần khu vực của bạn</strong> để quay lại.</li>
+            <li>Khi không có thiết lập nào ở trên, bạn sẽ thấy những bài đăng mới nhất từ mọi nơi, và mục <strong>Xem những gì gần bạn</strong> sẽ mở bộ chọn khoảng cách. Một dòng phía trên danh sách của Chợ cho biết bạn đang xem theo chế độ nào. Khi đã chọn <strong>Khoảng cách</strong>, dòng này không có nút: hãy mở <strong>Khoảng cách</strong> và nhấn <strong>Đặt lại</strong>. Khi đó bạn sẽ quay lại chế độ gần khu vực của bạn, hoặc nếu chưa thiết lập khu vực, bạn sẽ thấy bài đăng mới nhất từ mọi nơi.</li>
+            <li>Mỗi tin đăng hiển thị khoảng cách xa bao nhiêu, chẳng hạn như <strong>📍 12 km</strong>. Các tin đăng của chính bạn luôn luôn xuất hiện trên Bản đồ, và trên Chợ ở chế độ gần khu vực của bạn, dù chúng ở bất cứ đâu. Khi đã chọn <strong>Khoảng cách</strong>, Chợ chỉ hiển thị những tin nằm trong khoảng cách đó, bao gồm cả tin của bạn.</li>
+            <li>Trong khi danh sách đang hiển thị các mục ở gần bạn, các bài đăng không có vị trí sẽ bị bỏ qua. Một cuộc thăm dò từ người chưa thiết lập khu vực của họ là một trong số đó. Để xem chúng, hãy đặt lại <strong>Khoảng cách</strong> nếu bạn đã chọn, sau đó nhấn <strong>Hiện tất cả mọi nơi</strong>.</li>
+            <li>Dưới mục <strong>Sự kiện</strong>, danh sách không bao giờ bị cắt giảm theo khu vực của bạn hay theo <strong>Khoảng cách</strong>, như trước đây.</li>
+            <li>Nếu không có gì ở gần, Bản đồ sẽ thông báo điều đó, kèm theo nút <strong>Hiện tất cả mọi nơi</strong>. Sau đó nút <strong>Gần khu vực của bạn</strong> (hoặc <strong>Near the place you picked</strong>) sẽ đưa các tin gần nhất quay lại.</li>
+        </ul>
+        <p>Tính năng tìm kiếm của ứng dụng web chỉ tìm qua các tin đăng đang hiển thị trên màn hình. Nút <strong>Hiện tất cả mọi nơi</strong> hiển thị các tin đăng mới nhất từ mọi nơi chứ không phải tất cả mọi tin đăng, vì vậy một tin đăng ở xa và không còn mới sẽ không xuất hiện trong kết quả tìm kiếm. Trong mọi cộng đồng khác, ứng dụng web không cắt giảm Chợ hay Bản đồ theo khu vực của bạn. Chúng hiển thị 50 tin đăng được thay đổi gần đây nhất và các tin của chính bạn, và tìm kiếm chỉ duyệt qua các tin đó.</p>
+        <h2>Trên cộng đồng toàn cầu, trên điện thoại</h2>
+        <p>Điện thoại lưu các tin đăng ở gần khu vực của bạn nhất: tối đa 500 tin, trong phạm vi 250 km. Điện thoại cũng lưu các tin đăng của chính bạn, cùng bất kỳ tin nào bạn có giao dịch, cuộc trò chuyện hoặc câu trả lời. Tab Chợ và Bản đồ hiển thị những gì điện thoại lưu giữ. Nếu không thiết lập khu vực, điện thoại sẽ lưu các tin đăng mới nhất thay thế, và một dòng phía trên Chợ sẽ thông báo điều đó. Xem &quot;Khu vực bạn&quot;.</p>
+        <h2>Sự kiện ở gần bạn</h2>
+        <p>Trên điện thoại, các thẻ sự kiện sẽ hiển thị khoảng cách sau khi bạn đã cho phép ứng dụng sử dụng vị trí của bạn. Trong ứng dụng web, thẻ sẽ hiển thị khoảng cách tính từ điểm trung tâm bạn đã chọn trong mục <strong>Khoảng cách</strong>. Trên cộng đồng toàn cầu, nếu bạn chưa chọn điểm trung tâm, thẻ sẽ hiển thị khoảng cách từ khu vực của bạn (không áp dụng dưới mục <strong>Sự kiện</strong>). Trên Bản đồ, ứng dụng web hiển thị khoảng cách từ vị trí của bạn sau khi bạn nhấn vào nút hồng tâm.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="browsing-the-market.html"><strong>Xem qua chợ</strong><span>Tìm Lời đề nghị và Nhu cầu bằng tìm kiếm, bộ lọc và khoảng cách.</span></a></li>
+            <li><a href="map-pins.html"><strong>Những gì bản đồ hiển thị</strong><span>Các ghim trên Bản đồ, ý nghĩa màu sắc của chúng và các nút xung quanh.</span></a></li>
+            <li><a href="pin-locations.html"><strong>Vị trí ghim của bạn</strong><span>Ai thấy vị trí các bài đăng và sự kiện của bạn, và cách giữ riêng tư cho ngôi nhà.</span></a></li>
+            <li><a href="events.html"><strong>Sự kiện</strong><span>Tạo sự kiện trực tiếp hoặc trực tuyến, một lần hoặc lặp lại; xác nhận tham gia, nhận nhắc nhở, chia sẻ và chủ trì sự kiện.</span></a></li>
+            <li><a href="your-area.html"><strong>Khu vực bạn</strong><span>Vị trí ước tính cộng đồng toàn cầu dùng để hiển thị các bài đăng ở gần bạn và cách đổi hoặc xóa.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

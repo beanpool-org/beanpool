@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ko by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>의사결정 제안하기 — BeanPool members' guide</title>
+    <meta name="description" content="커뮤니티에 구속력 있는 결정을 제안해 보세요.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#commons">공유지</a></p>
+        <h1>의사결정 제안하기</h1>
+        <p class="lede">커뮤니티에 구속력 있는 결정을 제안해 보세요.</p>
+        <h2>시작하기 전에</h2>
+        <ul>
+            <li>결정은 커뮤니티 서버가 직접 집행할 수 있는 사안을 위한 것이에요: 멤버 제명 또는 자격 정지, 누군가의 신용 동결 또는 해제, 보증 자격자 지정, 또는 공유지에서 콩 지급이에요. 그 밖의 모든 사항은 설문을 대신 시작하세요.</li>
+            <li>결정으로 커뮤니티 서버의 소유자나 관리자를 제명하거나 자격을 정지할 수는 없어요. &quot;규칙 및 의사결정 방식&quot;을 참조하세요.</li>
+            <li>거래를 1회 완료했거나 관리자에게 신뢰 배지를 받은 경우 제안할 수 있어요. 커뮤니티 관리자는 언제나 제안할 수 있어요. 보증을 받은 것만으로는 충분하지 않아요.</li>
+            <li>한 번에 1개의 결정만 진행 중으로 둘 수 있어요.</li>
+            <li>글로벌 커뮤니티에는 결정이 없으므로 제안할 수 있는 것이 없어요. &quot;의사결정 투표&quot;를 참조하세요.</li>
+        </ul>
+        <h2>제안하기</h2>
+        <ul>
+            <li><strong>공유지</strong>를 탭한 다음 <strong>결정</strong>을 탭하고 <strong>+ 결정 제안하기</strong>를 탭하세요.</li>
+            <li>안건의 대상을 선택하세요: <strong>멤버</strong> 또는 <strong>공유 풀</strong>.</li>
+            <li><strong>제목:</strong> &quot;공구 도서관에 200 콩 지원&quot;과 같이 한 줄로 작성하세요.</li>
+            <li><strong>설명 및 제안 이유:</strong> 최소 10자 이상으로 이유를 명확하게 설명하세요. 솔직하고 알기 쉽게 적으세요. 사람들은 여기에 적힌 내용을 보고 투표해요.</li>
+            <li>그 아래 목록에서 정확히 어떤 조치를 취할지 선택하세요. 예를 들어 멤버의 경우: 멤버 제명, 멤버 자격 정지, 또는 신용 한도 동결이에요. 공유지의 경우: 프로젝트나 기업에 콩 지원, 긴급 구호 지원금, 또는 프로젝트나 기업의 부채 변제예요.</li>
+            <li>대상이 누구인지, 그리고 지원금이 있다면 몇 콩인지 입력하세요. 프로젝트나 기업에 대한 지원금의 경우 긴 코드 형태의 고유 키를 직접 입력해야 해요: 두 앱 모두 목록에서 선택하는 기능이 없어요. 부채를 변제하거나 대표를 교체하려면 목록에서 해당 프로젝트나 기업을 탭하거나 키를 입력하세요.</li>
+            <li><strong>커뮤니티 결정 제출</strong>을 탭하세요.</li>
+        </ul>
+        <p>웹 앱에서는 버튼이 <strong>+ 의사결정 제안</strong>(또는 <strong>결정</strong>이 열려 있을 때 공유지 상단의 <strong>+ 제안</strong>)과 <strong>의사결정 제출</strong>로 표시되며, 입력란은 <strong>설명 및 제안 이유</strong>예요.</p>
+        <p>투표는 즉시 시작되며 7일 동안 진행돼요.</p>
+        <h2>지원금 최대 한도</h2>
+        <p>기업에 대한 지원금이나 긴급 구호 지원금은 공유지가 지급할 수 있는 금액을 초과할 수 없어요. 요청할 수 있는 최대 금액은 다음과 같아요:</p>
+        <ul>
+            <li>현재 공유지가 보유한 금액,</li>
+            <li>여기에 지난 30일 동안 공유지로 들어온 모든 콩(장터 수수료, 유통 수수료 및 기타 납부된 콩)을 더한 금액이에요.</li>
+        </ul>
+        <p>해당 30일 동안 공유지에서 지출된 콩은 차감되지 않아요. 이보다 많은 금액을 요청하면 누구도 투표하기 전에 앱에서 거절하며, 지금 요청할 수 있는 최대 금액을 알려줘요. 그 금액은 공유지에 콩이 들어옴에 따라 늘어나요.</p>
+        <p>이는 대기열을 원활하게 유지하기 위함이에요. 공유지 잔액이 부족할 때 지원금 안건이 통과되면 콩이 모일 때까지 대기하며, 한 번에 1개의 지원금만 대기할 수 있어요. &quot;규칙 및 의사결정 방식&quot;을 참조하세요.</p>
+        <h2>앱에서 거절하는 경우</h2>
+        <ul>
+            <li><strong>먼저 거래를 완료하세요</strong> (휴대폰): 아직 제안할 수 없어요. 웹 앱에서는 <strong>+ 의사결정 제안</strong> 버튼이 비활성화되며 그 위에 이유가 표시돼요.</li>
+            <li><strong>한도 도달</strong> (휴대폰): 이미 진행 중인 결정이 있어요. 해당 결정이 마감될 때까지 기다리세요. 웹 앱에서도 버튼이 비활성화되며 이유가 표시돼요.</li>
+            <li><strong>커뮤니티 투표로 이 커뮤니티 서버의 소유자나 관리자를 제명하거나 자격을 정지할 수 없어요:</strong> 선택한 멤버가 서버를 운영하고 있어요. 소유자가 먼저 해당 역할을 해제해야 해요.</li>
+            <li><strong>이 지원금은 공유지가 지급할 수 있는 금액보다 커요:</strong> 명시된 금액 이하로 요청하거나 더 많은 콩이 모일 때까지 기다리세요.</li>
+            <li><strong>잘못된 금액</strong> (웹 앱에서는 &quot;Please enter a valid positive grant amount in Beans&quot;): 콩 수량을 입력하세요.</li>
+            <li><strong>오류:</strong> 설명이 최소 10자 이상인지 확인하세요.</li>
+        </ul>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="decisions.html"><strong>의사결정 투표</strong><span>진행 중인 의사결정을 찾고, 투표하고, 투표를 변경하고, 결과를 확인하세요.</span></a></li>
+            <li><a href="rules.html"><strong>규칙 및 의사결정 방식</strong><span>투표, 참여율, 비밀 투표, 투표 자격, 활동 정지, 멤버 제명, 운영자 및 소집자와 대표 소집자 안내예요.</span></a></li>
+            <li><a href="polls.html"><strong>설문</strong><span>커뮤니티에 간단한 질문을 올려보세요. 설문은 의견을 모으는 용도이며 그 자체로 결정을 바꾸지는 않아요.</span></a></li>
+            <li><a href="enterprises.html"><strong>프로젝트 및 기업</strong><span>자체 콩을 보유한 공동 사업: 프로젝트나 기업을 찾고, 후원하거나, 직접 시작해 보세요.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

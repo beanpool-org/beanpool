@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/vi by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Người quản lý — BeanPool members' guide</title>
+    <meta name="description" content="Những người điều hành và chịu trách nhiệm cho dự án. Cách tham gia, phản đối và từ nhiệm.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#commons">Chung</a></p>
+        <h1>Người quản lý</h1>
+        <p class="lede">Những người điều hành và chịu trách nhiệm cho dự án. Cách tham gia, phản đối và từ nhiệm.</p>
+        <h2>Người quản lý làm những gì</h2>
+        <p>Người quản lý điều hành một doanh nghiệp: họ đăng các Lời đề nghị và Nhu cầu của doanh nghiệp, chi trả đậu và trông coi doanh nghiệp. Một trong số họ là <strong>người quản lý chính</strong>.</p>
+        <p>Người quản lý của một dự án là <strong>người phụ trách</strong> và các <strong>người cộng tác</strong>: ứng dụng sử dụng các từ này đối với dự án. Một người cộng tác cũng là một người quản lý: họ có thể đăng các Lời đề nghị và Nhu cầu của dự án và cùng chịu trách nhiệm theo cách tương tự. Mọi nội dung trên trang này đều áp dụng cho họ.</p>
+        <p>Một người quản lý có thể bảo đảm cho doanh nghiệp bằng một phần uy tín của chính mình. Điều đó giúp mở rộng hạn mức tín dụng của doanh nghiệp. Việc này không bao giờ lấy đi đậu trong số dư của bạn. Trường hợp cộng đồng của bạn sử dụng mức sàn đã biết, phần bảo đảm vượt quá uy tín tích lũy của bạn sẽ được trừ vào hạn mức tín dụng của chính bạn, theo tỷ lệ từng hạt đậu một. Xem &quot;Hạn mức tín dụng&quot;.</p>
+        <p>Toàn bộ quy tắc, bao gồm cả những gì sẽ xảy ra khi một người quản lý chính im lặng không hoạt động, có trong mục &quot;Quy tắc và cách quyết định vận hành&quot;.</p>
+        <h2>Xin gia nhập</h2>
+        <ul>
+            <li>Mở trang của doanh nghiệp.</li>
+            <li>Dưới mục <strong>Xin tham gia với tư cách người quản lý</strong>, hãy nhập mức uy tín của bạn để bảo đảm cho doanh nghiệp. Mức bằng 0 vẫn được chấp nhận.</li>
+            <li>Nhấn <strong>Yêu cầu tham gia làm người quản lý</strong>.</li>
+        </ul>
+        <p>Người quản lý chính sẽ phê duyệt hoặc từ chối. Nếu doanh nghiệp đã có từ hai người quản lý trở lên, bạn sẽ trở thành người quản lý sau 3 ngày, trừ khi có một người quản lý khác phản đối.</p>
+        <p>Chỉ bạn mới thấy bạn còn bao nhiêu mức uy tín để bảo đảm. Người quản lý chính chỉ thấy cam kết của bạn và việc uy tín của bạn có còn đủ chi trả cho cam kết đó hay không, chứ không bao giờ thấy con số cụ thể. Nếu việc phê duyệt bạn bị từ chối, hoặc thay đổi của bạn bị hủy khi thời hạn phản đối kết thúc, họ chỉ được thông báo rằng mức uy tín của bạn không đủ để chi trả cho cam kết: không bao giờ tiết lộ con số, số dư hay việc tài khoản bị đóng băng của bạn.</p>
+        <h2>Dành cho người quản lý</h2>
+        <ul>
+            <li><strong>Phê duyệt</strong> hoặc <strong>Từ chối</strong> các yêu cầu trong mục <strong>YÊU CẦU NGƯỜI QUẢN LÝ ĐANG CHỜ</strong> (<strong>Yêu cầu tham gia với tư cách người quản lý</strong> trong ứng dụng web). Mỗi yêu cầu hiển thị khoản cam kết và cho biết uy tín của người đó có đủ chi trả hay không. Nếu không đủ, việc phê duyệt sẽ bị từ chối cho đến khi đủ điều kiện.</li>
+            <li>Các thay đổi đang chờ trong mục <strong>THAY ĐỔI NGƯỜI QUẢN LÝ ĐANG CHỜ</strong> (<strong>Thay đổi người quản lý đang chờ</strong> trong ứng dụng web) hiển thị thời hạn phản đối. Nhấn <strong>Phản đối</strong> để dừng thay đổi. <strong>Nút Phản đối có hiệu lực ngay lần nhấn đầu tiên, không có câu hỏi xác nhận thứ hai.</strong> Một ý kiến phản đối sẽ hủy bỏ thay đổi.</li>
+            <li>Người quản lý chính có thể xóa một người quản lý bằng nút <strong>Xóa</strong> và tên của họ. Các người quản lý khác cũng có thể phản đối theo cách tương tự.</li>
+            <li>Mục <strong>Kiểm soát của người vận hành</strong> cho phép các người quản lý đăng các Lời đề nghị và Nhu cầu của doanh nghiệp.</li>
+        </ul>
+        <h2>Từ nhiệm</h2>
+        <p>Nhấn <strong>Từ nhiệm vai trò người quản lý</strong>, sau đó xác nhận (<strong>Từ nhiệm</strong> trên điện thoại, <strong>OK</strong> trong ứng dụng web).</p>
+        <ul>
+            <li>Người quản lý duy nhất không thể từ nhiệm. Thay vào đó họ có thể giải thể doanh nghiệp.</li>
+            <li>Nếu doanh nghiệp có số dư dưới 0 và cần sự bảo đảm của bạn để bù đắp, ứng dụng sẽ thông báo bạn chưa thể từ nhiệm (trên điện thoại là <strong>Chưa phải lúc này</strong>).</li>
+        </ul>
+        <h2>Bỏ phiếu giữa các người quản lý</h2>
+        <p>Khi một doanh nghiệp có từ hai người quản lý trở lên, bất kỳ người quản lý nào cũng có thể mở một cuộc bỏ phiếu giữa các người quản lý. Mở doanh nghiệp: các cuộc bỏ phiếu nằm trong mục <strong>Quyết định</strong>, và chỉ các người quản lý của doanh nghiệp mới thấy. Nhấn <strong>Đề xuất một cuộc biểu quyết</strong> và chọn những việc cần làm:</p>
+        <ul>
+            <li><strong>Chi trả đậu</strong> từ tài khoản của chính doanh nghiệp, cho một người quản lý do bạn chọn. Số tiền chi trả không bao giờ vượt quá số đậu doanh nghiệp đang nắm giữ, và không bao giờ trích từ hạn mức tín dụng. Bạn không thể đề xuất chi trả cho chính mình. Chi trả cho người quản lý là trả lương, vì vậy chỉ được trích từ những gì doanh nghiệp đã kiếm được. Khoản phí giao dịch thông thường 1,5% được trừ vào số tiền và chuyển về Commons; biểu mẫu sẽ hiển thị cả hai con số trước khi bạn gửi.</li>
+            <li><strong>Xóa một người quản lý.</strong> Người quản lý chính không bị xóa theo cách này: thay vào đó họ sẽ được thay thế.</li>
+            <li><strong>Chuyển vai trò quản lý chính cho một người quản lý khác.</strong> Chỉ áp dụng trong doanh nghiệp. Người phụ trách của một dự án không thể bị các người cộng tác bỏ phiếu phế truất.</li>
+        </ul>
+        <p>Tất cả những ai là người quản lý tại thời điểm mở cuộc bỏ phiếu đều có thể bỏ phiếu <strong>Đồng ý</strong> hoặc <strong>Không đồng ý</strong>, kể cả người đã đề xuất cuộc bỏ phiếu. Phải có hơn một nửa số người quản lý tham gia bỏ phiếu. Việc chi trả và xóa một người quản lý cần 60% phiếu Đồng ý; việc chọn một người quản lý chính mới cần hơn một nửa số phiếu. Cuộc bỏ phiếu diễn ra trong 7 ngày, hoặc kết thúc sớm hơn khi kết quả không thể thay đổi được nữa. Khi được thông qua, ứng dụng sẽ tự động thực hiện.</p>
+        <p>Trong khi cuộc bỏ phiếu đang mở, mọi người đều thấy số lượng người đã bỏ phiếu, chứ không thấy họ bỏ phiếu thế nào. Số phiếu Đồng ý và Không đồng ý hiển thị sau khi cuộc bỏ phiếu kết thúc. Không ai thấy ai đã bỏ phiếu thế nào. Tuy nhiên, trong một nhóm rất nhỏ, kết quả và danh sách người đã bỏ phiếu có thể để lộ điều đó: nếu cả ba người quản lý đều bỏ phiếu và kết thúc với tỷ số 3–0, mọi người đều biết ai đã bỏ phiếu như thế nào.</p>
+        <p>Mọi người quản lý tham gia bỏ phiếu ngoại trừ người đề xuất đều nhận được một thông báo khi cuộc bỏ phiếu mở ra, trừ khi họ đã tắt tiếng đoạn chat của doanh nghiệp hoặc tắt thông báo chat. Thông báo không nêu tên ai: thông báo chỉ báo rằng một cuộc bỏ phiếu đã mở trong một nhóm của bạn, và ứng dụng sẽ hiển thị phần còn lại. Trên Trang chủ, một cuộc bỏ phiếu đang mở mà bạn chưa bỏ phiếu sẽ hiển thị dưới mục <strong>Cần bạn xử lý</strong> và mở ra doanh nghiệp đó.</p>
+        <p>Một người quản lý từ nhiệm trong khi cuộc bỏ phiếu đang diễn ra sẽ rời khỏi cuộc bỏ phiếu, và phiếu bầu của họ sẽ bị hủy theo. Một người quản lý bị xóa trong cuộc bỏ phiếu vẫn giữ nguyên phiếu bầu mà họ đã bỏ. Nếu doanh nghiệp bắt đầu giải thể, các cuộc bỏ phiếu đang mở sẽ kết thúc mà không thực thi điều gì.</p>
+        <h2>Khi người quản lý chính không hoạt động</h2>
+        <p>Nếu người quản lý chính không hoạt động trong một thời gian dài, các người quản lý khác sẽ thấy <strong>Đề xuất người quản lý đang hoạt động làm người quản lý chính</strong> và có thể bỏ phiếu <strong>Đồng ý</strong> hoặc <strong>Không đồng ý</strong>. Trong ứng dụng web, hãy chọn một người quản lý đang hoạt động từ danh sách, sau đó nhấn <strong>Đề xuất người phụ trách</strong> (trên dự án là <strong>Đề xuất trưởng nhóm</strong>). Các phiếu bầu về người quản lý không thể thay đổi được.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="enterprises.html"><strong>Dự án và sáng kiến chung</strong><span>Các dự án chung có quỹ đậu riêng: tìm kiếm, ủng hộ hoặc khởi tạo một dự án.</span></a></li>
+            <li><a href="rules.html"><strong>Quy tắc và cách quyết định vận hành</strong><span>Bỏ phiếu, tỷ lệ tham gia, bỏ phiếu kín, ai có quyền bỏ phiếu, đình chỉ, xóa thành viên, người quản lý, cùng người triệu tập.</span></a></li>
+            <li><a href="credit-line.html"><strong>Hạn mức tín dụng</strong><span>Mức âm tối đa bạn có thể chi tiêu và cách hạn mức này tăng lên.</span></a></li>
+            <li><a href="commons-fund.html"><strong>Quỹ Commons</strong><span>Số đậu chung của cộng đồng: nguồn gốc từ đâu và được chi tiêu như thế nào.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/de by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vertrauensstufen — BeanPool members' guide</title>
+    <meta name="description" content="Neuling, Bewohner, Verwalter und Ältester. Was sie bedeuten und warum sie nichts freischalten.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#ledger">Buch</a></p>
+        <h1>Vertrauensstufen</h1>
+        <p class="lede">Neuling, Bewohner, Verwalter und Ältester. Was sie bedeuten und warum sie nichts freischalten.</p>
+        <h2>Was sie sind</h2>
+        <p>Dein Vertrauensabzeichen zeigt, wie viel Vertrauen du aufgebaut hast:</p>
+        <ul>
+            <li><strong>Neuling:</strong> am Anfang;</li>
+            <li><strong>Bewohner:</strong> 200 Vertrauen;</li>
+            <li><strong>Verwalter:</strong> 600 Vertrauen;</li>
+            <li><strong>Ältester:</strong> 1.400 Vertrauen.</li>
+        </ul>
+        <p>Ein Mitglied, das noch nicht gehandelt hat, zeigt <strong>GRÜNDER</strong> auf seinen Beiträgen.</p>
+        <p>Vertrauen entsteht durch eine Bürgschaft beim Beitritt, durch abgeschlossene Handelsgeschäfte und durch Vertrauen, das ein Admin gewährt hat. In einer Community, die ihre Mitglieder bestätigt, zählt auch der Kreditrahmen, den ein bestätigtes Mitglied erhält.</p>
+        <h2>Sie schalten nichts frei</h2>
+        <p>Abzeichen sind Anerkennung, keine Berechtigung. Jedes Mitglied kann Beiträge erstellen, handeln, einladen und abstimmen, unabhängig von seinem Abzeichen.</p>
+        <p>Was dein Vertrauen jedoch ändert, ist, wie weit dein Kreditrahmen ins Minus gehen kann. Siehe „Dein Kreditrahmen“.</p>
+        <h2>Wo du sie siehst</h2>
+        <ul>
+            <li><strong>Buch</strong>, dann <strong>Stufen:</strong> dein Abzeichen, wie viel Vertrauen du hast und wie viel noch bis zur nächsten Stufe fehlt. <strong>Alle Stufen</strong> zeigt jedes Abzeichen. Eine Stufe, die du noch nicht erreicht hast, trägt den Hinweis <strong>Nächste Stufe</strong> oder <strong>Als Nächstes</strong>, mit der Angabe, wie viel Vertrauen dafür nötig ist: ein Ziel zum Hineinwachsen, niemals etwas, das dir vorenthalten wird.</li>
+            <li><strong>Was dein Vertrauen aufbaut:</strong> wie viel du gehandelt hast, mit wie vielen Personen und deine Bewertung.</li>
+            <li>Auf Beiträgen und Profilen neben dem Namen jedes Mitglieds.</li>
+        </ul>
+        <p>Auf dem Smartphone kann der Filter <strong>Vertrauen</strong> im Markt nur Beiträge von Mitgliedern mit einem bestimmten Abzeichen oder höher anzeigen, nur <strong>Neulinge</strong> oder nur <strong>Gründer</strong>, die noch nicht gehandelt haben. In der Web-App zeigt <strong>🌱 Neue Mitglieder</strong> Beiträge von Mitgliedern an, die noch keinen Handel abgeschlossen haben.</p>
+        <h2>Admins und Abzeichen</h2>
+        <p>Die Admins einer Community können einem Mitglied ein Abzeichen verleihen. Das vertieft dessen Kreditrahmen wie erarbeitetes Vertrauen. Es zählt nicht als Handel: Es fügt kein Stimmguthaben hinzu und erlaubt es ihm nicht, Geschenke zu versenden.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="credit-line.html"><strong>Dein Kreditrahmen</strong><span>Wie weit du ins Minus gehen kannst und wie dieser Rahmen wächst.</span></a></li>
+            <li><a href="trading-partner-limit.html"><strong>Limit je Handelspartner</strong><span>Warum der Handel mit vielen Personen mehr Vertrauen schafft als viel Handel mit einer Person.</span></a></li>
+            <li><a href="your-profile.html"><strong>Dein Profil</strong><span>Dein Name, Foto, ein paar Worte über dich und wer deine Kontaktdaten sehen kann.</span></a></li>
+            <li><a href="how-it-works.html"><strong>So funktioniert BeanPool</strong><span>Bohnen, Handel, Angebote und Gesuche sowie Kredit, in einfachen Worten.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

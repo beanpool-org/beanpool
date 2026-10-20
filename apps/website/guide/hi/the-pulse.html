@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/hi by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>द पल्स — BeanPool members' guide</title>
+    <meta name="description" content="आपके पड़ोसी अन्यत्र क्या बनाते और साझा करते हैं, एक ही फ़ीड में।">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#pulse">हलचल</a></p>
+        <h1>द पल्स</h1>
+        <p class="lede">आपके पड़ोसी अन्यत्र क्या बनाते और साझा करते हैं, एक ही फ़ीड में।</p>
+        <h2>What it is</h2>
+        <p><strong>होम</strong> पर <strong>द पल्स</strong> कार्ड से पल्स खोलें: किसी पोस्ट पर टैप करें, या <strong>सभी देखें</strong> पर टैप करें। यदि यह आपके होम पर नहीं है, तो इसे फ़ोन पर <strong>कार्ड जोड़ें</strong>, या वेब ऐप में <strong>होम संपादित करें</strong> के साथ वापस लाएं। फ़ोन पर आप इसे <strong>सेटिंग्स</strong> से, <strong>द पल्स</strong> के तहत भी खोल सकते हैं।</p>
+        <p>द पल्स उन चीज़ों को इकट्ठा करता है जो आपके समुदाय के सदस्य अन्य साइटों पर पोस्ट करते हैं: वीडियो, संगीत, ब्लॉग, फ़ोटो। यह जानने का एक तरीका है कि आपके पड़ोसी क्या बनाते हैं और क्या करते हैं।</p>
+        <ul>
+            <li><strong>पड़ोसी:</strong> सदस्यों के चैनलों की पोस्ट। शीर्ष पर दिए गए बटन कोई विषय चुनते हैं, जैसे भोजन और खेती या मरम्मत और पुन: उपयोग। <strong>सभी</strong> सब कुछ दिखाता है।</li>
+            <li><strong>सीखें</strong> (फ़ोन ऐप): BeanPool कैसे काम करता है इसके बारे में वीडियो, और एक संक्षिप्त दैनिक विचार। &quot;सीखें लेन&quot; देखें। वेब ऐप में वे फ़ीड में होते हैं, और शीर्ष पर <strong>यह कैसे काम करता है</strong> केवल उन्हें दिखाता है।</li>
+        </ul>
+        <p>ताज़ा करने के लिए नीचे खींचें। वेब ऐप में, इसके बजाय शीर्ष पर 🔄 पर टैप करें।</p>
+        <p>फ़ोन पर, जैसे ही आप नीचे स्क्रॉल करते हैं शीर्ष के बटन हट जाते हैं। थोड़ा ऊपर स्क्रॉल करें और वे वापस आ जाते हैं।</p>
+        <h2>Opening a post</h2>
+        <p><strong>एक YouTube वीडियो:</strong> फ़ोन पर, ▶ वाले चित्र पर टैप करें, और वीडियो यहीं कार्ड में चलने लगता है। जब तक आप टैप नहीं करते तब तक YouTube से कुछ भी लोड नहीं होता है — किसी वीडियो के पास से स्क्रॉल करने से किसी को कुछ नहीं भेजा जाता है। स्क्रीन भरने के लिए वीडियो के कोने में दिए गए बटन पर टैप करें।</p>
+        <p>जब आप इसे नज़रों से ओझल कर देते हैं, जब आप पल्स छोड़ते हैं, और जब आप कोई दूसरा वीडियो शुरू करते हैं, तो वीडियो बंद हो जाता है। एक समय में केवल एक ही चलता है।</p>
+        <p>वेब ऐप में वीडियो कार्ड में नहीं चलता है। चित्र या शीर्षक पर टैप करें और यह एक नए टैब में YouTube पर खुलता है।</p>
+        <p><strong>बाकी सब कुछ</strong> — TikTok, Instagram, एक ब्लॉग, एक वेबसाइट: चित्र या शीर्षक पर टैप करें और यह आपके ब्राउज़र में या उस साइट के अपने ऐप में खुलता है।</p>
+        <p>आप हमेशा इसके बजाय YouTube पर एक वीडियो खोल सकते हैं: शीर्षक पर टैप करें, या इसके नीचे <strong>Open on YouTube ↗</strong> पर। यदि कोई वीडियो यहाँ नहीं चलेगा — कुछ लोग अपने वीडियो को YouTube के बाहर चलाने की अनुमति नहीं देते हैं, और कुछ फ़ोन नहीं चला सकते — तो कार्ड ऐसा कहता है और आपको वह बटन प्रदान करता है।</p>
+        <h2>Something wrong with a post</h2>
+        <ul>
+            <li><strong>किसी अन्य की पोस्ट:</strong> ध्वज (फ़्लैग) पर टैप करें, कारण चुनें (<strong>स्पैम या धोखाधड़ी</strong>, <strong>आपत्तिजनक सामग्री</strong>, <strong>भ्रामक पोस्ट</strong>, <strong>बाल सुरक्षा</strong> या <strong>अन्य</strong>) और <strong>रिपोर्ट सबमिट करें</strong> पर टैप करें। आपके समुदाय के सर्वर को चलाने वाले लोग इसे देखते हैं।</li>
+            <li><strong>आपकी अपनी पोस्ट:</strong> <strong>छुपाएं</strong> पर टैप करें, फिर <strong>फ़ीड से छिपाएँ</strong> पर। यह सभी के लिए पल्स से हट जाती है। छिपाई गई पोस्ट को वापस नहीं लाया जा सकता। वेब ऐप में आप अपनी पोस्ट को हमेशा के लिए हटाने के लिए <strong>हटाएं</strong>, फिर <strong>स्थायी रूप से हटाएं</strong> पर भी टैप कर सकते हैं।</li>
+        </ul>
+        <p>आप किसी अन्य की पोस्ट को केवल अपने लिए नहीं छिपा सकते।</p>
+        <h2>Adding your own</h2>
+        <p>शीर्ष पर <strong>+ चैनल</strong> पर टैप करें। &quot;अपने चैनल साझा करना&quot; देखें।</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="home.html"><strong>होम</strong><span>होम क्या है, यह फ़ोन और वेब ऐप पर कौन से कार्ड दिखाता है, उन्हें कैसे जोड़ें, हटाएं या बदलें, अपनी पसंद चुनना, और साइन आउट करने पर गोपनीयता।</span></a></li>
+            <li><a href="learn.html"><strong>सीखें लेन</strong><span>BeanPool के बारे में लघु वीडियो, और उनसे जुड़े गाइड पृष्ठ।</span></a></li>
+            <li><a href="your-channels.html"><strong>अपने चैनल साझा करना</strong><span>अपने YouTube, ब्लॉग, Instagram और अन्य चैनलों को हलचल पर डालें।</span></a></li>
+            <li><a href="reporting.html"><strong>समस्या की रिपोर्ट करना</strong><span>किसी पोस्ट, कार्यक्रम, हलचल पोस्ट, परियोजना या उपक्रम के बारे में समुदाय के मॉडरेटर को बताएं।</span></a></li>
+            <li><a href="the-bean.html"><strong>यह मार्गदर्शिका</strong><span>यह मार्गदर्शिका कहाँ मिलेगी, इसे कैसे खोजें, और यह कैसे अद्यतित रहती है।</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ko by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>선물 보내기 — BeanPool members' guide</title>
+    <meta name="description" content="거래 없이 다른 멤버에게 콩을 선물해 보세요.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#ledger">장부</a></p>
+        <h1>선물 보내기</h1>
+        <p class="lede">거래 없이 다른 멤버에게 콩을 선물해 보세요.</p>
+        <h2>선물 보내기 전에 알아둘 점</h2>
+        <ul>
+            <li>장터에서 거래를 1회 완료해야 해요. 1~2 콩에 불과한 거래는 너무 작아서 횟수로 인정되지 않아요.</li>
+            <li>현재 보유하고 있는 콩만 보낼 수 있어요. 선물로 인해 잔액이 0 미만으로 내려갈 수는 없어요.</li>
+        </ul>
+        <p>조건을 충족하기 전까지 버튼에는 <strong>완료된 거래 1건 필요</strong> 또는 <strong>양수 잔액 필요</strong>와 같이 부족한 조건이 표시돼요.</p>
+        <p>내 신뢰 배지는 상관없어요.</p>
+        <h2>보내기</h2>
+        <ul>
+            <li><strong>장부</strong>를 탭한 다음 <strong>지갑</strong>을 누르고 <strong>콩 보내기</strong>를 탭하세요.</li>
+            <li><strong>받는 이웃 선택...</strong>을 탭하고, 상대방의 이름을 검색한 후 탭하세요.</li>
+            <li><strong>금액</strong>을 입력하세요. 원하는 경우 &quot;토마토 고마워요&quot;와 같이 <strong>메모</strong>를 추가하세요.</li>
+            <li><strong>받는 사람이 받는 수량</strong>을 확인하세요. 선물에는 수수료가 없으므로 전액이 전달돼요.</li>
+            <li><strong>송금 확인</strong>을 탭하세요. 휴대폰에서는 <strong>전송 완료!</strong>가 표시되고, 웹 앱에서는 양식이 닫히며 거래 내역에 선물이 표시돼요.</li>
+        </ul>
+        <p>선물은 되돌릴 수 없어요. 보내기 전에 이름을 꼭 확인하세요.</p>
+        <h2>참고 사항</h2>
+        <ul>
+            <li>선물은 신뢰를 쌓아주지 않아요. 완료된 거래만 신뢰를 쌓아줘요.</li>
+            <li>휴가 중에도 선물을 보낼 수 있어요.</li>
+            <li>24시간 동안 최대 100건의 결제를 할 수 있어요. 선물, 구매, 제공 구매 요청, 요청에 대한 도움 승인, 프로젝트에 콩 약정, 다른 커뮤니티로부터의 구매가 모두 결제에 포함돼요. 운영자의 기업 보증은 콩이 이동하지 않으므로 결제가 아니며, 하루 20건의 약정 변경 횟수에만 계산돼요. 이 중 최대 30건까지 이전에 결제한 적 없는 사람에게 보낼 수 있으며, 이전에 결제했던 사람에게 보내는 것은 계속 가능해요. 받는 것은 제한이 없어요. 한도에 도달하면 앱에서 어떤 한도인지와 언제 다시 결제할 수 있는지 알려줘요.</li>
+        </ul>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="your-balance.html"><strong>내 잔액 및 거래 내역</strong><span>보유 콩 수량, 거래 대기 중인 수량, 모든 거래와 선물 내역이에요.</span></a></li>
+            <li><a href="credit-line.html"><strong>내 신용 한도</strong><span>잔액이 마이너스로 내려갈 수 있는 범위와 한도 상향 방식이에요.</span></a></li>
+            <li><a href="how-it-works.html"><strong>BeanPool 작동 원리</strong><span>콩, 거래, 제공과 요청, 신용 한도를 알기 쉽게 설명해요.</span></a></li>
+            <li><a href="a-deal-step-by-step.html"><strong>단계별 거래 진행 방식</strong><span>제공과 요청에서 요청부터 지급 완료까지의 과정, 후기 작성 안내예요.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

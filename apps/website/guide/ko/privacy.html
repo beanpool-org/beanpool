@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ko by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>개인정보 보호 — BeanPool members' guide</title>
+    <meta name="description" content="다른 멤버에게 공개되는 내 정보와 이를 설정하는 방법이에요.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">설정 및 안전</a></p>
+        <h1>개인정보 보호</h1>
+        <p class="lede">다른 멤버에게 공개되는 내 정보와 이를 설정하는 방법이에요.</p>
+        <h2>설정 열기</h2>
+        <p>화면 오른쪽 상단의 슬라이더 모양 버튼을 탭하세요. 넓은 컴퓨터 화면의 웹 앱에서는 왼쪽 사이드바 맨 아래에 있는 톱니바퀴 모양이에요. 설정은 탭 목록 중 하나가 아니에요.</p>
+        <h2>커뮤니티 멤버가 볼 수 있는 정보</h2>
+        <ul>
+            <li>내 이름, 사진, 소개글, 가입 시점 및 마지막 활동 시점.</li>
+            <li>신뢰 배지, 리뷰(리뷰를 작성한 사람은 다른 누구도 볼 수 없음), 신뢰 프로필: 완료된 거래 수와 취소된 거래 수 및 완료율, 회원들과 주고받은 콩 결제 건수와 완료된 거래 건수의 합, 결제하거나 결제를 받거나 거래한 고유 회원 수, 프로필을 조회 중인 회원과 나눈 결제 및 거래 건수, 신뢰 점수. 관리자도 일반 멤버와 동일하게 볼 수 있으며 조회 기록은 남지 않아요.</li>
+            <li>내 게시물 및 게시물의 핀 위치. &quot;내 핀 위치 설정&quot;을 참고하세요.</li>
+            <li>투표에서의 내 투표 내용. 단, 투표 개설자가 <strong>open vote</strong>(공개 투표)로 설정한 경우에만 해당해요. 그 외의 투표는 익명이며, <strong>의사결정</strong>에 대한 투표는 항상 비밀 투표예요.</li>
+            <li>나를 초대한 사람. 휴대폰 앱에서 내 프로필에는 <strong>보증으로 가입</strong>과 그 사람의 이름이 표시돼요. 창립 멤버로 참여했거나 시스템 관리자의 직접 초대를 받은 경우 대신 <strong>창립 멤버</strong> 또는 <strong>시스템 관리자가 직접 초대함</strong>이라고 표시돼요. 회원이 내 신용 한도를 보증한 경우, 휴대폰 앱과 웹 앱의 내 프로필에 <strong>보증함</strong>과 그 사람의 이름이 표시돼요.</li>
+        </ul>
+        <h2>나만 볼 수 있는 정보</h2>
+        <ul>
+            <li><strong>내 잔액과 거래 내역.</strong> 앱에서든 커뮤니티 서버에서든 커뮤니티의 다른 사람은 이를 읽을 수 없어요. 거래 내역에는 나와 상대방 두 사람만 표시돼요.</li>
+            <li><strong>친구 목록, 나와 대화하는 사람, 내가 보낸 초대장.</strong> 앱에서든 커뮤니티 서버에서든 나만 읽을 수 있어요. 다른 사람들에게는 서로 함께 알고 있는 연결 관계만 표시돼요.</li>
+            <li>커뮤니티에서 내 퇴출 여부를 투표에 부칠 경우, 해당 투표에서 투표 권한이 있는 모든 사람이 해당 투표 화면에서만 내 잔액과 부채를 볼 수 있어요. 투표 권한이 없는 관리자나 소유자는 볼 수 없어요. 이러한 조회는 기록되지 않아요.</li>
+            <li>관리자가 내 계정을 제거하는 경우, 해당 작업을 시작한 관리자는 내가 보유하거나 빚진 금액을 정산할 수 있도록 내 잔액을 볼 수 있어요. 다른 관리자와 소유자는 누가 언제 조회했는지 확인할 수 있어요.</li>
+            <li>신원 확인 커뮤니티에서 내가 가입 시 이에 동의했고 관리자가 나를 확인했다면, 내 잔액이 커뮤니티의 기준선 중 하나를 넘을 때 관리자가 잔액을 볼 수 있어요. 설정에서 언제든 이를 철회할 수 있어요. 어떤 커뮤니티에서든 관리자는 내 거래 중 일부를 볼 수도 있어요. 아직 완료되지 않았거나 관리자가 정산한 거래, 구버전 서버에서 멤버가 제거되었을 때 콩이 묶인 거래, 부정 거래 의심 경고, 설정된 일수 동안 계정에 콩의 입출금이 없을 때의 경고예요. 이러한 거래를 조회할 때마다 기록이 남으며, 내 이름이 언급된 경고는 각 관리자가 24시간 동안 처음 열었을 때 조회가 기록돼요. 소유자와 관리자는 해당 로그를 볼 수 있어요. 관리자는 내가 등록한 게시물 수와 보낸 메시지 수도 볼 수 있으며, 거래의 경우 내 거래가 아닌 전체 커뮤니티의 총합만 볼 수 있어요. 또한 모든 멤버와 마찬가지로 로그가 남지 않는 내 신뢰 프로필을 볼 수 있어요. 커뮤니티 서버를 운영하는 사람은 백업, 스냅샷, 대기 사본을 포함한 전체 데이터베이스를 보유해요. &quot;관리자가 볼 수 있는 정보&quot;를 참고하세요.</li>
+        </ul>
+        <p>커뮤니티 서버를 운영하는 소유자와 관리자는 서버에 저장된 내용을 계속 볼 수 있어요. &quot;그 외에 볼 수 있는 사람&quot;을 참고하세요.</p>
+        <h2>가입하지 않은 사람</h2>
+        <ul>
+            <li><strong>내 커뮤니티:</strong> 내 게시물에 대해 아무것도 볼 수 없어요. 커뮤니티의 목록과 사진은 멤버 전용이며, 내 프로필 사진도 마찬가지예요. 각 사진은 앱 내에서 해당 게시물이나 내 이름과 함께 제공되는 링크를 통해서만 열리므로, 외부인은 멤버가 그 링크를 전달해 주었을 때만 볼 수 있어요. 가입하지 않고 커뮤니티 주소를 여는 사람에게는 글로벌 커뮤니티로 가는 경로가 대신 표시돼요.</li>
+            <li><strong>글로벌 커뮤니티:</strong> 누구나 가입하기 전에 게시물 목록을 볼 수 있지만, 글 내용과 사진, 그리고 각 게시물의 대략적인 위치만 볼 수 있을 뿐 내 이름, 얼굴 또는 정확한 위치는 절대 볼 수 없어요.</li>
+            <li><strong>내 동향 게시물:</strong> 아무것도 볼 수 없어요. 동향 피드는 멤버 전용이에요. 동영상이나 게시물 자체는 원래 게시된 플랫폼(YouTube, Instagram 등)에 유지되며, 그곳에서 공개된 설정 수준만큼만 공개돼요. &quot;내 채널 공유하기&quot;를 참고하세요.</li>
+        </ul>
+        <h2>내가 직접 설정할 수 있는 항목</h2>
+        <ul>
+            <li><strong>연락처 정보:</strong> 프로필에서 <strong>누가 볼 수 있나요?</strong>를 선택하세요: <strong>숨김</strong>, <strong>거래 상대방</strong>, <strong>친구</strong> 또는 <strong>커뮤니티</strong>. &quot;내 프로필&quot;을 참고하세요.</li>
+            <li><strong>함께 아는 사람:</strong> 나와 두 사람이 서로를 각자 친구로 추가했을 때, 그들은 상대방의 프로필에서 문의할 수 있는 사람으로 내 이름을 볼 수 있어요. 설정의 <strong>법적 고지 및 개인정보 처리방침</strong> 아래에서 <strong>나를 함께 아는 사람으로 표시</strong>를 끄면 아무도 그곳에서 내 이름을 볼 수 없어요. 내가 직접 끄기 전까지는 켜져 있어요. &quot;이웃과 친구&quot;를 참고하세요.</li>
+            <li><strong>나를 추가한 사람:</strong> 내가 누군가를 추가하면 상대방의 <strong>사람</strong> 탭에 내가 자신을 추가했다는 문구가 표시되어 맞추가를 할 수 있어요. 상대방에게 별도의 알림이 전송되지는 않아요.</li>
+            <li><strong>위치(휴대폰):</strong> 설정의 <strong>앱 설정</strong> 아래에서 <strong>위치</strong>를 켜면 지도와 주변 게시물에 내 위치를 사용할 수 있어요. 끄려면 휴대폰 자체 설정에서 변경하세요. 앱에서 방법을 안내해 줘요. 웹 브라우저에는 이러한 스위치가 없으며, 브라우저가 권한을 묻고 답변을 기억해요.</li>
+            <li><strong>내 지역</strong>(글로벌 커뮤니티): 설정의 <strong>내 지역</strong> 아래에서 내가 입력한 지역(도시 주변 약 10km 또는 두 개의 숫자)을 확인하거나 <strong>설정 안 됨</strong> 상태를 볼 수 있어요. <strong>지우기</strong>를 누르면 삭제돼요. 그 아래의 <strong>대략 어디에 계세요?</strong>에서는 <strong>내 위치 사용</strong> 또는 <strong>동네나 도시 이름 입력</strong>으로 새 지역을 설정할 수 있고, <strong>취소</strong>(브라우저에서는 <strong>← 설정으로 돌아가기</strong>)를 누르면 그대로 유지돼요. 오직 반올림된 대략적인 지역 정보만 전송돼요. 다른 멤버는 내가 얼마나 멀리 있는지 볼 수 있으며, 내가 올린 투표는 내 지역에 표시돼요. 지역을 설정하지 않으면 전 세계의 최신 목록을 보게 되며, 근처 멤버는 검색을 통해 찾을 수는 있어도 목록에서는 내가 올린 투표를 볼 수 없어요. &quot;내 지역&quot;을 참고하세요.</li>
+            <li><strong>앱 잠금:</strong> 앱이 열릴 때, 그리고 15초 이상 자리를 비웠다가 다시 돌아올 때 휴대폰의 화면 잠금(PIN, 패턴, 비밀번호, 지문 또는 얼굴)을 요구해요. 잠금은 앱의 화면과 팝업에 적용돼요. iPhone에서는 <strong>관리</strong>를 통해 연 커뮤니티 설정과 같이 앱이 연 웹 페이지도 닫아요. Android 휴대폰에서는 앱이 연 웹 페이지가 앱 외부에서 열리므로 닫을 수 없으며, 두 휴대폰 모두에서 공유 패널도 닫을 수 없으니 휴대폰을 내려놓기 전에 직접 닫으세요. <strong>관리</strong>에서 연 커뮤니티 설정은 15분 동안 사용하지 않으면 로그아웃돼요. 앱 잠금이 켜져 있는 동안에는 앱을 벗어날 때 화면이 백지 상태가 되고 다시 돌아올 때 복원돼요. 휴대폰에 화면 잠금이 설정되어 있어야 해요. 잠금이 없으면 요구할 수 있는 것이 없어요.</li>
+            <li><strong>채널:</strong> 동향에 공유하는 모든 내용은 내 이름과 함께 커뮤니티의 모든 사람에게 표시돼요. &quot;내 채널 공유하기&quot;를 참고하세요.</li>
+        </ul>
+        <h2>그 외에 볼 수 있는 사람</h2>
+        <ul>
+            <li>1:1 대화는 종단간 암호화돼요. 암호화할 수 없는 메시지는 전송되지 않아요. 거래 금액과 같이 BeanPool이 대화방에 추가하는 거래 관련 안내는 암호화되지 않아요. &quot;메시지&quot;를 참고하세요.</li>
+            <li>휴대폰에서 그룹 대화는 그룹 대화를 암호화하도록 업데이트된 커뮤니티 서버에서도 종단간 암호화돼요. 서버에는 뒤섞인 글자가 저장돼요. 서버는 여전히 누가 작성했는지, 언제 작성했는지, 누가 멘션되었는지, 각 줄이 어떤 메시지에 대한 답장인지, 그리고 이모지 반응을 볼 수 있어요. 대화방에 암호화 여부가 표시돼요. 업데이트되지 않은 서버에서는 그룹 대화를 계속 읽을 수 있어요.</li>
+            <li>동향에서 YouTube 동영상을 재생하면 YouTube 앱에서 동영상을 여는 것과 마찬가지로 YouTube에 시청 사실이 전달돼요. ▶를 탭하기 전까지는 YouTube로 아무것도 전송되지 않으며, 동영상을 스크롤하여 지나쳐도 아무것도 전송되지 않아요. &quot;동향 둘러보기&quot;를 참고하세요.</li>
+            <li>커뮤니티 서버는 내 거래 내역, 게시물, 투표, 그리고 웹 앱에서 내가 차단한 사람의 정보를 보관해요. 서버를 운영하는 소유자와 관리자는 행사 대화, 공동체 대화, 그리고 암호화 업데이트가 되지 않은 서버의 그룹 대화를 포함하여 서버에 저장된 내용을 볼 수 있어요. 신뢰할 수 있는 사람들이 있는 커뮤니티를 선택하세요.</li>
+            <li>내 계정을 삭제하면 내가 작성한 모든 메시지는 <strong>삭제된 메시지예요</strong>로 표시되고 내가 보낸 사진은 삭제돼요. 그 이전에 만들어진 서버 자체의 일일 사본은 최대 14일 동안 이를 유지해요. 커뮤니티 서버가 다른 저장소로 백업을 보내는 경우, 그 이전에 만들어진 각 백업은 최대 30일 동안 이를 유지해요. 소유자가 다운로드한 백업은 소유자가 삭제할 때까지 유지해요. &quot;로그아웃 또는 계정 삭제&quot;를 참고하세요.</li>
+            <li>로그인 계정을 연결했거나, 로그인 계정으로 가입했거나, 나중에 추가한 경우 커뮤니티 서버는 해당 로그인을 위해 내 계정의 잠긴 사본을 보관해요. 해당 서버를 운영하는 사람들은 이를 열 수 있어요. 오직 12개 단어만이 다른 누구도 필요로 하지 않아요. &quot;계정 복구하기&quot;를 참고하세요.</li>
+            <li>글로벌 커뮤니티의 중재자는 하루 이내에 동일한 인터넷 연결에서 가입한 계정을 확인할 수 있지만 연결 자체는 절대 볼 수 없으므로, 한꺼번에 몰려드는 가짜 계정을 한 번에 처리할 수 있어요. &quot;문제 신고하기&quot;를 참고하세요.</li>
+            <li>글로벌 커뮤니티에 가입할 때, 가입 시 사용한 인터넷 연결에 대한 스크램블된 참조 정보를 하루 동안 보관하며 주소 자체는 절대 보관하지 않아요. 이를 통해 하나의 연결에서 많은 계정이 생성될 때 새로 생성되는 각 계정의 설정 시간이 조금 더 걸리게 하고, 해당 연결에서 생성될 수 있는 계정 수를 제한해요. 커뮤니티가 가입 후 하루 이내에 계정을 제거하면, 해당 참조 정보는 가입 시점부터 7일 동안 보관되어 해당 주 동안 동일한 연결에서 새로운 12개 단어 계정을 설정하는 데 더 오래 걸리게 돼요. 스스로 계정을 삭제한 사람에 대해서는 더 오래 보관하지 않아요.</li>
+            <li>12개 단어로 글로벌 커뮤니티에 가입할 때, 커뮤니티가 가입 문턱에서 알게 되는 것은 해당 참조 정보 외에 내가 선택한 이름과 계정 키뿐이에요. 이메일, 전화번호 또는 다른 계정 정보는 일체 알지 못해요.</li>
+        </ul>
+        <h2>더 읽어보기</h2>
+        <p>설정의 <strong>법적 고지 및 개인정보 처리방침</strong> 아래에서 <strong>개인정보 처리방침</strong>을 탭하세요.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="your-profile.html"><strong>내 프로필</strong><span>이름, 사진, 간단한 소개와 내 연락처를 볼 수 있는 사람 설정 안내예요.</span></a></li>
+            <li><a href="your-area.html"><strong>내 지역</strong><span>글로벌 커뮤니티에서 주변 게시글을 보여주기 위해 사용하는 대략적인 위치 및 변경·삭제 방법이에요.</span></a></li>
+            <li><a href="pin-locations.html"><strong>내 핀 위치 설정</strong><span>내 게시글과 행사의 위치를 볼 수 있는 사람과 집 주소를 안전하게 지키는 방법이에요.</span></a></li>
+            <li><a href="blocking.html"><strong>멤버 차단하기</strong><span>특정 멤버의 게시글과 메시지를 숨기고, 나중에 차단을 해제하는 방법이에요.</span></a></li>
+            <li><a href="messages.html"><strong>메시지</strong><span>대화 시작, 사진 전송, 답장, 반응, 수정, 삭제, 알림 끄기와 대화 보호 안내예요.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

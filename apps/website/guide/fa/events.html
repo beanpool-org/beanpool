@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/fa by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="fa">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>رویدادها — BeanPool members' guide</title>
+    <meta name="description" content="رویدادی حضوری یا آنلاین، یک‌باره یا تکرارشونده بسازید؛ اعلام حضور کنید، یادآوری دریافت کنید و مدیریت کنید.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#commons">مشاع</a></p>
+        <h1>رویدادها</h1>
+        <p class="lede">رویدادی حضوری یا آنلاین، یک‌باره یا تکرارشونده بسازید؛ اعلام حضور کنید، یادآوری دریافت کنید و مدیریت کنید.</p>
+        <h2>یافتن رویدادها</h2>
+        <ul>
+            <li>در <strong>بازار</strong>، روی <strong>رویدادها</strong> بزنید. یکی از گزینه‌های <strong>امروز</strong>، <strong>این آخر هفته</strong> یا <strong>۷ روز آینده</strong> را انتخاب کنید.</li>
+            <li>روی <strong>نقشه</strong>، رویدادها سنجاق‌های بنفش هستند. در تلفن، روی <strong>رویدادها</strong> بزنید تا فقط آن‌ها را ببینید. در برنامه تحت وب آن‌ها همیشه آنجا هستند، و برچسب‌های تاریخ آن‌ها را محدود می‌کنند.</li>
+        </ul>
+        <h2>رویدادهای شما</h2>
+        <p>در <strong>بازار</strong>، روی <strong>★ برای شما</strong> بزنید. <strong>رویدادهای شما</strong> اولین بخش آن است: همه مواردی که گفته‌اید <strong>می‌روم</strong> یا به آن‌ها <strong>علاقه‌مند</strong> هستید، نزدیک‌ترین آن‌ها در ابتدا. روی یکی بزنید تا باز شود.</p>
+        <p>این بخش فقط زمانی وجود دارد که رویدادی در پیش داشته باشید، و فقط پاسخ‌های خود شما را نگه می‌دارد — هیچ‌کس دیگری نمی‌تواند آن را ببیند.</p>
+        <h2>رفتن</h2>
+        <p>در یک رویداد، روی <strong>می‌روم</strong> یا <strong>علاقه‌مند</strong> بزنید. برای لغو انتخاب خود، دوباره روی گزینه انتخابی بزنید.</p>
+        <p>وقتی وضعیت شما روی <strong>می‌روم</strong> است:</p>
+        <ul>
+            <li>می‌توانید <strong>یادداشت برای افرادی که می‌آیند</strong> را از طرف میزبان بخوانید، پس از اینکه میزبان به شما اجازه ورود داد، در صورتی که میزبان این گزینه را انتخاب کرده باشد؛</li>
+            <li>می‌توانید <strong>گفتگوی رویداد</strong> را باز کنید. «گفتگوی رویداد» را ببینید؛</li>
+            <li>برای یک رویداد آنلاین، <strong>پیوند برای پیوستن</strong> و دکمه <strong>پیوستن</strong> را با همان شرایط یادداشت می‌بینید.</li>
+        </ul>
+        <p>روی رویداد بزنید تا همه چیز و <strong>نمایش روی نقشه</strong> را ببینید. در تلفن برنامه نقشه شما را باز می‌کند. در برنامه تحت وب مکان را روی نقشه نشان می‌دهد.</p>
+        <h2>دریافت یادآوری</h2>
+        <p>وقتی روی <strong>می‌روم</strong> یا <strong>علاقه‌مند</strong> می‌زنید، رویداد گزینه <strong>یادآوری به من</strong> و مدت زمان قبل از شروع که به شما اطلاع داده می‌شود را نشان می‌دهد — <strong>۱ روز قبل (پیش‌فرض شما)</strong> تا زمانی که آن را تغییر دهید.</p>
+        <ul>
+            <li>روی <strong>تغییر</strong> بزنید تا یکی از گزینه‌های <strong>۱ هفته قبل</strong>، <strong>۱ روز قبل</strong>، <strong>۲ ساعت قبل</strong>، <strong>۱ ساعت قبل</strong> یا <strong>۳۰ دقیقه قبل</strong> را انتخاب کنید. می‌توانید بیش از یکی را علامت بزنید.</li>
+            <li>هیچ‌کدام را علامت نزنید تا یادآوری برای این رویداد دریافت نکنید.</li>
+            <li>سپس روی <strong>ذخیره برای این رویداد</strong> بزنید. علامت تا زمانی که این کار را نکنید ذخیره نمی‌شود.</li>
+            <li>روی <strong>استفاده از پیش‌فرض من</strong> بزنید تا به انتخاب معمول شما برگردد.</li>
+        </ul>
+        <p>برای تغییر انتخاب معمول خود برای همه رویدادها، «اعلان‌ها» را ببینید.</p>
+        <p>یادآوری‌ها به عنوان هشدارهایی روی تلفن شما، همراه با هشدارهای بازار شما ارسال می‌شوند، بنابراین اگر آن‌ها را خاموش کنید متوقف می‌شوند. هرگز در مورد رویدادی که لغو شده یا به پایان رسیده است به شما یادآوری نمی‌شود، و هرگز در مورد زمانی که هنگام اعلام حضورتان گذشته است به شما یادآوری نمی‌شود.</p>
+        <h2>اطلاع دادن به دیگران درباره آن</h2>
+        <p>رویداد را باز کنید و روی <strong>اشتراک‌گذاری</strong> بزنید. برگه اشتراک‌گذاری معمول تلفن شما با نام رویداد، زمان آن، مکان آن و یک پیوند باز می‌شود. در رایانه، پیوند برای شما کپی می‌شود تا جای‌گذاری کنید.</p>
+        <p>هر کسی که روی آن پیوند بزند رویداد را باز می‌کند — در برنامه اگر آن را داشته باشد، در غیر این صورت در برنامه تحت وب. کسی که در جامعه شما نیست به صفحه پیوستن به آن هدایت می‌شود. در مرورگر وب، جامعه جهانی ابتدا رویداد را همان‌طور که یک بازدیدکننده می‌بیند به آن‌ها نشان می‌دهد، و پس از پیوستن دوباره آن را باز می‌کند.</p>
+        <h2>قرار دادن آن در تقویم خود</h2>
+        <p>رویداد را باز کنید و روی <strong>افزودن به تقویم</strong> بزنید.</p>
+        <ul>
+            <li>در <strong>برنامه تحت وب</strong>، یک فایل تقویم دانلود می‌شود. آن را باز کنید و تقویم شما پیشنهاد اضافه کردن رویداد را می‌دهد.</li>
+            <li>در <strong>آیفون</strong>، همان فایل به تلفن شما تحویل داده می‌شود که گزینه <strong>افزودن به تقویم</strong> را پیشنهاد می‌کند.</li>
+            <li>در <strong>اندروید</strong>، تقویم گوگل با اطلاعات رویداد باز می‌شود. آن را بررسی و ذخیره کنید.</li>
+        </ul>
+        <p>این ورودی نام، زمان، مکان و پیوند بازگشت به رویداد را به همراه دارد. اگر میزبان بعداً زمان را تغییر دهد، تقویم شما با آن تغییر نمی‌کند — برنامه همچنان به شما یادآوری می‌کند، و خود رویداد همیشه زمان جدید را نشان می‌دهد.</p>
+        <h2>ایجاد یک رویداد</h2>
+        <ul>
+            <li>روی <strong>+ ثبت پست</strong> در برگه بازار یا نقشه، سپس روی <strong>رویداد</strong> بزنید.</li>
+            <li><strong>عنوان</strong>، و زمانی که <strong>شروع می‌شود</strong>. <strong>پایان می‌یابد</strong> اختیاری است؛ ۲ ساعت بعد است مگر اینکه آن را تغییر دهید.</li>
+            <li>زمان‌ها در منطقه زمانی خود رویداد هستند که از سنجاق گرفته شده است. وقتی منطقه زمانی خودتان نیست، خطی زیر زمان‌ها نام آن را ذکر می‌کند. اگر اشتباه است روی <strong>تغییر</strong> کنار آن بزنید.</li>
+            <li><strong>تکرار:</strong> انتخاب کنید که هر چند وقت یک‌بار تکرار شود، مانند هر هفته در آن روز یا ماهی یک‌بار، یا آن را روی <strong>تکرار نمی‌شود</strong> بگذارید. <strong>تا تاریخ</strong> اختیاری است: آن را خالی بگذارید و رویداد تکرار می‌شود تا زمانی که آن را لغو کنید.</li>
+            <li>گزینه <strong>در یک مکان</strong> یا <strong>آنلاین</strong> را انتخاب کنید. برای یک رویداد آنلاین هیچ مکان و سنجاقی وجود ندارد: به جای آن یک <strong>پیوند برای پیوستن</strong> اضافه کنید. فقط شما و افرادی که می‌روند آن را می‌بینند (در جایی که به افراد اجازه ورود می‌دهید، فقط افرادی که اجازه داده‌اید). زمان‌های آن در منطقه زمانی خود شما هستند، و هر کس دیگری آن‌ها را در منطقه زمانی خود می‌بیند که با <strong>زمان شما</strong> مشخص شده است.</li>
+            <li><strong>نام مکان</strong>، مانند «تالار شهر».</li>
+            <li>سنجاق را روی نقشه قرار دهید: روی نقشه بزنید، در <strong>یافتن نشانی</strong> جستجو کنید، یا روی <strong>استفاده از موقعیت مکانی من</strong> بزنید. اگر نمی‌خواهید نقطه دقیق نشان داده شود، روی <strong>تقریبی (حدود ۱۰۰ متر)</strong> بزنید. «محل قرارگیری سنجاق شما» را ببینید.</li>
+            <li>یک <strong>توضیحات</strong>، و در صورت تمایل یک عکس.</li>
+            <li><strong>یادداشت برای افرادی که می‌آیند:</strong> هر کسی که «می‌روم» را بزند آن را می‌بیند، مگر اینکه گزینه <strong>فقط افرادی که اجازه می‌دهم یادداشت و گفت‌وگو را می‌بینند</strong> را علامت بزنید (در آغاز در جامعه جهانی علامت زده شده است، جایی که هر کسی می‌تواند در عرض یک دقیقه بپیوندد): در این صورت فقط افرادی که به آن‌ها اجازه ورود می‌دهید آن را و گفتگوی رویداد را می‌بینند. مکانی مناسب برای نشانی دقیق یا کد ورودی؛ نام مکان برای همه است.</li>
+            <li><strong>چه کسی می‌تواند آن را ببیند:</strong> کل جامعه شما، یا یک گروه.</li>
+            <li>اگر یک پروژه یا طرح تجاری را مدیریت می‌کنید یا هماهنگ‌کننده یک گروه هستید، <strong>ارسال به عنوان</strong> به شما امکان می‌دهد رویداد را به نام آن ثبت کنید. یک گروه فقط برای اعضای خود میزبانی می‌کند؛ یک طرح تجاری برای کل جامعه میزبانی می‌کند، بنابراین رویداد یک طرح تجاری هرگز فقط مخصوص گروه نیست.</li>
+            <li>روی <strong>ایجاد</strong> بزنید. رویداد شما در بازار و روی نقشه قرار می‌گیرد.</li>
+        </ul>
+        <p>در برنامه تحت وب کادر عنوان <strong>چه اتفاقی در حال رخ دادن است</strong> است، دکمه‌های سنجاق <strong>📍 موقعیت مکانی من</strong> و <strong>📌 قرار دادن سنجاق</strong> هستند، و دکمه آخر <strong>ایجاد رویداد</strong> است.</p>
+        <p>می‌توانید ۵ رویداد آینده را در یک زمان داشته باشید. رویدادهای یک گروه به حساب گروه محاسبه می‌شوند، و رویدادهای یک طرح تجاری به حساب طرح تجاری.</p>
+        <h2>اداره رویداد خود</h2>
+        <p>رویداد خود را باز کنید. به عنوان میزبان می‌توانید:</p>
+        <ul>
+            <li>ببینید <strong>چه کسانی می‌آیند</strong>، و به افراد اجازه ورود دهید: <strong>اجازه ورود</strong> در کنار یک نام (دوباره بزنید تا پس گرفته شود)، یا <strong>اجازه ورود به همه</strong>. دوستان خودتان با زدن «می‌روم» اجازه ورود دریافت می‌کنند. اگر علامت گزینه <strong>فقط افرادی که اجازه می‌دهم یادداشت و گفت‌وگو را می‌بینند</strong> را بردارید، همه کسانی که می‌آیند یادداشت و گفتگو تا اینجا را می‌بینند، و گفتگو اعلام می‌کند که میزبان آن را باز کرده است؛</li>
+            <li><strong>ویرایش رویداد</strong>. اگر زمان یا مکان را تغییر دهید، به همه کسانی که می‌آیند اطلاع داده می‌شود؛</li>
+            <li><strong>کپی در تاریخ جدید</strong>، برای اجرای دوباره آن؛</li>
+            <li><strong>لغو رویداد</strong>، سپس تأیید کنید (دوباره <strong>لغو رویداد</strong> در تلفن، <strong>تأیید</strong> در برنامه تحت وب). همه کسانی که می‌آیند می‌توانند ببینند که لغو شده است، و گفتگوی آن به صورت فقط خواندنی درمی‌آید.</li>
+        </ul>
+        <h2>رویدادهای تکرارشونده</h2>
+        <p>یک رویداد تکرارشونده علامت <strong>↻</strong> و فاصله زمانی را در کنار تاریخ خود نشان می‌دهد، مانند <strong>هر جمعه</strong> یا <strong>ماهانه در شانزدهم</strong>. کارت آن تاریخ بعدی را نشان می‌دهد؛ آن را باز کنید تا <strong>تاریخ‌های بعدی</strong> را ببینید.</p>
+        <p>اگر شما میزبان آن باشید، هر یک از تاریخ‌های بعدی دارای موارد زیر است:</p>
+        <ul>
+            <li><strong>لغو این تاریخ:</strong> فقط آن روز لغو می‌شود. به همه کسانی که در آن روز می‌آیند اطلاع داده می‌شود.</li>
+            <li><strong>تغییر فقط این تاریخ:</strong> آن روز لغو می‌شود و شما یک رویداد یک‌باره در تاریخی دیگر ایجاد می‌کنید.</li>
+            <li><strong>بازگرداندن آن:</strong> یک تاریخ لغو شده دوباره فعال می‌شود.</li>
+        </ul>
+        <p>گزینه <strong>لغو رویداد</strong> همه تاریخ‌ها را لغو می‌کند، و گفتگوی آن به صورت فقط خواندنی درمی‌آید. تا آن زمان گفتگو بین تاریخ‌ها، تا آخرین تاریخ باز می‌ماند؛ بدون <strong>تا تاریخ</strong>، تا زمانی که رویداد را لغو کنید باز می‌ماند.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="event-chat.html"><strong>گفتگوی رویداد</strong><span>یک چت گروهی برای شرکت‌کنندگان و تفاوت آن با سایر چت‌ها.</span></a></li>
+            <li><a href="notifications.html"><strong>اعلان‌ها</strong><span>انتخاب اینکه کدام هشدارها به تلفن برسند و رویدادها چه زمانی یادآوری کنند.</span></a></li>
+            <li><a href="pin-locations.html"><strong>محل قرارگیری سنجاق شما</strong><span>چه کسی محل پست‌ها و رویدادهایتان را می‌بیند و حفظ حریم خصوصی خانه.</span></a></li>
+            <li><a href="map-pins.html"><strong>آنچه نقشه نشان می‌دهد</strong><span>سنجاق‌های روی نقشه، معنای رنگ‌هایشان، و دکمه‌های اطرافشان.</span></a></li>
+            <li><a href="polls.html"><strong>نظرسنجی‌ها</strong><span>یک پرسش سریع از جامعه. نظرسنجی‌ها افکار را نشان می‌دهند؛ خودبه‌خود تغییری نمی‌دهند.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

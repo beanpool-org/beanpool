@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/el by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="el">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Πού μπαίνει η πινέζα σου — BeanPool members' guide</title>
+    <meta name="description" content="Ποιος βλέπει πού βρίσκονται οι αναρτήσεις και οι εκδηλώσεις σας, και πώς να κρατήσετε το σπίτι σας ιδιωτικό.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#map">Χάρτης</a></p>
+        <h1>Πού μπαίνει η πινέζα σου</h1>
+        <p class="lede">Ποιος βλέπει πού βρίσκονται οι αναρτήσεις και οι εκδηλώσεις σας, και πώς να κρατήσετε το σπίτι σας ιδιωτικό.</p>
+        <h2>Εσείς επιλέγετε το σημείο</h2>
+        <p>Κάθε Προσφορά και Ανάγκη έχει μια θέση στον χάρτη. Την επιλέγετε όταν αναρτάτε:</p>
+        <ul>
+            <li>Το <strong>Η τοποθεσία μου</strong> χρησιμοποιεί το σημείο όπου βρίσκεται το τηλέφωνό σας αυτή τη στιγμή.</li>
+            <li>Το <strong>Τοποθέτηση πινέζας</strong> σας επιτρέπει να πατήσετε οποιοδήποτε σημείο στον χάρτη.</li>
+        </ul>
+        <p>Κάθε μέλος της κοινότητάς σας μπορεί να δει την πινέζα σε εκείνο το σημείο, με ακρίβεια περίπου 10 μέτρων. Η εφαρμογή δεν τη θολώνει για εσάς. Άτομα που δεν έχουν εγγραφεί δεν μπορούν να δουν τις καταχωρίσεις της κοινότητάς σας. Στην παγκόσμια κοινότητα μπορούν, αλλά μόνο κατά προσέγγιση πού βρίσκεται η καθεμία, ποτέ το ακριβές σημείο.</p>
+        <p>Στην παγκόσμια κοινότητα, τα άλλα μέλη βλέπουν την πινέζα της καταχώρισής σας σε ακτίνα περίπου ενός χιλιομέτρου· το ακριβές σημείο μπορείτε να το κοινοποιήσετε εσείς. Στην εφαρμογή ιστού μια νέα πινέζα εκεί ξεκινά στρογγυλοποιημένη σε περίπου 100 μέτρα: πατήστε <strong>Χρήση του ακριβούς σημείου</strong> για να διατηρήσετε το σημείο που επιλέξατε.</p>
+        <p><strong>Αν αναρτάτε από το σπίτι και δεν θέλετε να μάθουν οι άνθρωποι τη διεύθυνσή σας, χρησιμοποιήστε το Τοποθέτηση πινέζας και βάλτε την κάπου κοντά:</strong> σε μια γωνία, σε ένα πάρκο, στα καταστήματα. Μπορείτε να πείτε στο άλλο άτομο το ακριβές μέρος σε ένα μήνυμα μόλις συμφωνήσετε.</p>
+        <p>Δεν μπορείτε να μετακινήσετε την πινέζα μιας Προσφοράς ή μιας Ανάγκης αργότερα. Για να την αλλάξετε, διαγράψτε την ανάρτηση και δημοσιεύστε την ξανά. Ένας διοργανωτής μπορεί να μετακινήσει την πινέζα μιας εκδήλωσης επεξεργαζόμενος την εκδήλωση.</p>
+        <h2>Εκδηλώσεις</h2>
+        <p>Όταν δημιουργείτε μια εκδήλωση, τοποθετήστε πρώτα την πινέζα, και στη συνέχεια πατήστε <strong>Κατά προσέγγιση (~100 μ.)</strong>. Η πινέζα εμφανίζει τότε μόνο κατά προσέγγιση πού βρίσκεται. Αν μετακινήσετε την πινέζα μετά, πατήστε το ξανά. Στην παγκόσμια κοινότητα μια νέα πινέζα ξεκινά ως Κατά προσέγγιση, και το <strong>Χρήση του ακριβούς σημείου</strong> την επαναφέρει εκεί όπου την τοποθετήσατε. Εκεί, μόνο οι διοργανωτές και τα άτομα που μπορούν να διαβάσουν τη σημείωση βλέπουν το ακριβές σημείο· τα άλλα μέλη το βλέπουν σε ακτίνα περίπου ενός χιλιομέτρου.</p>
+        <p>Όλοι μπορούν να δουν το όνομα του μέρους της εκδήλωσης, επομένως μην πληκτρολογείτε τη διεύθυνση του σπιτιού σας εκεί. Βάλτε την ακριβή διεύθυνση στο <strong>Σημείωση για όσους θα πάνε</strong>. Οι διοργανωτές μπορούν να τη διαβάσουν, καθώς και όλοι όσοι πατούν <strong>Θα πάω</strong>, εκτός αν ο διοργανωτής επέλεξε <strong>Μόνο τα άτομα που αποδέχομαι βλέπουν τη σημείωση και τη συνομιλία</strong>: τότε μόνο τα άτομα που αποδέχεται ο διοργανωτής. Αυτό το πλαίσιο είναι αρχικά επιλεγμένο στην παγκόσμια κοινότητα.</p>
+        <h2>Τι δεν εμφανίζεται ποτέ</h2>
+        <ul>
+            <li>Η δική σας θέση. Η κουκκίδα που δείχνει πού βρίσκεστε εμφανίζεται μόνο στη δική σας οθόνη. Είναι μπλε στο τηλέφωνο και πράσινη στην εφαρμογή ιστού.</li>
+            <li>Οι ψηφοφορίες δεν έχουν δικό τους μέρος. Στην παγκόσμια κοινότητα μια ψηφοφορία εμφανίζεται στην περιοχή του ατόμου που την ανάρτησε, περίπου 10 χλμ. γύρω από αυτήν, αν έχει ορίσει περιοχή.</li>
+        </ul>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="map-pins.html"><strong>Τι δείχνει ο χάρτης</strong><span>Οι πινέζες στον Χάρτη, τι σημαίνουν τα χρώματά τους και τα κουμπιά γύρω τους.</span></a></li>
+            <li><a href="posting.html"><strong>Ανάρτηση προσφοράς ή ανάγκης</strong><span>Δημοσιεύστε κάτι που μπορείτε να κάνετε ή να δώσετε, ή κάτι που αναζητάτε.</span></a></li>
+            <li><a href="events.html"><strong>Εκδηλώσεις</strong><span>Δημιουργήστε εκδήλωση, σε τοποθεσία ή διαδικτυακά, μία φορά ή επαναλαμβανόμενη· δηλώστε συμμετοχή, λάβετε υπενθυμίσεις, μοιραστείτε την και διαχειριστείτε την ως διοργανωτής.</span></a></li>
+            <li><a href="privacy.html"><strong>Το απόρρητό σου</strong><span>Τι μπορούν να δουν οι άλλοι για εσάς και οι ρυθμίσεις που το ελέγχουν.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

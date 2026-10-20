@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/pt by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Grupos — BeanPool members' guide</title>
+    <meta name="description" content="Seus grupos e chats, conversas, criar um grupo, convidar pessoas, entrar por convite e as votações internas do grupo.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#talk">Conversas</a></p>
+        <h1>Grupos</h1>
+        <p class="lede">Seus grupos e chats, conversas, criar um grupo, convidar pessoas, entrar por convite e as votações internas do grupo.</p>
+        <h2>O que é um grupo</h2>
+        <p>Um grupo é um espaço voltado para certas pessoas em vez de todos: sua rua, uma equipe de horta, um coral, uma guilda. Todo grupo tem sua própria conversa. Alguns grupos guardam feijões: um projeto ou um empreendimento (veja &quot;Projetos e empreendimentos&quot;). Os outros (um círculo social, um grupo de trabalho, uma guilda) não guardam nenhum. Estar em um grupo não altera sua confiança nem o seu voto.</p>
+        <p>As pessoas que cuidam de um grupo de bate-papo são seus <strong>coordenadores</strong>; um deles é o <strong>coordenador principal</strong>. Eles não guardam feijões.</p>
+        <h2>Seus grupos</h2>
+        <p>Toque em <strong>Conversas</strong> e depois em <strong>Grupos</strong>. Todos os grupos dos quais você participa estão listados lá, com a mensagem mais recente primeiro, acompanhados dos projetos que você lidera ou nos quais trabalha (🎯), dos empreendimentos de que é custódio (🥖) e dos eventos que organiza ou aos quais vai comparecer (📅). A conversa de um empreendimento é a sua discussão pública: qualquer membro da sua comunidade pode lê-la. Veja &quot;Mensagens&quot;. Cada item exibe a mensagem mais recente e quantas você ainda não leu. Em uma conversa criptografada, a linha exibe quem escreveu por último e <strong>🔒 Mensagem</strong>, não as palavras.</p>
+        <ul>
+            <li>O número em <strong>Grupos</strong> no topo soma suas mensagens não lidas, exceto nas conversas que você silenciou.</li>
+            <li>Toque em um grupo para abrir a conversa dele. Isso a marca como lida.</li>
+            <li>Puxe a lista para baixo para atualizá-la.</li>
+        </ul>
+        <p>No celular, a mesma lista fica em <strong>Bens comuns</strong>, sob <strong>Grupos</strong>, como <strong>Seus grupos</strong>, sem os números de não lidas. Ela abre as mesmas conversas.</p>
+        <h2>Criando um grupo</h2>
+        <ul>
+            <li>No celular, em <strong>Conversas</strong>, sob <strong>Grupos</strong>, toque em <strong>Novo grupo</strong>. Ou em <strong>Bens comuns</strong>, sob <strong>Grupos</strong>, toque no botão redondo <strong>+</strong>. Ambos abrem o mesmo formulário <strong>Criar grupo</strong>. (No chip <strong>Projetos</strong> ou <strong>Empreendimentos</strong>, o <strong>+</strong> inicia um projeto ou empreendimento em vez disso.)</li>
+            <li>No app web, abra <strong>Bens comuns</strong>, depois <strong>Grupos</strong> e toque em <strong>+ Criar grupo</strong>. Você permanece em <strong>Bens comuns</strong> depois. Para convidar pessoas, abra o grupo e toque em <strong>Convidar pessoas</strong>. Você também pode abrir <strong>Bate-papo</strong>, tocar em <strong>Grupos</strong> e depois em <strong>Novo grupo</strong>: isso leva você diretamente para a conversa do novo grupo.</li>
+            <li>Dê um <strong>Nome do grupo</strong>, de até 60 caracteres, e, se desejar, um <strong>Objetivo / Descrição</strong>, de até 300: para que serve o grupo e a quem se destina.</li>
+            <li>Escolha uma <strong>Categoria</strong>: <strong>Círculo social</strong>, <strong>Geral</strong>, <strong>Grupo de trabalho</strong> ou <strong>Guilda</strong>. No celular, <strong>Círculo social</strong> já vem selecionado para você. No app web, <strong>Grupo de trabalho</strong> é o selecionado.</li>
+            <li>Escolha uma <strong>Política de adesão</strong>: <strong>Aberto</strong>, <strong>Pedir para entrar</strong> ou <strong>Apenas por convite</strong>.</li>
+            <li>Toque em <strong>Criar grupo</strong>. Você se torna o <strong>coordenador principal</strong>. No celular, o app leva você diretamente para a conversa do novo grupo.</li>
+        </ul>
+        <p>Você pode criar até 5 grupos em qualquer período de 24 horas.</p>
+        <p>Envolve feijões? Inicie um projeto ou empreendimento em vez disso, a partir do final das categorias: no celular, <strong>Iniciar um projeto ou um empreendimento</strong>; na web, <strong>Iniciar um projeto</strong> ou <strong>Iniciar um empreendimento</strong>. Veja &quot;Projetos e empreendimentos&quot;.</p>
+        <h2>Convidando pessoas</h2>
+        <p>Você pode convidar pessoas no celular e no app web. No celular, a conversa de um novo grupo pergunta: <strong>Quem você quer convidar?</strong></p>
+        <ul>
+            <li>Toque em <strong>Convidar pessoas</strong>, marque as pessoas que deseja e toque no botão na parte inferior (por exemplo, <strong>Convidar 2 pessoas</strong>).</li>
+            <li>Ou toque em <strong>Agora não</strong> para pular essa etapa.</li>
+        </ul>
+        <p>Mais tarde, um coordenador pode convidar pessoas a partir do menu <strong>⋮</strong> da conversa, em <strong>Convidar pessoas</strong>. No app web, o coordenador abre o grupo e toca em <strong>Convidar pessoas</strong>, marca as pessoas e toca no botão na parte inferior da mesma forma. Cada pessoa convidada vê o grupo em <strong>Bens comuns</strong>, sob <strong>Grupos</strong>, marcado como <strong>CONVIDADO</strong> no app de celular (no celular, em uma comunidade sem a aba <strong>Bens comuns</strong>, em <strong>Encontrar grupos</strong> em <strong>Conversas</strong>). O app web ainda não marca convites: lá, a pessoa abre o grupo e toca em <strong>Aceitar convite</strong>. Quando a pessoa entra, a conversa avisa.</p>
+        <h2>A conversa do grupo</h2>
+        <ul>
+            <li>No celular, toque no nome do grupo no topo da conversa para ver o grupo: seus membros, <strong>Sair do grupo</strong> e, para coordenadores, <strong>Ferramentas do coordenador</strong>. No app web, toque no nome do grupo no topo da conversa ou abra o grupo a partir de <strong>Bens comuns</strong>, sob <strong>Grupos</strong>.</li>
+            <li>O menu <strong>⋮</strong> traz <strong>Convidar pessoas</strong> (coordenadores), <strong>Silenciar notificações</strong> (ou <strong>Reativar notificações</strong>), <strong>Pesquisar nesta conversa</strong>, <strong>Confirmar novo celular</strong> e <strong>Informações do grupo</strong>. A pesquisa roda no seu celular, não no servidor da comunidade.</li>
+            <li>Entradas, saídas e alterações de função aparecem na conversa como pequenas linhas cinzas.</li>
+            <li>Digite <strong>@</strong> e o nome de alguém para alertar a pessoa. Veja &quot;Menções&quot;.</li>
+            <li>A mensagem mais recente fica logo acima da caixa de mensagem e permanece ali quando o teclado se abre. Role para cima para ler mensagens anteriores; a chegada de uma nova mensagem aguardará você, em vez de rolar a tela para baixo à força.</li>
+        </ul>
+        <p>A conversa de um grupo é criptografada de ponta a ponta: somente os membros do grupo podem lê-la, não os responsáveis pelo servidor da sua comunidade. Acima da caixa de mensagem, o app informa que ela é <strong>Criptografada de ponta a ponta</strong>. O servidor da comunidade ainda vê quem escreveu, quando, quem foi mencionado, a qual mensagem cada linha responde e as reações com emojis.</p>
+        <ul>
+            <li>Você vê a conversa somente a partir do dia em que entrou. Nada escrito antes é exibido, e o seu celular nunca detém a chave para isso. Você ainda vê as linhas cinzas de antes, mas não as palavras de ninguém.</li>
+            <li>Quando alguém é removido ou sai, o grupo gera uma nova chave. Em um grupo de 10 ou mais pessoas, a conversa exibe <strong>Protegendo a conversa para N pessoas…</strong> enquanto o celular a gera.</li>
+            <li>Uma mensagem que não puder ser protegida não é enviada. Ela exibe <strong>! não entregue</strong>, e uma linha acima da caixa de mensagem pode dizer o motivo. Toque nela para <strong>Reenviar</strong> ou <strong>Descartar</strong>.</li>
+            <li>Uma mensagem que não for verificada como escrita por um membro aparece como <strong>Não verificada</strong>, como de ninguém, acompanhada de <strong>Esta mensagem não pôde ser verificada.</strong> Uma mensagem cuja chave ainda não chegou ao seu celular informa <strong>Aguardando a chave desta mensagem.</strong></li>
+            <li>Se o servidor da comunidade for mais antigo e ainda não puder proteger conversas em grupo, o bate-papo avisa que o servidor pode lê-lo e que será protegido assim que o servidor for atualizado. Quando for atualizado, as mensagens anteriores do grupo, que o servidor conseguia ler, são removidas, e uma linha na conversa avisa isso. Cada mensagem anterior passa a exibir <strong>Uma mensagem anterior foi removida quando esta conversa foi protegida</strong>, e várias em sequência aparecem em uma única linha, como <strong>11 mensagens anteriores removidas quando esta conversa foi protegida</strong>.</li>
+        </ul>
+        <p>No app web, suas conversas de grupo ficam em <strong>Bate-papo</strong>, marcadas com 👥. Você pode ler e escrever lá, com criptografia de ponta a ponta como no celular: responder, reagir, editar por 15 minutos e pesquisar na conversa. Silenciar, <strong>Excluir</strong> e <strong>Remover</strong> existem apenas no celular. No app web, toque no nome do grupo no topo da conversa para abrir o grupo; um coordenador pode convidar pessoas por lá. A conversa de um empreendimento não é criptografada: veja &quot;Mensagens&quot;.</p>
+        <h2>Falando na conversa de um grupo</h2>
+        <p>A conversa de um grupo funciona exatamente como a conversa com uma pessoa. Toque em uma mensagem e pequenos botões redondos aparecem ao lado dela:</p>
+        <ul>
+            <li><strong>Responder</strong> inclui uma citação dela acima do que você escrever a seguir. Toque na citação para voltar até a mensagem respondida.</li>
+            <li><strong>Reagir</strong> abre sete emojis. Um por pessoa; toque nele novamente para retirá-lo. As reações aparecem como um selo sob a mensagem.</li>
+            <li><strong>Editar</strong>, nas suas próprias mensagens, por 15 minutos. A mensagem exibe então <strong>editada</strong>.</li>
+            <li><strong>Excluir</strong>, nas suas próprias mensagens, a qualquer momento. O app pergunta <strong>Excluir para todos?</strong> uma vez, e a mensagem passa a exibir <strong>Esta mensagem foi apagada</strong> para todos no grupo.</li>
+            <li><strong>Remover</strong>, para coordenadores, na mensagem de qualquer outra pessoa. O app pergunta uma vez, e a mensagem passa a exibir <strong>Removido por um coordenador</strong>. Sua própria mensagem é uma ação de <strong>Excluir</strong>, não de <strong>Remover</strong>.</li>
+        </ul>
+        <p>Duas ou mais mensagens seguidas que seus autores excluíram aparecem em uma única linha, como <strong>3 mensagens foram apagadas</strong>. Duas ou mais mensagens removidas por um coordenador aparecem como <strong>3 mensagens removidas por um coordenador</strong>.</p>
+        <p>Abaixo da sua própria mensagem: um relógio enquanto ela está sendo enviada, uma marca de confirmação quando o servidor do grupo a recebe ou <strong>! não entregue</strong> se não pôde ser enviada — toque nisso para <strong>Reenviar</strong> ou <strong>Descartar</strong>. Não há marcas de confirmação azuis duplas em um grupo: um grupo não possui um leitor único.</p>
+        <p>Fotos não podem ser enviadas na conversa de um grupo, e um acordo não pode ser iniciado nela. Ambos pertencem a uma conversa entre duas pessoas. Veja &quot;Mensagens&quot;.</p>
+        <p>Um <strong>observador</strong> pode ler a conversa, mas não pode escrever nela, reagir ou responder.</p>
+        <p>O servidor da sua comunidade precisa estar atualizado para que responder, reagir, editar e excluir funcionem. Somente se o seu servidor não estiver atualizado é que o aplicativo exibirá <strong>Ainda não disponível nesta comunidade</strong> — vale a pena falar sobre isso com os responsáveis pelo servidor.</p>
+        <p>Qualquer outra coisa que o servidor recusar, ele recusa em suas próprias palavras, e o aplicativo mostra essas palavras em vez daquela linha padrão. &quot;Uma mensagem removida não pode ser editada&quot; significa que um coordenador a removeu enquanto você digitava, e não que seu servidor está desatualizado.</p>
+        <h2>Mensagens de antes de você trocar de celular</h2>
+        <p>Quando a sua conta passa para um novo celular com uma nova chave, as mensagens de grupo de antes estavam protegidas pela chave do seu celular antigo. Na conversa de cada grupo, uma linha diz <strong>🔒 N mensagens de antes de você trocar de celular. Desbloquear →</strong>. Toque nela:</p>
+        <ul>
+            <li><strong>Tenho meu celular antigo ou as 12 palavras antigas</strong>: digite suas 12 palavras antigas no celular novo (lembre-se de que são palavras em inglês), e as mensagens anteriores serão desbloqueadas. Seu celular antigo exibe <strong>Esta conta foi transferida para um novo celular</strong>, com um botão para mostrar essas palavras após o bloqueio de tela. Elas são suas palavras pessoais: digite-as apenas no seu próprio celular novo, nunca em um celular oferecido por outra pessoa.</li>
+            <li><strong>Pedir para um membro do grupo confirmar este celular</strong>: seu novo celular exibe um código. Encontre pessoalmente um membro do grupo; ele abre o menu da conversa do grupo, toca em <strong>Confirmar novo celular</strong> e o escaneia. O celular dele passa para o seu as chaves anteriores que guarda para os grupos que vocês compartilham.</li>
+            <li><strong>Manter bloqueadas</strong>: nada muda. As mensagens que você escreveu naquela época continuam sob o seu nome, sem o texto visível.</li>
+        </ul>
+        <p><strong>Quando você confirma o novo celular de outra pessoa</strong>, o seu celular compara o código com o que ele se lembra da chave antiga dessa pessoa. Apenas confirme um novo celular para alguém com quem você já conversou naquele grupo antes, neste aparelho, e apenas com o celular nas mãos da própria pessoa: quem segurar o aparelho poderá ler as mensagens anteriores que você pode ler. Se o seu celular disser <strong>Não continue; avise um proprietário</strong>, pare. Isso significa que o que seu celular viu antes não corresponde ao que o servidor diz agora. O celular também diz isso, em definitivo, sobre alguém que alterou o nome depois que seu celular já o conhecia: para o aparelho, um novo nome na chave parece o nome de um estranho colocado ali, então um celular que viu os dois nomes nunca mais poderá confirmar essa pessoa presencialmente. As 12 palavras antigas dela ainda funcionam, assim como a confirmação feita por um membro cujo celular só conheceu o novo nome. Um celular que acabou de ser restaurado a partir das 12 palavras, ou que nunca abriu aquele grupo, viu muito pouco para conseguir checar: ele avisa que nunca conheceu a chave antiga ou pode confiar no que o servidor informa. Deixe que um membro que já conversava com a pessoa faça a confirmação.</p>
+        <p>Ao final, o seu celular informa o que aconteceu: <strong>Concluído</strong> apenas quando transferiu todas as chaves; <strong>Transferidas 3 de 5</strong> quando o servidor recusou algumas. Quando o servidor informa que o novo celular já contém algumas, o seu celular diz <strong>a comunidade informa</strong> isso, porque não pode acessar o interior do outro celular: se o novo aparelho ainda não conseguir ler essas mensagens, avise um proprietário.</p>
+        <h2>Entrando em um grupo</h2>
+        <p>No celular, em <strong>Bens comuns</strong>, sob <strong>Grupos</strong>, a seção <strong>Grupos que você poderia entrar</strong> lista os grupos em que você não está. Filtre-os por categoria usando os botões acima da lista. No app web, <strong>Grupos</strong> lista todos os grupos que você pode ver, marcando os seus com a sua função; <strong>Meus grupos</strong> mostra apenas os seus. Cada um mostra o início da descrição. Abra um grupo para lê-la por inteiro e depois:</p>
+        <ul>
+            <li><strong>Entrar no grupo</strong> se for aberto a todos;</li>
+            <li><strong>Pedir para entrar</strong> se um coordenador aprova membros. Você verá <strong>Pedido aguardando aprovação</strong> até que ele aprove.</li>
+        </ul>
+        <p>No celular, um grupo em que você pediu para entrar não aparece em nenhuma das duas listas até que um coordenador autorize sua entrada. Na web, ele permanece na lista marcado como <strong>Pendente</strong>.</p>
+        <p>Um grupo <strong>Apenas por convite</strong> fica oculto para todos que não estão nele nem foram convidados para ele.</p>
+        <p>No celular, uma comunidade local sem feijões não tem a aba <strong>Bens comuns</strong>. Lá, toque em <strong>Conversas</strong>, depois em <strong>Grupos</strong> e em <strong>Encontrar grupos</strong>: isso abre a mesma lista. Antes de você estar em qualquer grupo, o link exibido é <strong>Encontrar um grupo para entrar</strong>. A comunidade global possui a aba <strong>Bens comuns</strong>: os grupos dela ficam lá, abaixo de um exemplo de comunidade local (veja &quot;Feijões e a comunidade global&quot;).</p>
+        <p>Se um coordenador removeu você de um grupo, você não pode entrar nele novamente por conta própria.</p>
+        <p>Enquanto sua conta estiver suspensa, você não pode criar um grupo, entrar em um, pedir para entrar ou aceitar um convite, e um coordenador não pode aprovar um pedido feito por você anteriormente. Os grupos em que você já está continuam sendo seus. Quando a suspensão termina, você pode criar grupos ou entrar neles novamente.</p>
+        <h2>Entrando por convite</h2>
+        <p>Um grupo para o qual você foi convidado aparece em <strong>Bens comuns</strong>, sob <strong>Grupos</strong>, marcado como <strong>CONVIDADO</strong> no app de celular. No celular, em uma comunidade sem a aba <strong>Bens comuns</strong>, ele fica sob <strong>Encontrar grupos</strong> em <strong>Conversas</strong>. Toque nele para ver o convite: quem convidou você, o que é o grupo, quem participa (para um grupo apenas por convite, quantas pessoas) e quem pode ler a conversa dele. No celular:</p>
+        <ul>
+            <li>Toque em <strong>Entrar no grupo</strong>. Você é direcionado para a conversa dele.</li>
+            <li>Toque em <strong>Agora não</strong> para decidir mais tarde. O convite permanece.</li>
+            <li>Se o app disser <strong>Este convite não está mais aberto</strong>, ele foi revogado. Peça a quem convidou você para enviar um novo convite.</li>
+            <li>Se disser <strong>Não foi possível abrir este grupo</strong>, seu celular não conseguiu contatar o servidor da comunidade. Toque em <strong>Tentar novamente</strong>.</li>
+        </ul>
+        <p>O app web ainda não marca convites. Abra o grupo em <strong>Bens comuns</strong>, sob <strong>Grupos</strong>, e toque em <strong>Aceitar convite</strong>. Você entra nele e permanece na página do grupo.</p>
+        <h2>Publicando em um grupo</h2>
+        <p>Na web, abra o grupo em <strong>Bens comuns</strong>, sob <strong>Grupos</strong>, e toque em <strong>Publicar em</strong> e no nome dele. O app de celular ainda não permite publicar em um grupo do qual você já faça parte. Apenas os membros do grupo veem a publicação. Ela aparece no Mercado com um cadeado e o nome do grupo.</p>
+        <h2>Coordenadores e o coordenador principal</h2>
+        <p>Um coordenador cuida do grupo. Quem o criou é seu <strong>coordenador principal</strong>, e o cartão do grupo exibe seu nome, como <strong>Coordenador principal: Ali</strong>. Na lista de membros, a linha correspondente é marcada como <strong>LÍDER</strong>.</p>
+        <p>Em <strong>Ferramentas do coordenador</strong>, qualquer coordenador pode:</p>
+        <ul>
+            <li>alterar a política de adesão;</li>
+            <li><strong>Aprovar</strong> ou <strong>Recusar</strong> pedidos de entrada.</li>
+        </ul>
+        <p>Ao lado de um nome na lista de <strong>Membros</strong>, qualquer coordenador pode:</p>
+        <ul>
+            <li>alterar a função de um membro ou observador (<strong>Função</strong> no celular, um menu suspenso no app web), incluindo torná-lo um coordenador;</li>
+            <li>remover um membro ou observador (<strong>✕</strong>).</li>
+        </ul>
+        <p>Um coordenador remove uma publicação a partir do próprio anúncio e, no celular, uma mensagem na conversa. O nome e a descrição de um grupo ainda não podem ser alterados no aplicativo.</p>
+        <p>Apenas o <strong>coordenador principal</strong> pode remover um coordenador ou retirar a função de coordenador de alguém. Ao lado de uma linha sobre a qual você não tem autoridade, nenhuma opção de <strong>Função</strong> ou <strong>✕</strong> é exibida — é o app informando que essa ação não cabe a você.</p>
+        <p><strong>Ninguém pode remover o coordenador principal nem retirar a liderança dele.</strong> Nem outro coordenador, nem um administrador da comunidade. Além da transferência voluntária pelo próprio líder, somente uma votação do grupo pode escolher um novo líder. Veja &quot;Votações em um grupo&quot;.</p>
+        <p><strong>Transferindo a liderança.</strong> O líder pode repassar a função. No celular, toque em <strong>Transferir</strong> em <strong>Ferramentas do coordenador</strong>, ou no botão de escudo ao lado do nome de alguém. No app web, toque em <strong>Tornar coordenador principal</strong> ao lado do nome da pessoa. Escolha outro coordenador ou um membro — um membro torna-se coordenador no mesmo instante. Um observador não pode ser o líder; torne-o membro ou coordenador primeiro. Depois de concluído, você não pode retomar a liderança.</p>
+        <p><strong>Saindo como líder.</strong> Transfira a liderança primeiro; o celular oferece essa opção quando você toca em <strong>Sair do grupo</strong>, e o app web avisa para fazer isso. Se ninguém mais estiver no grupo, você pode simplesmente sair.</p>
+        <p>O último coordenador não pode renunciar nem sair enquanto houver qualquer outra pessoa no grupo.</p>
+        <p><strong>Enquanto um coordenador estiver suspenso.</strong> Se a sua comunidade suspender a conta de um coordenador, nenhuma das ferramentas de coordenador funciona para ele até o término da suspensão: aprovar, convidar, mudar funções, remover pessoas, anúncios ou mensagens, editar o grupo, transferir a liderança. O app avisa que a conta dele está suspensa e que ele continua sendo um coordenador. Nada é retirado dele: ele permanece coordenador, o líder continua líder, e tudo volta a funcionar no instante em que a suspensão termina. Ele ainda pode sair do grupo, a menos que seja o líder e ainda haja outras pessoas nele.</p>
+        <p>O grupo continua funcionando enquanto isso. Seus membros continuam conversando e publicando, e as pessoas ainda podem entrar em um grupo aberto. Qualquer outro coordenador ainda pode fazer tudo o que foi descrito acima; apenas os poderes exclusivos do líder aguardam. Pedidos para entrar e novos convites aguardam um coordenador. Qualquer pessoa ainda pode denunciar uma publicação ou uma pessoa aos moderadores da sua comunidade. Se o coordenador suspenso for o único coordenador do grupo, ele é seu líder, e nada do que fizer enquanto suspenso conta como atividade: 30 dias após sua última atividade, o grupo pode eleger um novo líder por votação, como explicado a seguir.</p>
+        <p><strong>Quando o líder fica inativo.</strong> Após 30 dias sem nenhuma atividade do líder, o grupo ganha uma segunda maneira de eleger um novo líder. (Seus membros também podem votar para escolher um novo líder a qualquer momento, exceto na comunidade global: veja &quot;Votações em um grupo&quot;.) Abra o grupo e observe logo acima da lista de <strong>Membros</strong>: um painel aparece lá indicando o líder e há quanto tempo ele está ausente. Nada aparece enquanto o líder do grupo estiver ativo — exceto uma linha dizendo como a última votação terminou, que permanece por duas semanas após o encerramento.</p>
+        <p>Quem vota são os <strong>outros coordenadores</strong> do grupo — ou seus <strong>membros</strong>, caso nenhum dos outros coordenadores tenha sido nomeado coordenador até o dia em que o líder esteve ativo pela última vez. Quem tiver entrado no grupo, ou tiver se tornado coordenador após esse dia, não participa da votação. Qualquer um dos autorizados a votar pode tocar em <strong>Propor</strong> ao lado de um nome nesse painel, incluindo o seu próprio; propor conta como o voto &quot;Sim&quot; dessa pessoa. Todos os autorizados a votar veem então as opções <strong>Sim</strong> e <strong>Não</strong>. Você é solicitado a confirmar, porque um voto não pode ser alterado, e você só vê os totais — nunca quem votou de que forma. A votação dura 14 dias e é aprovada quando mais da metade dos que responderem votar Sim. Se aprovada, o antigo líder continua sendo coordenador quando os outros coordenadores votaram, e torna-se membro quando os membros votaram. Se o líder inativo retornar e realizar qualquer ação no app, a votação é encerrada imediatamente. No celular, com notificações permitidas, basta abrir o app para contar como atividade. Enquanto a conta do líder estiver suspensa, nada do que ele fizer conta. Observadores podem ver o painel, mas não têm direito a voto, e o líder inativo também não vota.</p>
+        <p>As regras completas estão em &quot;Regras e como funcionam as decisões&quot;, sob &quot;Um coordenador principal inativo&quot;.</p>
+        <p><strong>Enquanto o grupo vota em um novo líder.</strong> Quer seja esta votação ou uma das votações internas do próprio grupo descritas abaixo, nenhum coordenador pode remover a pessoa que pode se tornar líder, nem rebaixar sua função, até que a votação seja encerrada. O app avisa isso em suas próprias palavras. A pessoa ainda pode sair por vontade própria, e uma votação do grupo ainda pode removê-la.</p>
+        <h2>Votações em um grupo</h2>
+        <p>Os membros de um grupo podem votar juntos sobre os assuntos internos do grupo. Abra o grupo (no celular, toque no nome dele no topo da conversa; na web, abra-o em <strong>Bens comuns</strong>, sob <strong>Grupos</strong>): suas votações ficam em <strong>Decisões</strong>, no alto da página. Apenas as pessoas do grupo as veem.</p>
+        <p>Na comunidade global, um grupo não tem votações próprias nem a opção <strong>Propor uma votação</strong>; apenas a votação por líder inativo funciona lá.</p>
+        <p>Toque em <strong>Propor uma votação</strong> e escolha o que deve acontecer:</p>
+        <ul>
+            <li><strong>Escolher um novo coordenador principal</strong>: qualquer pessoa do grupo exceto um observador, incluindo você mesmo.</li>
+            <li><strong>Tornar alguém coordenador</strong> ou <strong>Tornar um coordenador membro</strong>. Uma votação nunca altera a função do líder; para mudar o líder, vote em um novo líder.</li>
+            <li><strong>Remover alguém</strong> do grupo. Não é possível remover o líder, nem você mesmo: para sair, use a opção de sair do grupo.</li>
+            <li><strong>Mudar quem pode entrar</strong>: aberto a todos, pedidos com aprovação de um coordenador ou apenas por convite.</li>
+            <li><strong>Fechar o grupo.</strong> Sua conversa permanece visível para leitura, mas não aceita novas mensagens, anúncios ou membros, e suas outras votações abertas são encerradas. Seus anúncios são retirados do Mercado.</li>
+        </ul>
+        <p>Dê um título e justifique a proposta, depois toque em <strong>Abrir a votação</strong>. Uma votação de grupo nunca movimenta feijões: um grupo não guarda feijões. Nem pode alterar o status de alguém na comunidade; isso requer uma Decisão comunitária.</p>
+        <p><strong>Quem vota.</strong> Todos os que eram membros ou coordenadores do grupo quando a votação foi aberta, incluindo o líder e quem fez a proposta. Os observadores apenas acompanham: veem as votações, mas não votam Sim nem Não. Quem entra após a abertura da votação não participa dela. Um grupo de uma única pessoa não tem com quem votar, portanto o botão <strong>Propor uma votação</strong> não aparece nesse caso. Você pode manter aberta apenas uma votação proposta por você por vez em um mesmo grupo.</p>
+        <p><strong>Como é aprovada.</strong> Mais da metade das pessoas com direito a voto devem votar. A remoção de alguém e o fechamento do grupo exigem 60% de aprovação (Sim); as demais precisam de maioria simples (mais da metade). A votação dura 7 dias ou termina antes assim que o resultado não puder mais mudar. Quando é aprovada, o aplicativo executa a decisão automaticamente. Um novo líder, uma mudança de função, uma remoção ou um encerramento aparecem na conversa como uma pequena linha cinza; uma nova regra de adesão aparece na página do grupo.</p>
+        <p><strong>O que você vê.</strong> Enquanto uma votação está aberta, todos veem quantas pessoas votaram, não como votaram. As contagens de Sim e Não aparecem assim que ela é encerrada. O voto não pode ser alterado depois de confirmado. Ninguém vê quem votou em qual opção. Em um grupo muito pequeno, no entanto, o resultado somado à lista de quem votou pode revelar: se três pessoas votam e o placar termina em 3 a 0, todos sabem como cada um votou.</p>
+        <p><strong>Sendo avisado.</strong> Todos os participantes da votação, exceto quem propôs, recebem uma notificação quando ela é aberta, a menos que tenham silenciado a conversa do grupo ou desativado as notificações de bate-papo. Ela não cita pessoas nem o nome do grupo: diz <strong>Uma votação foi aberta em um dos seus grupos.</strong> Toque nela e o grupo se abre na seção <strong>Decisões</strong>. No Início, uma votação aberta na qual você ainda não votou aparece sob <strong>Precisa de você</strong> e também abre o grupo.</p>
+        <p><strong>Quando pessoas entram e saem.</strong> Quem sai do grupo durante uma votação sai da votação, e o voto dado por essa pessoa é descartado. Alguém que um coordenador remove ou transforma em observador durante uma votação permanece nela: mantém o voto já dado e ainda pode votar se não tiver votado. Remover membros nunca serve para manipular uma votação. Se restarem menos de duas pessoas na votação, ela é encerrada sem resultado.</p>
+        <p><strong>Um grupo fechado</strong> exibe <strong>Fechado</strong> em sua página, com a frase &quot;O grupo foi fechado por votação de seus membros. Seu bate-papo permanece visível para leitura.&quot; A conversa, as votações e os membros participantes continuam lá para consulta; nada novo pode ser acrescentado.</p>
+        <h2>Em breve</h2>
+        <ul>
+            <li>Remoção de um coordenador principal desonesto por meio de uma Decisão comunitária. Chegará em uma atualização futura.</li>
+            <li>Indicação de convites pendentes na lista de grupos na web.</li>
+        </ul>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="messages.html"><strong>Mensagens</strong><span>Iniciar uma conversa, enviar fotos, responder, reagir, editar, apagar, silenciar e o que é privado.</span></a></li>
+            <li><a href="mute.html"><strong>Silenciar conversa</strong><span>Silencie uma conversa — individual, de grupo ou de empreendimento — por 8 horas, uma semana ou para sempre.</span></a></li>
+            <li><a href="mentions.html"><strong>Menções (@nome)</strong><span>Chame a atenção de alguém em um chat em grupo escrevendo @ e o nome da pessoa.</span></a></li>
+            <li><a href="enterprises.html"><strong>Projetos e empreendimentos</strong><span>Iniciativas conjuntas com feijões próprios: encontre uma, apoie ou crie a sua.</span></a></li>
+            <li><a href="event-chat.html"><strong>Chat do evento</strong><span>Converse com o anfitrião e todos que vão ao evento.</span></a></li>
+            <li><a href="posting.html"><strong>Publicar Oferta ou Pedido</strong><span>Publique algo que você pode fazer ou oferecer, ou algo que esteja procurando.</span></a></li>
+            <li><a href="decisions.html"><strong>Votar em uma Decisão</strong><span>Encontre Decisões abertas, vote, altere seu voto e veja os resultados.</span></a></li>
+            <li><a href="keepers.html"><strong>Custódios</strong><span>As pessoas que administram um empreendimento e respondem por ele. Como entrar, contestar e sair.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

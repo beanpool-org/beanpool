@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/bn by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>চ্যাট মিউট করা — BeanPool members' guide</title>
+    <meta name="description" content="একটি চ্যাটে যুক্ত থেকেই এর বিজ্ঞপ্তি বন্ধ করে রাখা।">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#talk">কথা</a></p>
+        <h1>চ্যাট মিউট করা</h1>
+        <p class="lede">একটি চ্যাটে যুক্ত থেকেই এর বিজ্ঞপ্তি বন্ধ করে রাখা।</p>
+        <h2>চ্যাট মিউট করা</h2>
+        <p>কোনো ব্যক্তি বা গ্রুপের সাথে যেকোনো চ্যাটে, এবং কোনো উদ্যোগের চ্যাটে যদি আপনি এর কিপারদের একজন হন:</p>
+        <ul>
+            <li>উপরের ডানদিকের <strong>⋮</strong>-এ ট্যাপ করুন (একক ব্যক্তির সাথে চ্যাটে <strong>⋯</strong>), তারপর <strong>বিজ্ঞপ্তি মিউট করুন</strong>-এ।</li>
+            <li><strong>৮ ঘণ্টার জন্য</strong>, <strong>এক সপ্তাহের জন্য</strong> বা <strong>সবসময়</strong> বেছে নিন।</li>
+        </ul>
+        <p>এটি পূর্বাবস্থায় ফেরাতে, একই বোতামে ট্যাপ করুন, তারপর <strong>আনমিউট করুন</strong>-এ।</p>
+        <p>মিউট করার সুবিধা আপাতত কেবল ফোন অ্যাপেই রয়েছে।</p>
+        <h2>মিউট করা যা করে</h2>
+        <ul>
+            <li>এটি সেই চ্যাটের সতর্কতাগুলো বন্ধ করে। একটি গ্রুপের চ্যাটে, কেউ আপনাকে @মেনশন করলে তা তবুও আপনার কাছে পৌঁছাবে। &quot;মেনশন (@নাম)&quot; দেখুন।</li>
+            <li>একটি উদ্যোগের চ্যাট কোনো সতর্কতা পাঠায় না, তাই বন্ধ করার মতো কিছুই থাকে না। এটি মিউট করলে তা নিচের সংখ্যাগুলো থেকে বাদ থাকে।</li>
+            <li>চ্যাটটি এখনও নতুন বার্তাগুলো প্রদর্শন করে।</li>
+            <li><strong>আলাপ</strong>-এ, <strong>গ্রুপ</strong>-এর অধীনে, মিউট করা একটি চ্যাট কাটা দাগযুক্ত একটি ঘণ্টা দেখায়। এর অপঠিত সংখ্যা ধূসর থাকে এবং এটি <strong>গ্রুপ</strong>-এর সংখ্যার সাথে যোগ হয় না।</li>
+            <li>একটি গ্রুপ বা উদ্যোগের চ্যাটে, শীর্ষ বারটিও এটি সম্পর্কে শান্ত থাকে। একক ব্যক্তির সাথে মিউট করা চ্যাট এখনও সেখানে গণনা করা হয়।</li>
+            <li>আপনি চ্যাট ছেড়ে বের হলেও মিউট কার্যকর থাকে। আপনি যখন আবার কোনো গ্রুপ বা উদ্যোগের চ্যাট খোলেন, তখন শীর্ষে <strong>মিউট করা</strong> দেখায়।</li>
+        </ul>
+        <h2>অন্যান্য চ্যাট</h2>
+        <p>ইভেন্ট চ্যাট এখনও মিউট করা যায় না। আপনি করতে পারেন:</p>
+        <ul>
+            <li><strong>সেটিংস</strong>-এ, <strong>বিজ্ঞপ্তি পছন্দসমূহ</strong>-এর অধীনে সব ধরনের সতর্কতা বন্ধ করা। &quot;বিজ্ঞপ্তিসমূহ&quot; দেখুন;</li>
+            <li>আপনাকে বিরক্ত করছেন এমন কাউকে ব্লক করা। &quot;কাউকে ব্লক করা&quot; দেখুন।</li>
+        </ul>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="notifications.html"><strong>বিজ্ঞপ্তিসমূহ</strong><span>কোন সতর্কতাগুলো আপনার ফোনে পৌঁছাবে এবং ইভেন্টগুলো কখন আপনাকে মনে করিয়ে দেবে তা নির্বাচন করুন।</span></a></li>
+            <li><a href="blocking.html"><strong>কাউকে ব্লক করা</strong><span>কারও পোস্ট ও বার্তা আপনার থেকে লুকিয়ে রাখুন এবং পরে তা পূর্বাবস্থায় ফিরিয়ে আনুন।</span></a></li>
+            <li><a href="groups.html"><strong>গ্রুপ</strong><span>একটি গ্রুপে যোগদান, শুরু করা, গ্রুপ চ্যাট, উন্মুক্ত ও বন্ধ গ্রুপ, আহ্বায়ক ও প্রধান আহ্বায়ক এবং নতুন প্রধান নির্বাচন।</span></a></li>
+            <li><a href="mentions.html"><strong>মেনশন (@নাম)</strong><span>গ্রুপ বা ইভেন্ট চ্যাটে কীভাবে কাউকে সতর্ক করবেন।</span></a></li>
+            <li><a href="messages.html"><strong>বার্তাসমূহ</strong><span>একটি চ্যাট শুরু করুন, ছবি পাঠান, উত্তর দিন, প্রতিক্রিয়া দিন, সম্পাদনা করুন, মুছুন, মিউট করুন এবং কী গোপনীয়।</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

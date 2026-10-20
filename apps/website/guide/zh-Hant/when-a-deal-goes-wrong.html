@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/zh-Hant by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>交易出現問題時 — BeanPool members' guide</title>
+    <meta name="description" content="取消交易，以及雙方無法達成共識時該如何處理。">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#market">市集</a></p>
+        <h1>交易出現問題時</h1>
+        <p class="lede">取消交易，以及雙方無法達成共識時該如何處理。</p>
+        <h2>先進行溝通</h2>
+        <p>大多數問題都源於誤會。點擊貼文上的<strong>發訊息</strong>，雙方充分溝通協商。</p>
+        <h2>取消交易</h2>
+        <ul>
+            <li><strong>達成共識之前：</strong>提出請求者點擊<strong>撤回申請</strong>。發布需求者點擊<strong>拒絕</strong>，然後點擊<strong>婉拒</strong>，並可附上一段簡短訊息。若無人回應，請求將在 7 天後自動結束。</li>
+            <li><strong>豆子受託保管期間：</strong>任一方皆可點擊<strong>取消代管</strong>，然後點擊<strong>是，取消</strong>。所有託管的豆子將全數退還給付款方，貼文重新回到市集中。對方會收到通知。</li>
+        </ul>
+        <p>在網頁版應用程式中，<strong>撤回申請</strong>顯示為<strong>取消提供</strong>，<strong>拒絕</strong>會立即婉拒且無法附加訊息。若要在網頁版中取消已託管的交易，請點擊<strong>取消託管</strong>，然後點擊 <strong>好</strong>。</p>
+        <p>在豆子被釋放之前的任何時候，任一方都可以單方面取消交易。這包括在工作完成之後。如果這種情況發生在你身上，請先與對方溝通，然後尋求你所在社群管理員的協助。</p>
+        <h2>當雙方無法達成共識時</h2>
+        <p>應用程式中沒有「爭議」按鈕。請向你所在社群的管理員尋求協助。他們負責維護社群伺服器，並可透過以下三種方式之一來解決卡住的交易：</p>
+        <ul>
+            <li>付款給賣家（適用平時的 1.5% 手續費）；</li>
+            <li>將所有豆子退還給買家；</li>
+            <li>雙方各分一半。</li>
+        </ul>
+        <p>管理員無法調解自己參與的交易，亦無法調解涉及其所管理事業的交易。</p>
+        <p>雙方都會收到一則快訊（「你的一筆交易有新消息。」），且聊天室中會有一行文字說明交易是如何解決的。該聊天文字會註明管理員的呼號，或標記為「一位社群管理員」。快訊本身則不指明任何人名。</p>
+        <h2>如果有人不誠實</h2>
+        <ul>
+            <li>留下公正的評價。偏低的星級會減少對方賺得的信任。</li>
+            <li>檢舉對方的貼文，或將其封鎖。參見「檢舉問題」與「封鎖成員」。</li>
+        </ul>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="a-deal-step-by-step.html"><strong>交易步驟詳解</strong><span>從發起詢問到完成付款，針對提供與需求的流程，以及留下評價。</span></a></li>
+            <li><a href="getting-help.html"><strong>取得協助</strong><span>遇到問題時在哪裡尋找答案，以及向誰求助。</span></a></li>
+            <li><a href="reporting.html"><strong>檢舉問題</strong><span>向社群協調員反映刊登、活動、動態內容、專案或事業方面的問題。</span></a></li>
+            <li><a href="rules.html"><strong>規則與決策機制</strong><span>投票、投票率、無記名投票、投票資格、暫停資格、移除成員、管理人以及召集人和主召集人。</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ml by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ml">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ലൈറ്റും ഡാർക്കും — BeanPool members' guide</title>
+    <meta name="description" content="ഫോൺ ആപ്പ് ലൈറ്റ് തീമിലും വെബ് ആപ്പ് ഡാർക്ക് തീമിലും തുടങ്ങുന്നു. മാറ്റുകയോ ഡിവൈസ് ക്രമീകരണം പിന്തുടരുകയോ ചെയ്യാം.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">ക്രമീകരണങ്ങളും സുരക്ഷയും</a></p>
+        <h1>ലൈറ്റും ഡാർക്കും</h1>
+        <p class="lede">ഫോൺ ആപ്പ് ലൈറ്റ് തീമിലും വെബ് ആപ്പ് ഡാർക്ക് തീമിലും തുടങ്ങുന്നു. മാറ്റുകയോ ഡിവൈസ് ക്രമീകരണം പിന്തുടരുകയോ ചെയ്യാം.</p>
+        <h2>തിരഞ്ഞെടുക്കൽ</h2>
+        <ul>
+            <li><strong>ക്രമീകരണങ്ങൾ</strong> തുറക്കുക. <strong>ആപ്പ് ക്രമീകരണങ്ങൾ</strong> എന്നതിന് താഴെ, <strong>ദൃശ്യരൂപം</strong> കണ്ടെത്തുക.</li>
+            <li>ഒരെണ്ണം തിരഞ്ഞെടുക്കുക:</li>
+            <li><strong>ഫോണിന് സമാനം</strong> (വെബ് ആപ്പിൽ <strong>ഉപകരണത്തിന് തുല്യം</strong>): നിങ്ങളുടെ ഫോണോ കമ്പ്യൂട്ടറോ ഡാർക്ക് ആയി സജ്ജീകരിച്ചിരിക്കുമ്പോൾ ആപ്പ് ഡാർക്ക് ആകുകയും, ലൈറ്റ് ആയിരിക്കുമ്പോൾ ലൈറ്റ് ആകുകയും ചെയ്യുന്നു.</li>
+            <li><strong>ലൈറ്റ്:</strong> എപ്പോഴും ലൈറ്റ് ആയിരിക്കും. ഫോൺ ആപ്പ് ഇങ്ങനെയാണ് ആരംഭിക്കുന്നത്.</li>
+            <li><strong>ഡാർക്ക്:</strong> എപ്പോഴും ഡാർക്ക് ആയിരിക്കും. വെബ് ആപ്പ് ഇങ്ങനെയാണ് ആരംഭിക്കുന്നത്.</li>
+        </ul>
+        <p>ലൈറ്റിന് ഒരു കൂട്ടം നിറങ്ങളും ഡാർക്കിന് മറ്റൊന്നുമാണ് ഉള്ളത്.</p>
+        <p><strong>ആപ്പ് ക്രമീകരണങ്ങൾ</strong> എന്നതിന് താഴെ തന്നെ, <strong>പശ്ചാത്തല പാറ്റേൺ</strong> ആപ്പിന്റെ പിന്നിൽ ഡൂഡിലുകൾ നൽകുന്നു. പ്ലെയിൻ പശ്ചാത്തലത്തിനായി ഇത് ഓഫ് ചെയ്യുക. തുടക്കത്തിൽ ഇത് ഓൺ ആയിരിക്കും, കൂടാതെ ഓരോ ഉപകരണത്തിലും ഇത് സൂക്ഷിക്കുന്നു.</p>
+        <p>ഫോണിൽ, മാപ്പിന്റെ ഇടതുവശത്തായി മാപ്പിന് സ്വന്തമായി ലൈറ്റ്, ഡാർക്ക് ബട്ടൺ ഉണ്ട്.</p>
+        <p>വെബ് ആപ്പിൽ, ആദ്യത്തെ തിരഞ്ഞെടുപ്പ് <strong>ഉപകരണത്തിന് തുല്യം</strong> എന്നാണ് അറിയപ്പെടുന്നത്.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="privacy.html"><strong>സ്വകാര്യത</strong><span>നിങ്ങളെക്കുറിച്ച് മറ്റുള്ളവർക്ക് എന്തൊക്കെ കാണാം, അത് നിയന്ത്രിക്കുന്ന ക്രമീകരണങ്ങൾ.</span></a></li>
+            <li><a href="notifications.html"><strong>അറിയിപ്പുകൾ</strong><span>ഏതൊക്കെ അലേർട്ടുകൾ ഫോണിൽ വരണമെന്നും ഇവന്റുകൾ എപ്പോൾ ഓർമ്മിപ്പിക്കണമെന്നും തിരഞ്ഞെടുക്കുക.</span></a></li>
+            <li><a href="the-bean.html"><strong>ഈ ഗൈഡ്</strong><span>ഈ ഗൈഡ് എവിടെ കണ്ടെത്താം, എങ്ങനെ തിരയാം, ഇത് എപ്പോഴും അപ്‌ഡേറ്റായി തുടരുന്നത് എങ്ങനെ.</span></a></li>
+            <li><a href="web-app.html"><strong>വെബ് ബ്രൗസറിൽ BeanPool ഉപയോഗിക്കൽ</strong><span>ഫോൺ ആപ്പിലുള്ള ഭൂരിഭാഗം കാര്യങ്ങളും വെബ് ആപ്പിലും ലഭ്യമാണ്. ബ്രൗസറിൽ ഗ്ലോബൽ കമ്മ്യൂണിറ്റിയിൽ ചേരൽ, സൈൻ-ഇൻ വഴി അക്കൗണ്ട് തിരികെ നേടൽ, അതേ അക്കൗണ്ട് ഫോണിൽ ചേർക്കൽ, ബട്ടൺ പേരുകളിലെ വ്യത്യാസങ്ങൾ.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/it by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Saldo e cronologia — BeanPool members' guide</title>
+    <meta name="description" content="Quanti fagioli hai, quanto è bloccato e ogni scambio e regalo effettuato.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#ledger">Mastro</a></p>
+        <h1>Saldo e cronologia</h1>
+        <p class="lede">Quanti fagioli hai, quanto è bloccato e ogni scambio e regalo effettuato.</p>
+        <h2>Come aprirlo</h2>
+        <p>Tocca <strong>Mastro</strong> nella riga delle schede. Il tuo saldo si trova in alto a destra, in <strong>FAGIOLI</strong>. Può essere inferiore a zero; vedi &quot;Linea di credito&quot;.</p>
+        <p>Sulla comunità globale non ci sono fagioli, quindi il Mastro mostra un membro di esempio di una comunità locale, Example Valley, contrassegnato come <strong>🏘️ Comunità locale</strong>. I suoi pulsanti spiegano perché i fagioli risiedono in una comunità locale, e non inviano nulla. Vedi &quot;Fagioli e comunità globale&quot;.</p>
+        <p>Il Mastro ha due schede: <strong>Livelli</strong> (la tua fiducia, vedi &quot;Badge di fiducia&quot;) e <strong>Portafoglio</strong>. Sul telefono, tocca il tuo saldo per andare direttamente a Portafoglio.</p>
+        <h2>La scheda Portafoglio</h2>
+        <ul>
+            <li><strong>Il tuo saldo</strong>, e all'incirca a quante ore di aiuto corrisponde, a 40 fagioli l'ora.</li>
+            <li><strong>Beni comuni:</strong> il fondo condiviso della tua comunità.</li>
+            <li><strong>Limite di credito:</strong> quanto puoi scendere sotto lo zero.</li>
+            <li>Quanti dei tuoi fagioli sono trattenuti in accordi in corso, se presenti.</li>
+            <li><strong>Circolazione nella comunità:</strong> compare quando possiedi fagioli. Vedi &quot;Tassa di circolazione&quot;.</li>
+            <li><strong>Promesse di progetto:</strong> fagioli che hai promesso ai progetti, se presenti.</li>
+            <li><strong>Invia fagioli:</strong> invia un dono. Vedi &quot;Inviare un dono&quot;.</li>
+        </ul>
+        <p>Nell'app web la scheda Portafoglio è più breve: <strong>Soglia di scoperto</strong>, <strong>Fondo Comune</strong>, <strong>Invia fagioli</strong> e <strong>Circolazione nella comunità</strong>. Il tuo saldo si trova in cima al Mastro.</p>
+        <h2>Transazioni recenti</h2>
+        <p>Ogni scambio, dono e commissione, dalla voce più recente, con una nota, l'orario e un segno più o meno. Sul telefono ogni riga indica anche la controparte; nell'app web riporta <strong>Inviati</strong> o <strong>Ricevuti</strong>. Se una nota menziona un post, tocca <strong>Visualizza offerta</strong> per aprirlo.</p>
+        <p>Solo tu puoi vedere il tuo saldo e queste transazioni. Nessun altro nella tua comunità può leggerli. <strong>Esporta CSV</strong> (<strong>Esporta i miei</strong> nell'app web) salva le tue transazioni in un file.</p>
+        <p>L'elenco non include ancora funzioni di ricerca o filtri.</p>
+        <h2>Pulsanti ⓘ</h2>
+        <p>Sul telefono, tocca la <strong>ⓘ</strong> accanto al tuo saldo per una breve spiegazione del saldo e del tuo limite.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="credit-line.html"><strong>Linea di credito</strong><span>Quanto puoi andare sotto zero e come aumenta questa disponibilità.</span></a></li>
+            <li><a href="gifts.html"><strong>Inviare un dono</strong><span>Invia fagioli a qualcuno, senza alcuno scambio.</span></a></li>
+            <li><a href="circulation-fee.html"><strong>Tassa di circolazione</strong><span>Una piccola quota mensile sui saldi elevati per far circolare i fagioli. I primi 200 sono esenti.</span></a></li>
+            <li><a href="my-deals.html"><strong>I miei accordi</strong><span>Un unico posto per ogni scambio in corso, ogni tuo annuncio e le transazioni passate.</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>Fagioli e comunità globale</strong><span>A cosa serve la comunità globale, una comunità tra tante, e cosa vi trovi: il contrassegno 🏘️ Comunità, la comunità d'esempio Example Valley, perché i fagioli attendono lì e come trovare o avviare una comunità locale.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

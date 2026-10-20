@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/pt by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enquetes — BeanPool members' guide</title>
+    <meta name="description" content="Faça uma pergunta rápida à comunidade. Enquetes mostram opiniões; não mudam nada sozinhas.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#commons">Bens comuns</a></p>
+        <h1>Enquetes</h1>
+        <p class="lede">Faça uma pergunta rápida à comunidade. Enquetes mostram opiniões; não mudam nada sozinhas.</p>
+        <h2>Enquete ou Decisão?</h2>
+        <p>Uma <strong>Enquete</strong> pergunta a opinião das pessoas: &quot;Mercado no domingo ou no sábado?&quot;. Ela não altera nada sozinha. Para algo vinculativo, proponha uma Decisão.</p>
+        <p>Na comunidade global, cada enquete diz: <strong>Uma enquete informal; não decide nada</strong>. Qualquer pessoa pode entrar nela, com 12 palavras ou um login, de modo que uma pessoa com várias contas poderia influenciar a contagem, e não há Decisões por lá. Abaixo dela, &quot;🏘️ Em uma comunidade local uma Decisão é vinculativa ›&quot; explica por que uma votação vincula apenas em uma comunidade local.</p>
+        <p>Quando uma enquete anônima é encerrada por lá, ela também informa quantos dos seus votos vieram de <strong>contas novas ou criadas com 12 palavras</strong>, por exemplo &quot;5 de 12 votos vieram de contas novas ou com 12 palavras&quot;. Cada voto é computado de acordo com o estado da conta no momento da votação: uma conta nova é aquela que ainda estava com os limites de conta recente, e uma conta de 12 palavras é aquela criada com 12 palavras que não havia vinculado um login. Quando pelo menos 3 votos vêm de contas novas ou de 12 palavras, e os outros votos são zero ou pelo menos 3, cada resposta também informa quantos dos seus próprios votos vieram dessas contas. Todos os votos continuam valendo, e nada mostra quem votou.</p>
+        <p>Enquanto a enquete está aberta, ela não menciona nada sobre isso. Se mencionasse, alguém acompanhando a enquete a cada voto poderia deduzir de que tipo de conta veio cada voto e o que ela escolheu. Uma votação aberta nunca informa isso, esteja aberta ou encerrada: ela mostra quem votou, de modo que a contagem revelaria qual tipo de conta cada votante possui. A enquete de um grupo também não informa isso, assim como a enquete de uma comunidade local.</p>
+        <h2>Criar uma enquete</h2>
+        <ul>
+            <li>Toque em <strong>+ PUBLICAR</strong> na aba Mercado ou no Mapa.</li>
+            <li>Escolha <strong>Enquete da comunidade</strong>.</li>
+            <li>Escreva a <strong>Pergunta</strong>.</li>
+            <li>Adicione <strong>Contexto / Observações</strong> se achar útil. Isso é opcional.</li>
+            <li>Escreva de 2 a 4 <strong>Opções</strong>. Toque em <strong>+ Adicionar opção</strong> para incluir mais.</li>
+            <li>Escolha a duração: <strong>3 dias</strong>, <strong>7 dias</strong> ou <strong>14 dias</strong>.</li>
+            <li>Escolha se é um <strong>Voto aberto</strong> antes de tocar em <strong>Criar</strong>. Deixe desmarcado e a enquete será anônima. Marque a opção e os membros poderão ver quem votou em quê. Não é possível alterar isso após a enquete ser publicada.</li>
+            <li>Toque em <strong>Criar</strong>.</li>
+        </ul>
+        <p>No aplicativo web, o tipo é <strong>🗳️ Enquete</strong>, as anotações são <strong>Histórico / Contexto</strong>, o botão de opção é <strong>+ Adicionar opção</strong> e o último botão é <strong>🗳️ Criar enquete</strong>. No Mapa da web, toque no <strong>+</strong> redondo.</p>
+        <p>Você pode ter uma enquete aberta por vez, e uma comunidade pode ter até 5 abertas simultaneamente. Você precisa de crédito não congelado para iniciar ou responder a uma enquete.</p>
+        <h2>Encontrar e responder enquetes</h2>
+        <p>As enquetes ficam no Mercado. Toque em <strong>Enquetes</strong> na linha superior para ver apenas enquetes.</p>
+        <ul>
+            <li>Toque em uma resposta para escolhê-la. Toque em outra para mudar de ideia, até que a enquete seja encerrada.</li>
+            <li>O cartão mostra quantas pessoas escolheram cada resposta.</li>
+        </ul>
+        <h2>Quem pode ver como você votou</h2>
+        <p>Cada enquete indica de qual tipo ela é, acima da participação:</p>
+        <ul>
+            <li><strong>Anônima</strong> (o tipo habitual): todos veem apenas quantas pessoas escolheram cada resposta. Ninguém vê quem escolheu o quê, inclusive quem a iniciou.</li>
+            <li><strong>Voto aberto:</strong> quem criou escolheu mostrar os votantes. Os membros podem tocar em <strong>Ver votantes</strong> (<strong>Mostrar votantes</strong> no aplicativo web) para ver quem escolheu o quê. Um membro suspenso vê apenas os totais, até que a suspensão termine.</li>
+        </ul>
+        <p>Os proprietários e administradores que operam o servidor da sua comunidade ainda podem ver cada voto registrado nele.</p>
+        <h2>Encerrar uma enquete antes do prazo</h2>
+        <p>Se você a iniciou, toque em <strong>Encerrar enquete</strong> e confirme com <strong>Encerrar enquete</strong> novamente (<strong>OK</strong> no aplicativo web).</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="decisions.html"><strong>Votar em uma Decisão</strong><span>Encontre Decisões abertas, vote, altere seu voto e veja os resultados.</span></a></li>
+            <li><a href="proposing-a-decision.html"><strong>Propor uma Decisão</strong><span>Peça à comunidade para decidir algo de forma vinculativa.</span></a></li>
+            <li><a href="events.html"><strong>Eventos</strong><span>Crie um evento, presencial ou online, único ou recorrente; confirme presença, receba lembretes, compartilhe e gerencie como anfitrião.</span></a></li>
+            <li><a href="rules.html"><strong>Regras e decisões</strong><span>Votação, quórum, voto secreto, quem pode votar, suspensão, remoção de membros, custódios, coordenadores e coordenadores principais.</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>Feijões e comunidade global</strong><span>Para que serve a comunidade global, uma comunidade entre várias, e o que você vê lá: o marcador 🏘️ Comunidade local, a comunidade de exemplo Example Valley, a espera dos feijões e como criar ou achar uma comunidade local.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

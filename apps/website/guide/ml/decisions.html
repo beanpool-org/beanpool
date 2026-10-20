@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ml by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ml">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>തീരുമാനത്തിൽ വോട്ട് ചെയ്യൽ — BeanPool members' guide</title>
+    <meta name="description" content="തുറന്ന തീരുമാനങ്ങൾ കണ്ടെത്തുക, വോട്ട് ചെയ്യുക, വോട്ട് മാറ്റുക, ഫലങ്ങൾ കാണുക.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#commons">പൊതു</a></p>
+        <h1>തീരുമാനത്തിൽ വോട്ട് ചെയ്യൽ</h1>
+        <p class="lede">തുറന്ന തീരുമാനങ്ങൾ കണ്ടെത്തുക, വോട്ട് ചെയ്യുക, വോട്ട് മാറ്റുക, ഫലങ്ങൾ കാണുക.</p>
+        <h2>എവിടെയാണ്</h2>
+        <p><strong>കോമൺസ്</strong> ടാപ്പ് ചെയ്യുക, തുടർന്ന് <strong>തീരുമാനിക്കുക</strong>. തുറന്ന തീരുമാനങ്ങൾ <strong>തുറന്ന തീരുമാനങ്ങൾ</strong> എന്നതിന് കീഴിലുണ്ട്.</p>
+        <p>ഒരു തീരുമാനം നിർബന്ധമായും നടപ്പിലാക്കേണ്ടതാണ്: അത് പാസ്സായാൽ, നിങ്ങളുടെ കമ്മ്യൂണിറ്റിയുടെ സെർവർ അത് സ്വയം നടപ്പിലാക്കുന്നു. അംഗങ്ങൾക്ക് വായിക്കാൻ കഴിയുന്ന ഒരു രേഖാമൂലമുള്ള കാരണം നൽകി മാത്രമേ ഒരു അഡ്മിന് അത് തടയാൻ കഴിയൂ. ആർക്കൊക്കെ വോട്ട് ചെയ്യാം, എത്ര പങ്കാളിത്തം ആവശ്യമാണ്, എത്ര 'അതെ' വോട്ടുകൾ ആവശ്യമാണ് എന്നിവയ്ക്കുള്ള നിയമങ്ങൾ &quot;നിയമങ്ങളും തീരുമാനങ്ങൾ എടുക്കുന്ന രീതിയും&quot; എന്നതിലുണ്ട്.</p>
+        <p>ആഗോള കമ്മ്യൂണിറ്റിയിൽ തീരുമാനങ്ങൾ ഇല്ല. 12 വാക്കുകളോ സൈൻ-ഇന്നോ ഉപയോഗിച്ച് ആർക്കും ഇതിൽ ചേരാം, അതിനാൽ ഒന്നിലധികം അക്കൗണ്ടുകളുള്ള ഒരാൾക്ക് അവിടെ വോട്ടെടുപ്പിനെ സ്വാധീനിക്കാൻ കഴിയും. പകരം അതിന്റെ മോഡറേറ്റർമാർ അത് നോക്കിനടത്തുന്നു: &quot;പ്രശ്നം റിപ്പോർട്ട് ചെയ്യൽ&quot; കാണുക. തീരുമാനങ്ങൾ പ്രാദേശിക കമ്മ്യൂണിറ്റികളുടേതാണ്. വോട്ടെടുപ്പുകൾ എല്ലായിടത്തും പ്രവർത്തിക്കുന്നു.</p>
+        <p>ആഗോള കമ്മ്യൂണിറ്റിയിൽ, <strong>കോമൺസ്</strong> ഒരു പ്രാദേശിക കമ്മ്യൂണിറ്റിയിൽ നിന്നുള്ള ഒരു മാതൃകാ തീരുമാനം <strong>🏘️ പ്രാദേശിക കമ്മ്യൂണിറ്റി</strong> എന്ന് അടയാളപ്പെടുത്തി കാണിക്കുന്നു, അതിനാൽ അത് എങ്ങനെ പ്രവർത്തിക്കുന്നുവെന്ന് നിങ്ങൾക്ക് കാണാനാകും. അതിന്റെ <strong>'അതെ' എന്ന് വോട്ട് ചെയ്യുക</strong>, <strong>'അല്ല' എന്ന് വോട്ട് ചെയ്യുക</strong> എന്നീ ബട്ടണുകൾ എന്തുകൊണ്ടാണ് വോട്ടിംഗ് ഒരു പ്രാദേശിക കമ്മ്യൂണിറ്റിയിൽ നിലനിൽക്കുന്നത് എന്ന് വ്യക്തമാക്കുന്നു, അവ വോട്ടൊന്നും രേഖപ്പെടുത്തുന്നില്ല. &quot;പയറും ഗ്ലോബൽ കമ്മ്യൂണിറ്റിയും&quot; കാണുക.</p>
+        <h2>ഒരു തീരുമാനം വായിക്കൽ</h2>
+        <p>ഓരോ തീരുമാനവും ഇവ കാണിക്കുന്നു:</p>
+        <ul>
+            <li>അത് എന്തിനെക്കുറിച്ചാണ്, അത് പാസ്സായാൽ എന്ത് സംഭവിക്കും;</li>
+            <li>വോട്ടുകൾ എങ്ങനെ കണക്കാക്കുന്നു: ഒരു അംഗത്തിന് ഒരു വോട്ട്, അല്ലെങ്കിൽ കോമൺസിന്റെ പയറിനെക്കുറിച്ചുള്ള തീരുമാനങ്ങൾക്ക് വോയ്‌സ് ക്രെഡിറ്റുകൾ;</li>
+            <li>ഇനി എത്ര സമയം ബാക്കിയുണ്ട്. വോട്ടിംഗ് 7 ദിവസം നടക്കുന്നു;</li>
+            <li><strong>പങ്കാളിത്തം:</strong> ഇതിന് എത്ര വോട്ടുകൾ ആവശ്യമാണ്, ഇപ്പോൾ അത്രയും ഉണ്ടോ;</li>
+            <li><strong>ഫലം:</strong> ഇതുവരെയുള്ള അതെ, അല്ല എന്നിവ, കൂടാതെ ഇതിന് എത്ര 'അതെ' ആവശ്യമാണ്.</li>
+        </ul>
+        <h2>വോട്ട് ചെയ്യൽ</h2>
+        <ul>
+            <li><strong>'അതെ' എന്ന് വോട്ട് ചെയ്യുക</strong> അല്ലെങ്കിൽ <strong>'അല്ല' എന്ന് വോട്ട് ചെയ്യുക</strong> ടാപ്പ് ചെയ്യുക. ഫോണിൽ, ആപ്പ് <strong>വോട്ട് രേഖപ്പെടുത്തി</strong> എന്ന് പറയുന്നു. വെബ് ആപ്പിൽ, കാർഡ് അപ്‌ഡേറ്റ് ആകുന്നു.</li>
+            <li>തുടർന്ന് കാർഡ് &quot;നിങ്ങൾ 'അതെ' എന്ന് വോട്ട് ചെയ്തു&quot; പോലെ നിങ്ങൾ എന്താണ് വോട്ട് ചെയ്തതെന്ന് പറയുന്നു.</li>
+            <li>അത് അവസാനിക്കുന്നതിന് മുമ്പ് നിങ്ങളുടെ തീരുമാനം മാറ്റാൻ, <strong>'അല്ല' എന്നാക്കി മാറ്റുക</strong> പോലുള്ള മറ്റ് ബട്ടൺ ടാപ്പ് ചെയ്യുക.</li>
+        </ul>
+        <p>ഓരോ തീരുമാനവും ഒരു <strong>രഹസ്യ ബാലറ്റ്</strong> ആണ്. ആകെത്തുക മാത്രമേ അംഗങ്ങൾ കാണൂ, ആര് എങ്ങനെ വോട്ട് ചെയ്തുവെന്ന് ഒരിക്കലും കാണില്ല. നിങ്ങളുടെ സ്വന്തം വോട്ട് നിങ്ങൾക്ക് മാത്രമേ കാണിക്കൂ.</p>
+        <h2>കോമൺസിന്റെ പയറിനെക്കുറിച്ചുള്ള തീരുമാനങ്ങൾ</h2>
+        <p>ഇവ <strong>വോയ്‌സ് ക്രെഡിറ്റുകൾ</strong> ഉപയോഗിക്കുന്നു. പൂർത്തിയായ നിങ്ങളുടെ ഇടപാടുകളിൽ നിന്ന് ഓരോ തീരുമാനത്തിനും പുതുതായി നിങ്ങൾക്ക് വോയ്‌സ് ക്രെഡിറ്റുകൾ ലഭിക്കുന്നു. എത്ര വോട്ടുകൾ നൽകണമെന്ന് തിരഞ്ഞെടുക്കാൻ <strong>−</strong>, <strong>+</strong> എന്നിവ ഉപയോഗിക്കുക. കൂടുതൽ വോട്ടുകൾക്ക് കൂടുതൽ ചെലവ് വരും: 2 വോട്ടുകൾക്ക് 4 ക്രെഡിറ്റുകളും 3 വോട്ടുകൾക്ക് 9 ക്രെഡിറ്റുകളും ചിലവാകും.</p>
+        <p>നിങ്ങൾ ഇതുവരെ ഒരു ഇടപാട് പൂർത്തിയാക്കിയിട്ടില്ലെങ്കിൽ, നിങ്ങൾക്ക് ഇവയിൽ വോട്ട് ചെയ്യാൻ കഴിയില്ല. അവ തുറക്കുന്നതിന് മുമ്പ് നിങ്ങൾ ചേരുകയും നിങ്ങളുടെ ക്രെഡിറ്റ് മരവിപ്പിക്കാതിരിക്കുകയും ചെയ്യുന്നിടത്തോളം, മറ്റ് തീരുമാനങ്ങളിൽ നിങ്ങൾക്ക് ഇപ്പോഴും വോട്ട് ചെയ്യാം.</p>
+        <h2>ഫലങ്ങൾ</h2>
+        <p><strong>തീരുമാനങ്ങളുടെ ചരിത്രം</strong> ടാപ്പ് ചെയ്യുക. <strong>എല്ലാം</strong>, <strong>നടപ്പിലാക്കിയത്</strong>, <strong>പരാജയപ്പെട്ടു</strong> അല്ലെങ്കിൽ <strong>അസാധുവായത്</strong> തിരഞ്ഞെടുക്കുക. ഓരോന്നും അന്തിമ പങ്കാളിത്തവും ഫലവും എന്ത് സംഭവിച്ചു എന്നതും കാണിക്കുന്നു, ഉദാഹരണത്തിന് വളരെ കുറച്ച് ആളുകൾ മാത്രമേ വോട്ട് ചെയ്തിട്ടുള്ളൂ എന്നത്.</p>
+        <h2>കൂടുതൽ വിവരങ്ങൾ</h2>
+        <p>കോമൺസിന്റെ പയറും വോട്ടിംഗും എങ്ങനെ പ്രവർത്തിക്കുന്നു എന്നറിയാൻ ഫോണിൽ, കോമൺസ് തലക്കെട്ടിന് അടുത്തുള്ള <strong>ⓘ</strong> ടാപ്പ് ചെയ്യുക. വെബ് ആപ്പിൽ, <strong>ലെഡ്ജർ</strong> തുറക്കുക, <strong>വാലറ്റ്</strong> ടാപ്പ് ചെയ്യുക, തുടർന്ന് <strong>കോമൺസ് പൂൾ ⓘ</strong> ടാപ്പ് ചെയ്യുക.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="proposing-a-decision.html"><strong>തീരുമാനം നിർദ്ദേശിക്കൽ</strong><span>നിർബന്ധിതമായ ഒരു കാര്യത്തിൽ തീരുമാനം എടുക്കാൻ കമ്മ്യൂണിറ്റിയോട് ആവശ്യപ്പെടുക.</span></a></li>
+            <li><a href="rules.html"><strong>നിയമങ്ങളും തീരുമാനങ്ങൾ എടുക്കുന്ന രീതിയും</strong><span>വോട്ടിംഗ്, പങ്കാളിത്തം, രഹസ്യ ബാലറ്റ്, ആർക്കൊക്കെ വോട്ട് ചെയ്യാം, സസ്പെൻഷൻ, അംഗത്തെ നീക്കം ചെയ്യൽ, സൂക്ഷിപ്പുകാർ, കൺവീനർമാരും മുഖ്യ കൺവീനർമാരും.</span></a></li>
+            <li><a href="polls.html"><strong>പോളുകൾ</strong><span>കമ്മ്യൂണിറ്റിയോട് പെട്ടെന്ന് ഒരു ചോദ്യം ചോദിക്കുക. പോളുകൾ അഭിപ്രായം കാണിക്കുന്നു; അവ സ്വന്തമായി ഒന്നും മാറ്റുന്നില്ല.</span></a></li>
+            <li><a href="commons-fund.html"><strong>കോമൺസ് ഫണ്ട്</strong><span>കമ്മ്യൂണിറ്റിയുടെ പങ്കിട്ട പയറുകൾ: അവ എവിടെ നിന്ന് വരുന്നു, എങ്ങനെ ചിലവഴിക്കുന്നു.</span></a></li>
+            <li><a href="the-top-bar.html"><strong>മുകളിലെ ബാർ</strong><span>പയർ, നിങ്ങളുടെ ശ്രദ്ധ ആവശ്യമുള്ളപ്പോൾ കാണിക്കുന്ന ചെറിയ ഐക്കണുകൾ, മുകളിൽ വലതുവശത്തുള്ള ബട്ടണുകൾ.</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>പയറും ഗ്ലോബൽ കമ്മ്യൂണിറ്റിയും</strong><span>ഗ്ലോബൽ കമ്മ്യൂണിറ്റിയുടെ ലക്ഷ്യം, പലതിൽ ഒരു കമ്മ്യൂണിറ്റി, അവിടെ കാണുന്ന കാര്യങ്ങൾ: 🏘️ പ്രാദേശിക കമ്മ്യൂണിറ്റി അടയാളം, മാതൃകാ കമ്മ്യൂണിറ്റിയായ Example Valley, പയർ അവിടെ കാത്തിരിക്കുന്നതിന്റെ കാരണം, പ്രാദേശിക കമ്മ്യൂണിറ്റി ആരംഭിക്കുന്നതോ കണ്ടെത്തുന്നതോ എങ്ങനെ.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

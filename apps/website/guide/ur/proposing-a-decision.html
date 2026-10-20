@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ur by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ur">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>فیصلہ تجویز کرنا — BeanPool members' guide</title>
+    <meta name="description" content="کمیونٹی سے کسی لازمی معاملے پر فیصلہ کرنے کی درخواست کریں۔">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#commons">مشترکہ</a></p>
+        <h1>فیصلہ تجویز کرنا</h1>
+        <p class="lede">کمیونٹی سے کسی لازمی معاملے پر فیصلہ کرنے کی درخواست کریں۔</p>
+        <h2>شروع کرنے سے پہلے</h2>
+        <ul>
+            <li>ایک فیصلہ اس چیز کے لیے ہوتا ہے جسے آپ کی کمیونٹی کا سرور خود نافذ کر سکے: کسی رکن کو ہٹانا یا معطل کرنا، کسی کا کریڈٹ منجمد یا بحال کرنا، یہ چننا کہ کون ضمانت دے سکتا ہے، یا کامنز سے پھلیاں ادا کرنا۔ کسی بھی دوسری چیز کے لیے، اس کے بجائے ایک پول شروع کریں۔</li>
+            <li>ایک فیصلہ آپ کی کمیونٹی کے سرور کے مالک یا ایڈمن کو ہٹا یا معطل نہیں کر سکتا۔ &quot;قواعد اور فیصلوں کا طریقہ کار&quot; دیکھیں۔</li>
+            <li>آپ سودا مکمل کرنے کے بعد، یا کسی ایڈمن کی طرف سے ٹرسٹ بیج ملنے کے بعد تجویز پیش کر سکتے ہیں۔ آپ کی کمیونٹی کے ایڈمنز ہمیشہ تجویز پیش کر سکتے ہیں۔ صرف ضمانت کافی نہیں ہے۔</li>
+            <li>آپ ایک وقت میں ایک کھلا فیصلہ رکھ سکتے ہیں۔</li>
+            <li>عالمی کمیونٹی میں کوئی فیصلے نہیں ہوتے، اس لیے وہاں تجویز کرنے کے لیے کچھ نہیں ہے۔ &quot;فیصلے پر ووٹنگ&quot; دیکھیں۔</li>
+        </ul>
+        <h2>تجویز پیش کرنا</h2>
+        <ul>
+            <li><strong>کامنز</strong> پر ٹیپ کریں، پھر <strong>فیصلہ کریں</strong> پر، پھر <strong>+ فیصلے کی تجویز دیں</strong> پر۔</li>
+            <li>منتخب کریں کہ یہ کس بارے میں ہے: <strong>رکن</strong> یا <strong>کامنز پول</strong>۔</li>
+            <li><strong>عنوان:</strong> ایک سطر، جیسے کہ &quot;ٹول لائبریری کو 200 پھلیوں کی گرانٹ&quot;۔</li>
+            <li><strong>تفصیل اور جواز:</strong> بتائیں کہ کیوں، کم از کم 10 حروف میں۔ اسے صاف اور سادہ الفاظ میں کہیں۔ لوگ اسی پر ووٹ دیتے ہیں جو وہ یہاں پڑھتے ہیں۔</li>
+            <li>اس کے نیچے دی گئی فہرست میں سے، بالکل وہی منتخب کریں جو ہونا چاہیے: مثال کے طور پر، کسی رکن کے لیے: رکن کو ہٹائیں، رکن کو معطل کریں یا کریڈٹ منجمد کریں۔ کامنز کے لیے: کسی پروجیکٹ یا انٹرپرائز کو پھلیاں دیں، مالی امداد کی گرانٹ، یا کسی پروجیکٹ یا انٹرپرائز کا قرض ادا کریں۔</li>
+            <li>درج کریں کہ یہ کس کے لیے ہے، اور اگر پھلیاں شامل ہیں تو کتنی ہیں۔ کسی پروجیکٹ یا انٹرپرائز کو گرانٹ کے لیے آپ اس کی کلید، ایک طویل کوڈ ٹائپ کرتے ہیں: کسی بھی ایپ میں اسے منتخب کرنے کے لیے فہرست نہیں ہے۔ قرض ادا کرنے یا سربراہ کو تبدیل کرنے کے لیے، فہرست میں موجود پروجیکٹ یا انٹرپرائز پر ٹیپ کریں، یا اس کی کلید ٹائپ کریں۔</li>
+            <li><strong>کمیونٹی فیصلہ جمع کرائیں</strong> پر ٹیپ کریں۔</li>
+        </ul>
+        <p>ویب ایپ میں بٹن <strong>+ فیصلہ تجویز کریں</strong> (یا کامنز کے اوپری حصے میں <strong>+ تجویز کریں</strong>، جب <strong>فیصلہ کریں</strong> کھلا ہو) اور <strong>فیصلہ جمع کرائیں</strong> پڑھتے ہیں، اور باکس <strong>تفصیل اور جواز</strong> ہے۔</p>
+        <p>ووٹنگ فوراً شروع ہو جاتی ہے اور 7 دن تک چلتی ہے۔</p>
+        <h2>گرانٹ کتنی بڑی ہو سکتی ہے</h2>
+        <p>کسی انٹرپرائز کو گرانٹ یا مالی امداد کی گرانٹ اس سے بڑی نہیں ہو سکتی جتنا کہ کامنز ادا کر سکتا ہے۔ سب سے زیادہ جس کی آپ درخواست کر سکتے ہیں وہ ہے:</p>
+        <ul>
+            <li>کامنز کے پاس ابھی جتنی رقم ہے،</li>
+            <li>جمع پچھلے 30 دنوں میں اس میں آنے والی ہر پھلی: مارکیٹ فیس، گردشی فیس، اور کوئی دوسری جمع شدہ پھلیاں۔</li>
+        </ul>
+        <p>ان 30 دنوں میں کامنز سے ادا کی جانے والی پھلیاں منہا نہیں کی جاتیں۔ اگر آپ اس سے زیادہ مانگتے ہیں، تو ایپ کسی کے ووٹ دینے سے پہلے ہی انکار کر دیتی ہے، اور آپ کو وہ زیادہ سے زیادہ رقم بتاتی ہے جو آپ ابھی مانگ سکتے ہیں۔ جیسے جیسے کامنز میں پھلیاں آتی ہیں وہ رقم بڑھتی جاتی ہے۔</p>
+        <p>یہ قطار کو خالی رکھتا ہے۔ اگر کوئی گرانٹ اس وقت منظور ہو جائے جب کامنز کے پاس کمی ہو، تو یہ پھلیوں کا انتظار کرتی ہے، اور ایک وقت میں صرف ایک گرانٹ انتظار کر سکتی ہے۔ &quot;قواعد اور فیصلوں کا طریقہ کار&quot; دیکھیں۔</p>
+        <h2>اگر ایپ انکار کر دے</h2>
+        <ul>
+            <li><strong>پہلے کوئی تبادلہ مکمل کریں</strong> (فون پر): آپ ابھی تجویز پیش نہیں کر سکتے۔ ویب ایپ میں <strong>+ فیصلہ تجویز کریں</strong> کا بٹن غیر فعال (greyed out) ہوتا ہے، اور اس کے اوپر ایک سطر وجہ بتاتی ہے۔</li>
+            <li><strong>حد ختم ہو گئی</strong> (فون پر): آپ کے پاس پہلے سے ایک کھلا فیصلہ موجود ہے۔ اس کے بند ہونے کا انتظار کریں۔ ویب ایپ میں بھی بٹن غیر فعال ہوتا ہے، اور ایک سطر وجہ بتاتی ہے۔</li>
+            <li><strong>A community vote can't remove or suspend an owner or admin of this community's server:</strong> جس شخص کو آپ نے منتخب کیا ہے وہ سرور چلاتا ہے۔ ایک مالک پہلے اس کا کردار واپس لے سکتا ہے۔</li>
+            <li><strong>This grant is bigger than the Commons could pay:</strong> اس رقم سے زیادہ نہ مانگیں جس کا یہ نام لیتی ہے، یا مزید پھلیاں آنے کا انتظار کریں۔</li>
+            <li><strong>غلط رقم</strong> (ویب ایپ میں، &quot;براہ کرم پھلیوں میں گرانٹ کی ایک درست مثبت رقم درج کریں&quot;): درج کریں کہ کتنی پھلیاں ہیں۔</li>
+            <li><strong>خرابی:</strong> چیک کریں کہ آپ کی تفصیل کم از کم 10 حروف لمبی ہو۔</li>
+        </ul>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="decisions.html"><strong>فیصلے پر ووٹنگ</strong><span>کھلے فیصلے تلاش کریں، ووٹ دیں، اپنا ووٹ تبدیل کریں، اور نتائج دیکھیں۔</span></a></li>
+            <li><a href="rules.html"><strong>قواعد اور فیصلوں کا طریقہ کار</strong><span>ووٹنگ، ٹرن آؤٹ، خفیہ رائے شماری، کون ووٹ دے سکتا ہے، معطلی، رکن کو ہٹانا، نگران، اور کنوینرز و لیڈ کنوینرز۔</span></a></li>
+            <li><a href="polls.html"><strong>پولز</strong><span>کمیونٹی سے فوری سوال پوچھیں۔ پولز رائے ظاہر کرتے ہیں؛ وہ خود کچھ تبدیل نہیں کرتے۔</span></a></li>
+            <li><a href="enterprises.html"><strong>پروجیکٹس اور انٹرپرائزز</strong><span>اپنی پھلیاں رکھنے والے مشترکہ منصوبے: تلاش کریں، حمایت کریں، یا خود شروع کریں۔</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

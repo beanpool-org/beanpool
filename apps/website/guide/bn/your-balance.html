@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/bn by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>আপনার ব্যালেন্স ও ইতিহাস — BeanPool members' guide</title>
+    <meta name="description" content="আপনার কত শিম আছে, কী পরিমাণ আটকে আছে এবং প্রতিটি লেনদেন ও উপহার।">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#ledger">খতিয়ান</a></p>
+        <h1>আপনার ব্যালেন্স ও ইতিহাস</h1>
+        <p class="lede">আপনার কত শিম আছে, কী পরিমাণ আটকে আছে এবং প্রতিটি লেনদেন ও উপহার।</p>
+        <h2>এটি খোলা</h2>
+        <p>ট্যাবগুলোর সারিতে <strong>খতিয়ান</strong>-এ ট্যাপ করুন। আপনার ব্যালেন্স উপরে ডানদিকে <strong>শিম</strong>-এ রয়েছে। এটি শূন্যের নিচে হতে পারে; &quot;আপনার ক্রেডিট সীমা&quot; দেখুন।</p>
+        <p>গ্লোবাল কমিউনিটিতে কোনো শিম নেই, তাই খতিয়ান একটি স্থানীয় কমিউনিটির উদাহরণ সদস্য এক্সাম্পল ভ্যালি দেখায়, যা <strong>🏘️ Local community</strong> হিসেবে চিহ্নিত। এর বোতামগুলো বলে কেন শিম স্থানীয় কমিউনিটিতে থাকে, এবং কিছুই পাঠায় না। &quot;শিম ও বিশ্বব্যাপী কমিউনিটি&quot; দেখুন।</p>
+        <p>খতিয়ানের দুটি ট্যাব রয়েছে: <strong>স্তরসমূহ</strong> (আপনার আস্থা, &quot;আস্থার ব্যাজ&quot; দেখুন) এবং <strong>ওয়ালেট</strong>। ফোনে সরাসরি ওয়ালেটে যেতে আপনার ব্যালেন্সে ট্যাপ করুন।</p>
+        <h2>ওয়ালেট ট্যাব</h2>
+        <ul>
+            <li><strong>আপনার ব্যালেন্স</strong>, এবং প্রতি ঘণ্টায় ৪০ শিম হিসেবে এটি প্রায় কত ঘণ্টার সহায়তার সমান।</li>
+            <li><strong>যৌথ তহবিল:</strong> আপনার কমিউনিটির যৌথ পুল।</li>
+            <li><strong>ক্রেডিট সীমা:</strong> আপনি শূন্যের কত নিচে যেতে পারবেন।</li>
+            <li>চলমান চুক্তিগুলোতে আপনার কতগুলো শিম আটকে রাখা হয়েছে, যদি কিছু থাকে।</li>
+            <li><strong>সম্প্রদায়ের সার্কুলেশন:</strong> আপনি শিম ধরে রাখলে প্রদর্শিত হয়। &quot;সঞ্চালন ফি&quot; দেখুন।</li>
+            <li><strong>প্রকল্প অঙ্গীকার:</strong> আপনি প্রকল্পগুলোতে যে শিম অঙ্গীকার করেছেন, যদি থাকে।</li>
+            <li><strong>শিম পাঠান:</strong> একটি উপহার পাঠান। &quot;উপহার পাঠানো&quot; দেখুন।</li>
+        </ul>
+        <p>ওয়েব অ্যাপে ওয়ালেট ট্যাবটি সংক্ষিপ্ত: <strong>ওভারড্রাফট সীমা</strong>, <strong>যৌথ তহবিল</strong>, <strong>শিম পাঠান</strong> এবং <strong>সম্প্রদায়ে সঞ্চালন</strong>। আপনার ব্যালেন্স খতিয়ানের শীর্ষে থাকে।</p>
+        <h2>সাম্প্রতিক লেনদেনসমূহ</h2>
+        <p>প্রতিটি লেনদেন, উপহার এবং ফি, নতুনগুলো প্রথমে, একটি নোট, সময় এবং যোগ বা বিয়োগ সহ। ফোনে প্রতিটি লাইন এও বলে এটি কার সাথে ছিল; ওয়েব অ্যাপে এটি <strong>পাঠানো হয়েছে</strong> বা <strong>প্রাপ্ত</strong> বলে। কোনো নোটে কোনো পোস্টের উল্লেখ থাকলে, সেটি খুলতে <strong>প্রস্তাব দেখুন</strong>-এ ট্যাপ করুন।</p>
+        <p>কেবল আপনিই আপনার ব্যালেন্স এবং এই লেনদেনগুলো দেখতে পাবেন। আপনার কমিউনিটির অন্য কেউ এগুলো পড়তে পারবেন না। <strong>CSV রপ্তানি</strong> (ওয়েব অ্যাপে <strong>আমার তথ্য রপ্তানি করুন</strong>) আপনার নিজস্ব লেনদেনগুলো একটি ফাইল হিসেবে সংরক্ষণ করে।</p>
+        <p>তালিকায় এখনও কোনো অনুসন্ধান বা ফিল্টার নেই।</p>
+        <h2>ⓘ বোতামসমূহ</h2>
+        <p>ফোনে, আপনার ব্যালেন্স এবং আপনার সীমার সংক্ষিপ্ত ব্যাখ্যার জন্য 'আপনার ব্যালেন্স'-এর পাশের <strong>ⓘ</strong>-এ ট্যাপ করুন।</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="credit-line.html"><strong>আপনার ক্রেডিট সীমা</strong><span>আপনি শূন্যের কত নিচে যেতে পারেন এবং কীভাবে এটি বৃদ্ধি পায়।</span></a></li>
+            <li><a href="gifts.html"><strong>উপহার পাঠানো</strong><span>বিনিময় ছাড়াই কাউকে শিম পাঠান।</span></a></li>
+            <li><a href="circulation-fee.html"><strong>সঞ্চালন ফি</strong><span>বড় ব্যালেন্সের ওপর একটি ছোট মাসিক ফি, যাতে শিম সর্বদা সচল থাকে। প্রথম ২০০টি বিনামূল্যে।</span></a></li>
+            <li><a href="my-deals.html"><strong>আমার চুক্তি</strong><span>আপনার সমস্ত চলমান লেনদেন, আপনার সমস্ত সক্রিয় পোস্ট এবং অতীতের লেনদেনের এক স্থান।</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>শিম ও বিশ্বব্যাপী কমিউনিটি</strong><span>বিশ্বব্যাপী কমিউনিটি কী উদ্দেশ্যে, অনেকের মাঝে একটি কমিউনিটি, এবং সেখানে আপনি কী দেখতে পান: 🏘️ স্থানীয় সম্প্রদায় চিহ্নিতকারী, উদাহরণ উপত্যকা নমুনা কমিউনিটি, কেন শিম সেখানে অপেক্ষা করে, এবং কীভাবে স্থানীয় কমিউনিটি শুরু করবেন বা খুঁজবেন।</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

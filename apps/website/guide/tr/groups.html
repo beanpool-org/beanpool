@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/tr by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gruplar — BeanPool members' guide</title>
+    <meta name="description" content="Gruplarınız ve sohbetleri, grup içinde konuşma, grup kurma, insanları davet etme, davetle katılma ve grubun kendi oylamaları.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#talk">Sohbet</a></p>
+        <h1>Gruplar</h1>
+        <p class="lede">Gruplarınız ve sohbetleri, grup içinde konuşma, grup kurma, insanları davet etme, davetle katılma ve grubun kendi oylamaları.</p>
+        <h2>Bir grubun ne olduğu</h2>
+        <p>Grup herkes yerine belirli kişiler için bir yerdir: sokağınız, bir bahçe ekibi, bir koro, bir lonca. Her grubun kendi sohbeti vardır. Bazı gruplar Fasulye tutar: bir proje veya bir girişim (bkz. &quot;Projeler ve girişimler&quot;). Diğerleri (bir sosyal çevre, bir çalışma grubu, bir lonca) hiç Fasulye tutmaz. Bir grupta olmak güveninizi veya oyunuzu değiştirmez.</p>
+        <p>Bir sohbet grubunu yöneten kişiler onun <strong>koordinatörler</strong>idir; içlerinden biri <strong>baş koordinatör</strong>dür. Fasulye tutmazlar.</p>
+        <h2>Gruplarınız</h2>
+        <p><strong>Sohbet</strong>'e, ardından <strong>Gruplar</strong>'a dokunun. İçinde bulunduğunuz her grup, en yeni mesaj en başta olacak şekilde orada listelenir; liderlik ettiğiniz veya üzerinde çalıştığınız projeler (🎯), yürüttüğünüz girişimler (🥖) ve ev sahipliği yaptığınız veya katılacağınız etkinlikler (📅) ile birlikte. Bir girişimin sohbeti onun herkese açık tartışmasıdır: topluluğunuzun herhangi bir üyesi bunu okuyabilir. Bkz. &quot;Mesajlar&quot;. Her biri en son mesajını ve kaç tanesini okumadığınızı gösterir. Şifrelenmiş bir sohbette satır, kelimeleri değil, en son kimin yazdığını ve <strong>🔒 Mesaj</strong> ifadesini gösterir.</p>
+        <ul>
+            <li>Üstteki <strong>Gruplar</strong> üzerindeki sayı, susturduğunuz sohbetler hariç okunmamış mesajlarınızı toplar.</li>
+            <li>Sohbetini açmak için bir gruba dokunun. Bu, onu okundu olarak işaretler.</li>
+            <li>Yenilemek için listeyi aşağı çekin.</li>
+        </ul>
+        <p>Telefonda aynı liste, okunmamış sayıları olmadan <strong>Ortak</strong> içinde, <strong>Gruplar</strong> altında, <strong>Gruplarınız</strong> olarak yer alır. Aynı sohbetleri açar.</p>
+        <h2>Grup başlatma</h2>
+        <ul>
+            <li>Telefonda, <strong>Sohbet</strong> içinde, <strong>Gruplar</strong> altında <strong>Yeni grup</strong>'a dokunun. Veya <strong>Ortak</strong> içinde, <strong>Gruplar</strong> altında yuvarlak <strong>+</strong> düğmesine dokunun. Her ikisi de aynı <strong>Grup Oluştur</strong> formunu açar. (<strong>Projeler</strong> veya <strong>Girişimler</strong> sekmesinde <strong>+</strong>, bunun yerine bir proje veya bir girişim başlatır.)</li>
+            <li>Web uygulamasında <strong>Ortak</strong>'ı, ardından <strong>Gruplar</strong>'ı açın ve <strong>+ Grup Oluştur</strong>'a dokunun. Sonrasında <strong>Ortak</strong> üzerinde kalırsınız. Kişileri davet etmek için grubu açın ve <strong>Kişileri davet et</strong> seçeneğine dokunun. Ayrıca <strong>Sohbet</strong>'i açabilir, <strong>Gruplar</strong>'a ve ardından <strong>Yeni grup</strong>'a dokunabilirsiniz: bu sizi doğrudan yeni grubun sohbetine götürür.</li>
+            <li>En fazla 60 karakterden oluşan bir <strong>Grup Adı</strong> ve isterseniz 300 karaktere kadar bir <strong>Amaç / Açıklama</strong> verin: grubun ne için ve kimin için olduğu.</li>
+            <li>Bir <strong>Kategori</strong> seçin: <strong>Sosyal Çevre</strong>, <strong>Genel</strong>, <strong>Çalışma Grubu</strong> veya <strong>Lonca</strong>. Telefonda sizin için <strong>Sosyal Çevre</strong> seçilidir. Web uygulamasında ise <strong>Çalışma Grubu</strong> seçilidir.</li>
+            <li>Bir <strong>Katılma İlkesi</strong> seçin: <strong>Açık</strong>, <strong>Katılma İsteği</strong> veya <strong>Yalnızca Davetle</strong>.</li>
+            <li><strong>Grup Oluştur</strong> seçeneğine dokunun. Grubun <strong>baş koordinatörü</strong> olursunuz. Telefonda uygulama sizi doğrudan yeni grubun sohbetine götürür.</li>
+        </ul>
+        <p>Herhangi bir 24 saat içinde en fazla 5 grup başlatabilirsiniz.</p>
+        <p>Fasulye mi söz konusu? Kategorilerin altından bunun yerine bir proje veya girişim başlatın: telefonda <strong>Bir proje veya girişim başlat</strong>, web'de <strong>Proje başlat</strong> veya <strong>Girişim başlat</strong>. Bkz. &quot;Projeler ve girişimler&quot;.</p>
+        <h2>İnsanları davet etme</h2>
+        <p>İnsanları telefonda ve web uygulamasında davet edebilirsiniz. Telefonda yeni bir grubun sohbeti <strong>Kimi davet etmek istiyorsun?</strong> diye sorar.</p>
+        <ul>
+            <li><strong>Kişileri davet et</strong>'e dokunun, istediğiniz kişileri işaretleyin ve alttaki düğmeye dokunun (örneğin <strong>2 kişiyi davet et</strong>).</li>
+            <li>Veya geçmek için <strong>Şimdi değil</strong>'e dokunun.</li>
+        </ul>
+        <p>Daha sonra bir koordinatör, sohbetin <strong>⋮</strong> menüsünden <strong>Kişileri davet et</strong> seçeneğini kullanarak insanları davet edebilir. Web uygulamasında bir koordinatör grubu açar ve <strong>Kişileri davet et</strong>'e dokunur, kişileri işaretler ve aynı şekilde alttaki düğmeye dokunur. Davet ettiğiniz her kişi grubu, telefon uygulamasında <strong>Ortak</strong> içinde, <strong>Gruplar</strong> altında <strong>DAVET EDİLDİ</strong> olarak işaretlenmiş olarak görür (telefonda <strong>Ortak</strong> sekmesi olmayan bir toplulukta, <strong>Sohbet</strong> içinde <strong>Grup bul</strong> altında). Web uygulaması henüz davetleri işaretlemez: orada grubu açarlar ve <strong>Daveti kabul et</strong> seçeneğine dokunurlar. Katıldıklarında sohbet bunu belirtir.</p>
+        <h2>Grubun sohbeti</h2>
+        <ul>
+            <li>Telefonda, grubu görmek için sohbetin üst kısmındaki grup adına dokunun: üyeleri, <strong>Gruptan Ayrıl</strong> ve koordinatörler için <strong>Koordinatör Araçları</strong>. Web uygulamasında, sohbetinin üst kısmındaki grup adına dokunun veya grubu <strong>Ortak</strong> içinde, <strong>Gruplar</strong> altından açın.</li>
+            <li><strong>⋮</strong> menüsünde <strong>Kişileri davet et</strong> (koordinatörler), <strong>Bildirimleri sessize al</strong> (veya <strong>Sesi aç</strong>), <strong>Bu sohbette ara</strong>, <strong>Yeni telefonu onayla</strong> ve <strong>Grup bilgisi</strong> bulunur. Arama topluluğunuzun sunucusunda değil, telefonunuzda çalışır.</li>
+            <li>Katılmalar, ayrılmalar ve rol değişiklikleri sohbette küçük gri çizgiler halinde gösterilir.</li>
+            <li>Birini uyarmak için <strong>@</strong> ve adını yazın. Bkz. &quot;Bahsetmeler (@ad)&quot;.</li>
+            <li>En yeni mesaj mesaj kutusunun hemen üzerinde yer alır ve klavye açıldığında orada kalır. Geçmişi okumak için yukarı kaydırın; gelen yeni bir mesaj sizi aşağı çekmek yerine sizi bekler.</li>
+        </ul>
+        <p>Bir grubun sohbeti uçtan uca şifrelidir: topluluğunuzun sunucusunu işleten kişiler değil, yalnızca grubun üyeleri okuyabilir. Mesaj kutusunun üzerinde <strong>Uçtan uca şifreli</strong> olduğu belirtilir. Topluluğunuzun sunucusu yine de kimin ne zaman yazdığını, kimden bahsedildiğini, her satırın hangi mesaja yanıt verdiğini ve emoji tepkilerini görür.</p>
+        <ul>
+            <li>Sohbeti yalnızca katıldığınız günden itibaren görürsünüz. Daha önce yazılan hiçbir şey gösterilmez ve telefonunuz bunun anahtarını asla tutmaz. Önceki gri çizgileri görmeye devam edersiniz, ancak kimsenin sözlerini göremezsiniz.</li>
+            <li>Biri çıkarıldığında veya ayrıldığında grup yeni bir anahtar oluşturur. 10 veya daha fazla kişilik bir grupta, telefonunuz anahtarı oluştururken sohbette <strong>Sohbet N kişi için güvenli hale getiriliyor…</strong> yazar.</li>
+            <li>Kilitlenemeyen bir mesaj gönderilmez. <strong>! iletilmedi</strong> gösterilir ve mesaj kutusunun üzerindeki bir satır nedenini belirtebilir. <strong>Yeniden Gönder</strong> veya <strong>Sil</strong> için üzerine dokunun.</li>
+            <li>Bir üye tarafından yazıldığı doğrulanamayan bir mesaj <strong>Doğrulanmamış</strong> olarak, kimseye ait olmadan <strong>Bu mesaj doğrulanamadı.</strong> ifadesiyle görünür. Anahtarı henüz telefonunuza ulaşmamış bir mesajda <strong>Bu mesajın anahtarı bekleniyor.</strong> yazar.</li>
+            <li>Topluluğunuzun sunucusu eskiyse ve grup sohbetlerini henüz kilitleyemiyorsa, sohbet sunucunun bunu okuyabileceğini ve sunucu güncellendiğinde kilitleneceğini söyler. Güncellendiğinde, grubun sunucunun okuyabildiği önceki mesajları kaldırılır ve sohbette bir satır bunu belirtir. Önceki her mesajda <strong>Bu sohbet kilitlendiğinde önceki bir mesaj kaldırıldı</strong> yazar ve art arda gelen birkaç mesaj tek bir satır olarak gösterilir, örneğin <strong>Bu sohbet kilitlendiğinde 11 önceki mesaj kaldırıldı</strong>.</li>
+        </ul>
+        <p>Web uygulamasında grup sohbetleriniz 👥 ile işaretlenmiş olarak <strong>Sohbet</strong> bölümündedir. Telefonda olduğu gibi uçtan uca şifreli olarak orada okuyabilir ve yazabilirsiniz: yanıtlayabilir, tepki verebilir, 15 dakika boyunca düzenleyebilir ve sohbette arama yapabilirsiniz. Sessize alma, <strong>Sil</strong> ve <strong>Kaldır</strong> yalnızca telefondadır. Web uygulamasında, grubu açmak için sohbetinin üst kısmındaki grup adına dokunun; bir koordinatör oradan insanları davet edebilir. Bir girişimin sohbeti şifrelenmez: bkz. &quot;Mesajlar&quot;.</p>
+        <h2>Grup sohbetinde konuşma</h2>
+        <p>Grup sohbeti tam olarak bir kişiyle yapılan sohbet gibi çalışır. Bir mesaja dokunduğunuzda yanında küçük yuvarlak düğmeler belirir:</p>
+        <ul>
+            <li><strong>Yanıtla</strong>, bir sonraki yazacağınız şeyin üzerinde alıntılar. Neye yanıt verdiğine geri dönmek için alıntıya dokunun.</li>
+            <li><strong>Tepki Ver</strong> yedi emoji açar. Her biri için bir tane; geri almak için tekrar dokunun. Tepkiler mesajın altında bir rozet olarak görünür.</li>
+            <li>Kendi mesajlarınızda 15 dakika boyunca <strong>Düzenle</strong>. Mesaj daha sonra <strong>düzenlendi</strong> olarak gösterilir.</li>
+            <li>Kendi mesajlarınızda istediğiniz zaman <strong>Sil</strong>. Bir kez <strong>Herkesten silinsin mi?</strong> diye sorar ve mesaj daha sonra gruptaki herkes için <strong>Bu mesaj silindi</strong> olarak görünür.</li>
+            <li>Başkasının mesajında koordinatörler için <strong>Kaldır</strong>. Bir kez sorar ve mesaj daha sonra <strong>Bir koordinatör tarafından kaldırıldı</strong> olarak görünür. Kendi mesajınız <strong>Kaldır</strong> değil, <strong>Sil</strong> işlemidir.</li>
+        </ul>
+        <p>Yazarlarının sildiği art arda iki veya daha fazla mesaj tek bir satır olarak gösterilir, örneğin <strong>3 mesaj silindi</strong>. Bir koordinatörün kaldırdığı iki veya daha fazlası <strong>Bir koordinatör tarafından kaldırılan 3 mesaj</strong> olarak gösterilir.</p>
+        <p>Kendi mesajınızın altında: gönderilirken bir saat, grubun sunucusuna ulaştığında bir onay işareti veya gönderilemediyse <strong>! iletilmedi</strong> — <strong>Yeniden Gönder</strong> veya <strong>Sil</strong> için buna dokunun. Bir grupta mavi çift onay işareti yoktur: bir grubun tek bir okuyucusu yoktur.</p>
+        <p>Grup sohbetinde fotoğraf gönderilemez ve grupta bir anlaşma başlatılamaz. Her ikisi de iki kişi arasındaki sohbete aittir. Bkz. &quot;Mesajlar&quot;.</p>
+        <p>Bir <strong>gözlemci</strong> sohbeti okuyabilir ancak içine yazamaz, tepki veremez veya yanıtlayamaz.</p>
+        <p>Yanıt, tepkiler, düzenleme ve silme için topluluğunuzun sunucusunun güncel olması gerekir. Yalnızca sizinki güncel değilse uygulama <strong>Bu toplulukta henüz mevcut değil</strong> der — bu durum sunucuyla ilgilenen kişiye iletilmeye değerdir.</p>
+        <p>Sunucunun geri çevirdiği başka her şeyi sunucu kendi sözleriyle geri çevirir ve uygulama size o satır yerine bu sözleri gösterir. &quot;Kaldırılan bir mesaj düzenlenemez&quot;, siz yazarken bir koordinatörün onu kaldırdığı anlamına gelir, sunucunuzun geride kaldığı anlamına gelmez.</p>
+        <h2>Telefon değiştirmeden önceki mesajlar</h2>
+        <p>Hesabınız yeni bir anahtarla yeni bir telefona taşındığında, önceki grup mesajları eski telefonunuzun anahtarına kilitlenmiş durumdaydı. Her grubun sohbetinde bir satırda <strong>🔒 Telefonunuzu değiştirmeden önceki N mesaj. Kilidi aç →</strong> yazar. Üzerine dokunun:</p>
+        <ul>
+            <li><strong>Eski telefonum veya eski 12 kelimem var</strong>: eski 12 kelimenizi yeni telefona yazın; önceki mesajların kilidi açılır. Eski telefonunuz, kilidinin arkasında bu kelimeleri gösterecek bir düğmeyle birlikte <strong>Bu hesap yeni bir telefona taşındı</strong> mesajını gösterir. Bunlar sizin kendi kelimelerinizdir: onları yalnızca kendi yeni telefonunuza yazın, asla başkasının uzattığı bir telefona yazmayın.</li>
+            <li><strong>Gruptan bir üyeden bu telefonu onaylamasını isteyin</strong>: yeni telefonunuz bir kod gösterir. Grubun bir üyesiyle şahsen buluşun; grup sohbet menüsünü açarlar, <strong>Yeni telefonu onayla</strong> seçeneğine dokunurlar ve kodu tararlar. Telefonları, paylaştığınız gruplar için tuttuğu eski anahtarları sizinkine iletir.</li>
+            <li><strong>Kilitli tut</strong>: hiçbir şey değişmez. O zamanki kendi mesajlarınız kelimeleri olmadan adınızın altında görünür.</li>
+        </ul>
+        <p><strong>Başka birinin yeni telefonunu onayladığınızda</strong>, telefonunuz kodu o kişinin eski anahtarından hatırladıklarına göre denetler. Yeni bir telefonu yalnızca daha önce bu telefonda o grupta sohbet ettiğiniz biri için ve yalnızca telefon onun elindeyken onaylayın: telefonu tutan herkes sizin okuyabildiğiniz önceki mesajları okuyabilir. Telefonunuz <strong>Devam etmeyin; bir sahibe bildirin</strong> derse durun. Bu, telefonunuzun daha önce gördüklerinin sunucunun şu anda söyledikleriyle eşleşmediği anlamına gelir. Telefonunuzun onları görmesinden sonra adını değiştiren biri hakkında da kesin olarak bunu söyler: bir telefona göre, anahtarındaki yeni bir ad tıpkı oraya konmuş bir yabancının adı gibi görünür; bu nedenle her iki adı da görmüş bir telefon onları bir daha asla şahsen onaylayamaz. Kendi eski 12 kelimeleri çalışmaya devam eder; telefonu yalnızca yeni adı görmüş olan bir üye de onaylayabilir. 12 kelimesinden yeni geri yüklenmiş veya o grubu hiç açmamış bir telefon denetlemek için çok az şey görmüştür: eski anahtarlarını hiç bilmediğini söyler veya sunucunun söylediğine inanabilir. Bunun yerine onlarla sohbet etmekte olan bir üyenin onaylamasını sağlayın.</p>
+        <p>Sonunda telefonunuz ne olduğunu söyler: yalnızca her anahtarı ilettiğinde <strong>Bitti</strong>, sunucu bazılarını reddettiğinde <strong>5 anahtardan 3'ü iletildi</strong>. Sunucu yeni telefonlarının zaten bazılarını tuttuğunu söylediğinde, diğer telefonun içini göremediği için telefonunuz <strong>topluluk öyle diyor</strong> der: yeni telefon bu mesajları hâlâ okuyamıyorsa bir sahibe bildirin.</p>
+        <h2>Bir gruba katılma</h2>
+        <p>Telefonda, <strong>Ortak</strong> içinde, <strong>Gruplar</strong> altında, <strong>Katılabileceğiniz gruplar</strong> içinde olmadığınız grupları listeler. Listenin üzerindeki düğmelerle onları türlerine göre filtreleyin. Web uygulamasında <strong>Gruplar</strong>, görebildiğiniz her grubu rolünüzle işaretlenmiş olarak listeler; <strong>Gruplarım</strong> yalnızca sizinkileri gösterir. Her biri açıklamasının başlangıcını gösterir. Tamamını okumak için bir grubu açın, ardından:</p>
+        <ul>
+            <li>Herkese açıksa <strong>Gruba Katıl</strong>;</li>
+            <li>Bir koordinatör üyeleri onaylıyorsa <strong>Katılma İsteği</strong>. Onaylayana kadar <strong>Onay Bekleyen İstek</strong> ifadesini görürsünüz.</li>
+        </ul>
+        <p>Telefonda, katılmak istediğiniz bir grup bir koordinatör sizi içeri alana kadar iki listede de yer almaz. Web'de listede <strong>Beklemede</strong> olarak işaretlenmiş kalır.</p>
+        <p><strong>Yalnızca Davetle</strong> olan bir grup, içinde olmayan veya davet edilmeyen herkesten gizlenir.</p>
+        <p>Telefonda Fasulyesi olmayan yerel bir topluluğun <strong>Ortak</strong> sekmesi yoktur. Orada <strong>Sohbet</strong>'e, ardından <strong>Gruplar</strong>'a ve ardından <strong>Grup bul</strong>'a dokunun: aynı listeyi açar. Henüz hiçbir grupta değilseniz bağlantı <strong>Katılacak bir grup bul</strong> şeklindedir. Küresel topluluğun <strong>Ortak</strong> sekmesi vardır: grupları orada, yerel bir topluluk örneğinin altında yer alır (bkz. &quot;Fasulye ve küresel topluluk&quot;).</p>
+        <p>Bir koordinatör sizi bir gruptan çıkardıysa, gruba kendi başınıza tekrar katılamazsınız.</p>
+        <p>Hesabınız askıya alındığında bir grup başlatamaz, bir gruba katılamaz, katılma isteğinde bulunamaz veya bir daveti kabul edemezsiniz; ayrıca bir koordinatör daha önce yaptığınız bir isteği onaylayamaz. Zaten içinde olduğunuz gruplar sizde kalır. Askıya alma sona erdiğinde grupları yeniden başlatabilir veya gruplara katılabilirsiniz.</p>
+        <h2>Davetle katılma</h2>
+        <p>Davet edildiğiniz bir grup telefon uygulamasında <strong>Ortak</strong> içinde, <strong>Gruplar</strong> altında <strong>DAVET EDİLDİ</strong> olarak işaretlenmiş şekilde gösterilir. Telefonda <strong>Ortak</strong> sekmesi olmayan bir toplulukta, <strong>Sohbet</strong> içinde <strong>Grup bul</strong> altındadır. Daveti görmek için üzerine dokunun: sizi kimin davet ettiği, grubun ne olduğu, kimlerin içinde olduğu (yalnızca davetle girilen bir grup için kaç kişi olduğu) ve sohbetini kimlerin okuyabileceği. Telefonda:</p>
+        <ul>
+            <li><strong>Gruba katıl</strong> seçeneğine dokunun. Sohbetine geçersiniz.</li>
+            <li>Daha sonra karar vermek için <strong>Şimdi değil</strong> seçeneğine dokunun. Davet kalır.</li>
+            <li><strong>Bu davet artık açık değil</strong> yazıyorsa geri çekilmiştir. Sizi davet eden kişiden tekrar davet etmesini isteyin.</li>
+            <li><strong>Bu grup açılamadı</strong> yazıyorsa telefonunuz topluluğunuzun sunucusuna ulaşamamıştır. <strong>Tekrar dene</strong> seçeneğine dokunun.</li>
+        </ul>
+        <p>Web uygulaması henüz davetleri işaretlemez. Grubu <strong>Ortak</strong> içinde, <strong>Gruplar</strong> altında açın ve <strong>Daveti kabul et</strong> seçeneğine dokunun. Gruba katılırsınız ve grubun sayfasında kalırsınız.</p>
+        <h2>Bir gruba ilan paylaşma</h2>
+        <p>Web'de grubu <strong>Ortak</strong> içinde, <strong>Gruplar</strong> altında açın ve <strong>Şuraya ilan ver:</strong> ve adına dokunun. Telefon uygulaması henüz içinde olduğunuz bir gruba ilan paylaşamaz. İlanı yalnızca grubun üyeleri görür. Pazar'da bir kilit ve grup adıyla görünür.</p>
+        <h2>Koordinatörler ve baş koordinatör</h2>
+        <p>Bir koordinatör grupla ilgilenir. Grubu kim oluşturduysa onun <strong>baş koordinatörü</strong>dür ve grubun kartında adı <strong>Baş koordinatör: Ali</strong> şeklinde belirtilir. Üye listesinde satırları <strong>LİDER</strong> olarak işaretlenir.</p>
+        <p><strong>Koordinatör Araçları</strong> içinde herhangi bir koordinatör şunları yapabilir:</p>
+        <ul>
+            <li>katılma ilkesini değiştirebilir;</li>
+            <li>katılma isteklerini <strong>Onayla</strong>yabilir veya <strong>Reddet</strong>ebilir.</li>
+        </ul>
+        <p><strong>Üye Listesi</strong> içinde bir adın yanında herhangi bir koordinatör şunları yapabilir:</p>
+        <ul>
+            <li>bir üyenin veya bir gözlemcinin rolünü değiştirebilir (telefonda <strong>Rol</strong>, web uygulamasında bir açılır menü), onları koordinatör yapmak da dahil;</li>
+            <li>bir üyeyi veya gözlemciyi çıkarabilir (<strong>✕</strong>).</li>
+        </ul>
+        <p>Bir koordinatör bir ilanı ilanın kendisinden, telefonda ise bir mesajı sohbetin içinden kaldırır. Bir grubun adı ve açıklaması henüz uygulamada değiştirilemez.</p>
+        <p>Yalnızca <strong>baş koordinatör</strong> bir koordinatörü çıkarabilir veya koordinatör rolünü birinden alabilir. İşlem yapamayacağınız bir satırın yanında hiçbir şekilde <strong>Rol</strong> veya <strong>✕</strong> gösterilmez — bu, uygulamanın bunun sizin göreviniz olmadığını söylemesidir.</p>
+        <p><strong>Hiç kimse baş koordinatörü çıkaramaz veya liderliği ondan alamaz.</strong> Ne başka bir koordinatör ne de bir topluluk yöneticisi. Liderin görevi devretmesi dışında, yalnızca grubun oylaması yeni bir lider seçebilir. Bkz. &quot;Gruptaki oylamalar&quot;.</p>
+        <p><strong>Liderliği devretme.</strong> Lider görevi devredebilir. Telefonda <strong>Koordinatör Araçları</strong> içinde <strong>Devret</strong> seçeneğine veya birinin adının yanındaki kalkan düğmesine dokunun. Web uygulamasında adının yanındaki <strong>Lider yap</strong> seçeneğine dokunun. Başka bir koordinatör veya bir üye seçin — bir üye aynı anda koordinatör olur. Bir gözlemci lider olamaz; önce onu bir üye veya bir koordinatör yapın. İşlem tamamlandıktan sonra liderliği geri alamazsınız.</p>
+        <p><strong>Lider olarak ayrılma.</strong> Önce liderliği devredin; telefonda <strong>Gruptan Ayrıl</strong> seçeneğine dokunduğunuzda telefon bunu size sunar ve web uygulaması bunu yapmanızı söyler. Grupta başka kimse yoksa doğrudan ayrılabilirsiniz.</p>
+        <p>Grupta başka biri varken son koordinatör görevden çekilemez veya gruptan ayrılamaz.</p>
+        <p><strong>Bir koordinatör askıya alındığında.</strong> Topluluğunuz bir koordinatörün hesabını askıya alırsa, askıya alma sona erene kadar koordinatör araçlarının hiçbiri onun için çalışmaz: onaylama, davet etme, rolleri değiştirme, kişileri, ilanları veya mesajları kaldırma, grubu düzenleme, liderliği devretme. Uygulama hesaplarının askıya alındığını ve hâlâ bir koordinatör olduklarını belirtir. Onlardan hiçbir şey alınmaz: koordinatör olarak kalırlar, lider lider olarak kalır ve askıya alma sona erdiği anda hepsi tekrar çalışır. Lider olmadıkları ve grupta başka biri bulunmadığı sürece yine de gruptan ayrılabilirler.</p>
+        <p>Grup bu sırada devam eder. Üyeleri sohbet etmeye ve ilan paylaşmaya devam eder ve insanlar açık bir gruba katılmaya devam edebilir. Diğer herhangi bir koordinatör yukarıdakilerin tümünü yapmaya devam edebilir; yalnızca liderin kendi yetkileri bekler. Katılma istekleri ve yeni davetler bir koordinatörü bekler. Herhangi biri yine de topluluğunuzun moderatörlerine bir ilanı veya bir kişiyi bildirebilir. Askıya alınan koordinatör grubun tek koordinatörüyse, grubun lideridir ve askıya alındığı süre boyunca yaptığı hiçbir şey etkinlik olarak sayılmaz: en son aktif olmasından 30 gün sonra grup, aşağıda açıklandığı gibi yeni bir lider oylayabilir.</p>
+        <p><strong>Lider sessizliğe büründüğünde.</strong> Liderden 30 gün boyunca hiçbir etkinlik gelmediğinde, grubun yeni bir lider seçmek için ikinci bir yolu vardır. (Üyeleri ayrıca küresel topluluk hariç her zaman yeni bir lider için oy kullanabilir: bkz. &quot;Gruptaki oylamalar&quot;.) Grubu açın ve <strong>Üye Listesi</strong>'nin hemen üzerine bakın: orada liderin adını ve ne kadar süredir uzakta olduğunu belirten bir panel görünür. Grubun lideri aktifken hiçbir şey gösterilmez — son oylamanın nasıl bittiğini söyleyen ve kapandıktan sonra iki hafta boyunca kalan tek bir satır hariç.</p>
+        <p>Oy kullananlar grubun <strong>diğer koordinatörleri</strong>dir — veya diğer koordinatörlerin hiçbiri liderin en son aktif olduğu güne kadar koordinatör yapılmadıysa grubun <strong>üyeleri</strong>dir. O günden sonra gruba katılan veya koordinatör yapılan hiç kimse oylamaya katılamaz. Oy kullananlardan herhangi biri o panelde kendi adı da dahil olmak üzere bir adın yanındaki <strong>Öner</strong> seçeneğine dokunabilir; önermek o kişinin Evet oyu sayılır. Oy kullanabilen herkes daha sonra <strong>Evet</strong> ve <strong>Hayır</strong> seçeneklerini görür. Bir oy değiştirilemeyeceği için onaylamanız istenir ve yalnızca toplamları görürsünüz — asla kimin hangi yönde oy kullandığını göremezsiniz. Oylama 14 gün sürer ve yanıt verenlerin yarısından fazlası Evet dediğinde kabul edilir. Kabul edilirse, eski lider diğer koordinatörler oy kullandığında koordinatör olarak kalır; üyeler oy kullandığında üye olur. Sessiz lider geri döner ve uygulamada herhangi bir şey yaparsa oylama anında kapanır. Telefonda bildirimlere izin verildiğinde yalnızca uygulamayı açmak bile sayılır. Liderin hesabı askıya alındığında yaptığı hiçbir şey sayılmaz. Gözlemciler paneli görebilir ancak oy hakları yoktur; sessiz liderin de oyu yoktur.</p>
+        <p>Kuralların tamamı &quot;Kurallar ve karar alma süreci&quot; altında, &quot;Sessiz bir baş koordinatör&quot; bölümündedir.</p>
+        <p><strong>Grup yeni bir lideri oylarken.</strong> İster bu oylama olsun ister grubun aşağıdaki kendi oylamalarından biri olsun, hiçbir koordinatör oylama kapanana kadar lider yapabileceği kişiyi gruptan çıkaramaz veya rolünü düşüremez. Uygulama bunu kendi sözleriyle belirtir. Yine de kendi başlarına ayrılabilirler ve grubun bir oylaması onları yine de çıkarabilir.</p>
+        <h2>Gruptaki oylamalar</h2>
+        <p>Bir grubun üyeleri grubun kendi konularında birlikte oy kullanabilir. Grubu açın (telefonda sohbetinin üst kısmındaki adına dokunun; web'de <strong>Ortak</strong> içinde, <strong>Gruplar</strong> altında açın): oylamaları sayfanın üst kısımlarında <strong>Kararlar</strong> altındadır. Yalnızca gruptaki kişiler bunları görür.</p>
+        <p>Küresel toplulukta bir grubun kendine ait oylamaları ve <strong>Bir oylama öner</strong> seçeneği yoktur; orada yalnızca sessiz lider oylaması çalışır.</p>
+        <p><strong>Bir oylama öner</strong> seçeneğine dokunun ve ne olması gerektiğini seçin:</p>
+        <ul>
+            <li><strong>Yeni bir baş koordinatör seç</strong>: bir gözlemci dışında gruptaki herhangi biri, siz de dahil.</li>
+            <li><strong>Birini koordinatör yap</strong> veya <strong>Bir koordinatörü üye yap</strong>. Bir oylama asla liderin rolünü değiştirmez; lideri değiştirmek için yeni bir lider için oy verin.</li>
+            <li>Gruptan <strong>Birini çıkar</strong>. Lideri değil ve kendinizi değil: gitmek için gruptan ayrılın.</li>
+            <li><strong>Kimin katılabileceğini değiştir</strong>: herkese açık, insanlar katılım ister ve bir koordinatör onları içeri alır veya yalnızca davetle.</li>
+            <li><strong>Grubu kapat.</strong> Sohbeti okunmak üzere kalır ancak yeni mesaj, ilan veya üye kabul etmez ve diğer açık oylamaları sona erer. İlanları Pazar'dan kaldırılır.</li>
+        </ul>
+        <p>Bir başlık verin ve nedenini belirtin, ardından <strong>Oylamayı başlat</strong> seçeneğine dokunun. Bir oylama asla Fasulye taşımaz: bir grup hiç Fasulye tutmaz. Topluluktaki kimsenin konumunu da değiştiremez; bunun için bir topluluk Kararı gerekir.</p>
+        <p><strong>Kimler oy kullanır.</strong> Oylama açıldığında grubun üyesi veya koordinatörü olan herkes; lider ve öneren kişi dahil. Gözlemciler izler: oyları görürler ancak Evet veya Hayır hakları yoktur. Bir oylama açıldıktan sonra katılan biri oylamada yer almaz. Tek kişilik bir grubun birlikte oy kullanacak kimsesi yoktur, bu nedenle o zaman <strong>Bir oylama öner</strong> düğmesi bulunmaz. Bir grupta aynı anda kendinize ait bir açık oylamaya sahip olabilirsiniz.</p>
+        <p><strong>Nasıl kabul edilir.</strong> Oylamadakilerin yarısından fazlası oy kullanmalıdır. Birini çıkarmak ve grubu kapatmak %60 Evet gerektirir; geri kalanı yarısından fazlasını gerektirir. Bir oylama 7 gün sürer veya yanıt değişemeyecek hale geldiğinde daha erken biter. Kabul edildiğinde uygulama bunu kendiliğinden yürütür. Yeni bir lider, rol değişikliği, çıkarma veya kapatma sohbette küçük gri bir çizgi olarak gösterilir; yeni bir katılma kuralı grubun sayfasında gösterilir.</p>
+        <p><strong>Gördükleriniz.</strong> Bir oylama açıkken herkes kaç kişinin oy kullandığını görür, nasıl oy kullandığını değil. Evet ve Hayır kapandıktan sonra gösterilir. Kullanılan bir oy değiştirilemez. Kimse kimin nasıl oy kullandığını görmez. Çok küçük bir grupta ise sonuç ve kimin oy kullandığı bunu gösterebilir: üç kişi de oy kullanır ve 3–0 biterse herkes kimin nasıl oy kullandığını bilir.</p>
+        <p><strong>Haber verilmesi.</strong> Oylamadaki herkes (öneren kişi hariç), grubun sohbetini sessize almadılarsa veya sohbet bildirimlerini kapatmadılarsa açıldığında bir bildirim alır. Hiçbir kişinin ve hiçbir grubun adını vermez: <strong>Gruplarınızdan birinde bir oylama başladı.</strong> yazar. Üzerine dokunun ve grup <strong>Kararlar</strong> bölümünde açılır. Ana Sayfa'da henüz kullanmadığınız açık bir oylama <strong>Sana ihtiyacı var</strong> altında görünür ve o da grubu açar.</p>
+        <p><strong>Gelenler ve gidenler.</strong> Bir oylama sırasında gruptan ayrılan biri oylamadan ayrılır ve oyu onunla birlikte gider. Bir koordinatörün oylama sırasında çıkardığı veya gözlemci yaptığı biri oylamada kalır: kullandığı oyu korur ve henüz kullanmadıysa yine de oy kullanabilir. İnsanları çıkarmak hiçbir zaman bir oylamayı yönlendirmenin yolu değildir. Oylamada ikiden az kişi kalırsa oylama bir yanıta ulaşmadan sona erer.</p>
+        <p><strong>Kapatılmış bir grup</strong> sayfasında <strong>Kapalı</strong> yazar ve &quot;Grup üyelerinin oylamasıyla kapatıldı. Sohbeti okunmak üzere duruyor.&quot; satırı yer alır. Sohbeti, oylamaları ve içinde kimlerin olduğu okunmak üzere orada kalır; yeni hiçbir şey eklenemez.</p>
+        <h2>Çok yakında</h2>
+        <ul>
+            <li>Bir topluluk Kararı ile kurallara uymayan bir baş koordinatörün görevden alınması. Daha sonraki bir güncellemede gelecek.</li>
+            <li>Web grup listesinde davetlerin işaretlenmesi.</li>
+        </ul>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="messages.html"><strong>Mesajlar</strong><span>Sohbet başlatma, fotoğraf gönderme, yanıtlama, tepki verme, düzenleme, silme, sessize alma ve gizlilik.</span></a></li>
+            <li><a href="mute.html"><strong>Sohbeti susturma</strong><span>Bir kişinin, grubun veya girişimin sohbetini 8 saat, bir hafta veya tamamen sessize alın.</span></a></li>
+            <li><a href="mentions.html"><strong>Bahsetmeler (@ad)</strong><span>Grup sohbetinde @ ve adını yazarak birini uyarın.</span></a></li>
+            <li><a href="enterprises.html"><strong>Projeler ve girişimler</strong><span>Kendi fasulyeleri olan ortak girişimler: birini bulun, destekleyin veya kendiniz başlatın.</span></a></li>
+            <li><a href="event-chat.html"><strong>Etkinlik odası</strong><span>Etkinliğin ev sahibi ve katılan herkesle sohbet edin.</span></a></li>
+            <li><a href="posting.html"><strong>Teklif veya İhtiyaç paylaşma</strong><span>Yapabileceğiniz, verebileceğiniz bir şey veya aradığınız bir şeyi paylaşın.</span></a></li>
+            <li><a href="decisions.html"><strong>Karara oy verme</strong><span>Açık Kararları bulun, oy verin, oyunuzu değiştirin ve sonuçları görün.</span></a></li>
+            <li><a href="keepers.html"><strong>Sorumlular</strong><span>Bir girişimi yöneten ve arkasında duran kişiler. Nasıl katılınır, itiraz edilir ve ayrılınır.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

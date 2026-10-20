@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/tr by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sohbette anahtarın değiştiği uyarısı çıkarsa — BeanPool members' guide</title>
+    <meta name="description" content="Sohbetin neden mesaj göndermeyi durdurduğu, anahtar kodunun kişiyle nasıl doğrulanacağı ve ne zaman devam edileceği.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#talk">Sohbet</a></p>
+        <h1>Sohbette anahtarın değiştiği uyarısı çıkarsa</h1>
+        <p class="lede">Sohbetin neden mesaj göndermeyi durdurduğu, anahtar kodunun kişiyle nasıl doğrulanacağı ve ne zaman devam edileceği.</p>
+        <h2>Ne anlama gelir</h2>
+        <p>İki kişi arasındaki her mesaj, yalnızca diğer kişinin telefonunun açabilmesi için kilitlenir. Adlarına değil, <strong>anahtar</strong>larına kilitlenir. Telefonunuz, sohbetinizi hangi anahtara kilitlediğini hatırlar.</p>
+        <p>Topluluğunuz artık o kişi için farklı bir anahtar belirtiyorsa telefonunuz sessizce yeni anahtara göndermek yerine durur ve size haber verir. Sohbetin üst kısmında <strong>&quot;Ben&quot; arkasındaki anahtar değişti.</strong> uyarısını görürsünüz. Mesaj kutusu soluklaşır ve göndermenin duraklatıldığını belirtir.</p>
+        <p>Onlarla önceki mesajlarınız genellikle daha önceki gibi okunmaya devam eder. Yeni geri yüklediğiniz veya yeniden kurduğunuz bir telefonda, yeni anahtardan gelen mesajlar siz karar verene kadar <strong>Yeni anahtardan gönderildi. Siz devam ettikten sonra gösterilir.</strong> şeklinde görünür.</p>
+        <p>Bu durum telefon uygulamasındadır. Web uygulaması henüz anahtarları hatırlamaz.</p>
+        <h2>Neden olabilir</h2>
+        <ul>
+            <li><strong>Yeni bir telefon aldılar ve anahtarlarını yenilediler.</strong> Bu olağan nedendir. Eski anahtarları gitti, bu yüzden yeni bir anahtara sahipler.</li>
+            <li><strong>Bir şeyler ters gidiyor.</strong> Bir topluluğun sunucusu her sohbette kimlerin olduğunu listeler. Mesajlarınızı okumak isteyen bir sunucu, arkadaşınızın adının arkasına başka birinin anahtarını koyabilir. Ad doğru görünür ancak anahtar doğru görünmez.</li>
+        </ul>
+        <p>Telefonunuz bunları kendi başına ayırt edemez. Siz anahtar koduyla ayırt edebilirsiniz.</p>
+        <h2>Kişiyle anahtar kodunu kontrol edin</h2>
+        <ul>
+            <li>Başlık bir kod gösterir: dörderli beş grup halinde 20 basamak.</li>
+            <li>Kişiden <strong>Ayarlar</strong>'ı, ardından <strong>Hesap Koruması</strong>'nı açmasını ve size <strong>Anahtar kodum</strong> bilgisini okumasını isteyin.</li>
+            <li><strong>Anahtar kodum</strong> yalnızca telefon uygulamasındadır. Kişi yalnızca web uygulamasını kullanıyorsa bunu henüz size okuyamaz: telefon uygulamasını açana kadar <strong>Şimdi değil</strong> seçeneğine dokunun.</li>
+            <li>Bunu <strong>şahsen veya kendileri olduğunu bildiğiniz bir telefon ya da görüntülü görüşmede</strong> kontrol edin. BeanPool'daki bir mesajla kontrol etmeyin: anahtar yanlışsa yanıt veren kişi de yanlıştır.</li>
+            <li>Her basamak eşleşiyorsa <strong>Ben ile kontrol ettim: Ayarlar'ındaki anahtar kodu bununla eşleşiyor</strong> kutusunu işaretleyin, ardından <strong>Yeni anahtarla devam et</strong> seçeneğine dokunun.</li>
+        </ul>
+        <p>O andan itibaren mesajlarınız yeni anahtara gider. Başlık ve <strong>Sohbet</strong> içindeki sohbette bulunan <strong>anahtar değişti</strong> etiketi kaybolur ve önceki mesajlarınız okunmaya devam eder.</p>
+        <p>Kod gizli değildir. Sesli okumak güvenlidir.</p>
+        <h2>Kod eşleşmezse veya kontrol edemiyorsanız</h2>
+        <p><strong>Şimdi değil</strong> seçeneğine dokunun. Hiçbir şey gönderilmez ve hiçbir şey değişmez. Sohbete daha sonra geri dönebilirsiniz.</p>
+        <p>Duraklatılmış bir sohbet, siz devam edene kadar duraklatılmış kalabilir. İçinde konuşmaya devam etmenin başka yolu yoktur: topluluğunuz ikiniz için tek bir sohbet tutar, bu nedenle aynı kişiyle yeni bir sohbet başlatmak bu aynı sohbeti açar.</p>
+        <p>Kod eşleşmezse devam etmeyin. Kişiye ve topluluğunuzun yöneticilerine bildirin: biri mesajlarınızı okumaya çalışıyor olabilir.</p>
+        <h2>Başlık devam edilecek bir anahtar sunmuyorsa</h2>
+        <p>Bazen topluluk iki kişi arasındaki bir sohbette o kişi için tek bir anahtar listelemez: birkaç tane listeler veya hiç listelemez. Bu durumda devam edilecek bir anahtar yoktur, bu yüzden başlık bunu belirtir ve yalnızca <strong>Şimdi değil</strong> seçeneğini sunar. Hiçbir şey gönderilmez. Kişiyle şahsen veya bir aramada konuşun. Topluluğun listesi değiştiğinde telefonunuz sohbeti kendiliğinden tekrar denetler ve aynı kişiyle yeni bir sohbet bu aynı sohbettir.</p>
+        <h2>Başlık telefonunuzun sohbeti baştan kontrol ettiğini söylüyorsa</h2>
+        <p>Telefonunuzu 12 kelimenizden geri yükledikten veya uygulamayı güncelledikten sonra, telefonunuz her sohbeti kendi önceki mesajlarına göre kontrol eder. Bunlar topluluğunuzun şu anda kişi için verdiğinden farklı bir anahtardan geldiyse başlık <strong>Bu telefon, geri yükledikten veya uygulamayı güncelledikten sonra yaptığı gibi bu sohbeti baştan kontrol ediyor.</strong> ile başlar. Kişiyle kodu yukarıdaki gibi kontrol edin. Topluluğun sohbet belleğini sıfırladıktan sonra ise bunun yerine <strong>Bu topluluğun sohbet belleği sıfırlandı, bu nedenle bu telefon bu sohbeti baştan kontrol ediyor.</strong> ile başlar.</p>
+        <h2>Sohbet belleği</h2>
+        <p>Telefonunuz her topluluk için küçük bir bellek tutar: sohbetlerinizin her birinin hangi anahtarla olduğu ve hangi sohbetlerin özel olduğu. Telefonda tutulur ve topluluğun sunucusu bir sohbeti kendi başına başka bir anahtara taşıyamaz: bunu başlıkta yalnızca siz yapabilirsiniz. Çıkış yaptığınızda telefonda kalır; bu nedenle çıkış yapıp tekrar girmek bunu temizlemez. Telefon bunu kendi başına asla sıfırlamaz.</p>
+        <p>Bunu tek bir topluluk için sıfırlayabilirsiniz: <strong>Ayarlar</strong>'ı açın, <strong>Hesap ve kimlik</strong> altında <strong>Sohbet belleği</strong>'ne dokunun, topluluğun yanındaki <strong>Sıfırla</strong>'ya dokunun, uyarıyı okuyun ve tekrar <strong>Sıfırla</strong>'ya dokunun. Uygulama sizi buraya yalnızca bu belleği okuyamadığını ve tekrar denemenin işe yaramadığını söylediğinde yönlendirir.</p>
+        <p>Sıfırlamadan sonra telefonunuz o topluluktaki her sohbeti, tuttuğu mesajlardan baştan tekrar kontrol eder. Mesajları topluluğun şu anda verdiğinden farklı bir anahtardan gelen bir sohbet başlığı, <strong>Bu topluluğun sohbet belleği sıfırlandı, bu nedenle bu telefon bu sohbeti baştan kontrol ediyor.</strong> ile başlayarak tekrar gösterir. Kişiyle kodu yukarıdaki gibi kontrol edin.</p>
+        <p>Sıfırlamadan sonra iki şey değişebilir ve uyarı onaylamadan önce bunu belirtir: anahtarı değiştiği için duraklatılan bir sohbet yeni anahtarla açılabilir ve Sohbet'ten kaybolan özel bir sohbet topluluğun okuyabileceği bir grup sohbeti olarak geri gelebilir. Göndermeden önce anahtar kodunu veya sohbette kimlerin olduğunu kontrol edin.</p>
+        <p>Sıfırlama, telefonunuzun tek bir anahtarla eşleştiremediği bir sohbete yardımcı olmaz: tekrar kontrol edilir ve tekrar durur. Bunun yerine kodu kişiyle kontrol edin (yukarıda).</p>
+        <p>Bu durum telefon uygulamasındadır. Web uygulamasında sohbet belleği yoktur.</p>
+        <h2>Başlık telefonunuzun sohbeti tek bir anahtarla eşleştiremediğini söylüyorsa</h2>
+        <p>Bazen bir sohbetteki önceki mesajlar telefonunuzun tek bir kişiyle eşleştiremediği anahtarlara kilitlenmiştir. Mesaj kutusunun üzerinde <strong>Bu telefon bu sohbeti tek bir anahtarla eşleştiremiyor, bu yüzden gönderme kapatıldı.</strong> yazar ve başlık topluluğunuzun şu anda o kişi için listelediği anahtarın kodunu gösterir.</p>
+        <p>Bazı mesajlar hâlâ gösterilebilir. Sohbette adı yazan kişiden olmayabilirler: kendi önceki mesajları <strong>Bu mesaj doğrulanamadı, bu nedenle gösterilmiyor.</strong> yazan mesajlar olabilir. Siz devam ettikten sonra bile bunlar öyle kalır.</p>
+        <p>Kodu kişiyle yukarıdaki gibi, şahsen veya bir aramada kontrol edin. Eşleşirse kutuyu işaretleyin ve <strong>Yeni anahtarla devam et</strong> seçeneğine dokunun: o andan itibaren mesajlarınız o anahtara gider. Eşleşmezse veya kontrol edemiyorsanız <strong>Şimdi değil</strong> seçeneğine dokunun. Aynı kişiyle yeni bir sohbet bu aynı sohbettir, bu yüzden denenecek başka bir şey yoktur. Topluluk onlar için tek bir anahtar listelemiyorsa başlık yalnızca <strong>Şimdi değil</strong> seçeneğini sunar ve topluluğun listesi değiştiğinde telefonunuz sohbeti kendiliğinden tekrar denetler.</p>
+        <h2>Telefonunuz neleri kontrol edebilir, neleri edemez</h2>
+        <p>Telefonunuz bir sohbeti önceden tuttuğu mesajlara göre kontrol eder. Geri yüklenen bir telefon veya güncelleme sırasındaki mevcut bir telefon, yalnızca gönderdiklerinde sohbetin en eski kısmını geride tutan veya çevreleyen bir sunucu tarafından yönlendirilir. O en eski kısmı önceden tutan bir telefon ise sunucunun güncellemeden sonra gönderdiği hiçbir şey tarafından yönlendirilmez.</p>
+        <p>Bu nedenle yeni geri yüklediğiniz veya yeni güncellediğiniz bir telefon, bir sohbetin anahtarı konusunda yanıltılabilir. Bir başlık bunu tamamen dışlayamaz. <strong>Değişen bir anahtarı şahsen doğrulayın</strong> ya da kendileri olduğunu bildiğiniz bir aramada doğrulayın.</p>
+        <h2>Topluluk bir tarih veriyorsa</h2>
+        <p>Topluluğunuz hesabın anahtarının yenilendiğini gösterebildiğinde, başlık bunu belirtir, örneğin: <strong>Bu topluluk hesaba 3 Eki 2026 tarihinde yeni bir anahtar verildiğini bildiriyor.</strong> Bu ne olduğunu anlamanıza yardımcı olur ancak kodu kontrol etmenin yerini almaz: bir sunucu da bunu söyleyebilir.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="messages.html"><strong>Mesajlar</strong><span>Sohbet başlatma, fotoğraf gönderme, yanıtlama, tepki verme, düzenleme, silme, sessize alma ve gizlilik.</span></a></li>
+            <li><a href="your-12-words.html"><strong>12 kelimeniz</strong><span>12 kelime hesabınızın anahtarıdır. Neden önemli oldukları, nerede bulunacakları, nasıl güvende tutulacakları ve ikinci bir kurtarma yolu olarak giriş hesabı ekleme.</span></a></li>
+            <li><a href="people.html"><strong>Kişiler ve arkadaşlar</strong><span>Topluluk üyelerini bulma, arkadaş ekleme ve birine kefil olma.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

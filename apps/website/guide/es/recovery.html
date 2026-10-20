@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/es by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Recuperar tu cuenta — BeanPool members' guide</title>
+    <meta name="description" content="Restaura tu cuenta en un teléfono nuevo y protégela vinculando un inicio de sesión.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">Ajustes y seguridad</a></p>
+        <h1>Recuperar tu cuenta</h1>
+        <p class="lede">Restaura tu cuenta en un teléfono nuevo y protégela vinculando un inicio de sesión.</p>
+        <h2>En un teléfono nuevo</h2>
+        <p>La clave de tu cuenta no está en los respaldos de tu teléfono. Un teléfono nuevo necesita tus 12 palabras o una cuenta de inicio de sesión que hayas vinculado, incluso un iPhone restaurado a partir de un respaldo del anterior.</p>
+        <ul>
+            <li>Instala BeanPool y ábrela.</li>
+            <li>Toca <strong>¿Ya eres miembro? Restaurar cuenta</strong>.</li>
+            <li>Elige <strong>Recuperar con 12 palabras</strong> o <strong>Recuperar con cuenta social</strong>.</li>
+        </ul>
+        <h2>Con tus 12 palabras</h2>
+        <ul>
+            <li>Escribe las 12 palabras en orden, o toca <strong>Pegar</strong>.</li>
+            <li>En <strong>¿Cuál comunidad?</strong>, toca <strong>Comunidad global</strong>, o una de las comunidades que ha tenido este teléfono. Para cualquier otra, toca <strong>otra dirección</strong> y escribe el nombre o la dirección de tu comunidad.</li>
+            <li>Toca <strong>Recuperar identidad</strong>. Tu nombre y foto se recuperan de tu comunidad.</li>
+        </ul>
+        <h2>Con una cuenta de inicio de sesión</h2>
+        <p>Esto solo funciona si vinculaste una previamente (ver más abajo), y solo mientras el servidor de tu comunidad esté funcionando.</p>
+        <ul>
+            <li>Escribe tu nombre en la comunidad. La app puede sugerir &quot;¿Eres tú?&quot;.</li>
+            <li>Escribe el nombre o la dirección de tu comunidad.</li>
+            <li>Toca <strong>Recuperar con</strong> y la cuenta que vinculaste: Google o Facebook, o Apple en un iPhone.</li>
+            <li>Con Google en un iPhone, se abre una página web de Google. Inicia sesión allí y elige la cuenta que vinculaste. En Android, Google muestra su propia lista de cuentas. Si no puede mostrar una en ese teléfono, se abre una página web de Google en su lugar.</li>
+        </ul>
+        <p>Si la cuenta de inicio de sesión se vinculó desde un teléfono que tenía tus 12 palabras, en una app actualizada, tus 12 palabras regresan también. De lo contrario, el teléfono no tiene 12 palabras: no se pueden reconstruir a partir de un inicio de sesión. Si las tienes anotadas, puedes añadirlas (consulta «Tus 12 palabras»). Hasta entonces, una cuenta de inicio de sesión vinculada es la vía de acceso de ese teléfono para volver, así que mantén una vinculada y vincula una segunda si puedes (ver más abajo).</p>
+        <h2>Proteger tu cuenta ahora</h2>
+        <ul>
+            <li>Abre <strong>Ajustes</strong> y toca <strong>Protección de la cuenta</strong>.</li>
+            <li>En <strong>Proveedores de recuperación por inicio de sesión (1 de N)</strong>, toca <strong>Proteger con</strong> y elige una cuenta.</li>
+            <li>Supera la comprobación de la pantalla de bloqueo de tu teléfono. La cuenta vinculada puede recuperar tu cuenta, por lo que la app lo solicita primero.</li>
+            <li>Con Google en un iPhone, se abre una página web de Google. Inicia sesión allí y elige tu cuenta, y volverás a BeanPool.</li>
+        </ul>
+        <p>Esto también funciona en un teléfono que no tiene 12 palabras.</p>
+        <p>Si te uniste a la comunidad global con 12 palabras, usa en su lugar <strong>Añadir un inicio de sesión</strong>, cerca de la parte superior de <strong>Protección de la cuenta</strong>. Es una vía de acceso también y además elimina los límites de una cuenta nueva de 12 palabras. Consulta «Tus 12 palabras».</p>
+        <p>Si este teléfono tiene tus 12 palabras, la cuenta vinculada también las conserva, por lo que restaurar con ella las devuelve. Una cuenta que vinculaste en una versión anterior de la app solo conserva tu clave: toca <strong>Conectar de nuevo</strong> junto a ella y supera la comprobación de la pantalla de bloqueo de tu teléfono para incluir las palabras. En un teléfono sin 12 palabras no hay nada que incluir, por lo que no se muestra <strong>Conectar de nuevo</strong>.</p>
+        <p>Esta no es una forma de iniciar sesión. Tu cuenta sigue siendo tu propia clave. La cuenta vinculada solo te ayuda a recuperarla, en esa comunidad.</p>
+        <p>Para eliminarla, toca <strong>Desconectar</strong>.</p>
+        <h2>Si habías vinculado GitHub</h2>
+        <p>BeanPool ya no utiliza GitHub. El identificador de una cuenta de GitHub es público, por lo que una copia vinculada a ella no estaba protegida con nada que solo tú tuvieras. Cuando el servidor de tu comunidad se actualiza, elimina todas las copias vinculadas a GitHub. Tu cuenta en sí no se ve afectada y tus 12 palabras siguen funcionando.</p>
+        <ul>
+            <li>Si GitHub era la única cuenta que vinculaste y tus 12 palabras están en este teléfono pero no anotadas, anótalas ahora (<strong>Ajustes</strong>, luego <strong>Ver frase de recuperación</strong>), o vincula Google, Facebook o (en un iPhone) Apple, como se indica arriba. Hasta que hagas una de estas acciones, este teléfono es tu única vía de entrada a tu cuenta.</li>
+            <li>Si tienes anotadas tus 12 palabras, no necesitas hacer nada. Para tener también una cuenta de inicio de sesión, vincula Google, Facebook o (en un iPhone) Apple, como se indica arriba.</li>
+            <li>Si GitHub era la única cuenta que vinculaste, este teléfono no tiene 12 palabras y no las tienes anotadas, vincula Google, Facebook o (en un iPhone) Apple ahora. Hasta que lo hagas, este teléfono es tu única vía de entrada a tu cuenta.</li>
+        </ul>
+        <h2>Quién puede abrir la copia</h2>
+        <p>Una cuenta de inicio de sesión vinculada funciona porque el servidor de tu comunidad guarda una copia cifrada de tu cuenta para ella. Las personas que administran ese servidor pueden abrir esta copia, porque su servidor comprueba tu inicio de sesión. En la comunidad global, esa entidad es BeanPool. Una copia robada de la base de datos del servidor no puede abrirla, una vez que el servidor se ha actualizado para ello. Cualquier persona que tome el control de tu cuenta de inicio de sesión también puede entrar: consulta «Si alguien más lo intenta».</p>
+        <p>Si prefieres que nadie excepto tú pueda entrar, usa solo tus 12 palabras: mantenlas anotadas y toca <strong>Desconectar</strong> junto a cada cuenta de inicio de sesión. Desconectar elimina la copia. Un servidor de respaldo, el segundo servidor que algunas comunidades mantienen listo para asumir el control, también elimina su copia la próxima vez que copia del servidor principal (aproximadamente una vez por minuto). Desconectar no elimina las copias que ya están en los respaldos del servidor, ni la copia que el servidor conserva, como registro, cada vez que un inicio de sesión recupera tu cuenta. Las personas que administran el servidor también pueden abrirlas.</p>
+        <h2>Si alguien más lo intenta</h2>
+        <p>Si alguien empieza a recuperar tu cuenta, Ajustes muestra <strong>Alguien está recuperando tu cuenta</strong> mientras el proceso está en curso. Si no eres tú, toca <strong>Detener ahora</strong>: el servidor de tu comunidad no entregará nada más a esa restauración. Si entran con tu cuenta de inicio de sesión vinculada, recibirás una alerta de que tu cuenta se acaba de restaurar en otro dispositivo, y es posible que ya hayan entrado para cuando la veas. Mantén segura esa cuenta de inicio de sesión, con su propia contraseña segura.</p>
+        <h2>Si el teléfono ya tiene una cuenta</h2>
+        <p>Restaurar una cuenta diferente reemplaza la que está en este teléfono, ya sea que la restaures con tus 12 palabras o con una cuenta de inicio de sesión. La app pregunta primero, en <strong>¿Reemplazar la cuenta de este teléfono?</strong> (con una cuenta de inicio de sesión, una vez que hayas iniciado sesión). Nada cambia hasta que escribas <strong>WIPE</strong>, toques <strong>Reemplazar cuenta</strong> y superes la comprobación de la pantalla de bloqueo de tu teléfono. Toca <strong>Conservar</strong>, luego el nombre de la cuenta, <strong>volver</strong> para dejar todo como estaba.</p>
+        <p>Asegúrate de tener las 12 palabras de la cuenta que estás reemplazando. Si este teléfono las tiene, esa pantalla las muestra cuando tocas <strong>Mostrar las 12 palabras de</strong> (nombre de la cuenta) y superas la comprobación de la pantalla de bloqueo de tu teléfono. Si este teléfono no tiene 12 palabras para esa cuenta (Ajustes lo indica), sin una cuenta de inicio de sesión vinculada no podrás recuperarla.</p>
+        <h2>Perdiste tu teléfono y tus 12 palabras</h2>
+        <p>Sin tus 12 palabras y sin una cuenta de inicio de sesión vinculada, un administrador de tu comunidad puede transferir tu cuenta a un teléfono nuevo, con tus frijoles, tu nombre y tu historial. Ve a verlo en persona: primero comprobará que seas tú.</p>
+        <ul>
+            <li>El administrador genera un código de cambio de clave en su pantalla. Si tu teléfono anterior todavía tiene la app, recibe un aviso de que un administrador comenzó a transferir tu cuenta.</li>
+            <li>En tu teléfono nuevo, abre BeanPool, toca <strong>¿Ya eres miembro? Restaurar cuenta</strong>, luego <strong>Un administrador me dio un código de cambio de clave</strong>. Escanea el código QR en la pantalla del administrador o escribe el código (comienza con RK-) y el nombre de tu comunidad. En un navegador, el enlace del código QR abre la misma pantalla; o abre la aplicación web de tu comunidad, toca <strong>Ya soy miembro →</strong>, luego <strong>Un administrador me dio un código de cambio de clave</strong> y escribe el código.</li>
+            <li>Tu teléfono muestra un número de dos dígitos y, debajo, la dirección de la comunidad a la que consultó. Muestra ambos al administrador: él escribe el número en su pantalla. El número asegura que sea tu teléfono el que vinculen y no alguien que vio el código. <strong>Ahora no</strong> deja el número: tu teléfono conserva su lugar y el mismo código vuelve a mostrar el mismo número.</li>
+            <li>Si el teléfono nuevo no tenía cuenta de BeanPool, entonces muestra las 12 palabras de tu <strong>nueva</strong> clave. Anótalas: tus palabras anteriores ya no funcionan y tu teléfono antiguo deja de funcionar definitivamente. Un teléfono que ya tenía una cuenta (para otra comunidad) conserva las 12 palabras de esa cuenta, y ahora recuperan esta cuenta también.</li>
+            <li>Si habías vinculado una cuenta de inicio de sesión, tu teléfono te pide que la vincules nuevamente en Protección de la cuenta: la que tenías protegía tu clave anterior, por lo que fue eliminada.</li>
+            <li>Las personas con las que chateas verán que tu clave cambió. Diles que fuiste tú y léeles tu <strong>Mi código de clave</strong>, en <strong>Ajustes</strong>, en <strong>Protección de la cuenta</strong> en el teléfono. Consulta «Si un chat dice que la clave detrás de un nombre cambió».</li>
+        </ul>
+        <p>El código dura 24 horas. Si tu administrador dice que tu teléfono no es el que vio o el código caduca, pídele uno nuevo.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="your-12-words.html"><strong>Tus 12 palabras</strong><span>Las 12 palabras son la llave de tu cuenta. Por qué importan, dónde encontrarlas, cómo protegerlas y cómo vincular un inicio de sesión como alternativa.</span></a></li>
+            <li><a href="leaving-or-deleting.html"><strong>Salir o eliminar tu cuenta</strong><span>Cierra sesión en este teléfono o elimina tu cuenta definitivamente, y qué ocurre con tus frijoles.</span></a></li>
+            <li><a href="communities.html"><strong>Más de una comunidad</strong><span>Pertenecer a varias comunidades con una sola cuenta, cambiar entre ellas, seguir a tu comunidad a una nueva dirección y ver qué te muestra la comunidad global.</span></a></li>
+            <li><a href="faq.html"><strong>Preguntas</strong><span>Respuestas breves a las preguntas más frecuentes de los miembros.</span></a></li>
+            <li><a href="key-changed.html"><strong>Si la clave de un contacto cambió</strong><span>Por qué un chat deja de enviar, cómo verificar el código de clave con la persona y cuándo continuar.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

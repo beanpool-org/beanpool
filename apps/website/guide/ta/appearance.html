@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ta by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ta">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>வெளிச்சம் மற்றும் இருள் — BeanPool members' guide</title>
+    <meta name="description" content="தொலைபேசி செயலி வெளிச்சத்திலும், வலைப் பயன்பாடு இருளிலும் தொடங்குகிறது. மாற்றவும் அல்லது சாதனத்தைப் பின்பற்றவும்.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">அமைப்புகளும் பாதுகாப்பும்</a></p>
+        <h1>வெளிச்சம் மற்றும் இருள்</h1>
+        <p class="lede">தொலைபேசி செயலி வெளிச்சத்திலும், வலைப் பயன்பாடு இருளிலும் தொடங்குகிறது. மாற்றவும் அல்லது சாதனத்தைப் பின்பற்றவும்.</p>
+        <h2>தேர்வு செய்தல்</h2>
+        <ul>
+            <li><strong>அமைப்புகள்</strong> என்பதைத் திறக்கவும். <strong>செயலி அமைப்புகள்</strong> என்பதன் கீழ், <strong>தோற்றம்</strong> என்பதைக் கண்டறியவும்.</li>
+            <li>ஒன்றைத் தேர்ந்தெடுக்கவும்:</li>
+            <li><strong>தொலைபேசியைப் போல</strong> (இணைய செயலியில் <strong>சாதனத்தைப் போன்றது</strong>): உங்கள் தொலைபேசி அல்லது கணினி இருளுக்கு அமைக்கப்படும் போது செயலி இருட்டாகவும், வெளிச்சத்திற்கு அமைக்கப்படும் போது வெளிச்சமாகவும் இருக்கும்.</li>
+            <li><strong>வெளிச்சம்:</strong> எப்போதும் வெளிச்சம். தொலைபேசி செயலி இவ்வாறுதான் தொடங்குகிறது.</li>
+            <li><strong>இருள்:</strong> எப்போதும் இருள். இணைய செயலி இவ்வாறுதான் தொடங்குகிறது.</li>
+        </ul>
+        <p>வெளிச்சத்திற்கு ஒரு தொகுப்பு வண்ணங்களும், இருளுக்கு ஒரு தொகுப்பும் உள்ளன.</p>
+        <p><strong>செயலி அமைப்புகள்</strong> என்பதன் கீழும், <strong>பின்னணி வடிவம்</strong> செயலிக்கு பின்னால் டூடுல்களை வைக்கிறது. எளிய பின்னணிக்கு அதை அணைக்கவும். இது தொடங்குவதற்கு இயக்கப்பட்டிருக்கும், மேலும் ஒவ்வொரு சாதனத்திலும் வைக்கப்படுகிறது.</p>
+        <p>மொபைலில், வரைபடத்தின் இடதுபுறத்தில் வரைபடத்திற்குத் தனியான வெளிச்சம் மற்றும் இருள் பொத்தான் உள்ளது.</p>
+        <p>இணைய செயலியில், முதல் தேர்வு <strong>சாதனத்தைப் போன்றது</strong> என்று அழைக்கப்படுகிறது.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="privacy.html"><strong>உங்கள் தனியுரிமை</strong><span>உங்களைப் பற்றி மற்றவர்கள் என்ன பார்க்க முடியும் மற்றும் அதைக் கட்டுப்படுத்தும் அமைப்புகள்.</span></a></li>
+            <li><a href="notifications.html"><strong>அறிவிப்புகள்</strong><span>தொலைபேசிக்கு எந்த விழிப்பூட்டல்கள் வர வேண்டும் மற்றும் நிகழ்வுகள் எப்போது நினைவூட்ட வேண்டும் என்பதைத் தேர்ந்தெடுக்கவும்.</span></a></li>
+            <li><a href="the-bean.html"><strong>இந்த வழிகாட்டி</strong><span>இந்த வழிகாட்டியை எங்கு காண்பது, எவ்வாறு தேடுவது மற்றும் அது எவ்வாறு புதுப்பித்த நிலையில் உள்ளது என்பது.</span></a></li>
+            <li><a href="web-app.html"><strong>வலை உலாவியில் BeanPool பயன்பாடு</strong><span>தொலைபேசி செயலி செய்வதில் பெரும்பாலானவற்றை வலைப் பயன்பாடும் செய்கிறது. உலாவியில் உலகளாவிய சமூகத்தில் இணைவது, கணக்கை மீட்டெடுப்பது, தொலைபேசியில் அதே கணக்கை வைப்பது, மற்றும் பொத்தான் பெயர்களில் உள்ள வேறுபாடுகள்.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

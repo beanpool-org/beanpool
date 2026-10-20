@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/zh-Hans by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="zh-Hans">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>查找附近的内容 — BeanPool members' guide</title>
+    <meta name="description" content="仅显示距离你或你选择的任意地点一定范围内的帖子。">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#map">地图</a></p>
+        <h1>查找附近的内容</h1>
+        <p class="lede">仅显示距离你或你选择的任意地点一定范围内的帖子。</p>
+        <h2>在市集标签页中</h2>
+        <ul>
+            <li>点按<strong>市集</strong>，然后在第二排筛选条件中点按<strong>距离</strong>。在选中<strong>活动</strong>时，该选项不会出现。</li>
+            <li>打开 <strong>Location &amp; Radius</strong>（Web 应用中为 <strong>Set Location &amp; Radius</strong>）。如需使用你的所在位置，请点按准星按钮。也可以点按地图或拖动图钉，以选取另一个中心点。</li>
+            <li>通过<strong>搜索半径</strong>选择距离范围：从 100 米到 50 公里不等。</li>
+            <li>点按 <strong>Apply</strong>。随后该按钮会显示距离，例如 <strong>5km</strong>。</li>
+            <li>如需恢复查看全部内容，请重新打开并点按<strong>重置</strong>。在 Web 应用中，你也可以点按<strong>距离</strong>上的 <strong>✕</strong>。</li>
+        </ul>
+        <p>在手机上，没有位置信息的刊登始终会显示。在 Web 应用中，设置<strong>距离</strong>会将其隐藏（投票除外）。在全球社区中，当列表按你附近排序时，Web 应用也会省略它们（见下文）。</p>
+        <p>如果你的浏览器已允许 BeanPool 使用你的位置，选择器打开时即可定位到你当前所在的位置。如果未允许，它会在一个固定地点打开。在点按 <strong>Apply</strong> 之前，请检查图钉，或点按准星按钮或地图。在全球社区中，Web 应用会将你选择的中心点发送给社区，精度近似到约 11 米。</p>
+        <p>在手机上，选择器会打开你上次选择的中心点或固定地点，因此请先点按准星按钮。</p>
+        <h2>在地图上</h2>
+        <p>地图本身没有距离筛选器。点按左侧的准星按钮以查看你的所在位置，然后环顾并缩放地图。</p>
+        <h2>在全球社区中（Web 应用）</h2>
+        <p>全球社区包含来自各地的刊登，因此 Web 应用的<strong>市集</strong>和<strong>地图</strong>会从你附近开始展示：</p>
+        <ul>
+            <li>在市集上选择了<strong>距离</strong>后，两者都会显示该范围内的最近刊登，按距离由近到远排列。地图最多显示 200 个图钉。</li>
+            <li>如果没有选择距离，它们会显示你所在区域 250 公里范围内的最近刊登：即你加入社区时向社区提供的粗略位置，或稍后在<strong>设置</strong>中的<strong>你的区域</strong>下提供的位置。市集列表上方的一行提示显示 <strong>Nearest to your area first, within 250 km.</strong>。点按<strong>显示所有地区</strong>可查看来自各地的最新刊登，点按<strong>你所在区域附近</strong>可返回。</li>
+            <li>如果两者均未设置，你将看到来自各地的最新内容，点按<strong>查看附近的内容</strong>可打开距离选择器。市集列表上方的一行提示会说明你当前查看的是哪种内容。设置了<strong>距离</strong>后该提示没有按钮：打开<strong>距离</strong>并点按<strong>重置</strong>。然后你将返回到你所在区域附近，或者在未设置区域时查看来自各地的最新内容。</li>
+            <li>每项刊登都会显示距离有多远，例如 <strong>📍 12 km</strong>。你自己的刊登始终显示在地图上，以及你所在区域附近的市集中，无论它们位于何处。设置了<strong>距离</strong>后，市集仅显示该范围内的内容，包括你自己的刊登。</li>
+            <li>当列表显示在你附近时，没有位置信息的刊登会被省略。未设置所在区域的成员发布的投票就是其中之一。如需查看它们，请先重置已选的<strong>距离</strong>，然后点按<strong>显示所有地区</strong>。</li>
+            <li>在<strong>活动</strong>下，列表绝不会按你的区域或<strong>距离</strong>进行裁剪，一如既往。</li>
+            <li>如果附近没有任何内容，地图会予以提示，并附带<strong>显示所有地区</strong>。随后点按<strong>你所在区域附近</strong>（或 <strong>Near the place you picked</strong>）即可恢复显示最近的内容。</li>
+        </ul>
+        <p>Web 应用的搜索仅针对屏幕上显示的刊登进行检索。<strong>显示所有地区</strong>展示来自各地的最新刊登，而非所有刊登，因此距离遥远且不是最新的刊登不会出现在搜索中。在其他所有社区中，Web 应用不会按你的区域裁剪市集或地图。它们展示最近更新的 50 条刊登以及你自己的刊登，且搜索仅在这些刊登中进行。</p>
+        <h2>在全球社区中（手机端）</h2>
+        <p>手机端会保留离你所在区域最近的刊登：最多 500 条，位于 250 公里以内。它还会保留你自己的刊登，以及任何你有交易、聊天或回复的刊登。市集和地图显示手机端保留的内容。未设置区域时，它会改为保留最新的刊登，市集上方的一行提示会予以说明。参见“你的区域”。</p>
+        <h2>你附近的活动</h2>
+        <p>在手机上，一旦你允许应用使用你的位置信息，活动卡片就会显示距离有多远。在 Web 应用中，卡片会根据你在<strong>距离</strong>中选择的中心点显示距离。在全球社区中，如果你尚未选择中心点，卡片会根据你的区域显示距离（在<strong>活动</strong>下则不会）。在地图上，一旦你点按准星，Web 应用就会显示距你的距离。</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="browsing-the-market.html"><strong>浏览市集</strong><span>通过搜索、分类筛选和距离范围查找提供与需求。</span></a></li>
+            <li><a href="map-pins.html"><strong>地图图钉说明</strong><span>地图上的图钉、颜色代表的含义以及图钉周边的操作按钮。</span></a></li>
+            <li><a href="pin-locations.html"><strong>你的图钉位置</strong><span>谁能看到你的帖子和活动所在位置，以及如何保护家庭住址隐私。</span></a></li>
+            <li><a href="events.html"><strong>活动</strong><span>在线下或线上发起一次性或周期性活动；报名参加、接收提醒、分享活动并作为主办方进行管理。</span></a></li>
+            <li><a href="your-area.html"><strong>所在区域</strong><span>全球社区向你展示附近帖子所使用的大致位置，以及如何更改或清除该位置。</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

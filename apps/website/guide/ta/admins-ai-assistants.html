@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ta by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ta">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>நிர்வாகி AI உதவியாளரைப் பயன்படுத்தும்போது — BeanPool members' guide</title>
+    <meta name="description" content="உரிமையாளர் அல்லது நிர்வாகியின் AI உதவியாளர் உங்களைப் பற்றி எதைப் படிக்க முடியும், பார்க்காதவை மற்றும் பெறுபவர்.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">அமைப்புகளும் பாதுகாப்பும்</a></p>
+        <h1>நிர்வாகி AI உதவியாளரைப் பயன்படுத்தும்போது</h1>
+        <p class="lede">உரிமையாளர் அல்லது நிர்வாகியின் AI உதவியாளர் உங்களைப் பற்றி எதைப் படிக்க முடியும், பார்க்காதவை மற்றும் பெறுபவர்.</p>
+        <p>உங்கள் சமூகத்தின் உரிமையாளர்கள் தங்கள் சமூகத்தின் சேவையகத்தைப் பராமரிக்க உதவ, தங்களின் சொந்த AI உதவியாளரை (எடுத்துக்காட்டாக Claude அல்லது ChatGPT) அதனுடன் இணைக்க முடியும்: தங்களின் கவனம் தேவைப்படுவது எது என்று கேட்க, அல்லது திறந்திருக்கும் புகார்களைச் சுருக்கிக் கூற. நிர்வாகிகளும் அவ்வாறு செய்யலாம்: அவர்கள் உங்கள் சமூகத்தின் முகவரியைத் தங்கள் உதவியாளரிடம் சேர்த்து, தங்கள் மொபைலில் அதை அங்கீகரிக்கிறார்கள். அவர்களே அதை இணைக்கிறார்கள், எந்த நேரத்திலும் அவர்களால் அதைத் துண்டிக்க முடியும். ஒன்று இணைக்கப்படும் போது மற்ற உரிமையாளர்களுக்குத் தெரிவிக்கப்படும்.</p>
+        <h2>உங்களைப் பற்றி அது என்ன படிக்க முடியும்</h2>
+        <p>அமைப்புகளில் ஓர் நிர்வாகி பார்ப்பதை விட ஓர் உதவியாளர் மிகக் குறைவாகவே பார்க்கிறார். உங்கள் சமூகத்தின் சேவையகமே அது எதைப் பெறுகிறது என்பதைத் தீர்மானிக்கிறது, உதவியாளர் அல்ல.</p>
+        <ul>
+            <li><strong>யாராவது உங்களையோ உங்கள் பதிவையோ புகாரளித்தால்</strong>, மற்றும் நிர்வாகி புகாரின் சொற்களைக் கேட்டால்: கொடுக்கப்பட்ட காரணம், உங்கள் பதிவின் தலைப்பு மற்றும் விளக்கம், மற்றும் உங்கள் BeanPool பெயர். புகாரளித்தவர் யார் என்பது ஒருபோதும் காட்டப்படாது.</li>
+            <li><strong>நீங்கள் இணையக் கேட்டால்</strong>, மற்றும் நிர்வாகி செய்திகளைக் கேட்டால்: உங்கள் கோரிக்கையுடன் நீங்கள் அனுப்பிய பெயர் மற்றும் செய்தி, மற்றும் நீங்கள் எந்த சமூகத்திலிருந்து வந்ததாகக் கூறினீர்கள் என்பது. உங்கள் புகைப்படம் அல்லது உங்கள் சாவி ஒருபோதும் இல்லை.</li>
+            <li>எத்தனை உறுப்பினர்கள் உள்ளனர் மற்றும் புழக்கத்தில் எத்தனை பயறுகள் உள்ளன போன்ற <strong>ஒட்டுமொத்த சமூகத்திற்கான மொத்த எண்ணிக்கைகள்</strong>. உங்கள் இருப்பு ஒருபோதும் இல்லை.</li>
+        </ul>
+        <h2>அது ஒருபோதும் பார்க்காதவை</h2>
+        <p>உங்கள் செய்திகள் மற்றும் அரட்டைகள், உங்கள் இருப்பு மற்றும் வர்த்தகங்கள், உங்கள் சாவிகள், உங்கள் முகவரி, உங்கள் புகைப்படங்கள், பெயர்கள் பட்டியல் மற்றும் யாரை யார் புகாரளித்தார்கள் என்பது. உங்களைப் பற்றி எதையும் அதனால் மாற்ற முடியாது: உங்களை நீக்கவோ, உங்களை ஒலியடக்கவோ, உங்கள் பதிவை அகற்றவோ அல்லது உங்கள் இணைப்பு கோரிக்கைக்குப் பதிலளிக்கவோ முடியாது. அவை மனிதர்களால் செய்யப்படுகின்றன. ஓர் நிர்வாகி அவற்றை அமைப்புகளிலோ அல்லது தங்கள் தொலைபேசியிலோ செய்கிறார், மேலும் ஓர் இணைப்பு கோரிக்கைக்கு அழைக்க அனுமதி உள்ள எந்தவொரு உறுப்பினரும் பயன்பாட்டில் பதிலளிக்கலாம்.</p>
+        <p>ஒரு புகாரைப் பற்றி என்ன செய்ய வேண்டும் என்பதை ஓர் உதவியாளர் பரிந்துரைக்கலாம், எடுத்துக்காட்டாக உங்கள் பதிவை வைத்திருக்கவா அல்லது அதை அகற்றவா என்பது. அது வேலை செய்யும் நிர்வாகி புகாரைப் படித்து அங்கீகரித்தால் அன்றி எதுவும் நடக்காது; அதைப்பற்றி நீங்கள் கேள்விப்படும் எதுவும் எப்போதுமிருப்பது போல் உங்கள் சமூகத்தின் நடுவர்களிடமிருந்தே வரும்.</p>
+        <h2>அதைப் பெறுபவர் யார்</h2>
+        <p>நீங்களே ஓர் AI அரட்டையில் எதையாவது ஒட்டும்போது நடப்பதைப் போல, உதவியாளர் படிப்பது அதை இயக்கும் நிறுவனத்திற்குச் செல்கிறது. நிர்வாகியின் உதவியாளர் கேட்கும்போது மட்டுமே, ஓர் உறுப்பினரின் சொற்கள் மற்றும் வழிமுறைகள் அல்ல எனக் குறிக்கப்பட்டு, ஒரு புகாரின் சொற்களை அல்லது ஓர் இணைப்புச் செய்தியைச் சேவையகம் அனுப்புகிறது.</p>
+        <p>உங்கள் புகாரையோ அல்லது உங்கள் இணைப்புச் செய்தியையோ ஓர் AI படிக்கக்கூடாது என்று நீங்கள் விரும்பினால், உங்கள் நிர்வாகிகள் தங்களுடையதை எவ்வாறு பயன்படுத்துகிறார்கள் என்று அவர்களிடம் கேளுங்கள்.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="what-the-admins-can-see.html"><strong>நிர்வாகிகள் பார்க்கக்கூடியவை</strong><span>பெயர் பட்டியல் பராமரிக்கும் சமூகத்தில்: உங்களைப் பற்றிய தகவல்கள், யார் படிக்கலாம், சேவையகம் வைத்திருப்பது மற்றும் உறுதிப்படுத்தலின் பொருள்.</span></a></li>
+            <li><a href="reporting.html"><strong>சிக்கலைப் புகாரளித்தல்</strong><span>ஒரு பதிவு, நிகழ்வு, துடிப்புப் பதிவு, திட்டம் அல்லது கூட்டு முயற்சி குறித்து நடுவர்களிடம் தெரிவிக்கவும்.</span></a></li>
+            <li><a href="privacy.html"><strong>உங்கள் தனியுரிமை</strong><span>உங்களைப் பற்றி மற்றவர்கள் என்ன பார்க்க முடியும் மற்றும் அதைக் கட்டுப்படுத்தும் அமைப்புகள்.</span></a></li>
+            <li><a href="joining.html"><strong>BeanPool-ல் இணைதல்</strong><span>இணைய இரு வழிகள்: ஓர் உறுப்பினரின் அழைப்புடன் கூடிய சமூகம், அல்லது 12 ரகசியச் சொற்கள் அல்லது உள்நுழைவு மூலம் உலகளாவிய சமூகம். சமூகத்தில் இணையக் கோருதல் மற்றும் பிறரை அழைப்பது எப்படி.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

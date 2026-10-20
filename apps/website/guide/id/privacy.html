@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/id by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Privasimu — BeanPool members' guide</title>
+    <meta name="description" content="Apa yang bisa dilihat orang lain tentangmu, dan pengaturan yang mengaturnya.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">Pengaturan dan keamanan</a></p>
+        <h1>Privasimu</h1>
+        <p class="lede">Apa yang bisa dilihat orang lain tentangmu, dan pengaturan yang mengaturnya.</p>
+        <h2>Membuka Pengaturan</h2>
+        <p>Ketuk tombol penggeser di kanan atas layar. Di aplikasi web pada layar komputer yang lebar, tombol ini berupa roda gigi di bagian bawah bilah sisi kiri. Pengaturan bukanlah salah satu tab.</p>
+        <h2>Yang dapat dilihat oleh anggota komunitasmu</h2>
+        <ul>
+            <li>Nama, foto, bio, kapan kamu bergabung, dan kapan kamu terakhir aktif.</li>
+            <li>Lencana percayamu, ulasanmu (tidak ada orang lain yang dapat melihat siapa yang menulis ulasan), dan profil percayamu: berapa banyak transaksimu yang selesai dan berapa banyak yang dibatalkan, serta bagian yang selesai, berapa banyak pembayaran Kacang yang telah kamu kirimkan atau terima dari anggota ditambah transaksi yang telah kamu selesaikan, dengan berapa banyak anggota berbeda kamu telah membayar, dibayar, atau bertransaksi, berapa banyak pembayaran dan transaksi yang telah kamu lakukan dengan anggota yang sedang melihat, serta Poin Percayamu. Admin melihatnya seperti halnya anggota mana pun, dan hal ini tidak dicatat dalam log.</li>
+            <li>Postinganmu, dan di mana pin postingan tersebut berada. Lihat &quot;Di mana pinmu ditempatkan&quot;.</li>
+            <li>Bagaimana kamu memberikan suara pada Jajak Pendapat, tetapi hanya pada Jajak Pendapat yang pembuatnya menetapkan <strong>pemungutan suara terbuka</strong>. Jika tidak, Jajak Pendapat bersifat anonim, dan pemungutan suara pada <strong>Keputusan</strong> selalu rahasia.</li>
+            <li>Siapa yang mengundangmu. Di ponsel profilmu tertulis <strong>Dijamin oleh</strong> dan nama mereka. Jika kamu bergabung sebagai anggota pendiri atau diundang langsung oleh admin sistem, profilmu akan tertulis <strong>Anggota pendiri</strong> atau <strong>Diundang langsung oleh admin sistem</strong>. Jika seorang anggota menjamin jalur kreditmu, profilmu tertulis <strong>Dijamin oleh</strong> dan nama mereka, di aplikasi ponsel dan aplikasi web.</li>
+        </ul>
+        <h2>Yang hanya dapat dilihat olehmu</h2>
+        <ul>
+            <li><strong>Saldomu dan transaksimu.</strong> Tidak ada orang lain di komunitasmu yang dapat membacanya, baik di aplikasi maupun dari server komunitasmu. Sebuah transaksi hanya menampilkan dua orang yang terlibat: kamu dan orang tersebut.</li>
+            <li><strong>Daftar temanmu, dengan siapa kamu mengobrol, dan undangan yang kamu buat.</strong> Hanya kamu yang dapat membacanya, baik di aplikasi maupun dari server komunitasmu. Orang lain hanya melihat koneksi bersama yang kamu miliki dengan mereka.</li>
+            <li>Jika komunitas melakukan pemungutan suara untuk mengeluarkanmu, setiap orang yang dapat memberikan suara di dalamnya melihat saldomu dan hutang apa pun, hanya dalam pemungutan suara tersebut. Admin atau pemilik yang tidak dapat memberikan suara di dalamnya tidak melihatnya di sana. Pemeriksaan tersebut tidak dicatat dalam log.</li>
+            <li>Jika seorang admin menghapus akunmu, admin yang memulainya dapat melihat saldomu, sehingga apa yang kamu pegang atau berhutang dapat diselesaikan. Admin lainnya dan pemilik dapat melihat siapa yang melihat dan kapan.</li>
+            <li>Di komunitas yang dikenal, jika kamu menyetujuinya saat bergabung dan seorang admin telah mengonfirmasimu, para admin dapat melihat saldomu setelah melewati salah satu batas komunitasmu. Kamu dapat mencabut persetujuan itu kapan saja di Pengaturan. Di komunitas mana pun, admin mana pun juga dapat melihat beberapa transaksimu: transaksi yang belum selesai atau yang diselesaikan oleh admin, transaksi yang Kacangnya tertahan saat seorang anggota dikeluarkan pada server yang lebih lama, peringatan penipuan, dan peringatan jika tidak ada Kacang yang masuk atau keluar dari akunmu selama sejumlah hari yang ditentukan. Setiap pemeriksaan pada salah satu transaksi tersebut dicatat dalam log, dan pemeriksaan pada peringatan yang menyebut namamu dicatat pada saat pertama kali setiap admin membukanya dalam 24 jam. Pemilik dan para admin dapat melihat log tersebut. Para admin juga melihat berapa banyak postingan yang kamu miliki dan pesan yang telah kamu kirimkan, dan dari transaksi hanya total seluruh komunitas, bukan milikmu; serta, seperti yang dilihat oleh setiap anggota, profil percayamu, tanpa dicatat dalam log. Siapa pun yang menjalankan server komunitasmu memegang seluruh databasenya, beserta cadangan, snapshot, dan salinan siaganya. Lihat &quot;Apa yang dapat dilihat oleh admin&quot;.</li>
+        </ul>
+        <p>Pemilik dan admin yang menjalankan server komunitasmu masih dapat melihat apa yang disimpan di sana. Lihat &quot;Siapa lagi yang dapat melihat&quot;.</p>
+        <h2>Orang yang belum bergabung</h2>
+        <ul>
+            <li><strong>Di komunitasmu:</strong> tidak ada postinganmu yang terlihat. Postingan penawarannya, dan fotonya, hanya untuk para anggotanya, begitu juga foto profilmu. Setiap foto hanya terbuka dari tautan yang menyertai postingan tersebut atau dengan namamu di aplikasi, sehingga seseorang dari luar hanya dapat melihatnya jika seorang anggota meneruskan tautan itu. Seseorang yang membuka alamat komunitasmu tanpa bergabung akan diarahkan ke komunitas global sebagai gantinya.</li>
+            <li><strong>Di komunitas global:</strong> siapa pun dapat melihat postingannya sebelum bergabung, tetapi mereka hanya melihat kata-kata, foto, dan perkiraan lokasinya, tidak pernah namamu, wajahmu, atau lokasi pastinya.</li>
+            <li><strong>Postingan Kabarmu:</strong> tidak ada. Kabar hanya untuk anggota. Video atau postingan itu sendiri tetap berada di situs asalnya (YouTube, Instagram, dan sebagainya), sepublik apa adanya di sana. Lihat &quot;Membagikan kanalmu&quot;.</li>
+        </ul>
+        <h2>Yang kamu kendalikan</h2>
+        <ul>
+            <li><strong>Rincian kontak:</strong> di profilmu, pilih <strong>Siapa yang dapat melihat ini?</strong>: <strong>Tersembunyi</strong>, <strong>Mitra Pertukaran</strong>, <strong>Teman</strong>, atau <strong>Komunitas</strong>. Lihat &quot;Profilmu&quot;.</li>
+            <li><strong>Koneksi bersama:</strong> ketika kamu dan dua orang telah saling menambahkan, masing-masing dari mereka dapat melihat namamu di profil yang lain, sebagai seseorang yang dapat mereka tanyakan. Di Pengaturan, di bawah <strong>HUKUM &amp; PRIVASI</strong>, matikan <strong>Tampilkan saya sebagai koneksi bersama</strong> dan tidak ada yang akan melihat namamu di sana. Opsi ini aktif sampai kamu mematikannya. Lihat &quot;Orang dan teman&quot;.</li>
+            <li><strong>Siapa yang menambahkanmu:</strong> saat kamu menambahkan seseorang, mereka melihat baris di tab Orang mereka yang menyatakan bahwa kamu menambahkan mereka, sehingga mereka dapat menambahkanmu kembali. Mereka tidak dikirimi notifikasi.</li>
+            <li><strong>Lokasi (ponsel):</strong> di Pengaturan, di bawah <strong>PENGATURAN APLIKASI</strong>, aktifkan <strong>Lokasi</strong> untuk menggunakan posisimu bagi peta dan postingan di sekitar. Untuk mematikannya, ubah di pengaturan ponselmu sendiri; aplikasi akan menunjukkan caranya. Di browser web tidak ada sakelar semacam itu: browser akan menanyakan kepadamu, dan mengingat jawabanmu.</li>
+            <li><strong>Wilayahmu</strong> (di komunitas global): di Pengaturan, di bawah <strong>Wilayahmu</strong>, lihat wilayah yang kamu berikan, sekitar 10 km di sekitar kota atau dua angka koordinat, atau <strong>Belum diatur</strong>. <strong>Hapus</strong> akan menghapusnya. Di bawahnya, <strong>Kira-kira kamu di mana?</strong> mengatur wilayah baru dengan <strong>Pakai lokasiku</strong> atau <strong>Ketik nama kota atau daerah</strong>, dan <strong>Batal</strong> (di browser, <strong>← Kembali ke Pengaturan</strong>) membiarkannya seperti semula. Hanya perkiraan wilayah yang dibulatkan yang pernah dikirim. Anggota lain melihat seberapa jauh jarakmu, dan jajak pendapat yang kamu buat ditampilkan di wilayahmu. Tanpa wilayah, kamu melihat postingan terbaru di seluruh dunia, dan anggota di sekitar tidak akan melihat jajak pendapat yang kamu buat di daftar mereka, meskipun mereka masih dapat menemukannya lewat pencarian. Lihat &quot;Wilayahmu&quot;.</li>
+            <li><strong>Kunci Aplikasi:</strong> meminta kunci layar ponselmu (PIN, pola, kata sandi, sidik jari, atau wajah) saat aplikasi dibuka, dan saat kamu kembali ke aplikasi setelah 15 detik atau lebih meninggalkannya. Kunci ini mencakup layar aplikasi dan jendela pop-up. Pada iPhone, kunci ini juga menutup halaman web yang dibuka aplikasi, seperti Pengaturan komunitasmu dari <strong>Kelola</strong>. Kunci ini tidak dapat mencakup halaman web yang dibuka aplikasi di ponsel Android, yang terbuka di luar aplikasi, atau panel untuk membagikan sesuatu di kedua ponsel: tutup panel tersebut sebelum kamu meletakkan ponselmu. Pengaturan komunitasmu, yang dibuka dari <strong>Kelola</strong>, mengeluarkanmu setelah 15 menit tidak digunakan. Saat Kunci Aplikasi aktif, layar aplikasi menjadi kosong saat kamu meninggalkannya, dan kembali normal saat kamu kembali. Fitur ini memerlukan kunci layar pada ponsel: tanpa kunci layar tidak ada yang dapat dimintanya.</li>
+            <li><strong>Kanal:</strong> apa pun yang kamu bagikan ke Kabar ditampilkan dengan namamu, kepada semua orang di komunitasmu. Lihat &quot;Membagikan kanalmu&quot;.</li>
+        </ul>
+        <h2>Siapa lagi yang dapat melihat</h2>
+        <ul>
+            <li>Obrolan antara dua orang dienkripsi dari ujung ke ujung: pesan yang tidak dapat dikunci tidak akan dikirim. Pemberitahuan yang ditambahkan BeanPool ke obrolan tentang suatu kesepakatan, seperti jumlahnya, tidak dienkripsi. Lihat &quot;Pesan&quot;.</li>
+            <li>Di ponsel, obrolan grup juga dienkripsi dari ujung ke ujung, pada komunitas yang servernya telah diperbarui untuk mengunci obrolan grup: server menyimpan kata-kata yang diacak. Server masih melihat siapa yang menulis, kapan, siapa yang disebut, pesan mana yang dijawab oleh setiap baris, dan reaksi emoji. Obrolan menyatakan apakah obrolan tersebut terkunci. Pada server yang belum diperbarui, server masih dapat membaca obrolan grup.</li>
+            <li>Memutar video YouTube di Kabar memberi tahu YouTube bahwa kamu telah menontonnya, sama seperti membukanya di aplikasi YouTube. Tidak ada yang dikirim ke YouTube sampai kamu mengetuk ▶, dan menggulir melewati video tidak mengirimkan apa pun sama sekali. Lihat &quot;Kabar&quot;.</li>
+            <li>Server komunitasmu menyimpan transaksimu, postingan, dan suara, serta siapa yang kamu blokir di aplikasi web. Pemilik dan admin yang menjalankannya dapat melihat apa yang tersimpan di sana, termasuk obrolan acara, obrolan usaha, dan obrolan grup di server yang belum diperbarui untuk menguncinya. Pilihlah komunitas yang orang-orangnya kamu percayai.</li>
+            <li>Jika kamu menghapus akunmu, setiap pesan yang kamu tulis akan terbaca <strong>Pesan ini telah dihapus</strong> dan foto yang kamu kirimkan akan dihapus. Salinan harian milik server yang dibuat sebelum waktu tersebut tetap menyimpannya hingga 14 hari. Jika server komunitasmu mengirimkan cadangannya ke penyimpanan di tempat lain, setiap cadangan yang dibuat sebelum waktu tersebut menyimpannya hingga 30 hari. Cadangan yang diunduh pemilik menyimpannya hingga pemilik menghapusnya. Lihat &quot;Keluar atau menghapus akun&quot;.</li>
+            <li>Jika kamu menghubungkan akun masuk, bergabung dengannya, atau menambahkannya nanti, server komunitasmu menyimpan salinan akunmu yang terkunci untuk akun tersebut. Orang-orang yang menjalankan server tersebut dapat membukanya. Hanya 12 katamu yang tidak memerlukan siapa pun. Lihat &quot;Memulihkan akun Anda&quot;.</li>
+            <li>Di komunitas global, para moderatornya dapat melihat akun mana saja yang bergabung dari koneksi internet yang sama dalam rentang satu hari satu sama lain, tetapi tidak pernah melihat koneksi itu sendiri, sehingga mereka dapat menangani serbuan akun palsu sekaligus. Lihat &quot;Melaporkan masalah&quot;.</li>
+            <li>Saat kamu bergabung dengan komunitas global, komunitas menyimpan referensi acak ke koneksi internet tempat kamu bergabung selama sehari, tidak pernah alamat itu sendiri. Dengannya, ketika banyak akun dibuat dari satu koneksi, setiap akun baru di sana membutuhkan sedikit lebih banyak pengaturan, dan hanya sejumlah tertentu yang dapat berasal dari koneksi tersebut. Jika komunitas menghapus suatu akun dalam rentang sehari setelah bergabung, referensi tersebut disimpan selama 7 hari sejak bergabung sebagai gantinya, sehingga akun 12 kata baru dari koneksi yang sama membutuhkan waktu lebih lama untuk disiapkan pada minggu itu. Referensi tersebut tidak pernah disimpan lebih lama untuk seseorang yang menghapus akunnya sendiri.</li>
+            <li>Jika kamu bergabung dengan komunitas global dengan 12 kata, semua yang diketahuinya di pintu masuk, selain referensi tersebut, hanyalah nama yang kamu pilih dan kunci akunmu: tidak ada email, tidak ada nomor telepon, tidak ada akun lain.</li>
+        </ul>
+        <h2>Baca lebih lanjut</h2>
+        <p>Di Pengaturan, di bawah <strong>HUKUM &amp; PRIVASI</strong>, ketuk <strong>Kebijakan Privasi</strong>.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="your-profile.html"><strong>Profilmu</strong><span>Nama, foto, beberapa patah kata tentangmu, dan siapa yang bisa melihat rincian kontakmu.</span></a></li>
+            <li><a href="your-area.html"><strong>Wilayahmu</strong><span>Perkiraan wilayah yang digunakan komunitas global untuk menampilkan kiriman terdekat, dan cara mengubah atau menghapusnya.</span></a></li>
+            <li><a href="pin-locations.html"><strong>Lokasi pin kamu</strong><span>Siapa yang melihat lokasi kiriman dan acaramu, serta cara menjaga privasi tempat tinggalmu.</span></a></li>
+            <li><a href="blocking.html"><strong>Memblokir seseorang</strong><span>Sembunyikan kiriman dan pesan seseorang darimu, dan batalkan pemblokiran nanti jika diinginkan.</span></a></li>
+            <li><a href="messages.html"><strong>Pesan</strong><span>Mulai obrolan, kirim foto, balas, beri reaksi, edit, hapus, bisukan, dan apa saja yang bersifat pribadi.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

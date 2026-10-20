@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ja by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>地図の見方 — BeanPool members' guide</title>
+    <meta name="description" content="地図上のピン、色の意味、ピン周囲のボタンについて説明します。">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#map">地図</a></p>
+        <h1>地図の見方</h1>
+        <p class="lede">地図上のピン、色の意味、ピン周囲のボタンについて説明します。</p>
+        <h2>ピン</h2>
+        <p>タブの並びにある<strong>地図</strong>をタップします。地図にはコミュニティの投稿が表示されます：</p>
+        <ul>
+            <li><strong>緑のピン：</strong> 提供</li>
+            <li><strong>オレンジのピン：</strong> 求め</li>
+            <li><strong>カレンダー付きの紫のピン：</strong> まだ終了していないイベント</li>
+        </ul>
+        <p>ピンには投稿のカテゴリー画像が表示されます。多くの提供や求めが密集している場所では、数字の入った円にまとまります。円はスマートフォンでは青色、Webアプリでは濃い灰色になります。拡大すると1つずつ表示されます。イベントは常に個別に表示されます。</p>
+        <p>メンバーやグループは地図には表示されません。Webアプリでは、場所を設定した事業体が画像付きの四角いピンとして表示されます。タップするとその事業体が開きます。</p>
+        <p>アンケートも地図には表示されません。唯一の例外はスマートフォンのグローバルコミュニティで、投稿者の地域にアンケートがピンとして表示される場合があります。オレンジ色の「求め」のピンのように見え、<strong>すべて</strong>を選択している場合にのみ表示されます。</p>
+        <h2>ピンをタップしたとき</h2>
+        <ul>
+            <li><strong>提供または求め：</strong> タイトルと投稿者を示すカードが表示されます。<strong>詳細を見る</strong>をタップして開きます。スマートフォンでは、名前をタップしてプロフィールを確認できます。地図上または<strong>✕</strong>をタップしてカードを閉じます。</li>
+            <li><strong>イベント：</strong> 日時、場所、参加人数を示すカードが表示されます。<strong>イベントを見る</strong>をタップします。Webアプリではボタンが<strong>詳細を見る</strong>となり、カード上で<strong>参加</strong>または<strong>興味あり</strong>をタップすることもできます。</li>
+        </ul>
+        <h2>フィルター</h2>
+        <p>スマートフォンでは、地図の上部に以下が表示されます：</p>
+        <ul>
+            <li><strong>すべて</strong>、<strong>提供</strong>、<strong>求め</strong>、または<strong>イベント</strong>。解除するには<strong>✕</strong>をタップします。</li>
+            <li><strong>すべてのカテゴリー</strong>：特定のカテゴリーを1つ表示します。</li>
+            <li>イベントの場合：<strong>すべて</strong>、<strong>今日</strong>、<strong>今週末</strong>、または<strong>今後7日間</strong>。地図がそれらに合わせて移動します。</li>
+        </ul>
+        <p>Webアプリの地図にはイベントの日付チップのみがあります：<strong>今日</strong>、<strong>今週末</strong>、<strong>今後7日間</strong>、<strong>すべてのイベント</strong>です。これらはコミュニティに今後の予定がある場合にのみ表示されます。</p>
+        <h2>左側のボタン</h2>
+        <ul>
+            <li>スマートフォンでは、月または太陽のマーク：ダークモードまたはライトモードの地図。</li>
+            <li>ターゲットマーク：現在地を表示します。初回はアプリが位置情報の使用許可を求めます。</li>
+            <li><strong>+</strong>と<strong>−</strong>：ズーム。</li>
+        </ul>
+        <p>琥珀色の円はコミュニティが対象とする地域を示します。</p>
+        <h2>地図から投稿を追加する</h2>
+        <p><strong>+ 投稿を作成</strong>をタップします。Webアプリでは、右下の丸い<strong>+</strong>をタップします。「提供や求めの投稿」を参照してください。</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="pin-locations.html"><strong>ピンの位置</strong><span>投稿やイベントの場所が誰に表示されるか、自宅のプライバシーを守る方法について説明します。</span></a></li>
+            <li><a href="near-you.html"><strong>近くの投稿を探す</strong><span>現在地や任意の指定場所から一定の距離内にある投稿のみを表示します。</span></a></li>
+            <li><a href="events.html"><strong>イベント</strong><span>対面またはオンライン、単発または定期的なイベントを作成し、参加表明、リマインダー受け取り、共有、主催者としての運営を行います。</span></a></li>
+            <li><a href="posting.html"><strong>提供や求めの投稿</strong><span>自分ができること・提供できるもの、または探しているものを投稿します。</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

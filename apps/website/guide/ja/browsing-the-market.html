@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ja by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>マーケットの閲覧 — BeanPool members' guide</title>
+    <meta name="description" content="検索、フィルター、距離を利用して提供と求めを探します。">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#market">市場</a></p>
+        <h1>マーケットの閲覧</h1>
+        <p class="lede">検索、フィルター、距離を利用して提供と求めを探します。</p>
+        <h2>マーケットタブ</h2>
+        <p>タブの並びにある<strong>マーケット</strong>をタップします。コミュニティの人々が提供しているものや探しているものが、投稿された日ごとにグループ化され、新しい順に表示されます。</p>
+        <p>スマートフォンでは、イベントが最初に表示されます。すでにアプリに位置情報の使用を許可している場合、リスト表示およびコンパクト表示では、代わりに<strong>近い順</strong>の下に近い順に出品が表示され、アンケートは<strong>投票</strong>の下に表示されます。<strong>おすすめ</strong>は独自の並び順を維持します。リストを下に引っ張ると更新されます。</p>
+        <p>Webアプリでは、マーケットはカードとして開きます。リスト表示およびコンパクト表示では、イベントは投稿された日の下に配置されます。ローカルコミュニティでは、Webアプリは近い順には並べません。</p>
+        <p>グローバルコミュニティでは、Webアプリはあなたの近くの出品を最初に表示します（<strong>距離</strong>の範囲内、またはお住まいの地域（参加時または<strong>設定</strong>でコミュニティに伝えた大体の場所）から250 km以内で最も近い出品が、それぞれの距離とともに表示されます）。一覧の上の行にどちらが表示されているかが示されます。お住まいの地域の近くでは、世界中の最新の出品を表示する<strong>全地域を表示</strong>が表示されます。<strong>距離</strong>を設定している場合は、<strong>距離</strong>を開いて<strong>リセット</strong>をタップしてお住まいの地域に戻し、<strong>全地域を表示</strong>をタップします。スマートフォンでは、グローバルコミュニティはお住まいの地域に最も近い出品を保持するため、それらがマーケットに表示されます。「近くの投稿を探す」を参照してください。</p>
+        <p>グローバルコミュニティでは、出品がまだ少ない間、マーケットに<strong>例</strong>とマークされた少数のカードも表示されます。これらは人々が何を投稿しているかを示すための架空のものであり、開いたり回答したりすることはできません。実際の出品が十分に増えると非表示になります。</p>
+        <p>スマートフォンでは、下にスクロールすると検索とフィルターが隠れ、より多くの投稿を見ることができます。少し上にスクロールすると再び表示されます。最上部に戻るには、もう一度<strong>マーケット</strong>をタップします。</p>
+        <h2>検索</h2>
+        <p>上部の<strong>マーケットを検索...</strong>に入力します。画面の小さいスマートフォンでは単に<strong>検索</strong>と表示される場合があります。検索は関連する言葉も見つけます（「果物」で「レモン」が見つかります）。中国語、日本語、タイ語の言葉も検索でき、ブロックした相手の投稿は除外されます。接続がない場合は、すでにスマートフォン上にある情報から検索します。</p>
+        <p>検索欄に言葉が入力されている間、<strong>この検索をホームに保存</strong>ボタンが表示されます。これをタップすると、追加可能な保存された検索（入力した言葉、片方のみを見ていた場合は<strong>提供</strong>または<strong>求め</strong>、カテゴリー、および距離）が用意された状態でホームが開きます。<strong>イベント</strong>や<strong>投票</strong>の下にはこのボタンはありません。「ホーム」を参照してください。</p>
+        <h2>フィルター</h2>
+        <p>検索の下にあるボタンの行で、表示する内容を選択します：</p>
+        <ul>
+            <li><strong>すべて</strong>、<strong>提供</strong>、または<strong>求め</strong>。</li>
+            <li><strong>おすすめ</strong>：<strong>興味のある分野を設定</strong>で星を付けたカテゴリーの投稿（ホームで設定した星と同じ）、および参加予定または興味ありと回答した今後のイベント。</li>
+            <li><strong>イベント</strong>および<strong>投票</strong>。</li>
+        </ul>
+        <p>2行目でさらに絞り込みます。スマートフォンでは：</p>
+        <ul>
+            <li><strong>すべてのカテゴリー</strong>：食品、道具、園芸など、1つのカテゴリーを選択します。</li>
+            <li><strong>距離</strong>：特定の地点からの距離内にある投稿のみを表示します。「近くの投稿を探す」を参照してください。</li>
+            <li><strong>信頼</strong>：まだ取引を行っていないメンバー（<strong>設立</strong>）、<strong>新規</strong>メンバー、または特定の信頼バッジ以上のメンバーによる投稿のみを表示します。</li>
+            <li><strong>豆のみ</strong>：現金も求めている投稿を非表示にします。</li>
+        </ul>
+        <p>Webアプリでは、ボタンは<strong>カテゴリー</strong>、<strong>距離</strong>、<strong>🌱 新規メンバー</strong>（まだ取引を行っていないメンバー）、および<strong>🫘 豆のみ</strong>です。信頼フィルターはありません。</p>
+        <p>グループに所属している場合は、グループボタンの行も表示されます。<strong>すべてのグループと公開</strong>はすべてを表示し、各グループのボタンはそのグループ向けの投稿のみを表示します。Webアプリでは、グループは行ではなくドロップダウンに表示されます。</p>
+        <p>スマートフォンでは、一致するものが何もない場合に<strong>すべてのフィルターを解除</strong>をタップします。Webアプリでは空の一覧に<strong>見つかりませんでした</strong>と表示され、そのようなボタンはありません。</p>
+        <p>スマートフォンで下にスクロールした状態で検索やフィルターが有効になっている場合、上部の小さなチップにその内容が表示されます。チップをタップして変更できます。チップの<strong>✕</strong>をタップすると、検索とすべてのフィルターが解除されます。</p>
+        <p><strong>自分の取引</strong>の横にあるボタンで、一覧の表示形式（リスト、グリッド、またはコンパクト）を切り替えます。</p>
+        <h2>投稿に表示される内容</h2>
+        <ul>
+            <li>写真、またはカテゴリーの画像。</li>
+            <li><strong>提供</strong>または<strong>求め</strong>。</li>
+            <li>豆の価格（時間制の料金設定の場合は<strong>/時間</strong>付き）。</li>
+            <li>取引成立後も公開されたままになる場合は<strong>定期</strong>。</li>
+            <li>燃料費や材料費のために現金も必要な場合は<strong>一部現金あり</strong>。</li>
+            <li>そのグループのみに公開されている場合は、鍵マークとグループ名。</li>
+            <li>投稿者名、およびその信頼バッジと星評価。まだ取引を行っていないメンバーには<strong>FOUNDING</strong>と表示されます。</li>
+        </ul>
+        <p>投稿をタップして開きます。</p>
+        <h2>投稿を開いたときの操作</h2>
+        <ul>
+            <li><strong>メッセージ</strong>と相手の名前：合意する前に質問できます。</li>
+            <li>相手の名前をタップすると、プロフィール、レビュー、信頼度を確認できます。</li>
+            <li>詐欺、攻撃的、誤解を招く内容、または子どもを危険にさらす内容（<strong>子どもの安全</strong>）である場合は、<strong>投稿を通報</strong>をタップします。</li>
+            <li>スマートフォン上でその人の投稿やチャットを非表示にするには、<strong>ユーザーをブロック</strong>をタップします。管理者にも通知されます。「ユーザーのブロック」を参照してください。</li>
+        </ul>
+        <p>Webアプリでは、投稿上のボタンは<strong>💬 メッセージ</strong>と<strong>🚩 通報</strong>です。プロフィールからブロックできます。</p>
+        <p>グローバルコミュニティでは、投稿に豆の価格はありません。お返しに何を希望するかが記載されています。価格が表示される場所には「🏘️ ローカルコミュニティでは、これは豆の価格です ›」と表示されます。依頼する代わりに、投稿には<strong>リクエスト · 豆は安全に保管されています 🏘️</strong>が表示されます。タップするとローカルコミュニティでの取引の仕組みを確認できます。相手へのメッセージ送信はどこでも通常通り機能します。「豆とグローバルコミュニティ」を参照してください。</p>
+        <p>投稿を保存したり共有したりする機能はまだありません。</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="home.html"><strong>ホーム</strong><span>ホームの概要、スマートフォンやWebアプリで表示されるカード、追加・移動・削除方法、興味の設定、サインアウト時のプライバシーについて説明します。</span></a></li>
+            <li><a href="posting.html"><strong>提供や求めの投稿</strong><span>自分ができること・提供できるもの、または探しているものを投稿します。</span></a></li>
+            <li><a href="a-deal-step-by-step.html"><strong>取引のステップ</strong><span>問い合わせから支払いまで、提供と求めの双方について、そしてレビューの記入方法を説明します。</span></a></li>
+            <li><a href="near-you.html"><strong>近くの投稿を探す</strong><span>現在地や任意の指定場所から一定の距離内にある投稿のみを表示します。</span></a></li>
+            <li><a href="trust-badges.html"><strong>信頼バッジ</strong><span>新規、住民、世話人、長老。それぞれの意味と、特権が付与されるわけではない理由を説明します。</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>豆とグローバルコミュニティ</strong><span>グローバルコミュニティの目的、多数のコミュニティの1つとしての位置付け、表示内容（🏘️ コミュニティマーカー、サンプルコミュニティExample Valley、豆がそこで待機する理由、ローカルコミュニティの探し方や立ち上げ方）を説明します。</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

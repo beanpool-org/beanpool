@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/vi by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat sự kiện — BeanPool members' guide</title>
+    <meta name="description" content="Trò chuyện với người tổ chức và tất cả những người tham gia sự kiện.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#talk">Chat</a></p>
+        <h1>Chat sự kiện</h1>
+        <p class="lede">Trò chuyện với người tổ chức và tất cả những người tham gia sự kiện.</p>
+        <h2>Những ai có mặt trong đoạn chat</h2>
+        <p>Mỗi sự kiện đều có cuộc trò chuyện riêng. Người tổ chức và tất cả những ai đã nhấn <strong>Sẽ đến</strong> đều có thể đọc và viết trong đó. Trường hợp người tổ chức duyệt người vào, chỉ những người tham gia được người tổ chức cho vào mới có mặt: cho đến lúc đó, cuộc trò chuyện sẽ thông báo <strong>Đoạn chat sẽ mở khi người tổ chức cho bạn vào.</strong> Nếu bạn đổi sang <strong>Quan tâm</strong>, hoặc nhấn <strong>Sẽ đến</strong> một lần nữa để hủy, bạn sẽ rời khỏi cuộc trò chuyện. Người tổ chức luôn luôn có mặt trong đó.</p>
+        <h2>Mở cuộc trò chuyện</h2>
+        <ul>
+            <li>Mở sự kiện và nhấn <strong>Mở trò chuyện sự kiện</strong>.</li>
+            <li>Hoặc tìm sự kiện trong mục <strong>Trò chuyện</strong>, dưới phần <strong>Nhóm</strong>, được đánh dấu 📅 <strong>Sự kiện</strong>. Trong ứng dụng web, mục này nằm trong tab <strong>Trò chuyện</strong>, cùng với các cuộc trò chuyện khác của bạn.</li>
+        </ul>
+        <p>Ở trên cùng, một hộp được ghim sẽ hiển thị <strong>Ghi chú cho những người tham gia</strong> của người tổ chức, chẳng hạn như địa chỉ chính xác. Nhấn vào tên sự kiện ở trên cùng (trong ứng dụng web là <strong>Xem sự kiện</strong>) để quay lại sự kiện.</p>
+        <h2>Viết tin nhắn</h2>
+        <p>Nhập vào ô <strong>Nhắn tin cho tất cả người tham gia…</strong> và nhấn nút gửi. Bạn có thể gửi tối đa 30 tin nhắn một phút. Tin nhắn mới nhất nằm ngay phía trên ô tin nhắn và vẫn ở đó khi bàn phím mở lên.</p>
+        <h2>Những điều nên biết</h2>
+        <ul>
+            <li>Các cuộc trò chuyện sự kiện không được mã hóa đầu cuối. Người tổ chức, tất cả những người tham gia (nơi người tổ chức duyệt người vào, là những người được người tổ chức cho vào), và những người vận hành máy chủ cộng đồng của bạn đều có thể đọc được chúng. Cuộc trò chuyện sẽ thông báo điều đó phía trên ô tin nhắn.</li>
+            <li>Người tổ chức có thể gỡ bỏ bất kỳ tin nhắn nào. Nhấn vào tin nhắn, sau đó nhấn <strong>Xóa</strong>. Tin nhắn sau đó sẽ hiển thị &quot;đã bị người tổ chức gỡ&quot;.</li>
+            <li>Một cuộc trò chuyện sự kiện không có tính năng trả lời, không có biểu cảm, không có chỉnh sửa và không thể xóa tin nhắn của chính bạn — không giống như cuộc trò chuyện với một người hoặc cuộc trò chuyện của nhóm. Hãy nhờ người tổ chức gỡ bỏ điều gì đó mà bạn hối tiếc. Nếu bạn xóa tài khoản của mình, mọi tin nhắn bạn đã viết tại đây sẽ hiển thị <strong>Tin nhắn này đã bị xóa</strong>.</li>
+            <li>Khi sự kiện kết thúc hoặc bị hủy, cuộc trò chuyện sẽ chuyển sang chế độ chỉ đọc. Cuộc trò chuyện của một sự kiện lặp lại vẫn mở giữa các ngày diễn ra: cho đến ngày cuối cùng nếu người tổ chức đặt <strong>Đến ngày</strong>, và cho đến khi người tổ chức hủy sự kiện nếu không đặt. Ba mươi ngày sau khi kết thúc, cuộc trò chuyện sẽ biến mất.</li>
+        </ul>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="events.html"><strong>Sự kiện</strong><span>Tạo sự kiện trực tiếp hoặc trực tuyến, một lần hoặc lặp lại; xác nhận tham gia, nhận nhắc nhở, chia sẻ và chủ trì sự kiện.</span></a></li>
+            <li><a href="messages.html"><strong>Tin nhắn</strong><span>Bắt đầu cuộc trò chuyện, gửi ảnh, trả lời, thả cảm xúc, chỉnh sửa, xóa, tắt thông báo và tính riêng tư.</span></a></li>
+            <li><a href="pin-locations.html"><strong>Vị trí ghim của bạn</strong><span>Ai thấy vị trí các bài đăng và sự kiện của bạn, và cách giữ riêng tư cho ngôi nhà.</span></a></li>
+            <li><a href="reporting.html"><strong>Báo cáo vấn đề</strong><span>Báo cho kiểm duyệt viên cộng đồng về bài đăng, sự kiện, bài đăng Nhịp đập hoặc dự án.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

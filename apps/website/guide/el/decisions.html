@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/el by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="el">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ψήφος σε απόφαση — BeanPool members' guide</title>
+    <meta name="description" content="Βρείτε ανοιχτές Αποφάσεις, ψηφίστε, αλλάξτε την ψήφο σας και δείτε τα αποτελέσματα.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#commons">Κοινά</a></p>
+        <h1>Ψήφος σε απόφαση</h1>
+        <p class="lede">Βρείτε ανοιχτές Αποφάσεις, ψηφίστε, αλλάξτε την ψήφο σας και δείτε τα αποτελέσματα.</p>
+        <h2>Πού</h2>
+        <p>Πατήστε <strong>Κοινά</strong>, και στη συνέχεια <strong>Αποφάσεις</strong>. Οι ανοιχτές Αποφάσεις βρίσκονται κάτω από τις <strong>Ανοιχτές Αποφάσεις</strong>.</p>
+        <p>Μια Απόφαση είναι δεσμευτική: αν υπερψηφιστεί, ο διακομιστής της κοινότητάς σας την εκτελεί μόνος του. Ένας διαχειριστής μπορεί να σταματήσει μία μόνο αναφέροντας έναν γραπτό λόγο που μπορούν να διαβάσουν τα μέλη. Οι κανόνες για το ποιος μπορεί να ψηφίσει, πόση συμμετοχή απαιτείται και πόσο Ναι χρειάζεται βρίσκονται στο «Κανόνες και αποφάσεις».</p>
+        <p>Η παγκόσμια κοινότητα δεν έχει Αποφάσεις. Οποιοσδήποτε μπορεί να ενταχθεί σε αυτήν, με 12 λέξεις ή με σύνδεση, οπότε ένα άτομο με πολλούς λογαριασμούς θα μπορούσε να επηρεάσει μια ψηφοφορία εκεί. Αντ' αυτού, τη φροντίζουν οι συντονιστές της: βλέπε «Αναφορά προβλήματος». Οι Αποφάσεις ανήκουν στις τοπικές κοινότητες. Οι ψηφοφορίες εξακολουθούν να λειτουργούν παντού.</p>
+        <p>Στην παγκόσμια κοινότητα, τα <strong>Κοινά</strong> εμφανίζουν ένα παράδειγμα Απόφασης από μια τοπική κοινότητα, με την επισήμανση <strong>🏘️ Τοπική κοινότητα</strong>, ώστε να μπορείτε να δείτε πώς λειτουργεί μία. Τα κουμπιά της <strong>Ψήφισε ΝΑΙ</strong> και <strong>Ψήφισε ΟΧΙ</strong> εξηγούν γιατί η ψηφοφορία ανήκει σε μια τοπική κοινότητα, και δεν καταχωρίζουν τίποτα. Βλέπε «Φασόλια και παγκόσμια κοινότητα».</p>
+        <h2>Ανάγνωση μιας Απόφασης</h2>
+        <p>Κάθε Απόφαση εμφανίζει:</p>
+        <ul>
+            <li>περί τίνος πρόκειται και τι θα συμβεί αν υπερψηφιστεί·</li>
+            <li>πώς υπολογίζονται οι ψήφοι: ένα μέλος μία ψήφος, ή πιστώσεις ψήφου για αποφάσεις σχετικά με τα φασόλια των Κοινών·</li>
+            <li>πόσος χρόνος απομένει. Η ψηφοφορία διαρκεί 7 ημέρες·</li>
+            <li><strong>Συμμετοχή:</strong> πόσες ψήφους χρειάζεται και αν τις έχει ήδη·</li>
+            <li><strong>Καταμέτρηση:</strong> τα Ναι και Όχι μέχρι στιγμής, και πόσο Ναι χρειάζεται.</li>
+        </ul>
+        <h2>Ψηφοφορία</h2>
+        <ul>
+            <li>Πατήστε <strong>Ψήφισε ΝΑΙ</strong> ή <strong>Ψήφισε ΟΧΙ</strong>. Στο τηλέφωνο, η εφαρμογή αναφέρει <strong>Η ψήφος καταχωρίστηκε</strong>. Στην εφαρμογή ιστού, η κάρτα ενημερώνεται.</li>
+            <li>Στη συνέχεια, η κάρτα αναφέρει τι ψηφίσατε, όπως «Ψηφίσατε Ναι».</li>
+            <li>Για να αλλάξετε γνώμη πριν κλείσει, πατήστε το άλλο κουμπί, όπως <strong>Αλλαγή σε Όχι</strong>.</li>
+        </ul>
+        <p>Κάθε Απόφαση είναι <strong>μυστική ψηφοφορία</strong>. Τα μέλη βλέπουν τα σύνολα, ποτέ ποιος ψήφισε τι. Η δική σας ψήφος εμφανίζεται μόνο σε εσάς.</p>
+        <h2>Αποφάσεις για τα φασόλια των Κοινών</h2>
+        <p>Αυτές χρησιμοποιούν <strong>πιστώσεις ψήφου</strong>. Λαμβάνετε πιστώσεις ψήφου από τις ολοκληρωμένες συναλλαγές σας, νέες για κάθε Απόφαση. Χρησιμοποιήστε τα <strong>−</strong> και <strong>+</strong> για να επιλέξετε πόσες ψήφους θα δώσετε. Περισσότερες ψήφοι κοστίζουν περισσότερο: 2 ψήφοι κοστίζουν 4 πιστώσεις, 3 ψήφοι κοστίζουν 9.</p>
+        <p>Αν δεν έχετε ολοκληρώσει ακόμη καμία συναλλαγή, δεν μπορείτε να ψηφίσετε σε αυτές. Μπορείτε ακόμα να ψηφίσετε στις άλλες Αποφάσεις, εφόσον γίνατε μέλος πριν ανοίξουν και η πίστωσή σας δεν είναι παγωμένη.</p>
+        <h2>Αποτελέσματα</h2>
+        <p>Πατήστε <strong>Ιστορικό Αποφάσεων</strong>. Επιλέξτε <strong>Όλα</strong>, <strong>Εκτελεσμένες</strong>, <strong>Απορριφθείσες</strong> ή <strong>Άκυρες</strong>. Κάθε καρτέλα εμφανίζει την τελική συμμετοχή και την καταμέτρηση, καθώς και τι συνέβη, για παράδειγμα ότι ψήφισαν πολύ λίγα άτομα.</p>
+        <h2>Περισσότερα</h2>
+        <p>Στο τηλέφωνο, πατήστε το <strong>ⓘ</strong> δίπλα στον τίτλο Κοινά για το πώς λειτουργούν τα φασόλια των Κοινών και η ψηφοφορία. Στην εφαρμογή ιστού, ανοίξτε το <strong>Καθολικό</strong>, πατήστε <strong>Πορτοφόλι</strong>, και στη συνέχεια <strong>Κοινό Ταμείο ⓘ</strong>.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="proposing-a-decision.html"><strong>Πρόταση απόφασης</strong><span>Ζητήστε από την κοινότητα να πάρει μια δεσμευτική απόφαση.</span></a></li>
+            <li><a href="rules.html"><strong>Κανόνες και αποφάσεις</strong><span>Ψηφοφορία, συμμετοχή, μυστικές ψηφοφορίες, ποιοι ψηφίζουν, αναστολή, αφαίρεση μέλους, υπεύθυνοι, καθώς και συντονιστές και επικεφαλής συντονιστές.</span></a></li>
+            <li><a href="polls.html"><strong>Ψηφοφορίες</strong><span>Κάντε μια γρήγορη ερώτηση στην κοινότητα. Οι ψηφοφορίες δείχνουν γνώμη· δεν αλλάζουν κάτι από μόνες τους.</span></a></li>
+            <li><a href="commons-fund.html"><strong>Τα Κοινά</strong><span>Τα κοινά φασόλια της κοινότητάς σας: από πού προέρχονται και πώς δαπανώνται.</span></a></li>
+            <li><a href="the-top-bar.html"><strong>Η πάνω γραμμή</strong><span>Το φασόλι, τα μικρά εικονίδια που δείχνουν όταν κάτι σας χρειάζεται, και τα κουμπιά πάνω δεξιά.</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>Φασόλια και παγκόσμια κοινότητα</strong><span>Σε τι χρησιμεύει η παγκόσμια κοινότητα, μία ανάμεσα σε πολλές, και τι βλέπετε εκεί: ο δείκτης 🏘️ Τοπική κοινότητα, η δειγματική κοινότητα Κοιλάδα του Παραδείγματος, γιατί περιμένουν εκεί τα Φασόλια και πώς ξεκινάτε ή βρίσκετε μια τοπική κοινότητα.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

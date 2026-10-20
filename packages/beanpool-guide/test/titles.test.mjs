@@ -201,3 +201,20 @@ test('a missing file, a stray file in a language folder, and a file that is not 
         fs.rmSync(dir, { recursive: true, force: true });
     }
 });
+
+// Review round 1: Finder leaves a .DS_Store in a folder it has opened; it is gitignored, so only a Mac's check would see it.
+test('a dotfile in a language folder is not a stray file', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'guide-titles-'));
+    try {
+        for (const lang of GUIDE_LANGS) {
+            fs.mkdirSync(path.join(dir, lang));
+            fs.writeFileSync(path.join(dir, lang, TITLES_FILE), '{ "sections": {}, "pages": {} }');
+        }
+        fs.writeFileSync(path.join(dir, 'pt', '.DS_Store'), '');
+        assert.deepEqual(readGuideTitles(dir).problems, []);
+        fs.writeFileSync(path.join(dir, 'pt', 'market.md'), '---');
+        assert.deepEqual(readGuideTitles(dir).problems.map(p => p.replace(/:.*/s, '')), ['content/pt/market.md']);
+    } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+});

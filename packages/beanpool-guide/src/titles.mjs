@@ -107,7 +107,8 @@ export function readGuideTitles(contentDir) {
             problems.push(`${rel(lang)} is missing: every language has one, even with nothing translated yet ({ "sections": {}, "pages": {} }), because the apps bundle each by name`);
             continue;
         }
-        for (const name of fs.readdirSync(dir).sort()) {
+        // A dotfile is the system's, not ours: a Mac's Finder leaves .DS_Store in a folder it has opened (gitignored).
+        for (const name of fs.readdirSync(dir).filter(n => !n.startsWith('.')).sort()) {
             if (name !== TITLES_FILE) problems.push(`${rel(lang, name)}: a language's folder holds only ${TITLES_FILE} (its titles); translated page bodies are slice S5b`);
         }
         try {

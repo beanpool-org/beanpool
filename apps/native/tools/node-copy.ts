@@ -1,0 +1,142 @@
+/**
+ * The node copy on the phone (scratch/tools/DESIGN-tool-template-fable.md §1.6, DESIGN-t04-node-copy-delete-fable.md §2
+ * "Hosts", slice T0.4): a tool's private copy on the member's own community server, kept beside its `tool_docs` row.
+ * Core's tools/node-copy.ts decides and does the steps; this hands it the phone's side (the row in the community's
+ * SQLite file and the toggle's setting in app storage) and the node's routes, signed as the member through the app's own
+ * helpers (utils/db.ts signedGet and signedRequestWithMethod) to the community this phone is on, whatever its address.
+ *
+ * Only for a tool whose manifest asks for `node-copy` ({@link keepsNodeCopy}). Every step for one community, owner and
+ * tool runs in one queue, so a sync after a write never lands after the DELETE that follows it; and none runs once the
+ * phone has moved to another community, whose file and server are another's.
+ *
+ * Only the host route (app/tool/[id].tsx) calls this: the eslint fence refuses a tool any import of it.
+ */
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+    createToolCopyQueue, removeToolCopy, syncToolCopy, toolCopyPath, turnToolCopyOff, turnToolCopyOn,
+    type ToolCopyDevice, type ToolCopyNode, type ToolCopyOutcome, type ToolCopyOwner, type ToolManifest, type ToolNodeAnswer,
+} from '@beanpool/core';
+import { getDb, signedGet, signedRequestWithMethod } from '../utils/db';
+import { notifyToolStore, patchToolSettings, readToolCopy, readToolSettings } from './store';
+import { communityKey } from './community';
+
+/** Whether a tool keeps a private copy on the node at all: only one whose manifest asks for it. */
+export const keepsNodeCopy = (manifest: Pick<ToolManifest, 'permissions'>): boolean => manifest.permissions.includes('node-copy');
+
+/** One tool's copy as the host route knows it: the tool, whose copy, and the community it was opened in. */
+export interface PhoneToolCopy {
+    manifest: ToolManifest;
+    owner: ToolCopyOwner;
+    url: string | null;
+}
+
+/** The node's routes for this owner's copy, signed as the member; a refusal comes back as answered, no answer as null. */
+export function phoneToolNode(owner: ToolCopyOwner, tool: string): ToolCopyNode {
+    const path = toolCopyPath(owner, tool);
+    const write = async (method: 'PUT' | 'DELETE', payload?: unknown): Promise<ToolNodeAnswer | null> => {
+        try {
+            return { status: 200, json: await signedRequestWithMethod(method, path, payload, { withStatus: true }) };
+        } catch (e) {
+            const status = (e as { status?: unknown } | null)?.status;
+            return typeof status === 'number' ? { status, json: { error: e instanceof Error ? e.message : '' } } : null;
+        }
+    };
+    return {
+        get: async () => {
+            try {
+                const res = await signedGet(path);
+                return { status: res.status, json: await res.json().catch(() => null) };
+            } catch {
+                return null;
+            }
+        },
+        put: (doc) => write('PUT', { doc }),
+        delete: () => write('DELETE'),
+    };
+}
+
+/**
+ * The phone's side of one tool's copy: its row (a take or a sent copy changes it only if no write landed meanwhile) and
+ * its setting, the one writer of `nodeCopy`.
+ */
+export function phoneToolDevice(owner: string, tool: string, url: string | null): ToolCopyDevice {
+    return {
+        read: () => readToolCopy(owner, tool),
+        take: async (body, at, was) => {
+            const db = await getDb();
+            const r = was
+                ? await db.runAsync('UPDATE tool_docs SET body = ?, updated_at = ?, synced_at = ? WHERE owner = ? AND tool = ? AND body = ? AND updated_at = ?',
+                    [body, at, at, owner, tool, was.body, was.updatedAt])
+                : await db.runAsync('INSERT INTO tool_docs (owner, tool, body, updated_at, synced_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(owner, tool) DO NOTHING',
+                    [owner, tool, body, at, at]);
+            if (!r?.changes) return false;
+            notifyToolStore(owner, tool);
+            return true;
+        },
+        sent: async (was, body, at) => {
+            const db = await getDb();
+            if (was) {
+                await db.runAsync('UPDATE tool_docs SET synced_at = ?, updated_at = CASE WHEN body = ? AND updated_at = ? THEN ? ELSE updated_at END WHERE owner = ? AND tool = ?',
+                    [at, was.body, was.updatedAt, at, owner, tool]);
+            } else {
+                // Switched on with nothing kept here: the empty document the node now keeps is this phone's too.
+                await db.runAsync(`INSERT INTO tool_docs (owner, tool, body, updated_at, synced_at) VALUES (?, ?, ?, ?, ?)
+                    ON CONFLICT(owner, tool) DO UPDATE SET synced_at = excluded.synced_at`, [owner, tool, body, at, at]);
+                notifyToolStore(owner, tool);
+            }
+        },
+        setting: async () => (await readToolSettings(owner, tool, url)).nodeCopy,
+        setSetting: async (on) => { await patchToolSettings(owner, tool, { nodeCopy: on }, url); },
+    };
+}
+
+const queue = createToolCopyQueue();
+const keyOf = (c: PhoneToolCopy) => `${communityKey(c.url)}|${c.owner.publicKey}|${c.manifest.id}`;
+
+/** Whether the phone is still on the community the tool was opened in: its file and its server are the copy's. */
+async function stillHere(url: string | null): Promise<boolean> {
+    const now = await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null);
+    return communityKey(now) === communityKey(url);
+}
+
+function parts(c: PhoneToolCopy) {
+    return { device: phoneToolDevice(c.owner.publicKey, c.manifest.id, c.url), node: phoneToolNode(c.owner, c.manifest.id) };
+}
+
+async function sync(c: PhoneToolCopy): Promise<ToolCopyOutcome> {
+    if (!keepsNodeCopy(c.manifest) || !await stillHere(c.url)) return 'later';
+    const { device, node } = parts(c);
+    return syncToolCopy(c.manifest, device, node);
+}
+
+/** On a tool's open: the GET and the step, unless the setting is off. */
+export function openToolCopy(c: PhoneToolCopy): Promise<ToolCopyOutcome> {
+    return queue.run(keyOf(c), () => sync(c));
+}
+
+/** After a write: one sync five seconds after the last (an open's rule, so an off made elsewhere is heard first). */
+export function toolCopyAfterWrite(c: PhoneToolCopy, then: (outcome: ToolCopyOutcome) => void): void {
+    if (!keepsNodeCopy(c.manifest)) return;
+    queue.later(keyOf(c), async () => then(await sync(c)));
+}
+
+/** The member's toggle: on is the GET, the step and the PUT; off the DELETE. The setting moves only once the node answered. */
+export function switchToolCopy(c: PhoneToolCopy, on: boolean): Promise<'on' | 'off' | 'older-node' | 'failed'> {
+    if (!on) queue.cancel(keyOf(c));
+    return queue.run(keyOf(c), async () => {
+        if (!await stillHere(c.url)) return 'failed';
+        const { device, node } = parts(c);
+        return on ? turnToolCopyOn(c.manifest, device, node) : turnToolCopyOff(device, node);
+    });
+}
+
+/** Remove my data, the node's part, first: true when the node keeps no copy now, and only then may the phone's go. */
+export function removeToolCopyFirst(c: PhoneToolCopy): Promise<boolean> {
+    if (!keepsNodeCopy(c.manifest)) return Promise.resolve(true);
+    queue.cancel(keyOf(c));
+    return queue.run(keyOf(c), async () => {
+        if (!await stillHere(c.url)) return false;
+        const { device, node } = parts(c);
+        return removeToolCopy(device, node);
+    });
+}

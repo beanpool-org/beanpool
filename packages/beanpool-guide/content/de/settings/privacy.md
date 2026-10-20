@@ -1,0 +1,62 @@
+---
+slug: privacy
+title: Privatsphäre
+summary: Was andere über dich sehen können und welche Einstellungen dies steuern.
+related: your-profile, your-area, pin-locations, blocking, messages
+help: Was andere Mitglieder über dich sehen können und mit welchen Schaltern du es steuerst.
+source-hash: 7a296a90b991050e
+---
+
+## Die Einstellungen öffnen
+
+Tippe oben rechts auf dem Bildschirm auf die Schieberegler-Schaltfläche. In der Web-App auf einem breiten Computerbildschirm ist es stattdessen ein Zahnrad unten in der linken Seitenleiste. Die Einstellungen sind keiner der Haupt-Tabs.
+
+## Was Mitglieder deiner Community sehen können
+
+- Deinen Namen, dein Foto, deine Biografie, wann du beigetreten bist und wann du zuletzt aktiv warst.
+- Dein Vertrauensabzeichen, deine Bewertungen (niemand sonst kann sehen, wer eine Bewertung geschrieben hat) und dein Vertrauensprofil: wie viele deiner Handelsgeschäfte abgeschlossen und wie viele abgebrochen wurden sowie die Abschlussquote, wie viele Bohnenzahlungen du an Mitglieder gesendet oder von ihnen empfangen hast plus die von dir abgeschlossenen Trades, mit wie vielen verschiedenen Mitgliedern du Transaktionen hattest, wie viele Zahlungen und Trades du mit dem jeweiligen betrachtenden Mitglied hattest, und deine Vertrauenspunkte. Die Admins sehen dies genau wie jedes andere Mitglied, und es wird nicht protokolliert.
+- Deine Beiträge und wo deren Stecknadeln liegen. Siehe „Wo dein Pin steht“.
+- Wie du bei einer Umfrage abgestimmt hast, jedoch nur bei einer Umfrage, die ihr Ersteller als **offene Abstimmung** angelegt hat. Andernfalls sind Umfragen anonym, und Stimmen bei **Entscheidungen** sind immer geheim.
+- Wer dich eingeladen hat. Auf dem Smartphone zeigt dein Profil **Hereingebürgt von** und dessen Namen. Wenn du als Gründungsmitglied beigetreten bist oder direkt vom System-Admin eingeladen wurdest, steht dort stattdessen **Gründungsmitglied** oder **Direkt vom System-Admin eingeladen**. Wenn ein Mitglied für deinen Kreditrahmen gebürgt hat, zeigt dein Profil sowohl in der Smartphone-App als auch in der Web-App **Verbürgt von** und dessen Namen an.
+
+## Was nur du sehen kannst
+
+- **Deinen Kontostand und deine Handelsgeschäfte.** Niemand sonst in deiner Community kann sie lesen, weder in der App noch auf dem Server deiner Community. Ein Handel zeigt nur seine zwei beteiligten Personen: dich und die andere Person.
+- **Deine Freundesliste, mit wem du chattest und die von dir erstellten Einladungen.** Nur du kannst sie lesen, in der App oder auf dem Server deiner Community. Andere sehen nur die gemeinsamen Verbindungen, die du mit ihnen teilst.
+- Wenn die Community über deinen Ausschluss abstimmt, sehen alle stimmberechtigten Personen deinen Kontostand und eventuelle Schulden ausschließlich in dieser Abstimmung. Ein Admin oder Eigentümer, der darin nicht abstimmberechtigt ist, sieht sie dort nicht. Diese Ansichten werden nicht protokolliert.
+- Wenn ein Admin dein Konto entfernt, sieht der Admin, der dies einleitet, deinen Kontostand, damit dein Guthaben oder deine Schulden abgewickelt werden können. Die anderen Admins und der Eigentümer können sehen, wer nachgesehen hat und wann.
+- In einer bekannten Community können die Admins deinen Kontostand sehen, sobald er eine der Grenzen deiner Community überschreitet, sofern du dem beim Beitritt zugestimmt hast und ein Admin dich bestätigt hat. Du kannst diese Zustimmung in den Einstellungen jederzeit widerrufen. In jeder Community kann jeder Admin zudem bestimmte deiner Handelsgeschäfte sehen: einen Handel, der noch nicht abgeschlossen ist oder den ein Admin beigelegt hat, einen Handel, dessen Bohnen beim Entfernen eines Mitglieds auf einem älteren Server hängengeblieben sind, Betrugswarnungen und einen Hinweis, wenn über eine festgelegte Anzahl von Tagen weder Bohnen auf dein Konto noch davon weg bewegt wurden. Jeder Einblick in einen solchen Handel wird protokolliert, und ein Einblick in Warnungen, die dich namentlich nennen, wird protokolliert, sobald ein Admin diese zum ersten Mal innerhalb von 24 Stunden öffnet. Der Eigentümer und die Admins können dieses Protokoll einsehen. Die Admins sehen außerdem, wie viele Beiträge du aktiv hast und wie viele Nachrichten du gesendet hast, und bei Handelsgeschäften nur die Gesamtzahlen der gesamten Community, nicht deine eigenen; und wie jedes Mitglied dein Vertrauensprofil, unprotokolliert. Wer den Server deiner Community betreibt, hält dessen gesamte Datenbank, einschließlich Backups, Snapshots und Standby-Kopien. Siehe „Was die Admins sehen“.
+
+Die Eigentümer und Admins, die den Server deiner Community betreiben, können weiterhin einsehen, was dort gespeichert ist. Siehe „Wer sonst Dinge sehen kann“.
+
+## Personen, die nicht beigetreten sind
+
+- **In deiner Community:** Nichts von deinen Beiträgen. Die Einträge und deren Fotos sind für ihre Mitglieder bestimmt, ebenso wie dein Profilfoto. Jedes Foto öffnet sich nur über den Link, der mit seinem Eintrag oder mit deinem Namen in der App bereitgestellt wird; Außenstehende sehen es also nur, wenn ein Mitglied diesen Link weitergibt. Jemand, der die Adresse deiner Community ohne Beitritt öffnet, wird stattdessen zur globalen Community weitergeleitet.
+- **In der globalen Community:** Jeder kann die Einträge vor dem Beitritt ansehen, sieht jedoch nur den Text, die Fotos und ungefähr, wo sich der jeweilige Eintrag befindet, niemals deinen Namen, dein Gesicht oder den genauen Standort.
+- **Deine Pulse-Beiträge:** Nichts. Der Pulse ist für Mitglieder. Das Video oder der Beitrag selbst verbleibt auf seiner eigenen Plattform (YouTube, Instagram usw.), so öffentlich, wie er dort eingestellt ist. Siehe „Eigene Kanäle teilen“.
+
+## Was du steuern kannst
+
+- **Kontaktdaten:** Wähle in deinem Profil bei **Wer kann das sehen?**: **Ausgeblendet**, **Tauschpartner**, **Freunde** oder **Community**. Siehe „Dein Profil“.
+- **Gemeinsame Verbindungen:** Wenn du und zwei andere Personen einander gegenseitig hinzugefügt habt, kann jede von ihnen deinen Namen auf dem Profil der anderen Person sehen, als Kontakt, den sie fragen können. Schalte in den Einstellungen unter **Rechtliches & Datenschutz** die Option **Mich als gemeinsame Verbindung anzeigen** aus, und niemand sieht deinen Namen dort. Sie ist aktiv, bis du sie ausschaltest. Siehe „Leute und Freunde“.
+- **Wer dich hinzugefügt hat:** Wenn du jemanden hinzufügst, sieht diese Person auf ihrem Personen-Tab eine Zeile, dass du sie hinzugefügt hast, damit sie dich zurückhinzufügen kann. Es wird keine Push-Benachrichtigung gesendet.
+- **Standort (Smartphone):** Schalte in den Einstellungen unter **App-Einstellungen** die Option **Standort** ein, um deine Position für die Karte und Beiträge in der Nähe zu nutzen. Um sie auszuschalten, ändere dies in den Geräteeinstellungen deines Smartphones; die App zeigt dir, wie. Im Webbrowser gibt es keinen solchen Schalter: Der Browser fragt dich und merkt sich deine Antwort.
+- **Deine Gegend** (in der globalen Community): Sieh in den Einstellungen unter **Deine Gegend** die von dir angegebene Gegend, etwa 10 km um einen Ort oder zwei Koordinaten, oder **Nicht festgelegt**. **Löschen** entfernt sie. Darunter legt **Wo bist du ungefähr?** mit **Meinen Standort verwenden** oder **Ort oder Stadtteil eingeben** eine neue Gegend fest, und **Abbrechen** (im Browser: **← Zurück zu Einstellungen**) belässt sie unverändert. Es wird immer nur das gerundete Gebiet übertragen. Andere Mitglieder sehen, wie weit du entfernt bist, und eine von dir erstellte Umfrage wird in deiner Gegend angezeigt. Ohne festgelegte Gegend siehst du die neuesten Einträge weltweit, und Mitglieder in deiner Nähe sehen eine von dir erstellte Umfrage nicht in ihrer Liste, können sie aber über die Suche finden. Siehe „Deine Gegend“.
+- **App-Sperre:** Verlangt die Bildschirmsperre deines Smartphones (PIN, Muster, Passwort, Fingerabdruck oder Gesichtserkennung), wenn die App geöffnet wird und wenn du nach 15 Sekunden oder mehr Abwesenheit zu ihr zurückkehrst. Die Sperre schützt die Bildschirme und Pop-ups der App. Auf einem iPhone schließt sie auch eine von der App geöffnete Webseite, wie etwa die Einstellungen deiner Community über **Verwalten**. Sie kann eine Webseite nicht absichern, die die App auf einem Android-Gerät geöffnet hat, da diese außerhalb der App öffnet, und ebenso wenig das Teilen-Menü auf beiden Systemen: Schließe diese, bevor du dein Smartphone aus der Hand legst. Die über **Verwalten** geöffneten Einstellungen deiner Community melden dich nach 15 Minuten Inaktivität ab. Bei aktivierter App-Sperre wird der Bildschirm beim Verlassen der App leer und kehrt zurück, sobald du wieder da bist. Sie erfordert eine Bildschirmsperre auf dem Smartphone: Ohne diese gibt es nichts, was abgefragt werden könnte.
+- **Kanäle:** Alles, was du im Pulse teilst, wird mit deinem Namen für jedes Mitglied deiner Community angezeigt. Siehe „Eigene Kanäle teilen“.
+
+## Wer sonst Dinge sehen kann
+
+- Chats zwischen zwei Personen sind Ende-zu-Ende-verschlüsselt: Eine Nachricht, die nicht verschlüsselt werden kann, wird nicht gesendet. Die Hinweise, die BeanPool einem Chat über einen Deal hinzufügt (wie etwa der Betrag), sind nicht verschlüsselt. Siehe „Nachrichten“.
+- Auf dem Smartphone ist der Gruppen-Chat ebenfalls Ende-zu-Ende-verschlüsselt, sofern der Server der Community aktualisiert wurde, um Gruppen-Chats zu sperren: Der Server speichert nur unlesbaren Buchstabensalat. Er sieht weiterhin, wer geschrieben hat, wann, wer erwähnt wurde, auf welche Nachricht geantwortet wird und die Emoji-Reaktionen. Der Chat zeigt an, ob er verschlüsselt ist. Auf einem nicht aktualisierten Server kann er den Gruppen-Chat weiterhin im Klartext lesen.
+- Das Abspielen eines YouTube-Videos im Pulse meldet YouTube, dass du es angesehen hast, genau wie das Öffnen in der YouTube-App. Vor dem Antippen von ▶ wird nichts an YouTube gesendet, und das Vorbeiscrollen an einem Video sendet gar nichts. Siehe „Der Puls“.
+- Der Server deiner Community speichert deine Handelsgeschäfte, Beiträge und Stimmen sowie wen du in der Web-App blockiert hast. Die Eigentümer und Admins, die ihn betreiben, können einsehen, was dort gespeichert ist, einschließlich Event-Chats, Betriebs-Chats und Gruppen-Chats auf einem Server, der noch nicht für deren Verschlüsselung aktualisiert wurde. Wähle eine Community, deren Betreibern du vertraust.
+- Wenn du dein Konto löschst, zeigt jede von dir geschriebene Nachricht **Diese Nachricht wurde gelöscht**, und deine gesendeten Fotos werden gelöscht. Die täglichen Serverkopien vor diesem Zeitpunkt behalten sie für bis zu 14 Tage. Wenn der Server deiner Community seine Backups extern speichert, behält jedes Backup vor diesem Zeitpunkt sie für bis zu 30 Tage. Ein Backup, das ein Eigentümer heruntergeladen hat, behält sie, bis der Eigentümer es löscht. Siehe „Konto verlassen oder löschen“.
+- Wenn du ein Anmeldekonto verknüpft hast, mit einem beigetreten bist oder später eines hinzugefügt hast, bewahrt der Server deiner Community eine gesperrte Kopie deines Kontos dafür auf. Die Personen, die diesen Server betreiben, können sie öffnen. Nur deine 12 Wörter kommen ganz ohne andere Personen aus. Siehe „Konto wiederherstellen“.
+- In der globalen Community können ihre Moderatoren sehen, welche Konten innerhalb eines Tages über dieselbe Internetverbindung beigetreten sind, jedoch niemals die Verbindung selbst; so können sie eine Welle gefälschter Konten auf einmal behandeln. Siehe „Ein Problem melden“.
+- Beim Beitritt zur globalen Community speichert diese eine verschlüsselte Referenz der Internetverbindung, über die du beigetreten bist, für einen Tag, niemals die Adresse selbst. Wenn viele Konten über dieselbe Verbindung erstellt werden, erfordert jedes neue Konto etwas mehr Einrichtungsschritte, und die Anzahl möglicher Konten ist begrenzt. Schließt die Community ein Konto innerhalb eines Tages nach dem Beitritt aus, wird diese Referenz stattdessen für 7 Tage ab dem Beitritt aufbewahrt, sodass neue 12-Wörter-Konten über dieselbe Verbindung in dieser Woche länger zum Einrichten brauchen. Sie wird für jemanden, der sein eigenes Konto gelöscht hat, niemals länger aufbewahrt.
+- Wenn du der globalen Community mit 12 Wörtern beitrittst, erfährt sie am Eingang neben dieser Referenz lediglich den gewählten Namen und den Kontoschlüssel: keine E-Mail-Adresse, keine Telefonnummer, kein anderes Konto.
+
+## Weiterlesen
+
+Tippe in den Einstellungen unter **Rechtliches & Datenschutz** auf **Datenschutzerklärung**.

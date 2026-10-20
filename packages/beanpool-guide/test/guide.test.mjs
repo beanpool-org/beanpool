@@ -87,9 +87,19 @@ test('front matter: related must name real pages, video must be a video id', () 
 });
 
 test('member-facing words: no internal names, no code words, beans not Ʀ, badges not tiers', () => {
-    const text = fs.readdirSync(CONTENT_DIR, { recursive: true }).filter(f => String(f).endsWith('.md'))
-        .map(f => fs.readFileSync(path.join(CONTENT_DIR, String(f)), 'utf8')).join('\n')
-        + fs.readFileSync(path.join(CONTENT_DIR, 'manifest.json'), 'utf8');
+    // English pages get every rule below; a translation (content/<lang>/…) only the ones that hold in any language: these
+    // are English words (French "effectué" contains "effect"; "quorum" is plain Italian), each language's own words are
+    // checked by the drafting round and its meaning checks.
+    const files = fs.readdirSync(CONTENT_DIR, { recursive: true }).map(String).filter(f => f.endsWith('.md'));
+    const isTranslation = (f) => GUIDE_LANGS.includes(f.split(path.sep)[0]);
+    const join = (list) => list.map(f => fs.readFileSync(path.join(CONTENT_DIR, f), 'utf8')).join('\n');
+    const text = join(files.filter(f => !isTranslation(f))) + fs.readFileSync(path.join(CONTENT_DIR, 'manifest.json'), 'utf8');
+    const translated = join(files.filter(isTranslation));
+    assert.ok(translated.length > 0 || !files.some(isTranslation));
+    for (const [re, why] of [[/Ʀ/, 'the currency is beans'], [/conservingTransaction|pubkey/i, 'internal or technical word']]) {
+        const m = re.exec(translated);
+        assert.equal(m, null, `found "${m?.[0]}" in a translated page — ${why}`);
+    }
     const banned = [
         [/Ʀ/, 'the currency is beans'],
         [/\bnodes?\b/i, 'say "your community\'s server"'],

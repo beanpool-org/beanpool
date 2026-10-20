@@ -18,7 +18,7 @@ Sổ cái có hai tab: **Cấp bậc** (mức độ tin cậy của bạn, xem "
 ## Tab Ví
 
 - **Số dư của bạn**, và tương đương khoảng bao nhiêu giờ giúp đỡ, với tỷ lệ 40 đậu một giờ.
-- **Chung:** quỹ chung của cộng đồng bạn.
+- **Commons:** quỹ chung của cộng đồng bạn.
 - **SÀN TÍN DỤNG:** bạn có thể xuống sâu đến mức nào dưới 0.
 - Số đậu của bạn đang bị giữ trong các giao dịch đang thực hiện, nếu có.
 - **Luân chuyển cộng đồng:** hiển thị khi bạn đang nắm giữ đậu. Xem "Phí lưu thông".

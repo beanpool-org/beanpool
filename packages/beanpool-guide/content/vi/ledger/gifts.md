@@ -19,7 +19,7 @@ Huy hiệu tin cậy của bạn không ảnh hưởng đến việc này.
 
 - Nhấn **Sổ cái**, sau đó nhấn **Ví**, rồi nhấn **Gửi đậu**.
 - Nhấn **Chọn người nhận...**, tìm kiếm tên của họ và nhấn vào đó.
-- Nhập **Số tiền**. Thêm **Ghi chú** nếu bạn thích, chẳng hạn như "Cảm ơn vì số cà chua".
+- Nhập **Số lượng**. Thêm **Ghi chú** nếu bạn thích, chẳng hạn như "Cảm ơn vì số cà chua".
 - Kiểm tra lại mục **Người nhận nhận được:**. Quà tặng không mất phí, vì vậy họ sẽ nhận được toàn bộ số tiền.
 - Nhấn **Xác nhận chuyển**. Trên điện thoại bạn sẽ thấy **✓ Đã gửi!**; trong ứng dụng web biểu mẫu sẽ đóng lại và món quà tặng sẽ hiển thị trong các giao dịch của bạn.
 

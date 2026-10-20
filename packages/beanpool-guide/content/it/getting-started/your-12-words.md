@@ -60,13 +60,13 @@ Il tuo telefono verifica che le parole appartengano al tuo account, lo stesso co
 
 Puoi unirti alla comunità globale solo con 12 parole segrete, senza un account Google, Apple o Facebook (vedi "Entrare in BeanPool"). Se questo ha creato un nuovo account, le tue 12 parole sono il tuo unico modo per rientrare. Nessuna copia del tuo account è conservata altrove se non sul tuo telefono, e nessuno può reimpostarle: né BeanPool, né la comunità. Se perdi le parole e il telefono, l'account è perso per sempre. (Se ti sei unito con l'account che avevi già, un accesso che hai collegato in un'altra comunità consente comunque di recuperarlo lì.)
 
-L'app lo segnala in **Backup sicuro**. Dopo esserti unito, una scheda sulla **Home** lo ribadisce, sul telefono e nell'app web: **Il tuo account ha una sola via di ritorno: le tue 12 parole. Verifica di averle ancora o aggiungi un accesso.** Non ti impedisce mai di fare nulla. Sul telefono:
+L'app lo segnala in **Backup sicuro**. Dopo esserti unito, una scheda sulla **Inizio** lo ribadisce, sul telefono e nell'app web: **Il tuo account ha una sola via di ritorno: le tue 12 parole. Verifica di averle ancora o aggiungi un accesso.** Non ti impedisce mai di fare nulla. Sul telefono:
 
 - **✕** chiude la scheda. Ricompare una volta dopo il tuo primo post e una volta dopo una settimana, poi rimane solo in **Impostazioni**, sotto **Protezione dell'account**.
 - **Mostra le mie 12 parole** apre **Protezione dell'account**, dove puoi vederle di nuovo.
 - In **Protezione dell'account**, **Ho ancora le mie 12 parole** elimina definitivamente la scheda. **Aggiungi un accesso** rimane lì.
 
-Nell'app web la scheda è intitolata **Una sola via di ritorno**, con **Visualizza le mie 12 parole** e **Aggiungi un accesso**. **✕** la chiude: ricompare una volta dopo che uno dei tuoi post è rimasto attivo, e una volta terminata la tua prima settimana. Toccando **Visualizza le mie 12 parole** sulla scheda della **Home** le parole vengono mostrate, e la scheda non compare più lì. Rimane in cima a **Impostazioni** finché non aggiungi un accesso.
+Nell'app web la scheda è intitolata **Una sola via di ritorno**, con **Visualizza le mie 12 parole** e **Aggiungi un accesso**. **✕** la chiude: ricompare una volta dopo che uno dei tuoi post è rimasto attivo, e una volta terminata la tua prima settimana. Toccando **Visualizza le mie 12 parole** sulla scheda della **Inizio** le parole vengono mostrate, e la scheda non compare più lì. Rimane in cima a **Impostazioni** finché non aggiungi un accesso.
 
 Un account creato con 12 parole parte anche più lentamente rispetto a uno creato con un accesso, durante la sua prima settimana. Vedi "Segnalare un problema" per i suoi limiti e le relative motivazioni.
 

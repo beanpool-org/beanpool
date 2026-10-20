@@ -20,7 +20,7 @@ import {
     scanWebsitePages,
     writeBriefs,
 } from './draft.mjs';
-import { guideBodyHash } from '../../packages/beanpool-guide/src/guide.mjs';
+import { guideBodyHash, loadGuide } from '../../packages/beanpool-guide/src/guide.mjs';
 import { guideSourceHash } from '../../packages/beanpool-guide/src/titles.mjs';
 
 function makeTempDir(prefix = 'words-draft-test-') {
@@ -560,6 +560,97 @@ test('apps/server/words is scanned as fourth catalog, counting in --report and a
         const briefContent = fs.readFileSync(path.join(briefsDir, 'brief-es.md'), 'utf8');
         assert.match(briefContent, /server \(14\)/);
         assert.match(briefContent, /#### Catalog: apps\/server\/words\/es\.json \(14 missing\)/);
+    } finally {
+        fs.rmSync(tmp, { recursive: true, force: true });
+    }
+});
+
+test('writeBriefs removes old brief-*.md files and leaves no brief for a completed language', async () => {
+    const tmp = makeTempDir();
+    try {
+        const contentDir = path.join(tmp, 'packages/beanpool-guide/content');
+        fs.mkdirSync(path.join(contentDir, 'about'), { recursive: true });
+        fs.mkdirSync(path.join(contentDir, 'es/about'), { recursive: true });
+        fs.writeFileSync(
+            path.join(contentDir, 'manifest.json'),
+            JSON.stringify({
+                sections: [{ id: 'about', title: 'About', summary: 'Sum', pages: ['faq', 'intro'] }],
+            }),
+        );
+        fs.writeFileSync(
+            path.join(contentDir, 'about/faq.md'),
+            '---\nslug: faq\ntitle: FAQ\nsummary: Questions\nrelated: intro\n---\n\n## Questions\n\nAnswers.\n',
+        );
+        fs.writeFileSync(
+            path.join(contentDir, 'about/intro.md'),
+            '---\nslug: intro\ntitle: Intro\nsummary: Overview\nrelated: faq\n---\n\n## Intro\n\nText.\n',
+        );
+        // manifest has all titles translated
+        fs.writeFileSync(path.join(contentDir, 'es/manifest.json'), JSON.stringify({
+            sections: {
+                about: {
+                    title: { text: 'Acerca de', sourceHash: guideSourceHash('About') },
+                    summary: { text: 'Resumen', sourceHash: guideSourceHash('Sum') },
+                },
+            },
+            pages: {
+                faq: {
+                    title: { text: 'Preguntas', sourceHash: guideSourceHash('FAQ') },
+                    summary: { text: 'Respuestas', sourceHash: guideSourceHash('Questions') },
+                },
+                intro: {
+                    title: { text: 'Introducción', sourceHash: guideSourceHash('Intro') },
+                    summary: { text: 'Resumen', sourceHash: guideSourceHash('Overview') },
+                },
+            },
+        }));
+
+        const guide = loadGuide(contentDir);
+        const introG = guide.guides.find((g) => g.slug === 'intro');
+        fs.writeFileSync(
+            path.join(contentDir, 'es/about/intro.md'),
+            `---\nslug: intro\ntitle: Intro\nsummary: Sum\nrelated: faq\nsource-hash: ${guideBodyHash(introG)}\n---\n\n## Introducción\n\nTexto.\n`,
+        );
+
+        fs.mkdirSync(path.join(tmp, 'packages/beanpool-core/words'), { recursive: true });
+        const catDefs = [{ name: 'core', folder: 'packages/beanpool-core/words' }];
+        const extracted = [
+            {
+                name: 'core',
+                words: 'packages/beanpool-core/words',
+                calls: [{ fn: 't', text: 'Save', at: 'file.ts:1' }],
+            },
+        ];
+
+        // Round 1: es is missing "Save" and missing page "about/faq.md"
+        fs.writeFileSync(path.join(tmp, 'packages/beanpool-core/words/es.json'), JSON.stringify({ _meta: {} }));
+        const briefsDir = path.join(tmp, 'briefs');
+        fs.mkdirSync(briefsDir, { recursive: true });
+        fs.writeFileSync(path.join(briefsDir, 'notes.txt'), 'keep me');
+
+        await writeBriefs({ root: tmp, dir: briefsDir, langs: ['es'], catalogDefs: catDefs, extracted });
+        assert.equal(fs.existsSync(path.join(briefsDir, 'brief-es.md')), true);
+        assert.equal(fs.existsSync(path.join(briefsDir, 'notes.txt')), true);
+
+        // Round 2: Complete es by adding missing key and page
+        fs.writeFileSync(
+            path.join(tmp, 'packages/beanpool-core/words/es.json'),
+            JSON.stringify({ _meta: {}, Save: 'Guardar' }),
+        );
+        const faqG = guide.guides.find((g) => g.slug === 'faq');
+        fs.writeFileSync(
+            path.join(contentDir, 'es/about/faq.md'),
+            `---\nslug: faq\ntitle: FAQ\nsummary: Sum\nrelated: intro\nsource-hash: ${guideBodyHash(faqG)}\n---\n\n## Preguntas\n\nRespuestas.\n`,
+        );
+
+        // Run writeBriefs again on the same dir
+        await writeBriefs({ root: tmp, dir: briefsDir, langs: ['es'], catalogDefs: catDefs, extracted });
+
+        // Assert brief-es.md was removed and no brief was created
+        assert.equal(fs.existsSync(path.join(briefsDir, 'brief-es.md')), false);
+        const remainingBriefs = fs.readdirSync(briefsDir).filter((f) => /^brief-.*\.md$/.test(f));
+        assert.equal(remainingBriefs.length, 0);
+        assert.equal(fs.existsSync(path.join(briefsDir, 'notes.txt')), true);
     } finally {
         fs.rmSync(tmp, { recursive: true, force: true });
     }

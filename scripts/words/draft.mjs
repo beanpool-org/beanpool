@@ -397,6 +397,21 @@ export async function writeBriefs({ root = ROOT, dir, langs = null, maxKeys = nu
     const outDir = path.resolve(root, dir);
     fs.mkdirSync(outDir, { recursive: true });
 
+    // Remove any previous brief-*.md files in outDir before generating fresh briefs
+    const existing = fs.readdirSync(outDir);
+    for (const file of existing) {
+        if (/^brief-.*\.md$/.test(file)) {
+            const filePath = path.join(outDir, file);
+            try {
+                if (fs.statSync(filePath).isFile()) {
+                    fs.rmSync(filePath, { force: true });
+                }
+            } catch {
+                // ignore
+            }
+        }
+    }
+
     const status = await draftStatus({ root, langs, catalogDefs, extracted });
     const rulesFile = path.join(root, 'scripts/words/STYLE.md');
     const styleRules = fs.existsSync(rulesFile) ? fs.readFileSync(rulesFile, 'utf8') : '';

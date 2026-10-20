@@ -152,6 +152,12 @@ test('legal pages banner mechanism works, and no legal translations are shipped 
     assert.ok(renderedEsPrivacy.includes('website-legal-banner'), 'rendered translated legal page includes legal banner');
     assert.ok(renderedEsPrivacy.includes(legalDate), 'legal banner mentions the English version date');
     assert.ok(renderedEsPrivacy.includes('href="../privacy.html"'), 'legal banner links to English version');
+
+    // 3. Verify hreflang tags on legal pages only include en and x-default (no dead links)
+    const privacyHreflang = buildHreflangTags('privacy.html');
+    assert.ok(privacyHreflang.includes('hreflang="en"'), 'legal page includes en hreflang');
+    assert.ok(privacyHreflang.includes('hreflang="x-default"'), 'legal page includes x-default hreflang');
+    assert.ok(!privacyHreflang.includes('hreflang="es"'), 'legal page omits unbuilt translations');
 });
 
 test('outdated translation displays "This page is newer in English." banner linking to English', () => {
@@ -201,8 +207,9 @@ test('main.js on English page presents "Read this in <language>" banner when nav
     const banner1 = dom1.window.document.getElementById('read-in-banner');
     assert.ok(banner1, 'banner appears for Spanish visitor on English page');
     assert.ok(banner1.textContent.includes('Español'), 'banner mentions Español');
+    assert.ok(dom1.window.document.body.classList.contains('has-read-in-banner'), 'body has has-read-in-banner class when banner is active');
     const link = banner1.querySelector('a');
-    assert.equal(link.getAttribute('href'), 'es/rules.html', 'banner link points to es/rules.html');
+    assert.equal(link.getAttribute('href'), '/es/rules.html', 'banner link points to /es/rules.html');
 
     // Test 2: Cookie already set -> banner does NOT appear
     const dom2 = new JSDOM(`<!DOCTYPE html><html lang="en"><body><div id="navbar"></div></body></html>`, {
@@ -216,11 +223,34 @@ test('main.js on English page presents "Read this in <language>" banner when nav
     const banner2 = dom2.window.document.getElementById('read-in-banner');
     assert.equal(banner2, null, 'banner does not appear when choice cookie is set');
 
-    // Test 3: Dismiss button sets cookie
+    // Test 3: Dismiss button sets cookie with Secure flag on HTTPS and clears body class
     const closeBtn = banner1.querySelector('.read-in-close');
     closeBtn.click();
     assert.ok(dom1.window.document.cookie.includes('beanpool_lang=en'), 'dismiss sets beanpool_lang=en cookie');
     assert.equal(dom1.window.document.getElementById('read-in-banner'), null, 'banner element is removed after dismiss');
+    assert.ok(!dom1.window.document.body.classList.contains('has-read-in-banner'), 'has-read-in-banner class removed on dismiss');
+
+    // Test 4: Bilingual user with English primary ['en-US', 'es'] does NOT see banner
+    const dom4 = new JSDOM(`<!DOCTYPE html><html lang="en"><body><div id="navbar"></div></body></html>`, {
+        url: 'https://beanpool.org/rules.html',
+        runScripts: 'dangerously'
+    });
+    Object.defineProperty(dom4.window.navigator, 'language', { value: 'en-US', configurable: true });
+    Object.defineProperty(dom4.window.navigator, 'languages', { value: ['en-US', 'es'], configurable: true });
+    dom4.window.eval(mainJsText);
+    assert.equal(dom4.window.document.getElementById('read-in-banner'), null, 'banner does not appear for bilingual user with English primary');
+
+    // Test 5: Untranslated legal pages suppress banner to avoid 404 links
+    for (const legalPage of ['privacy.html', 'terms.html', 'data-deletion.html']) {
+        const domLegal = new JSDOM(`<!DOCTYPE html><html lang="en"><body><div id="navbar"></div></body></html>`, {
+            url: `https://beanpool.org/${legalPage}`,
+            runScripts: 'dangerously'
+        });
+        Object.defineProperty(domLegal.window.navigator, 'language', { value: 'es-ES', configurable: true });
+        Object.defineProperty(domLegal.window.navigator, 'languages', { value: ['es-ES', 'es'], configurable: true });
+        domLegal.window.eval(mainJsText);
+        assert.equal(domLegal.window.document.getElementById('read-in-banner'), null, `banner does not appear on legal page ${legalPage}`);
+    }
 });
 
 test('320px viewport layout in Arabic (ar) has no horizontal overflow in headless Chromium', async () => {

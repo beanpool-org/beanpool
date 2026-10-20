@@ -52,12 +52,13 @@ vi.mock('../sso-signin', () => ({
 }));
 const lock = vi.hoisted(() => ({ prompts: [] as string[] }));
 vi.mock('../LocalAuth', () => ({ authenticateUser: async (prompt: string) => { lock.prompts.push(prompt); return true; } }));
-const link = vi.hoisted(() => ({ answer: null as any, notices: [] as string[] }));
+const link = vi.hoisted(() => ({ answer: null as any, notices: [] as string[], error: null as Error | null }));
 vi.mock('../join-link', async (importOriginal) => ({
     ...(await importOriginal<typeof import('../join-link')>()),
     linkSignIn: async (o: { phoneLock: (() => Promise<boolean>) | null; onSignInAgain?: (line: string) => void }) => {
         if (o.phoneLock) await o.phoneLock();
         for (const line of link.notices) o.onSignInAgain?.(line);
+        if (link.error) throw link.error;
         return link.answer;
     },
 }));
@@ -95,6 +96,7 @@ import { DOOR_CHOICE_TEXT, DoorChoices, DoorWorkProgress, WORDS_BACKUP_TEXT, Wor
 import { AddWordsForm, addWordsLine, wordBoxesStatusWords } from '../../components/AddWordsForm';
 import { AppLockScreenView } from '../../components/AppLock';
 import { LINK_MESSAGES, linkedNotice, type LinkAnswer, type LinkRefusal } from '../join-link';
+import { SsoSignInError } from '../sso-signin';
 import { ADD_WORDS_COPY, checkWordBoxes, wordBoxesStatus } from '../add-words';
 import { DOOR_WORK_MESSAGES } from '../door-work';
 import { SSO_PROVIDER_NAMES } from '../sso-providers';
@@ -115,6 +117,7 @@ beforeEach(() => {
     alerts.said.length = 0;
     lock.prompts.length = 0;
     link.notices = [];
+    link.error = null;
     store.map.clear();
 });
 afterEach(() => { act(() => root.unmount()); host.remove(); setLanguage('en'); });
@@ -147,6 +150,16 @@ describe('"Add a sign-in as a second way back" in the pseudo-locale', () => {
         expect(host.textContent).toContain(pseudoLocalise('✅ Sign-in added'));
         expect(host.textContent).toContain(pseudoLocalise('Your {provider} sign-in is added: your account now has the usual new-account limits. If you lose this phone, sign in with {provider} to get back in.').split('{provider}').join('Google'));
         expect(bypassing(host, WRITTEN)).toEqual([]);
+    });
+
+    it("a sign-in that timed out says so in the member's language, the provider as sso-signin.ts writes it", async () => {
+        link.error = new SsoSignInError('provider', 'google sign-in timed out.');
+        await renderIn('xx', sheet());
+        await click(host.querySelector('[data-sso="google"]'), 'Google');
+        expect(host.querySelector('[role="alert"]')?.textContent).toBe(pseudoLocalise('{provider} sign-in timed out.').replace('{provider}', 'google'));
+        expect(bypassing(host, WRITTEN)).toEqual([]);
+        // 320 - 2 × 24 (the sheet's padding), at 1.3×.
+        expect(unfit(host, 320 - 48)).toEqual([]);
     });
 
     it('a refusal, by its reason; one with a time in it as it came; and Try again', async () => {

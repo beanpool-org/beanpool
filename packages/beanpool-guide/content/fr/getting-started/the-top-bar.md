@@ -20,7 +20,7 @@ Dans un navigateur web, la barre du haut est plus simple. Elle présente l'état
 
 Touchez le haricot en haut à gauche pour ouvrir le volet **BeanPool**. Il affiche :
 
-- **Votre communauté :** son nom en haut, et si elle est accessible pour le moment.
+- **Votre communauté:** son nom en haut, et si elle est accessible pour le moment.
 - **Vos communautés :** touchez-en une pour basculer dessus, ou touchez **Ajouter une communauté**. La **Communauté mondiale** est toujours présente parmi elles : sa deuxième ligne indique si vous pouvez la rejoindre.
 - **Rechercher dans le guide**, puis **Guides** (comment fonctionne BeanPool, les règles, les questions fréquentes), **Comment utiliser l'application** (ce guide, section par section) et **Le projet BeanPool**, avec les **Nouveautés**.
 - **beanpool.org :** le site web public, avec **Partager** pour l'envoyer à un ami.
@@ -52,7 +52,7 @@ Les icônes s'empilent depuis la droite. La plus importante se place à côté d
 
 ### Sur un petit écran
 
-S'il n'y a pas assez de place pour chaque icône, le dernier emplacement affiche **•••**. Touchez-le pour voir la liste complète, **A besoin de vous**, sous forme textuelle. Touchez une ligne pour vous y rendre.
+S'il n'y a pas assez de place pour chaque icône, le dernier emplacement affiche **•••**. Touchez-le pour voir la liste complète, **Attend votre action**, sous forme textuelle. Touchez une ligne pour vous y rendre.
 
 ### Une barre calme est une bonne nouvelle
 
@@ -63,7 +63,7 @@ Quand rien n'attend votre action, il n'y a aucune icône. Vous n'avez rien manqu
 À la place des icônes, vous pouvez voir un bouton :
 
 - **Rejoindre** (orange) : vous visitez en tant qu'invité. Touchez-le pour ouvrir les **Invitations**. Dans une communauté locale, vous rejoignez avec une invitation. Dans la communauté globale, touchez **Rejoindre avec 12 mots ou une connexion** (**Rejoindre avec une connexion** là où une communauté n'accepte que les connexions).
-- **Se connecter** (rouge) : ce téléphone n'est connecté à aucune communauté. Touchez-le pour ouvrir les **Paramètres**, où vous pouvez en ajouter une.
+- **Se connecter** (rouge) : ce téléphone n'est connecté à aucune communauté. Touchez-le pour ouvrir les **Réglages**, où vous pouvez en ajouter une.
 
 Pendant que l'un de ces boutons s'affiche, l'icône d'invitation est masquée.
 
@@ -71,7 +71,7 @@ Pendant que l'un de ces boutons s'affiche, l'icône d'invitation est masquée.
 
 - **L'icône ?** (un point d'interrogation dans un cercle) : de l'aide pour l'écran où vous vous trouvez. Elle ouvre un court volet expliquant à quoi sert cet écran, puis **Lire la page du guide**, **Rechercher dans le guide** et **Refaire la visite**. Elle figure sur chaque onglet, pour les membres comme pour les invités. Dans l'application web, elle se trouve entre votre photo et les Paramètres en haut, et à côté des Paramètres en bas de la barre latérale sur grand écran.
 - **L'icône d'invitation** (une silhouette avec un plus) : ouvre **Invitations**, pour inviter quelqu'un ou rejoindre une autre communauté. Voir « Rejoindre BeanPool ».
-- **Paramètres** (les curseurs) : ouvre les **Paramètres**. Touchez à nouveau pour revenir là où vous étiez.
+- **Réglages** (les curseurs) : ouvre les **Réglages**. Touchez à nouveau pour revenir là où vous étiez.
 - **Votre photo :** ouvre votre propre profil, tel que les autres le voient.
 
 ## Messages de mise à jour

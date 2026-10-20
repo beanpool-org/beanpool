@@ -8,7 +8,7 @@ source-hash: 7adea0e9b76c043c
 
 ## Modifier votre nom, votre photo ou votre bio
 
-- Ouvrez les **Paramètres** avec le bouton des curseurs en haut de l'écran.
+- Ouvrez les **Réglages** avec le bouton des curseurs en haut de l'écran.
 - Sur votre carte en haut, touchez **Modifier**, ou touchez votre photo.
 - Modifiez ce que vous souhaitez :
 - **Pseudo** est le nom que les personnes voient.
@@ -18,7 +18,7 @@ source-hash: 7adea0e9b76c043c
 
 Dans l'application web, touchez **Modifier le profil**, changez la photo avec **Appareil photo** ou **Galerie**, puis touchez **Enregistrer les modifications du profil**.
 
-Vous pouvez également toucher **Relancer la configuration** dans les Paramètres. Cela vous guide à nouveau pour votre nom et votre photo, votre localisation approximative (sur la communauté globale, dans l'application mobile), et la courte visite expliquant le fonctionnement de BeanPool. Dans un navigateur web, définissez votre zone dans les **Paramètres**, sous **Votre zone**.
+Vous pouvez également toucher **Relancer la configuration** dans les Paramètres. Cela vous guide à nouveau pour votre nom et votre photo, votre localisation approximative (sur la communauté globale, dans l'application mobile), et la courte visite expliquant le fonctionnement de BeanPool. Dans un navigateur web, définissez votre zone dans les **Réglages**, sous **Votre zone**.
 
 ## Avant de publier
 
@@ -30,10 +30,10 @@ Sous **Coordonnées**, vous pouvez ajouter un numéro de téléphone, une adress
 
 Une fois ajouté, choisissez **Qui peut voir cela ?** :
 
-- **Masqué :** personne.
-- **Partenaires d'échange :** les membres avec lesquels vous avez un accord. Cela compte à partir du moment où l'un de vous deux touche **Accepter l'Offre** ou **Proposer vos services** sur l'annonce de l'autre, même si l'accord est annulé ou refusé par la suite. Envoyer des haricots seuls ne constitue pas un accord.
-- **Amis :** les personnes que vous avez ajoutées comme amis.
-- **Communauté :** tous les membres de votre communauté.
+- **Masqué:** personne.
+- **Partenaires d'échange:** les membres avec lesquels vous avez un accord. Cela compte à partir du moment où l'un de vous deux touche **Accepter l'Offre** ou **Proposer vos services** sur l'annonce de l'autre, même si l'accord est annulé ou refusé par la suite. Envoyer des haricots seuls ne constitue pas un accord.
+- **Amis:** les personnes que vous avez ajoutées comme amis.
+- **Communauté:** tous les membres de votre communauté.
 
 Un membre suspendu ne voit aucune de ces informations pendant toute la durée de sa suspension. De même pour quiconque n'a pas rejoint votre communauté, même une personne à qui un membre a écrit ou envoyé des haricots.
 

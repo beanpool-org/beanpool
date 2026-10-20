@@ -10,17 +10,17 @@ source-hash: 3f81c6f1fb085719
 
 Sur le téléphone, touchez le haricot en haut à gauche de l'écran. Ou bien :
 
-- Ouvrez les **Paramètres** avec le bouton des curseurs en haut de l'écran.
+- Ouvrez les **Réglages** avec le bouton des curseurs en haut de l'écran.
 - Sous **BeanPool**, touchez **Aide et fonctionnement**.
 
-Dans l'application web, c'est au même endroit : les **Paramètres**, puis **Aide et fonctionnement** sous **BeanPool**.
+Dans l'application web, c'est au même endroit : les **Réglages**, puis **Aide et fonctionnement** sous **BeanPool**.
 
 ## Ce qu'il contient
 
-- **Votre communauté :** son nom (son adresse dans l'application web), et si son serveur est accessible pour le moment. Sur le téléphone, en dessous, **Vos communautés** : touchez-en une pour basculer dessus, ou touchez **Ajouter une communauté**. La **Communauté mondiale** est toujours l'une des lignes, avec une seconde ligne qui indique si vous en êtes membre, si vous pouvez la rejoindre, ou pourquoi elle ne peut pas être utilisée actuellement. Voir « Plusieurs communautés ».
-- **Guides :** comment fonctionne BeanPool, les règles et la prise de décision, et les questions fréquentes.
-- **Comment utiliser l'application :** une courte page pour chaque tâche, regroupée comme l'est l'application : Premiers pas, Marché, Carte, Échanges, Pouls, Communs, Registre et Paramètres et sécurité.
-- **Le projet BeanPool :** les nouveautés de cette version, et un lien vers le site web beanpool.org (sur le téléphone, avec un bouton **Partager** pour l'envoyer à un ami).
+- **Votre communauté:** son nom (son adresse dans l'application web), et si son serveur est accessible pour le moment. Sur le téléphone, en dessous, **Vos communautés** : touchez-en une pour basculer dessus, ou touchez **Ajouter une communauté**. La **Communauté mondiale** est toujours l'une des lignes, avec une seconde ligne qui indique si vous en êtes membre, si vous pouvez la rejoindre, ou pourquoi elle ne peut pas être utilisée actuellement. Voir « Plusieurs communautés ».
+- **Guides:** comment fonctionne BeanPool, les règles et la prise de décision, et les questions fréquentes.
+- **Comment utiliser l'application:** une courte page pour chaque tâche, regroupée comme l'est l'application : Premiers pas, Marché, Carte, Échanges, Pouls, Communs, Registre et Paramètres et sécurité.
+- **Le projet BeanPool:** les nouveautés de cette version, et un lien vers le site web beanpool.org (sur le téléphone, avec un bouton **Partager** pour l'envoyer à un ami).
 
 ## Rechercher
 

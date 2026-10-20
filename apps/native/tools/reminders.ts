@@ -92,17 +92,24 @@ export async function cancelToolReminders(
     if (!n) return;
     let match: (id: string) => boolean = (id) => id.startsWith(TOOL_REMINDER_PREFIX);
     if (typeof target === 'string') {
-        match = (id) => id.startsWith(`${TOOL_REMINDER_PREFIX}${target}:`) || id.includes(`:${target}:`);
+        const tool = target;
+        match = (id) => {
+            const parts = id.split(':');
+            return (parts.length === 5 && parts[2] === tool) || (parts.length === 4 && parts[1] === tool);
+        };
     } else if (target) {
-        if (target.community && target.tool) {
-            const prefix = `${TOOL_REMINDER_PREFIX}${target.community}:${target.tool}:`;
-            match = (id) => id.startsWith(prefix) || id.startsWith(`${TOOL_REMINDER_PREFIX}${target.tool}:`);
-        } else if (target.community) {
-            const prefix = `${TOOL_REMINDER_PREFIX}${target.community}:`;
-            match = (id) => id.startsWith(prefix);
-        } else if (target.tool) {
-            match = (id) => id.includes(`:${target.tool}:`);
-        }
+        const { community, tool } = target;
+        match = (id) => {
+            const parts = id.split(':');
+            if (parts[0] !== 'bp-tool') return false;
+            if (parts.length === 5) {
+                return (!community || parts[1] === community) && (!tool || parts[2] === tool);
+            }
+            if (parts.length === 4) {
+                return Boolean(tool && parts[1] === tool);
+            }
+            return false;
+        };
     }
     try {
         for (const s of await n.getAllScheduledNotificationsAsync()) {

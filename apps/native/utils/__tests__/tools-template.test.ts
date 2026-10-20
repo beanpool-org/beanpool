@@ -854,6 +854,16 @@ describe("reminders: due() becomes the phone's own date-trigger notifications", 
         expect(n.scheduled.some((s) => s.identifier === `bp-tool:community_a:fixture-kit:back:${NOW + DAY}`)).toBe(true);
     });
 
+    it("cancelToolReminders does not cancel reminders of other tools with matching reminder names", async () => {
+        const n = fakeNotifications();
+        n.scheduled.push(
+            { identifier: 'bp-tool:comm:other-tool:due:1000' },
+            { identifier: 'bp-tool:comm:due:item:2000' },
+        );
+        await cancelToolReminders({ tool: 'due' }, n);
+        expect(n.scheduled.map((s) => s.identifier)).toEqual(['bp-tool:comm:other-tool:due:1000']);
+    });
+
     it("serializes reschedules so an older write cannot survive two quick writes", async () => {
         const n = fakeNotifications();
         const doc1: KitDoc = { v: 1, items: [{ id: '1', name: 'Ladder', at: NOW + 1000 }] };

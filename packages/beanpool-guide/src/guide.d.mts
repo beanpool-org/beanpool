@@ -4,6 +4,8 @@
 
 export const GUIDE_SCHEMA: number;
 export const ABOUT_SECTION: string;
+/** The languages besides English that have a titles folder, content/<lang>/ (core's LANGS but en). */
+export const GUIDE_LANGS: readonly string[];
 
 export type GuideBlock =
     | { type: 'h2' | 'h3' | 'p'; text: string }

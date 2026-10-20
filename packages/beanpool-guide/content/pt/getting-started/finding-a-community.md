@@ -16,12 +16,12 @@ Nenhuma comunidade perto de você ainda? Você pode começar uma: veja "Nada per
 
 ## Comunidades perto de você
 
-Na comunidade global, o cartão **Encontre sua comunidade** no **Início** mostra as comunidades mais próximas de você. Durante seus primeiros 30 dias, ele permanece perto do topo do Início e não pode ser removido nem movido; depois disso, você pode removê-lo como qualquer outro cartão. No aplicativo web, cada comunidade no cartão é um link para sua própria página. Se o aplicativo não souber onde você está, toque em **Compartilhar minha região**, ou em **ou digite sua cidade** e escolha sua cidade. As instruções abaixo são para o aplicativo de celular.
+Na comunidade global, o cartão **Find your community** no **Início** mostra as comunidades mais próximas de você. Durante seus primeiros 30 dias, ele permanece perto do topo do Início e não pode ser removido nem movido; depois disso, você pode removê-lo como qualquer outro cartão. No aplicativo web, cada comunidade no cartão é um link para sua própria página. Se o aplicativo não souber onde você está, toque em **Compartilhar minha região**, ou em **or type your town** e escolha sua cidade. As instruções abaixo são para o aplicativo de celular.
 
 Ainda não está na comunidade global? Toque no feijão no canto superior esquerdo e, sob **SUAS COMUNIDADES**, toque em **Comunidade global**, depois entre com a conta que você já possui: consulte "Mais de uma comunidade". Sem nenhuma conta ainda, toque em **Explorar o BeanPool no mundo todo** na primeira tela do aplicativo: consulte "Entrar no BeanPool".
 
 - Toque em **Comunidades perto de você** para ver a lista completa.
-- As comunidades são listadas das mais próximas para as mais distantes quando o aplicativo sabe onde você está. Se ele não souber, toque em **Usar minha localização** ou busque pelo nome. Prefere não compartilhar sua localização? Toque em **ou digite sua cidade**, comece a digitar e selecione sua cidade na lista: apenas um ponto aproximado é guardado, e **alterar** escolhe outro.
+- As comunidades são listadas das mais próximas para as mais distantes quando o aplicativo sabe onde você está. Se ele não souber, toque em **Usar minha localização** ou busque pelo nome. Prefere não compartilhar sua localização? Toque em **or type your town**, comece a digitar e selecione sua cidade na lista: apenas um ponto aproximado é guardado, e **Alterar** escolhe outro.
 - Comunidades que estão aproximadamente à mesma distância de você são alternadas em ordem aleatória, para que nenhuma comunidade fique sempre no topo.
 - Cada uma mostra a que distância está e quantos membros possui, quando a comunidade tiver divulgado isso.
 
@@ -29,7 +29,7 @@ Uma comunidade que ainda não publicou seu endereço é listada, mas ainda não 
 
 ## Pedir para entrar
 
-- Toque em **Solicitar entrada** em uma comunidade.
+- Toque em **Pedir para entrar** em uma comunidade.
 - Confira seu nome e escreva algumas palavras sobre você, com até 280 caracteres: onde você mora, o que gostaria de compartilhar ou aprender.
 - Toque em **Enviar**.
 
@@ -48,14 +48,14 @@ O cartão exibirá **Um membro convidou você**. Toque em **Entrar** com o nome 
 - Sua conta acompanha você: a mesma chave e as mesmas 12 palavras em inglês. Seu nome também vem. Se alguém já tiver esse nome lá, um número é adicionado, como "Sarah2". Você pode alterá-lo na etapa seguinte.
 - Suas publicações, conversas e trocas permanecem em cada comunidade. Na nova comunidade, você começa do zero.
 - Em seguida, você confere seu nome e foto para a nova comunidade.
-- Um login que protege sua conta é mantido por cada comunidade. O aplicativo pede para você proteger sua conta na nova comunidade também: toque em **Proteger** ou em **Depois**, e faça isso a qualquer momento nas **Ajustes**.
+- Um login que protege sua conta é mantido por cada comunidade. O aplicativo pede para você proteger sua conta na nova comunidade também: toque em **Proteger** ou em **Depois**, e faça isso a qualquer momento nas **Configurações**.
 
 Você continua sendo membro da comunidade global e pode alternar entre elas: consulte "Mais de uma comunidade".
 
 ## Nada perto de você
 
-- **Avisar quando começar uma aqui:** você recebe uma notificação quando uma comunidade começar perto de onde você está. Apenas a região é guardada, com cerca de 10 km de extensão, nunca sua localização exata. Você pode monitorar até 3 locais e parar de monitorar qualquer um com **Parar**.
-- **Criar uma comunidade:** cada comunidade possui seu próprio pequeno servidor, administrado por alguém local. Exige um computador sobressalente em casa ou alguns dólares por mês, e cerca de meia hora: consulte "Os Feijões e a comunidade global". O aplicativo mostra três formas de operar: um computador sobressalente em casa, um pequeno servidor alugado ou pedindo ajuda. Preencha o nome, a localização e como as pessoas podem entrar em contato com você, e toque em **Copiar detalhes da minha comunidade** para colar essas informações nas configurações do seu novo servidor. Seus dados de contato ficam fora do diretório público, a menos que você ative essa opção por lá.
+- **Avise-me quando uma começar aqui:** você recebe uma notificação quando uma comunidade começar perto de onde você está. Apenas a região é guardada, com cerca de 10 km de extensão, nunca sua localização exata. Você pode monitorar até 3 locais e parar de monitorar qualquer um com **Parar**.
+- **Começar uma comunidade:** cada comunidade possui seu próprio pequeno servidor, administrado por alguém local. Exige um computador sobressalente em casa ou alguns dólares por mês, e cerca de meia hora: consulte "Os Feijões e a comunidade global". O aplicativo mostra três formas de operar: um computador sobressalente em casa, um pequeno servidor alugado ou pedindo ajuda. Preencha o nome, a localização e como as pessoas podem entrar em contato com você, e toque em **Copiar detalhes da minha comunidade** para colar essas informações nas configurações do seu novo servidor. Seus dados de contato ficam fora do diretório público, a menos que você ative essa opção por lá.
 
 ## Se você for membro de uma comunidade local
 

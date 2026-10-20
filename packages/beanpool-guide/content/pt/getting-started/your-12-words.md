@@ -35,7 +35,7 @@ O kit de recuperação é uma única página para imprimir: suas 12 palavras em 
 
 ## Onde vê-las novamente
 
-Abra as **Ajustes** com o botão de controles deslizantes na parte superior da tela. Em seguida, escolha uma das opções:
+Abra as **Configurações** com o botão de controles deslizantes na parte superior da tela. Em seguida, escolha uma das opções:
 
 - Sob **CONTA E IDENTIDADE**, toque em **Ver frase de recuperação**. Digite **CONFIRM**, toque em **Mostrar frase de recuperação** e passe pela verificação de bloqueio de tela do celular.
 - Ou toque em **Proteção da conta**, depois em **Mostrar minhas 12 palavras de recuperação**, e passe pela verificação de bloqueio de tela do celular. Toque em **Ocultar** quando terminar.
@@ -50,7 +50,7 @@ Um celular restaurado com uma conta de login só recupera suas 12 palavras se es
 
 Se este celular não tiver uma cópia das suas 12 palavras e você as tiver anotado, você poderá adicioná-las:
 
-- Abra as **Ajustes**. Sob **CONTA E IDENTIDADE**, toque em **Ver frase de recuperação**. (Ou, em **Proteção da conta**, toque em **Mostrar minhas 12 palavras de recuperação**.) Em um celular sem cópia, qualquer uma das opções abre **Adicionar suas 12 palavras a este celular**.
+- Abra as **Configurações**. Sob **CONTA E IDENTIDADE**, toque em **Ver frase de recuperação**. (Ou, em **Proteção da conta**, toque em **Mostrar minhas 12 palavras de recuperação**.) Em um celular sem cópia, qualquer uma das opções abre **Adicionar suas 12 palavras a este celular**.
 - Digite as 12 palavras em ordem (as palavras são em inglês), ou toque em **Colar**. Letras maiúsculas e espaços extras não importam. Uma palavra que não estiver na lista de palavras de recuperação em inglês é destacada enquanto você digita.
 - Toque em **Adicionar estas palavras**.
 
@@ -60,13 +60,13 @@ Seu celular verifica se as palavras pertencem à sua conta, a mesma verificaçã
 
 Você pode entrar na comunidade global apenas com 12 palavras secretas, sem uma conta Google, Apple ou Facebook (consulte "Entrar no BeanPool"). Se isso criou uma nova conta, suas 12 palavras são sua única forma de recuperação. Nenhuma cópia da sua conta é mantida em outro lugar além do seu celular, e ninguém pode redefini-las: nem o BeanPool e nem a comunidade. Se você perder as palavras e o celular, a conta será perdida para sempre. (Se você entrou com a conta que já tinha, um login vinculado em outra comunidade ainda a recupera lá.)
 
-O aplicativo informa isso no **Backup seguro**. Depois de entrar, um cartão no **Início** repete o aviso, no celular e no aplicativo web: **Sua conta tem uma única forma de recuperação: suas 12 palavras. Verifique se você ainda as tem ou adicione um login.** Ele nunca impede você de fazer nada. No celular:
+O aplicativo informa isso no **Backup de segurança**. Depois de entrar, um cartão no **Início** repete o aviso, no celular e no aplicativo web: **Sua conta tem uma única forma de recuperação: suas 12 palavras. Verifique se você ainda as tem ou adicione um login.** Ele nunca impede você de fazer nada. No celular:
 
-- **✕** dispensa o cartão. Ele volta uma vez após sua primeira publicação e outra após uma semana, ficando depois disso apenas nas **Ajustes**, sob **Proteção da conta**.
+- **✕** dispensa o cartão. Ele volta uma vez após sua primeira publicação e outra após uma semana, ficando depois disso apenas nas **Configurações**, sob **Proteção da conta**.
 - **Mostrar minhas 12 palavras** abre a **Proteção da conta**, onde você pode vê-las novamente.
 - Na **Proteção da conta**, **Ainda tenho minhas 12 palavras** dispensa o cartão em definitivo. **Adicionar um login** permanece lá.
 
-No aplicativo web, o cartão tem o título **Uma forma de recuperação**, com **Ver minhas 12 palavras** e **Adicionar um login**. **✕** o dispensa: ele volta uma vez após uma das suas publicações permanecer ativa, e outra quando sua primeira semana terminar. Tocar em **Ver minhas 12 palavras** no cartão do **Início** as exibe, e o cartão não volta mais ali. Ele fica no topo das **Ajustes** até que você adicione um login.
+No aplicativo web, o cartão tem o título **Uma forma de recuperação**, com **Ver minhas 12 palavras** e **Adicionar um login**. **✕** o dispensa: ele volta uma vez após uma das suas publicações permanecer ativa, e outra quando sua primeira semana terminar. Tocar em **Ver minhas 12 palavras** no cartão do **Início** as exibe, e o cartão não volta mais ali. Ele fica no topo das **Configurações** até que você adicione um login.
 
 Uma conta criada com 12 palavras também começa com ritmo mais lento do que uma criada com login durante sua primeira semana. Consulte "Denunciar um problema" para saber seus limites e os motivos.
 
@@ -74,9 +74,9 @@ Uma conta criada com 12 palavras também começa com ritmo mais lento do que uma
 
 Você pode adicionar um login mais tarde, a partir de qualquer celular ou navegador em que estiver na sua conta, não apenas daquele em que entrou. Em um celular no qual você restaurou sua conta com as suas 12 palavras, abra a comunidade global no aplicativo: a comunidade informa que sua conta tem apenas suas 12 palavras, e o cartão e **Adicionar um login** aparecem (pode levar um instante). Você não pode adicionar um login enquanto sua conta estiver suspensa, ou se a comunidade tiver encerrado sua conta (o aplicativo avisa sobre isso e nada muda). Ele se torna uma segunda forma de voltar e remove os limites de 12 palavras de imediato.
 
-Se o cofre de chaves do BeanPool já mantiver uma cópia da sua conta, essa cópia também é uma forma de voltar. O aplicativo então não exibe o cartão de recuperação única. A opção **Adicionar um login** ainda é oferecida, discretamente, em **Proteção da conta** nas **Ajustes**, porque ela remove os limites de 12 palavras.
+Se o cofre de chaves do BeanPool já mantiver uma cópia da sua conta, essa cópia também é uma forma de voltar. O aplicativo então não exibe o cartão de recuperação única. A opção **Adicionar um login** ainda é oferecida, discretamente, em **Proteção da conta** nas **Configurações**, porque ela remove os limites de 12 palavras.
 
-- Toque em **Adicionar um login**: no cartão, ou nas **Ajustes** sob **Proteção da conta**. No **Backup seguro**, o botão diz **Adicione um login como segundo meio de acesso**.
+- Toque em **Adicionar um login**: no cartão, ou nas **Configurações** sob **Proteção da conta**. No **Backup de segurança**, o botão diz **Adicione um login como segunda forma de voltar**.
 - Toque em **Continuar com Google**, **Continuar com Facebook** ou, em um iPhone, **Continuar com Apple**, e faça login uma vez. O aplicativo pode solicitar o bloqueio do seu celular primeiro.
 - **Sign-in added** avisa que deu certo. Sua conta passa a ter os limites habituais de contas novas, e esse login a traz de volta se você perder seu celular, da mesma forma que para quem entrou com ele. Consulte "Recuperar sua conta" para ver quem pode abrir a cópia guardada para ela.
 

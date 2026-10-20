@@ -1585,10 +1585,11 @@ export default function PostDetailModal() {
                                             if (isOffer && !isLoan) {
                                                 await acceptMarketplacePost(post.id, identity.publicKey, estimatedHrs);
                                             } else {
-                                                await requestMarketplacePost(post.id, identity.publicKey, estimatedHrs);
+                                                const asked = await requestMarketplacePost(post.id, identity.publicKey, estimatedHrs);
                                                 // Optimistically add to local state: on a loan the one asking is the buyer, on a Need the seller.
+                                                // By the node's id for it, so Withdraw works before the next read replaces it.
                                                 setRequests(prev => [...prev, {
-                                                    id: Crypto.randomUUID(), post_id: post.id,
+                                                    id: asked?.transaction?.id ?? Crypto.randomUUID(), post_id: post.id,
                                                     buyer_pubkey: isLoan ? identity.publicKey : post.author_pubkey,
                                                     seller_pubkey: isLoan ? post.author_pubkey : identity.publicKey,
                                                     credits: post.price_type === 'fixed' ? post.credits : post.credits * (estimatedHrs ?? 0),

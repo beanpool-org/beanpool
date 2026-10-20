@@ -309,6 +309,24 @@ describe("a listing's page in the pseudo-locale: every word on it came through t
         expect(bypassing(), 'the ask waiting').toEqual([]);
     });
 
+    it("the ask just made can be withdrawn at once: by the node's id for it, not one made up on the phone", async () => {
+        const LENT = { ...OFFER, id: 'p-lent', credits: 0, lendable: 1, audience_scope: 'public', target_group_id: null, cash_also_needed: 0 };
+        await open(LENT);
+        const page = net.answer!;
+        const withdrawn: unknown[][] = [];
+        net.answer = (name, args) => {
+            if (name === 'requestMarketplacePost') return Promise.resolve({ success: true, transaction: { id: 'tx-node', postId: 'p-lent', status: 'requested' } });
+            if (name === 'createConversationApi') return Promise.resolve(null);
+            if (name === 'cancelMarketplaceRequest') { withdrawn.push(args); return Promise.resolve({ success: true }); }
+            return page(name, args);
+        };
+        await press('📦 Ask to borrow');
+        await press('Confirm');
+        expect(host.textContent).toContain(pseudoLocalise('Asked to borrow'));
+        await press('Withdraw Request');
+        expect(withdrawn).toEqual([['tx-node', ME.publicKey]]);
+    });
+
     it("the member's own Need: its requests to approve or deny, the decline note, and its edit form", async () => {
         await open(NEED, 'xx', { all: (sql) => (sql.includes("status='requested'") ? REQUESTS : []) });
         expect(host.textContent).toContain('Mia');

@@ -383,6 +383,7 @@ test('main.js WORDS dictionary translates strings by document.documentElement.la
         assert.equal(typeof wordsTable[lang].visit, 'function', `WORDS[${lang}].visit must be a function`);
         assert.equal(typeof wordsTable[lang].readIn, 'function', `WORDS[${lang}].readIn must be a function`);
     }
+    assert.equal(wordsTable.id.readIn('Bahasa Indonesia'), 'Baca ini dalam Bahasa Indonesia →', 'Indonesian readIn avoids redundant "bahasa"');
 });
 
 test('main.js on English page presents "Read this in <language>" banner when navigator.language matches without choice cookie', () => {

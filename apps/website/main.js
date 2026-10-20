@@ -142,7 +142,7 @@ const WORDS = {
         checkInbox: 'Periksa kotak masuk Anda untuk email konfirmasi! 🫘',
         somethingWrong: 'Terjadi kesalahan. Silakan coba lagi.',
         subscribe: 'Berlangganan',
-        readIn: (lang) => `Baca ini dalam bahasa ${lang} →`,
+        readIn: (lang) => `Baca ini dalam ${lang} →`,
     },
     'zh-Hans': {
         noneNear: '您附近暂无社区。',

@@ -208,6 +208,7 @@ test('main.js on English page presents "Read this in <language>" banner when nav
     assert.ok(banner1, 'banner appears for Spanish visitor on English page');
     assert.ok(banner1.textContent.includes('Español'), 'banner mentions Español');
     assert.ok(dom1.window.document.body.classList.contains('has-read-in-banner'), 'body has has-read-in-banner class when banner is active');
+    assert.equal(dom1.window.document.documentElement.style.getPropertyValue('--banner-height'), '61px', 'sets --banner-height custom property');
     const link = banner1.querySelector('a');
     assert.equal(link.getAttribute('href'), '/es/rules.html', 'banner link points to /es/rules.html');
 
@@ -229,6 +230,7 @@ test('main.js on English page presents "Read this in <language>" banner when nav
     assert.ok(dom1.window.document.cookie.includes('beanpool_lang=en'), 'dismiss sets beanpool_lang=en cookie');
     assert.equal(dom1.window.document.getElementById('read-in-banner'), null, 'banner element is removed after dismiss');
     assert.ok(!dom1.window.document.body.classList.contains('has-read-in-banner'), 'has-read-in-banner class removed on dismiss');
+    assert.equal(dom1.window.document.documentElement.style.getPropertyValue('--banner-height'), '', '--banner-height property removed on dismiss');
 
     // Test 4: Bilingual user with English primary ['en-US', 'es'] does NOT see banner
     const dom4 = new JSDOM(`<!DOCTYPE html><html lang="en"><body><div id="navbar"></div></body></html>`, {
@@ -279,6 +281,82 @@ test('320px viewport layout in Arabic (ar) has no horizontal overflow in headles
             assert.equal(bodyDir, 'rtl', `${testPage} has dir="rtl" on body`);
             assert.ok(scrollWidth <= 320, `${testPage} scrollWidth (${scrollWidth}) <= 320 at 320px width`);
         }
+    } finally {
+        await browser.close();
+        server.close();
+    }
+});
+
+test('language banner on mobile (320px) does not overlap fixed navbar in headless Chromium', async () => {
+    const TYPES = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.png': 'image/png', '.woff2': 'font/woff2' };
+
+    const server = http.createServer((req, res) => {
+        let p = path.join(WEBSITE_DIR, decodeURIComponent(new URL(req.url, 'http://x').pathname));
+        if (fs.existsSync(p) && fs.statSync(p).isDirectory()) p = path.join(p, 'index.html');
+        if (!fs.existsSync(p)) { res.writeHead(404); res.end(); return; }
+        res.writeHead(200, { 'content-type': TYPES[path.extname(p)] || 'application/octet-stream' });
+        fs.createReadStream(p).pipe(res);
+    });
+
+    await new Promise(r => server.listen(0, '127.0.0.1', r));
+    const port = server.address().port;
+    const browser = await chromium.launch({ headless: true });
+
+    try {
+        const context = await browser.newContext({
+            viewport: { width: 320, height: 600 },
+            locale: 'es-ES'
+        });
+        const page = await context.newPage();
+        await page.goto(`http://127.0.0.1:${port}/rules.html`, { waitUntil: 'load' });
+
+        await page.waitForFunction(() => {
+            const nav = document.getElementById('navbar');
+            const prop = document.documentElement.style.getPropertyValue('--banner-height');
+            return nav && prop && window.getComputedStyle(nav).top === prop;
+        });
+
+        const layout = await page.evaluate(() => {
+            const banner = document.getElementById('read-in-banner');
+            const nav = document.getElementById('navbar');
+            if (!banner || !nav) return null;
+            const bRect = banner.getBoundingClientRect();
+            const nRect = nav.getBoundingClientRect();
+            return {
+                bannerHeight: bRect.height,
+                bannerBottom: bRect.bottom,
+                navTop: nRect.top,
+                computedTop: window.getComputedStyle(nav).top,
+                customProp: document.documentElement.style.getPropertyValue('--banner-height')
+            };
+        });
+
+        assert.ok(layout, 'banner and navbar are present in Chromium');
+        assert.ok(layout.bannerHeight >= 44, `banner height (${layout.bannerHeight}) meets touch target requirements`);
+        assert.equal(layout.computedTop, layout.customProp, 'navbar computed top matches --banner-height');
+        assert.ok(layout.navTop >= layout.bannerBottom - 0.1, `navbar top (${layout.navTop}) must be at or below banner bottom (${layout.bannerBottom}) with no overlap`);
+        assert.equal(layout.customProp, `${Math.round(layout.bannerHeight)}px`, 'custom property matches banner height');
+
+        // Test dismiss cleanup
+        await page.click('.read-in-close');
+        await page.waitForFunction(() => {
+            const nav = document.getElementById('navbar');
+            return nav && window.getComputedStyle(nav).top === '0px';
+        });
+        const afterDismiss = await page.evaluate(() => {
+            const banner = document.getElementById('read-in-banner');
+            const nav = document.getElementById('navbar');
+            return {
+                bannerPresent: !!banner,
+                navTop: nav ? nav.getBoundingClientRect().top : -1,
+                computedTop: nav ? window.getComputedStyle(nav).top : '',
+                customProp: document.documentElement.style.getPropertyValue('--banner-height')
+            };
+        });
+
+        assert.equal(afterDismiss.bannerPresent, false, 'banner removed on dismiss');
+        assert.equal(afterDismiss.computedTop, '0px', 'navbar computed top returns to 0px after banner dismiss');
+        assert.equal(afterDismiss.customProp, '', 'custom property cleared on dismiss');
     } finally {
         await browser.close();
         server.close();

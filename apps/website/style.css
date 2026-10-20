@@ -2070,10 +2070,10 @@ footer {
     box-sizing: border-box;
 }
 body.has-read-in-banner #navbar {
-    top: 40px;
+    top: var(--banner-height, 61px);
 }
 body.has-read-in-banner {
-    padding-top: 40px;
+    padding-top: var(--banner-height, 61px);
 }
 .read-in-banner a {
     color: var(--green-ink);

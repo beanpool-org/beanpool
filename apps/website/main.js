@@ -466,6 +466,14 @@ function initLanguageBanner() {
         document.cookie = `beanpool_lang=${matched};path=/;max-age=31536000;SameSite=Lax${secure}`;
     });
 
+    const updateBannerHeight = () => {
+        if (!banner.isConnected) return;
+        const bannerHeight = banner.offsetHeight || 61;
+        if (document.documentElement) {
+            document.documentElement.style.setProperty('--banner-height', `${bannerHeight}px`);
+        }
+    };
+
     const closeBtn = document.createElement('button');
     closeBtn.className = 'read-in-close';
     closeBtn.type = 'button';
@@ -474,7 +482,13 @@ function initLanguageBanner() {
     closeBtn.addEventListener('click', () => {
         const secure = (typeof window !== 'undefined' && window.location.protocol === 'https:') ? ';Secure' : '';
         document.cookie = `beanpool_lang=en;path=/;max-age=31536000;SameSite=Lax${secure}`;
+        if (typeof window !== 'undefined') {
+            window.removeEventListener('resize', updateBannerHeight);
+        }
         banner.remove();
+        if (document.documentElement) {
+            document.documentElement.style.removeProperty('--banner-height');
+        }
         if (document.body) {
             document.body.classList.remove('has-read-in-banner');
         }
@@ -485,6 +499,10 @@ function initLanguageBanner() {
     if (document.body) {
         document.body.classList.add('has-read-in-banner');
         document.body.prepend(banner);
+        updateBannerHeight();
+        if (typeof window !== 'undefined') {
+            window.addEventListener('resize', updateBannerHeight);
+        }
     }
 }
 

@@ -44,14 +44,14 @@ Du begegnest ihr in verschiedenen Formen:
 
 - Ein kleines Label auf einem Bildschirm oder einer Karte;
 - Ein Kasten am oberen Rand eines Beispiel-Bildschirms;
-- Eine Schaltfläche, die ihren Platz behält, wie etwa **Request · Beans held safely 🏘️** bei einem Eintrag;
+- Eine Schaltfläche, die ihren Platz behält, wie etwa **Anfrage · Bohnen sicher verwahrt 🏘️** bei einem Eintrag;
 - Eine Zeile, in der sich eine lokale Community unterscheidet, wie etwa „🏘️ In einer lokalen Community ist dies ein Preis in Bohnen ›“.
 
-Tippe auf ein beliebiges davon, um **Why this lives in a local community** zu öffnen. Es erklärt in ein oder zwei Sätzen den Grund und bietet dann **Eine Gemeinschaft gründen** und, wo möglich, **Communitys in deiner Nähe** sowie **So funktioniert's** an.
+Tippe auf ein beliebiges davon, um **Warum dies in einer lokalen Community lebt** zu öffnen. Es erklärt in ein oder zwei Sätzen den Grund und bietet dann **Eine Gemeinschaft gründen** und, wo möglich, **Communitys in deiner Nähe** sowie **So funktioniert's** an.
 
 ## Example Valley
 
-Die Bildschirme mit der Markierung zeigen **Example Valley**: Eine fiktive Community, damit du die Bildschirme einer lokalen Community mit Inhalten sehen kannst.
+Die Bildschirme mit der Markierung zeigen **Beispieltal**: Eine fiktive Community, damit du die Bildschirme einer lokalen Community mit Inhalten sehen kannst.
 
 - **Buch:** Ein Beispiel-Mitglied mit 85 Bohnen, einem Verfügungsrahmen bis zu −200, einem Vertrauensabzeichen und ein paar aktuellen Handelsgeschäften wie Brot, einer Stunde Gartenarbeit und einigen Setzlingen.
 - **Gemeingut:** Die Example Valley Bakery, ein Betrieb, den ihre Mitglieder verwalten, und eine Entscheidung: Ein Kompostplatz, bezahlt aus den gemeinsamen Bohnen des Gemeinguts.
@@ -61,7 +61,7 @@ Niemand in Example Valley hat einen Namen. Du siehst „ein Nachbar“, „das G
 
 Die **ⓘ**-Schaltflächen und die Leitfadenseiten auf diesen Bildschirmen sind die echten: Sie erklären, wie es in einer lokalen Community funktioniert.
 
-Eine Schaltfläche, die Bohnen senden, einen Deal abschließen, abstimmen, eine Zusage machen oder einladen würde, öffnet stattdessen **Why this lives in a local community**. Sie sendet nichts und ändert nichts.
+Eine Schaltfläche, die Bohnen senden, einen Deal abschließen, abstimmen, eine Zusage machen oder einladen würde, öffnet stattdessen **Warum dies in einer lokalen Community lebt**. Sie sendet nichts und ändert nichts.
 
 Der Kasten oben auf einem Beispiel-Bildschirm hat ein **✕**. Tippe darauf und der Kasten schrumpft auf eine Zeile: „🏘️ Ein Beispiel · Warum? ›“. Dein Smartphone oder Browser merkt sich das für diese Community. Tippe auf dem Smartphone auf die Zeile, um den Kasten wieder zu öffnen. Tippe in der Web-App auf die Zeile, um den Grund zu sehen, oder auf **▾**, um den Kasten wieder zu öffnen.
 
@@ -91,7 +91,7 @@ Eine lokale Community läuft auf ihrem eigenen kleinen Server, der von jemandem 
 - **Was du niemals siehst:** Die privaten Chats deiner Mitglieder mit einer einzelnen Person. Sie sind verschlüsselt, sodass der Server sie nicht lesen kann.
 - **Wie lange es dauert:** Etwa eine halbe Stunde für jemanden, der einer Anleitung folgen kann.
 
-Tippe zu Beginn in einem beliebigen **Why this lives in a local community**-Hinweisblatt oder auf dem Smartphone auf der Karte **Finde deine Community** der Startseite auf **Eine Gemeinschaft gründen**. Es werden drei Möglichkeiten für den Betrieb vorgestellt: Ein ausgedienter Computer zu Hause, ein kleiner gemieteter Server oder die Bitte um Hilfe in der globalen Community. **Details meiner Community kopieren** kopiert den Namen deiner Community, den Ort und die Angaben, wie man dich erreichen kann, um sie in die Einstellungen deines neuen Servers einzufügen.
+Tippe zu Beginn in einem beliebigen **Warum dies in einer lokalen Community lebt**-Hinweisblatt oder auf dem Smartphone auf der Karte **Finde deine Community** der Startseite auf **Eine Gemeinschaft gründen**. Es werden drei Möglichkeiten für den Betrieb vorgestellt: Ein ausgedienter Computer zu Hause, ein kleiner gemieteter Server oder die Bitte um Hilfe in der globalen Community. **Details meiner Community kopieren** kopiert den Namen deiner Community, den Ort und die Angaben, wie man dich erreichen kann, um sie in die Einstellungen deines neuen Servers einzufügen.
 
 Die Schritte dazu stehen in „Erstinstallation“ im Leitfaden für Personen, die eine Community betreiben, auf beanpool.org. Sobald dein Server läuft, beanspruchst du ihn mit deinem Smartphone: Richte die Kamera deines Telefons auf den QR-Code, den dein Server anzeigt, oder tippe in BeanPool auf **Neuen Community-Server einrichten** (in **Eine Community finden** oder **Eine Gemeinschaft gründen**), dann auf **Code scannen**. Die Einstellungen helfen dir anschließend, deine Community zu benennen, einen zweiten Eigentümer hinzuzufügen und deine ersten Einladungen zu erstellen. Lege den Standort deiner Community ebenfalls in den Einstellungen fest, damit Menschen in deiner Nähe sie finden können.
 

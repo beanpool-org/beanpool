@@ -16,12 +16,12 @@ Gibt es noch keine Community in deiner Nähe? Du kannst eine gründen: Siehe unt
 
 ## Communitys in deiner Nähe
 
-In der globalen Community zeigt die Karte **Finde deine Community** auf der **Startseite** die Communitys in deiner Nähe an. In deinen ersten 30 Tagen bleibt sie nahe dem oberen Rand der Startseite und kann weder entfernt noch verschoben werden; danach kannst du sie wie jede andere Karte entfernen. In der Web-App ist jede Community auf der Karte ein Link zu ihrer eigenen Seite. Wenn sie nicht weiß, wo du bist, tippe auf **Mein Gebiet teilen** oder auf **or type your town** und wähle deinen Ort. Die folgenden Schritte gelten für die Smartphone-App.
+In der globalen Community zeigt die Karte **Finde deine Community** auf der **Startseite** die Communitys in deiner Nähe an. In deinen ersten 30 Tagen bleibt sie nahe dem oberen Rand der Startseite und kann weder entfernt noch verschoben werden; danach kannst du sie wie jede andere Karte entfernen. In der Web-App ist jede Community auf der Karte ein Link zu ihrer eigenen Seite. Wenn sie nicht weiß, wo du bist, tippe auf **Mein Gebiet teilen** oder auf **oder gib deinen Ort ein** und wähle deinen Ort. Die folgenden Schritte gelten für die Smartphone-App.
 
 Noch nicht in der globalen Community? Tippe oben links auf die Bohne und unter **DEINE COMMUNITIES** auf **Globale Community**, tritt ihr dann mit dem bestehenden Konto bei: Siehe „Mehr als eine Community“. Wenn du noch kein Konto hast, tippe auf dem ersten Bildschirm der App auf **BeanPool weltweit entdecken**: Siehe „BeanPool beitreten“.
 
 - Tippe auf **Communitys in deiner Nähe**, um die gesamte Liste zu sehen.
-- Communitys werden nach Entfernung aufsteigend aufgeführt, sobald die App weiß, wo du bist. Weiß sie es nicht, tippe auf **Meinen Standort verwenden** oder suche nach Namen. Möchtest du deinen Standort lieber nicht teilen? Tippe auf **or type your town**, beginne zu tippen und wähle deinen Ort aus der Liste: Es wird nur ein ungefährer Punkt gespeichert, und **ändern** wählt einen anderen.
+- Communitys werden nach Entfernung aufsteigend aufgeführt, sobald die App weiß, wo du bist. Weiß sie es nicht, tippe auf **Meinen Standort verwenden** oder suche nach Namen. Möchtest du deinen Standort lieber nicht teilen? Tippe auf **oder gib deinen Ort ein**, beginne zu tippen und wähle deinen Ort aus der Liste: Es wird nur ein ungefährer Punkt gespeichert, und **ändern** wählt einen anderen.
 - Communitys in etwa derselben Entfernung zu dir werden gemischt, sodass nicht immer dieselbe Community ganz oben steht.
 - Jede zeigt an, wie weit sie entfernt ist und wie viele Mitglieder sie hat, sofern die Community dies angegeben hat.
 

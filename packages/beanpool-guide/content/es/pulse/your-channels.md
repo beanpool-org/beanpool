@@ -26,7 +26,7 @@ Cada sitio funciona un poco diferente. La pantalla indica cuál:
 ## Cuentas verificadas
 
 - Cuando tocas **Connect TikTok** o **Connect Instagram**, el servidor de tu comunidad le pregunta a Instagram o TikTok en qué cuenta iniciaste sesión. El canal se marca como verificado solo cuando esa es la cuenta del canal.
-- ¿Iniciaste sesión en una cuenta diferente? La pantalla te lo indica. Inicia sesión en la cuenta correcta y toca el mismo botón **Connect** de nuevo.
+- ¿Iniciaste sesión en una cuenta diferente? La pantalla te lo indica. Inicia sesión en la cuenta correcta y toca el mismo botón **Conectar** de nuevo.
 - Añade el canal como tu **@usuario** para que pueda ser comprobado. Un enlace corto no se puede comprobar.
 - Los canales de Facebook nunca se marcan como verificados.
 - Si un canal dice **Vuelve a conectar para restablecer tu insignia de verificado**, toca **Reconnect TikTok** o **Reconnect Instagram**.

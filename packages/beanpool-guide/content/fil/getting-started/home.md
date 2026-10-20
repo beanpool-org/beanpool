@@ -22,7 +22,7 @@ Nagsisimula ang Home ng isang bagong miyembro na halos walang laman: isang card,
 - Tinatapos ng **Laktawan**, sa card o sa bar, ang tour. Kung hindi ka pa naglalagay ng card sa Home sa sarili mo, ibinibigay nito sa iyo ang karaniwang lima. Kung nakapaglagay ka na (mula sa **Magdagdag ng card**, o isang pinili sa huling hakbang ng tour), pinapanatili ng Home ang mga card na pinili mo.
 - Hindi kailanman kusang nagsisimula ang tour sa sarili nito. Kung isasara mo ang app habang nasa gitna, sinasabi ng card ang "Ipagpatuloy ang tour sa hakbang 3".
 - Naitatabi sa iyong account ang Tapos na o Laktawan, kaya hindi na babalik ang card sa iba mo pang telepono o browser. Upang makita muli ang tour, i-tap ang **?** sa itaas at **Ulitin ang tour**.
-- Kung naisaayos mo na ang iyong Home bago pa umiral ang tour, walang magbabago para sa iyo. Nasa **Pagsisimula** ang **Magdagdag ng card**, sa ilalim ng **Pagsisimula**, kung nais mo ito.
+- Kung naisaayos mo na ang iyong Home bago pa umiral ang tour, walang magbabago para sa iyo. Nasa **Magdagdag ng card** ang **Pagsisimula**, sa ilalim ng **Pagsisimula**, kung nais mo ito.
 
 Pagkatapos mong i-tap ang **Laktawan** sa tour, may lalabas na isang linyang tip sa ilalim ng unang card. I-tap ang **✕** upang itabi ito. Pagkatapos ng **Tapos na** ay hindi na ito ipinapakita.
 
@@ -50,7 +50,7 @@ Habang may mga salita sa paghahanap ng Merkado, isang button sa ilalim nito ang 
 Ipinapakita lamang ng Home ang mga card na may sasabihin sa iyo, sa sarili mong pagkakasunod-sunod. Ang card na idaragdag mo ay pupunta sa itaas, sa ilalim ng **Kailangan ka**. Ito ang mga card na maaari mong magkaroon:
 
 - **Kailangan ka:** habang may naghihintay lamang sa iyo: isang deal na naghihintay sa iyo, mga hindi pa nababasang mensahe mula sa mga tao, mga bagong linya sa iyong mga grupo, isang boto na hindi mo pa naibibigay (amber kapag magsasara ito sa loob ng dalawang araw), at, para sa mga may-ari, admin at moderator, ang gawaing admin na naghihintay sa kanila, tulad ng mga ulat na susuriin. Sa telepono, ito ang parehong mga bagay na ipinapakita ng maliliit na icon sa itaas ng screen. Nananatiling una ang card na ito at hindi maaaring ilipat o itago.
-- **Paraan mo pabalik:** kung sumali ka gamit ang 12 salita at walang nakakonektang sign-in, ipinapaalala sa iyo ng card na ito na panatilihing ligtas ang mga ito o magdagdag ng sign-in. I-tap ang **✕** upang itabi ito. Bumabalik ito nang isang beses pagkatapos ng iyong unang post at isang beses pagkatapos ng isang linggo, pagkatapos ay naninirahan na lamang sa **Setting**: sa ilalim ng **Proteksyon ng Account** sa telepono, at sa itaas ng Mga Setting, na may pamagat na **Isang paraan pabalik**, sa web app. Hindi ito ipinapakita kung saan may hawak nang kopya ng iyong susi ang key vault ng BeanPool.
+- **Paraan mo pabalik:** kung sumali ka gamit ang 12 salita at walang nakakonektang sign-in, ipinapaalala sa iyo ng card na ito na panatilihing ligtas ang mga ito o magdagdag ng sign-in. I-tap ang **✕** upang itabi ito. Bumabalik ito nang isang beses pagkatapos ng iyong unang post at isang beses pagkatapos ng isang linggo, pagkatapos ay naninirahan na lamang sa **Mga Setting**: sa ilalim ng **Proteksyon ng Account** sa telepono, at sa itaas ng Mga Setting, na may pamagat na **Isang paraan pabalik**, sa web app. Hindi ito ipinapakita kung saan may hawak nang kopya ng iyong susi ang key vault ng BeanPool.
 - **Hanapin ang iyong komunidad:** sa pandaigdigang komunidad lamang. Ipinapakita nito ang mga komunidad na pinakamalapit sa iyo at nagbibigay-daan sa iyo na humiling na sumali sa kanila (tingnan ang "Paghahanap ng kalapit na komunidad"). Sa telepono, mayroon itong **Mga komunidad na malapit sa iyo**, **Magsimula ng komunidad** at **Sabihan ako kapag may nagsimula rito**. Sa web app, ang bawat komunidad ay isang link sa sarili nitong pahina. Kung hindi nito alam kung nasaan ka, i-tap ang **o i-type ang iyong bayan** at piliin ang iyong bayan sa halip na ibahagi ang iyong lokasyon, sa telepono at sa web app. Ang card ng web app ay mayroon ding **Ibahagi ang area ko**. Kapag nakapili ka na ng isang bayan, sinasabi ng card ng web app ang "Near" at ang bayan, na may **Palitan**. Kung ang card ng web app ay mayroon nang lokasyon, ginagawa rin ng **Wala rito? I-type ang iyong bayan** ang parehong bagay. Sa iyong unang 30 araw sa pandaigdigang komunidad, nananatili ito sa itaas, at hindi maaaring alisin o ilipat. Pagkatapos nito, isa na itong card tulad ng iba pa.
 - **Mga unang hakbang:** isang maikling checklist. Sa isang lokal na komunidad: i-post ang iyong unang Alok, magdagdag ng larawan sa profile, pumili ng ilang bagay na gusto mo, at, kapag nakapag-post ka na ng isang Alok, kung saan naka-on ang mga imbitasyon, mag-imbita ng isang tao. Kung saan ang mga admin lamang ang nag-iimbita, ipinapakita lamang ng telepono ang huling linyang iyon sa mga may-ari at admin. Ipinapakita ito ng web app sa bawat miyembro, at ang isang linyang hindi pa natapos ay nagpapanatili sa card. Sa telepono, nawawala ang card kapag tapos na ang bawat linya. Sa web app, nananatili rin ito sa iyong unang 14 na araw.
 - **First steps on the global community:** mag-post ng isang bagay na libre o para sa palitan, at, kung may nakalistang komunidad sa loob ng 250 km mula sa iyo, isang mungkahi na hilingin dito na papasukin ka (hindi kailanman pinapanatiling bukas ng linyang iyon ang card). Maaari rin nitong sabihin ang mga limitasyon sa isang bagong account, tulad ng kung gaano karaming mga post at mga bagong chat ang maaari mong gawin sa isang araw sa simula. Nananatili ito sa iyong unang 14 na araw, at pagkatapos nito hanggang sa magawa ang post at matapos ang mga limitasyon.
@@ -77,7 +77,7 @@ Sa telepono, kapag lumipat ang iyong komunidad sa bagong address, may card sa it
 
 Karamihan sa mga card ay may **…** na button sa kanang bahagi sa itaas. Ang mga ito ay wala:
 
-- **Kailangan ka**, **Pagsisimula** at **Iyong komunidad**. May **Pagsisimula** ang **Laktawan** sa halip.
+- **Kailangan ka**, **Pagsisimula** at **Iyong komunidad**. May **Laktawan** ang **Pagsisimula** sa halip.
 - **Paraan mo pabalik**, sa telepono. May sarili itong **✕**.
 - **Hanapin ang iyong komunidad**, sa iyong unang 30 araw sa pandaigdigang komunidad.
 
@@ -88,7 +88,7 @@ I-tap ang **…** upang:
 - **Ilipat pababa:** ipinagpapalit ang card sa card sa ilalim nito.
 - **Alisin:** inaalis ang card mula sa Home, kasama ang mga setting nito. Ibabalik ito ng **Magdagdag ng card**. Walang magtatanong sa iyo para kumpirmahin. Ang pag-alis ng **Mga Tip** ay kapareho ng **Huwag nang ipakita muli ang mga tip**.
 
-Sa web app, may **Paraan mo pabalik** din ang **Your way back in**, na may **Ilipat pataas**, **Ilipat pababa** at **Alisin**.
+Sa web app, may **…** din ang **Paraan mo pabalik**, na may **Ilipat pataas**, **Ilipat pababa** at **Alisin**.
 
 Naka-grey out ang paglipat kapag wala nang mapupuntahan: sa pinakataas o pinakababa ng mga card na maaari mong ilipat. Ang unang card sa ilalim ng **Kailangan ka** ay hindi maaaring ilipat pataas, at ang huling card sa itaas ng **Iyong komunidad** ay hindi maaaring ilipat pababa.
 
@@ -98,7 +98,7 @@ Sa ibaba ng Home, sa card ng iyong komunidad, i-tap ang **I-edit ang Home**.
 
 - Nauuna ang **＋ Magdagdag ng card**. Binubuksan nito ang parehong listahan tulad ng **Magdagdag ng card** sa Home.
 - Pagkatapos ay kasunod ang mga card sa iyong Home, sa iyong pagkakasunod-sunod. Bawat isa ay may mga pataas at pababang arrow at sarili nitong **…** (Setting…, Ilipat pataas, Ilipat pababa, Alisin). Ang saved search ay nakalista ayon sa mga salita nito, at ayon sa **Mga Alok** o **Mga Kahilingan** kapag naghahanap lamang ito ng isa, tulad ng "itlog" o "Needs · eggs", kaya ang dalawang paghahanap ay dalawang magkaibang hanay.
-- Ang card na walang maipakikita ngayon ay nagsasabing **Walang maipapakita ngayon**. Sinasabi ng **Mga Tip** ang **Lahat ng tip ay nakita na** kapag nakita mo na ang bawat tip, at sinasabi ng **Araw at buwan** ang **Walang maipapakita ngayon: walang alam na lugar.** habang walang lokasyon na mapagbabatayan.
+- Ang card na walang maipakikita ngayon ay nagsasabing **Walang maipapakita ngayon**. Sinasabi ng **Mga Tip** ang **Nakita na ang lahat ng tip** kapag nakita mo na ang bawat tip, at sinasabi ng **Araw at buwan** ang **Walang maipapakita ngayon: walang alam na lugar.** habang walang lokasyon na mapagbabatayan.
 - I-tap ang **I-reset sa mga default** upang bumalik sa karaniwang limang card.
 - Walang mga switch at walang nakatagong listahan: ang card na inalis mo ay nasa **Magdagdag ng card**.
 - Ang mga card lamang na maipapakita ng iyong komunidad ang nakalista, sa telepono at sa web app. Halimbawa, ang listahan ng pandaigdigang komunidad ay walang **Iyong mga munggo** o **Mga kasunduan mo**: doon, ang Talaan at **Aking mga Deal** ay nagpapakita sa halip ng mga halimbawa mula sa isang lokal na komunidad.

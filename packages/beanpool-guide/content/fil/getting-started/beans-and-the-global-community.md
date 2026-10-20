@@ -85,10 +85,10 @@ Kung makakayanan ng pandaigdigang komunidad balang araw na suriin kung sino ang 
 
 Tumatakbo ang isang lokal na komunidad sa sarili nitong maliit na server, na inaalagaan ng isang lokal na residente. Maaaring ikaw iyon.
 
-- **Ano ang magagastos:** isang reserbang computer na nananatiling bukas sa bahay, o isang maliit na inupahang server para sa ilang dolyar bawat buwan. Libre ang software.
+- **Ano ang gastos nito:** isang reserbang computer na nananatiling bukas sa bahay, o isang maliit na inupahang server para sa ilang dolyar bawat buwan. Libre ang software.
 - **Sino ang nagpapatakbo nito:** ikaw, sa sarili mong makina o sa inupahan mo. Hindi nito kailangan ang beanpool.org: maaari itong magkaroon ng sarili nitong web address.
-- **Ano ang pananagutan mo:** ang mga ulat mula sa iyong mga miyembro ay dumarating sa iyo. Ang data ng komunidad ay sa iyo upang i-back up, gamit ang isang recovery code. Magpanatili ng dalawang may-ari, at panatilihing bukas at napapanahon ang server.
-- **Ang hindi mo kailanman makikita:** ang mga chat ng iyong mga miyembro sa isang tao. Naka-lock ang mga ito upang hindi mabasa ng server ang mga ito.
+- **Ano ang iyong inaako:** ang mga ulat mula sa iyong mga miyembro ay dumarating sa iyo. Ang data ng komunidad ay sa iyo upang i-back up, gamit ang isang recovery code. Magpanatili ng dalawang may-ari, at panatilihing bukas at napapanahon ang server.
+- **Kung ano ang hindi mo kailanman nakikita:** ang mga chat ng iyong mga miyembro sa isang tao. Naka-lock ang mga ito upang hindi mabasa ng server ang mga ito.
 - **Gaano katagal:** mga kalahating oras, para sa isang taong marunong sumunod sa mga tagubilin.
 
 Upang magsimula, i-tap ang **Magsimula ng komunidad** sa anumang sheet ng **Bakit ito nasa lokal na komunidad**, o, sa telepono, sa card ng **Hanapin ang iyong komunidad** sa Home. Nagpapakita ito ng tatlong paraan upang magpatakbo ng isa: isang reserbang computer sa bahay, isang maliit na inupahang server, o paghingi ng tulong sa pandaigdigang komunidad. Kinokopya ng **Kopyahin ang mga detalye ng aking komunidad** ang pangalan ng iyong komunidad, lokasyon at kung paano ka maaabot ng mga tao, upang i-paste sa mga setting ng iyong bagong server.

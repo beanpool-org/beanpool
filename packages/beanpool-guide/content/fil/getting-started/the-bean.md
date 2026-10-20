@@ -10,17 +10,17 @@ source-hash: 3f81c6f1fb085719
 
 Sa telepono, i-tap ang bean sa itaas sa kaliwa ng screen. O kaya:
 
-- Buksan ang **Setting** gamit ang sliders button sa itaas ng screen.
+- Buksan ang **Mga Setting** gamit ang sliders button sa itaas ng screen.
 - Sa ilalim ng **BeanPool**, i-tap ang **Tulong at kung paano ito gumagana**.
 
-Sa web app, nasa parehong lugar ito: **Setting**, pagkatapos ay **Tulong at kung paano ito gumagana** sa ilalim ng **BeanPool**.
+Sa web app, nasa parehong lugar ito: **Mga Setting**, pagkatapos ay **Tulong at kung paano ito gumagana** sa ilalim ng **BeanPool**.
 
 ## Kung ano ang nasa loob nito
 
 - **Iyong komunidad:** ang pangalan nito (ang address nito sa web app), at kung maabot ang server nito sa ngayon. Sa telepono, sa ilalim nito, **Your communities**: i-tap ang isa upang lumipat dito, o i-tap ang **Magdagdag ng komunidad**. Ang **Pandaigdigang komunidad** ay palaging isa sa mga hanay, na may ikalawang linya na nagsasabi kung miyembro ka, kung maaari kang sumali rito, o kung bakit hindi ito magagamit sa ngayon. Tingnan ang "Mahigit sa isang komunidad".
 - **Mga Gabay:** kung paano gumagana ang BeanPool, ang mga alituntunin at kung paano ginagawa ang mga desisyon, at mga karaniwang tanong.
 - **Paano gamitin ang app:** isang maikling pahina para sa bawat gawain, na nakapangkat ayon sa ayos ng app: Pagsisimula, Merkado, Mapa, Usapan, Balita, Komun, Talaan at Mga Setting at kaligtasan.
-- **Ang proyektong BeanPool:** kung ano ang bago sa bersyong ito, at isang link patungo sa website na beanpool.org (sa telepono, na may button na **Ibahagi** upang ipadala ito sa isang kaibigan).
+- **Ang proyekto ng BeanPool:** kung ano ang bago sa bersyong ito, at isang link patungo sa website na beanpool.org (sa telepono, na may button na **Ibahagi** upang ipadala ito sa isang kaibigan).
 
 ## Paghahanap
 

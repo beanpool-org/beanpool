@@ -63,7 +63,7 @@ Kapag walang kailangan sa iyo, wala talagang mga icon. Wala kang napalampas na a
 Sa halip na mga icon, maaari kang makakita ng button:
 
 - **Sumali** (amber): bumibisita ka bilang bisita. I-tap ito upang buksan ang **Mga Imbitasyon**. Sa isang lokal na komunidad sasali ka roon gamit ang isang imbitasyon. Sa pandaigdigang komunidad, i-tap ang **Join with 12 words or a sign-in** (**Join with a sign-in** kung saan tumatanggap lamang ng sign-in ang komunidad).
-- **Kumonekta** (pula): hindi nakakonekta sa isang komunidad ang teleponong ito. I-tap ito upang buksan ang **Setting**, kung saan maaari kang magdagdag ng isa.
+- **Kumonekta** (pula): hindi nakakonekta sa isang komunidad ang teleponong ito. I-tap ito upang buksan ang **Mga Setting**, kung saan maaari kang magdagdag ng isa.
 
 Habang ipinapakita ang isa sa mga ito, nakatago ang icon ng imbitasyon.
 
@@ -71,7 +71,7 @@ Habang ipinapakita ang isa sa mga ito, nakatago ang icon ng imbitasyon.
 
 - **Ang ? icon** (isang tandang pananong sa loob ng bilog): tulong para sa screen kung nasaan ka. Binubuksan nito ang isang maikling sheet na nagsasabi kung para saan ang screen na iyon, pagkatapos ay **Read the guide page**, **Maghanap sa gabay** at **Ulitin ang tour**. Nasa bawat tab ito, para sa mga miyembro at mga bisita. Sa web app nakapwesto ito sa pagitan ng iyong larawan at Mga Setting sa itaas, at sa tabi ng Mga Setting sa ibaba ng side bar sa isang malapad na screen.
 - **Ang icon ng imbitasyon** (isang tao na may plus): binubuksan ang **Mga Imbitasyon**, upang mag-imbita ng isang tao o sumali sa isa pang komunidad. Tingnan ang "Pagsali sa BeanPool".
-- **Setting** (ang mga slider): binubuksan ang **Setting**. I-tap ito muli upang bumalik sa kung nasaan ka.
+- **Mga Setting** (ang mga slider): binubuksan ang **Mga Setting**. I-tap ito muli upang bumalik sa kung nasaan ka.
 - **Ang iyong larawan:** binubuksan ang iyong sariling profile, gaya ng nakikita ng iba.
 
 ## Mga mensahe ng update

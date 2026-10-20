@@ -21,7 +21,7 @@ Sa pandaigdigang komunidad, ipinapakita ng card na **Hanapin ang iyong komunidad
 Wala pa sa pandaigdigang komunidad? I-tap ang bean sa itaas sa kaliwa at, sa ilalim ng **Your communities**, i-tap ang **Pandaigdigang komunidad**, pagkatapos ay sumali rito gamit ang account na mayroon ka: tingnan ang "Mahigit sa isang komunidad". Kung wala pang account, i-tap ang **Tuklasin ang BeanPool sa buong mundo** sa unang screen ng app: tingnan ang "Pagsali sa BeanPool".
 
 - I-tap ang **Mga komunidad na malapit sa iyo** upang makita ang buong listahan.
-- Nakalista ang mga komunidad nang pinakamalapit muna kapag alam ng app kung nasaan ka. Kung hindi, i-tap ang **Gamitin ang location ko**, o maghanap ayon sa pangalan. Mas gusto mong hindi ibahagi ang iyong lokasyon? I-tap ang **o i-type ang iyong bayan**, simulan ang pagtitipa, at piliin ang iyong bayan mula sa listahan: isang tinatayang punto lamang ang itinatago, at pumipili ng iba ang **Palitan**.
+- Nakalista ang mga komunidad nang pinakamalapit muna kapag alam ng app kung nasaan ka. Kung hindi, i-tap ang **Gamitin ang aking lokasyon**, o maghanap ayon sa pangalan. Mas gusto mong hindi ibahagi ang iyong lokasyon? I-tap ang **o i-type ang iyong bayan**, simulan ang pagtitipa, at piliin ang iyong bayan mula sa listahan: isang tinatayang punto lamang ang itinatago, at pumipili ng iba ang **Palitan**.
 - Ang mga komunidad na nasa halos parehong distansya mula sa iyo ay pinaghalu-halo, kaya walang iisang komunidad na palaging nasa itaas.
 - Ipinapakita ng bawat isa kung gaano ito kalayo at kung gaano karaming miyembro ang mayroon ito, kapag sinabi ito ng komunidad.
 
@@ -48,7 +48,7 @@ Sinasabi ng card ang **Inimbita ka ng isang miyembro**. I-tap ang **Sumali** kas
 - Kasama mo ang iyong account: ang parehong susi at ang parehong 12 salita sa Ingles. Kasama rin ang iyong pangalan. Kung mayroon nang ganoong pangalan ang iba roon, may idinaragdag na numero, tulad ng "Maria2". Maaari mo itong palitan sa susunod na hakbang.
 - Ang iyong mga post, chat at kalakalan ay nananatili sa bawat komunidad. Sa bago ay magsisimula ka nang bago.
 - Susunod mong susuriin ang iyong pangalan at larawan para sa bagong komunidad.
-- Ang isang sign-in na nagpoprotekta sa iyong account ay itinatabi ng bawat komunidad. Humihiling ang app na protektahan mo rin ang iyong account sa bagong komunidad: i-tap ang **Protektahan ito**, o **Mamaya**, at gawin ito anumang oras sa **Setting**.
+- Ang isang sign-in na nagpoprotekta sa iyong account ay itinatabi ng bawat komunidad. Humihiling ang app na protektahan mo rin ang iyong account sa bagong komunidad: i-tap ang **Protektahan ito**, o **Mamaya**, at gawin ito anumang oras sa **Mga Setting**.
 
 Mananatili kang miyembro ng pandaigdigang komunidad, at maaari kang lumipat sa pagitan ng mga ito: tingnan ang "Mahigit sa isang komunidad".
 

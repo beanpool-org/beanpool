@@ -64,7 +64,7 @@ Entri tersebut memuat nama, waktu, tempat, dan tautan kembali ke acara. Jika tua
 - **Judul**, dan kapan acara **Mulai**. **Selesai** bersifat opsional; standarnya adalah 2 jam kemudian kecuali jika kamu mengubahnya.
 - Waktu disesuaikan dengan zona waktu acara itu sendiri, yang diambil dari pin. Ketika zona tersebut berbeda dari zonamu sendiri, sebuah baris di bawah waktu akan menyebutkannya. Ketuk **Ubah** di sampingnya jika tidak sesuai.
 - **Pengulangan:** pilih seberapa sering acara berulang, seperti setiap minggu pada hari tersebut atau sebulan sekali, atau biarkan pada **Tidak berulang**. **Hingga** bersifat opsional: biarkan kosong dan acara akan berulang sampai kamu membatalkannya.
-- Pilih **Di suatu tempat** atau **Online**. Untuk acara online tidak ada tempat dan tidak ada pin: tambahkan **Tautan untuk bergabung** sebagai gantinya. Hanya kamu dan orang yang hadir yang melihatnya (jika kamu menyaring yang masuk, hanya orang yang kamu izinkan). Waktunya mengikuti zona waktumu sendiri, dan semua orang melihatnya dalam zona waktu mereka, ditandai **waktu Anda**.
+- Pilih **Di suatu tempat** atau **Daring**. Untuk acara online tidak ada tempat dan tidak ada pin: tambahkan **Tautan untuk bergabung** sebagai gantinya. Hanya kamu dan orang yang hadir yang melihatnya (jika kamu menyaring yang masuk, hanya orang yang kamu izinkan). Waktunya mengikuti zona waktumu sendiri, dan semua orang melihatnya dalam zona waktu mereka, ditandai **waktu Anda**.
 - **Nama tempat**, seperti "Balai desa".
 - Letakkan pin di peta: ketuk peta, cari **Cari alamat**, atau ketuk **Gunakan lokasi saya**. Ketuk **Perkiraan (~100 m)** jika kamu tidak ingin titik pastinya diperlihatkan. Lihat "Lokasi pin kamu".
 - **Deskripsi**, dan foto jika kamu mau.
@@ -84,7 +84,7 @@ Buka acaramu. Sebagai tuan rumah, kamu dapat:
 - melihat **Siapa yang hadir**, dan mengizinkan orang masuk: **Izinkan masuk** di samping nama (ketuk lagi untuk membatalkannya), atau **Izinkan semua masuk**. Temanmu sendiri langsung diizinkan masuk begitu mereka mengetuk Hadir. Jika kamu menghapus centang pada **Hanya orang yang saya izinkan yang bisa melihat catatan dan obrolan**, semua orang yang hadir akan melihat catatan dan obrolan sejauh ini, dan obrolan akan menyatakan bahwa tuan rumah telah membukanya;
 - **Edit acara**. Jika kamu mengubah waktu atau tempat, semua orang yang hadir akan diberi tahu;
 - **Salin ke tanggal baru**, untuk mengadakannya lagi;
-- **Batalkan acara**, lalu konfirmasi (**Batalkan acara** lagi di ponsel, **OK** di web app). Semua orang yang hadir dapat melihat bahwa acara dibatalkan, dan obrolannya menjadi hanya-baca.
+- **Batalkan acara**, lalu konfirmasi (**Batalkan acara** lagi di ponsel, **Oke** di web app). Semua orang yang hadir dapat melihat bahwa acara dibatalkan, dan obrolannya menjadi hanya-baca.
 
 ## Acara berulang
 

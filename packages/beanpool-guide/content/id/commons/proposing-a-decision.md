@@ -46,4 +46,4 @@ Ini menjaga antrean tetap lancar. Jika suatu hibah disetujui saat dana Sarana Be
 - **A community vote can't remove or suspend an owner or admin of this community's server:** orang yang kamu pilih mengelola server. Seorang pemilik dapat mencabut peran mereka terlebih dahulu.
 - **This grant is bigger than the Commons could pay:** jangan meminta lebih dari jumlah yang disebutkan, atau tunggu sampai lebih banyak kacang masuk.
 - **Jumlah Tidak Valid** (di web app, "Masukkan jumlah hibah positif yang valid dalam kacang"): isi berapa banyak kacang.
-- **Error:** periksa apakah deskripsimu memiliki panjang setidaknya 10 karakter.
+- **Kesalahan:** periksa apakah deskripsimu memiliki panjang setidaknya 10 karakter.

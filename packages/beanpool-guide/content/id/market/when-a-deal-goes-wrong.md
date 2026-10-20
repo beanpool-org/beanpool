@@ -15,7 +15,7 @@ Sebagian besar masalah terjadi karena kesalahpahaman. Ketuk **Pesan** pada posti
 - **Sebelum disepakati:** orang yang meminta mengetuk **Tarik Permintaan**. Orang yang memposting Permintaan mengetuk **Tolak**, lalu **Tolak**, dan dapat menambahkan pesan singkat. Permintaan yang tidak dijawab siapa pun akan berakhir dengan sendirinya setelah 7 hari.
 - **Selama kacang ditahan:** salah satu dari kalian dapat mengetuk **Batalkan Penahanan Jaminan**, lalu **Ya, Batalkan**. Semua kacang yang ditahan dikembalikan kepada orang yang membayar, dan postingan kembali ke pasar. Pihak lainnya akan diberi tahu.
 
-Di web app, **Tarik Permintaan** adalah **Batalkan Penawaran**, dan **Tolak** langsung menolak seketika, tanpa pesan. Untuk membatalkan kesepakatan yang ditahan di sana, ketuk **Batalkan Hold**, lalu **OK**.
+Di web app, **Tarik Permintaan** adalah **Batalkan Penawaran**, dan **Tolak** langsung menolak seketika, tanpa pesan. Untuk membatalkan kesepakatan yang ditahan di sana, ketuk **Batalkan Hold**, lalu **Oke**.
 
 Masing-masing pihak dapat membatalkan secara sepihak, kapan saja sebelum kacang dilepaskan. Itu termasuk setelah pekerjaan selesai. Jika hal itu terjadi padamu, bicaralah dengan mereka, lalu hubungi admin komunitasmu.
 

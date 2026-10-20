@@ -9,7 +9,7 @@ source-hash: 5a5a0ba505806e0a
 
 ## Apa itu The Pulse
 
-Buka Pulse dari kartu **The Pulse** di **Beranda**: ketuk postingan, atau ketuk **Lihat semua**. Jika tidak ada di Berandamu, kembalikan dengan **Tambah kartu** di ponsel, atau **Edit beranda** di web app. Di ponsel kamu juga dapat membukanya dari **Pengaturan**, di bawah **The Pulse**.
+Buka Pulse dari kartu **Kabar** di **Beranda**: ketuk postingan, atau ketuk **Lihat semua**. Jika tidak ada di Berandamu, kembalikan dengan **Tambah kartu** di ponsel, atau **Edit beranda** di web app. Di ponsel kamu juga dapat membukanya dari **Pengaturan**, di bawah **Kabar**.
 
 The Pulse mengumpulkan apa yang diposting anggota komunitasmu di situs lain: video, musik, blog, foto. Ini adalah cara untuk mengetahui apa yang dibuat dan dilakukan tetanggamu.
 

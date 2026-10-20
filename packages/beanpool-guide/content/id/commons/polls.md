@@ -50,4 +50,4 @@ Pemilik dan admin yang mengelola server komunitasmu tetap dapat melihat setiap s
 
 ## Menutup jajak pendapat lebih awal
 
-Jika kamu yang memulainya, ketuk **Tutup Jajak Pendapat**, lalu **Tutup Jajak Pendapat** lagi untuk mengonfirmasi (**OK** di web app).
+Jika kamu yang memulainya, ketuk **Tutup Jajak Pendapat**, lalu **Tutup Jajak Pendapat** lagi untuk mengonfirmasi (**Oke** di web app).

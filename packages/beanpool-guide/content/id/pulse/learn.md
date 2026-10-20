@@ -19,7 +19,7 @@ Anggota juga dapat menambahkan saluran panduan mereka sendiri ke Belajar, dengan
 
 Semua yang kamu butuhkan sudah tertulis di panduan ini. Video disediakan jika kamu lebih suka menonton.
 
-Di ponsel, pada jalur Belajar, ketuk gambar video dan video akan diputar langsung di kartunya. Tidak ada data yang dimuat dari YouTube sampai kamu mengetuknya. Di web app, mengetuk video akan membukanya di YouTube pada tab baru. Lihat "The Pulse".
+Di ponsel, pada jalur Belajar, ketuk gambar video dan video akan diputar langsung di kartunya. Tidak ada data yang dimuat dari YouTube sampai kamu mengetuknya. Di web app, mengetuk video akan membukanya di YouTube pada tab baru. Lihat "Kabar".
 
 Ketika BeanPool telah membuat video untuk suatu halaman panduan, dan video tersebut ada di jalur Belajar komunitasmu, halaman tersebut menampilkan **Tonton:** dan nama video di bagian atas. Ketuk tautan tersebut untuk membuka video di YouTube. Jika tidak ada video untuk halaman tersebut, atau kamu sedang offline, tautan tersebut tidak akan muncul.
 

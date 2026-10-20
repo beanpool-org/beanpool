@@ -131,7 +131,7 @@ Di web, buka grup di **Sarana Bersama**, di bawah **Grup**, dan ketuk **Posting 
 
 ## Koordinator dan koordinator utama
 
-Seorang koordinator mengurus grup. Siapa pun yang membuatnya adalah **koordinator utama**, dan kartu grup menyebutkan nama mereka, sebagai **Koordinator utama: Ali**. Di daftar anggota baris mereka bertanda **LEAD**.
+Seorang koordinator mengurus grup. Siapa pun yang membuatnya adalah **koordinator utama**, dan kartu grup menyebutkan nama mereka, sebagai **Koordinator utama: Ali**. Di daftar anggota baris mereka bertanda **PEMIMPIN**.
 
 Di **Peralatan Koordinator**, koordinator mana pun dapat:
 

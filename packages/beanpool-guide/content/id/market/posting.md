@@ -25,7 +25,7 @@ Di komunitas dengan Kacang kamu memerlukan nama dan foto profil. Di tempat yang 
 - **Deskripsi:** apa, kapan, di mana, dan apa pun yang perlu diketahui orang lain.
 - **Foto:** setidaknya satu, hingga lima foto. Ketuk **Kamera** atau **Galeri**. Di tempat yang tidak menggunakan Kacang, foto untuk Permintaan bersifat opsional.
 - **Lokasi:** ketuk **Lokasi saya**, atau **Pasang pin** dan ketuk peta, lalu **Konfirmasi Pin**. Setiap anggota komunitasmu dapat melihat pin tersebut, jadi pasanglah di dekatmu daripada persis di pintu depan rumahmu jika kamu menginginkannya. Lihat "Lokasi pin kamu".
-- **Harga:** sejumlah kacang. Ketuk tombol satuan untuk memilih **Total** atau **/ Jam**. Ketuk **GRATIS** untuk memberikannya secara cuma-cuma. Tombol ini juga menawarkan pilihan **/ Hr**, **/ Mgg**, dan **/ Bln**, tetapi postingan baru belum menyimpannya: postingan akan disimpan sebagai harga total. Pilih **Total** dan sebutkan periodenya di dalam deskripsi.
+- **Harga:** sejumlah kacang. Ketuk tombol satuan untuk memilih **Total** atau **/ Jam**. Ketuk **GRATIS** untuk memberikannya secara cuma-cuma. Tombol ini juga menawarkan pilihan **/ Jam**, **/ Mgg**, dan **/ Bln**, tetapi postingan baru belum menyimpannya: postingan akan disimpan sebagai harga total. Pilih **Total** dan sebutkan periodenya di dalam deskripsi.
 - Ketuk **Pasang Penawaran** atau **Pasang Permintaan**.
 
 Sampai semua yang dibutuhkan terisi, tombol akan memberi tahu apa yang kurang, seperti **Tambah foto** atau **Tentukan harga**.

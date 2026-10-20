@@ -35,7 +35,7 @@ Hanya kamu yang melihat berapa sisa kepercayaan yang kamu miliki untuk dukungan.
 
 ## Mengundurkan diri
 
-Ketuk **Mundur sebagai pengurus**, lalu konfirmasi (**Mundur** di ponsel, **OK** di web app).
+Ketuk **Mundur sebagai pengurus**, lalu konfirmasi (**Mundur** di ponsel, **Oke** di web app).
 
 - Satu-satunya pengurus tidak dapat mengundurkan diri. Mereka dapat menutup usaha tersebut sebagai gantinya.
 - Jika usaha berada di bawah nol dan membutuhkan dukunganmu untuk menutupinya, aplikasi memberi tahu bahwa kamu belum bisa melakukannya (di ponsel, **Nanti saja**).

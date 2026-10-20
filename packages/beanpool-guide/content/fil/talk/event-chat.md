@@ -13,7 +13,7 @@ Bawat kaganapan ay may sarili nitong chat. Mababasa at makakasulat dito ang host
 ## Pagbubukas nito
 
 - Buksan ang kaganapan at i-tap ang **Buksan ang event chat**.
-- O hanapin ito sa **Usapan**, sa ilalim ng **Mga Grupo**, na minarkahang 📅 **Kaganapan**. Sa web app ito ay nasa tab na **Chat**, kasama ng iba mo pang mga chat.
+- O hanapin ito sa **Usapan**, sa ilalim ng **Mga Grupo**, na minarkahang 📅 **Kaganapan**. Sa web app ito ay nasa tab na **Usapan**, kasama ng iba mo pang mga chat.
 
 Sa itaas, nagpapakita ang isang naka-pin na kahon ng **Paalala para sa mga pupunta** ng host, tulad ng eksaktong address. I-tap ang pangalan ng kaganapan sa pinakataas (sa web app, **Tingnan ang event**) upang bumalik sa kaganapan.
 

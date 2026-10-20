@@ -17,7 +17,7 @@ Wala sa mga backup ng iyong telepono ang susi ng iyong account. Ang isang bagong
 
 ## Gamit ang iyong 12 salita
 
-- I-type ang 12 salita nang sunod-sunod, o i-tap ang **Paste**.
+- I-type ang 12 salita nang sunod-sunod, o i-tap ang **I-paste**.
 - Sa ilalim ng **Aling komunidad?**, i-tap ang **Pandaigdigang komunidad**, o isa sa mga komunidad na mayroon ang teleponong ito. Para sa iba pa, i-tap ang **ibang address** at i-type ang pangalan o address ng iyong komunidad.
 - I-tap ang **Ibalik ang Pagkakakilanlan**. Babalik ang iyong pangalan at larawan mula sa iyong komunidad.
 

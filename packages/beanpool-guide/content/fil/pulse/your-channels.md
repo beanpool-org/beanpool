@@ -8,7 +8,7 @@ source-hash: bc8099cfeda70bea
 
 ## Magdagdag ng channel
 
-- Sa **Pulse**, i-tap ang **+ Mga Channel**. Sa telepono maaari mo ring buksan ang **Mga Setting** at i-tap ang **Mga Channel at Showcase**.
+- Sa **Balita**, i-tap ang **+ Mga Channel**. Sa telepono maaari mo ring buksan ang **Mga Setting** at i-tap ang **Mga Channel at Showcase**.
 - I-tap ang **+ Magdagdag ng channel**.
 - Sa ilalim ng **Saan ka nagpo-post?**, piliin ang site.
 - I-type o i-paste ang **Ang iyong link o handle**.
@@ -26,7 +26,7 @@ Ang **Connect TikTok** at **Connect Instagram** ay nasa app lamang sa telepono. 
 ## Mga beripikadong account
 
 - Kapag nag-tap ka ng **Connect TikTok** o **Connect Instagram**, tinatanong ng server ng iyong komunidad ang Instagram o TikTok kung aling account ka nag-sign in. Minamarkahan lamang ang channel bilang beripikado kapag iyon ang account sa channel.
-- Naka-sign in sa ibang account? Sinasabi ito ng screen. Mag-sign in sa tamang account at i-tap ang parehong button na **Connect** muli.
+- Naka-sign in sa ibang account? Sinasabi ito ng screen. Mag-sign in sa tamang account at i-tap ang parehong button na **Kumonekta** muli.
 - Idagdag ang channel bilang iyong **@handle** upang masuri ito. Ang isang maikling link ay hindi maaari.
 - Ang mga channel sa Facebook ay hindi kailanman minamarkahang beripikado.
 - Kung ang isang channel ay nagsasabing **Muling kumonekta para maibalik ang iyong verified badge**, i-tap ang **Muling ikonekta ang TikTok** o **Muling ikonekta ang Instagram**.

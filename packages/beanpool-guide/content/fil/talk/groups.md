@@ -26,7 +26,7 @@ Sa telepono, ang parehong listahan ay nasa **Komun**, sa ilalim ng **Mga Grupo**
 ## Pagsisimula ng grupo
 
 - Sa telepono, sa **Usapan**, sa ilalim ng **Mga Grupo**, i-tap ang **Bagong grupo**. O sa **Komun**, sa ilalim ng **Mga Grupo**, i-tap ang bilog na **+** na button. Parehong binubuksan ng dalawa ang parehong form na **Gumawa ng Grupo**. (Sa chip na **Mga Proyekto** o **Mga Negosyo**, ang **+** ay nagpapasimula ng proyekto o negosyo sa halip.)
-- Sa web app, buksan ang **Komun**, pagkatapos ay **Mga Grupo**, at i-tap ang **+ Gumawa ng Grupo**. Mananatili ka sa **Komun** pagkatapos. Upang mag-imbita ng mga tao, buksan ang grupo at i-tap ang **Mag-imbita ng mga tao**. Maaari mo ring buksan ang **Chat**, i-tap ang **Mga Grupo**, pagkatapos ay **Bagong grupo**: dadalhin ka niyon nang diretso sa chat ng bagong grupo.
+- Sa web app, buksan ang **Komun**, pagkatapos ay **Mga Grupo**, at i-tap ang **+ Gumawa ng Grupo**. Mananatili ka sa **Komun** pagkatapos. Upang mag-imbita ng mga tao, buksan ang grupo at i-tap ang **Mag-imbita ng mga tao**. Maaari mo ring buksan ang **Usapan**, i-tap ang **Mga Grupo**, pagkatapos ay **Bagong grupo**: dadalhin ka niyon nang diretso sa chat ng bagong grupo.
 - Bigyan ito ng **Pangalan ng Grupo**, hanggang 60 character, at, kung gusto mo, ng **Layunin / Deskripsyon**, hanggang 300: para saan ang grupo at para kanino ito.
 - Pumili ng **Kategorya**: **Social Circle**, **Pangkalahatan**, **Working Group** o **Guild**. Sa telepono, **Social Circle** ang pinili para sa iyo. Sa web app, **Working Group**.
 - Pumili ng **Patakaran sa Pagsali**: **Bukas**, **Humiling na Sumali** o **Imbitasyon Lamang**.
@@ -61,7 +61,7 @@ Naka-encrypt nang end-to-end ang chat ng isang grupo: ang mga miyembro lamang ng
 - Ang isang mensaheng hindi pumasa bilang isinulat ng isang miyembro ay ipinapakita bilang **Hindi Na-verify**, bilang walang nagmamay-ari, na may **Hindi ma-verify ang mensaheng ito.** Ang isang mensaheng ang susi ay hindi pa nakakarating sa iyong telepono ay mababasang **Naghihintay ng key para sa mensaheng ito.**
 - Kung mas luma ang server ng iyong komunidad at hindi pa makapag-lock ng mga group chat, sinasabi ng chat na mababasa ito ng server, at mai-lock ito kapag na-update na ang server. Kapag na-update ito, ang mga naunang mensahe ng grupo, na mababasa ng server, ay aalisin, at sinasabi ito ng isang linya sa chat. Bawat naunang mensahe ay mababasang **May naunang mensahe na inalis noong na-lock ang chat na ito**, at ang ilan na magkakasunod ay ipinapakita bilang isang linya, tulad ng **11 naunang mensahe ang inalis noong na-lock ang chat na ito**.
 
-Sa web app ang iyong mga group chat ay nasa **Chat**, na minarkahang 👥. Maaari kang magbasa at sumulat doon, na naka-encrypt nang end-to-end tulad sa telepono: tumugon, mag-react, mag-edit sa loob ng 15 minuto, at maghanap sa chat. Ang pag-mute, **Burahin**, at **Alisin** ay sa telepono lamang. Sa web app, i-tap ang pangalan ng grupo sa itaas ng chat nito upang buksan ang grupo; maaaring mag-imbita ang isang tagapag-ugnay ng mga tao mula roon. Ang chat ng isang negosyo ay hindi naka-encrypt: tingnan ang "Mga Mensahe".
+Sa web app ang iyong mga group chat ay nasa **Usapan**, na minarkahang 👥. Maaari kang magbasa at sumulat doon, na naka-encrypt nang end-to-end tulad sa telepono: tumugon, mag-react, mag-edit sa loob ng 15 minuto, at maghanap sa chat. Ang pag-mute, **Burahin**, at **Alisin** ay sa telepono lamang. Sa web app, i-tap ang pangalan ng grupo sa itaas ng chat nito upang buksan ang grupo; maaaring mag-imbita ang isang tagapag-ugnay ng mga tao mula roon. Ang chat ng isang negosyo ay hindi naka-encrypt: tingnan ang "Mga Mensahe".
 
 ## Pakikipag-usap sa chat ng grupo
 
@@ -104,7 +104,7 @@ Sa telepono, sa **Komun**, sa ilalim ng **Mga Grupo**, inililista ng **Mga grupo
 - **Sumali sa Grupo** kung ito ay bukas sa sinuman;
 - **Humiling na Sumali** kung nag-aapruba ang isang tagapag-ugnay ng mga miyembro. Makikita mo ang **Naghihintay ng Pag-apruba ang Kahilingan** hanggang sa aprubahan nila ito.
 
-Sa telepono, ang isang grupong hiniling mong salihan ay wala sa alinmang listahan hanggang sa papasukin ka ng isang tagapag-ugnay. Sa web nananatili ito sa listahan na minarkahang **Pending**.
+Sa telepono, ang isang grupong hiniling mong salihan ay wala sa alinmang listahan hanggang sa papasukin ka ng isang tagapag-ugnay. Sa web nananatili ito sa listahan na minarkahang **Nakabinbin**.
 
 Ang isang grupong **Imbitasyon Lamang** ay nakatago mula sa lahat ng hindi kasama rito o hindi inimbitahan dito.
 

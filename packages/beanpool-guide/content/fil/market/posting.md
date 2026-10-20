@@ -41,7 +41,7 @@ Sa web app ang mga hakbang ay bahagyang naiiba:
 
 ## Sa pandaigdigang komunidad
 
-Walang Munggo sa pandaigdigang komunidad, kaya ang isang post doon ay walang presyo. Ang form ay walang **Presyo**: sabihin sa paglalarawan kung ano ang nais mong matanggap bilang kapalit, o na ito ay libre. Kung saan naroon sana ang presyo, sinasabi ng form ng web app, at ng form sa telepono para sa pagbabago ng post, ang "🏘️ In a local community this is a price in Beans ›": i-tap ito upang makita kung bakit. Tingnan ang "Munggo at pandaigdigang komunidad".
+Walang Munggo sa pandaigdigang komunidad, kaya ang isang post doon ay walang presyo. Ang form ay walang **Presyo**: sabihin sa paglalarawan kung ano ang nais mong matanggap bilang kapalit, o na ito ay libre. Kung saan naroon sana ang presyo, sinasabi ng form ng web app, at ng form sa telepono para sa pagbabago ng post, ang "🏘️ Sa lokal na komunidad ito ay presyo sa munggo ›": i-tap ito upang makita kung bakit. Tingnan ang "Munggo at pandaigdigang komunidad".
 
 Makikita ng mga bisita sa pandaigdigang komunidad ang mga larawan ng listing na ito at ang tinatayang lugar nito bago sila sumali. Nakikita nila ang mga salita at larawan ng post at humigit-kumulang kung nasaan ito, hindi ang iyong pangalan, ang iyong mukha o ang eksaktong lugar. Sa web app sinasabi ito ng form sa ilalim ng mga larawan. Nakikita ng mga miyembro ng pandaigdigang komunidad ang iyong lugar sa layong humigit-kumulang isang kilometro.
 

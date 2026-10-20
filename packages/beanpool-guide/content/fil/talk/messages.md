@@ -19,7 +19,7 @@ Ang mga chat na kabilang sa isang grupo, negosyo, o kaganapan ay nasa ilalim ng 
 - Inaayos ng filter button ayon sa **Kamakailan** o **Hindi Pa Nababasa** (at, kung saan gumagamit ang iyong komunidad ng Munggo, ayon sa Munggo sa bawat kasunduan, pinakamataas o pinakamababa muna), at maaaring magpakita ng **Hindi Pa Nababasa Lang** o **Mga Kaibigan Lang**.
 - Sa telepono, ang button sa paghahanap at pag-filter ay dumudulas palayo habang nag-i-scroll ka pababa. Mag-scroll pataas nang kaunti at babalik ang mga ito. I-tap ang **Usapan** muli upang lumukso sa itaas.
 
-Sa web app ito ang tab na **Chat**. Inililista nito ang lahat ng iyong mga chat, mga grupo at kaganapan din, na may **Lahat**, **Mga Transaksyon**, **Direkta** at **Mga Grupo** sa itaas, at wala itong paghahanap o filter.
+Sa web app ito ang tab na **Usapan**. Inililista nito ang lahat ng iyong mga chat, mga grupo at kaganapan din, na may **Lahat**, **Mga Transaksyon**, **Direkta** at **Mga Grupo** sa itaas, at wala itong paghahanap o filter.
 
 ## Pagsisimula ng chat
 
@@ -32,7 +32,7 @@ Sa web app, gamitin ang **✉️ Bagong DM**, o ang button na **💬 Mensahe** s
 ## Pagpapadala
 
 - Mag-type sa **Mensahe...** at i-tap ang send button.
-- Upang magpadala ng larawan, i-tap ang **+**, pagkatapos ay **Camera** o **Gallery**. Sa web app, gamitin ang button na **📎**, o i-paste o i-drag ang isang larawan nang diretso sa chat — ipinapakita muna nito sa iyo ang larawan, at anumang na-type mo na ay sasama rito bilang caption. Ang mga larawan ay maaari lamang ipadala sa mga chat sa pagitan ng dalawang tao.
+- Upang magpadala ng larawan, i-tap ang **+**, pagkatapos ay **Kamera** o **Galerya**. Sa web app, gamitin ang button na **📎**, o i-paste o i-drag ang isang larawan nang diretso sa chat — ipinapakita muna nito sa iyo ang larawan, at anumang na-type mo na ay sasama rito bilang caption. Ang mga larawan ay maaari lamang ipadala sa mga chat sa pagitan ng dalawang tao.
 
 Ang mga tsek sa ilalim ng iyong mensahe:
 

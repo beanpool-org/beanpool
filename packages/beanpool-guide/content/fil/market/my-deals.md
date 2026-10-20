@@ -25,6 +25,6 @@ I-tap ang isang deal sa **Kasalukuyang Ginagawa** o **Aking mga Post** upang buk
 
 ## Mga Review
 
-Ang isang natapos na kalakalan sa **Kasaysayan** ay may button na **Review**. Pagkatapos mong mag-review, sinasabi nito ang **I-edit**, at maaari mong baguhin ang iyong mga bituin.
+Ang isang natapos na kalakalan sa **Kasaysayan** ay may button na **I-review**. Pagkatapos mong mag-review, sinasabi nito ang **I-edit**, at maaari mong baguhin ang iyong mga bituin.
 
 Sa web app sinasabi ng button ang **Mag-iwan ng Review**, at hanggang sa masuri mo lamang ang kalakalang iyon. Upang baguhin ang review doon, buksan ang post.

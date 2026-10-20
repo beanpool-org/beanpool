@@ -57,7 +57,7 @@ Wala itong kailangan kundi ang server lamang ng iyong komunidad, kaya gumagana p
 
 ## Mga paalala sa kaganapan
 
-Sa ilalim ng mga switch, itinatakda ng **Mga paalala sa kaganapan** kung gaano katagal bago magsimula ang isang kaganapang iyong **Pupunta** o **Interesado** ka bago ka masabihan. Lagyan ng tsek ang **1 linggo bago**, **1 araw bago**, **2 oras bago**, **1 oras bago**, o **30 minuto bago** — maaari kang maglagay ng higit sa isa — o lagyan ng tsek ang **Off** para sa wala talaga.
+Sa ilalim ng mga switch, itinatakda ng **Mga paalala sa kaganapan** kung gaano katagal bago magsimula ang isang kaganapang iyong **Pupunta** o **Interesado** ka bago ka masabihan. Lagyan ng tsek ang **1 linggo bago**, **1 araw bago**, **2 oras bago**, **1 oras bago**, o **30 minuto bago** — maaari kang maglagay ng higit sa isa — o lagyan ng tsek ang **Naka-off** para sa wala talaga.
 
 Nagsisimula ang lahat sa **1 araw** bago. Ito ang iyong karaniwang pagpipilian; ang anumang kaganapan ay maaaring itakda nang iba sa mismong kaganapan. Tingnan ang "Mga Kaganapan".
 

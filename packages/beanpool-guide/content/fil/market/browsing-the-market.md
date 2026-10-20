@@ -73,6 +73,6 @@ I-tap ang isang post upang buksan ito.
 
 Sa web app ang mga button sa isang post ay **💬 Mensahe** at **🚩 I-ulat**. Mag-block ng isang tao mula sa kanilang profile.
 
-Sa pandaigdigang komunidad ang isang post ay walang presyo sa Munggo: sinasabi nito kung ano ang gustong matanggap ng tao bilang kapalit. Kung saan naroon sana ang presyo, sinasabi nito ang "🏘️ In a local community this is a price in Beans ›". Sa halip na humiling para dito, ipinapakita ng post ang **Kahilingan · Ligtas na hawak ang mga munggo 🏘️**: i-tap ito upang makita kung paano gumagana ang deal sa isang lokal na komunidad. Ang pagpapadala ng mensahe sa tao ay gumagana tulad ng kahit saan. Tingnan ang "Munggo at pandaigdigang komunidad".
+Sa pandaigdigang komunidad ang isang post ay walang presyo sa Munggo: sinasabi nito kung ano ang gustong matanggap ng tao bilang kapalit. Kung saan naroon sana ang presyo, sinasabi nito ang "🏘️ Sa lokal na komunidad ito ay presyo sa munggo ›". Sa halip na humiling para dito, ipinapakita ng post ang **Kahilingan · Ligtas na hawak ang mga munggo 🏘️**: i-tap ito upang makita kung paano gumagana ang deal sa isang lokal na komunidad. Ang pagpapadala ng mensahe sa tao ay gumagana tulad ng kahit saan. Tingnan ang "Munggo at pandaigdigang komunidad".
 
 Hindi mo pa mai-save o maibahagi ang isang post sa ngayon.

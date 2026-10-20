@@ -50,7 +50,7 @@ Ang isang Nauulit na post ay muling bumabalik pagkatapos ng bawat deal, at ilang
 
 Pagkatapos mag-release, hinihiling sa taong nagbabayad na i-rate ang deal: 1 hanggang 5 bituin at isang maikli, opsyonal na komento. I-tap ang **Ipasa ang Rating**, o **Laktawan muna**.
 
-Parehong maaaring mag-rate ang dalawang tao sa ibang pagkakataon: i-tap ang **I-rate** at ang pangalan sa natapos na post (hindi sa isang Nauulit na post, na muling bumabalik), o **Review** sa Aking mga Deal, Kasaysayan (**Mag-iwan ng Review** sa web app). Maaari mong baguhin ang iyong rating; pinapalitan ng bago ang luma.
+Parehong maaaring mag-rate ang dalawang tao sa ibang pagkakataon: i-tap ang **I-rate** at ang pangalan sa natapos na post (hindi sa isang Nauulit na post, na muling bumabalik), o **I-review** sa Aking mga Deal, Kasaysayan (**Mag-iwan ng Review** sa web app). Maaari mong baguhin ang iyong rating; pinapalitan ng bago ang luma.
 
 Mababasa ng lahat sa iyong komunidad ang mga bituin at mga salita ng isang review. Ang dalawang tao lamang sa kalakalan ang makakakita kung sino ang sumulat nito at kung tungkol sa aling deal ito.
 

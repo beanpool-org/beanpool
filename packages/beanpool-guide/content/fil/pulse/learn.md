@@ -8,7 +8,7 @@ source-hash: d668d9d4149309e7
 
 ## Kung ano ang nasa loob nito
 
-Sa telepono, buksan ang **Pulse** at i-tap ang **Alamin**. Sa web app, buksan ang Pulse at i-tap ang **Paano ito gumagana** sa may itaas. Naglalaman ito ng:
+Sa telepono, buksan ang **Balita** at i-tap ang **Alamin**. Sa web app, buksan ang Pulse at i-tap ang **Paano ito gumagana** sa may itaas. Naglalaman ito ng:
 
 - mga video mula sa BeanPool tungkol sa kung paano ito gumagana;
 - ang **Pang-araw-araw na Pagninilay**, isang maikling kaisipan na nagbabago tuwing umaga. Isa lamang itong pamagat; walang mabubuksan.

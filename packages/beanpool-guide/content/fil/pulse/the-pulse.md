@@ -9,7 +9,7 @@ source-hash: 5a5a0ba505806e0a
 
 ## Ano ito
 
-Buksan ang Pulse mula sa card ng **The Pulse** sa **Home**: i-tap ang isang post, o i-tap ang **Tingnan lahat**. Kung wala ito sa iyong Home, ibalik ito gamit ang **Magdagdag ng card** sa telepono, o **I-edit ang Home** sa web app. Sa telepono maaari mo rin itong buksan mula sa **Mga Setting**, sa ilalim ng **The Pulse**.
+Buksan ang Pulse mula sa card ng **Ang Balita** sa **Home**: i-tap ang isang post, o i-tap ang **Tingnan lahat**. Kung wala ito sa iyong Home, ibalik ito gamit ang **Magdagdag ng card** sa telepono, o **I-edit ang Home** sa web app. Sa telepono maaari mo rin itong buksan mula sa **Mga Setting**, sa ilalim ng **Ang Balita**.
 
 Tinitipon ng Pulse kung ano ang ipinopost ng mga miyembro ng iyong komunidad sa iba pang mga site: mga video, musika, blog, larawan. Isa itong paraan upang malaman kung ano ang ginagawa at nililikha ng iyong mga kapitbahay.
 

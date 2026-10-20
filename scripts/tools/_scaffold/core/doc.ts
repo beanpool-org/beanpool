@@ -26,18 +26,22 @@ export const emptyScaffoldDoc = (): ScaffoldDoc => ({ v: SCAFFOLD_DOC_VERSION, i
 
 const isPlainObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 
-function readItem(raw: unknown): ScaffoldItem | null {
+/** One item, its unknown keys kept; held to this build's bounds only when `ours` (this build's version or older). */
+function readItem(raw: unknown, ours: boolean): ScaffoldItem | null {
     if (!isPlainObject(raw) || typeof raw.id !== 'string' || typeof raw.name !== 'string' || typeof raw.addedAt !== 'string') return null;
-    return { id: raw.id, name: [...raw.name].slice(0, SCAFFOLD_NAME_CHARS).join(''), addedAt: raw.addedAt };
+    const name = ours ? [...raw.name].slice(0, SCAFFOLD_NAME_CHARS).join('') : raw.name;
+    return { ...raw, id: raw.id, name, addedAt: raw.addedAt };
 }
 
 /**
- * Any stored value as this build's document: tolerant, never throws, empty() for anything unreadable. A newer version
- * (from a newer app on another device) is read for what this build knows and every key is kept, so writing it back
- * loses nothing.
+ * Any stored value as this build's document: tolerant, never throws, empty() for anything unreadable. This build's
+ * version and older are held to its bounds. A newer version (from a newer app on another device) is read for what this
+ * build knows and kept whole, every key at the top and on each item and every item past this build's bound, so writing
+ * it back loses nothing; the bounds of a newer version are the newer app's.
  */
 export function readScaffoldDoc(raw: unknown): ScaffoldDoc {
     if (!isPlainObject(raw) || typeof raw.v !== 'number' || !Number.isInteger(raw.v) || raw.v < 1) return emptyScaffoldDoc();
-    const items = (Array.isArray(raw.items) ? raw.items : []).map(readItem).filter((i): i is ScaffoldItem => i !== null);
-    return { ...raw, v: Math.max(raw.v, SCAFFOLD_DOC_VERSION), items: items.slice(0, SCAFFOLD_MAX_ITEMS) };
+    const ours = raw.v <= SCAFFOLD_DOC_VERSION;
+    const items = (Array.isArray(raw.items) ? raw.items : []).map((i) => readItem(i, ours)).filter((i): i is ScaffoldItem => i !== null);
+    return { ...raw, v: Math.max(raw.v, SCAFFOLD_DOC_VERSION), items: ours ? items.slice(0, SCAFFOLD_MAX_ITEMS) : items };
 }

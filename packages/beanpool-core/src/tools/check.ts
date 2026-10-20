@@ -149,8 +149,8 @@ function lineProblem(line: ToolLine | ToolDue, screens: readonly string[]): stri
 /**
  * Problems with a tool's fixtures and with its pure functions on them, one sentence each: every stored value reads as
  * the fixture says, reading twice is reading once, every version 1 to `version` has a stored value, a newer version's
- * unknown keys are kept, the full document fits its bound, and row(), the Home card's lines() and due() are the same
- * twice and within their bounds.
+ * unknown keys are kept (at the top and on its records), the full document fits its bound, and row(), the Home card's
+ * lines() and due() are the same twice and within their bounds.
  */
 export function toolFixtureProblems<D>(m: ToolManifest<D>, fx: ToolFixtures<D>): string[] {
     const out: string[] = [];
@@ -179,11 +179,23 @@ export function toolFixtureProblems<D>(m: ToolManifest<D>, fx: ToolFixtures<D>):
     }
     const full = fx.docs?.full;
     if (isPlainObject(full)) {
-        const newer = { ...full, v: m.doc.version + 1, __later: { kept: true } };
+        // A newer app's keys at the top and on the first record of each list of records.
+        const later = { kept: true };
+        const lists = Object.keys(full).filter((k) => Array.isArray(full[k]) && isPlainObject((full[k] as unknown[])[0]));
+        const newer: Record<string, unknown> = { ...full, v: m.doc.version + 1, __later: later };
+        for (const k of lists) {
+            const [first, ...rest] = full[k] as Record<string, unknown>[];
+            newer[k] = [{ ...first, __later: later }, ...rest];
+        }
         try {
             const read = m.doc.read(newer) as unknown;
-            if (!isPlainObject(read) || !sameJson(read.__later, { kept: true })) {
+            if (!isPlainObject(read) || !sameJson(read.__later, later)) {
                 say("read() of a newer version drops keys it doesn't know: keep them, so a newer app's document survives this one's write.");
+            } else {
+                for (const k of lists) {
+                    const kept = Array.isArray(read[k]) && (read[k] as unknown[]).some((r) => isPlainObject(r) && sameJson(r.__later, later));
+                    if (!kept) say(`read() of a newer version drops the keys it doesn't know on a record in ${k}: keep them too.`);
+                }
             }
         } catch {
             say('read() throws on a newer version.');

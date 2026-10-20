@@ -139,6 +139,29 @@ describe('the checks bite', () => {
         one(toolFixtureProblems({ ...good, doc: { ...good.doc, maxBytes: 22 } }, fixtures), /full document is 25 bytes, over its 22/);
     });
 
+    it("refuses a read() that rebuilds a newer version's records without the keys it doesn't know", () => {
+        type Rec = { id: string };
+        type RecDoc = { v: number; items: Rec[] };
+        const records = (raw: unknown, keep: boolean): RecDoc => {
+            const r = raw as Partial<RecDoc> | null;
+            if (!r || typeof r !== 'object' || typeof r.v !== 'number') return { v: 1, items: [] };
+            const items = (Array.isArray(r.items) ? r.items : []).filter((i) => typeof i?.id === 'string');
+            return { ...r, v: r.v, items: items.map((i) => (keep ? { ...i, id: i.id } : { id: i.id })) };
+        };
+        const { id, name, line, icon, shelf, shopKinds, owner, permissions, screens, examples } = good;
+        const tool = (keep: boolean): ToolManifest<RecDoc> => ({
+            id, name, line, icon, shelf, shopKinds, owner, permissions, screens, examples, row: () => null,
+            doc: { version: 1, empty: () => ({ v: 1, items: [] }), read: (raw) => records(raw, keep) },
+        });
+        const recFixtures: ToolFixtures<RecDoc> = {
+            stored: [{ name: 'version 1', raw: { v: 1, items: [{ id: 'a' }] }, reads: { v: 1, items: [{ id: 'a' }] } }],
+            docs: { empty: { v: 1, items: [] }, small: { v: 1, items: [{ id: 'a' }] }, full: { v: 1, items: [{ id: 'a' }, { id: 'b' }] } },
+            now: 0,
+        };
+        expect(toolFixtureProblems(tool(true), recFixtures)).toEqual([]);
+        one(toolFixtureProblems(tool(false), recFixtures), /drops the keys it doesn't know on a record in items/);
+    });
+
     it('refuses pure functions that are not pure or not bounded', () => {
         let calls = 0;
         one(toolFixtureProblems({ ...good, row: () => ({ key: word('Kept here: {count}'), values: { count: calls++ } }) }, { ...fixtures, docs: { ...fixtures.docs, small: fixtures.docs.empty, full: fixtures.docs.empty } }).slice(0, 1), /not the same twice/);

@@ -22,6 +22,7 @@
  *   node scripts/website-build.mjs            Builds all pages from apps/website-src/content/ into apps/website/<lang>/
  *   node scripts/website-build.mjs --check    Verifies generated files match build output and check rules
  *   node scripts/website-build.mjs --draft <lang>  Prepares/refreshes apps/website-src/content/<lang>/ from current English
+ *   node scripts/website-build.mjs --mark-current <lang> <page>  Records current English hash on that translated page
  */
 
 import fs from 'node:fs';
@@ -154,30 +155,31 @@ export function extractSourceHash(content) {
     return match ? match[1] : null;
 }
 
-/** Builds hreflang alternate tags for a given page. For untranslated legal pages, only en and x-default are emitted. */
+/** Builds hreflang alternate tags for a given page. Uses final extensionless absolute URLs. */
 export function buildHreflangTags(page) {
-    const isStatus = page === 'status.html';
     const isLegal = LEGAL_PAGES.includes(page);
+    const isIndex = page === 'index.html';
+    const slug = page.replace(/\.html$/, '');
 
     if (isLegal) {
         return [
-            `    <link rel="alternate" hreflang="en" href="https://beanpool.org/${page}">`,
-            `    <link rel="alternate" hreflang="x-default" href="https://beanpool.org/${page}">`
+            `    <link rel="alternate" hreflang="en" href="https://beanpool.org/${slug}">`,
+            `    <link rel="alternate" hreflang="x-default" href="https://beanpool.org/${slug}">`
         ].join('\n');
     }
 
     const lines = [];
     for (const lang of LANGS) {
         let href;
-        if (isStatus) {
-            href = lang === 'en' ? '/status.html' : `/${lang}/status.html`;
+        if (isIndex) {
+            href = lang === 'en' ? 'https://beanpool.org/' : `https://beanpool.org/${lang}/`;
         } else {
-            href = lang === 'en' ? `https://beanpool.org/${page}` : `https://beanpool.org/${lang}/${page}`;
+            href = lang === 'en' ? `https://beanpool.org/${slug}` : `https://beanpool.org/${lang}/${slug}`;
         }
         lines.push(`    <link rel="alternate" hreflang="${lang}" href="${href}">`);
     }
 
-    const defaultHref = isStatus ? '/status.html' : `https://beanpool.org/${page}`;
+    const defaultHref = isIndex ? 'https://beanpool.org/' : `https://beanpool.org/${slug}`;
     lines.push(`    <link rel="alternate" hreflang="x-default" href="${defaultHref}">`);
 
     return lines.join('\n');
@@ -586,6 +588,45 @@ export function countStalePages() {
     return stale;
 }
 
+/**
+ * Records the current English content hash on one translated page under apps/website-src/content/<lang>/<page>.
+ * Refuses a page whose translation source file is missing.
+ */
+export function markCurrent(lang, page) {
+    if (!GUIDE_LANGS.includes(lang)) {
+        throw new Error(`unknown or invalid language: "${lang}"`);
+    }
+
+    const pageFile = page.endsWith('.html') ? page : `${page}.html`;
+    if (!TRANSLATED_PAGES.includes(pageFile)) {
+        throw new Error(`unknown or untranslated page: "${page}"`);
+    }
+
+    const enPath = path.join(WEBSITE_DIR, pageFile);
+    if (!fs.existsSync(enPath)) {
+        throw new Error(`English page missing: apps/website/${pageFile}`);
+    }
+
+    const destPath = path.join(CONTENT_DIR, lang, pageFile);
+    if (!fs.existsSync(destPath)) {
+        throw new Error(`Translation source file missing: apps/website-src/content/${lang}/${pageFile}`);
+    }
+
+    const enHtml = fs.readFileSync(enPath, 'utf8');
+    const hash = pageContentHash(enHtml);
+    const existing = fs.readFileSync(destPath, 'utf8');
+
+    let updated;
+    if (/<!--\s*source-hash:\s*[0-9a-f]{16}\s*-->/i.test(existing)) {
+        updated = existing.replace(/<!--\s*source-hash:\s*[0-9a-f]{16}\s*-->/i, `<!-- source-hash: ${hash} -->`);
+    } else {
+        updated = `<!-- source-hash: ${hash} -->\n${existing}`;
+    }
+
+    fs.writeFileSync(destPath, updated, 'utf8');
+    return hash;
+}
+
 /** One-time re-stamp of verbatim content files with the corrected text-only content hash. */
 export function restampContentHashes() {
     for (const page of TRANSLATED_PAGES) {
@@ -625,6 +666,21 @@ if (process.argv[1] === __filename) {
         draftLanguage(lang);
         console.log(`✓ Drafted content for ${lang}.`);
         process.exit(0);
+    } else if (args[0] === '--mark-current') {
+        const lang = args[1];
+        const page = args[2];
+        if (!lang || !page) {
+            console.error('Usage: node scripts/website-build.mjs --mark-current <lang> <page>');
+            process.exit(1);
+        }
+        try {
+            const hash = markCurrent(lang, page);
+            console.log(`✓ Marked ${lang}/${page} current (source-hash: ${hash}).`);
+            process.exit(0);
+        } catch (e) {
+            console.error(`Error: ${e.message}`);
+            process.exit(1);
+        }
     } else {
         buildAll();
         console.log('✓ Built website pages in all languages.');

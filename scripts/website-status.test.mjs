@@ -113,7 +113,10 @@ const look = (page) => page.evaluate(() => {
 test('the page loads only its own files and reads its status only from the registrar on its own site', () => {
     const html = fs.readFileSync(PAGE, 'utf8').replace(/<!--[\s\S]*?-->/g, '');
     assert.deepEqual([...html.matchAll(/<script\b[^>]*\bsrc=/g)], [], 'no script from a file or another site');
-    for (const m of html.matchAll(/\b(?:href|src)="([^"]+)"/g)) assert.doesNotMatch(m[1], /^(?:https?:)?\/\//, `${m[1]}: the site's own files only`);
+    for (const m of html.matchAll(/\b(?:href|src)="([^"]+)"/g)) {
+        if (m[1].startsWith('https://beanpool.org/')) continue;
+        assert.doesNotMatch(m[1], /^(?:https?:)?\/\//, `${m[1]}: the site's own files only`);
+    }
     assert.deepEqual([...html.matchAll(/fetch\(([^,)]+)/g)].map((m) => m[1]), ['URL_']);
     assert.match(html, /var URL_ = '\/api\/registrar\/status\.json';/);
     assert.doesNotMatch(html, /innerHTML|outerHTML|insertAdjacentHTML|document\.write/, 'what the status says is set as text');

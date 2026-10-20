@@ -710,8 +710,9 @@ function initLanguageBanner() {
 
     const t = WORDS[matched] || WORDS.en;
     const link = document.createElement('a');
-    link.href = p ? `/${matched}/${p}` : `/${matched}/`;
+    link.href = p ? `https://beanpool.org/${matched}/${p}` : `https://beanpool.org/${matched}/`;
     link.lang = matched;
+    link.dir = 'auto';
     link.textContent = typeof t.readIn === 'function' ? t.readIn(langName) : `Read this in ${langName} →`;
     link.addEventListener('click', () => {
         const secure = (typeof window !== 'undefined' && window.location.protocol === 'https:') ? ';Secure' : '';

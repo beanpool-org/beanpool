@@ -40,7 +40,8 @@ import {
     buildFooterLanguagesRow,
     draftLanguage,
     extractSourceHash,
-    buildAll
+    buildAll,
+    markCurrent
 } from './website-build.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -90,9 +91,14 @@ test('every generated page has lang attribute, 26 hreflang tags, and footer lang
             const hreflangs = [...html.matchAll(/<link\s+rel="alternate"\s+hreflang="([^"]*)"\s+href="([^"]*)"/gi)];
             assert.equal(hreflangs.length, 26, `${lang}/${page} has 26 hreflang links (25 languages + x-default)`);
 
-            // Verify x-default is present
+            // Verify x-default is present and all URLs are final extensionless absolute URLs
             const xDefault = hreflangs.find(m => m[1] === 'x-default');
             assert.ok(xDefault, `${lang}/${page} has x-default hreflang link`);
+
+            for (const [, hLang, href] of hreflangs) {
+                assert.ok(href.startsWith('https://beanpool.org/'), `${lang}/${page} hreflang="${hLang}" href (${href}) must be absolute https://beanpool.org/`);
+                assert.ok(!href.includes('.html'), `${lang}/${page} hreflang="${hLang}" href (${href}) must not contain .html`);
+            }
 
             // 3. Footer language row (if page has footer)
             if (html.includes('<footer>')) {
@@ -201,10 +207,11 @@ test('legal pages banner mechanism works, and no legal translations are shipped 
     assert.ok(renderedEsPrivacy.includes(legalDate), 'legal banner mentions the English version date');
     assert.ok(renderedEsPrivacy.includes('href="../privacy.html"'), 'legal banner links to English version');
 
-    // 3. Verify hreflang tags on legal pages only include en and x-default (no dead links)
+    // 3. Verify hreflang tags on legal pages only include en and x-default (no dead links, extensionless absolute URLs)
     const privacyHreflang = buildHreflangTags('privacy.html');
-    assert.ok(privacyHreflang.includes('hreflang="en"'), 'legal page includes en hreflang');
-    assert.ok(privacyHreflang.includes('hreflang="x-default"'), 'legal page includes x-default hreflang');
+    assert.ok(privacyHreflang.includes('hreflang="en" href="https://beanpool.org/privacy"'), 'legal page includes extensionless absolute en hreflang');
+    assert.ok(privacyHreflang.includes('hreflang="x-default" href="https://beanpool.org/privacy"'), 'legal page includes extensionless absolute x-default hreflang');
+    assert.ok(!privacyHreflang.includes('.html'), 'legal page hreflang does not contain .html');
     assert.ok(!privacyHreflang.includes('hreflang="es"'), 'legal page omits unbuilt translations');
 
     // 4. Verify footer languages row on legal pages points each language to its home page (/es/)
@@ -293,6 +300,51 @@ test('--draft <lang> never re-stamps an existing file hash without writing new t
     }
 });
 
+test('--mark-current <lang> <page> records current English hash on translated page and refuses missing file', () => {
+    const testLang = 'es';
+    const testPage = 'rules.html';
+    const filePath = path.join(CONTENT_DIR, testLang, testPage);
+    const originalContent = fs.readFileSync(filePath, 'utf8');
+    const staleHash = '0000000000000000';
+    const fakeStaleContent = originalContent.replace(/<!--\s*source-hash:\s*[0-9a-f]{16}\s*-->/i, `<!-- source-hash: ${staleHash} -->`);
+
+    try {
+        fs.writeFileSync(filePath, fakeStaleContent, 'utf8');
+        assert.equal(extractSourceHash(fs.readFileSync(filePath, 'utf8')), staleHash);
+
+        // 1. Mark current successfully records the current English hash
+        const stampedHash = markCurrent(testLang, testPage);
+        const enHtml = fs.readFileSync(path.join(WEBSITE_DIR, testPage), 'utf8');
+        const expectedHash = pageContentHash(enHtml);
+        assert.equal(stampedHash, expectedHash, 'returned hash matches current English hash');
+        const updatedContent = fs.readFileSync(filePath, 'utf8');
+        assert.equal(extractSourceHash(updatedContent), expectedHash, 'file source-hash was updated to current English hash');
+
+        // 2. Also accepts page name without .html
+        fs.writeFileSync(filePath, fakeStaleContent, 'utf8');
+        markCurrent(testLang, 'rules');
+        assert.equal(extractSourceHash(fs.readFileSync(filePath, 'utf8')), expectedHash);
+
+        // 3. Refuses a page whose translation source file is missing
+        assert.throws(() => markCurrent('es', 'nonexistent.html'), /unknown or untranslated page/);
+
+        // Create a missing condition for a valid page
+        const tmpMissingPage = path.join(CONTENT_DIR, 'es', 'status.html');
+        const statusBak = fs.readFileSync(tmpMissingPage, 'utf8');
+        try {
+            fs.rmSync(tmpMissingPage);
+            assert.throws(() => markCurrent('es', 'status.html'), /Translation source file missing/);
+        } finally {
+            fs.writeFileSync(tmpMissingPage, statusBak, 'utf8');
+        }
+
+        // 4. Refuses an invalid language
+        assert.throws(() => markCurrent('xx', 'rules.html'), /unknown or invalid language/);
+    } finally {
+        fs.writeFileSync(filePath, originalContent, 'utf8');
+    }
+});
+
 test('main.js WORDS dictionary translates strings by document.documentElement.lang', () => {
     const mainJsText = fs.readFileSync(path.join(WEBSITE_DIR, 'main.js'), 'utf8');
 
@@ -351,11 +403,12 @@ test('main.js on English page presents "Read this in <language>" banner when nav
     assert.ok(dom1.window.document.body.classList.contains('has-read-in-banner'), 'body has has-read-in-banner class when banner is active');
     assert.equal(dom1.window.document.documentElement.style.getPropertyValue('--banner-height'), '61px', 'sets --banner-height custom property');
     const link = banner1.querySelector('a');
-    assert.equal(link.getAttribute('href'), '/es/rules', 'banner link points to extensionless /es/rules');
+    assert.equal(link.getAttribute('href'), 'https://beanpool.org/es/rules', 'banner link points to extensionless absolute https://beanpool.org/es/rules');
     assert.equal(link.getAttribute('lang'), 'es', 'banner link sets lang to target language');
+    assert.equal(link.getAttribute('dir'), 'auto', 'banner link sets dir="auto"');
     assert.equal(link.textContent, 'Leer esto en Español →', 'banner link uses target language readIn string');
 
-    // Test 1b: Homepage links to extensionless /es/
+    // Test 1b: Homepage links to extensionless absolute /es/
     const domHome = new JSDOM(`<!DOCTYPE html><html lang="en"><body><div id="navbar"></div></body></html>`, {
         url: 'https://beanpool.org/',
         runScripts: 'dangerously'
@@ -365,7 +418,8 @@ test('main.js on English page presents "Read this in <language>" banner when nav
     domHome.window.eval(mainJsText);
     const homeBanner = domHome.window.document.getElementById('read-in-banner');
     assert.ok(homeBanner, 'banner appears on homepage');
-    assert.equal(homeBanner.querySelector('a').getAttribute('href'), '/es/', 'homepage banner links to /es/');
+    assert.equal(homeBanner.querySelector('a').getAttribute('href'), 'https://beanpool.org/es/', 'homepage banner links to https://beanpool.org/es/');
+    assert.equal(homeBanner.querySelector('a').getAttribute('dir'), 'auto', 'homepage banner link sets dir="auto"');
 
     // Test 1c: Extensionless path /rules links to /es/rules
     const domRulesExtless = new JSDOM(`<!DOCTYPE html><html lang="en"><body><div id="navbar"></div></body></html>`, {
@@ -375,7 +429,8 @@ test('main.js on English page presents "Read this in <language>" banner when nav
     Object.defineProperty(domRulesExtless.window.navigator, 'language', { value: 'es-ES', configurable: true });
     Object.defineProperty(domRulesExtless.window.navigator, 'languages', { value: ['es-ES', 'es'], configurable: true });
     domRulesExtless.window.eval(mainJsText);
-    assert.equal(domRulesExtless.window.document.getElementById('read-in-banner').querySelector('a').getAttribute('href'), '/es/rules');
+    assert.equal(domRulesExtless.window.document.getElementById('read-in-banner').querySelector('a').getAttribute('href'), 'https://beanpool.org/es/rules');
+    assert.equal(domRulesExtless.window.document.getElementById('read-in-banner').querySelector('a').getAttribute('dir'), 'auto');
 
     // Test 2: Cookie already set -> banner does NOT appear
     const dom2 = new JSDOM(`<!DOCTYPE html><html lang="en"><body><div id="navbar"></div></body></html>`, {

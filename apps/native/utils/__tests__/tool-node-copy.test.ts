@@ -10,6 +10,8 @@
  * words and the route's order (Remove my data, the toggle's failure line) are in tools-template.test.ts.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
 vi.mock('react-native', () => ({ Platform: { OS: 'android', select: (o: Record<string, unknown>) => o.android ?? o.default } }));
@@ -505,6 +507,29 @@ describe('the delete rule: what the node is told and when', () => {
         expect(await openToolCopy(ent)).toBe('switched-off');
         expect((await readToolSettings('ent-key', 'kit', URL_A)).nodeCopy).toBe(false);
         expect((await readToolDoc('ent-key', KIT)).doc).toEqual(doc('Till float'));
+    });
+
+    it('only the two hosts call the tool routes; on the server only the store, its route and the copies (standby, re-key, account close) touch the table', () => {
+        const REPO = path.resolve(__dirname, '../../../..');
+        const SKIP = /(^|\/)(node_modules|dist|generated|__tests__|android|ios|\.expo)(\/|$)|\.test\.[jt]sx?$|(^|\/)test-[^/]*\.ts$/;
+        const walk = (dir: string): string[] => fs.readdirSync(path.join(REPO, dir), { withFileTypes: true }).flatMap((e) => {
+            const rel = `${dir}/${e.name}`;
+            if (SKIP.test(rel)) return [];
+            return e.isDirectory() ? walk(rel) : /\.(ts|tsx|js|mjs|sql)$/.test(e.name) ? [rel] : [];
+        });
+        const read = (f: string) => fs.readFileSync(path.join(REPO, f), 'utf8');
+        const clients = ['app', 'components', 'utils', 'services', 'tools', 'constants'].map((d) => `apps/native/${d}`)
+            .concat(['apps/pwa/src', 'apps/manager/src'], fs.readdirSync(path.join(REPO, 'packages')).map((p) => `packages/${p}/src`))
+            .filter((d) => fs.existsSync(path.join(REPO, d)));
+        const callers = clients.flatMap(walk).filter((f) => /\/api\/tools\/|\/tools\/\$\{|toolCopyPath\(/.test(read(f)));
+        expect(callers.sort()).toEqual(['apps/native/tools/node-copy.ts', 'apps/pwa/src/tools/node-copy.ts', 'packages/beanpool-core/src/tools/node-copy.ts']);
+        // No sync page, Home answer, pooled count or admin screen reads it.
+        const server = walk('apps/server/src').filter((f) => /member_tool_state|tool-state\.js|routes\/tools\.js/.test(read(f)));
+        expect(server.sort()).toEqual([
+            'apps/server/src/db/schema.sql', 'apps/server/src/engine/key-move.ts', 'apps/server/src/engine/replication-manifest.ts',
+            'apps/server/src/engine/sync.ts', 'apps/server/src/engine/tool-state.ts', 'apps/server/src/https-server.ts',
+            'apps/server/src/routes/tools.ts', 'apps/server/src/state-engine.ts',
+        ]);
     });
 
     it('nothing runs once the phone has moved to another community: its file and its server are another\'s', async () => {

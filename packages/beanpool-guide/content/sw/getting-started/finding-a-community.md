@@ -16,7 +16,7 @@ Hakuna jumuiya karibu nawe bado? Unaweza kuanzisha moja: tazama "Hakuna kitu kar
 
 ## Jumuiya zilizo karibu nawe
 
-Kwenye jumuiya ya kimataifa, kadi ya **Find your community** kwenye **Nyumbani** huonyesha jumuiya zilizo karibu nawe zaidi. Kwa siku zako 30 za kwanza inabaki karibu na juu ya Nyumbani na haiwezi kuondolewa au kuhamishwa; baada ya hapo unaweza kuiondoa kama kadi nyingine yoyote. Kwenye programu ya wavuti, kila jumuiya kwenye kadi hiyo ni kiungo kinachoelekeza kwenye ukurasa wake yenyewe. Ikiwa haijui uko wapi, gusa **Shiriki eneo langu**, au **au andika mji wako** na uchague mji wako. Hatua zilizo hapa chini ni za programu ya simu.
+Kwenye jumuiya ya kimataifa, kadi ya **Tafuta jumuiya yako** kwenye **Nyumbani** huonyesha jumuiya zilizo karibu nawe zaidi. Kwa siku zako 30 za kwanza inabaki karibu na juu ya Nyumbani na haiwezi kuondolewa au kuhamishwa; baada ya hapo unaweza kuiondoa kama kadi nyingine yoyote. Kwenye programu ya wavuti, kila jumuiya kwenye kadi hiyo ni kiungo kinachoelekeza kwenye ukurasa wake yenyewe. Ikiwa haijui uko wapi, gusa **Shiriki eneo langu**, au **au andika mji wako** na uchague mji wako. Hatua zilizo hapa chini ni za programu ya simu.
 
 Bado haupo kwenye jumuiya ya kimataifa? Gusa haragwe lililo juu kushoto na, chini ya **Your communities**, gusa **Jumuiya ya kimataifa**, kisha ujiunge nayo kwa akaunti uliyo nayo: tazama "Zaidi ya jumuiya moja". Bila kuwa na akaunti bado, gusa **Gundua BeanPool duniani kote** kwenye skrini ya kwanza ya programu: tazama "Kujiunga na BeanPool".
 

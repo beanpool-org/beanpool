@@ -453,12 +453,12 @@ async function main(): Promise<void> {
     const oldRead = await call('GET', eve, own('t2'));
     assert(newRead.status === 200 && newRead.body?.doc?.v === 'rekey' && newRead.body?.deletedAt === null, `she reads them on her new key with deletedAt null (${show(newRead)})`);
     assert(oldRead.status === 403 && oldRead.body?.code === 'key_invalidated', `the old key reads nothing (${show(oldRead)})`);
-    await put(eveNew, own('t-del'), { v: 1 });
-    await call('DELETE', eveNew, own('t-del'));
-    const tDelNew = tombOf(eveNew.pk, 't-del');
-    const newReadDel = await call('GET', eveNew, own('t-del'));
-    const oldReadDel = await call('GET', eve, own('t-del'));
-    assert(newReadDel.status === 200 && newReadDel.body?.doc === null && newReadDel.body?.deletedAt === tDelNew && typeof tDelNew === 'string',
+    const dEveNew = await call('DELETE', eveNew, own('t2'));
+    const tDelNew = tombOf(eveNew.pk, 't2');
+    const newReadDel = await call('GET', eveNew, own('t2'));
+    const oldReadDel = await call('GET', eve, own('t2'));
+    assert(dEveNew.status === 200 && dEveNew.body?.removed === true && newReadDel.status === 200 && newReadDel.body?.doc === null
+        && newReadDel.body?.deletedAt === tDelNew && typeof tDelNew === 'string',
         `after a re-key the new key's GET answers deletedAt (${newReadDel.body?.deletedAt})`);
     assert(oldReadDel.status === 403 && oldReadDel.body?.code === 'key_invalidated', `and the old key still reads nothing (${show(oldReadDel)})`);
 

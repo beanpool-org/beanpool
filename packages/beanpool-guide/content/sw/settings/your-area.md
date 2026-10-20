@@ -26,7 +26,7 @@ Inasema **Takriban 10 km kuzunguka** na mji ulioandika, au nambari mbili ikiwa u
 
 - Katika **Eneo lako**, chini ya **Uko takriban wapi?**, gusa **Tumia mahali nilipo**, au **Andika mji au mtaa** na uchague mji wako kutoka kwenye orodha.
 - Mara linapohifadhiwa, unarudi kwenye Mipangilio.
-- **Ghairi** (kwenye kivinjari, **← Back to Settings**) huliacha kama lilivyokuwa.
+- **Ghairi** (kwenye kivinjari, **← Rudi kwenye Mipangilio**) huliacha kama lilivyokuwa.
 
 Simu yako au kivinjari chako hukadiria eneo hilo hadi takriban kilomita 10 kabla halijatumwa, na jumuiya hulikadiria tena, kwa hivyo mahali pako kamili hapatumwi wala kuhifadhiwa kamwe. **Tumia mahali nilipo** inachukua usomaji mmoja wa mahali ulipo. Ili kupata mji, kile unachoandika hutumwa kwa OpenStreetMap, ambako orodha ya maeneo inatoka.
 

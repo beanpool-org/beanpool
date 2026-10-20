@@ -13,7 +13,7 @@ source-hash: be8515fdd8bc780e
 - Kwenye mojawapo ya machapisho yake (programu ya simu): gusa **Mzuie Mtumiaji**. Chapisho kwenye programu ya wavuti halina kitufe cha kuzuia.
 - Kutoka kwenye gumzo: gusa jina lake juu ili kufungua wasifu wake, kisha **Zuia**. Kwenye programu ya wavuti, gumzo na mtu mmoja pia lina **Zuia** juu kabisa.
 
-Kwenye programu ya simu, thibitisha kwa **Mzuie Mtumiaji**. Kwenye programu ya wavuti, kivinjari chako kinakuomba uthibitishe: gusa **OK**.
+Kwenye programu ya simu, thibitisha kwa **Mzuie Mtumiaji**. Kwenye programu ya wavuti, kivinjari chako kinakuomba uthibitishe: gusa **Sawa**.
 
 ## Kile inachofanya
 

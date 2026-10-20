@@ -25,7 +25,7 @@ Katika jumuiya yenye Maharagwe unahitaji jina na picha ya wasifu. Mahali ambapo 
 - **Maelezo:** nini, lini, wapi, chochote ambacho watu wanapaswa kujua.
 - **Picha:** angalau moja, hadi tano. Gusa **Kamera** au **Matunzio**. Mahali ambapo hakuna Maharagwe, picha za Hitaji ni za hiari.
 - **Eneo:** gusa **Mahali nilipo**, au **Weka pini** na uguse ramani, kisha **Thibitisha Pini**. Kila mwanachama wa jumuiya yako anaweza kuona pini, kwa hivyo iweke karibu nawe badala ya mlango wako wa mbele ukipenda. Tazama "Pini yako inapokwenda".
-- **Bei:** idadi ya maharagwe. Gusa kitufe cha kipimo ili kuchagua **Jumla** au **/saa**. Gusa **BURE** ili kuitoa bure. Kitufe hicho pia kinatoa **/ Dy**, **/ Wk** na **/ Mo**, lakini chapisho jipya halizihifadhi bado: linahifadhiwa kama bei ya jumla. Chagua **Jumla** na useme kipindi katika maelezo.
+- **Bei:** idadi ya maharagwe. Gusa kitufe cha kipimo ili kuchagua **Jumla** au **/saa**. Gusa **BURE** ili kuitoa bure. Kitufe hicho pia kinatoa **/siku**, **/wiki** na **/mwezi**, lakini chapisho jipya halizihifadhi bado: linahifadhiwa kama bei ya jumla. Chagua **Jumla** na useme kipindi katika maelezo.
 - Gusa **Weka Ofa** au **Weka Uhitaji**.
 
 Hadi kila kitu kinachohitajika kijazwe, kitufe kinakuambia kile kinachokosekana, kama vile **Ongeza picha** au **Weka bei**.

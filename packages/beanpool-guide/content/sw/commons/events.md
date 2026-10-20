@@ -84,7 +84,7 @@ Fungua tukio lako. Kama mwenyeji unaweza:
 - kuona **Wanaohudhuria**, na kuwaruhusu watu waingie: **Ruhusu kuingia** kando ya jina (gusa tena ili kuiondoa), au **Waruhusu wote waingie**. Marafiki zako wenyewe huruhusiwa kuingia wanapogusa Nitaenda. Ukiondoa tiki kwenye **Watu niliowaruhusu tu ndio wanaoona dokezo na gumzo**, kila mtu anayeenda huona dokezo na soga kufikia sasa, na soga husema mwenyeji ameifungua;
 - **Hariri tukio**. Ukibadilisha muda au mahali, kila mtu anayeenda huarifiwa;
 - **Nakili kwa tarehe mpya**, ili kuliendesha tena;
-- **Ghairi tukio**, kisha uthibitishe (**Ghairi tukio** tena kwenye simu, **OK** kwenye programu ya wavuti). Kila mtu anayeenda anaweza kuona limeghairiwa, na soga yake inakuwa ya kusoma tu.
+- **Ghairi tukio**, kisha uthibitishe (**Ghairi tukio** tena kwenye simu, **Sawa** kwenye programu ya wavuti). Kila mtu anayeenda anaweza kuona limeghairiwa, na soga yake inakuwa ya kusoma tu.
 
 ## Matukio yanayojirudia
 

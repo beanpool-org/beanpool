@@ -35,7 +35,7 @@ Wewe pekee ndiye unayeona kiasi cha uaminifu ulichobaki nacho cha kuiunga mkono.
 
 ## Kujiuzulu
 
-Gusa **Jiuzulu kama msimamizi**, kisha uthibitishe (**Jiuzulu** kwenye simu, **OK** kwenye programu ya wavuti).
+Gusa **Jiuzulu kama msimamizi**, kisha uthibitishe (**Jiuzulu** kwenye simu, **Sawa** kwenye programu ya wavuti).
 
 - Msimamizi wa pekee hawezi kujiuzulu. Badala yake anaweza kuifunga biashara.
 - Ikiwa biashara ya pamoja iko chini ya sifuri na inahitaji uungaji mkono wako ili kuifunika, programu inasema huwezi bado (kwenye simu, **Bado**).

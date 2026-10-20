@@ -50,4 +50,4 @@ Wamiliki na wasimamizi wanaoendesha seva ya jumuiya yako bado wanaweza kuona kil
 
 ## Kufunga kura ya maoni mapema
 
-Ikiwa wewe ndiye uliyeianzisha, gusa **Funga Kura ya Maoni**, kisha **Funga Kura ya Maoni** tena ili kuthibitisha (**OK** kwenye programu ya wavuti).
+Ikiwa wewe ndiye uliyeianzisha, gusa **Funga Kura ya Maoni**, kisha **Funga Kura ya Maoni** tena ili kuthibitisha (**Sawa** kwenye programu ya wavuti).

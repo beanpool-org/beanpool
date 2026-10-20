@@ -15,7 +15,7 @@ Matatizo mengi hutokana na kutoelewana. Gusa **Ujumbe** kwenye chapisho na mzung
 - **Kabla ya kukubaliana:** mtu aliyeomba anagusa **Ondoa Ombi**. Mtu aliyechapisha Hitaji anagusa **Kataa**, kisha **Kataa**, na anaweza kuongeza ujumbe mfupi. Ombi ambalo halijibiwi na mtu yeyote linamalizika lenyewe baada ya siku 7.
 - **Wakati maharagwe yanapozuiliwa:** yeyote kati yenu anaweza kugusa **Ghairi Uzuiaji wa Amana**, kisha **Ndiyo, Ghairi**. Maharagwe yote yaliyozuiliwa yanamrudia mtu anayelipa, na chapisho linarudi tena sokoni. Mtu huyo mwingine anaarifiwa.
 
-Kwenye programu ya wavuti, **Ondoa Ombi** ni **Ghairi Ofa**, na **Kataa** hukataa mara moja, bila ujumbe. Ili kufuta makubaliano yaliyozuiliwa huko, gusa **Ghairi Uzuiaji**, kisha **OK**.
+Kwenye programu ya wavuti, **Ondoa Ombi** ni **Ghairi Ofa**, na **Kataa** hukataa mara moja, bila ujumbe. Ili kufuta makubaliano yaliyozuiliwa huko, gusa **Ghairi Uzuiaji**, kisha **Sawa**.
 
 Mtu yeyote anaweza kughairi peke yake, wakati wowote kabla ya maharagwe kutolewa. Hiyo inajumuisha baada ya kazi kufanyika. Hilo likikupata, zungumza naye, na kisha na wasimamizi wa jumuiya yako.
 

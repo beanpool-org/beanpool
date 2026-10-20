@@ -16,7 +16,7 @@ Non c'è ancora nessuna comunità vicino a te? Puoi avviarne una: vedi "Nulla vi
 
 ## Comunità vicino a te
 
-Sulla comunità globale, la scheda **Trova la tua comunità** sulla **Home** mostra le comunità più vicine a te. Per i tuoi primi 30 giorni rimane vicino alla parte superiore della Home e non può essere rimossa né spostata; dopo tale periodo puoi rimuoverla come qualsiasi altra scheda. Nell'app web, ogni comunità presente sulla scheda è un collegamento alla propria pagina. Se l'app non sa dove ti trovi, tocca **Condividi la mia zona**, oppure **o inserisci il tuo comune** e seleziona la tua città. I passaggi seguenti si riferiscono all'app per telefono.
+Sulla comunità globale, la scheda **Trova la tua comunità** sulla **Inizio** mostra le comunità più vicine a te. Per i tuoi primi 30 giorni rimane vicino alla parte superiore della Home e non può essere rimossa né spostata; dopo tale periodo puoi rimuoverla come qualsiasi altra scheda. Nell'app web, ogni comunità presente sulla scheda è un collegamento alla propria pagina. Se l'app non sa dove ti trovi, tocca **Condividi la mia zona**, oppure **o inserisci il tuo comune** e seleziona la tua città. I passaggi seguenti si riferiscono all'app per telefono.
 
 Non sei ancora nella comunità globale? Tocca il fagiolo in alto a sinistra e, sotto **LE TUE COMUNITÀ**, tocca **Comunità globale**, quindi unisciti ad essa con l'account che possiedi: vedi "Più di una comunità". Se non hai ancora un account, tocca **Esplora BeanPool nel mondo** nella prima schermata dell'app: vedi "Entrare in BeanPool".
 
@@ -54,7 +54,7 @@ Rimani membro della comunità globale e puoi passare dall'una all'altra: vedi "P
 
 ## Nulla vicino a te
 
-- **Avvisami quando ne nasce una qui:** ricevi una notifica quando nasce una comunità vicino a dove ti trovi. Viene conservata solo la zona, con un raggio di circa 10 km, mai la tua posizione esatta. Puoi monitorare fino a 3 luoghi e smettere di monitorarne uno con **Stop**.
+- **Avvisami quando ne nasce una qui:** ricevi una notifica quando nasce una comunità vicino a dove ti trovi. Viene conservata solo la zona, con un raggio di circa 10 km, mai la tua posizione esatta. Puoi monitorare fino a 3 luoghi e smettere di monitorarne uno con **Ferma**.
 - **Avvia una comunità:** ogni comunità dispone di un proprio piccolo server, gestito da qualcuno del posto. Richiede un computer di riserva a casa o pochi euro al mese, e circa mezz'ora: vedi "Fagioli e comunità globale". L'app mostra tre modi per gestirne una: un computer di riserva a casa, un piccolo server noleggiato o chiedere aiuto. Inserisci il nome, il luogo e come le persone possono contattarti, quindi tocca **Copia i dettagli della mia comunità** per incollarli nelle impostazioni del tuo nuovo server. I recapiti rimangono esclusi dalla directory pubblica a meno che tu non decida di renderli visibili lì.
 
 ## Se sei membro di una comunità locale

@@ -83,6 +83,6 @@ A volte sotto la barra in alto compare una barra verde:
 
 ## Le schede
 
-Sotto la barra in alto si trovano le schede: **Home**, **Mercato**, **Mappa**, **Chat**, **Beni comuni** e **Mastro**. Il nome di ciascuna scheda si trova sopra la sua icona. Sul telefono, una comunità locale priva di fagioli non mostra né **Beni comuni** né **Mastro**. La comunità globale mostra entrambi, con esempi tratti da una comunità locale. Vedi "Fagioli e comunità globale".
+Sotto la barra in alto si trovano le schede: **Inizio**, **Mercato**, **Mappa**, **Chat**, **Beni comuni** e **Mastro**. Il nome di ciascuna scheda si trova sopra la sua icona. Sul telefono, una comunità locale priva di fagioli non mostra né **Beni comuni** né **Mastro**. La comunità globale mostra entrambi, con esempi tratti da una comunità locale. Vedi "Fagioli e comunità globale".
 
 In una pagina lunga, tocca la scheda su cui ti trovi già per tornare direttamente in cima. Funziona su ogni scheda tranne che su **Mappa**.

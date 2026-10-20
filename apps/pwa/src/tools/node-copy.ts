@@ -6,7 +6,8 @@
  * through the app's own helper (lib/api.ts signedFetch) to the community this page is on, whatever its address.
  *
  * Only for a tool whose manifest asks for `node-copy` ({@link keepsNodeCopy}). Every step for one community, owner and
- * tool runs in one queue, and none once the page has moved to another community.
+ * tool runs in one queue, and none once the page has moved to another community or its account has changed
+ * (lib/account-epoch.ts), not even the rest of one already under way ({@link heldTo}).
  *
  * Only the host (pages/ToolsPage.tsx, tools/builder.ts) calls this: the eslint fence refuses a tool any import of it.
  */
@@ -14,6 +15,7 @@ import {
     createToolCopyQueue, removeToolCopy, syncToolCopy, toolCopyPath, turnToolCopyOff, turnToolCopyOn,
     type ToolCopyDevice, type ToolCopyNode, type ToolCopyOutcome, type ToolCopyOwner, type ToolManifest, type ToolNodeAnswer,
 } from '@beanpool/core';
+import { accountEpoch, accountEpochHolds } from '../lib/account-epoch';
 import { getNodeApiUrl, signedFetch } from '../lib/api';
 import { patchToolSettings, readToolRecord, readToolSettings, takeToolRecord, toolRecordSent } from './store';
 
@@ -58,31 +60,64 @@ export function webToolDevice(owner: string, tool: string): ToolCopyDevice {
 
 const queue = createToolCopyQueue();
 const keyOf = (c: WebToolCopy) => `${c.node}|${c.owner.publicKey}|${c.manifest.id}`;
-const parts = (c: WebToolCopy) => ({ device: webToolDevice(c.owner.publicKey, c.manifest.id), node: webToolNode(c.owner, c.manifest.id) });
 
-async function sync(c: WebToolCopy): Promise<ToolCopyOutcome> {
-    if (!keepsNodeCopy(c.manifest) || pageNode() !== c.node) return 'later';
-    const { device, node } = parts(c);
+/**
+ * `device` and `node` held to what the page was on at `epoch` (lib/account-epoch.ts accountEpoch): the community the tool
+ * was opened in, and the account, with no sign-out or clear since (here or in another tab). Checked before each request
+ * and each write, so a step after a GET that waited (up to TOOL_COPY_ANSWER_MS) never goes to another community's server
+ * or record, nor signed as the next account (signedFetch signs as whoever this browser holds then). A request held back
+ * is no answer, a write held back none: tried again on the next open.
+ */
+function heldTo(c: WebToolCopy, epoch: number) {
+    const holds = () => pageNode() === c.node && accountEpochHolds(epoch);
+    const device = webToolDevice(c.owner.publicKey, c.manifest.id);
+    const node = webToolNode(c.owner, c.manifest.id);
+    return {
+        holds,
+        device: {
+            ...device,
+            take: async (body, at, was) => holds() && device.take(body, at, was),
+            sent: async (was, body, at) => { if (holds()) await device.sent(was, body, at); },
+            setSetting: async (on) => { if (holds()) await device.setSetting(on); },
+        } satisfies ToolCopyDevice,
+        node: {
+            get: async () => (holds() ? node.get() : null),
+            put: async (doc) => (holds() ? node.put(doc) : null),
+            delete: async () => (holds() ? node.delete() : null),
+        } satisfies ToolCopyNode,
+    };
+}
+
+async function sync(c: WebToolCopy, epoch: number): Promise<ToolCopyOutcome> {
+    const { holds, device, node } = heldTo(c, epoch);
+    if (!keepsNodeCopy(c.manifest) || !holds()) return 'later';
     return syncToolCopy(c.manifest, device, node);
 }
 
 /** On a tool's open: the GET and the step, unless the setting is off. */
 export function openToolCopy(c: WebToolCopy): Promise<ToolCopyOutcome> {
-    return queue.run(keyOf(c), () => sync(c));
+    const epoch = accountEpoch();
+    return queue.run(keyOf(c), () => sync(c, epoch));
 }
 
-/** After a write: one sync five seconds after the last (an open's rule, so an off made elsewhere is heard first). */
+/**
+ * After a write: one sync five seconds after the last (an open's rule, so an off made elsewhere is heard first). One
+ * still waiting when the account signs out or is cleared is dropped: what it would have sent is still here, and goes on
+ * that tool's next open.
+ */
 export function toolCopyAfterWrite(c: WebToolCopy, then: (outcome: ToolCopyOutcome) => void): void {
     if (!keepsNodeCopy(c.manifest)) return;
-    queue.later(keyOf(c), async () => then(await sync(c)));
+    const epoch = accountEpoch();
+    queue.later(keyOf(c), async () => then(await sync(c, epoch)));
 }
 
 /** The member's toggle: on is the GET, the step and the PUT; off the DELETE. The setting moves only once the node answered. */
 export function switchToolCopy(c: WebToolCopy, on: boolean): Promise<'on' | 'off' | 'older-node' | 'failed'> {
     if (!on) queue.cancel(keyOf(c));
+    const epoch = accountEpoch();
     return queue.run(keyOf(c), async () => {
-        if (pageNode() !== c.node) return 'failed';
-        const { device, node } = parts(c);
+        const { holds, device, node } = heldTo(c, epoch);
+        if (!holds()) return 'failed';
         return on ? turnToolCopyOn(c.manifest, device, node) : turnToolCopyOff(device, node);
     });
 }
@@ -91,9 +126,10 @@ export function switchToolCopy(c: WebToolCopy, on: boolean): Promise<'on' | 'off
 export function removeToolCopyFirst(c: WebToolCopy): Promise<boolean> {
     if (!keepsNodeCopy(c.manifest)) return Promise.resolve(true);
     queue.cancel(keyOf(c));
+    const epoch = accountEpoch();
     return queue.run(keyOf(c), async () => {
-        if (pageNode() !== c.node) return false;
-        const { device, node } = parts(c);
+        const { holds, device, node } = heldTo(c, epoch);
+        if (!holds()) return false;
         return removeToolCopy(device, node);
     });
 }

@@ -11,7 +11,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { word, type ToolManifest } from '@beanpool/core';
 import { memoryIndexedDB, type MemoryIndexedDB } from '../../lib/memory-indexeddb';
-import { resetAccountEpochForTest } from '../../lib/account-epoch';
+import { beginAccountEpoch, endAccountEpoch, resetAccountEpochForTest } from '../../lib/account-epoch';
 import { keepToolDoc, patchToolSettings, readToolRecord, readToolSettings, resetToolStoreForTest } from '../store';
 import { keepsNodeCopy, openToolCopy, removeToolCopyFirst, switchToolCopy, toolCopyAfterWrite, type WebToolCopy } from '../node-copy';
 import { readDoc } from '../builder';
@@ -134,6 +134,23 @@ async function record(b: Browser) { use(b); return readToolRecord(b.signer, KIT.
 async function setting(b: Browser) { use(b); return (await readToolSettings(b.signer, KIT.id)).nodeCopy; }
 async function setSetting(b: Browser, nodeCopy: boolean | undefined) { use(b); await patchToolSettings(b.signer, KIT.id, { nodeCopy }); }
 const syncNow = open;
+/** The next GET held until `release()`, so the page can move or its account change while it is out. */
+function holdNextGet() {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    let arrived!: () => void;
+    const asked = new Promise<void>((r) => { arrived = r; });
+    const answers = globalThis.fetch;
+    vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
+        if ((init?.method ?? 'GET') === 'GET') {
+            vi.stubGlobal('fetch', answers);
+            arrived();
+            await gate;
+        }
+        return answers(url, init);
+    });
+    return { asked, release };
+}
 
 describe('two browsers, one server: the open rule', () => {
     it('only a tool that asks for node-copy keeps a copy at all', () => {
@@ -222,6 +239,59 @@ describe('two browsers, one server: the open rule', () => {
         expect(node.log.map((r) => r.method)).toEqual(['GET', 'PUT']);
         await vi.advanceTimersByTimeAsync(60_000);
         expect(node.count('PUT')).toBe(1);
+    });
+
+    it("a sync waiting when the browser's account changes (Sign Out, another sign-in) is dropped: never signed as the next account", async () => {
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
+        await write(A, doc('Ladder'));
+        endAccountEpoch('signed-out');
+        beginAccountEpoch();
+        signer = 'someone-else';
+        await vi.advanceTimersByTimeAsync(10_000);
+        expect(node.log).toEqual([]);
+        // With no change of account since the write, it goes.
+        await write(A, doc('Ladder', 'Tent'));
+        await vi.advanceTimersByTimeAsync(5_000);
+        await vi.waitFor(() => expect(node.count('PUT')).toBe(1));
+        expect(node.log.map((r) => r.method)).toEqual(['GET', 'PUT']);
+        expect(node.doc(ME, 'kit')).toEqual(doc('Ladder', 'Tent'));
+        expect(node.doc('someone-else', 'kit')).toBeNull();
+    });
+
+    it("a GET still out when the page moves to another community or the account changes: nothing after it is sent or kept", async () => {
+        await write(A, doc('Ladder'));
+        // Moved while the GET was out: A's copy is not PUT to the community the page is on now.
+        let gate = holdNextGet();
+        const put = open(A);
+        await gate.asked;
+        localStorage.setItem('bp_node_url', 'https://elsewhere.example');
+        gate.release();
+        expect(await put).toBe('later');
+        expect(node.log.map((r) => r.method)).toEqual(['GET']);
+        // Nor is the server's copy kept as the other community's record.
+        localStorage.setItem('bp_node_url', NODE);
+        node.rows.set(`${ME}|kit`, { doc: doc('From the server'), updatedAt: '2026-12-01T00:00:00.000Z' });
+        gate = holdNextGet();
+        const take = open(A);
+        await gate.asked;
+        localStorage.setItem('bp_node_url', 'https://elsewhere.example');
+        gate.release();
+        expect(await take).toBe('later');
+        expect(await record(A)).toBeNull();
+        localStorage.setItem('bp_node_url', NODE);
+        expect(await held(A)).toEqual(doc('Ladder'));
+        // Signed out, and another account signed in, while the GET was out: nothing goes signed as them.
+        node.rows.clear();
+        gate = holdNextGet();
+        const after = open(A);
+        await gate.asked;
+        endAccountEpoch('signed-out');
+        beginAccountEpoch();
+        signer = 'someone-else';
+        gate.release();
+        expect(await after).toBe('later');
+        expect(node.count('PUT')).toBe(0);
+        expect(node.doc('someone-else', 'kit')).toBeNull();
     });
 
     it("take runs the tool's reader: an older version is upgraded; a copy that can't be read never replaces the browser's", async () => {

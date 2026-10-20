@@ -255,6 +255,23 @@ function versionProblems(published, pages, ref) {
     for (const c of cols) {
         const before = publishedAt(ref, c.json);
         const now = published[c.key];
+        if (before && !now) {
+            problems.push(`${rel(c.json)} was removed; published copies cannot be deleted`);
+            continue;
+        }
+        if (!before && now) {
+            if (now.version !== 1) {
+                problems.push(`${rel(c.json)} is v${now.version}; the first published version must be v1`);
+            }
+            const edited = pagesEditedSince(ref, c);
+            if (edited.length) {
+                const named = edited.slice(0, 3).join(', ') + (edited.length > 3 ? ` and ${edited.length - 3} more` : '');
+                problems.push(`this change edits the ${c.name}'s pages (${named}) AND publishes them as v${now.version}. A pull request changes only the pages; the director publishes after merge (pnpm guide:publish). So that PRs never conflict on a version, ${restore}`);
+            } else if (pages && pages[c.key] && !sameText(now, pages[c.key])) {
+                problems.push(`${rel(c.json)} v${now.version} is not the text of the pages; publish only with pnpm guide:publish, never by hand`);
+            }
+            continue;
+        }
         if (!before || !now) continue;
         if (sameText(before, now)) {
             if (now.version !== before.version) {

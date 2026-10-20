@@ -558,3 +558,47 @@ test('version isolation: a language publish raises that language version and lea
         repo.cleanup();
     }
 });
+
+test('the check refuses a PR that introduces a new language guide and publishes it itself', () => {
+    const repo = makeRepo();
+    try {
+        const cwd = repo.work;
+        git(cwd, 'checkout', '-q', '-b', 'add-ru-guide');
+
+        const enJson = read(cwd, GUIDE_JSON);
+        const enGuide = JSON.parse(enJson);
+        const homePage = enGuide.guides.find(g => g.slug === 'home');
+        const homeHash = guideBodyHash(homePage);
+
+        const ruDir = path.join(cwd, PKG, 'content/ru/getting-started');
+        fs.mkdirSync(ruDir, { recursive: true });
+        const page = [
+            '---',
+            'slug: home',
+            'title: Главная',
+            'summary: Описание.',
+            'related: rules',
+            `source-hash: ${homeHash}`,
+            '---',
+            '',
+            'Текст на русском.',
+        ].join('\n');
+        write(cwd, `${PKG}/content/ru/getting-started/home.md`, page);
+
+        // Also commit generated published copy (violating PR rules for new language)
+        const genDir = path.join(cwd, PKG, 'generated');
+        fs.mkdirSync(genDir, { recursive: true });
+        write(cwd, `${PKG}/generated/guide.ru.json`, JSON.stringify({
+            schema: 2, version: 1, language: 'ru', hash: 'abc', sections: [], guides: [],
+        }));
+
+        git(cwd, 'add', `${PKG}/content/ru/getting-started/home.md`, `${PKG}/generated/guide.ru.json`);
+        git(cwd, 'commit', '-q', '-m', 'add ru and publish');
+
+        const chk = ciCheck(cwd, 'pull_request');
+        assert.equal(chk.status, 1, `check should refuse: ${said(chk)}`);
+        assert.match(chk.stderr, /this change edits the ru guide's pages.*AND publishes them as v1/);
+    } finally {
+        repo.cleanup();
+    }
+});

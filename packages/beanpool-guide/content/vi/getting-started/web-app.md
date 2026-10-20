@@ -1,0 +1,138 @@
+---
+slug: web-app
+title: Dùng BeanPool trên trình duyệt web
+summary: Ứng dụng web làm được hầu hết những gì ứng dụng điện thoại làm. Tham gia cộng đồng toàn cầu trên trình duyệt, khôi phục tài khoản, đồng bộ sang điện thoại và các tên nút khác biệt.
+related: home, the-bean, your-12-words, joining, messages, reporting
+source-hash: a209ede1df9c7ec7
+---
+
+## Cùng một tài khoản, một màn hình khác
+
+Cộng đồng của bạn cũng có thể được sử dụng trong trình duyệt web, trên máy tính hoặc điện thoại. Hướng dẫn này được viết cho ứng dụng điện thoại. Ứng dụng web hoạt động theo cách tương tự, nhưng một số thứ có tên gọi hoặc vị trí khác nhau.
+
+Hãy dùng một tài khoản duy nhất trên cả hai nơi. Bạn đã tham gia trên trình duyệt? Hãy đưa chính tài khoản đó vào điện thoại của bạn: xem "Đưa tài khoản web của bạn lên điện thoại" bên dưới. Bạn đã tham gia trên điện thoại? Hãy mang tài khoản đó sang trình duyệt: xem "Sử dụng tài khoản điện thoại trên máy tính". Tham gia lần nữa sẽ tạo ra tài khoản thứ hai, và hai tài khoản không bao giờ có thể hợp nhất thành một.
+
+## Tham gia global.beanpool.org trên trình duyệt
+
+Cộng đồng toàn cầu tại global.beanpool.org mở cho bất kỳ ai, và bạn có thể tham gia ngay tại đó trong trình duyệt web. Bạn không cần lời mời và không cần ứng dụng điện thoại.
+
+Trước khi tham gia, trang hiển thị **Trang chủ**, **Chợ**, **Bản đồ** và **Sổ cái** (một ví dụ mẫu từ một cộng đồng địa phương) như cách khách truy cập nhìn thấy: các thẻ công khai, tin đăng, ảnh và ước chừng vị trí của chúng, nhưng không có tên, không có ảnh đại diện và không có địa điểm chính xác. Không có mục nào ở đó cho phép bạn đăng bài hoặc trả lời cho đến khi bạn tham gia. Nút **Tham gia** nằm ở đầu trang và trong thẻ phía trên các tin đăng.
+
+Trên trình duyệt của điện thoại, thẻ đó đưa ra tùy chọn **Mở trong ứng dụng BeanPool** trước tiên. Nút này sẽ mở ứng dụng BeanPool tại lối vào của cộng đồng toàn cầu, hoặc mở kho ứng dụng của điện thoại nếu ứng dụng chưa được cài đặt, nhờ đó tài khoản của bạn sẽ ở trong ứng dụng ngay từ đầu. Nếu ứng dụng đã có tài khoản, nút sẽ mở **Tham gia cộng đồng toàn cầu** với tài khoản đó, hoặc mở bảng **BeanPool** nếu tài khoản đó đã là thành viên ở đó. Xem "Tham gia BeanPool". Bên dưới đó, tùy chọn **hoặc tham gia tại đây trên trình duyệt** sẽ cho phép tham gia ngay tại đây, như các bước bên dưới. Trên máy tính, thẻ hiển thị **Tham gia**.
+
+Trong khi cộng đồng toàn cầu chỉ có một vài tin đăng, mục **Chợ** của nó cũng hiển thị một vài thẻ được đánh dấu **Ví dụ**. Chúng là dữ liệu giả lập để minh họa những gì mọi người đăng, và không thể mở ra xem. Chúng sẽ biến mất khi có đủ các tin đăng thực tế.
+
+Nếu bạn đến từ một liên kết mà ai đó đã chia sẻ dẫn đến một tin đăng hoặc một sự kiện, trang đó sẽ mở ra trước. Hãy tham gia từ trang đó, và khi bạn đã vào trong, trang sẽ mở lại lần nữa, lần này có đầy đủ thông tin về người đã đăng tin.
+
+- Nhấn **Tham gia**, sau đó chọn **Tôi mới dùng BeanPool**.
+- Chọn tên mà mọi người sẽ thấy. Tên cần có ít nhất 2 chữ cái và tối đa 20 chữ cái.
+- Chọn cách tham gia. **Tạo tài khoản bằng 12 từ bí mật** không cần tài khoản nào khác (đây là các từ tiếng Anh). Hoặc, dưới mục **Hoặc đăng nhập**, hãy đăng nhập một lần bằng một trong các tài khoản mà trang hiển thị: **Google**, **Apple** hoặc **Facebook**. Trang sẽ đưa bạn đến trang đăng nhập của chính công ty đó và đưa bạn quay trở lại. Ở nơi cộng đồng chỉ chấp nhận đăng nhập, trang chỉ hiển thị riêng các phương thức đăng nhập.
+- Sau đó là các bước tương tự như mọi người: ảnh đại diện, ước chừng vị trí của bạn, 12 từ tiếng Anh của bạn và một chuyến tham quan ngắn. Thanh ở trên cùng ghi **Đăng nhập** (hoặc **Tên của bạn**, khi bạn tham gia bằng 12 từ), **Ảnh của bạn**, **Khu vực của bạn**, **Sao lưu** và **Cách hoạt động**. Tại bước **Khu vực của bạn**, nút **Dùng vị trí của tôi** sẽ hỏi trình duyệt của bạn một lần và làm tròn kết quả đến khoảng 10 km trước khi gửi đi; **Type a town or suburb** tìm một địa điểm theo tên; **Để sau** sẽ không gửi gì cả. Trình duyệt sẽ không bị hỏi lại vị trí của bạn ở cuối quá trình. Xem "Tham gia BeanPool".
+
+**Tham gia bằng 12 từ.** Không cần tài khoản Google, Apple hay Facebook, và cộng đồng không lưu giữ bất kỳ thông tin nào về bạn ngoài tên của bạn và một mã tham chiếu đã xáo trộn đến mạng bạn đã dùng để tham gia (được giữ trong một ngày). Trong khi bạn nhập tên, trang web sẽ thực hiện một phần công việc nhỏ cho cộng đồng ở chế độ nền, để không ai có thể tạo tài khoản liên tục không ngừng nghỉ. Bạn không cần phải chờ đợi: nếu bạn nhấn trước khi hoàn tất, trang sẽ báo **Đang thiết lập tài khoản của bạn…** cùng một thanh tiến trình gồm 8 bước. Khi có nhiều người đang tham gia, quá trình sẽ mất nhiều thời gian hơn, và trang sẽ cho biết khoảng thời gian cần thiết trên trình duyệt này: lúc đó việc đăng nhập sẽ nhanh hơn. **← Chọn cách khác** sẽ quay lại cả hai cách tham gia, trong khi công việc nền vẫn tiếp tục. 12 từ tiếng Anh khi đó là cách duy nhất để bạn vào lại. Không ai có thể đặt lại chúng, kể cả chúng tôi hay cộng đồng: bước **Sao lưu** sẽ giải thích điều đó, và đưa ra tùy chọn **Thêm đăng nhập làm cách thứ hai để vào lại**: bạn chọn phương thức đăng nhập ở cuối chuyến tham quan ngắn, khi ảnh của bạn đã được lưu (xem "Thêm phương thức đăng nhập sau" bên dưới). Cả hai đều tùy thuộc vào lựa chọn của bạn.
+
+**Tham gia bằng phương thức đăng nhập.** Cộng đồng chỉ lưu một mã tham chiếu đã xáo trộn đến thông tin đó, không bao giờ lưu email hay tên của bạn từ tài khoản đó. Một tài khoản đăng nhập có thể tham gia một lần.
+
+Chính thông tin đăng nhập đó cũng được giữ lại làm cách để quay lại tài khoản của bạn. Trong khi trang hiển thị **Đang bảo mật tài khoản…**, nó sẽ khóa một bản sao tài khoản của bạn cùng 12 từ tiếng Anh của nó, và quá trình tham gia sẽ chuyển bản sao đó cho cộng đồng. Tài khoản đăng nhập đó có thể mở lại nó. Những người vận hành máy chủ cũng có thể mở nó, vì máy chủ của họ kiểm tra thông tin đăng nhập của bạn, tương tự như tài khoản đăng nhập được liên kết trên ứng dụng điện thoại: xem "Khôi phục tài khoản của bạn". Cài đặt sau đó hiển thị **Khôi phục bằng đăng nhập: đã kết nối** cùng tên phương thức đã dùng. Nếu bản sao không thể tạo hoặc lưu giữ, bạn vẫn tham gia được, và Cài đặt sẽ ghi **Khôi phục bằng đăng nhập: chưa kết nối**: khi đó 12 từ tiếng Anh là cách duy nhất để bạn vào lại.
+
+Nếu bạn không muốn cộng đồng lưu giữ bản sao đó, ứng dụng web hiện chưa thể gỡ bỏ nó. Ứng dụng điện thoại có thể làm được việc đó, nếu tài khoản của bạn cũng đang có trên điện thoại: khi đang mở cộng đồng toàn cầu, hãy vào **Cài đặt**, nhấn **Bảo vệ tài khoản**, rồi chọn **Ngắt kết nối** bên cạnh phương thức đăng nhập. Dù bằng cách nào, hãy giữ 12 từ tiếng Anh của bạn thật an toàn: chúng là cách vào lại thuộc về riêng bạn.
+
+Nếu ai đó ở đây đã dùng tên bạn chọn, bạn sẽ nhận được tên đó kèm theo một con số. Bạn có thể đổi lại tên trong Cài đặt.
+
+**Đã sử dụng BeanPool rồi?** Đừng tạo tài khoản thứ hai. Sau khi nhấn **Tham gia**, hãy chọn **Tôi dùng BeanPool trên điện thoại** để liên kết từ ứng dụng điện thoại, hoặc **Tôi có 12 từ của mình**. Nếu tài khoản đó chưa tham gia cộng đồng toàn cầu, trang sẽ đưa ra các cách tham gia tương tự (12 từ của bạn, hoặc đăng nhập một lần), và nó sẽ tham gia với tư cách tài khoản bạn đã có. Nếu trước đây bạn đã tham gia cộng đồng toàn cầu bằng phương thức đăng nhập, hãy chọn **Trước đây tôi tham gia bằng đăng nhập** (xem bên dưới).
+
+Nếu bạn đóng trang giữa chừng, hãy mở lại trong vòng 10 phút và trang sẽ tiếp tục với cùng tên đó.
+
+**Một tài khoản cho mỗi trình duyệt.** Nếu bạn tham gia ở hai tab cùng một lúc, tab thứ hai sẽ báo **Trình duyệt này đã có một tài khoản** và đưa ra nút **Mở** kèm theo tên tài khoản đó. Không có gì thay thế nó. Nếu việc tham gia của tab thứ hai cũng đã thành công, tài khoản đó cũng được lưu trên trình duyệt này, và nút **Show** (tên của nó) **12 words** sẽ hiển thị các từ của nó: hãy viết chúng ra giấy nếu bạn muốn giữ lại tài khoản đó. Để sử dụng tài khoản đó thay thế, hãy đăng xuất trong Cài đặt (**Chỉ xóa khỏi thiết bị này**), sau đó khôi phục bằng những từ đó.
+
+**Lần tham gia đã gửi đi luôn được ưu tiên.** Nếu trình duyệt này đã gửi đi một yêu cầu tham gia có thể đã thành công, trang web sẽ hỏi cộng đồng về yêu cầu đó trước mọi thao tác khác, ngay cả trước lời mời hoặc khôi phục tài khoản khác. Nếu bạn đã vào trong, bạn tiếp tục sử dụng. Nếu yêu cầu vẫn có thể được xử lý, trang sẽ yêu cầu bạn chờ vài phút, sau đó nhấn **Kiểm tra lại**. Điều này vẫn áp dụng ngay cả khi cộng đồng đã ngừng tiếp nhận thành viên mới.
+
+Nếu có sự cố xảy ra trên trang sau khi yêu cầu tham gia của bạn đã gửi đi, trang sẽ thông báo và đưa ra nút **Tải lại trang**. Yêu cầu tham gia của bạn được lưu trên trình duyệt này, và việc tải lại sẽ kiểm tra xem bạn đã vào được hay chưa.
+
+**Nhiều người tham gia từ một mạng:** khi có nhiều tài khoản mới đến từ một kết nối internet, việc tham gia sẽ yêu cầu trình duyệt xử lý thêm một chút công việc thay vì từ chối người dùng. Mọi người trên cùng một mạng đều được tính chung, vì vậy tại trường học, văn phòng hay buổi gặp mặt, có thể là do những người khác đang tham gia chứ không phải bạn. Chỉ khi vượt quá một số lượng rất lớn, trang mới từ chối tiếp nhận lúc này, và cho biết cần chờ bao nhiêu phút. Khi trang thông báo điều đó về các tài khoản 12 từ, việc tham gia bằng đăng nhập vẫn hoạt động bình thường.
+
+## Giới hạn của tài khoản mới
+
+Trên cộng đồng toàn cầu, tài khoản mới có một vài giới hạn hàng ngày trong 3 ngày đầu tiên, và cho đến khi 3 bài đăng của tài khoản được giữ lại: 3 bài đăng, 5 ảnh và 10 người mới để nhắn tin trong mỗi 24 giờ. Tài khoản tạo bằng 12 từ có các giới hạn nhỏ hơn, trong 7 ngày đầu tiên và cho đến khi 3 bài đăng được giữ lại: 2 bài đăng, 4 ảnh và 3 người mới để nhắn tin. Thêm phương thức đăng nhập sẽ nâng tài khoản lên các giới hạn thông thường ngay lập tức. Việc trả lời một người đã nhắn tin cho bạn trước không bao giờ bị giới hạn. Xem "Báo cáo vấn đề" để biết lý do.
+
+- Sau khi bạn tham gia, một thẻ có tên **Tài khoản của bạn còn mới** sẽ hiển thị bạn còn lại bao nhiêu lượt cho mỗi loại và khi nào có thêm lượt. Nhấn **✕** để đóng lại. Thẻ sẽ nằm trong **Cài đặt** cho đến khi các giới hạn kết thúc.
+- Nếu bạn chạm giới hạn, mục **Bài đăng mới** hoặc đoạn chat sẽ thông báo giới hạn nào và khi nào được dỡ bỏ, đồng thời **Bài đăng mới** sẽ hiển thị cùng thẻ đó.
+- Nếu người kiểm duyệt đã tạm dừng quyền đăng bài của bạn, mục **Bài đăng mới** và đoạn chat sẽ thông báo như vậy, cùng một thẻ có tên **Đã tạm dừng đăng bài** cho biết đến khi nào. Thẻ sẽ giữ nguyên cho đến khi lệnh tạm dừng kết thúc.
+- Nếu người kiểm duyệt ẩn hoặc xóa một bài đăng của bạn, hoặc tạm dừng quyền đăng bài của bạn trong khi ứng dụng web đang đóng, ứng dụng web sẽ hiển thị cảnh báo vào lần tiếp theo bạn mở, trong tối đa 60 ngày. Mỗi cảnh báo sẽ giữ nguyên cho đến khi bạn nhấn **Đã hiểu**, và sau đó không xuất hiện lại. Nếu có nhiều cảnh báo đang chờ, nút **Close all** sẽ đóng tất cả lại. Nếu tài khoản của bạn cũng đang có trên điện thoại, ứng dụng web có thể hiển thị cảnh báo bạn đã xem trên điện thoại.
+
+Cộng đồng địa phương của riêng bạn không có bất kỳ giới hạn nào trong số này.
+
+## Khôi phục tài khoản của bạn bằng đăng nhập
+
+Trên cộng đồng toàn cầu, phương thức đăng nhập bạn đã dùng khi tham gia sẽ giúp lấy lại tài khoản trên trình duyệt: một trình duyệt đã bị xóa dữ liệu đã lưu, hoặc một trình duyệt mới trên máy tính khác. Bạn sẽ nhận lại chính tài khoản đó, không bao giờ thành tài khoản thứ hai.
+
+- Nhấn **Đã có tài khoản BeanPool?**, sau đó chọn **Dùng đăng nhập của tôi**. (Sau khi nhấn **Tham gia**, tùy chọn **Trước đây tôi tham gia bằng đăng nhập** cũng làm điều tương tự.)
+- Một trình duyệt quá cũ không thể chứa tài khoản BeanPool sẽ thông báo điều đó tại đây thay vì đưa ra các tùy chọn này, tương tự như vị trí của nút **Tham gia**. Hãy dùng Chrome, Firefox, Safari hoặc Edge phiên bản cập nhật.
+- Nhập tên của bạn tại đây. Nhấn vào tài khoản của bạn khi nó xuất hiện.
+- Chọn phương thức đăng nhập bạn đã dùng khi tham gia: **Google**, **Apple** hoặc **Facebook**. Tương tự như khi tham gia, trang web sẽ đưa bạn đến trang đăng nhập của chính công ty đó và đưa bạn quay trở lại.
+- Trang web sẽ mở bản sao bị khóa của tài khoản trong trình duyệt, và kiểm tra xem đó có đúng là tài khoản bạn đã nhấn hay không. Nếu không phải, trang sẽ báo **That isn't** (tên) và không lưu gì cả.
+- Bạn đã vào trong, cùng với 12 từ tiếng Anh khi bản sao có lưu giữ chúng: tài khoản tham gia trên trình duyệt luôn có chúng. Nếu bản sao không lưu giữ chúng, trình duyệt này sẽ không có chúng, và Cài đặt sẽ thông báo như vậy (xem "Giữ 12 từ của bạn" bên dưới).
+
+Các thiết bị của tài khoản sẽ được thông báo rằng tài khoản đang được lấy lại, phòng trường hợp đó không phải là bạn.
+
+Nếu bạn tham gia bằng GitHub, nó không thể giúp lấy lại tài khoản: BeanPool không còn sử dụng GitHub nữa (xem "Khôi phục tài khoản của bạn"). Hãy dùng 12 từ của bạn thay thế.
+
+Nếu bạn đăng nhập bằng một tài khoản không phải là tài khoản bạn đã dùng khi tham gia, trang sẽ thông báo và cho phép bạn chọn lại. Nếu bạn nhấn **Tham gia** và đăng nhập bằng một tài khoản đã tham gia rồi, trang sẽ báo **Bạn đã ở đây rồi** và đưa ra tùy chọn **Restore with** (phương thức đăng nhập đó).
+
+**Quy tắc một tài khoản cho mỗi trình duyệt** cũng áp dụng ở đây. Nếu trình duyệt này đã có một tài khoản khác, không có gì thay thế nó: trang sẽ báo **Trình duyệt này đã có một tài khoản** và đưa ra tùy chọn mở tài khoản đó. Để mang tài khoản của bạn đến đây thay thế, trước tiên hãy đăng xuất khỏi tài khoản kia. Nếu trình duyệt này đã có sẵn tài khoản của bạn, trang sẽ báo tài khoản đã ở đây rồi.
+
+## Thêm phương thức đăng nhập sau
+
+Nếu bạn tham gia cộng đồng toàn cầu bằng 12 từ, chúng là cách duy nhất để bạn vào lại. Sau khi bạn tham gia, một thẻ có tên **Một cách quay lại** sẽ thông báo như vậy, cùng với **Xem 12 từ của tôi** và **Thêm đăng nhập**. Nhấn **✕** để đóng lại: thẻ sẽ xuất hiện lại một lần sau khi một trong các bài đăng của bạn được giữ lại, và một lần nữa khi tuần đầu tiên của bạn kết thúc. Thẻ sẽ nằm trong **Cài đặt** cho đến khi bạn thêm một phương thức đăng nhập.
+
+- Nhấn **Thêm đăng nhập**, sau đó chọn **Google**, **Apple** hoặc **Facebook**. Tương tự như khi tham gia, trang web sẽ đưa bạn đến trang đăng nhập của chính công ty đó và đưa bạn quay trở lại.
+- **Cài đặt** sẽ mở ra và cho biết nó đã được thêm hay chưa. Kể từ đó, thông tin đăng nhập đó cũng giúp lấy lại tài khoản của bạn: cộng đồng sẽ lưu giữ một bản sao bị khóa của tài khoản cho nó, tương tự như khi bạn tham gia bằng đăng nhập, và những người vận hành máy chủ có thể mở bản sao đó. Các giới hạn tài khoản mới của bạn sẽ trở thành giới hạn thông thường ngay lập tức.
+- Một tài khoản đăng nhập đã có một tài khoản BeanPool khác ở đây, hoặc thuộc về một tài khoản đã bị cộng đồng loại bỏ, sẽ không thể thêm được: trang sẽ thông báo như vậy, và không có gì thay đổi.
+
+## Tên gọi và vị trí khác biệt
+
+- **Tham gia bằng lời mời:** nút của bước đầu tiên ghi **Tạo danh tính & Tham gia →**. Nếu ai đó ở đây đã có tên bạn chọn, bạn sẽ nhận được tên đó kèm theo một con số. Nút **← Quay lại** trên bước **Ảnh của bạn** hiển thị riêng tên của bạn, cùng nút **Tiếp →**: hãy đổi tên (tối đa 20 ký tự) hoặc giữ nguyên, trên cùng một tài khoản. Nếu ai đó đã có tên mới, trang sẽ thông báo và gợi ý những tên khác.
+- **Các tab:** ứng dụng web có các tab **Trang chủ**, **Chợ**, **Bản đồ**, **Commons**, **Trò chuyện**, **Mọi người** và **Sổ cái**. Những gì ứng dụng điện thoại gọi là **Trò chuyện** thì trên web gọi là **Trò chuyện**, và mục **Mọi người** có tab riêng.
+- **Cài đặt và hồ sơ của bạn:** các nút nhỏ ở trên cùng bên phải: hồ sơ của bạn, dấu **?**, sau đó là Cài đặt. Trên màn hình rộng, chúng nằm ở cuối menu bên trái.
+- **Đăng Lời đề nghị hoặc Nhu cầu:** sử dụng nút **Bài đăng mới** trên trang **Bản đồ**.
+- **Giao diện:** tùy chọn được gọi là **Giống như thiết bị** thay vì "Giống như điện thoại".
+- **Chặn:** Cài đặt ghi **Quản lý thành viên bị chặn**. Cộng đồng lưu giữ danh sách chặn cùng tài khoản của bạn, vì vậy chúng sẽ hiển thị lại khi bạn đăng nhập trên bất kỳ trình duyệt nào, và việc đăng xuất sẽ không để lại thông tin gì về chúng trên máy tính. Những người vận hành máy chủ cộng đồng của bạn có thể thấy bạn đã chặn ai. Việc chặn và bỏ chặn cần có kết nối mạng: khi không có kết nối, ứng dụng web sẽ thông báo và không có gì thay đổi. Các thao tác chặn thực hiện trong ứng dụng điện thoại sẽ chỉ ở trên điện thoại và không hiển thị ở đây.
+- **Các cuộc trò chuyện:** phần chat trên web có các nút **Báo cáo** và **Chặn** ở trên cùng.
+- **Khu vực của bạn:** trên cộng đồng toàn cầu, Cài đặt của ứng dụng web cũng có mục **Khu vực bạn**, và Chợ cùng Bản đồ của nó sẽ bắt đầu từ khu vực đó. Xem "Khu vực bạn".
+- **Cộng đồng toàn cầu:** trên một cộng đồng địa phương, Cài đặt có một hàng **Cộng đồng toàn cầu** dưới mục **BEANPOOL**, kèm theo địa chỉ của nó và dòng chữ **Cộng đồng toàn cầu là một cộng đồng trong số rất nhiều cộng đồng. Cộng đồng của riêng bạn chạy trên máy chủ riêng và không bao giờ cần đến cộng đồng toàn cầu.** Mục này sẽ mở cộng đồng toàn cầu mà máy chủ của cộng đồng bạn đã chỉ định, trong một tab mới. Tài khoản của bạn chưa có ở đó cho đến khi bạn mang nó sang: trong tab đó, nhấn **Tham gia**, sau đó chọn **Tôi có 12 từ của mình**. Nếu cộng đồng của bạn không chỉ định địa chỉ nào, hàng này sẽ không xuất hiện.
+
+## Những gì ứng dụng web không có
+
+- Khôi phục tài khoản của bạn bằng đăng nhập trên một cộng đồng khác ngoài cộng đồng toàn cầu. Ở những cộng đồng đó, 12 từ của bạn sẽ giúp lấy lại tài khoản, hoặc liên kết từ ứng dụng điện thoại nếu tài khoản của bạn cũng đang có trên điện thoại.
+- Kênh **Tìm hiểu** của Nhịp đập.
+- Tính năng khóa ứng dụng của điện thoại.
+- Đăng nhập vào Cài đặt cộng đồng bằng chiếc khóa của chính bạn, dành cho chủ sở hữu và quản trị viên. Liên kết **Manage** của ứng dụng web sẽ mở Cài đặt, nhưng trình duyệt không có cơ chế tự mở khóa riêng. Trên máy tính, hãy chọn **Đăng nhập bằng điện thoại của bạn** trong Cài đặt và quét mã bằng ứng dụng điện thoại (**Cài đặt**, sau đó chọn **Quản lý cộng đồng này từ máy tính**; ứng dụng cũ hơn: **Sign in on a computer**).
+
+## Đưa tài khoản web của bạn lên điện thoại
+
+Nếu bạn tham gia trên trình duyệt, hãy mang chính tài khoản đó sang ứng dụng điện thoại. Đừng tham gia lại trên điện thoại: việc đó sẽ tạo ra tài khoản thứ hai, và hai tài khoản không bao giờ có thể hợp nhất thành một. Bước **Sao lưu**, bên cạnh 12 từ của bạn, và thẻ **Khôi phục bằng đăng nhập** trong Cài đặt sẽ hướng dẫn cách làm:
+
+- Cài đặt ứng dụng BeanPool và mở ứng dụng.
+- Nhấn **Đã là thành viên? Khôi phục tài khoản**, sau đó chọn **Khôi phục bằng 12 từ**.
+- Nhập 12 từ tiếng Anh của bạn, sau đó dưới mục **Cộng đồng nào?**, nhấn **Cộng đồng toàn cầu**. Trong ứng dụng không có tùy chọn đó, hãy nhập địa chỉ của cộng đồng toàn cầu, global.beanpool.org. Đối với cộng đồng khác, hãy nhập địa chỉ của cộng đồng đó: ứng dụng web sẽ hiển thị địa chỉ đó trong cùng câu văn.
+- Nếu bạn tham gia bằng phương thức đăng nhập, tùy chọn **Recover with Social** cũng hoạt động, với chính phương thức đăng nhập đó. Xem "Khôi phục tài khoản của bạn".
+
+Màn hình 1 của việc tham gia trên trình duyệt cũng nêu điều tương tự theo chiều ngược lại: nếu bạn đã có tài khoản trên BeanPool, trên bất kỳ điện thoại hay máy tính nào, hãy mang tài khoản đó sang thay vì bắt đầu một tài khoản mới.
+
+## Sử dụng tài khoản điện thoại trên máy tính
+
+- Trong ứng dụng web trên máy tính, hãy chọn liên kết với ứng dụng di động. Màn hình sẽ hiển thị mã QR.
+- Trên điện thoại, mở **Cài đặt** và nhấn **Liên kết thiết bị** (ứng dụng cũ hơn: **Use your account on another device**).
+- Hướng máy ảnh của điện thoại vào mã QR, nhấn **Xác nhận & Liên kết thiết bị** và vượt qua bước kiểm tra khóa màn hình của điện thoại.
+- Sau đó điện thoại sẽ hiển thị **bốn chữ số**. Nhập bốn chữ số đó trên máy tính và nhấn **Xác nhận**. Tài khoản của bạn chỉ chuyển sang máy tính sau bước đó. Ba lần thử sai và không có gì được gửi đi: hãy tạo mã mới. Không bao giờ đọc to các chữ số hoặc gửi chúng cho bất kỳ ai.
+- Nếu điện thoại báo ứng dụng của nó quá cũ, hãy cập nhật ứng dụng BeanPool trên điện thoại, sau đó quét mã mới.
+
+## Cài đặt ứng dụng
+
+Ứng dụng web có thể đưa ra tùy chọn **Cài đặt BeanPool** để mở từ màn hình chính như một ứng dụng. Nếu trình duyệt của bạn không thể làm được điều đó, hãy nhấn **Như thế nào?** để xem các bước.
+
+## Giữ 12 từ của bạn
+
+Các trình duyệt đôi khi xóa dữ liệu đã lưu, ví dụ như Safari sau một tuần không truy cập. Cho đến khi bạn đã xem 12 từ của mình, Cài đặt của ứng dụng web sẽ hiển thị một cảnh báo kèm theo nút **Xem & Lưu cụm từ khôi phục**. Hãy thực hiện và viết chúng ra giấy.
+
+Một trình duyệt đã lấy lại tài khoản của bạn bằng phương thức đăng nhập mà bản sao không lưu giữ 12 từ sẽ không có chúng, do đó nó không hiển thị cảnh báo như vậy. Ở đó, mục **Xem cụm từ khôi phục** sẽ báo **Chưa được lưu trong trình duyệt này**, và mở ra trang giải thích những gì có thể giúp lấy lại tài khoản của bạn thay thế: 12 từ của bạn, nếu bạn đã viết chúng ra giấy, hoặc phương thức đăng nhập mà Cài đặt hiển thị là đã kết nối. Nếu không có cả hai, chỉ ứng dụng điện thoại mới có thể làm được, nếu tài khoản cũng đang có trên điện thoại của bạn. Nút **Chỉ xóa khỏi thiết bị này** cũng nói điều tương tự trước khi bạn đăng xuất.

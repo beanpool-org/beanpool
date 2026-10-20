@@ -874,9 +874,26 @@ describe("reminders: due() becomes the phone's own date-trigger notifications", 
         n.scheduled.push(
             { identifier: 'bp-tool:comm:other-tool:due:1000' },
             { identifier: 'bp-tool:comm:due:item:2000' },
+            { identifier: 'bp-tool:other-tool:due:3000' },
         );
+        // Cancelling tool "due" should not match reminders of other-tool whose reminder name is "due",
+        // nor should it match 5-part reminders by community identifier.
         await cancelToolReminders({ tool: 'due' }, n);
-        expect(n.scheduled.map((s) => s.identifier)).toEqual(['bp-tool:comm:other-tool:due:1000']);
+        expect(n.scheduled.map((s) => s.identifier)).toEqual([
+            'bp-tool:comm:other-tool:due:1000',
+            'bp-tool:other-tool:due:3000',
+        ]);
+
+        // Calling cancelToolReminders with community name as tool should not wipe other tools in that community
+        await cancelToolReminders('comm', n);
+        expect(n.scheduled.map((s) => s.identifier)).toEqual([
+            'bp-tool:comm:other-tool:due:1000',
+            'bp-tool:other-tool:due:3000',
+        ]);
+
+        // Cancelling by tool name cancels both anchored and legacy reminders for that tool
+        await cancelToolReminders('other-tool', n);
+        expect(n.scheduled.map((s) => s.identifier)).toEqual([]);
     });
 
     it('cancelToolReminders matches anchored prefix and cancels multi-part reminder ids', async () => {

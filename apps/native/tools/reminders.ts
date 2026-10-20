@@ -90,10 +90,14 @@ export async function cancelToolReminders(
     n: ToolNotifications | null = deviceNotifications(),
 ): Promise<void> {
     if (!n) return;
+    const matchTool = (tool: string) => (id: string) => {
+        if (!id.startsWith(TOOL_REMINDER_PREFIX)) return false;
+        const parts = id.split(':');
+        return (parts.length >= 5 && parts[2] === tool) || (parts.length === 4 && parts[1] === tool);
+    };
     let match: (id: string) => boolean = (id) => id.startsWith(TOOL_REMINDER_PREFIX);
     if (typeof target === 'string') {
-        const tool = target;
-        match = (id) => id.startsWith(TOOL_REMINDER_PREFIX) && (id.split(':')[2] === tool || id.split(':')[1] === tool);
+        match = matchTool(target);
     } else if (target) {
         const { community, tool } = target;
         if (community && tool) {
@@ -104,7 +108,7 @@ export async function cancelToolReminders(
             const prefix = `${TOOL_REMINDER_PREFIX}${community}:`;
             match = (id) => id.startsWith(prefix);
         } else if (tool) {
-            match = (id) => id.startsWith(TOOL_REMINDER_PREFIX) && (id.split(':')[2] === tool || id.split(':')[1] === tool);
+            match = matchTool(tool);
         }
     }
     try {

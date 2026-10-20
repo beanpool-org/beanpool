@@ -640,6 +640,9 @@ describe("reminders: due() becomes the phone's own date-trigger notifications", 
         expect(toolReminderRoute({ remote: true, data: { bpTool: 'fixture-kit' } })).toBeNull();
         expect(toolReminderRoute({ remote: false, data: { bpTool: 'not-here' } })).toBeNull();
         expect(toolReminderRoute({ remote: false, data: null })).toBeNull();
+        // Not the phone's own (no bpLocal: 1), even with `remote` inferred false: a push naming a tool opens nothing here.
+        expect(toolReminderRoute({ remote: false, data: { bpTool: 'fixture-kit', screen: 'item' } })).toBeNull();
+        expect(toolReminderRoute({ remote: false, data: { bpLocal: '1', bpTool: 'fixture-kit' } })).toBeNull();
     });
 });
 

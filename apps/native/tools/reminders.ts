@@ -128,11 +128,14 @@ export async function scheduleToolReminders<D>(
 /**
  * Where a tap on a tool's reminder opens: the tool, at the screen due() named when this build has it, else its first.
  * Null for anything else: a push from outside (only the app posts a local notification), a tool this build doesn't have.
+ * Only what {@link scheduleToolReminders} posted is one: `remote` is inferred from the trigger, which a platform may leave
+ * unset on a push, so the `bpLocal: 1` it writes must be there too, or an unsigned push naming a tool is never routed
+ * here past the signed-tap check (PR #2267 review 4326931551).
  */
 export function toolReminderRoute(n: { remote: boolean; data: unknown }): string | null {
     if (n.remote || !n.data || typeof n.data !== 'object') return null;
-    const { bpTool, screen } = n.data as { bpTool?: unknown; screen?: unknown };
-    if (typeof bpTool !== 'string') return null;
+    const { bpLocal, bpTool, screen } = n.data as { bpLocal?: unknown; bpTool?: unknown; screen?: unknown };
+    if (bpLocal !== 1 || typeof bpTool !== 'string') return null;
     const tool = phoneTool(bpTool);
     if (!tool) return null;
     const known = typeof screen === 'string' && tool.manifest.screens.includes(screen) && screen !== tool.manifest.screens[0];

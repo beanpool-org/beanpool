@@ -415,7 +415,10 @@ export async function writeBriefs({ root = ROOT, dir, langs = null, maxKeys = nu
         briefLines.push('Never merge, deploy, or open a pull request (the director merges after meaning-check). Stage named files only.');
         briefLines.push('');
         briefLines.push(`## Work Summary for ${lang}`);
-        briefLines.push(`- App words missing: core (${l.appWords.byCatalog.core?.missing ?? 0}), native (${l.appWords.byCatalog.native?.missing ?? 0}), pwa (${l.appWords.byCatalog.pwa?.missing ?? 0})`);
+        const catalogSummary = catalogDefs
+            .map((def) => `${def.name} (${l.appWords.byCatalog[def.name]?.missing ?? 0})`)
+            .join(', ');
+        briefLines.push(`- App words missing: ${catalogSummary}`);
         briefLines.push(`- Guide titles: ${l.guideTitles.missing} missing, ${l.guideTitles.stale} stale`);
         briefLines.push(`- Guide pages: ${l.guidePages.missing} missing, ${l.guidePages.stale} stale`);
         briefLines.push(`- Safety/Money items requiring strict fidelity: ${l.safetyMoney}`);

@@ -448,3 +448,54 @@ test('reportDraft exits 0 even on scan errors', async () => {
         fs.rmSync(tmp, { recursive: true, force: true });
     }
 });
+
+test('writeBriefs reflects custom catalogDefs in header summary', async () => {
+    const tmp = makeTempDir();
+    try {
+        const contentDir = path.join(tmp, 'packages/beanpool-guide/content');
+        fs.mkdirSync(path.join(contentDir, 'about'), { recursive: true });
+        fs.mkdirSync(path.join(contentDir, 'es'), { recursive: true });
+        fs.writeFileSync(
+            path.join(contentDir, 'manifest.json'),
+            JSON.stringify({
+                sections: [{ id: 'about', title: 'About', summary: 'Sum', pages: ['faq', 'intro'] }],
+            }),
+        );
+        fs.writeFileSync(
+            path.join(contentDir, 'about/faq.md'),
+            '---\nslug: faq\ntitle: FAQ\nsummary: Questions\nrelated: intro\n---\n\n## Questions\n\nAnswers.\n',
+        );
+        fs.writeFileSync(
+            path.join(contentDir, 'about/intro.md'),
+            '---\nslug: intro\ntitle: Intro\nsummary: Overview\nrelated: faq\n---\n\n## Intro\n\nText.\n',
+        );
+        fs.writeFileSync(path.join(contentDir, 'es/manifest.json'), JSON.stringify({ sections: {}, pages: {} }));
+        fs.mkdirSync(path.join(tmp, 'custom-pkg/words'), { recursive: true });
+        fs.writeFileSync(path.join(tmp, 'custom-pkg/words/es.json'), JSON.stringify({ _meta: {} }));
+
+        const briefsDir = path.join(tmp, 'briefs');
+        const customDefs = [{ name: 'custom-pkg', folder: 'custom-pkg/words' }];
+        const extracted = [
+            {
+                name: 'custom-pkg',
+                words: 'custom-pkg/words',
+                calls: [{ fn: 't', text: 'Custom key', at: 'file.ts:1' }],
+            },
+        ];
+
+        const rc = await writeBriefs({
+            root: tmp,
+            dir: briefsDir,
+            langs: ['es'],
+            catalogDefs: customDefs,
+            extracted,
+        });
+        assert.equal(rc, 0);
+
+        const briefText = fs.readFileSync(path.join(briefsDir, 'brief-es.md'), 'utf8');
+        assert.match(briefText, /- App words missing: custom-pkg \(1\)/);
+        assert.ok(!briefText.includes('core ('));
+    } finally {
+        fs.rmSync(tmp, { recursive: true, force: true });
+    }
+});

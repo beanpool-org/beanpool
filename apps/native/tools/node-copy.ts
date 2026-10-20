@@ -17,6 +17,7 @@ import {
     type ToolCopyDevice, type ToolCopyNode, type ToolCopyOutcome, type ToolCopyOwner, type ToolManifest, type ToolNodeAnswer,
 } from '@beanpool/core';
 import { getDb, signedGet, signedRequestWithMethod } from '../utils/db';
+import { onAccountOnPhone } from '../utils/account-on-phone';
 import { notifyToolStore, patchToolSettings, readToolCopy, readToolSettings } from './store';
 import { communityKey } from './community';
 
@@ -93,6 +94,19 @@ export function phoneToolDevice(owner: string, tool: string, url: string | null)
 const queue = createToolCopyQueue();
 const keyOf = (c: PhoneToolCopy) => `${communityKey(c.url)}|${c.owner.publicKey}|${c.manifest.id}`;
 
+/**
+ * Moved on each time the phone's account changes (Sign Out, Replace, another account signing in): a sync after a write
+ * that was waiting from before is dropped, so it is never signed as the account that holds the phone now. What it would
+ * have sent is still on the phone and goes on that tool's next open.
+ */
+let accountTurn = 0;
+let accountHeld: string | null | undefined;
+onAccountOnPhone((key) => {
+    if (key === accountHeld) return;
+    accountHeld = key;
+    accountTurn++;
+});
+
 /** Whether the phone is still on the community the tool was opened in: its file and its server are the copy's. */
 async function stillHere(url: string | null): Promise<boolean> {
     const now = await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null);
@@ -117,7 +131,8 @@ export function openToolCopy(c: PhoneToolCopy): Promise<ToolCopyOutcome> {
 /** After a write: one sync five seconds after the last (an open's rule, so an off made elsewhere is heard first). */
 export function toolCopyAfterWrite(c: PhoneToolCopy, then: (outcome: ToolCopyOutcome) => void): void {
     if (!keepsNodeCopy(c.manifest)) return;
-    queue.later(keyOf(c), async () => then(await sync(c)));
+    const turn = accountTurn;
+    queue.later(keyOf(c), async () => then(turn === accountTurn ? await sync(c) : 'later'));
 }
 
 /** The member's toggle: on is the GET, the step and the PUT; off the DELETE. The setting moves only once the node answered. */

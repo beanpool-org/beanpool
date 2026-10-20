@@ -47,6 +47,7 @@ import { word, type ToolManifest } from '@beanpool/core';
 import { TOOL_DOCS_TABLE } from '../../tools/schema';
 import { readToolCopy, readToolDoc, readToolSettings, writeToolDoc, writeToolSettings } from '../../tools/store';
 import { keepsNodeCopy, openToolCopy, removeToolCopyFirst, switchToolCopy, toolCopyAfterWrite, type PhoneToolCopy } from '../../tools/node-copy';
+import { announceAccountOnPhone } from '../account-on-phone';
 
 const URL_A = 'https://mullum.example';
 const ME = 'me-key';
@@ -269,6 +270,21 @@ describe('two phones, one server: the open rule', () => {
         expect(node.log.map((r) => r.method)).toEqual(['GET', 'PUT']);
         await vi.advanceTimersByTimeAsync(60_000);
         expect(node.count('PUT')).toBe(1);
+    });
+
+    it("a sync waiting when the phone's account changes (Sign Out, another sign-in) is dropped: never signed as the next account", async () => {
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+        await write(A, doc('Ladder'));
+        announceAccountOnPhone(null);
+        announceAccountOnPhone('someone-else');
+        await vi.advanceTimersByTimeAsync(10_000);
+        expect(node.log).toEqual([]);
+        // The same account announced again (a name change) drops nothing.
+        await write(A, doc('Ladder', 'Tent'));
+        announceAccountOnPhone('someone-else');
+        await vi.advanceTimersByTimeAsync(10_000);
+        expect(node.log.map((r) => r.method)).toEqual(['GET', 'PUT']);
+        expect(node.doc(ME, 'kit')).toEqual(doc('Ladder', 'Tent'));
     });
 
     it("take runs the tool's reader: an older version is upgraded; a copy that can't be read never replaces the phone's", async () => {
